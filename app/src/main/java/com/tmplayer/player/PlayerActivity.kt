@@ -27,15 +27,19 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.tmplayer.App
 import com.tmplayer.R
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
+import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -74,18 +78,19 @@ class PlayerActivity : FragmentActivity() {
     private var durationSec = 0
     private var resumeMs = 0L
 
+    /** Only used to label the film in "Continue watching"; playback never needs it. */
+    private var chatTitle = ""
+
     /** True until the picture first appears; after that a stall is a chip, not a full sheet. */
     private var openingFilm = true
     private val speed = SpeedMeter()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Deliberately not restoring fragments.
-        //
-        // After process death the framework brings the old playback fragment back before any of
-        // this runs, so it reattaches with no player behind it and no glue — and leanback's own
-        // onStart then dereferences that glue and takes the activity down. Passing null starts
-        // with a clean fragment manager and the fragment below is built fresh against a live
-        // player. Nothing here is worth restoring anyway: the resume position lives on disk.
+        // Deliberately not restoring fragments. A restored playback fragment comes back before
+        // the player is rebuilt, so it would attach with nothing behind it and no transport
+        // controls. Starting from a clean fragment manager means the fragment below is always
+        // built against a live player, and nothing here is worth restoring anyway: the resume
+        // position lives on disk.
         super.onCreate(null)
         setContentView(R.layout.activity_player)
         // Two hours of a film is two hours with no button presses — without this the TV
@@ -98,6 +103,7 @@ class PlayerActivity : FragmentActivity() {
         messageId = intent.getLongExtra(EXTRA_MESSAGE_ID, 0)
         mediaTitle = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         mediaSubtitle = intent.getStringExtra(EXTRA_SUBTITLE).orEmpty()
+        chatTitle = intent.getStringExtra(EXTRA_CHAT_TITLE).orEmpty()
         fileSizeBytes = intent.getLongExtra(EXTRA_SIZE, 0)
         durationSec = intent.getIntExtra(EXTRA_DURATION, 0)
 
@@ -151,6 +157,7 @@ class PlayerActivity : FragmentActivity() {
         }
 
         observeDownload()
+        startResumeHeartbeat()
 
         // Replace unconditionally: after process death the restored fragment came up before
         // the player existed, so it has no glue and has to be rebuilt.
@@ -372,6 +379,24 @@ class PlayerActivity : FragmentActivity() {
         rebufferChip.visibility = View.GONE
     }
 
+    /**
+     * Writes the position every [RESUME_TICK_MS] while a film is on screen.
+     *
+     * onStop covers Back and Home, but it never runs when the power goes off at the wall or the
+     * system kills the process to reclaim memory — and on a 1 GB stick the second of those is
+     * routine. Without a heartbeat those are precisely the cases where an hour of a film is lost.
+     */
+    private fun startResumeHeartbeat() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                while (true) {
+                    delay(RESUME_TICK_MS)
+                    if (player?.isPlaying == true) saveResumePosition()
+                }
+            }
+        }
+    }
+
     override fun onStop() {
         super.onStop()
         saveResumePosition()
@@ -398,10 +423,20 @@ class PlayerActivity : FragmentActivity() {
         val store = settings
         val chat = chatId
         val message = messageId
+        // Written with the position so "Continue watching" can offer the film back without the
+        // chat it came from being loaded, or still being in the list at all.
+        val description = ResumeRecord.encode(
+            fileId = fileId,
+            title = mediaTitle,
+            chatTitle = chatTitle,
+            sizeBytes = fileSizeBytes,
+            durationSec = durationSec,
+            updatedAt = System.currentTimeMillis(),
+        )
         App.backgroundScope.launch {
             runCatching {
                 if (watched) store.clearResumePosition(chat, message)
-                else store.saveResumePosition(chat, message, position, duration)
+                else store.saveResumePosition(chat, message, position, duration, description)
             }
         }
     }
@@ -414,6 +449,7 @@ class PlayerActivity : FragmentActivity() {
         private const val EXTRA_SUBTITLE = "subtitle"
         private const val EXTRA_SIZE = "size"
         private const val EXTRA_DURATION = "duration"
+        private const val EXTRA_CHAT_TITLE = "chat_title"
 
         private const val BUFFER_MIN_MS = 15_000
         private const val BUFFER_MAX_MS = 50_000
@@ -422,9 +458,10 @@ class PlayerActivity : FragmentActivity() {
         private const val TARGET_BUFFER_BYTES = 20 * 1024 * 1024
         private const val END_GUARD_MS = 1_000L
         private const val NUDGE_MS = 10_000L
+        private const val RESUME_TICK_MS = 10_000L
         private const val SUBTITLE_TEXT_FRACTION = 0.065f
 
-        fun intent(context: Context, item: MediaItem): Intent =
+        fun intent(context: Context, item: MediaItem, chatTitle: String = ""): Intent =
             Intent(context, PlayerActivity::class.java).apply {
                 putExtra(EXTRA_FILE_ID, item.fileId)
                 putExtra(EXTRA_SIZE, item.sizeBytes)
@@ -432,6 +469,7 @@ class PlayerActivity : FragmentActivity() {
                 putExtra(EXTRA_CHAT_ID, item.chatId)
                 putExtra(EXTRA_MESSAGE_ID, item.messageId)
                 putExtra(EXTRA_TITLE, item.title)
+                putExtra(EXTRA_CHAT_TITLE, chatTitle)
                 putExtra(
                     EXTRA_SUBTITLE,
                     listOf(

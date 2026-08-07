@@ -20,9 +20,11 @@ class TvPlaybackFragment : VideoSupportFragment() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Leanback shows a buffering spinner of its own, which lands on top of TMPlayer's
-        // loading screen and reads as two loaders for the same wait.
+        // loading screen and reads as two loaders for the same wait. Disabling it is enough:
+        // show() returns immediately once the flag is off. Do not also call
+        // setProgressBarView(null) — that method dereferences its argument to check for a
+        // parent, so null takes the activity down before the surface is ever created.
         progressBarManager.disableProgressBar()
-        progressBarManager.setProgressBarView(null)
 
         val owner = activity as PlayerActivity
         val player = owner.player ?: return

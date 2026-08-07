@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +29,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Person
@@ -58,6 +60,8 @@ import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.ui.components.Poster
 import com.tmplayer.ui.components.StateScaffold
+import com.tmplayer.data.ResumeRecord
+import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvSearchField
 import com.tmplayer.ui.components.UiState
@@ -76,6 +80,7 @@ enum class BrowseTab(
     val blurb: String,
     val icon: ImageVector,
 ) {
+    Continue("Continue", "Continue watching", "Pick up where you stopped", Icons.Filled.PlayArrow),
     Favorites("Favourites", "Favourites", "The chats you watch from most", Icons.Filled.Star),
     Recent("Recent", "Recent", "Newest activity across Telegram", Icons.Filled.Refresh),
     Channels("Channels", "Channels", "Broadcast channels you follow", TmIcons.Channel),
@@ -88,14 +93,23 @@ enum class BrowseTab(
 fun BrowseScreen(
     state: UiState<BrowseData>,
     favorites: Set<Long>,
+    continueWatching: List<ResumeRecord>,
     onRetry: () -> Unit,
     onOpenChat: (ChatSummary) -> Unit,
+    onResumeFilm: (ResumeRecord) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    // Favourites is the landing tab, but only when there is something in it — an empty first
-    // screen is a worse greeting than a full one.
-    var tab by remember(favorites.isEmpty()) {
-        mutableStateOf(if (favorites.isEmpty()) BrowseTab.Recent else BrowseTab.Favorites)
+    // An unfinished film is the most likely reason the app was opened at all, so it wins the
+    // landing tab. Failing that Favourites, and failing that Recent — an empty first screen is
+    // a worse greeting than a full one.
+    var tab by remember(favorites.isEmpty(), continueWatching.isEmpty()) {
+        mutableStateOf(
+            when {
+                continueWatching.isNotEmpty() -> BrowseTab.Continue
+                favorites.isEmpty() -> BrowseTab.Recent
+                else -> BrowseTab.Favorites
+            },
+        )
     }
     var query by remember { mutableStateOf("") }
 
@@ -115,27 +129,129 @@ fun BrowseScreen(
                 }
 
                 Column(Modifier.fillMaxSize()) {
-                    Header(tab, visible.size)
-                    SearchRow(query = query, onQuery = { query = it })
-                    Spacer(Modifier.height(20.dp))
-
-                    if (visible.isEmpty()) {
-                        EmptyTab(tab, query)
+                    if (tab == BrowseTab.Continue) {
+                        Header(tab, continueWatching.size)
+                        Spacer(Modifier.height(20.dp))
+                        if (continueWatching.isEmpty()) {
+                            EmptyTab(tab, query = "")
+                        } else {
+                            ContinueList(continueWatching, onResumeFilm)
+                        }
                     } else {
-                        ChatList(
-                            chats = visible,
-                            favorites = favorites,
-                            // Recency order comes straight from Telegram, so the top of the
-                            // unfiltered list already is "recent" — no extra sorting to go stale.
-                            recent = if (tab == BrowseTab.Recent && query.isBlank()) {
-                                visible.take(RECENT_COUNT)
-                            } else {
-                                emptyList()
-                            },
-                            onOpenChat = onOpenChat,
-                        )
+                        Header(tab, visible.size)
+                        SearchRow(query = query, onQuery = { query = it })
+                        Spacer(Modifier.height(20.dp))
+
+                        if (visible.isEmpty()) {
+                            EmptyTab(tab, query)
+                        } else {
+                            ChatList(
+                                chats = visible,
+                                favorites = favorites,
+                                // Recency order comes straight from Telegram, so the top of the
+                                // unfiltered list already is "recent" — no sorting to go stale.
+                                recent = if (tab == BrowseTab.Recent && query.isBlank()) {
+                                    visible.take(RECENT_COUNT)
+                                } else {
+                                    emptyList()
+                                },
+                                onOpenChat = onOpenChat,
+                            )
+                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+// ---- continue watching -----------------------------------------------------------------------
+
+@Composable
+private fun ContinueList(
+    records: List<ResumeRecord>,
+    onResume: (ResumeRecord) -> Unit,
+) {
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(bottom = Tv.SafeV),
+    ) {
+        items(records, key = { "${it.chatId}_${it.messageId}" }) { record ->
+            ContinueCard(record, onResume)
+        }
+    }
+}
+
+@Composable
+private fun ContinueCard(record: ResumeRecord, onResume: (ResumeRecord) -> Unit) {
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusedAsState()
+    val border by animateColorAsState(
+        targetValue = if (focused) Accent else Color.Transparent,
+        animationSpec = tween(140),
+        label = "continueBorder",
+    )
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(SurfaceDark)
+            .border(2.dp, border, RoundedCornerShape(16.dp))
+            .clickable(interactionSource = interactions, indication = null) { onResume(record) }
+            .focusable(interactionSource = interactions)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.PlayArrow,
+            contentDescription = null,
+            tint = Accent,
+            modifier = Modifier.size(36.dp),
+        )
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                record.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.marqueeWhen(focused),
+            )
+            Text(
+                buildString {
+                    append(StreamStats.formatClock(record.positionMs))
+                    if (record.remainingMs > 0) {
+                        append("  ·  ")
+                        append(StreamStats.formatClock(record.remainingMs))
+                        append(" left")
+                    }
+                    if (record.chatTitle.isNotBlank()) {
+                        append("  ·  ")
+                        append(record.chatTitle)
+                    }
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = TextMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            // The bar is the whole point of the row: it is what tells the viewer, at a glance,
+            // that this is a film they are part way through rather than one they have not started.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(TextMuted.copy(alpha = 0.25f)),
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(record.fraction.coerceAtLeast(0.01f))
+                        .fillMaxHeight()
+                        .background(Accent),
+                )
             }
         }
     }
@@ -152,7 +268,8 @@ private fun filterChats(
         BrowseTab.Channels -> chats.filter { it.kind == ChatKind.Channel }
         BrowseTab.Groups -> chats.filter { it.kind == ChatKind.Group }
         BrowseTab.People -> chats.filter { it.kind == ChatKind.Direct }
-        BrowseTab.Recent, BrowseTab.All -> chats
+        // Continue watching is a list of films, not chats; it never reaches this filter.
+        BrowseTab.Continue, BrowseTab.Recent, BrowseTab.All -> chats
     }
     if (query.isBlank()) return byTab
     return byTab.filter { it.title.contains(query.trim(), ignoreCase = true) }

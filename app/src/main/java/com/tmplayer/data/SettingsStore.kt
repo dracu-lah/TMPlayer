@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -26,6 +27,10 @@ private fun resumeKey(chatId: Long, messageId: Long) =
 
 private fun durationKey(chatId: Long, messageId: Long) =
     longPreferencesKey("duration_${chatId}_$messageId")
+
+/** Title, chat and file id, so a half-watched film can be reopened without its chat loaded. */
+private fun metaKey(chatId: Long, messageId: Long) =
+    stringPreferencesKey("meta_${chatId}_$messageId")
 
 class SettingsStore(private val context: Context) {
 
@@ -142,11 +147,36 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    /**
+     * Everything half-watched, most recent first — the "Continue watching" row.
+     *
+     * Entries without a stored description are skipped rather than guessed at: they were written
+     * by a build before the description existed, and an untitled card is worse than no card.
+     */
+    val continueWatching: Flow<List<ResumeRecord>> = context.prefs.data.map { prefs ->
+        buildList {
+            for ((key, value) in prefs.asMap()) {
+                val name = key.name
+                if (!name.startsWith("resume_")) continue
+                val ids = name.removePrefix("resume_")
+                val positionMs = value as? Long ?: continue
+                val record = ResumeRecord.decode(
+                    key = ids,
+                    encoded = prefs[stringPreferencesKey("meta_$ids")],
+                    positionMs = positionMs,
+                    durationMs = prefs[longPreferencesKey("duration_$ids")] ?: 0L,
+                ) ?: continue
+                add(record)
+            }
+        }.sortedByDescending { it.updatedAt }
+    }
+
     suspend fun saveResumePosition(
         chatId: Long,
         messageId: Long,
         positionMs: Long,
         durationMs: Long = 0L,
+        description: String? = null,
     ) {
         context.prefs.edit { prefs ->
             val key = resumeKey(chatId, messageId)
@@ -154,9 +184,11 @@ class SettingsStore(private val context: Context) {
             if (positionMs < MIN_RESUME_MS) {
                 prefs.remove(key)
                 prefs.remove(durationKey(chatId, messageId))
+                prefs.remove(metaKey(chatId, messageId))
             } else {
                 prefs[key] = positionMs
                 if (durationMs > 0) prefs[durationKey(chatId, messageId)] = durationMs
+                if (description != null) prefs[metaKey(chatId, messageId)] = description
             }
         }
     }
@@ -165,6 +197,7 @@ class SettingsStore(private val context: Context) {
         context.prefs.edit {
             it.remove(resumeKey(chatId, messageId))
             it.remove(durationKey(chatId, messageId))
+            it.remove(metaKey(chatId, messageId))
         }
     }
 

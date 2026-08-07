@@ -7,7 +7,9 @@ import androidx.media3.datasource.BaseDataSource
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DataSourceException
+import com.tmplayer.data.Failures
 import com.tmplayer.data.Td
+import com.tmplayer.data.errorMessage
 import com.tmplayer.data.valueOrNull
 import dev.g000sha256.tdl.TdlClient
 import dev.g000sha256.tdl.dto.File as TdFile
@@ -227,15 +229,24 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
         )
     }
 
-    /** `limit = 0` means "keep going to the end of the file" — exactly what playback wants. */
+    /**
+     * `limit = 0` means "keep going to the end of the file" — exactly what playback wants.
+     *
+     * The result is checked rather than dropped. A refused request looks exactly like a slow
+     * one from here — no bytes arrive — and swallowing it turns a flood wait or an expired file
+     * reference into a minute of blank screen followed by "Telegram stopped sending", which
+     * says nothing a viewer can act on.
+     */
     private suspend fun requestDownloadFrom(offset: Long) {
-        td.downloadFile(
+        val result = td.downloadFile(
             fileId = fileId,
             priority = PLAYBACK_PRIORITY,
             offset = offset,
             limit = 0,
             synchronous = false,
         )
+        val error = result.errorMessage ?: return
+        throw IOException(Failures.humanise(error))
     }
 
     /** Call under the instance lock. [awaitBytesAt] has already recorded a usable path. */

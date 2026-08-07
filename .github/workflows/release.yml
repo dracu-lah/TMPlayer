@@ -99,6 +99,11 @@ jobs:
             abi=$(basename "$f" | sed -E 's/^app-(.*)-release\.apk$/\1/')
             cp "$f" "dist/TMPlayer-${{ steps.version.outputs.name }}-$abi.apk"
           done
+          # R8 renames every class, so a crash report from a released APK is unreadable without
+          # the mapping for that exact build. It is generated once and then gone; publish it or
+          # the next stack trace from a user is undecodable.
+          cp app/build/outputs/mapping/release/mapping.txt \
+            "dist/mapping-${{ steps.version.outputs.name }}.txt"
           ls -la dist
 
       # Anything holding the signing key is deleted before the job can reach a step that
@@ -111,7 +116,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: TMPlayer ${{ steps.version.outputs.name }}
-          files: dist/*.apk
+          files: |
+            dist/*.apk
+            dist/mapping-*.txt
           generate_release_notes: true
           body: |
             ## Install

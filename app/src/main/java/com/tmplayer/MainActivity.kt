@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -24,6 +25,7 @@ import com.tmplayer.data.CachePolicy
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.MediaItem
+import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.Td
@@ -53,6 +55,7 @@ private data class RoomPrompt(
     val item: MediaItem,
     val reclaimBytes: Long,
     val shortfallBytes: Long,
+    val chatTitle: String,
 )
 
 class MainActivity : ComponentActivity() {
@@ -76,6 +79,7 @@ private fun Root() {
     val introSeen by settings.introSeen.collectAsStateWithLifecycle(initialValue = true)
     val favorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
     val watchProgress by settings.watchProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
+    val continueWatching by settings.continueWatching.collectAsStateWithLifecycle(initialValue = emptyList())
     val jumpToFavorite by settings.jumpToFavorite.collectAsStateWithLifecycle(initialValue = true)
     val defaultChatId by settings.defaultChatId.collectAsStateWithLifecycle(initialValue = 0L)
     val minSize by settings.minSizeBytes.collectAsStateWithLifecycle(initialValue = SizeFilter.DEFAULT_MIN)
@@ -88,14 +92,19 @@ private fun Root() {
     var screen by remember { mutableStateOf<Screen>(Screen.Chats) }
     var passwordError by remember { mutableStateOf<String?>(null) }
     var roomPrompt by remember { mutableStateOf<RoomPrompt?>(null) }
-    var autoOpened by remember { mutableStateOf(false) }
+    // Saveable, not just remembered. Playing a film puts a second activity in front of this one,
+    // and a 1 GB stick will happily kill what is behind it — so this composable is routinely
+    // rebuilt on the way back. Remembered state would come back false, the jump would re-arm, and
+    // Back out of the chat would drop the viewer straight into it again: the navigation rail and
+    // Settings become unreachable, including the switch that turns this behaviour off.
+    var autoOpened by rememberSaveable { mutableStateOf(false) }
     var confirmExit by remember { mutableStateOf(false) }
 
     /**
      * Starts playback, first clearing the previous film when there is no room for both.
      * [confirmed] is true once the viewer has answered the prompt.
      */
-    fun play(item: MediaItem, confirmed: Boolean = false) {
+    fun play(item: MediaItem, confirmed: Boolean = false, chatTitle: String = "") {
         scope.launch {
             val alreadyCached = runCatching { Td.isFileCached(item.fileId) }.getOrDefault(false)
             val cacheBytes = runCatching { Td.storageUsedBytes() }.getOrDefault(0L)
@@ -105,23 +114,23 @@ private fun Root() {
 
             when (decision) {
                 is CachePolicy.Decision.Proceed ->
-                    context.startActivity(PlayerActivity.intent(context, item))
+                    context.startActivity(PlayerActivity.intent(context, item, chatTitle))
 
                 is CachePolicy.Decision.FreeUp -> {
                     if (ask && !confirmed) {
-                        roomPrompt = RoomPrompt(item, decision.reclaimBytes, 0)
+                        roomPrompt = RoomPrompt(item, decision.reclaimBytes, 0, chatTitle)
                     } else {
                         runCatching { Td.clearMediaCache() }
-                        context.startActivity(PlayerActivity.intent(context, item))
+                        context.startActivity(PlayerActivity.intent(context, item, chatTitle))
                     }
                 }
 
                 is CachePolicy.Decision.TooLarge -> {
                     if (!confirmed) {
-                        roomPrompt = RoomPrompt(item, decision.reclaimBytes, decision.shortfallBytes)
+                        roomPrompt = RoomPrompt(item, decision.reclaimBytes, decision.shortfallBytes, chatTitle)
                     } else {
                         runCatching { Td.clearMediaCache() }
-                        context.startActivity(PlayerActivity.intent(context, item))
+                        context.startActivity(PlayerActivity.intent(context, item, chatTitle))
                     }
                 }
             }
@@ -180,8 +189,10 @@ private fun Root() {
             is Screen.Chats -> BrowseScreen(
                 state = chatsState,
                 favorites = favorites,
+                continueWatching = continueWatching,
                 onRetry = chatsViewModel::load,
                 onOpenChat = { screen = Screen.Media(it) },
+                onResumeFilm = { play(it.toMediaItem(), chatTitle = it.chatTitle) },
                 onOpenSettings = { screen = Screen.Settings },
             )
 
@@ -189,6 +200,9 @@ private fun Root() {
                 BackHandler {
                     // Films posted while the list was open only appear after a fresh search.
                     chatsViewModel.load()
+                    // Backing out of a chat is the viewer asking for the chat list. Honour that
+                    // for the rest of the session rather than jumping them back in.
+                    autoOpened = true
                     screen = Screen.Chats
                 }
                 MediaGridScreen(
@@ -199,7 +213,7 @@ private fun Root() {
                     maxSizeBytes = maxSize,
                     watchProgress = watchProgress,
                     onToggleFavorite = { scope.launch { settings.toggleFavorite(current.chat.id) } },
-                    onPlay = { play(it) },
+                    onPlay = { play(it, chatTitle = current.chat.title) },
                 )
             }
 
@@ -232,8 +246,9 @@ private fun Root() {
                 confirmLabel = if (tooLarge) "Play anyway" else "Make room and play",
                 onConfirm = {
                     val item = pending.item
+                    val chat = pending.chatTitle
                     roomPrompt = null
-                    play(item, confirmed = true)
+                    play(item, confirmed = true, chatTitle = chat)
                 },
                 onDismiss = { roomPrompt = null },
             )

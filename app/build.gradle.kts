@@ -27,10 +27,11 @@ android {
         minSdk = 26
         targetSdk = 35
         // A release is cut by pushing a git tag, and the workflow passes the version through as
-        // Gradle properties. The literals below are what a local build gets; they are also the
-        // floor, so a hand-built APK never claims to be newer than a released one.
-        versionCode = (findProperty("tmVersionCode") as String?)?.toInt() ?: 2
-        versionName = (findProperty("tmVersionName") as String?) ?: "0.2.0"
+        // Gradle properties. The literals below are what a local build gets, and they track the
+        // most recent tag: leaving them behind means a local build cannot be installed over the
+        // release it is meant to be debugging, since Android refuses the downgrade.
+        versionCode = (findProperty("tmVersionCode") as String?)?.toInt() ?: 302
+        versionName = (findProperty("tmVersionName") as String?) ?: "0.3.2"
 
         // Telegram API credentials — bring your own via local.properties (see README)
         buildConfigField("int", "TG_API_ID", localProps.getProperty("TG_API_ID") ?: "0")
