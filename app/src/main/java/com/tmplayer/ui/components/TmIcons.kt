@@ -175,6 +175,44 @@ object TmIcons {
         }
     }
 
+    /**
+     * Four panes, for the grid arrangement.
+     *
+     * The partner of Material's own `List`, which is what the other half of that toggle uses.
+     */
+    val Grid: ImageVector by lazy {
+        icon("Grid") {
+            path(fill = SolidColor(Color.White)) {
+                moveTo(3f, 3f)
+                horizontalLineTo(11f)
+                verticalLineTo(11f)
+                horizontalLineTo(3f)
+                close()
+            }
+            path(fill = SolidColor(Color.White)) {
+                moveTo(13f, 3f)
+                horizontalLineTo(21f)
+                verticalLineTo(11f)
+                horizontalLineTo(13f)
+                close()
+            }
+            path(fill = SolidColor(Color.White)) {
+                moveTo(3f, 13f)
+                horizontalLineTo(11f)
+                verticalLineTo(21f)
+                horizontalLineTo(3f)
+                close()
+            }
+            path(fill = SolidColor(Color.White)) {
+                moveTo(13f, 13f)
+                horizontalLineTo(21f)
+                verticalLineTo(21f)
+                horizontalLineTo(13f)
+                close()
+            }
+        }
+    }
+
     /** Microphone, for voice search. */
     val Mic: ImageVector by lazy {
         icon("Mic") {

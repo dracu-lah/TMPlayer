@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tmplayer.data.CardLayout
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
 import com.tmplayer.ui.theme.Tv
@@ -114,7 +115,7 @@ fun SkeletonBox(
  * certain about; it is the avatar and the name inside it that are still unknown.
  */
 @Composable
-fun ChatListSkeleton(modifier: Modifier = Modifier) {
+fun ChatListSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLayout.List) {
     val shimmer = rememberShimmer()
 
     Column(
@@ -122,28 +123,53 @@ fun ChatListSkeleton(modifier: Modifier = Modifier) {
             .fillMaxSize()
             .clipToBounds()
             .padding(start = 28.dp, top = Tv.SafeV),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(if (layout == CardLayout.List) 14.dp else 16.dp),
     ) {
-        repeat(CHAT_ROWS) { index ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(84.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(SurfaceDark)
-                    .padding(horizontal = 24.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                SkeletonBox(shimmer, Modifier.size(64.dp), CircleShape)
-                Spacer(Modifier.width(24.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    // Names differ in length, and bars of one uniform width read as a barcode
-                    // rather than as a list of chats.
-                    SkeletonBox(
-                        shimmer,
-                        Modifier.width(TITLE_WIDTHS[index % TITLE_WIDTHS.size]).height(16.dp),
-                    )
-                    SkeletonBox(shimmer, Modifier.width(84.dp).height(11.dp))
+        when (layout) {
+            CardLayout.List -> repeat(CHAT_ROWS) { index ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(84.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(SurfaceDark)
+                        .padding(horizontal = 24.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SkeletonBox(shimmer, Modifier.size(64.dp), CircleShape)
+                    Spacer(Modifier.width(24.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // Names differ in length, and bars of one uniform width read as a barcode
+                        // rather than as a list of chats.
+                        SkeletonBox(
+                            shimmer,
+                            Modifier.width(TITLE_WIDTHS[index % TITLE_WIDTHS.size]).height(16.dp),
+                        )
+                        SkeletonBox(shimmer, Modifier.width(84.dp).height(11.dp))
+                    }
+                }
+            }
+
+            CardLayout.Grid -> repeat(CHAT_TILE_ROWS) {
+                Row(
+                    Modifier.fillMaxWidth().padding(end = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    repeat(CHAT_TILE_COLUMNS) {
+                        Column(
+                            Modifier
+                                .weight(1f)
+                                .height(154.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(SurfaceDark)
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            SkeletonBox(shimmer, Modifier.size(64.dp), CircleShape)
+                            SkeletonBox(shimmer, Modifier.fillMaxWidth(0.82f).height(16.dp))
+                            SkeletonBox(shimmer, Modifier.fillMaxWidth(0.45f).height(11.dp))
+                        }
+                    }
                 }
             }
         }
@@ -151,11 +177,14 @@ fun ChatListSkeleton(modifier: Modifier = Modifier) {
 }
 
 /**
- * Stand-in for the poster grid: the same four columns, the same 16:9 art and the same spacing, so
+ * Stand-in for the film listing: the same four columns, the same 16:9 art and the same spacing, so
  * nothing shifts sideways at the moment the real tiles arrive.
+ *
+ * It follows [layout] for the same reason it matches the grid's measurements — a screen of tiles
+ * that resolves into a screen of rows is the placeholder having described the wrong thing.
  */
 @Composable
-fun MediaGridSkeleton(modifier: Modifier = Modifier) {
+fun MediaGridSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLayout.Grid) {
     val shimmer = rememberShimmer()
 
     Column(
@@ -163,15 +192,42 @@ fun MediaGridSkeleton(modifier: Modifier = Modifier) {
             .fillMaxSize()
             .clipToBounds()
             .padding(horizontal = Tv.SafeH),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(if (layout == CardLayout.Grid) 16.dp else 12.dp),
     ) {
-        repeat(GRID_ROWS) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                repeat(GRID_COLUMNS) {
-                    MediaTileSkeleton(shimmer, Modifier.weight(1f))
+        when (layout) {
+            CardLayout.Grid -> repeat(GRID_ROWS) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    repeat(GRID_COLUMNS) {
+                        MediaTileSkeleton(shimmer, Modifier.weight(1f))
+                    }
+                }
+            }
+
+            CardLayout.List -> repeat(LIST_ROWS) { index ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(SurfaceDark)
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SkeletonBox(
+                        shimmer,
+                        Modifier.width(176.dp).aspectRatio(16f / 9f),
+                        RoundedCornerShape(8.dp),
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        SkeletonBox(
+                            shimmer,
+                            Modifier.width(TITLE_WIDTHS[index % TITLE_WIDTHS.size]).height(18.dp),
+                        )
+                        SkeletonBox(shimmer, Modifier.width(140.dp).height(12.dp))
+                    }
                 }
             }
         }
@@ -203,7 +259,14 @@ private fun MediaTileSkeleton(shimmer: Shimmer, modifier: Modifier = Modifier) {
 private val SweepColors = listOf(SurfaceDark, SurfaceRaised, SurfaceDark)
 private const val SWEEP_MS = 1_400
 private const val CHAT_ROWS = 7
+private const val CHAT_TILE_COLUMNS = 3
+
+/** Three rows of chat tiles is one more than a 540 dp screen shows, so the grid never looks short. */
+private const val CHAT_TILE_ROWS = 3
 private const val GRID_COLUMNS = 4
+
+/** Rows of the list arrangement, which stand taller than a chat row and so need fewer. */
+private const val LIST_ROWS = 5
 
 /** Three rows of tiles is one row more than a 540 dp screen shows, so the grid never looks short. */
 private const val GRID_ROWS = 3

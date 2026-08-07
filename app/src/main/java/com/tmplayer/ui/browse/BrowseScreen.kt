@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +24,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.CircleShape
@@ -52,11 +56,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.Account
+import com.tmplayer.data.CardLayout
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.FilmLookup
@@ -75,6 +81,8 @@ import com.tmplayer.ui.components.TvMenu
 import com.tmplayer.ui.components.TvSearchField
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.components.rememberVoiceSearch
+import com.tmplayer.ui.components.switchIcon
+import com.tmplayer.ui.components.switchLabel
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
@@ -118,6 +126,9 @@ fun BrowseScreen(
     launchChatId: Long = 0L,
     picked: BrowseTab? = null,
     onPickTab: (BrowseTab) -> Unit = {},
+    /** Rows or tiles. One arrangement covers every tab: they are all lists of the same card. */
+    layout: CardLayout = CardLayout.List,
+    onToggleLayout: () -> Unit = {},
     /**
      * Drawn above the content, beside the navigation rail rather than above it.
      * A banner stacked over the whole screen pushes the rail down far enough to shove Settings
@@ -151,7 +162,11 @@ fun BrowseScreen(
 
         Column(Modifier.fillMaxSize().padding(end = Tv.SafeH)) {
             banner()
-            StateScaffold(state, onRetry = onRetry, loading = { ChatListSkeleton() }) { data ->
+            StateScaffold(
+                state,
+                onRetry = onRetry,
+                loading = { ChatListSkeleton(layout = layout) },
+            ) { data ->
                 val visible = remember(data.chats, tab, favorites, query) {
                     filterChats(data.chats, tab, favorites, query)
                 }
@@ -159,6 +174,16 @@ fun BrowseScreen(
                 Column(Modifier.fillMaxSize()) {
                     if (tab == BrowseTab.Continue) {
                         Header(tab, continueWatching.size) {
+                            // This tab has no search row to hang the arrangement toggle from, so it
+                            // sits beside the heading with the action that empties the tab.
+                            if (continueWatching.isNotEmpty()) {
+                                HeaderAction(
+                                    label = layout.switchLabel,
+                                    icon = layout.switchIcon,
+                                    onClick = onToggleLayout,
+                                )
+                                Spacer(Modifier.width(12.dp))
+                            }
                             // Only worth offering once there is a list to empty; a lone film is
                             // quicker to remove by holding OK on it.
                             if (continueWatching.size > 1) {
@@ -173,30 +198,44 @@ fun BrowseScreen(
                         if (continueWatching.isEmpty()) {
                             EmptyTab(tab, query = "")
                         } else {
-                            ContinueList(
+                            ContinueSection(
                                 records = continueWatching,
+                                layout = layout,
                                 onResume = onResumeFilm,
                                 onHold = { filmMenu = it },
                             )
                         }
                     } else {
                         Header(tab, visible.size)
-                        SearchRow(query = query, onQuery = { query = it })
+                        SearchRow(
+                            query = query,
+                            onQuery = { query = it },
+                            layout = layout,
+                            onToggleLayout = onToggleLayout,
+                        )
                         Spacer(Modifier.height(20.dp))
 
                         if (visible.isEmpty()) {
                             EmptyTab(tab, query)
                         } else {
-                            ChatList(
+                            ChatSection(
                                 chats = visible,
                                 favorites = favorites,
                                 // Recency order comes straight from Telegram, so the top of the
                                 // unfiltered list already is "recent", with no sorting to go stale.
-                                recent = if (tab == BrowseTab.Recent && query.isBlank()) {
+                                // Tiles are dropped from the strip in grid view: the grid's own
+                                // first row is those same chats, and the two together read as the
+                                // list having repeated itself rather than as a shortcut.
+                                recent = if (
+                                    tab == BrowseTab.Recent &&
+                                    query.isBlank() &&
+                                    layout == CardLayout.List
+                                ) {
                                     visible.take(RECENT_COUNT)
                                 } else {
                                     emptyList()
                                 },
+                                layout = layout,
                                 onOpenChat = onOpenChat,
                                 onHold = { chatMenu = it },
                                 launchChatId = launchChatId,
@@ -281,37 +320,135 @@ fun BrowseScreen(
 // ---- continue watching -----------------------------------------------------------------------
 
 @Composable
-private fun ContinueList(
+private fun ContinueSection(
     records: List<ResumeRecord>,
+    layout: CardLayout,
     onResume: (ResumeRecord) -> Unit,
     onHold: (ResumeRecord) -> Unit,
 ) {
     val first = remember { FocusRequester() }
+    // Only the first card asks for focus, and which card that is does not change with the
+    // arrangement, so the two branches can share one modifier.
+    fun focusOf(record: ResumeRecord): Modifier =
+        if (record === records.firstOrNull()) Modifier.focusRequester(first) else Modifier
 
-    LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        // The same start inset the chat list uses, so the cards line up under their heading
-        // instead of butting against the rail.
-        contentPadding = PaddingValues(start = 28.dp, bottom = Tv.SafeV),
-    ) {
-        items(records, key = { "${it.chatId}_${it.messageId}" }) { record ->
-            ContinueCard(
-                record = record,
-                onResume = onResume,
-                onHold = onHold,
-                modifier = if (record === records.firstOrNull()) {
-                    Modifier.focusRequester(first)
-                } else {
-                    Modifier
-                },
-            )
+    // The same start inset the chat list uses, so the cards line up under their heading instead of
+    // butting against the rail.
+    val padding = PaddingValues(start = 28.dp, end = 4.dp, bottom = Tv.SafeV)
+
+    when (layout) {
+        CardLayout.List -> LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = padding,
+        ) {
+            items(records, key = { "${it.chatId}_${it.messageId}" }) { record ->
+                ContinueCard(
+                    record = record,
+                    onResume = onResume,
+                    onHold = onHold,
+                    modifier = focusOf(record),
+                )
+            }
+        }
+
+        CardLayout.Grid -> LazyVerticalGrid(
+            columns = GridCells.Fixed(TILE_COLUMNS),
+            contentPadding = padding,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            gridItems(records, key = { "${it.chatId}_${it.messageId}" }) { record ->
+                ContinueTile(
+                    record = record,
+                    onResume = onResume,
+                    onHold = onHold,
+                    modifier = focusOf(record),
+                )
+            }
         }
     }
 
     // This is the landing tab for anyone with a film on the go, and the remote has nowhere to go
-    // until something holds focus.
-    LaunchedEffect(records.firstOrNull()?.messageId) {
+    // until something holds focus. Re-run on a change of arrangement too: switching rebuilds the
+    // list from scratch, and the card that was holding focus leaves the composition with it.
+    LaunchedEffect(records.firstOrNull()?.messageId, layout) {
         runCatching { first.requestFocus() }
+    }
+}
+
+/**
+ * A Continue watching card as a tile: the art carries the progress bar, the way a film poster in
+ * the grid does, because there is no longer a row of text alongside it to put the bar under.
+ */
+@Composable
+private fun ContinueTile(
+    record: ResumeRecord,
+    onResume: (ResumeRecord) -> Unit,
+    onHold: (ResumeRecord) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusedAsState()
+    val border by animateColorAsState(
+        targetValue = if (focused) Accent else Color.Transparent,
+        animationSpec = tween(FOCUS_FADE_MS),
+        label = "continueTileBorder",
+    )
+
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (focused) SurfaceRaised else SurfaceDark)
+            .border(3.dp, border, RoundedCornerShape(14.dp))
+            .holdable(
+                interactionSource = interactions,
+                onClick = { onResume(record) },
+                onHold = { onHold(record) },
+            ),
+    ) {
+        Box {
+            ContinueArt(record, Modifier.fillMaxWidth().aspectRatio(16f / 9f), badge = 40.dp)
+            Box(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .background(Color.Black.copy(alpha = 0.55f)),
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(record.fraction.coerceAtLeast(0.01f))
+                        .fillMaxHeight()
+                        .background(Accent),
+                )
+            }
+        }
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Text(
+                record.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.marqueeWhen(focused),
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                buildString {
+                    append(StreamStats.formatClock(record.positionMs))
+                    if (record.remainingMs > 0) {
+                        append("  ·  ")
+                        append(StreamStats.formatClock(record.remainingMs))
+                        append(" left")
+                    }
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -345,7 +482,11 @@ private fun ContinueCard(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ContinueThumbnail(record)
+        ContinueArt(
+            record,
+            Modifier.width(THUMBNAIL_WIDTH).height(THUMBNAIL_HEIGHT),
+            badge = 34.dp,
+        )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
                 record.title,
@@ -400,24 +541,26 @@ private fun ContinueCard(
 }
 
 /**
- * Film art for a Continue watching row, with a play badge over it.
+ * Film art for a Continue watching card, with a play badge over it.
  *
  * There is no Telegram thumbnail to fall back on here: a resume record stores only enough to
  * reopen the file, so that a film stays resumable even when its chat has not been loaded this
  * session. TMDB is therefore the only source of art, and when it has nothing (no key, no match,
- * no network) the row falls back to the play icon it used before. That is a complete row, not a
+ * no network) the card falls back to the play icon it used before. That is a complete card, not a
  * broken one, so the failure is never mentioned.
+ *
+ * [modifier] carries the size, because the row wants a thumbnail and the tile wants the whole
+ * width of its column. [badge] follows it: a 34 dp disc that reads as a play button over a 96 dp
+ * thumbnail is a speck over art three times that wide.
  */
 @Composable
-private fun ContinueThumbnail(record: ResumeRecord) {
+private fun ContinueArt(record: ResumeRecord, modifier: Modifier = Modifier, badge: Dp) {
     val art by produceState<String?>(initialValue = null, key1 = record.title) {
         value = (Tmdb.lookup(record.title) as? FilmLookup.Found)?.details?.backdropUrl
     }
 
     Box(
-        Modifier
-            .width(THUMBNAIL_WIDTH)
-            .height(THUMBNAIL_HEIGHT)
+        modifier
             .clip(RoundedCornerShape(8.dp))
             .background(SurfaceRaised),
         contentAlignment = Alignment.Center,
@@ -430,7 +573,7 @@ private fun ContinueThumbnail(record: ResumeRecord) {
                     imageVector = Icons.Filled.PlayArrow,
                     contentDescription = null,
                     tint = Accent,
-                    modifier = Modifier.size(30.dp),
+                    modifier = Modifier.size(badge * 0.88f),
                 )
             },
         )
@@ -438,7 +581,7 @@ private fun ContinueThumbnail(record: ResumeRecord) {
             // Over real artwork the icon needs its own backing to stay legible.
             Box(
                 Modifier
-                    .size(34.dp)
+                    .size(badge)
                     .clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.55f)),
                 contentAlignment = Alignment.Center,
@@ -447,7 +590,7 @@ private fun ContinueThumbnail(record: ResumeRecord) {
                     imageVector = Icons.Filled.PlayArrow,
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(22.dp),
+                    modifier = Modifier.size(badge * 0.65f),
                 )
             }
         }
@@ -694,7 +837,12 @@ private fun Header(tab: BrowseTab, count: Int, action: @Composable () -> Unit = 
 }
 
 @Composable
-private fun SearchRow(query: String, onQuery: (String) -> Unit) {
+private fun SearchRow(
+    query: String,
+    onQuery: (String) -> Unit,
+    layout: CardLayout,
+    onToggleLayout: () -> Unit,
+) {
     val startVoice = rememberVoiceSearch("Say a chat name", onQuery)
     val searchField = remember { FocusRequester() }
     Row(
@@ -708,6 +856,7 @@ private fun SearchRow(query: String, onQuery: (String) -> Unit) {
             placeholder = "Search chats",
             modifier = Modifier.weight(1f).focusRequester(searchField),
         )
+        PillButton(layout.switchLabel, layout.switchIcon, onToggleLayout)
         if (startVoice != null) {
             PillButton("Voice search", TmIcons.Mic, startVoice)
         }
@@ -758,83 +907,115 @@ private fun PillButton(label: String, icon: ImageVector?, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ChatList(
+private fun ChatSection(
     chats: List<ChatSummary>,
     favorites: Set<Long>,
     recent: List<ChatSummary>,
+    layout: CardLayout,
     onOpenChat: (ChatSummary) -> Unit,
     onHold: (ChatSummary) -> Unit,
     launchChatId: Long,
 ) {
     val first = remember { FocusRequester() }
+    // The strip is what a viewer lands on when it is there, because it is the largest thing on the
+    // screen; otherwise the first card takes it.
+    fun focusOf(chat: ChatSummary, inStrip: Boolean): Modifier = when {
+        inStrip -> if (chat === recent.firstOrNull()) Modifier.focusRequester(first) else Modifier
+        recent.isNotEmpty() -> Modifier
+        chat === chats.firstOrNull() -> Modifier.focusRequester(first)
+        else -> Modifier
+    }
 
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 28.dp, bottom = Tv.SafeV),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        if (recent.isNotEmpty()) {
-            item(key = "recent-strip") {
-                Column {
-                    Text(
-                        "Jump back in",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = TextPrimary,
-                        modifier = Modifier.padding(bottom = 14.dp),
-                    )
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        items(recent, key = { "r-${it.id}" }) { chat ->
-                            RecentTile(
-                                chat = chat,
-                                onClick = { onOpenChat(chat) },
-                                onHold = { onHold(chat) },
-                                modifier = if (chat === recent.firstOrNull()) {
-                                    Modifier.focusRequester(first)
-                                } else {
-                                    Modifier
-                                },
-                            )
+    when (layout) {
+        CardLayout.List -> LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 28.dp, bottom = Tv.SafeV),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            if (recent.isNotEmpty()) {
+                item(key = "recent-strip") {
+                    Column {
+                        Text(
+                            "Jump back in",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = TextPrimary,
+                            modifier = Modifier.padding(bottom = 14.dp),
+                        )
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            items(recent, key = { "r-${it.id}" }) { chat ->
+                                ChatTile(
+                                    chat = chat,
+                                    favorite = chat.id in favorites,
+                                    opensOnLaunch = chat.id == launchChatId,
+                                    onClick = { onOpenChat(chat) },
+                                    onHold = { onHold(chat) },
+                                    modifier = focusOf(chat, inStrip = true)
+                                        .width(RECENT_TILE_WIDTH),
+                                )
+                            }
                         }
+                        Text(
+                            // Not "All chats": that is the name of a rail tab, and repeating it as
+                            // a sub-heading inside a different tab reads as if the viewer moved.
+                            "More chats",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = TextPrimary,
+                            modifier = Modifier.padding(top = 32.dp, bottom = 4.dp),
+                        )
                     }
-                    Text(
-                        // Not "All chats": that is the name of a rail tab, and repeating it as a
-                        // sub-heading inside a different tab reads as if the viewer moved.
-                        "More chats",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = TextPrimary,
-                        modifier = Modifier.padding(top = 32.dp, bottom = 4.dp),
-                    )
                 }
+            }
+
+            items(chats, key = { it.id }) { chat ->
+                ChatRow(
+                    chat = chat,
+                    favorite = chat.id in favorites,
+                    opensOnLaunch = chat.id == launchChatId,
+                    onClick = { onOpenChat(chat) },
+                    onHold = { onHold(chat) },
+                    modifier = focusOf(chat, inStrip = false),
+                )
             }
         }
 
-        items(chats, key = { it.id }) { chat ->
-            ChatRow(
-                chat = chat,
-                favorite = chat.id in favorites,
-                opensOnLaunch = chat.id == launchChatId,
-                onClick = { onOpenChat(chat) },
-                onHold = { onHold(chat) },
-                modifier = if (recent.isEmpty() && chat === chats.firstOrNull()) {
-                    Modifier.focusRequester(first)
-                } else {
-                    Modifier
-                },
-            )
+        CardLayout.Grid -> LazyVerticalGrid(
+            columns = GridCells.Fixed(TILE_COLUMNS),
+            modifier = Modifier.fillMaxSize(),
+            // The end inset keeps a focused tile in the last column from having its border
+            // clipped by the panel edge, which the rows never had to worry about.
+            contentPadding = PaddingValues(start = 28.dp, end = 4.dp, bottom = Tv.SafeV),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            gridItems(chats, key = { it.id }) { chat ->
+                ChatTile(
+                    chat = chat,
+                    favorite = chat.id in favorites,
+                    opensOnLaunch = chat.id == launchChatId,
+                    onClick = { onOpenChat(chat) },
+                    onHold = { onHold(chat) },
+                    modifier = focusOf(chat, inStrip = false).fillMaxWidth(),
+                )
+            }
         }
     }
 
-    // The remote has nowhere to go until something holds focus. The target is the first tile of
-    // the "Jump back in" strip whenever that strip is on screen: it is the largest thing there,
-    // and it is what a viewer with no favourites and no unfinished film lands on.
-    LaunchedEffect(chats.firstOrNull()?.id, recent.firstOrNull()?.id) {
+    // The remote has nowhere to go until something holds focus. Switching arrangement is included:
+    // it rebuilds the list, and the card that was holding focus goes with the old one.
+    LaunchedEffect(chats.firstOrNull()?.id, recent.firstOrNull()?.id, layout) {
         runCatching { first.requestFocus() }
     }
 }
 
+/**
+ * A chat as a tile: the "Jump back in" strip and the grid are the same card at two widths, so
+ * [modifier] is what sets that width rather than the tile deciding for itself.
+ */
 @Composable
-private fun RecentTile(
+private fun ChatTile(
     chat: ChatSummary,
+    favorite: Boolean,
+    opensOnLaunch: Boolean,
     onClick: () -> Unit,
     onHold: () -> Unit,
     modifier: Modifier = Modifier,
@@ -844,12 +1025,11 @@ private fun RecentTile(
 
     Column(
         modifier
-            .width(RECENT_TILE_WIDTH)
             // Fixed, not wrapped: a chat whose name runs to two lines would otherwise stand
             // taller than its neighbours and leave the row visibly ragged.
             .height(RECENT_TILE_HEIGHT)
             .clip(RoundedCornerShape(16.dp))
-            .background(SurfaceDark)
+            .background(if (focused) SurfaceRaised else SurfaceDark)
             .border(
                 width = 3.dp,
                 color = if (focused) Accent else Color.Transparent,
@@ -858,12 +1038,23 @@ private fun RecentTile(
             .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold)
             .padding(16.dp),
     ) {
-        Poster(
-            miniThumbnail = chat.miniThumbnail,
-            thumbnailFileId = chat.photoFileId,
-            fallbackLabel = chat.title,
-            modifier = Modifier.size(64.dp).clip(CircleShape),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Poster(
+                miniThumbnail = chat.miniThumbnail,
+                thumbnailFileId = chat.photoFileId,
+                fallbackLabel = chat.title,
+                modifier = Modifier.size(64.dp).clip(CircleShape),
+            )
+            Spacer(Modifier.weight(1f))
+            if (favorite) {
+                Icon(
+                    Icons.Filled.Star,
+                    contentDescription = "Favourite",
+                    tint = Accent,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+        }
         Spacer(Modifier.height(12.dp))
         Text(
             chat.title,
@@ -877,7 +1068,11 @@ private fun RecentTile(
             modifier = Modifier.weight(1f).marqueeWhen(focused),
         )
         Text(
-            if (focused) HOLD_HINT else chat.kind.label,
+            when {
+                focused -> HOLD_HINT
+                opensOnLaunch -> "Opens on launch"
+                else -> chat.kind.label
+            },
             style = MaterialTheme.typography.bodyMedium,
             color = TextMuted,
             maxLines = 1,
@@ -1002,3 +1197,11 @@ private const val HOLD_HINT = "Hold OK for options"
 private val RAIL_INSET = 16.dp
 private val RECENT_TILE_WIDTH = 224.dp
 private val RECENT_TILE_HEIGHT = 154.dp
+
+/**
+ * Columns in the tile arrangement.
+ *
+ * Three, not the film grid's four: the rail takes 196 dp off a 960 dp screen before this starts,
+ * and a fourth column would leave each tile too narrow for a chat name to survive it.
+ */
+private const val TILE_COLUMNS = 3

@@ -24,9 +24,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -58,6 +61,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.data.CardLayout
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.SettingsStore
@@ -69,6 +73,8 @@ import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvSearchField
 import com.tmplayer.ui.components.rememberVoiceSearch
+import com.tmplayer.ui.components.switchIcon
+import com.tmplayer.ui.components.switchLabel
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
@@ -97,6 +103,9 @@ fun MediaGridScreen(
     onToggleFavorite: () -> Unit,
     onPlay: (MediaItem) -> Unit,
     onPlayFromStart: (MediaItem) -> Unit,
+    /** Posters four across, or one wide row per film with the full title on it. */
+    layout: CardLayout = CardLayout.Grid,
+    onToggleLayout: () -> Unit = {},
 ) {
     val context = LocalContext.current
     // The limits are part of the key: changing them in Settings has to rebuild the listing,
@@ -122,44 +131,67 @@ fun MediaGridScreen(
             onSubmit = { viewModel.search(query) },
             onToggleFavorite = onToggleFavorite,
             onRefresh = viewModel::load,
+            layout = layout,
+            onToggleLayout = onToggleLayout,
         )
 
         StateScaffold(
             state,
             onRetry = viewModel::load,
-            loading = { MediaGridSkeleton() },
+            loading = { MediaGridSkeleton(layout = layout) },
         ) { list ->
             val gridState = rememberLazyGridState()
+            val listState = rememberLazyListState()
             val firstItem = remember { FocusRequester() }
+            fun focusOf(item: MediaItem): Modifier =
+                if (item === list.items.firstOrNull()) Modifier.focusRequester(firstItem) else Modifier
+
+            val padding = PaddingValues(
+                start = Tv.SafeH,
+                end = Tv.SafeH,
+                // A television crops its outermost few percent, so the last row needs
+                // clearance or its titles are cut off the bottom of the panel.
+                bottom = Tv.SafeV + 16.dp,
+            )
 
             Box(Modifier.fillMaxSize()) {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(COLUMNS),
-                    state = gridState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = Tv.SafeH,
-                        end = Tv.SafeH,
-                        // A television crops its outermost few percent, so the last row needs
-                        // clearance or its titles are cut off the bottom of the panel.
-                        bottom = Tv.SafeV + 16.dp,
-                    ),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    items(list.items, key = { it.id }) { item ->
-                        MediaCard(
-                            item = item,
-                            watched = watchProgress[
-                                SettingsStore.progressKey(item.chatId, item.messageId),
-                            ],
-                            onClick = { details = item },
-                            modifier = if (item === list.items.firstOrNull()) {
-                                Modifier.focusRequester(firstItem)
-                            } else {
-                                Modifier
-                            },
-                        )
+                when (layout) {
+                    CardLayout.Grid -> LazyVerticalGrid(
+                        columns = GridCells.Fixed(COLUMNS),
+                        state = gridState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = padding,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        gridItems(list.items, key = { it.id }) { item ->
+                            MediaCard(
+                                item = item,
+                                watched = watchProgress[
+                                    SettingsStore.progressKey(item.chatId, item.messageId),
+                                ],
+                                onClick = { details = item },
+                                modifier = focusOf(item),
+                            )
+                        }
+                    }
+
+                    CardLayout.List -> LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = padding,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(list.items, key = { it.id }) { item ->
+                            MediaRow(
+                                item = item,
+                                watched = watchProgress[
+                                    SettingsStore.progressKey(item.chatId, item.messageId),
+                                ],
+                                onClick = { details = item },
+                                modifier = focusOf(item),
+                            )
+                        }
                     }
                 }
 
@@ -185,18 +217,33 @@ fun MediaGridScreen(
                 }
             }
 
-            LaunchedEffect(list.items.firstOrNull()?.id) {
+            // Switching arrangement rebuilds the list, taking the focused card with it, so the
+            // first item has to be asked for again or the remote is left with nowhere to go.
+            LaunchedEffect(list.items.firstOrNull()?.id, layout) {
                 runCatching { firstItem.requestFocus() }
             }
 
-            // Fetch the next page well before the user reaches the bottom row.
-            val nearEnd by remember(list.items.size) {
+            // Fetch the next page well before the user reaches the bottom row. The lead is counted
+            // in items, so it has to follow the arrangement: two rows of the grid is eight films,
+            // while two rows of the list is two.
+            val nearEnd by remember(list.items.size, layout) {
                 derivedStateOf {
-                    val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                    last >= list.items.size - COLUMNS * 2
+                    // The two states report the same figure through unrelated item types, so the
+                    // index comes out of each branch rather than the item it came from.
+                    val last = when (layout) {
+                        CardLayout.Grid ->
+                            gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
+                        CardLayout.List ->
+                            listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
+                    } ?: 0
+                    val lead = when (layout) {
+                        CardLayout.Grid -> COLUMNS * 2
+                        CardLayout.List -> LIST_LEAD
+                    }
+                    last >= list.items.size - lead
                 }
             }
-            LaunchedEffect(gridState, list.items.size) {
+            LaunchedEffect(gridState, listState, list.items.size, layout) {
                 snapshotFlow { nearEnd }.collect { if (it) viewModel.loadMore() }
             }
         }
@@ -241,6 +288,8 @@ private fun Header(
     onSubmit: () -> Unit,
     onToggleFavorite: () -> Unit,
     onRefresh: () -> Unit,
+    layout: CardLayout,
+    onToggleLayout: () -> Unit,
 ) {
     val startVoice = rememberVoiceSearch("Say a film name") {
         onQuery(it)
@@ -287,6 +336,7 @@ private fun Header(
                     onSubmit()
                 }
             }
+            Pill(layout.switchLabel, layout.switchIcon, onClick = onToggleLayout)
             Pill(
                 label = if (isFavorite) "Remove favourite" else "Add favourite",
                 icon = if (isFavorite) Icons.Filled.Star else TmIcons.StarOutline,
@@ -360,52 +410,7 @@ private fun MediaCard(
             .border(3.dp, border, RoundedCornerShape(14.dp))
             .clickable(interactionSource = interactions, indication = null, onClick = onClick),
     ) {
-        Box {
-            Poster(
-                miniThumbnail = item.miniThumbnail,
-                thumbnailFileId = item.thumbnailFileId,
-                fallbackLabel = item.title,
-                modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f),
-            )
-            val tags = item.qualityTags
-            if (tags.isNotEmpty()) {
-                Row(
-                    Modifier.align(Alignment.TopEnd).padding(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    tags.forEach { tag ->
-                        Text(
-                            tag,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White,
-                            maxLines = 1,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color.Black.copy(alpha = 0.72f))
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
-                        )
-                    }
-                }
-            }
-            if (watched != null && watched.fraction > 0f) {
-                // A thin bar along the bottom of the art, the one place a viewer already looks
-                // to see whether they have started something.
-                Box(
-                    Modifier
-                        .align(Alignment.BottomStart)
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .background(Color.Black.copy(alpha = 0.55f)),
-                ) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth(watched.fraction)
-                            .fillMaxHeight()
-                            .background(Accent),
-                    )
-                }
-            }
-        }
+        MediaArt(item, watched, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             Text(
                 item.title,
@@ -418,20 +423,138 @@ private fun MediaCard(
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(6.dp))
-            val duration = MediaMapper.formatDuration(item.durationSec)
-            val size = MediaMapper.formatSize(item.sizeBytes)
-            val resume = watched
-                ?.takeIf { it.positionMs > 0 }
-                ?.let { "Stopped at ${com.tmplayer.player.StreamStats.formatClock(it.positionMs)}" }
-            Text(
-                listOfNotNull(duration.ifEmpty { null }, size.ifEmpty { null }, resume)
-                    .joinToString("  ·  "),
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (resume != null) Accent else TextMuted,
-                maxLines = 1,
-            )
+            MetaLine(item, watched)
         }
     }
 }
 
+/**
+ * The same film as a full-width row.
+ *
+ * This is the arrangement for a chat full of release file names: the title gets the whole width of
+ * the panel rather than a quarter of it, so a name that a poster tile cuts after four words is
+ * readable without opening anything.
+ */
+@Composable
+private fun MediaRow(
+    item: MediaItem,
+    watched: WatchPoint?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusedAsState()
+    val border by animateColorAsState(
+        targetValue = if (focused) Accent else Color.Transparent,
+        animationSpec = tween(140),
+        label = "rowBorder",
+    )
+
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (focused) SurfaceRaised else SurfaceDark)
+            .border(3.dp, border, RoundedCornerShape(14.dp))
+            .clickable(interactionSource = interactions, indication = null, onClick = onClick)
+            .padding(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MediaArt(
+            item,
+            watched,
+            Modifier
+                .width(ROW_ART_WIDTH)
+                .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(8.dp)),
+        )
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                item.title,
+                style = MaterialTheme.typography.titleLarge,
+                color = TextPrimary,
+                // Two lines here, unlike the tile: this is the arrangement someone picked in
+                // order to read the name, and a row can afford the height a grid cell cannot.
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            MetaLine(item, watched)
+        }
+    }
+}
+
+/** Poster art with whatever belongs on top of it: quality tags, and how far in the viewer got. */
+@Composable
+private fun MediaArt(item: MediaItem, watched: WatchPoint?, modifier: Modifier = Modifier) {
+    Box(modifier) {
+        Poster(
+            miniThumbnail = item.miniThumbnail,
+            thumbnailFileId = item.thumbnailFileId,
+            fallbackLabel = item.title,
+            modifier = Modifier.fillMaxSize(),
+        )
+        val tags = item.qualityTags
+        if (tags.isNotEmpty()) {
+            Row(
+                Modifier.align(Alignment.TopEnd).padding(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                tags.forEach { tag ->
+                    Text(
+                        tag,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color.Black.copy(alpha = 0.72f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+            }
+        }
+        if (watched != null && watched.fraction > 0f) {
+            // A thin bar along the bottom of the art, the one place a viewer already looks
+            // to see whether they have started something.
+            Box(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .background(Color.Black.copy(alpha = 0.55f)),
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(watched.fraction)
+                        .fillMaxHeight()
+                        .background(Accent),
+                )
+            }
+        }
+    }
+}
+
+/** Running time, file size, and where playback stopped, on the one line both arrangements use. */
+@Composable
+private fun MetaLine(item: MediaItem, watched: WatchPoint?) {
+    val duration = MediaMapper.formatDuration(item.durationSec)
+    val size = MediaMapper.formatSize(item.sizeBytes)
+    val resume = watched
+        ?.takeIf { it.positionMs > 0 }
+        ?.let { "Stopped at ${com.tmplayer.player.StreamStats.formatClock(it.positionMs)}" }
+    Text(
+        listOfNotNull(duration.ifEmpty { null }, size.ifEmpty { null }, resume)
+            .joinToString("  ·  "),
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (resume != null) Accent else TextMuted,
+        maxLines = 1,
+    )
+}
+
 private const val COLUMNS = 4
+
+/** How many rows from the bottom the next page is fetched in the list arrangement. */
+private const val LIST_LEAD = 4
+
+private val ROW_ART_WIDTH = 176.dp
