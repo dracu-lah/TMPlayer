@@ -25,7 +25,7 @@ It runs on an 8 GB TV stick with a gigabyte of RAM, because that is what it was 
 on.
 
 <p align="center">
-  <img src="docs/screenshots/browse.png" width="90%" alt="Browsing chats on TMPlayer" />
+  <img src="docs/screenshots/browse.webp" width="90%" alt="Browsing chats on TMPlayer" />
 </p>
 
 ## What it does
@@ -61,7 +61,7 @@ before it does it.
 already in your remote and asks for no permissions to do it.
 
 <p align="center">
-  <img src="docs/screenshots/settings.png" width="90%" alt="TMPlayer settings" />
+  <img src="docs/screenshots/settings.webp" width="90%" alt="TMPlayer settings" />
 </p>
 
 ## Install it

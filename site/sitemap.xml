@@ -6,19 +6,19 @@
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <image:image>
-      <image:loc>https://tmplayer.org/screenshots/hero.jpg</image:loc>
+      <image:loc>https://tmplayer.org/screenshots/hero.webp</image:loc>
       <image:title>TMPlayer playing a film on a television</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://tmplayer.org/screenshots/chats.png</image:loc>
+      <image:loc>https://tmplayer.org/screenshots/chats.webp</image:loc>
       <image:title>The TMPlayer chat list on Android TV</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://tmplayer.org/screenshots/grid.png</image:loc>
+      <image:loc>https://tmplayer.org/screenshots/grid.webp</image:loc>
       <image:title>Videos in a Telegram chat, as poster tiles</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://tmplayer.org/screenshots/details.png</image:loc>
+      <image:loc>https://tmplayer.org/screenshots/details.webp</image:loc>
       <image:title>The TMPlayer film details screen</image:title>
     </image:image>
   </url>
