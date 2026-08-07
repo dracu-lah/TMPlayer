@@ -42,6 +42,7 @@ import com.tmplayer.ui.browse.MediaGridScreen
 import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.components.rememberToast
+import com.tmplayer.ui.onboarding.OverviewScreen
 import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.theme.TMPlayerTheme
 import kotlinx.coroutines.flow.first
@@ -81,6 +82,7 @@ private fun Root() {
     val settings = remember { SettingsStore(context) }
 
     val introSeen by settings.introSeen.collectAsStateWithLifecycle(initialValue = true)
+    val overviewSeen by settings.overviewSeen.collectAsStateWithLifecycle(initialValue = true)
     val favorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
     val watchProgress by settings.watchProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
     val continueWatching by settings.continueWatching.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -189,6 +191,10 @@ private fun Root() {
             }
             if (!introSeen) {
                 IntroScreen(onContinue = { scope.launch { settings.markIntroSeen() } })
+            } else if (!overviewSeen) {
+                // Between the two: what the app is allowed to do, then how to work it, then the
+                // QR code. A beginner has seen the whole shape of it before they sign in.
+                OverviewScreen(onDone = { scope.launch { settings.markOverviewSeen() } })
             } else {
                 LoginScreen(
                     state = auth,
@@ -199,6 +205,13 @@ private fun Root() {
                     },
                 )
             }
+            return@Box
+        }
+
+        // Asked for again from Settings. It covers the screen it is describing, which is the only
+        // place a walkthrough of this app makes sense.
+        if (!overviewSeen) {
+            OverviewScreen(onDone = { scope.launch { settings.markOverviewSeen() } })
             return@Box
         }
 
@@ -266,6 +279,19 @@ private fun Root() {
                             toast("${record.title} removed from Continue watching")
                         }
                     },
+                    onClearFavorites = {
+                        scope.launch {
+                            val count = favorites.size
+                            settings.clearFavorites()
+                            toast(
+                                if (count == 1) {
+                                    "Favourite cleared"
+                                } else {
+                                    "$count favourites cleared"
+                                },
+                            )
+                        }
+                    },
                     onClearHistory = {
                         scope.launch {
                             settings.clearWatchHistory()
@@ -276,9 +302,6 @@ private fun Root() {
                     picked = pickedTab,
                     onPickTab = { pickedTab = it },
                     layout = chatLayout,
-                    onToggleLayout = {
-                        scope.launch { settings.setChatLayout(chatLayout.toggled()) }
-                    },
                 )
             }
 
@@ -320,9 +343,6 @@ private fun Root() {
                         }
                     },
                     layout = filmLayout,
-                    onToggleLayout = {
-                        scope.launch { settings.setFilmLayout(filmLayout.toggled()) }
-                    },
                 )
             }
 

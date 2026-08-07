@@ -81,8 +81,6 @@ import com.tmplayer.ui.components.TvMenu
 import com.tmplayer.ui.components.TvSearchField
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.components.rememberVoiceSearch
-import com.tmplayer.ui.components.switchIcon
-import com.tmplayer.ui.components.switchLabel
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
@@ -122,13 +120,17 @@ fun BrowseScreen(
     onForgetFilm: (ResumeRecord) -> Unit = {},
     /** Empties Continue watching in one go, rather than one held-OK menu per film. */
     onClearHistory: () -> Unit = {},
+    /** Unstars every chat in one go, the counterpart to the star in each chat's menu. */
+    onClearFavorites: () -> Unit = {},
     /** The chat that reopens on launch, marked on its row so the jump is never unexplained. */
     launchChatId: Long = 0L,
     picked: BrowseTab? = null,
     onPickTab: (BrowseTab) -> Unit = {},
-    /** Rows or tiles. One arrangement covers every tab: they are all lists of the same card. */
+    /**
+     * Rows or tiles, chosen in Settings. One arrangement covers every tab: they are all lists of
+     * the same card.
+     */
     layout: CardLayout = CardLayout.List,
-    onToggleLayout: () -> Unit = {},
 ) {
     // An unfinished film wins the landing tab, then Favourites, then Recent, so the first screen
     // is never empty. Both are read from disk after the first frame, so the tab has to settle
@@ -144,6 +146,7 @@ fun BrowseScreen(
     var chatMenu by remember { mutableStateOf<ChatSummary?>(null) }
     var filmMenu by remember { mutableStateOf<ResumeRecord?>(null) }
     var confirmClearHistory by remember { mutableStateOf(false) }
+    var confirmClearFavorites by remember { mutableStateOf(false) }
 
     Row(Modifier.fillMaxSize()) {
         NavRail(
@@ -167,19 +170,7 @@ fun BrowseScreen(
                 Column(Modifier.fillMaxSize()) {
                     if (tab == BrowseTab.Continue) {
                         Header(tab, continueWatching.size) {
-                            // This tab has no search row to hang the arrangement toggle from, so it
-                            // sits beside the heading with the action that empties the tab.
                             if (continueWatching.isNotEmpty()) {
-                                HeaderAction(
-                                    label = layout.switchLabel,
-                                    icon = layout.switchIcon,
-                                    onClick = onToggleLayout,
-                                )
-                                Spacer(Modifier.width(12.dp))
-                            }
-                            // Only worth offering once there is a list to empty; a lone film is
-                            // quicker to remove by holding OK on it.
-                            if (continueWatching.size > 1) {
                                 HeaderAction(
                                     label = "Clear history",
                                     icon = Icons.Filled.Close,
@@ -199,13 +190,18 @@ fun BrowseScreen(
                             )
                         }
                     } else {
-                        Header(tab, visible.size)
-                        SearchRow(
-                            query = query,
-                            onQuery = { query = it },
-                            layout = layout,
-                            onToggleLayout = onToggleLayout,
-                        )
+                        Header(tab, visible.size) {
+                            // Stars are added one at a time from a menu, so the only way back from
+                            // a tab full of them is here, beside the tab they fill.
+                            if (tab == BrowseTab.Favorites && favorites.isNotEmpty()) {
+                                HeaderAction(
+                                    label = "Clear favourites",
+                                    icon = Icons.Filled.Close,
+                                    onClick = { confirmClearFavorites = true },
+                                )
+                            }
+                        }
+                        SearchRow(query = query, onQuery = { query = it })
                         Spacer(Modifier.height(20.dp))
 
                         if (visible.isEmpty()) {
@@ -264,6 +260,20 @@ fun BrowseScreen(
                     onToggleFavorite(chat)
                 },
             ),
+        )
+    }
+
+    if (confirmClearFavorites) {
+        TvConfirm(
+            title = "Clear favourites?",
+            message = "All ${favorites.size} chats lose their star and this tab empties.",
+            detail = "The chats themselves stay where they are, in Recent and All chats.",
+            confirmLabel = "Clear",
+            onConfirm = {
+                confirmClearFavorites = false
+                onClearFavorites()
+            },
+            onDismiss = { confirmClearFavorites = false },
         )
     }
 
@@ -830,12 +840,7 @@ private fun Header(tab: BrowseTab, count: Int, action: @Composable () -> Unit = 
 }
 
 @Composable
-private fun SearchRow(
-    query: String,
-    onQuery: (String) -> Unit,
-    layout: CardLayout,
-    onToggleLayout: () -> Unit,
-) {
+private fun SearchRow(query: String, onQuery: (String) -> Unit) {
     val startVoice = rememberVoiceSearch("Say a chat name", onQuery)
     val searchField = remember { FocusRequester() }
     Row(
@@ -849,9 +854,10 @@ private fun SearchRow(
             placeholder = "Search chats",
             modifier = Modifier.weight(1f).focusRequester(searchField),
         )
-        PillButton(layout.switchLabel, layout.switchIcon, onToggleLayout)
         if (startVoice != null) {
-            PillButton("Voice search", TmIcons.Mic, startVoice)
+            // A microphone on its own says it: the word beside it was only taking up room the
+            // search field could use.
+            PillButton(label = null, icon = TmIcons.Mic, onClick = startVoice)
         }
         if (query.isNotBlank()) {
             // Clearing the query is what removes this pill from the screen, and a control that
@@ -867,7 +873,7 @@ private fun SearchRow(
 }
 
 @Composable
-private fun PillButton(label: String, icon: ImageVector?, onClick: () -> Unit) {
+private fun PillButton(label: String?, icon: ImageVector?, onClick: () -> Unit) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
@@ -883,19 +889,30 @@ private fun PillButton(label: String, icon: ImageVector?, onClick: () -> Unit) {
             .clip(RoundedCornerShape(24.dp))
             .background(background)
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
-            .padding(horizontal = 18.dp),
+            // An icon on its own gets even padding, so the pill comes out round rather than as a
+            // wide one with a gap where the words used to be.
+            .padding(horizontal = if (label == null) 13.dp else 18.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (icon != null) {
-            Icon(icon, contentDescription = null, tint = foreground, modifier = Modifier.size(22.dp))
+            Icon(
+                icon,
+                // The label is the only description there was, so a wordless pill hands it to the
+                // screen reader instead of dropping it.
+                contentDescription = label,
+                tint = foreground,
+                modifier = Modifier.size(22.dp),
+            )
         }
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyLarge,
-            color = foreground,
-            maxLines = 1,
-        )
+        if (label != null) {
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = foreground,
+                maxLines = 1,
+            )
+        }
     }
 }
 

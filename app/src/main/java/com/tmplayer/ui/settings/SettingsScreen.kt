@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Notifications
@@ -59,11 +60,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.data.CardLayout
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DiskSpace
+import com.tmplayer.data.RemoteImages
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.Td
+import com.tmplayer.data.Tmdb
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvConfirm
@@ -79,6 +83,7 @@ import kotlinx.coroutines.launch
 private sealed interface Prompt {
     data object ClearCache : Prompt
     data object ClearHistory : Prompt
+    data object ClearFavorites : Prompt
     data object SignOut : Prompt
 }
 
@@ -95,6 +100,9 @@ fun SettingsScreen(
     val askBeforeClearing by settings.askBeforeClearing.collectAsStateWithLifecycle(initialValue = true)
     val downloadFirst by settings.downloadBeforePlaying.collectAsStateWithLifecycle(initialValue = false)
     val history by settings.continueWatching.collectAsStateWithLifecycle(initialValue = emptyList())
+    val favorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
+    val chatLayout by settings.chatLayout.collectAsStateWithLifecycle(initialValue = CardLayout.List)
+    val filmLayout by settings.filmLayout.collectAsStateWithLifecycle(initialValue = CardLayout.Grid)
     val lastChatId by settings.lastChatId.collectAsStateWithLifecycle(initialValue = 0L)
     val minSize by settings.minSizeBytes.collectAsStateWithLifecycle(
         initialValue = SizeFilter.DEFAULT_MIN,
@@ -208,6 +216,64 @@ fun SettingsScreen(
             )
         }
 
+        // ---- lists ---------------------------------------------------------------------------
+
+        item { SectionTitle("Lists") }
+        item {
+            ToggleRow(
+                title = "Chats as tiles",
+                subtitle = if (chatLayout == CardLayout.Grid) {
+                    "Artwork, several across"
+                } else {
+                    "Off: one wide row per chat, with room for the name"
+                },
+                icon = TmIcons.Grid,
+                checked = chatLayout == CardLayout.Grid,
+                onToggle = { scope.launch { settings.setChatLayout(chatLayout.toggled()) } },
+            )
+        }
+        item {
+            ToggleRow(
+                title = "Films as tiles",
+                subtitle = if (filmLayout == CardLayout.Grid) {
+                    "Posters, several across"
+                } else {
+                    "Off: one wide row per film, with room for the file name"
+                },
+                icon = TmIcons.Grid,
+                checked = filmLayout == CardLayout.Grid,
+                onToggle = { scope.launch { settings.setFilmLayout(filmLayout.toggled()) } },
+            )
+        }
+        if (favorites.isNotEmpty()) {
+            item {
+                ActionRow(
+                    title = "Clear favourites",
+                    subtitle = if (favorites.size == 1) {
+                        "Unstars the one chat you have starred"
+                    } else {
+                        "Unstars all ${favorites.size} starred chats"
+                    },
+                    icon = Icons.Filled.Close,
+                    onClick = { prompt = Prompt.ClearFavorites },
+                )
+            }
+        }
+        if (history.isNotEmpty()) {
+            item {
+                ActionRow(
+                    title = "Clear Continue watching",
+                    subtitle = if (history.size == 1) {
+                        "Forgets the one film you have on the go"
+                    } else {
+                        "Forgets all ${history.size} films you have on the go"
+                    },
+                    icon = Icons.Filled.Close,
+                    onClick = { prompt = Prompt.ClearHistory },
+                )
+            }
+        }
+
         // ---- playback -----------------------------------------------------------------------
 
         item { SectionTitle("Playback") }
@@ -225,21 +291,6 @@ fun SettingsScreen(
                     scope.launch { settings.setDownloadBeforePlaying(!downloadFirst) }
                 },
             )
-        }
-
-        if (history.isNotEmpty()) {
-            item {
-                ActionRow(
-                    title = "Clear Continue watching",
-                    subtitle = if (history.size == 1) {
-                        "Forgets the one film you have on the go"
-                    } else {
-                        "Forgets all ${history.size} films you have on the go"
-                    },
-                    icon = Icons.Filled.Close,
-                    onClick = { prompt = Prompt.ClearHistory },
-                )
-            }
         }
 
         // ---- storage ------------------------------------------------------------------------
@@ -302,6 +353,18 @@ fun SettingsScreen(
                     },
                 )
             }
+        }
+
+        // ---- help ----------------------------------------------------------------------------
+
+        item { SectionTitle("Help") }
+        item {
+            ActionRow(
+                title = "Show the walkthrough again",
+                subtitle = "A few screens on how TMPlayer works",
+                icon = Icons.Filled.Info,
+                onClick = { scope.launch { settings.replayOverview() } },
+            )
         }
 
         // ---- account ------------------------------------------------------------------------
@@ -371,16 +434,38 @@ fun SettingsScreen(
             onDismiss = { prompt = null },
         )
 
+        Prompt.ClearFavorites -> TvConfirm(
+            title = "Clear favourites?",
+            message = "All ${favorites.size} chats lose their star and the Favourites tab empties.",
+            detail = "The chats themselves stay where they are, in Recent and All chats.",
+            confirmLabel = "Clear",
+            onConfirm = {
+                prompt = null
+                scope.launch {
+                    val count = favorites.size
+                    settings.clearFavorites()
+                    toast(if (count == 1) "Favourite cleared" else "$count favourites cleared")
+                }
+            },
+            onDismiss = { prompt = null },
+        )
+
         Prompt.SignOut -> TvConfirm(
             title = "Sign out of Telegram?",
-            message = "You'll be signed out and taken back to the sign-in screen. " +
-                "The downloaded film is deleted too.",
+            message = "You'll be signed out and taken back to the sign-in screen. The downloaded " +
+                "film, your favourites and everything you were part-way through go with it.",
             confirmLabel = "Sign out",
             onConfirm = {
                 prompt = null
                 scope.launch {
                     busy = "Signing out…"
+                    // Everything this app knows is about the account that is leaving, so it all
+                    // goes: the film on disk, the film database answers and their artwork, and
+                    // every preference. TDLib clears its own database as it logs out.
                     runCatching { Td.clearMediaCache() }
+                    runCatching { settings.clearEverything() }
+                    runCatching { Tmdb.clearCache() }
+                    runCatching { RemoteImages.clear() }
                     Td.logOut()
                     onLoggedOut()
                 }

@@ -73,8 +73,6 @@ import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvSearchField
 import com.tmplayer.ui.components.rememberVoiceSearch
-import com.tmplayer.ui.components.switchIcon
-import com.tmplayer.ui.components.switchLabel
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
@@ -105,7 +103,6 @@ fun MediaGridScreen(
     onPlayFromStart: (MediaItem) -> Unit,
     /** Posters four across, or one wide row per film with the full title on it. */
     layout: CardLayout = CardLayout.Grid,
-    onToggleLayout: () -> Unit = {},
 ) {
     val context = LocalContext.current
     // The limits are part of the key: changing them in Settings has to rebuild the listing,
@@ -131,8 +128,6 @@ fun MediaGridScreen(
             onSubmit = { viewModel.search(query) },
             onToggleFavorite = onToggleFavorite,
             onRefresh = viewModel::load,
-            layout = layout,
-            onToggleLayout = onToggleLayout,
         )
 
         StateScaffold(
@@ -288,8 +283,6 @@ private fun Header(
     onSubmit: () -> Unit,
     onToggleFavorite: () -> Unit,
     onRefresh: () -> Unit,
-    layout: CardLayout,
-    onToggleLayout: () -> Unit,
 ) {
     val startVoice = rememberVoiceSearch("Say a film name") {
         onQuery(it)
@@ -324,7 +317,9 @@ private fun Header(
                 modifier = Modifier.weight(1f).focusRequester(searchField),
             )
             if (startVoice != null) {
-                Pill("Voice search", TmIcons.Mic, onClick = startVoice)
+                // The microphone says what it does; the word beside it only took room from the
+                // search field.
+                Pill(label = null, icon = TmIcons.Mic, onClick = startVoice)
             }
             if (query.isNotBlank()) {
                 Pill("Clear", Icons.Filled.Close) {
@@ -336,7 +331,6 @@ private fun Header(
                     onSubmit()
                 }
             }
-            Pill(layout.switchLabel, layout.switchIcon, onClick = onToggleLayout)
             Pill(
                 label = if (isFavorite) "Remove favourite" else "Add favourite",
                 icon = if (isFavorite) Icons.Filled.Star else TmIcons.StarOutline,
@@ -352,7 +346,7 @@ private fun Header(
 
 @Composable
 private fun Pill(
-    label: String,
+    label: String?,
     icon: ImageVector,
     tintWhenIdle: Color = TextPrimary,
     onClick: () -> Unit,
@@ -372,12 +366,18 @@ private fun Pill(
             .clip(RoundedCornerShape(24.dp))
             .background(background)
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
-            .padding(horizontal = 16.dp),
+            // Even padding when there are no words, so the pill comes out round rather than as a
+            // wide one with a gap in it.
+            .padding(horizontal = if (label == null) 13.dp else 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = foreground, modifier = Modifier.size(22.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = foreground, maxLines = 1)
+        // The label is the only description there was, so a wordless pill hands it to the screen
+        // reader instead of dropping it.
+        Icon(icon, contentDescription = label, tint = foreground, modifier = Modifier.size(22.dp))
+        if (label != null) {
+            Text(label, style = MaterialTheme.typography.bodyLarge, color = foreground, maxLines = 1)
+        }
     }
 }
 

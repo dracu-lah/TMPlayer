@@ -16,6 +16,7 @@ private val Context.prefs by preferencesDataStore("tmplayer")
 private val FAVORITES = stringSetPreferencesKey("favorite_chats")
 private val ASK_BEFORE_CLEARING = booleanPreferencesKey("ask_before_clearing")
 private val INTRO_SEEN = booleanPreferencesKey("intro_seen")
+private val OVERVIEW_SEEN = booleanPreferencesKey("overview_seen")
 private val OPEN_LAST_CHAT = booleanPreferencesKey("open_last_chat")
 private val DOWNLOAD_FIRST = booleanPreferencesKey("download_before_playing")
 private val LAST_CHAT = longPreferencesKey("last_chat")
@@ -52,6 +53,22 @@ class SettingsStore(private val context: Context) {
             prefs[FAVORITES] = current
         }
         return nowFavorite
+    }
+
+    /**
+     * Wipes every preference: favourites, watch history, size limits, the lot.
+     *
+     * Signing out has to leave nothing of the previous account behind. TDLib clears its own
+     * database on log out, but everything this app remembers about their chats and their films
+     * lives here, and none of it means anything to whoever signs in next.
+     */
+    suspend fun clearEverything() {
+        context.prefs.edit { it.clear() }
+    }
+
+    /** Unstars every chat at once, which is the only way back from a tab full of them. */
+    suspend fun clearFavorites() {
+        context.prefs.edit { it.remove(FAVORITES) }
     }
 
     // ---- what opens on launch ---------------------------------------------------------------
@@ -172,6 +189,20 @@ class SettingsStore(private val context: Context) {
 
     suspend fun markIntroSeen() {
         context.prefs.edit { it[INTRO_SEEN] = true }
+    }
+
+    /**
+     * Whether the walkthrough has been shown. Separate from [introSeen]: one is what the app is
+     * allowed to do, the other is how to use it, and Settings can ask for the second one back.
+     */
+    val overviewSeen: Flow<Boolean> = context.prefs.data.map { it[OVERVIEW_SEEN] ?: false }
+
+    suspend fun markOverviewSeen() {
+        context.prefs.edit { it[OVERVIEW_SEEN] = true }
+    }
+
+    suspend fun replayOverview() {
+        context.prefs.edit { it[OVERVIEW_SEEN] = false }
     }
 
     // ---- resume -----------------------------------------------------------------------------
