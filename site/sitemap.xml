@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
-    <loc>https://tmp.nevil.dev/</loc>
+    <loc>https://tmplayer.vercel.app/</loc>
     <lastmod>2026-08-07</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <image:image>
-      <image:loc>https://tmp.nevil.dev/screenshots/chats.png</image:loc>
+      <image:loc>https://tmplayer.vercel.app/screenshots/chats.png</image:loc>
       <image:title>The TMPlayer chat list on Android TV</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://tmp.nevil.dev/screenshots/grid.png</image:loc>
+      <image:loc>https://tmplayer.vercel.app/screenshots/grid.png</image:loc>
       <image:title>Videos in a Telegram chat, as poster tiles</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://tmp.nevil.dev/screenshots/details.png</image:loc>
+      <image:loc>https://tmplayer.vercel.app/screenshots/details.png</image:loc>
       <image:title>The TMPlayer film details screen</image:title>
     </image:image>
   </url>

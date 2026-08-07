@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TMPlayer: stream your own Telegram films on Android TV</title>
 <meta name="description" content="TMPlayer is a free, open source Android TV app that signs into your own Telegram account by QR code and streams the videos already in your chats. Built for cheap TV sticks with 1 GB of RAM.">
-<link rel="canonical" href="https://tmp.nevil.dev/">
+<link rel="canonical" href="https://tmplayer.vercel.app/">
 <meta name="author" content="dracu-lah">
 <meta name="theme-color" content="#0E0E12">
 <meta name="color-scheme" content="dark">
@@ -14,9 +14,9 @@
 <meta property="og:site_name" content="TMPlayer">
 <meta property="og:title" content="TMPlayer: stream your own Telegram films on Android TV">
 <meta property="og:description" content="A free, open source Android TV app that signs into your own Telegram account by QR code and streams the videos already in your chats. Built for cheap TV sticks with 1 GB of RAM.">
-<meta property="og:url" content="https://tmp.nevil.dev/">
-<meta property="og:image" content="https://tmp.nevil.dev/og.png">
-<meta property="og:image:secure_url" content="https://tmp.nevil.dev/og.png">
+<meta property="og:url" content="https://tmplayer.vercel.app/">
+<meta property="og:image" content="https://tmplayer.vercel.app/og.png">
+<meta property="og:image:secure_url" content="https://tmplayer.vercel.app/og.png">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -26,7 +26,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="TMPlayer: stream your own Telegram films on Android TV">
 <meta name="twitter:description" content="A free, open source Android TV app that signs into your own Telegram account by QR code and streams the videos already in your chats.">
-<meta name="twitter:image" content="https://tmp.nevil.dev/og.png">
+<meta name="twitter:image" content="https://tmplayer.vercel.app/og.png">
 <meta name="twitter:image:alt" content="The TMPlayer wordmark on a dark background, above the line: your Telegram films, on the TV.">
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -34,8 +34,8 @@
 <link rel="apple-touch-icon" href="/icon-512.png">
 <link rel="manifest" href="/site.webmanifest">
 
-<link rel="preload" href="fonts/instrument-sans-var.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="fonts/instrument-serif.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/poppins-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/poppins-600.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="styles.css">
 
 <script type="application/ld+json">
@@ -45,12 +45,12 @@
   "name": "TMPlayer",
   "alternateName": "TMPlayer for Android TV",
   "description": "An open source Android TV app that signs into your own Telegram account by QR code and streams the videos already in your chats.",
-  "url": "https://tmp.nevil.dev/",
-  "image": "https://tmp.nevil.dev/og.png",
+  "url": "https://tmplayer.vercel.app/",
+  "image": "https://tmplayer.vercel.app/og.png",
   "screenshot": [
-    "https://tmp.nevil.dev/screenshots/chats.png",
-    "https://tmp.nevil.dev/screenshots/grid.png",
-    "https://tmp.nevil.dev/screenshots/details.png"
+    "https://tmplayer.vercel.app/screenshots/chats.png",
+    "https://tmplayer.vercel.app/screenshots/grid.png",
+    "https://tmplayer.vercel.app/screenshots/details.png"
   ],
   "applicationCategory": "MultimediaApplication",
   "applicationSubCategory": "Video player",
@@ -105,7 +105,7 @@
         <a href="#download">Download</a>
         <a href="#screenshots">Screens</a>
         <a href="#install">Install</a>
-        <a href="#feedback">Feedback</a>
+        <a href="#feedback">Get in touch</a>
       </span>
       <a class="nav-cta" href="https://github.com/dracu-lah/TMPlayer" rel="noopener">GitHub</a>
     </nav>
@@ -163,14 +163,12 @@
       <figure class="hero-shot">
         <img src="screenshots/hero.jpg" alt="The TMPlayer details screen for a film called Uyir, showing its poster, runtime, genres, a synopsis, a row of cast portraits, and buttons to resume from 4 minutes 36 seconds, start from the beginning, or watch the trailer." width="1600" height="667" fetchpriority="high" decoding="async">
       </figure>
-      <div class="scrub" aria-hidden="true"><span class="scrub-fill"></span></div>
     </div>
   </section>
 
   <section class="band" id="download" aria-labelledby="download-h">
     <div class="wrap">
       <div class="section-head" data-reveal>
-        <p class="section-index" aria-hidden="true">01</p>
         <div class="section-title">
           <h2 id="download-h">Download</h2>
           <p class="section-sub">One APK per processor type, built by the repository's own workflow. Pick the one your stick can run.</p>
@@ -215,7 +213,6 @@
   <section class="band" id="screenshots" aria-labelledby="shots-h">
     <div class="wrap">
       <div class="section-head" data-reveal>
-        <p class="section-index" aria-hidden="true">02</p>
         <div class="section-title">
           <h2 id="shots-h">What it looks like</h2>
           <p class="section-sub">Captured on the device, at 1920 by 1080.</p>
@@ -248,7 +245,6 @@
   <section class="band" id="install" aria-labelledby="install-h">
     <div class="wrap">
       <div class="section-head" data-reveal>
-        <p class="section-index" aria-hidden="true">03</p>
         <div class="section-title">
           <h2 id="install-h">How to install</h2>
           <p class="section-sub">Four steps. You only do them once.</p>
@@ -285,7 +281,6 @@ adb install TMPlayer-&lt;version&gt;-armeabi-v7a.apk</code></pre>
   <section class="band" id="about" aria-labelledby="about-h">
     <div class="wrap">
       <div class="section-head" data-reveal>
-        <p class="section-index" aria-hidden="true">04</p>
         <div class="section-title">
           <h2 id="about-h">Be clear about what this is</h2>
           <p class="section-sub">A player pointed at an account you already have.</p>
@@ -316,7 +311,6 @@ adb install TMPlayer-&lt;version&gt;-armeabi-v7a.apk</code></pre>
   <section class="band" id="feedback" aria-labelledby="feedback-h">
     <div class="wrap">
       <div class="section-head" data-reveal>
-        <p class="section-index" aria-hidden="true">05</p>
         <div class="section-title">
           <h2 id="feedback-h">Missing something?</h2>
           <p class="section-sub">If the app will not do the thing you wanted, or a particular TV stick refuses to behave, I would rather hear about it.</p>
@@ -362,12 +356,12 @@ adb install TMPlayer-&lt;version&gt;-armeabi-v7a.apk</code></pre>
         <a href="https://github.com/dracu-lah/TMPlayer/releases" rel="noopener">All releases</a>
         <a href="https://github.com/dracu-lah/TMPlayer/blob/main/INSTALL.md" rel="noopener">Install guide</a>
         <a href="https://github.com/dracu-lah/TMPlayer/issues" rel="noopener">Report a problem</a>
-        <a href="https://www.apache.org/licenses/LICENSE-2.0" rel="noopener">Apache-2.0 licence</a>
+        <a href="mailto:nevilnicks4321@gmail.com?subject=TMPlayer%20feature%20request">Get in touch</a>
         <a href="https://nevil.dev" rel="noopener">nevil.dev</a>
       </nav>
     </div>
     <p class="muted small legal">Film posters, synopses and cast come from <a href="https://www.themoviedb.org" rel="noopener">The Movie Database</a>. This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
-    <p class="muted small legal">Player mark via <a href="https://www.svgrepo.com" rel="noopener">SVG Repo</a>, recoloured to the app palette. Set in Instrument Serif, Instrument Sans and IBM Plex Mono, all SIL Open Font License, served from this domain.</p>
+    <p class="muted small legal">Player mark via <a href="https://www.svgrepo.com" rel="noopener">SVG Repo</a>, recoloured to the app palette. Set in Poppins, SIL Open Font License, served from this domain. Released under the <a href="https://www.apache.org/licenses/LICENSE-2.0" rel="noopener">Apache-2.0 licence</a>.</p>
   </div>
 </footer>
 
