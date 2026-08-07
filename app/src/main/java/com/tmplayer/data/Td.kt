@@ -46,6 +46,7 @@ object Td {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val gate = Mutex()
+    private var lastHandled: AuthorizationState? = null
 
     private val _auth = MutableStateFlow<AuthState>(AuthState.Connecting)
     val auth: StateFlow<AuthState> = _auth.asStateFlow()
@@ -65,6 +66,7 @@ object Td {
             val closed = CompletableDeferred<Unit>()
             val td = TdlClient.create()
             current = td
+            lastHandled = null
 
             val updates = launch {
                 td.authorizationStateUpdates.collect { apply(td, it.authorizationState, closed) }
@@ -88,6 +90,14 @@ object Td {
         state: AuthorizationState,
         closed: CompletableDeferred<Unit>,
     ) = gate.withLock {
+        // The update flow and the one-off getAuthorizationState() often deliver the same state
+        // back to back at startup. Acting twice would send TDLib its parameters twice and
+        // surface the second attempt's error as a login failure. Comparing against only the
+        // immediately previous state still lets a genuine repeat through — a QR link that
+        // expires and sends us back to WaitPhoneNumber has a different state in between.
+        if (state == lastHandled) return@withLock
+        lastHandled = state
+
         val step = AuthReducer.reduce(state)
         // Never let a stale "connecting" overwrite a terminal failure the user still needs to read.
         if (_auth.value !is AuthState.Failed || step.state !is AuthState.Connecting) {

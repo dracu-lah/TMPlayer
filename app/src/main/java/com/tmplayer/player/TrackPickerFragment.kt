@@ -26,6 +26,9 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
 
     private class Option(val group: Tracks.Group?, val trackIndex: Int, val label: String)
 
+    /** PlayerActivity runs on Theme.Leanback, which has no guided-step styling of its own. */
+    override fun onProvideTheme(): Int = androidx.leanback.R.style.Theme_Leanback_GuidedStep
+
     override fun onCreateGuidance(savedInstanceState: Bundle?): GuidanceStylist.Guidance {
         val title = if (trackType == C.TRACK_TYPE_AUDIO) "Audio track" else "Subtitles"
         return GuidanceStylist.Guidance(title, "", "", null)

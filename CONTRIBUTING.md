@@ -27,3 +27,15 @@ Test devices: cheap/low-spec Android TV is the target (Mi TV Stick: 1 GB RAM, 8 
 ## Reporting issues
 
 Include: device model + Android TV version, what you did, what happened, and `adb logcat` output around the failure if you can. For playback issues, the file's container/codecs (e.g. from VLC's media info) helps a lot.
+
+## Toolchain notes
+
+These version constraints are not free choices, and changing them breaks the build:
+
+- **Kotlin must be 2.3.x or newer.** `dev.g000sha256:tdl-coroutines` ships Kotlin 2.3 metadata;
+  an older compiler rejects it outright.
+- **`compileSdk` is 36** because `androidx.core` 1.17+ and `activity-compose` 1.11+ require it,
+  and **AGP stays on 8.x** because `androidx.core` 1.19 / `lifecycle` 2.11 would drag in AGP 9
+  and Gradle 9. `targetSdk` deliberately stays at 35.
+- **media3 and NextLib versions are coupled**: `nextlib-media3ext` is published as
+  `<media3-version>-<nextlib-version>`, so bumping one means bumping both to a pair that exists.

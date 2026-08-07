@@ -32,7 +32,7 @@ See [PLAN.md](PLAN.md) for the full design document, and [INSTALL.md](INSTALL.md
 
 ## Building
 
-Requirements: JDK 17+ (21 recommended), Android SDK platform 35.
+Requirements: JDK 17+ (21 recommended), Android SDK platform 36 (the app itself runs on API 26+).
 
 1. Get your own Telegram API credentials at [my.telegram.org](https://my.telegram.org) → *API development tools* (free, 2 minutes). Every fork must use its own pair — they are not distributed with this repo.
 2. Create `local.properties` in the repo root:

@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,8 +58,8 @@ private fun Root() {
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (auth !is AuthState.Ready) {
-            // Signing out drops straight back to the QR code, so reset where we were.
-            if (screen !is Screen.Chats) screen = Screen.Chats
+            // Signing out drops straight back to the QR code, so forget where we were.
+            LaunchedEffect(Unit) { screen = Screen.Chats }
             LoginScreen(
                 state = auth,
                 passwordError = passwordError,

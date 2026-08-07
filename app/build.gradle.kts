@@ -20,7 +20,7 @@ val keystoreProps = Properties().apply {
 
 android {
     namespace = "com.tmplayer"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.tmplayer"

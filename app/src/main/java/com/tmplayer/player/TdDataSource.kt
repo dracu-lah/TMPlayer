@@ -41,6 +41,7 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
     private var fileId = -1
     private var uri: Uri? = null
     private var handle: RandomAccessFile? = null
+    private var localPath: String? = null
     private var position = 0L
     private var bytesRemaining = 0L
     private var opened = false
@@ -82,8 +83,8 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
         val available = blocking { awaitBytesAt(position) }
         val wanted = minOf(length.toLong(), bytesRemaining, available).toInt()
 
-        val file = openHandle()
         val read = synchronized(this) {
+            val file = openHandle()
             file.seek(position)
             file.read(buffer, offset, wanted)
         }
@@ -153,7 +154,17 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
 
     private fun available(file: TdFile, target: Long): Long {
         val size = if (file.size > 0) file.size else file.expectedSize
-        if (file.local.path.isNullOrEmpty()) return 0
+        val path = file.local.path
+        if (path.isNullOrEmpty()) return 0
+        // TDLib can move a file (finishing a download renames it out of the partial name), so
+        // the handle is dropped whenever the path changes rather than reading a stale inode.
+        synchronized(this) {
+            if (path != localPath) {
+                runCatching { handle?.close() }
+                handle = null
+                localPath = path
+            }
+        }
         return DownloadWindow.availableAt(
             position = target,
             size = size,
@@ -174,17 +185,16 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
         )
     }
 
-    private fun openHandle(): RandomAccessFile = synchronized(this) {
-        handle ?: run {
-            val path = runBlocking { td.getFile(fileId).valueOrNull?.local?.path }
-            if (path.isNullOrEmpty()) throw IOException("No local file for $fileId yet")
-            RandomAccessFile(path, "r").also { handle = it }
-        }
+    /** Call under the instance lock. [awaitBytesAt] has already recorded a usable path. */
+    private fun openHandle(): RandomAccessFile = handle ?: run {
+        val path = localPath ?: throw IOException("No local file for $fileId yet")
+        RandomAccessFile(path, "r").also { handle = it }
     }
 
     private fun closeHandle() = synchronized(this) {
         runCatching { handle?.close() }
         handle = null
+        localPath = null
     }
 
     /**

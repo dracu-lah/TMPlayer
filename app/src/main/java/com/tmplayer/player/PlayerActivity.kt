@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
+import android.view.WindowManager
 import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
 import androidx.leanback.app.GuidedStepSupportFragment
@@ -53,7 +54,6 @@ class PlayerActivity : FragmentActivity() {
 
     private var chatId = 0L
     private var messageId = 0L
-    private var durationHintSec = 0
 
     private lateinit var settings: SettingsStore
     private lateinit var subtitleView: SubtitleView
@@ -64,12 +64,14 @@ class PlayerActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_player)
+        // Two hours of a film is two hours with no button presses — without this the TV
+        // dims and then sleeps on the viewer.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         settings = SettingsStore(this)
         val fileId = intent.getIntExtra(EXTRA_FILE_ID, 0)
         chatId = intent.getLongExtra(EXTRA_CHAT_ID, 0)
         messageId = intent.getLongExtra(EXTRA_MESSAGE_ID, 0)
-        durationHintSec = intent.getIntExtra(EXTRA_DURATION, 0)
         mediaTitle = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         mediaSubtitle = intent.getStringExtra(EXTRA_SUBTITLE).orEmpty()
 
@@ -158,6 +160,7 @@ class PlayerActivity : FragmentActivity() {
             .apply {
                 setAudioAttributes(AudioAttributes.DEFAULT, /* handleAudioFocus = */ true)
                 setHandleAudioBecomingNoisy(true)
+                setWakeMode(C.WAKE_MODE_LOCAL)
             }
     }
 
@@ -308,7 +311,6 @@ class PlayerActivity : FragmentActivity() {
         private const val EXTRA_MESSAGE_ID = "message_id"
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_SUBTITLE = "subtitle"
-        private const val EXTRA_DURATION = "duration"
 
         private const val BUFFER_MIN_MS = 15_000
         private const val BUFFER_MAX_MS = 50_000
@@ -325,7 +327,6 @@ class PlayerActivity : FragmentActivity() {
                 putExtra(EXTRA_CHAT_ID, item.chatId)
                 putExtra(EXTRA_MESSAGE_ID, item.messageId)
                 putExtra(EXTRA_TITLE, item.title)
-                putExtra(EXTRA_DURATION, item.durationSec)
                 putExtra(
                     EXTRA_SUBTITLE,
                     listOf(

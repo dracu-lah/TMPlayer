@@ -39,7 +39,6 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
-import com.tmplayer.ui.components.BigLoader
 import com.tmplayer.ui.components.Poster
 import com.tmplayer.ui.components.StateScaffold
 
@@ -75,24 +74,34 @@ fun MediaGridScreen(
             val gridState = rememberLazyGridState()
             val firstItem = remember { FocusRequester() }
 
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(COLUMNS),
-                state = gridState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 56.dp, end = 56.dp, bottom = 48.dp),
-                horizontalArrangement = Arrangement.spacedBy(24.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-            ) {
-                items(list.items, key = { it.id }) { item ->
-                    MediaCard(
-                        item = item,
-                        onClick = { onPlay(item) },
-                        modifier = if (item === list.items.firstOrNull()) {
-                            Modifier.focusRequester(firstItem)
-                        } else {
-                            Modifier
-                        },
-                    )
+            Column(Modifier.fillMaxSize()) {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(COLUMNS),
+                    state = gridState,
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    contentPadding = PaddingValues(start = 56.dp, end = 56.dp, bottom = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(24.dp),
+                ) {
+                    items(list.items, key = { it.id }) { item ->
+                        MediaCard(
+                            item = item,
+                            onClick = { onPlay(item) },
+                            modifier = if (item === list.items.firstOrNull()) {
+                                Modifier.focusRequester(firstItem)
+                            } else {
+                                Modifier
+                            },
+                        )
+                    }
+                }
+
+                // Reserved strip rather than a conditional one, so the grid never jumps a row
+                // under the user's thumb the moment another page lands.
+                Box(Modifier.fillMaxWidth().height(72.dp), contentAlignment = Alignment.Center) {
+                    if (list.loadingMore) {
+                        Text("Loading more…", style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
 
@@ -109,10 +118,6 @@ fun MediaGridScreen(
             }
             LaunchedEffect(gridState, list.items.size) {
                 snapshotFlow { nearEnd }.collect { if (it) viewModel.loadMore() }
-            }
-
-            if (list.loadingMore) {
-                Box(Modifier.fillMaxWidth().height(96.dp)) { BigLoader(null) }
             }
         }
     }
