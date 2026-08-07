@@ -17,6 +17,7 @@ private val FAVORITES = stringSetPreferencesKey("favorite_chats")
 private val ASK_BEFORE_CLEARING = booleanPreferencesKey("ask_before_clearing")
 private val INTRO_SEEN = booleanPreferencesKey("intro_seen")
 private val OPEN_LAST_CHAT = booleanPreferencesKey("open_last_chat")
+private val DOWNLOAD_FIRST = booleanPreferencesKey("download_before_playing")
 private val LAST_CHAT = longPreferencesKey("last_chat")
 private val MIN_SIZE = longPreferencesKey("min_size_bytes")
 private val MAX_SIZE = longPreferencesKey("max_size_bytes")
@@ -88,6 +89,25 @@ class SettingsStore(private val context: Context) {
         val prefs = context.prefs.data.first()
         return autoOpenChatId(prefs[LAST_CHAT] ?: 0L, prefs[OPEN_LAST_CHAT] ?: true)
     }
+
+    // ---- playback ---------------------------------------------------------------------------
+
+    /**
+     * Wait for the whole film to arrive before starting it.
+     *
+     * Off by default, because streaming while it downloads is the point of the app. It is here for
+     * a connection too slow or too unsteady to keep up with playback, where waiting once beats
+     * being stopped every few minutes.
+     */
+    val downloadBeforePlaying: Flow<Boolean> = context.prefs.data.map { it[DOWNLOAD_FIRST] ?: false }
+
+    suspend fun setDownloadBeforePlaying(value: Boolean) {
+        context.prefs.edit { it[DOWNLOAD_FIRST] = value }
+    }
+
+    /** Read once at the start of playback, where a flow that has not emitted yet would lie. */
+    suspend fun downloadBeforePlayingNow(): Boolean =
+        context.prefs.data.first()[DOWNLOAD_FIRST] ?: false
 
     // ---- size filter ------------------------------------------------------------------------
 
@@ -217,6 +237,22 @@ class SettingsStore(private val context: Context) {
                 if (durationMs > 0) prefs[durationKey(chatId, messageId)] = durationMs
                 if (description != null) prefs[metaKey(chatId, messageId)] = description
             }
+        }
+    }
+
+    /**
+     * Forgets every half-watched film in one pass, emptying Continue watching.
+     *
+     * The keys are collected before anything is removed: [MutablePreferences] is being written to
+     * while its own map is walked otherwise.
+     */
+    suspend fun clearWatchHistory() {
+        context.prefs.edit { prefs ->
+            val doomed = prefs.asMap().keys.filter { key ->
+                val name = key.name
+                name.startsWith("resume_") || name.startsWith("duration_") || name.startsWith("meta_")
+            }
+            for (key in doomed) prefs.remove(key)
         }
     }
 

@@ -42,6 +42,37 @@ object StreamStats {
         return (missingBytes / speedBytesPerSec).roundToLong().coerceAtLeast(1)
     }
 
+    /**
+     * How far into the film the download has reached, 0..1.
+     *
+     * TDLib fills one contiguous window at a time, so the end of that window is the point the
+     * film is watchable up to. That, rather than the number of bytes sitting on disk, is what
+     * someone pausing to ask "how much has downloaded?" wants to know.
+     */
+    fun downloadedFraction(
+        downloadOffset: Long,
+        downloadedPrefixSize: Long,
+        size: Long,
+        completed: Boolean,
+    ): Float {
+        if (completed) return 1f
+        if (size <= 0) return 0f
+        return ((downloadOffset + downloadedPrefixSize).toDouble() / size).toFloat().coerceIn(0f, 1f)
+    }
+
+    /** `62%`, rounded down so a film still arriving is never reported as fully here. */
+    fun formatPercent(fraction: Float): String {
+        val percent = (fraction * 100).toInt().coerceIn(0, 100)
+        return "$percent%"
+    }
+
+    /** Seconds until [remainingBytes] have arrived, or `null` when the speed says nothing yet. */
+    fun secondsForBytes(remainingBytes: Long, speedBytesPerSec: Long): Long? {
+        if (remainingBytes <= 0) return 0
+        if (speedBytesPerSec < MIN_MEANINGFUL_SPEED) return null
+        return (remainingBytes / speedBytesPerSec).coerceAtLeast(1)
+    }
+
     /** Average bytes per millisecond of playback, used to turn "bytes" into "seconds". */
     fun bytesPerMs(sizeBytes: Long, durationSec: Int): Double {
         if (sizeBytes <= 0 || durationSec <= 0) return 0.0

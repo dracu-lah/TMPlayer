@@ -38,14 +38,20 @@ videos inside them. Text messages never appear. Documents are matched by name an
 most films arrive as a plain `.mkv` rather than as a video.
 
 **Starts fast and seeks properly.** Playback begins while the file is still arriving, and seeking
-re-aims the download rather than waiting for it. This is the whole reason the app exists.
+re-aims the download rather than waiting for it. This is the whole reason the app exists. Bring the
+controls up and the corner says how much of the film has come down, and how quickly.
+
+**Or waits, if your connection would rather.** Settings has a *Download the whole film first*
+switch, off by default. On, the film is fetched in full before it starts, which beats being
+stopped every few minutes on a line that cannot keep up with playback.
 
 **Handles the formats films actually come in.** MKV, MP4, AVI, TS, and the rest. Embedded
 subtitles, including image-based PGS and VobSub. Dual audio tracks you can switch between mid-film.
 DTS, TrueHD and E-AC3 decode in software when the stick has no silicon for them, while video stays
 on the hardware decoder.
 
-**Remembers where you stopped.** Every film, with a progress bar on its poster.
+**Remembers where you stopped.** Every film, with a progress bar on its poster. Hold OK on one to
+forget it, or clear the whole Continue watching list at once from its heading or from Settings.
 
 **Keeps one film on the device.** An 8 GB stick cannot hold a library. TMPlayer caches the film you
 are watching and clears the previous one, showing you exactly how much space that frees and asking

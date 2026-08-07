@@ -50,6 +50,20 @@ class TvPlaybackFragment : VideoSupportFragment() {
     /** True while the transport row is on screen; the activity uses it to route D-pad keys. */
     fun controlsVisible(): Boolean = isControlsOverlayVisible
 
+    // Leanback raises and hides the transport row itself, on a key press, on pause, and on its
+    // own auto-hide timer. Overriding both ends of that is the only way to hear about it, and the
+    // activity needs to: the download figure rides with the controls.
+
+    override fun showControlsOverlay(runAnimation: Boolean) {
+        super.showControlsOverlay(runAnimation)
+        (activity as? PlayerActivity)?.onControlsVisibilityChanged(true)
+    }
+
+    override fun hideControlsOverlay(runAnimation: Boolean) {
+        super.hideControlsOverlay(runAnimation)
+        (activity as? PlayerActivity)?.onControlsVisibilityChanged(false)
+    }
+
     override fun onDestroy() {
         glue?.host = null
         glue = null

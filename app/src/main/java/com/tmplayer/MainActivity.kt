@@ -238,6 +238,7 @@ private fun Root() {
                     onForgetFilm = { record ->
                         scope.launch { settings.clearResumePosition(record.chatId, record.messageId) }
                     },
+                    onClearHistory = { scope.launch { settings.clearWatchHistory() } },
                     launchChatId = lastChatId,
                     picked = pickedTab,
                     onPickTab = { pickedTab = it },

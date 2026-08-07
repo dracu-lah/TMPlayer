@@ -77,6 +77,7 @@ import kotlinx.coroutines.launch
 
 private sealed interface Prompt {
     data object ClearCache : Prompt
+    data object ClearHistory : Prompt
     data object SignOut : Prompt
 }
 
@@ -91,6 +92,8 @@ fun SettingsScreen(
 
     val openLastChat by settings.openLastChat.collectAsStateWithLifecycle(initialValue = true)
     val askBeforeClearing by settings.askBeforeClearing.collectAsStateWithLifecycle(initialValue = true)
+    val downloadFirst by settings.downloadBeforePlaying.collectAsStateWithLifecycle(initialValue = false)
+    val history by settings.continueWatching.collectAsStateWithLifecycle(initialValue = emptyList())
     val lastChatId by settings.lastChatId.collectAsStateWithLifecycle(initialValue = 0L)
     val minSize by settings.minSizeBytes.collectAsStateWithLifecycle(
         initialValue = SizeFilter.DEFAULT_MIN,
@@ -203,6 +206,40 @@ fun SettingsScreen(
             )
         }
 
+        // ---- playback -----------------------------------------------------------------------
+
+        item { SectionTitle("Playback") }
+        item {
+            ToggleRow(
+                title = "Download the whole film first",
+                subtitle = if (downloadFirst) {
+                    "Waits for all of it, then plays"
+                } else {
+                    "Off: it downloads while you watch"
+                },
+                icon = TmIcons.Clock,
+                checked = downloadFirst,
+                onToggle = {
+                    scope.launch { settings.setDownloadBeforePlaying(!downloadFirst) }
+                },
+            )
+        }
+
+        if (history.isNotEmpty()) {
+            item {
+                ActionRow(
+                    title = "Clear Continue watching",
+                    subtitle = if (history.size == 1) {
+                        "Forgets the one film you have on the go"
+                    } else {
+                        "Forgets all ${history.size} films you have on the go"
+                    },
+                    icon = Icons.Filled.Close,
+                    onClick = { prompt = Prompt.ClearHistory },
+                )
+            }
+        }
+
         // ---- storage ------------------------------------------------------------------------
 
         item { SectionTitle("Storage") }
@@ -301,6 +338,18 @@ fun SettingsScreen(
                     refresh()
                     busy = null
                 }
+            },
+            onDismiss = { prompt = null },
+        )
+
+        Prompt.ClearHistory -> TvConfirm(
+            title = "Clear Continue watching?",
+            message = "Every film you have part-watched is forgotten, and the tab empties.",
+            detail = "Nothing is deleted from Telegram; each film stays in the chat it came from.",
+            confirmLabel = "Clear",
+            onConfirm = {
+                prompt = null
+                scope.launch { settings.clearWatchHistory() }
             },
             onDismiss = { prompt = null },
         )

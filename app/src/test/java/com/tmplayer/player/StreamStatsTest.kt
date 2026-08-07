@@ -128,6 +128,53 @@ class SpeedMeterTest {
     }
 
     @Test
+    fun `downloaded fraction counts from the start of the file, not the start of the window`() {
+        // Seeked to halfway and pulled 100 MB since: the film is downloaded to 60%, even though
+        // only 100 MB of it arrived in this window.
+        val fraction = StreamStats.downloadedFraction(
+            downloadOffset = 500_000_000,
+            downloadedPrefixSize = 100_000_000,
+            size = 1_000_000_000,
+            completed = false,
+        )
+        assertEquals(0.6f, fraction, 0.001f)
+    }
+
+    @Test
+    fun `a finished download is full whatever the window says`() {
+        val fraction = StreamStats.downloadedFraction(
+            downloadOffset = 0,
+            downloadedPrefixSize = 0,
+            size = 0,
+            completed = true,
+        )
+        assertEquals(1f, fraction, 0.001f)
+    }
+
+    @Test
+    fun `an unknown size reports nothing rather than dividing by zero`() {
+        assertEquals(
+            0f,
+            StreamStats.downloadedFraction(0, 1_000, size = 0, completed = false),
+            0.001f,
+        )
+    }
+
+    @Test
+    fun `percentages round down, so a film still arriving never reads as complete`() {
+        assertEquals("99%", StreamStats.formatPercent(0.999f))
+        assertEquals("0%", StreamStats.formatPercent(0.004f))
+        assertEquals("100%", StreamStats.formatPercent(1f))
+    }
+
+    @Test
+    fun `time for the remaining bytes is withheld while the connection says nothing`() {
+        assertEquals(0L, StreamStats.secondsForBytes(0, 0))
+        assertEquals(60L, StreamStats.secondsForBytes(60_000_000, 1_000_000))
+        assertNull(StreamStats.secondsForBytes(60_000_000, 10))
+    }
+
+    @Test
     fun `a seek that moves the window backwards resets rather than reporting nonsense`() {
         val meter = SpeedMeter()
         meter.sample(0, 0)

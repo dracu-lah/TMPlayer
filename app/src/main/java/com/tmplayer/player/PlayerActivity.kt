@@ -33,11 +33,13 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tmplayer.App
 import com.tmplayer.R
+import com.tmplayer.data.Failures
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
+import com.tmplayer.data.errorMessage
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.delay
@@ -73,6 +75,7 @@ class PlayerActivity : FragmentActivity() {
     private lateinit var statusProgress: ProgressBar
     private lateinit var rebufferChip: View
     private lateinit var rebufferText: TextView
+    private lateinit var downloadChip: TextView
     private var statusSpinner: View? = null
 
     private var fileId = 0
@@ -86,6 +89,16 @@ class PlayerActivity : FragmentActivity() {
     /** True until the picture first appears; after that a stall is a chip, not a full sheet. */
     private var openingFilm = true
     private val speed = SpeedMeter()
+
+    /** True while the transport row is up: the download figure is shown alongside it. */
+    private var controlsUp = false
+
+    /** How far into the film the download has reached, and whether it has reached the end. */
+    private var downloadedFraction = 0f
+    private var downloadComplete = false
+
+    /** True while the whole film is being fetched before playback, under the "download first" setting. */
+    private var waitingForWholeFilm = false
 
     /** The stage the loading screen is currently reporting, kept so it can be re-rendered. */
     private var statusMessage = ""
@@ -131,6 +144,7 @@ class PlayerActivity : FragmentActivity() {
         statusSpinner = findViewById(R.id.status_spinner)
         rebufferChip = findViewById(R.id.rebuffer_chip)
         rebufferText = findViewById(R.id.rebuffer_text)
+        downloadChip = findViewById(R.id.download_chip)
         subtitleView.setApplyEmbeddedStyles(true)
         // A TV's default caption size is tuned for broadcast subtitles; movie subs need to be
         // legible from a sofa, with an outline that survives a bright frame behind them.
@@ -154,15 +168,13 @@ class PlayerActivity : FragmentActivity() {
         statusTitle.text = mediaTitle.ifBlank { "Opening…" }
         showStatus("Connecting to Telegram…")
 
-        player = buildPlayer().also { exo ->
-            exo.addListener(playerListener)
-            exo.setMediaItem(Media3Item.fromUri(tdFileUri(fileId)))
-            exo.prepare()
-            exo.playWhenReady = true
-        }
+        observeDownload()
+        startResumeHeartbeat()
 
         // Reading the saved position is a disk hit; do it off the main thread and seek once
-        // it lands. Opening the stream takes longer than this ever will.
+        // it lands. Opening the stream takes longer than this ever will. Under "download the
+        // whole film first" there is no player to seek yet, so [startPlayback] applies the same
+        // position as well; whichever of the two arrives second simply sets it again.
         lifecycleScope.launch {
             resumeMs = runCatching { settings.resumePosition(chatId, messageId) }.getOrDefault(0L)
             if (resumeMs > 0) {
@@ -172,14 +184,58 @@ class PlayerActivity : FragmentActivity() {
             }
         }
 
-        observeDownload()
-        startResumeHeartbeat()
+        lifecycleScope.launch {
+            val downloadFirst = runCatching { settings.downloadBeforePlayingNow() }
+                .getOrDefault(false)
+            if (downloadFirst && !fetchWholeFilm()) return@launch
+            startPlayback()
+        }
+    }
+
+    /** Builds the player, points it at the file, and puts the leanback surface in front of it. */
+    private fun startPlayback() {
+        player = buildPlayer().also { exo ->
+            exo.addListener(playerListener)
+            exo.setMediaItem(Media3Item.fromUri(tdFileUri(fileId)))
+            if (resumeMs > 0) exo.seekTo(resumeMs)
+            exo.prepare()
+            exo.playWhenReady = true
+        }
 
         // Replace unconditionally: after process death the restored fragment came up before
-        // the player existed, so it has no glue and has to be rebuilt.
+        // the player existed, so it has no glue and has to be rebuilt. State loss is allowed
+        // because nothing here is restored anyway, and under "download the whole film first"
+        // this can land after the activity has been stopped.
         supportFragmentManager.beginTransaction()
             .replace(R.id.playback_container, TvPlaybackFragment())
-            .commit()
+            .commitAllowingStateLoss()
+    }
+
+    /**
+     * Fetches the whole file before playback starts, for viewers who have asked for that.
+     *
+     * TDLib's own synchronous download does the waiting; the figures on the loading screen come
+     * from the same file updates the streaming path already collects. Returns false when the
+     * download failed, in which case the error is on screen and there is nothing to start.
+     */
+    private suspend fun fetchWholeFilm(): Boolean {
+        waitingForWholeFilm = true
+        showStatus("Downloading the whole film…")
+        val result = Td.client.downloadFile(
+            fileId = fileId,
+            priority = DOWNLOAD_PRIORITY,
+            offset = 0,
+            limit = 0,
+            synchronous = true,
+        )
+        waitingForWholeFilm = false
+        val error = result.errorMessage
+        if (error != null) {
+            showError(Failures.humanise(error))
+            return false
+        }
+        showStatus("Starting the film…")
+        return true
     }
 
     private fun buildPlayer(): ExoPlayer {
@@ -332,14 +388,43 @@ class PlayerActivity : FragmentActivity() {
                 .collect { update ->
                     val file = update.file
                     if (fileSizeBytes <= 0 && file.size > 0) fileSizeBytes = file.size
-                    val downloaded = file.local.downloadedPrefixSize
-                    speed.sample(downloaded, SystemClock.elapsedRealtime())
+                    val local = file.local
+                    downloadComplete = local.isDownloadingCompleted
+                    downloadedFraction = StreamStats.downloadedFraction(
+                        downloadOffset = local.downloadOffset,
+                        downloadedPrefixSize = local.downloadedPrefixSize,
+                        size = fileSizeBytes,
+                        completed = downloadComplete,
+                    )
+                    // Sampled on the prefix rather than the window's far end: a seek restarts the
+                    // prefix at zero, and the meter reads that drop as the reset it is, where a
+                    // window that jumped forwards would look like a burst of speed.
+                    speed.sample(local.downloadedPrefixSize, SystemClock.elapsedRealtime())
                     renderProgress()
                 }
         }
     }
 
     private fun renderProgress() {
+        val rate = StreamStats.formatSpeed(speed.bytesPerSec)
+
+        // Waiting for the whole film: the bar is the film, not the buffer, and the wait is long
+        // enough that a percentage and a time left are the only things making it bearable.
+        if (waitingForWholeFilm) {
+            val remaining = (fileSizeBytes - (fileSizeBytes * downloadedFraction).toLong())
+                .coerceAtLeast(0)
+            val left = StreamStats.formatEta(
+                StreamStats.secondsForBytes(remaining, speed.bytesPerSec),
+            )
+            statusProgress.progress = (downloadedFraction * 1000).toInt()
+            statusDetail.text = listOf(
+                "${StreamStats.formatPercent(downloadedFraction)} downloaded",
+                rate,
+                left,
+            ).filter { it.isNotBlank() }.joinToString("  ·  ")
+            return
+        }
+
         val exo = player ?: return
         val aheadMs = (exo.bufferedPosition - exo.currentPosition).coerceAtLeast(0)
         val fraction = StreamStats.progress(aheadMs, BUFFER_PLAYBACK_MS.toLong())
@@ -351,7 +436,6 @@ class PlayerActivity : FragmentActivity() {
             speedBytesPerSec = speed.bytesPerSec,
         )
 
-        val rate = StreamStats.formatSpeed(speed.bytesPerSec)
         val left = StreamStats.formatEta(eta)
 
         if (openingFilm) {
@@ -359,6 +443,36 @@ class PlayerActivity : FragmentActivity() {
             statusDetail.text = listOf(rate, left).filter { it.isNotBlank() }.joinToString("  ·  ")
         } else {
             rebufferText.text = "Loading  ·  $rate"
+        }
+        updateDownloadChip()
+    }
+
+    /** Leanback raising or hiding the transport row; the download figure rides with it. */
+    fun onControlsVisibilityChanged(visible: Boolean) {
+        controlsUp = visible
+        updateDownloadChip()
+    }
+
+    /**
+     * The corner figure: how much of the film is down, shown only alongside the transport row.
+     *
+     * It gives way to the rebuffering chip, which occupies the same corner and is the more urgent
+     * of the two, and it stays off entirely while a full-screen status sheet is up.
+     */
+    private fun updateDownloadChip() {
+        val show = controlsUp &&
+            statusOverlay.visibility != View.VISIBLE &&
+            rebufferChip.visibility != View.VISIBLE &&
+            (fileSizeBytes > 0 || downloadComplete)
+        downloadChip.visibility = if (show) View.VISIBLE else View.GONE
+        if (!show) return
+
+        downloadChip.text = when {
+            downloadComplete -> "Downloaded in full"
+            speed.bytesPerSec >= StreamStats.MIN_MEANINGFUL_SPEED ->
+                "${StreamStats.formatPercent(downloadedFraction)} downloaded  ·  " +
+                    StreamStats.formatSpeed(speed.bytesPerSec)
+            else -> "${StreamStats.formatPercent(downloadedFraction)} downloaded"
         }
     }
 
@@ -372,6 +486,7 @@ class PlayerActivity : FragmentActivity() {
         statusDetail.visibility = View.VISIBLE
         statusMessage = message
         renderStatusText()
+        updateDownloadChip()
     }
 
     /**
@@ -389,6 +504,7 @@ class PlayerActivity : FragmentActivity() {
         statusOverlay.visibility = View.GONE
         rebufferChip.visibility = View.VISIBLE
         rebufferText.text = "Loading…"
+        updateDownloadChip()
     }
 
     private fun showError(message: String) {
@@ -403,12 +519,14 @@ class PlayerActivity : FragmentActivity() {
         statusDetail.visibility = View.GONE
         statusTitle.text = "Can't play this"
         statusText.text = "$message\n\nPress Back to pick something else."
+        updateDownloadChip()
     }
 
     private fun hideStatus() {
         openingFilm = false
         statusOverlay.visibility = View.GONE
         rebufferChip.visibility = View.GONE
+        updateDownloadChip()
     }
 
     /**
@@ -491,6 +609,9 @@ class PlayerActivity : FragmentActivity() {
         private const val END_GUARD_MS = 1_000L
         private const val NUDGE_MS = 10_000L
         private const val RESUME_TICK_MS = 10_000L
+
+        /** 1..32; the same top slot the streaming path asks for. */
+        private const val DOWNLOAD_PRIORITY = 32
         private const val SUBTITLE_TEXT_FRACTION = 0.065f
 
         fun intent(context: Context, item: MediaItem, chatTitle: String = ""): Intent =

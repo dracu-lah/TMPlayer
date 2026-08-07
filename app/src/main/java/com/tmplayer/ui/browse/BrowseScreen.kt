@@ -70,6 +70,7 @@ import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.MenuAction
 import com.tmplayer.ui.components.holdable
 import com.tmplayer.ui.components.TmIcons
+import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.TvMenu
 import com.tmplayer.ui.components.TvSearchField
 import com.tmplayer.ui.components.UiState
@@ -111,6 +112,8 @@ fun BrowseScreen(
     onToggleFavorite: (ChatSummary) -> Unit = {},
     onRestartFilm: (ResumeRecord) -> Unit = {},
     onForgetFilm: (ResumeRecord) -> Unit = {},
+    /** Empties Continue watching in one go, rather than one held-OK menu per film. */
+    onClearHistory: () -> Unit = {},
     /** The chat that reopens on launch, marked on its row so the jump is never unexplained. */
     launchChatId: Long = 0L,
     picked: BrowseTab? = null,
@@ -135,6 +138,7 @@ fun BrowseScreen(
     // What the viewer held OK on. Only ever one at a time, so two nullable slots cover both lists.
     var chatMenu by remember { mutableStateOf<ChatSummary?>(null) }
     var filmMenu by remember { mutableStateOf<ResumeRecord?>(null) }
+    var confirmClearHistory by remember { mutableStateOf(false) }
 
     Row(Modifier.fillMaxSize()) {
         NavRail(
@@ -154,7 +158,17 @@ fun BrowseScreen(
 
                 Column(Modifier.fillMaxSize()) {
                     if (tab == BrowseTab.Continue) {
-                        Header(tab, continueWatching.size)
+                        Header(tab, continueWatching.size) {
+                            // Only worth offering once there is a list to empty; a lone film is
+                            // quicker to remove by holding OK on it.
+                            if (continueWatching.size > 1) {
+                                HeaderAction(
+                                    label = "Clear history",
+                                    icon = Icons.Filled.Close,
+                                    onClick = { confirmClearHistory = true },
+                                )
+                            }
+                        }
                         Spacer(Modifier.height(20.dp))
                         if (continueWatching.isEmpty()) {
                             EmptyTab(tab, query = "")
@@ -218,6 +232,21 @@ fun BrowseScreen(
                     onToggleFavorite(chat)
                 },
             ),
+        )
+    }
+
+    if (confirmClearHistory) {
+        TvConfirm(
+            title = "Clear Continue watching?",
+            message = "All ${continueWatching.size} films are forgotten and the tab empties. " +
+                "Nothing is deleted from Telegram.",
+            detail = "You can still find each film in the chat it came from.",
+            confirmLabel = "Clear",
+            onConfirm = {
+                confirmClearHistory = false
+                onClearHistory()
+            },
+            onDismiss = { confirmClearHistory = false },
         )
     }
 
@@ -607,8 +636,39 @@ private fun RailItem(
 
 // ---- content ---------------------------------------------------------------------------------
 
+/**
+ * A chip beside a heading, for the action that applies to the whole list under it.
+ *
+ * Sized and coloured like the rows below it rather than like a button, so it reads as part of the
+ * heading and not as the first item of the list.
+ */
 @Composable
-private fun Header(tab: BrowseTab, count: Int) {
+private fun HeaderAction(label: String, icon: ImageVector, onClick: () -> Unit) {
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusedAsState()
+    val background by animateColorAsState(
+        targetValue = if (focused) Accent else SurfaceDark,
+        animationSpec = tween(140),
+        label = "headerAction",
+    )
+    val foreground = if (focused) Color.White else TextPrimary
+
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(background)
+            .clickable(interactionSource = interactions, indication = null, onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = foreground, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = foreground, maxLines = 1)
+    }
+}
+
+@Composable
+private fun Header(tab: BrowseTab, count: Int, action: @Composable () -> Unit = {}) {
     // A bare number after the blurb leaves the viewer to guess what was counted, so it always
     // carries its unit, and this one tab counts films rather than chats.
     val unit = when {
@@ -617,13 +677,19 @@ private fun Header(tab: BrowseTab, count: Int) {
         count == 1 -> "chat"
         else -> "chats"
     }
-    Column(Modifier.padding(start = 28.dp, top = Tv.SafeV, bottom = 12.dp)) {
-        Text(tab.heading, style = MaterialTheme.typography.headlineLarge, color = TextPrimary)
-        Text(
-            if (count > 0) "${tab.blurb}  ·  $count $unit" else tab.blurb,
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextMuted,
-        )
+    Row(
+        Modifier.fillMaxWidth().padding(start = 28.dp, top = Tv.SafeV, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(tab.heading, style = MaterialTheme.typography.headlineLarge, color = TextPrimary)
+            Text(
+                if (count > 0) "${tab.blurb}  ·  $count $unit" else tab.blurb,
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextMuted,
+            )
+        }
+        action()
     }
 }
 
