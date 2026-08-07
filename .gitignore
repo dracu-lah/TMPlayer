@@ -1,0 +1,21 @@
+# Gradle
+.gradle/
+build/
+app/build/
+
+# Local machine config + secrets (Telegram api_id/api_hash live here)
+local.properties
+
+# Signing
+*.keystore
+*.jks
+keystore.properties
+
+# IDE
+.idea/
+*.iml
+.kotlin/
+
+# Misc
+captures/
+.DS_Store
