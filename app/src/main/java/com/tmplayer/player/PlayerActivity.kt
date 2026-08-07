@@ -79,7 +79,14 @@ class PlayerActivity : FragmentActivity() {
     private val speed = SpeedMeter()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+        // Deliberately not restoring fragments.
+        //
+        // After process death the framework brings the old playback fragment back before any of
+        // this runs, so it reattaches with no player behind it and no glue — and leanback's own
+        // onStart then dereferences that glue and takes the activity down. Passing null starts
+        // with a clean fragment manager and the fragment below is built fresh against a live
+        // player. Nothing here is worth restoring anyway: the resume position lives on disk.
+        super.onCreate(null)
         setContentView(R.layout.activity_player)
         // Two hours of a film is two hours with no button presses — without this the TV
         // dims and then sleeps on the viewer.
