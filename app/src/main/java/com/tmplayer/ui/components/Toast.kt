@@ -8,8 +8,8 @@ import androidx.compose.ui.platform.LocalContext
 /**
  * A short confirmation, for an action whose result the viewer cannot see happen.
  *
- * Deliberately rare. Most of this app answers for itself — a card that vanishes, a pill that
- * changes its label, a list that redraws — and a message about something already on screen is
+ * Deliberately rare. Most of this app answers for itself: a card that vanishes, a pill that
+ * changes its label, a list that redraws. A message about something already on screen is just
  * noise. What earns one is the opposite case: the effect lands somewhere the viewer is not
  * looking, on a screen they are about to leave, or nowhere visible at all.
  *

@@ -138,7 +138,7 @@ object Tmdb {
      * A previous answer, if one was stored and has not gone stale.
      *
      * A film's details barely change once it is released, so [DISK_TTL_MS] is generous; "no such
-     * film" expires sooner, because that is the answer most likely to be wrong later — TMDB gains
+     * film" expires sooner, because that is the answer most likely to be wrong later: TMDB gains
      * entries, and a release name we could not match today may match after the next scene rename.
      */
     private fun fromDisk(key: String): FilmLookup? {

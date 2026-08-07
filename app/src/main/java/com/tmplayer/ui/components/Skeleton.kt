@@ -180,7 +180,7 @@ fun ChatListSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLay
  * Stand-in for the film listing: the same four columns, the same 16:9 art and the same spacing, so
  * nothing shifts sideways at the moment the real tiles arrive.
  *
- * It follows [layout] for the same reason it matches the grid's measurements — a screen of tiles
+ * It follows [layout] for the same reason it matches the grid's measurements: a screen of tiles
  * that resolves into a screen of rows is the placeholder having described the wrong thing.
  */
 @Composable

@@ -140,7 +140,7 @@ class MediaListViewModel(
      * Scrolling never stops at a page boundary: pages keep being pulled until this one actually
      * grew, or the chat ran out. Without that, a page whose films are all outside the size limits
      * adds nothing, the item count does not change, and the screen the viewer is scrolling has no
-     * reason left to ask for more — the listing simply stops short of the end of the chat.
+     * reason left to ask for more, so the listing stops short of the end of the chat.
      */
     fun loadMore() {
         val current = _state.value as? UiState.Content ?: return

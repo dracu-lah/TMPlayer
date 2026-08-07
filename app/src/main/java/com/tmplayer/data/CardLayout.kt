@@ -3,7 +3,7 @@ package com.tmplayer.data
 /**
  * How a screen full of cards is arranged.
  *
- * Both browsing screens hold the same kind of thing — a list of cards — and differ only in how many
+ * Both browsing screens hold the same kind of thing, a list of cards, and differ only in how many
  * fit across the screen, so one type covers both rather than each carrying its own flag.
  *
  * [List] puts one wide row per item: the title has room to be read in full, which is what a long
