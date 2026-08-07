@@ -122,6 +122,14 @@ fun OverviewScreen(onDone: () -> Unit) {
 
 private val PAGES = listOf(
     Page(
+        title = "Sign in with your phone",
+        body = "TMPlayer shows a code. Open Telegram on your phone, go to Settings then Devices, " +
+            "and point the camera at the TV. Nothing is typed on the remote.",
+        // Deliberately blurred: the real code on that screen is a live sign-in token, and a
+        // scannable one shipped inside the app would be a working key to somebody's account.
+        image = R.drawable.overview_signin,
+    ),
+    Page(
         title = "Your Telegram chats, on the left",
         body = "The rail sorts them: channels, groups, people, or everything at once. Star the " +
             "chats you watch from and they sit in Favourites, one press away.",

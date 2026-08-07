@@ -67,6 +67,7 @@ import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.FilmLookup
 import com.tmplayer.data.Tmdb
+import com.tmplayer.data.Updates
 import com.tmplayer.ui.components.Poster
 import com.tmplayer.ui.components.ChatListSkeleton
 import com.tmplayer.ui.components.NetworkImage
@@ -82,6 +83,7 @@ import com.tmplayer.ui.components.TvSearchField
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.components.rememberVoiceSearch
 import com.tmplayer.ui.theme.Accent
+import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
 import com.tmplayer.ui.theme.TextMuted
@@ -131,6 +133,9 @@ fun BrowseScreen(
      * the same card.
      */
     layout: CardLayout = CardLayout.List,
+    /** The newer version on GitHub, if there is one. Shown on the rail, in amber. */
+    updateVersion: String? = null,
+    onUpdate: () -> Unit = {},
 ) {
     // An unfinished film wins the landing tab, then Favourites, then Recent, so the first screen
     // is never empty. Both are read from disk after the first frame, so the tab has to settle
@@ -155,6 +160,8 @@ fun BrowseScreen(
             favoriteCount = favorites.size,
             onSelect = { onPickTab(it); query = "" },
             onOpenSettings = onOpenSettings,
+            updateVersion = updateVersion,
+            onUpdate = onUpdate,
         )
 
         Column(Modifier.fillMaxSize().padding(end = Tv.SafeH)) {
@@ -630,6 +637,9 @@ private fun NavRail(
     favoriteCount: Int,
     onSelect: (BrowseTab) -> Unit,
     onOpenSettings: () -> Unit,
+    /** The version on GitHub, when it beats the one running. Null the rest of the time. */
+    updateVersion: String? = null,
+    onUpdate: () -> Unit = {},
 ) {
     Column(
         Modifier
@@ -665,10 +675,24 @@ private fun NavRail(
         }
 
         Spacer(Modifier.weight(1f))
+        if (updateVersion != null) {
+            RailItem(
+                label = "Update",
+                icon = Icons.Filled.Refresh,
+                badge = updateVersion,
+                selected = false,
+                onClick = onUpdate,
+                accent = Caution,
+            )
+            Spacer(Modifier.height(4.dp))
+        }
         RailItem(
             label = "Settings",
             icon = Icons.Filled.Settings,
-            badge = null,
+            // Which build this is, riding along with Settings rather than on a line of its own:
+            // the rail is already as tall as the screen with the tabs it has to hold, and a
+            // tenth row was simply cut off at the bottom edge.
+            badge = "v${Updates.installedVersion}",
             selected = false,
             onClick = onOpenSettings,
         )
@@ -728,6 +752,9 @@ private fun RailItem(
     badge: String?,
     selected: Boolean,
     onClick: () -> Unit,
+    // Amber for the update item, so it is the one thing on the rail that is not the app's own
+    // blue and reads as "look at this" without a second glance.
+    accent: Color = Accent,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
@@ -736,8 +763,8 @@ private fun RailItem(
     // reads as flicker on a large screen.
     val background by animateColorAsState(
         targetValue = when {
-            focused -> Accent
-            selected -> Accent.copy(alpha = 0.16f)
+            focused -> accent
+            selected -> accent.copy(alpha = 0.16f)
             else -> Color.Transparent
         },
         animationSpec = tween(FOCUS_FADE_MS),
@@ -746,8 +773,8 @@ private fun RailItem(
     val foreground by animateColorAsState(
         targetValue = when {
             focused -> Color.White
-            selected -> Accent
-            else -> TextMuted
+            selected -> accent
+            else -> if (accent == Accent) TextMuted else accent
         },
         animationSpec = tween(FOCUS_FADE_MS),
         label = "railForeground",

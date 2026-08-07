@@ -31,6 +31,8 @@ import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.Td
+import com.tmplayer.data.UpdateState
+import com.tmplayer.data.Updates
 import com.tmplayer.player.PlayerActivity
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.auth.IntroScreen
@@ -43,6 +45,7 @@ import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.onboarding.OverviewScreen
+import com.tmplayer.ui.update.UpdateDialog
 import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.theme.TMPlayerTheme
 import kotlinx.coroutines.flow.first
@@ -93,6 +96,14 @@ private fun Root() {
     val filmLayout by settings.filmLayout.collectAsStateWithLifecycle(initialValue = CardLayout.Grid)
 
     val toast = rememberToast()
+
+    // One quiet ask per launch. Nothing is said unless there is genuinely a newer release, and
+    // the rail is where it turns up.
+    val updateState by Updates.state.collectAsStateWithLifecycle()
+    var showUpdate by remember { mutableStateOf(false) }
+    LaunchedEffect(auth) {
+        if (auth is AuthState.Ready) Updates.check(quiet = true)
+    }
 
     // Half-watched entries that can no longer be turned into a card are swept once per launch.
     // Left alone they are invisible: the tab skips them, so nothing the viewer can press will
@@ -203,6 +214,10 @@ private fun Root() {
                         passwordError = null
                         scope.launch { passwordError = Td.submitPassword(password) }
                     },
+                    onScanAgain = {
+                        passwordError = null
+                        scope.launch { Td.restartSignIn() }
+                    },
                 )
             }
             return@Box
@@ -252,6 +267,8 @@ private fun Root() {
                     onOpenChat = { openChat(it) },
                     onResumeFilm = { resumeFilm(it) },
                     onOpenSettings = { screen = Screen.Settings },
+                    updateVersion = (updateState as? UpdateState.Available)?.release?.version,
+                    onUpdate = { showUpdate = true },
                     onToggleFavorite = { chat ->
                         scope.launch {
                             // The star lands on a row the menu was covering, and in the Favourites
@@ -382,6 +399,10 @@ private fun Root() {
                 },
                 onDismiss = { roomPrompt = null },
             )
+        }
+
+        if (showUpdate) {
+            UpdateDialog(onDismiss = { showUpdate = false; Updates.dismiss() })
         }
     }
 }

@@ -74,7 +74,7 @@ fun IntroScreen(onContinue: () -> Unit) {
                 Icons.Filled.Lock,
                 "You stay signed in to your own account",
                 "Signing in adds this TV to your Telegram devices, just like a computer does. " +
-                    "TMPlayer only ever connects to Telegram.",
+                    "Your films come from Telegram and nowhere else.",
             )
             Point(
                 Icons.Filled.PlayArrow,

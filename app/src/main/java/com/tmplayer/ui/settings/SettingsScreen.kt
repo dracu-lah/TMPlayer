@@ -68,11 +68,15 @@ import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.Td
 import com.tmplayer.data.Tmdb
+import com.tmplayer.data.UpdateState
+import com.tmplayer.data.Updates
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.rememberToast
+import com.tmplayer.ui.update.UpdateDialog
 import com.tmplayer.ui.theme.Accent
+import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
 import com.tmplayer.ui.theme.TextMuted
@@ -112,6 +116,8 @@ fun SettingsScreen(
     )
 
     val toast = rememberToast()
+    val updateState by Updates.state.collectAsStateWithLifecycle()
+    var showUpdate by remember { mutableStateOf(false) }
     var cacheBytes by remember { mutableStateOf(0L) }
     var disk by remember { mutableStateOf(DiskSpace.read(context)) }
     var busy by remember { mutableStateOf<String?>(null) }
@@ -355,13 +361,42 @@ fun SettingsScreen(
             }
         }
 
+        // ---- version -------------------------------------------------------------------------
+
+        item { SectionTitle("Version") }
+        (updateState as? UpdateState.Available)?.let { available ->
+            item {
+                ActionRow(
+                    title = "Update to ${available.release.version}",
+                    subtitle = "Downloads " +
+                        "${StreamStats.formatBytes(available.release.sizeBytes)} from GitHub, " +
+                        "then Android asks you to confirm",
+                    icon = Icons.Filled.Refresh,
+                    tint = Caution,
+                    onClick = { showUpdate = true },
+                )
+            }
+        }
+        item {
+            ActionRow(
+                title = "Check for updates",
+                subtitle = "This is TMPlayer ${Updates.installedVersion}, from " +
+                    Updates.RELEASES_PAGE,
+                icon = Icons.Filled.Refresh,
+                onClick = {
+                    showUpdate = true
+                    scope.launch { Updates.check() }
+                },
+            )
+        }
+
         // ---- help ----------------------------------------------------------------------------
 
         item { SectionTitle("Help") }
         item {
             ActionRow(
                 title = "Show the walkthrough again",
-                subtitle = "A few screens on how TMPlayer works",
+                subtitle = "Five screens on how TMPlayer works",
                 icon = Icons.Filled.Info,
                 onClick = { scope.launch { settings.replayOverview() } },
             )
@@ -386,8 +421,9 @@ fun SettingsScreen(
                     Spacer(Modifier.height(12.dp))
                 }
                 Text(
-                    "TMPlayer only ever connects to Telegram. Nothing you watch is sent " +
-                        "anywhere else.",
+                    "TMPlayer talks to Telegram for your chats and films, to the film database for " +
+                        "posters and cast, and to GitHub to see whether a newer version is out. " +
+                        "Nothing you watch is sent anywhere.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextMuted,
                 )
@@ -474,6 +510,10 @@ fun SettingsScreen(
         )
 
         null -> Unit
+    }
+
+    if (showUpdate) {
+        UpdateDialog(onDismiss = { showUpdate = false; Updates.dismiss() })
     }
 }
 

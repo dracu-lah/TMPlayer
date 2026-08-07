@@ -20,6 +20,9 @@ val Accent = Color(0xFF2AABEE)
 val TextPrimary = Color(0xFFEDEDF2)
 val TextMuted = Color(0xFF9A9AA5)
 
+/** Amber: worth noticing, nothing has gone wrong. A newer version being out is the whole use. */
+val Caution = Color(0xFFF5A524)
+
 private val colors = darkColorScheme(
     primary = Accent,
     onPrimary = Color.White,

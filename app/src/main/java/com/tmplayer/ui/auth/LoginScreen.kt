@@ -1,5 +1,6 @@
 package com.tmplayer.ui.auth
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -58,11 +59,13 @@ fun LoginScreen(
     state: AuthState,
     onSubmitPassword: (String) -> Unit,
     passwordError: String?,
+    onScanAgain: () -> Unit = {},
 ) {
     when (state) {
         is AuthState.Connecting -> BigLoader("Connecting to Telegram…")
         is AuthState.Qr -> QrPane(state.link)
-        is AuthState.Password -> PasswordPane(state.hint, passwordError, onSubmitPassword)
+        is AuthState.Password ->
+            PasswordPane(state.hint, passwordError, onSubmitPassword, onScanAgain)
         is AuthState.Ready -> BigLoader("Signing in…")
         is AuthState.Failed -> BigError(state.message, onRetry = null)
     }
@@ -110,7 +113,7 @@ private fun QrPane(link: String) {
             Step(3, "Tap “Link Desktop Device” and point the camera here")
             Spacer(Modifier.height(8.dp))
             Text(
-                "The code refreshes on its own. TMPlayer only ever connects to Telegram.",
+                "The code refreshes on its own. It is read by Telegram and nobody else.",
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
@@ -132,9 +135,17 @@ private fun Step(number: Int, text: String) {
 }
 
 @Composable
-private fun PasswordPane(hint: String, error: String?, onSubmit: (String) -> Unit) {
+private fun PasswordPane(
+    hint: String,
+    error: String?,
+    onSubmit: (String) -> Unit,
+    onScanAgain: () -> Unit,
+) {
     var password by remember { mutableStateOf("") }
     val focus = remember { FocusRequester() }
+
+    // The remote's Back is what anybody stuck here reaches for first, and it did nothing.
+    BackHandler(onBack = onScanAgain)
 
     // imePadding + scroll: the TV keyboard covers the lower half of the screen, and without
     // both of these the field being typed into sits behind it.
@@ -202,12 +213,19 @@ private fun PasswordPane(hint: String, error: String?, onSubmit: (String) -> Uni
                 Text(error, style = MaterialTheme.typography.bodyLarge, color = Danger)
             }
 
-            Button(
-                onClick = { onSubmit(password) },
-                colors = tmButtonColors(),
-                enabled = password.isNotEmpty(),
-            ) {
-                Text("Sign in")
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = { onSubmit(password) },
+                    colors = tmButtonColors(),
+                    enabled = password.isNotEmpty(),
+                ) {
+                    Text("Sign in")
+                }
+                // The way out: scanned with the wrong account, or the password is not to hand.
+                // Nothing is lost, because nobody is signed in yet.
+                Button(onClick = onScanAgain, colors = tmButtonColors()) {
+                    Text("Scan again")
+                }
             }
         }
     }

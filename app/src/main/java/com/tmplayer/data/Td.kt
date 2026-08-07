@@ -173,6 +173,18 @@ object Td {
         runCatching { current?.logOut() }
     }
 
+    /**
+     * Abandons a half-finished sign-in and goes back to a fresh QR code.
+     *
+     * The password step is a dead end otherwise: somebody who scanned with the wrong account, or
+     * who cannot remember the password, has nothing to press. Logging out here throws away an
+     * attempt rather than an account, since nobody is signed in yet.
+     */
+    suspend fun restartSignIn() {
+        _auth.value = AuthState.Connecting
+        runCatching { current?.logOut() }
+    }
+
     suspend fun storageUsedBytes(): Long =
         current?.getStorageStatisticsFast()?.valueOrNull?.filesSize ?: 0L
 
