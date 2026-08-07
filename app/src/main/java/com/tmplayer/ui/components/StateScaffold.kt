@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,6 +27,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Warning
+import androidx.tv.material3.Icon
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
@@ -33,12 +39,24 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.TextMuted
+import com.tmplayer.ui.theme.TextPrimary
 import com.tmplayer.ui.theme.tmButtonColors
 
 /** Every screen is exactly one of these — no blank frames, ever. */
 sealed interface UiState<out T> {
     data class Loading(val label: String = "Loading…") : UiState<Nothing>
+
+    /** Something actually failed and retrying might help. */
     data class Error(val message: String) : UiState<Nothing>
+
+    /**
+     * The request worked; there is simply nothing to show.
+     *
+     * Kept apart from [Error] because "Something went wrong / Retry" over an empty list is both
+     * untrue and alarming — a chat with no films in it is a normal answer, not a failure.
+     */
+    data class Empty(val message: String) : UiState<Nothing>
+
     data class Content<T>(val value: T) : UiState<T>
 }
 
@@ -51,6 +69,7 @@ fun <T> StateScaffold(
     when (state) {
         is UiState.Loading -> BigLoader(state.label)
         is UiState.Error -> BigError(state.message, onRetry)
+        is UiState.Empty -> BigEmpty(state.message)
         is UiState.Content -> content(state.value)
     }
 }
@@ -135,16 +154,57 @@ private const val ROTATION_MS = 1_332
 private const val SWEEP_MS = 1_332
 private const val MAX_SWEEP = 300f
 private const val MIN_SWEEP = 12f
+private val Danger = Color(0xFFE5484D)
+
+/** A calm, final statement. No Retry button, because there is nothing to retry. */
+@Composable
+fun BigEmpty(message: String) {
+    Box(Modifier.fillMaxSize().padding(horizontal = 72.dp), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Icon(
+                Icons.Filled.Search,
+                contentDescription = null,
+                tint = TextMuted.copy(alpha = 0.55f),
+                modifier = Modifier.size(56.dp),
+            )
+            Text(
+                message,
+                style = MaterialTheme.typography.titleLarge,
+                color = TextMuted,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
 
 @Composable
 fun BigError(message: String, onRetry: (() -> Unit)?) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize().padding(horizontal = 72.dp), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("Something went wrong", style = MaterialTheme.typography.titleLarge)
-            Text(message, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+            Icon(
+                Icons.Filled.Warning,
+                contentDescription = null,
+                tint = Danger,
+                modifier = Modifier.size(56.dp),
+            )
+            Text(
+                "Something went wrong",
+                style = MaterialTheme.typography.titleLarge,
+                color = TextPrimary,
+            )
+            Text(
+                message,
+                style = MaterialTheme.typography.bodyLarge,
+                color = TextMuted,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.size(8.dp))
             if (onRetry != null) {
                 val focus = remember { FocusRequester() }
                 Button(

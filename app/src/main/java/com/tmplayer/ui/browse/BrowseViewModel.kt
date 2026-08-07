@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.tmplayer.data.Account
 import com.tmplayer.data.ChatRepository
 import com.tmplayer.data.ChatSummary
+import com.tmplayer.data.Failures
 import com.tmplayer.data.MediaCursors
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.SizeFilter
@@ -43,7 +44,7 @@ class ChatListViewModel : ViewModel() {
                     chats = it
                     publish()
                 }
-                .onFailure { _state.value = UiState.Error(it.message ?: "Couldn't reach Telegram") }
+                .onFailure { _state.value = UiState.Error(Failures.humanise(it)) }
         }
         // The avatar is decoration: it must never hold the chat list up, and its failure is not
         // an error the viewer needs to see. Whichever of the two lands second does the publishing,
@@ -57,7 +58,7 @@ class ChatListViewModel : ViewModel() {
     private fun publish() {
         val loaded = chats ?: return
         _state.value = if (loaded.isEmpty()) {
-            UiState.Error("No chats yet. Open Telegram on your phone, then come back.")
+            UiState.Empty("No chats yet. Open Telegram on your phone, then come back.")
         } else {
             UiState.Content(BrowseData(loaded, account))
         }
@@ -107,23 +108,23 @@ class MediaListViewModel(
                     cursors = page.cursors
                     _state.value = if (page.items.isEmpty() && page.endReached) {
                         val message = when {
-                            searching -> "Nothing here matches “$query”."
+                            searching -> "Nothing in this chat matches “$query”."
                             // Say which knob is hiding things, rather than claiming the chat is
                             // empty when it is the filter doing the work.
-                            isFiltering -> "Nothing in this chat is between " +
+                            isFiltering -> "No videos here between " +
                                 "${SizeFilter.label(minSizeBytes)} and " +
-                                "${SizeFilter.label(maxSizeBytes)}. Change the size filter in " +
-                                "Settings to see more."
+                                "${SizeFilter.label(maxSizeBytes)}.\n\n" +
+                                "Widen the size range in Settings to see more."
                             else -> "Nothing playable in this chat."
                         }
-                        UiState.Error(message)
+                        UiState.Empty(message)
                     } else {
                         UiState.Content(MediaListState(page.items, endReached = page.endReached))
                     }
                     // A first page can come back empty while older pages still hold films.
                     if (page.items.isEmpty() && !page.endReached) loadMore()
                 }
-                .onFailure { _state.value = UiState.Error(it.message ?: "Couldn't load this chat") }
+                .onFailure { _state.value = UiState.Error(Failures.humanise(it)) }
         }
     }
 

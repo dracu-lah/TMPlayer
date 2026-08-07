@@ -1,6 +1,8 @@
 package com.tmplayer.ui.browse
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -437,7 +439,10 @@ private fun RecentTile(chat: ChatSummary, onClick: () -> Unit) {
 
     Column(
         Modifier
-            .width(168.dp)
+            .width(RECENT_TILE_WIDTH)
+            // Fixed, not wrapped: a chat whose name runs to two lines would otherwise stand
+            // taller than its neighbours and leave the row visibly ragged.
+            .height(RECENT_TILE_HEIGHT)
             .clip(RoundedCornerShape(16.dp))
             .background(SurfaceDark)
             .border(
@@ -459,8 +464,12 @@ private fun RecentTile(chat: ChatSummary, onClick: () -> Unit) {
             chat.title,
             style = MaterialTheme.typography.titleMedium,
             color = TextPrimary,
-            maxLines = 2,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            // Ellipsis is enough to keep the row tidy, but it also hides the end of a long
+            // channel name. Scrolling it while focused means the whole name is still readable,
+            // and only for the one tile the viewer is actually looking at.
+            modifier = Modifier.weight(1f).marqueeWhen(focused),
         )
         Text(
             chat.kind.label,
@@ -470,6 +479,11 @@ private fun RecentTile(chat: ChatSummary, onClick: () -> Unit) {
         )
     }
 }
+
+/** Scrolls overflowing text, but only while [active] — a wall of moving labels is unreadable. */
+@OptIn(ExperimentalFoundationApi::class)
+private fun Modifier.marqueeWhen(active: Boolean): Modifier =
+    if (active) basicMarquee(iterations = Int.MAX_VALUE) else this
 
 @Composable
 private fun ChatRow(
@@ -510,6 +524,7 @@ private fun ChatRow(
                 color = TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.marqueeWhen(focused),
             )
             Text(
                 chat.kind.label,
@@ -544,3 +559,5 @@ private fun EmptyTab(tab: BrowseTab, query: String) {
 
 private const val RECENT_COUNT = 8
 private const val FOCUS_FADE_MS = 140
+private val RECENT_TILE_WIDTH = 224.dp
+private val RECENT_TILE_HEIGHT = 154.dp

@@ -1,7 +1,10 @@
 package com.tmplayer.ui.components
 
+import androidx.activity.compose.BackHandler
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
@@ -17,6 +20,13 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -52,9 +62,17 @@ fun TvSearchField(
     modifier: Modifier = Modifier,
     onSubmit: (() -> Unit)? = null,
 ) {
+    // Focus alone must not start editing. On a remote the D-pad passes through this box on the
+    // way to everything below it, and a keyboard that throws itself over the screen each time
+    // makes the row impossible to move past. Editing begins on a deliberate press.
+    var editing by remember { mutableStateOf(false) }
+    var everFocused by remember { mutableStateOf(false) }
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
+    val field = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+
+    val active = focused || editing
 
     Row(
         modifier
@@ -62,37 +80,75 @@ fun TvSearchField(
             .clip(RoundedCornerShape(28.dp))
             .background(SurfaceDark)
             .border(
-                width = if (focused) 2.dp else 1.dp,
-                color = if (focused) Accent else TextMuted.copy(alpha = 0.35f),
+                width = if (active) 2.dp else 1.dp,
+                color = if (active) Accent else TextMuted.copy(alpha = 0.35f),
                 shape = RoundedCornerShape(28.dp),
+            )
+            .then(
+                if (editing) {
+                    Modifier
+                } else {
+                    Modifier.clickable(
+                        interactionSource = interactions,
+                        indication = null,
+                    ) { editing = true }
+                },
             )
             .padding(horizontal = 22.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MagnifierGlyph(if (focused) Accent else TextMuted)
+        MagnifierGlyph(if (active) Accent else TextMuted)
         Spacer(Modifier.width(14.dp))
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            if (value.isEmpty()) {
-                Text(placeholder, style = MaterialTheme.typography.bodyLarge, color = TextMuted)
+            if (editing) {
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    singleLine = true,
+                    // BasicTextField does not read LocalContentColor: without an explicit colour
+                    // it paints black, which is invisible on this background.
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = TextPrimary),
+                    cursorBrush = SolidColor(Accent),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(
+                        onSearch = {
+                            keyboard?.hide()
+                            editing = false
+                            onSubmit?.invoke()
+                        },
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(field)
+                        .onFocusChanged { state ->
+                            // onFocusChanged fires once with isFocused = false as the field is
+                            // first composed, before the focus request lands. Acting on that
+                            // closed editing again immediately and the keyboard never appeared.
+                            if (state.isFocused) {
+                                everFocused = true
+                            } else if (everFocused) {
+                                editing = false
+                            }
+                        },
+                )
+                LaunchedEffect(Unit) {
+                    everFocused = false
+                    runCatching { field.requestFocus() }
+                    keyboard?.show()
+                }
+                BackHandler {
+                    keyboard?.hide()
+                    editing = false
+                }
+            } else {
+                Text(
+                    value.ifEmpty { placeholder },
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (value.isEmpty()) TextMuted else TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                singleLine = true,
-                interactionSource = interactions,
-                // BasicTextField does not read LocalContentColor: without an explicit colour it
-                // paints black, which is invisible on this background.
-                textStyle = MaterialTheme.typography.bodyLarge.copy(color = TextPrimary),
-                cursorBrush = SolidColor(Accent),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(
-                    onSearch = {
-                        keyboard?.hide()
-                        onSubmit?.invoke()
-                    },
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
         }
     }
 }

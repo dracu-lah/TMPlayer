@@ -48,7 +48,10 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.BoxWithConstraintsScope
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Icon
@@ -98,6 +101,8 @@ fun SettingsScreen(
     var disk by remember { mutableStateOf(DiskSpace.read(context)) }
     var busy by remember { mutableStateOf<String?>(null) }
     var prompt by remember { mutableStateOf<Prompt?>(null) }
+    // Which end of the range the D-pad is currently moving.
+    var editingUpper by remember { mutableStateOf(false) }
     val firstRow = remember { FocusRequester() }
 
     suspend fun refresh() {
@@ -133,33 +138,53 @@ fun SettingsScreen(
 
         // ---- what shows up --------------------------------------------------------------
 
-        item { SectionTitle("Video size") }
+        item {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Video size",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = TextPrimary,
+                    modifier = Modifier.weight(1f),
+                )
+                ResetChip(
+                    enabled = minSize != SizeFilter.DEFAULT_MIN || maxSize != SizeFilter.DEFAULT_MAX,
+                ) {
+                    scope.launch {
+                        // Widen first, so the clamp that stops the two ends crossing cannot
+                        // block the new floor on its way past the old ceiling.
+                        settings.setMaxSizeBytes(SizeFilter.DEFAULT_MAX)
+                        settings.setMinSizeBytes(SizeFilter.DEFAULT_MIN)
+                    }
+                }
+            }
+        }
         item {
             Text(
-                "Only files between these sizes are listed, which keeps trailers and clips out " +
-                    "of the way without hiding real films.",
+                "Showing videos from ${SizeFilter.label(minSize)} to " +
+                    "${SizeFilter.label(maxSize)}. Anything outside that is hidden, which keeps " +
+                    "trailers and clips out of the way.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextMuted,
                 modifier = Modifier.padding(bottom = 4.dp, start = 4.dp),
             )
         }
         item {
-            SliderRow(
-                title = "Smallest",
-                value = minSize,
-                other = maxSize,
+            RangeRow(
+                minValue = minSize,
+                maxValue = maxSize,
+                editingUpper = editingUpper,
+                onSwitchEnd = { editingUpper = !editingUpper },
                 onStep = { direction ->
-                    scope.launch { settings.setMinSizeBytes(SizeFilter.step(minSize, direction)) }
-                },
-            )
-        }
-        item {
-            SliderRow(
-                title = "Largest",
-                value = maxSize,
-                other = minSize,
-                onStep = { direction ->
-                    scope.launch { settings.setMaxSizeBytes(SizeFilter.step(maxSize, direction)) }
+                    scope.launch {
+                        if (editingUpper) {
+                            settings.setMaxSizeBytes(SizeFilter.step(maxSize, direction))
+                        } else {
+                            settings.setMinSizeBytes(SizeFilter.step(minSize, direction))
+                        }
+                    }
                 },
             )
         }
@@ -308,15 +333,22 @@ fun SettingsScreen(
  * single vertical column, so nothing is lost by that.
  */
 @Composable
-private fun SliderRow(title: String, value: Long, other: Long, onStep: (Int) -> Unit) {
+private fun RangeRow(
+    minValue: Long,
+    maxValue: Long,
+    editingUpper: Boolean,
+    onSwitchEnd: () -> Unit,
+    onStep: (Int) -> Unit,
+) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
         targetValue = if (focused) Accent else SurfaceDark,
         animationSpec = tween(140),
-        label = "sliderBackground",
+        label = "rangeBackground",
     )
     val onSurface = if (focused) Color.White else TextPrimary
+    val dim = if (focused) Color.White.copy(alpha = 0.6f) else TextMuted
 
     Column(
         Modifier
@@ -328,60 +360,150 @@ private fun SliderRow(title: String, value: Long, other: Long, onStep: (Int) -> 
                 when (event.key) {
                     Key.DirectionLeft -> { onStep(-1); true }
                     Key.DirectionRight -> { onStep(1); true }
+                    // OK swaps which end moves, so one control covers both without the viewer
+                    // having to work out which of two identical-looking rows they are on.
+                    Key.DirectionCenter, Key.Enter -> { onSwitchEnd(); true }
                     else -> false
                 }
             }
             .focusable(interactionSource = interactions)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
+            .padding(horizontal = 20.dp, vertical = 16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleMedium,
-                color = onSurface,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                SizeFilter.label(value),
-                style = MaterialTheme.typography.titleMedium,
-                color = onSurface,
-            )
+            End("From", SizeFilter.label(minValue), active = !editingUpper, onSurface, dim, focused)
+            Spacer(Modifier.weight(1f))
+            End("Up to", SizeFilter.label(maxValue), active = editingUpper, onSurface, dim, focused)
         }
+        Spacer(Modifier.height(12.dp))
+        RangeTrack(minValue, maxValue, editingUpper, focused)
         Spacer(Modifier.height(10.dp))
-        Track(value = value, other = other, focused = focused)
-        Spacer(Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("0 MB", style = MaterialTheme.typography.bodyMedium, color = dim)
+            Text(
+                if (focused) {
+                    "\u25C0 \u25B6 move the ${if (editingUpper) "upper" else "lower"} end   \u00B7   " +
+                        "OK switches ends"
+                } else {
+                    ""
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White,
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center,
+            )
+            Text("8 GB", style = MaterialTheme.typography.bodyMedium, color = dim)
+        }
+    }
+}
+
+/** One end of the range. The active one is the only thing the D-pad will move. */
+@Composable
+private fun End(
+    caption: String,
+    value: String,
+    active: Boolean,
+    onSurface: Color,
+    dim: Color,
+    focused: Boolean,
+) {
+    Column {
+        Text(caption, style = MaterialTheme.typography.bodyMedium, color = dim)
         Text(
-            if (focused) "Left and right to adjust" else "0 MB to 8 GB",
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (focused) Color.White.copy(alpha = 0.85f) else TextMuted,
+            value,
+            style = MaterialTheme.typography.titleLarge,
+            color = if (active) onSurface else dim,
+        )
+        // A rule under the live end, because on a TV a colour difference alone is easy to miss.
+        Box(
+            Modifier
+                .padding(top = 3.dp)
+                .height(3.dp)
+                .width(if (active) 56.dp else 0.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(if (focused) Color.White else Accent),
         )
     }
 }
 
-/** The filled span is the range that will be listed, not merely the value's position. */
 @Composable
-private fun Track(value: Long, other: Long, focused: Boolean) {
-    val low = minOf(value, other)
-    val high = maxOf(value, other)
-
-    Box(
+private fun RangeTrack(minValue: Long, maxValue: Long, editingUpper: Boolean, focused: Boolean) {
+    BoxWithConstraints(
         Modifier
             .fillMaxWidth()
-            .height(12.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (focused) Color.White.copy(alpha = 0.25f) else SurfaceRaised),
+            .height(18.dp)
+            .clip(RoundedCornerShape(9.dp))
+            .background(if (focused) Color.White.copy(alpha = 0.22f) else SurfaceRaised),
     ) {
-        BoxWithConstraints(Modifier.fillMaxSize()) {
-            val width = maxWidth
-            Box(
-                Modifier
-                    .padding(start = width * SizeFilter.fraction(low))
-                    .width((width * (SizeFilter.fraction(high) - SizeFilter.fraction(low)))
-                        .coerceAtLeast(4.dp))
-                    .fillMaxHeight()
-                    .background(if (focused) Color.White else Accent),
+        val width = maxWidth
+        val start = width * SizeFilter.fraction(minValue)
+        val span = (width * (SizeFilter.fraction(maxValue) - SizeFilter.fraction(minValue)))
+            .coerceAtLeast(3.dp)
+
+        Box(
+            Modifier
+                .padding(start = start)
+                .width(span)
+                .fillMaxHeight()
+                .background(if (focused) Color.White.copy(alpha = 0.55f) else Accent.copy(alpha = 0.5f)),
+        )
+
+        Thumb(width, minValue, live = !editingUpper, focused = focused)
+        Thumb(width, maxValue, live = editingUpper, focused = focused)
+    }
+}
+
+@Composable
+private fun BoxWithConstraintsScope.Thumb(width: Dp, value: Long, live: Boolean, focused: Boolean) {
+    val w = if (live) 10.dp else 6.dp
+    Box(
+        Modifier
+            .padding(start = (width * SizeFilter.fraction(value) - w / 2).coerceIn(0.dp, width - w))
+            .width(w)
+            .fillMaxHeight()
+            .clip(RoundedCornerShape(5.dp))
+            .background(
+                when {
+                    focused && live -> Color.White
+                    focused -> Color.White.copy(alpha = 0.7f)
+                    live -> Accent
+                    else -> Accent.copy(alpha = 0.6f)
+                },
+            ),
+    )
+}
+
+/** Right-aligned "Reset to defaults", greyed out when the range is already the default. */
+@Composable
+private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusedAsState()
+    val background by animateColorAsState(
+        targetValue = if (focused) Accent else SurfaceRaised,
+        animationSpec = tween(140),
+        label = "resetChip",
+    )
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (enabled) background else SurfaceDark)
+            .clickable(
+                interactionSource = interactions,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick,
             )
-        }
+            .padding(horizontal = 18.dp, vertical = 9.dp),
+    ) {
+        Text(
+            "Reset to defaults",
+            style = MaterialTheme.typography.bodyLarge,
+            color = when {
+                !enabled -> TextMuted
+                focused -> Color.White
+                else -> TextPrimary
+            },
+            maxLines = 1,
+        )
     }
 }
 

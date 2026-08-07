@@ -1,17 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Play mark only (from art/logo.svg, SVG Repo), recolored for the dark theme.
+  Player mark, from art/player.svg (SVG Repo), recoloured to the app palette.
 
-  The original artwork was a filled plate with the triangle punched out of it by an evenOdd
-  fill. Dropping the plate subpath leaves the triangle itself as the whole icon, on a
-  transparent background, so it sits on whatever surface hosts it instead of carrying its own.
+  Structure is unchanged from the source: a tile, a darker screen filling the upper two thirds,
+  a progress bar across the bottom with its playhead, and the play triangle centred in the
+  screen. Only the fills differ — the original's purple and pink become the surface, accent and
+  text colours used everywhere else in the app.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="56dp"
-    android:height="56dp"
-    android:viewportWidth="56"
-    android:viewportHeight="56">
+    android:width="192dp"
+    android:height="192dp"
+    android:viewportWidth="1024"
+    android:viewportHeight="1024">
     <path
-        android:fillColor="@color/accent"
-        android:pathData="M 19.5 44.5 C 17.6 45.6 15.5 44.4 15.5 42.4 L 15.5 13.6 C 15.5 11.6 17.8 10.4 19.5 11.4 L 43.6 25.8 C 45.3 26.8 45.3 29.2 43.6 30.2 Z" />
+        android:fillColor="#1E1E28"
+        android:pathData="M960 1002.666667H64a42.666667 42.666667 0 0 1-42.666667-42.666667V64a42.666667 42.666667 0 0 1 42.666667-42.666667h896a42.666667 42.666667 0 0 1 42.666667 42.666667v896a42.666667 42.666667 0 0 1-42.666667 42.666667z" />
+    <path
+        android:fillColor="#0E0E12"
+        android:pathData="M64 64h896v682.666667H64z" />
+    <path
+        android:fillColor="#3A3A46"
+        android:pathData="M896 896H597.333333a21.333333 21.333333 0 1 1 0-42.666667h298.666667a21.333333 21.333333 0 1 1 0 42.666667z" />
+    <path
+        android:fillColor="#2AABEE"
+        android:pathData="M661.333333 896H128a21.333333 21.333333 0 1 1 0-42.666667h533.333333a21.333333 21.333333 0 1 1 0 42.666667z" />
+    <path
+        android:fillColor="#EDEDF2"
+        android:pathData="M640 960c-47.04 0-85.333333-38.293333-85.333333-85.333333s38.293333-85.333333 85.333333-85.333334 85.333333 38.293333 85.333333 85.333334-38.293333 85.333333-85.333333 85.333333zM426.666667 554.666667a21.269333 21.269333 0 0 1-21.333334-21.333334V277.333333a21.333333 21.333333 0 0 1 33.173334-17.749333l192 128a21.333333 21.333333 0 0 1 0 35.498667l-192 128A21.333333 21.333333 0 0 1 426.666667 554.666667z" />
 </vector>

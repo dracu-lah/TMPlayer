@@ -1,14 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 320x180 TV launcher banner: logo centered on dark background -->
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item>
-        <shape android:shape="rectangle">
-            <solid android:color="@color/background" />
-        </shape>
-    </item>
-    <item
-        android:drawable="@drawable/ic_logo"
-        android:gravity="center"
-        android:width="96dp"
-        android:height="96dp" />
-</layer-list>
+<!--
+  Android TV launcher banner, 320x180.
+
+  The launcher paints this into a wide 16:9 tile with no padding, rounding or background of its
+  own, so a square mark dropped in the middle reads as a small object floating on black. The
+  artwork is therefore composed for the shape it actually occupies: the same player mark from
+  art/player.svg, but stretched to a landscape screen and inset far enough that a launcher which
+  crops a few percent for its focus animation still cannot touch it.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+
+    <!-- Edge to edge, so the tile is never transparent. -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M0 0h320v180H0z" />
+
+    <!-- The player body, inset to leave a clear margin on every side. -->
+    <path
+        android:fillColor="#1E1E28"
+        android:pathData="M74 34h172a12 12 0 0 1 12 12v88a12 12 0 0 1-12 12H74a12 12 0 0 1-12-12V46a12 12 0 0 1 12-12z" />
+
+    <!-- Screen. -->
+    <path
+        android:fillColor="#0E0E12"
+        android:pathData="M62 46a12 12 0 0 1 12-12h172a12 12 0 0 1 12 12v76H62z" />
+
+    <!-- Track still to play. -->
+    <path
+        android:fillColor="#3A3A46"
+        android:pathData="M186 137h56a5 5 0 0 1 0 10h-56a5 5 0 0 1 0-10z" />
+
+    <!-- Track already played. -->
+    <path
+        android:fillColor="#2AABEE"
+        android:pathData="M78 137h108a5 5 0 0 1 0 10H78a5 5 0 0 1 0-10z" />
+
+    <!-- Playhead. -->
+    <path
+        android:fillColor="#EDEDF2"
+        android:pathData="M186 128a14 14 0 1 1 0 28 14 14 0 0 1 0-28z" />
+
+    <!-- Play triangle, centred in the screen. -->
+    <path
+        android:fillColor="#EDEDF2"
+        android:pathData="M148 60a6 6 0 0 1 9.2-5.1l36 22a6 6 0 0 1 0 10.2l-36 22A6 6 0 0 1 148 104z" />
+</vector>

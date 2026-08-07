@@ -1,80 +1,154 @@
 <p align="center">
-  <img src="art/logo.svg" width="72" alt="TMPlayer logo" />
+  <img src="art/player.svg" width="88" alt="TMPlayer logo" />
 </p>
 
 <h1 align="center">TMPlayer</h1>
 
-<p align="center">Watch movies from your Telegram chats on Android TV — QR login, instant streaming, proper seeking.</p>
+<p align="center">Your Telegram films, on the TV, without downloading them first.</p>
+
+<p align="center">
+  <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue" />
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Android%20TV%208.0%2B-3ddc84" />
+  <img alt="Tests" src="https://img.shields.io/badge/tests-77%20passing-brightgreen" />
+</p>
 
 ---
 
-TMPlayer is an unofficial, open-source Telegram client purpose-built for TVs (designed around the Mi TV Stick and other low-spec Android TV devices). Log in with a QR code, browse your chats as a clean media-only library, and press play — files stream directly from Telegram's servers while they download, with real forward/backward seeking, subtitles, and resume.
+You have films sitting in Telegram channels. Watching one on the TV means downloading eight
+gigabytes to a phone, copying it across, and finding somewhere to put it.
 
-No servers. No bots. No accounts other than your own Telegram. Nothing is hosted, indexed, or uploaded by this app.
+TMPlayer skips all of that. Scan a QR code with your phone, pick a film, and it starts playing in
+a few seconds. Skip to the ninety-minute mark and it gets there in a few seconds too — the
+download moves to wherever you are instead of grinding through everything before it.
 
-## Features
+It runs on an 8 GB TV stick with a gigabyte of RAM, because that is what it was built and tested
+on.
 
-- [x] **QR code login** — scan with the Telegram app on your phone (Settings → Devices → Link Desktop Device). Two-step verification supported.
-- [x] **Media-only chat library** — all your chats and channels, showing just their videos and movie files in a big poster grid.
-- [x] **Stream-while-downloading playback** — starts in seconds; seeking moves the download to the target offset instead of waiting for the file.
-- [x] **Subtitles & audio tracks** — embedded SRT/ASS/VTT and image-based PGS/VobSub, plus dual-audio switching; FFmpeg-backed audio decoding for codecs TV sticks lack (DTS, TrueHD, E-AC3).
-- [x] **Resume watching** — every file remembers where you stopped.
-- [x] **8 GB-friendly storage guard** — the streaming cache is capped (1 GB by default, 1/2/4 GB in Settings) and trimmed after every film.
-- [x] **10-foot UI** — plain, dark, oversized; every screen has proper loading and error states; zero typing after login.
+<p align="center">
+  <img src="docs/screenshots/browse.png" width="90%" alt="Browsing chats on TMPlayer" />
+</p>
 
-See [PLAN.md](PLAN.md) for the full design document, and [INSTALL.md](INSTALL.md) to put it on your TV.
+## What it does
 
-## How it works
+**Signs in with a QR code.** Open Telegram on your phone, go to Settings → Devices → Link Desktop
+Device, point it at the TV. No typing an email address with a D-pad. Two-step verification works.
 
-- [TDLib](https://core.telegram.org/tdlib) (Telegram's official client library) handles auth, chats, and file access — via [tdl-coroutines](https://github.com/g000sha256/tdl-coroutines), which bundles prebuilt natives for `armeabi-v7a`, `arm64-v8a`, and `x86_64`.
-- A small custom [Media3](https://developer.android.com/media/media3) `DataSource` bridges TDLib's offset-based partial downloads into ExoPlayer — the same technique official Telegram apps use for streaming (clean-room implementation from TDLib docs, Apache-licensed).
-- The player UI is Media3's leanback integration — standard Android TV transport controls, not a custom player.
+**Shows films, not messages.** Every chat and channel you are in, listed as poster grids of the
+videos inside them. Text messages never appear. Documents are matched by name and type, because
+most films arrive as a plain `.mkv` rather than as a video.
 
-## Building
+**Starts fast and seeks properly.** Playback begins while the file is still arriving, and seeking
+re-aims the download rather than waiting for it. This is the whole reason the app exists.
 
-Requirements: JDK 17+ (21 recommended), Android SDK platform 36 (the app itself runs on API 26+).
+**Handles the formats films actually come in.** MKV, MP4, AVI, TS, and the rest. Embedded
+subtitles, including image-based PGS and VobSub. Dual audio tracks you can switch between mid-film.
+DTS, TrueHD and E-AC3 decode in software when the stick has no silicon for them, while video stays
+on the hardware decoder.
 
-1. Get your own Telegram API credentials at [my.telegram.org](https://my.telegram.org) → *API development tools* (free, 2 minutes). Every fork must use its own pair — they are not distributed with this repo.
-2. Create `local.properties` in the repo root:
+**Remembers where you stopped.** Every film, with a progress bar on its poster.
 
-   ```properties
-   sdk.dir=/path/to/Android/Sdk
-   TG_API_ID=1234567
-   TG_API_HASH=your_api_hash
-   ```
+**Keeps one film on the device.** An 8 GB stick cannot hold a library. TMPlayer caches the film you
+are watching and clears the previous one, showing you exactly how much space that frees and asking
+before it does it.
 
-3. Build:
+**Finds things by voice.** Press Speak and say a channel or a file name. It uses the microphone
+already in your remote and asks for no permissions to do it.
 
-   ```bash
-   ./gradlew assembleDebug          # per-ABI debug APKs
-   ./gradlew assembleRelease        # minified release (needs your keystore, see below)
-   ./gradlew test                   # JVM unit tests
-   ```
+<p align="center">
+  <img src="docs/screenshots/settings.png" width="90%" alt="TMPlayer settings" />
+</p>
 
-Release signing: create a keystore (`keytool -genkeypair …`) and a `keystore.properties` (both are gitignored); CI/store distribution is out of scope — this app is meant to be sideloaded.
+## Install it
 
-## Installing on a TV
+Grab the APK from [Releases](../../releases) and pick the one matching your device:
 
-Enable Developer options on the TV (Settings → About → click *Build* 7×), turn on USB/network debugging, then:
+| Device | APK |
+|---|---|
+| Mi TV Stick, most 2018–2021 sticks | `armeabi-v7a` |
+| Chromecast with Google TV, newer boxes | `arm64-v8a` |
+| Emulators and x86 boxes | `x86_64` |
+
+Not sure which? Run `adb shell getprop ro.product.cpu.abi`.
+
+On the TV, turn on Developer options (Settings → About → press *Build* seven times), enable network
+debugging, then:
 
 ```bash
 adb connect <tv-ip>:5555
-adb install app/build/outputs/apk/release/app-armeabi-v7a-release.apk   # Mi TV Stick 2020
-adb install app/build/outputs/apk/release/app-arm64-v8a-release.apk    # most other devices
+adb install TMPlayer-<version>-armeabi-v7a.apk
 ```
+
+[INSTALL.md](INSTALL.md) covers the sideloading steps in full, along with the remote-control
+reference and what to do when something misbehaves.
+
+## What it is not
+
+It hosts nothing, indexes nothing and uploads nothing. There is no server, no bot, and no account
+except your own. It shows you media from chats you already joined, and what you do with that is
+your responsibility.
+
+It is also not a general Telegram client. You cannot read messages, reply, or send anything. It
+plays videos, and that is all it does.
+
+## How it works
+
+[TDLib](https://core.telegram.org/tdlib), Telegram's own client library, handles the account, the
+chats and the files — through
+[tdl-coroutines](https://github.com/g000sha256/tdl-coroutines), which ships prebuilt natives for
+every ABI here.
+
+The interesting part is a small [Media3](https://developer.android.com/media/media3) `DataSource`
+that maps ExoPlayer's reads onto TDLib's offset-based partial downloads. Seek to a new position and
+it points TDLib at that byte instead of waiting for the intervening gigabytes. The window
+arithmetic lives in one pure class with the awkward cases pinned down by unit tests, because that
+is where a streaming player either works or does not.
+
+The player itself is Media3's leanback integration: the standard Android TV transport controls,
+not a hand-rolled imitation of them.
+
+## Build it
+
+You need JDK 17 or newer (21 is what this is built with) and Android SDK platform 36. The app
+itself runs on API 26 and up.
+
+Telegram requires every client to identify itself, so you need your own credentials — free, and
+about two minutes, at [my.telegram.org](https://my.telegram.org) → *API development tools*. Put
+them in `local.properties` at the repo root:
+
+```properties
+sdk.dir=/path/to/Android/Sdk
+TG_API_ID=1234567
+TG_API_HASH=your_api_hash
+```
+
+Then:
+
+```bash
+./gradlew test              # unit tests
+./gradlew assembleDebug     # per-ABI debug APKs
+./gradlew assembleRelease   # signed release, needs keystore.properties
+```
+
+The build works without credentials — the app just says so on the login screen instead of drawing
+a QR code, which is what CI does on every pull request.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Short version: keep it minimal, use existing libraries, write tests for core logic, never copy GPL code into this Apache-2.0 project.
+[CONTRIBUTING.md](CONTRIBUTING.md) has the details. The short version: keep it small, prefer an
+existing library to new code, put logic that can be tested behind a pure function and test it, and
+never paste GPL code into an Apache-2.0 project.
+
+Some version constraints in this repo look arbitrary and are not — they are documented in
+CONTRIBUTING.md with the reason each one exists. Please read that before bumping anything.
 
 ## Legal
 
-- Unofficial client. Not affiliated with, endorsed by, or connected to Telegram FZ-LLC.
-- Uses the official Telegram API via TDLib with user-provided credentials, as [permitted for third-party clients](https://core.telegram.org/api/obtaining_api_id).
-- TMPlayer hosts no content and provides no content. It displays media from chats **you** joined with **your** account. You are responsible for what you access.
+Unofficial client. Not affiliated with, endorsed by, or connected to Telegram FZ-LLC. It uses the
+official Telegram API through TDLib with your own credentials, as
+[permitted for third-party clients](https://core.telegram.org/api/obtaining_api_id).
 
 ## License
 
 [Apache-2.0](LICENSE) © 2026 dracu-lah
 
-Logo icon via [SVG Repo](https://www.svgrepo.com).
+Player mark via [SVG Repo](https://www.svgrepo.com), recoloured.

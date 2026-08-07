@@ -109,7 +109,7 @@ object Td {
             AuthAction.SendParameters -> sendParameters(td)
             AuthAction.RequestQrCode -> {
                 val result = td.requestQrCodeAuthentication(longArrayOf())
-                if (result is TdlResult.Failure) _auth.value = AuthState.Failed(result.message)
+                if (result is TdlResult.Failure) _auth.value = AuthState.Failed(Failures.humanise(result.message))
             }
             AuthAction.OnReady -> onReady(td)
             AuthAction.RecreateClient -> closed.complete(Unit)
@@ -163,7 +163,7 @@ object Td {
             is TdlResult.Success -> null
             is TdlResult.Failure -> {
                 _auth.value = AuthState.Password(hint, wrong = true)
-                if (result.message == "PASSWORD_HASH_INVALID") "Wrong password" else result.message
+                if (result.message == "PASSWORD_HASH_INVALID") "Wrong password" else Failures.humanise(result.message)
             }
         }
     }
