@@ -116,13 +116,7 @@ object Tmdb {
         val parsed = FilmName.parse(fileName)
         if (parsed.title.isBlank()) return FilmLookup.NotFound
 
-        // The episode is part of the key, or every episode of a series would be handed the
-        // answer cached for whichever one was opened first.
-        val key = if (parsed.isSeries) {
-            "${parsed.query} s${parsed.season}e${parsed.episode}".lowercase()
-        } else {
-            parsed.query.lowercase()
-        }
+        val key = keyFor(parsed)
         cache.get(key)?.let { return it }
 
         // One request per film, however many cards are asking. Whoever queues behind the first
@@ -145,6 +139,32 @@ object Tmdb {
         }.also {
             inFlightLock.withLock { inFlight.remove(key) }
         }
+    }
+
+    /**
+     * The cache key for a parsed name.
+     *
+     * The episode is part of it, or every episode of a series would be handed the answer cached
+     * for whichever one was opened first.
+     */
+    private fun keyFor(parsed: ParsedName): String = if (parsed.isSeries) {
+        "${parsed.query} s${parsed.season}e${parsed.episode}".lowercase()
+    } else {
+        parsed.query.lowercase()
+    }
+
+    /**
+     * Throws away what was cached for one film, so the next [lookup] genuinely asks TMDB again.
+     *
+     * This is what the Refresh button on the details panel needs: without it a wrong or missing
+     * match is stored for a month, and pressing Refresh would hand back the same answer instantly.
+     */
+    fun forget(fileName: String) {
+        val parsed = FilmName.parse(fileName)
+        if (parsed.title.isBlank()) return
+        val key = keyFor(parsed)
+        cache.remove(key)
+        runCatching { cacheFile(key)?.delete() }
     }
 
     /**

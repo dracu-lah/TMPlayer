@@ -230,4 +230,27 @@ class FilmNameTest {
         assertNull(FilmName.nextEpisode("Some.Film.2024.1080p.mkv", chat) { it })
         assertNull(FilmName.nextEpisode("Wednesday.S02E04.1080p.mkv", chat) { it })
     }
+
+    @Test
+    fun `the previous episode is the one before it in the same season`() {
+        val chat = listOf(
+            "Wednesday.S02E05.1080p.WEBRip.mkv",
+            "Wednesday.S02E03.1080p.WEBRip.mkv",
+            "Wednesday.S02E04.1080p.WEBRip.mkv",
+        )
+        val previous = FilmName.previousEpisode("Wednesday.S02E04.1080p.WEBRip.mkv", chat) { it }
+        assertEquals("Wednesday.S02E03.1080p.WEBRip.mkv", previous)
+    }
+
+    @Test
+    fun `the first episode of a season does not roll back into the one before it`() {
+        val chat = listOf("Wednesday.S01E08.1080p.mkv", "Wednesday.S02E01.1080p.mkv")
+        assertNull(FilmName.previousEpisode("Wednesday.S02E01.1080p.mkv", chat) { it })
+    }
+
+    @Test
+    fun `a film has no previous episode`() {
+        val chat = listOf("Some.Film.2024.1080p.mkv", "Severance.S02E05.1080p.mkv")
+        assertNull(FilmName.previousEpisode("Some.Film.2024.1080p.mkv", chat) { it })
+    }
 }

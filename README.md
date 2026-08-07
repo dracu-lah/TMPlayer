@@ -9,7 +9,7 @@
 <p align="center">
   <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue" />
   <img alt="Platform" src="https://img.shields.io/badge/platform-Android%20TV%208.0%2B-3ddc84" />
-  <img alt="Tests" src="https://img.shields.io/badge/tests-146%20passing-brightgreen" />
+  <img alt="Tests" src="https://img.shields.io/badge/tests-149%20passing-brightgreen" />
 </p>
 
 ---
@@ -61,7 +61,8 @@ are stripped off the name before it is looked up, because that is how films actu
 **Knows a series from a film.** A name carrying `S02E04`, `2x04`, `Season 2 Episode 4` or a whole
 season is looked up in the television side of the database instead, and the panel shows that
 episode's own title, synopsis and still. A **Next** button plays the following episode from the
-same chat.
+same chat, and the player itself carries skip-forward and skip-back buttons for the episodes
+either side of the one on screen, beside the poster it puts on the transport row.
 
 **Remembers where you stopped.** Every film, with a progress bar on its poster. Hold OK on one to
 forget it, or clear the whole Continue watching list at once from its heading or from Settings.
@@ -73,7 +74,14 @@ turns that into a question first, for anyone who would rather be asked.
 
 **Stays out of the way.** Rows or posters, chosen beside the list it rearranges and remembered.
 Size limits so a chat full of stickers and clips does not bury the films. A resolution badge on
-each tile and nothing else, because the codec was never going to change anyone's mind.
+each tile and nothing else, because the codec was never going to change anyone's mind. A tile
+cuts a release name short, so the whole name sits in the bottom corner of the screen for whatever
+the remote is standing on, the way a browser shows the link under the cursor.
+
+**Catches up on demand.** A Refresh button beside every listing, for a film posted while the
+screen was open. Nothing is on a timer: a television that re-fetches by itself is a television
+that moves what you were about to press. Coming back after the TV has been asleep, the app waits
+for Telegram to answer before it says a chat is empty.
 
 **Finds things by voice.** Press the microphone and say a channel or a file name. It uses the
 microphone already in your remote and asks for no permissions to do it.

@@ -77,16 +77,36 @@ object FilmName {
      * guessing at where a series ends, and guessing wrong sends the viewer somewhere they did
      * not ask to go.
      */
-    fun <T> nextEpisode(current: String, candidates: List<T>, nameOf: (T) -> String): T? {
+    fun <T> nextEpisode(current: String, candidates: List<T>, nameOf: (T) -> String): T? =
+        episodeAt(current, candidates, step = 1, nameOf = nameOf)
+
+    /**
+     * The episode before [current], found the same way [nextEpisode] finds the one after it.
+     *
+     * The player needs both: somebody who has just pressed Next once too often, or who came back
+     * to a series a week later and started one episode too far along, is one press from where they
+     * meant to be rather than backing out of the film to look for it.
+     */
+    fun <T> previousEpisode(current: String, candidates: List<T>, nameOf: (T) -> String): T? =
+        episodeAt(current, candidates, step = -1, nameOf = nameOf)
+
+    private fun <T> episodeAt(
+        current: String,
+        candidates: List<T>,
+        step: Int,
+        nameOf: (T) -> String,
+    ): T? {
         val here = parse(current)
         val season = here.season ?: return null
         val episode = here.episode ?: return null
         val title = here.title.lowercase()
+        val wanted = episode + step
+        if (wanted < 1) return null
 
         return candidates.firstOrNull { candidate ->
             val other = parse(nameOf(candidate))
             other.season == season &&
-                other.episode == episode + 1 &&
+                other.episode == wanted &&
                 other.title.lowercase() == title
         }
     }

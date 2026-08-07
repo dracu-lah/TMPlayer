@@ -117,6 +117,11 @@ fun BrowseScreen(
     favorites: Set<Long>,
     continueWatching: List<ResumeRecord>,
     onRetry: () -> Unit,
+    /**
+     * Fetches the chat list again without clearing the screen first. Telegram reorders chats as
+     * messages arrive, so a list left open goes stale; this is the button that catches it up.
+     */
+    onRefresh: () -> Unit = onRetry,
     onOpenChat: (ChatSummary) -> Unit,
     onResumeFilm: (ResumeRecord) -> Unit,
     onOpenSettings: () -> Unit,
@@ -182,6 +187,8 @@ fun BrowseScreen(
                     if (tab == BrowseTab.Continue) {
                         Header(tab, continueWatching.size) {
                             LayoutAction(layout, onToggleLayout)
+                            // No Refresh here: this tab is read off this device and cannot be
+                            // behind, so the button would be one that visibly does nothing.
                             if (continueWatching.isNotEmpty()) {
                                 HeaderAction(
                                     label = "Clear history",
@@ -204,6 +211,7 @@ fun BrowseScreen(
                     } else {
                         Header(tab, visible.size) {
                             LayoutAction(layout, onToggleLayout)
+                            RefreshAction(onRefresh)
                             // Stars are added one at a time from a menu, so the only way back from
                             // a tab full of them is here, beside the tab they fill.
                             if (tab == BrowseTab.Favorites && favorites.isNotEmpty()) {
@@ -825,10 +833,26 @@ private fun RailItem(
 @Composable
 private fun LayoutAction(layout: CardLayout, onToggle: () -> Unit) {
     HeaderAction(
+        // A grid of squares and a stack of lines are the two pictures every phone and television
+        // uses for this, so the words beside them were only saying it twice.
         label = if (layout == CardLayout.Grid) "As rows" else "As tiles",
         icon = if (layout == CardLayout.Grid) Icons.AutoMirrored.Filled.List else TmIcons.Grid,
+        showLabel = false,
         onClick = onToggle,
     )
+}
+
+/**
+ * Fetches the chat list again.
+ *
+ * The list is built once when the screen opens, so a chat that moves, is joined, or is renamed
+ * while it is up does not appear until something else rebuilds it. This keeps its word, unlike
+ * the arrangement toggle: a circular arrow on its own could be a retry, a replay or an update,
+ * and this app already draws that same glyph for two of those.
+ */
+@Composable
+private fun RefreshAction(onRefresh: () -> Unit) {
+    HeaderAction(label = "Refresh", icon = Icons.Filled.Refresh, onClick = onRefresh)
 }
 
 /**
@@ -836,9 +860,17 @@ private fun LayoutAction(layout: CardLayout, onToggle: () -> Unit) {
  *
  * Sized and coloured like the rows below it rather than like a button, so it reads as part of the
  * heading and not as the first item of the list.
+ *
+ * [label] is always given, even where [showLabel] hides it: it is what a screen reader announces,
+ * and an icon with no name is a button nobody can identify.
  */
 @Composable
-private fun HeaderAction(label: String, icon: ImageVector, onClick: () -> Unit) {
+private fun HeaderAction(
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    showLabel: Boolean = true,
+) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
@@ -853,12 +885,16 @@ private fun HeaderAction(label: String, icon: ImageVector, onClick: () -> Unit) 
             .clip(RoundedCornerShape(20.dp))
             .background(background)
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 10.dp),
+            // Even padding with no words, so the chip comes out round rather than as a wide one
+            // with a gap where the label used to be.
+            .padding(horizontal = if (showLabel) 18.dp else 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, tint = foreground, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge, color = foreground, maxLines = 1)
+        Icon(icon, contentDescription = label, tint = foreground, modifier = Modifier.size(20.dp))
+        if (showLabel) {
+            Spacer(Modifier.width(8.dp))
+            Text(label, style = MaterialTheme.typography.bodyLarge, color = foreground, maxLines = 1)
+        }
     }
 }
 
@@ -884,7 +920,14 @@ private fun Header(tab: BrowseTab, count: Int, action: @Composable () -> Unit = 
                 color = TextMuted,
             )
         }
-        action()
+        // A heading can carry several actions, and butted together they read as one wide control
+        // with a seam down it. The gap is what makes them separate buttons.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            action()
+        }
     }
 }
 

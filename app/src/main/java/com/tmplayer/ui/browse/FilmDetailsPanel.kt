@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -95,8 +97,18 @@ fun FilmDetailsPanel(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        val lookup by produceState<FilmLookup>(initialValue = FilmLookup.Loading, key1 = item.id) {
-            value = Tmdb.lookup(item.fileName.ifBlank { item.title })
+        val name = item.fileName.ifBlank { item.title }
+        // Bumped by Refresh. An answer is kept for a month, which is right for a film that has
+        // been out for years and wrong for one added to TMDB last week, or for a lookup that
+        // failed while the TV's connection was down.
+        var reloads by remember(item.id) { mutableStateOf(0) }
+        val lookup by produceState<FilmLookup>(
+            initialValue = FilmLookup.Loading,
+            key1 = item.id,
+            key2 = reloads,
+        ) {
+            value = FilmLookup.Loading
+            value = Tmdb.lookup(name)
         }
 
         // Read straight off the file name so the screen knows it is showing an episode before
@@ -184,6 +196,10 @@ fun FilmDetailsPanel(
                         onPlayFromStart = onPlayFromStart,
                         onPlayNext = onPlayNext,
                         onWatchTrailer = onWatchTrailer,
+                        onRefresh = {
+                            Tmdb.forget(name)
+                            reloads++
+                        },
                     )
 
                     Spacer(Modifier.height(16.dp))
@@ -277,6 +293,7 @@ private fun Actions(
     onPlayFromStart: () -> Unit,
     onPlayNext: () -> Unit,
     onWatchTrailer: (String) -> Unit,
+    onRefresh: () -> Unit,
 ) {
     val play = remember { FocusRequester() }
     val hasResume = resumeMs > 0
@@ -320,6 +337,15 @@ private fun Actions(
                 Spacer(Modifier.width(8.dp))
                 Text("Watch trailer")
             }
+        }
+
+        // Last, because it is the least of what this screen is for: a match that came out wrong,
+        // or a lookup that failed while the TV was offline, without backing out and coming in
+        // again to no effect.
+        Button(onClick = onRefresh, colors = tmButtonColors()) {
+            Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Refresh")
         }
     }
 

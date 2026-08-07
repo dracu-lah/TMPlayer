@@ -24,10 +24,19 @@ class TvPlayerGlue(
     private val onSkip: (Long) -> Unit,
     private val onPickSubtitles: () -> Unit,
     private val onPickAudio: () -> Unit,
+    private val onPreviousEpisode: () -> Unit = {},
+    private val onNextEpisode: () -> Unit = {},
 ) : PlaybackTransportControlGlue<LeanbackPlayerAdapter>(context, adapter) {
 
     private val rewind = PlaybackControlsRow.RewindAction(context)
     private val fastForward = PlaybackControlsRow.FastForwardAction(context)
+
+    // The standard skip glyphs, so a series watcher recognises them from every other player.
+    // They are built here but only put on the row once the chat has been asked whether the
+    // episodes either side of this one exist: a button that does nothing is worse than no button.
+    private val skipPrevious = PlaybackControlsRow.SkipPreviousAction(context)
+    private val skipNext = PlaybackControlsRow.SkipNextAction(context)
+    private var primary: ArrayObjectAdapter? = null
 
     // Labelled rather than left as bare glyphs: leanback reads label1 out as the action's
     // accessible name, and shows it as a tooltip on focus, so an unlabelled button is one a
@@ -46,9 +55,36 @@ class TvPlayerGlue(
     )
 
     override fun onCreatePrimaryActions(primaryActionsAdapter: ArrayObjectAdapter) {
+        primary = primaryActionsAdapter
         primaryActionsAdapter.add(rewind)
         super.onCreatePrimaryActions(primaryActionsAdapter) // play / pause
         primaryActionsAdapter.add(fastForward)
+    }
+
+    /**
+     * Puts the episode buttons on the row, or takes them off.
+     *
+     * Called once the chat has been searched, which is after the row already exists, so the two
+     * actions are inserted around what is there: previous before the rewind, next after the
+     * fast-forward, the order every transport row on a television uses.
+     */
+    fun setEpisodes(hasPrevious: Boolean, hasNext: Boolean) {
+        val adapter = primary ?: return
+        setPresent(adapter, skipPrevious, hasPrevious, index = 0)
+        setPresent(adapter, skipNext, hasNext, index = adapter.size())
+    }
+
+    private fun setPresent(
+        adapter: ArrayObjectAdapter,
+        action: Action,
+        wanted: Boolean,
+        index: Int,
+    ) {
+        val at = adapter.indexOf(action)
+        when {
+            wanted && at < 0 -> adapter.add(index, action)
+            !wanted && at >= 0 -> adapter.remove(action)
+        }
     }
 
     override fun onCreateSecondaryActions(secondaryActionsAdapter: ArrayObjectAdapter) {
@@ -60,6 +96,8 @@ class TvPlayerGlue(
         when (action.id) {
             rewind.id -> onSkip(-SKIP_MS)
             fastForward.id -> onSkip(SKIP_MS)
+            skipPrevious.id -> onPreviousEpisode()
+            skipNext.id -> onNextEpisode()
             ID_SUBTITLES -> onPickSubtitles()
             ID_AUDIO -> onPickAudio()
             else -> super.onActionClicked(action)

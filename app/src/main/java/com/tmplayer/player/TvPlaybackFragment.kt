@@ -1,12 +1,17 @@
 package com.tmplayer.player
 
+import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import androidx.leanback.app.VideoSupportFragment
 import androidx.leanback.app.VideoSupportFragmentGlueHost
 import androidx.leanback.widget.PlaybackSeekDataProvider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.leanback.LeanbackPlayerAdapter
+import kotlinx.coroutines.launch
 
 /**
  * Hosts the video surface and leanback's transport row. The player itself belongs to
@@ -36,6 +41,8 @@ class TvPlaybackFragment : VideoSupportFragment() {
             onSkip = owner::skipBy,
             onPickSubtitles = { owner.showTrackPicker(C.TRACK_TYPE_TEXT) },
             onPickAudio = { owner.showTrackPicker(C.TRACK_TYPE_AUDIO) },
+            onPreviousEpisode = { owner.episodes.value.previous?.let(owner::playEpisode) },
+            onNextEpisode = { owner.episodes.value.next?.let(owner::playEpisode) },
         )
         created.host = VideoSupportFragmentGlueHost(this)
         created.title = owner.mediaTitle
@@ -45,6 +52,24 @@ class TvPlaybackFragment : VideoSupportFragment() {
         // bar, which is the seek most people holding a remote will reach for.
         created.seekProvider = PlaybackSeekDataProvider()
         glue = created
+
+        // Both arrive after the film has started: one is a search of the chat, the other a poster
+        // fetched over the internet. Neither holds playback up, and the row rearranges itself
+        // around them when they land.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    owner.episodes.collect {
+                        created.setEpisodes(it.previous != null, it.next != null)
+                    }
+                }
+                launch {
+                    owner.art.collect { bitmap ->
+                        created.art = bitmap?.let { BitmapDrawable(resources, it) }
+                    }
+                }
+            }
+        }
     }
 
     /** True while the transport row is on screen; the activity uses it to route D-pad keys. */

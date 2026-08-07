@@ -2,6 +2,7 @@ package com.tmplayer.player
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.Bundle
 import android.os.SystemClock
@@ -33,14 +34,22 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.tmplayer.App
 import com.tmplayer.R
+import com.tmplayer.data.ChatRepository
 import com.tmplayer.data.Failures
+import com.tmplayer.data.FilmLookup
+import com.tmplayer.data.FilmName
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
+import com.tmplayer.data.RemoteImages
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
+import com.tmplayer.data.Tmdb
 import com.tmplayer.data.errorMessage
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -85,6 +94,19 @@ class PlayerActivity : FragmentActivity() {
 
     /** Only used to label the film in "Continue watching"; playback never needs it. */
     private var chatTitle = ""
+
+    /**
+     * The episodes either side of this one, once the chat has been asked about them.
+     *
+     * Empty for a film, and empty for an episode whose neighbours are not in the chat. The
+     * transport row watches this and grows its two extra buttons when they arrive.
+     */
+    private val _episodes = MutableStateFlow(Episodes())
+    val episodes: StateFlow<Episodes> = _episodes.asStateFlow()
+
+    /** The poster for whatever is playing, for the thumbnail beside the title. Null until found. */
+    private val _art = MutableStateFlow<Bitmap?>(null)
+    val art: StateFlow<Bitmap?> = _art.asStateFlow()
 
     /** True until the picture first appears; after that a stall is a chip, not a full sheet. */
     private var openingFilm = true
@@ -170,6 +192,8 @@ class PlayerActivity : FragmentActivity() {
 
         observeDownload()
         startResumeHeartbeat()
+        findEpisodes()
+        findArt()
 
         // Reading the saved position is a disk hit; do it off the main thread and seek once
         // it lands. Opening the stream takes longer than this ever will. Under "download the
@@ -324,6 +348,62 @@ class PlayerActivity : FragmentActivity() {
         // ExoPlayer's own message names a codec or an internal class; it means nothing on a sofa
         // and reads as a crash. The exception still reaches logcat through ExoPlayer itself.
         else -> "This film wouldn't play. Try a different copy of it."
+    }
+
+    /**
+     * Asks the chat what comes before and after this episode.
+     *
+     * Off the critical path on purpose: it costs a search, and the film starts without it. The
+     * search is narrowed to the series name, which is what Telegram matches document file names
+     * against, and falls back to the plain listing for a chat that names its files some other way.
+     */
+    private fun findEpisodes() {
+        val here = FilmName.parse(mediaTitle)
+        if (!here.isEpisode || chatId == 0L) return
+
+        lifecycleScope.launch {
+            val candidates = runCatching {
+                // Built inside the guard: it reaches for the TDLib client, which is not there at
+                // all if the process was killed behind the player and is coming back up.
+                val repository = ChatRepository()
+                val narrowed = repository.mediaPage(chatId, query = here.title).items
+                narrowed.ifEmpty { repository.mediaPage(chatId).items }
+            }.getOrNull().orEmpty()
+            if (candidates.isEmpty()) return@launch
+
+            fun nameOf(item: MediaItem) = item.fileName.ifBlank { item.title }
+            _episodes.value = Episodes(
+                previous = FilmName.previousEpisode(mediaTitle, candidates, ::nameOf),
+                next = FilmName.nextEpisode(mediaTitle, candidates, ::nameOf),
+            )
+        }
+    }
+
+    /**
+     * The poster, for the thumbnail leanback draws beside the title on the transport row.
+     *
+     * Almost always a cache hit: the details panel looked the same film up to draw the screen the
+     * viewer pressed Play on, and both the answer and the image are kept on disk.
+     */
+    private fun findArt() {
+        lifecycleScope.launch {
+            val details = (Tmdb.lookup(mediaTitle) as? FilmLookup.Found)?.details ?: return@launch
+            _art.value = RemoteImages.load(details.posterUrl)
+        }
+    }
+
+    /**
+     * Switches to another episode of the same series.
+     *
+     * Done by starting the activity again rather than by swapping the file under the player:
+     * every one of opening the stream, the resume position, the download meter and the title is
+     * set up in [onCreate] against one file, and a second path through all of that is a second
+     * place for it to go wrong. The position in the episode being left is saved on the way out,
+     * so backing up to it later carries on where it stopped.
+     */
+    fun playEpisode(item: MediaItem) {
+        startActivity(intent(this, item, chatTitle))
+        finish()
     }
 
     /** Skips [deltaMs], clamped so a burst of remote presses can't run off either end. */
@@ -590,6 +670,9 @@ class PlayerActivity : FragmentActivity() {
             }
         }
     }
+
+    /** What the transport row offers either side of the film: nulls where there is nothing. */
+    data class Episodes(val previous: MediaItem? = null, val next: MediaItem? = null)
 
     companion object {
         private const val EXTRA_FILE_ID = "file_id"

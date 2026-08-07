@@ -7,6 +7,8 @@ import com.tmplayer.BuildConfig
 import dev.g000sha256.tdl.TdlClient
 import dev.g000sha256.tdl.TdlResult
 import dev.g000sha256.tdl.dto.AuthorizationState
+import dev.g000sha256.tdl.dto.ConnectionStateReady
+import dev.g000sha256.tdl.dto.ConnectionStateUpdating
 import dev.g000sha256.tdl.dto.FileTypeAnimation
 import dev.g000sha256.tdl.dto.FileTypeDocument
 import dev.g000sha256.tdl.dto.FileTypeVideo
@@ -20,7 +22,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -51,6 +55,17 @@ object Td {
     private val _auth = MutableStateFlow<AuthState>(AuthState.Connecting)
     val auth: StateFlow<AuthState> = _auth.asStateFlow()
 
+    /**
+     * Whether TDLib currently has a line to Telegram.
+     *
+     * Signing in is not the same thing as being connected. Coming back to the app after the TV has
+     * been asleep, the session is read off disk and the account is ready long before the socket
+     * is, and a search sent in that gap comes back empty: not an error, just nothing, which the
+     * screens then report as an empty chat.
+     */
+    private val _connected = MutableStateFlow(false)
+    val connected: StateFlow<Boolean> = _connected.asStateFlow()
+
     private lateinit var appContext: Context
     private lateinit var settings: SettingsStore
 
@@ -71,6 +86,15 @@ object Td {
             val updates = launch {
                 td.authorizationStateUpdates.collect { apply(td, it.authorizationState, closed) }
             }
+            val connection = launch {
+                td.connectionStateUpdates.collect { update ->
+                    // "Updating" means the socket is up and TDLib is pulling in what it missed.
+                    // Requests are answered from that point on, so it counts as connected; waiting
+                    // for it to finish would hold the chat list back on a large account.
+                    _connected.value = update.state is ConnectionStateReady ||
+                        update.state is ConnectionStateUpdating
+                }
+            }
             // The first update may already have been emitted before we subscribed, so ask
             // once directly. Both paths go through the same mutex-guarded handler.
             launch {
@@ -81,6 +105,8 @@ object Td {
 
             closed.await()
             updates.cancel()
+            connection.cancel()
+            _connected.value = false
             current = null
         }
     }
@@ -185,6 +211,16 @@ object Td {
         runCatching { current?.logOut() }
     }
 
+    /**
+     * Waits until Telegram is actually reachable, so a listing is not built from a search that
+     * had nowhere to go. Gives up after [timeoutMs] and lets the caller try anyway, because a
+     * screen stuck on a spinner for ever is worse than one that says the chat looks empty.
+     */
+    suspend fun awaitConnected(timeoutMs: Long = CONNECT_WAIT_MS) {
+        if (_connected.value) return
+        withTimeoutOrNull(timeoutMs) { _connected.first { it } }
+    }
+
     suspend fun storageUsedBytes(): Long =
         current?.getStorageStatisticsFast()?.valueOrNull?.filesSize ?: 0L
 
@@ -222,6 +258,9 @@ object Td {
     fun clearMediaCacheInBackground() {
         scope.launch { runCatching { clearMediaCache() } }
     }
+
+    /** Long enough to cover a stick waking its wifi up, short enough not to look frozen. */
+    private const val CONNECT_WAIT_MS = 15_000L
 
     /** The signed-in account, for the avatar and name in the navigation rail. */
     suspend fun me(): Account? {

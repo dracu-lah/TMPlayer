@@ -284,6 +284,7 @@ private fun Root() {
                     favorites = favorites,
                     continueWatching = continueWatching,
                     onRetry = chatsViewModel::load,
+                    onRefresh = chatsViewModel::load,
                     onOpenChat = { openChat(it) },
                     onResumeFilm = { resumeFilm(it) },
                     onOpenSettings = { screen = Screen.Settings },

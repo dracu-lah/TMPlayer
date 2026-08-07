@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -51,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -83,6 +86,7 @@ import com.tmplayer.ui.theme.SurfaceRaised
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
 import com.tmplayer.ui.theme.Tv
+import kotlinx.coroutines.delay
 
 @Suppress("UNCHECKED_CAST")
 private class MediaListViewModelFactory(
@@ -121,6 +125,8 @@ fun MediaGridScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     var query by remember { mutableStateOf("") }
     var details by remember { mutableStateOf<MediaItem?>(null) }
+    // Whatever the remote is standing on, for the name strip along the bottom.
+    var standingOn by remember { mutableStateOf<MediaItem?>(null) }
 
     // Whether anything on this device can play a YouTube link. Checked once rather than per
     // film, and used to hide the trailer button entirely rather than have it open nothing.
@@ -160,7 +166,22 @@ fun MediaGridScreen(
                 bottom = Tv.SafeV + 16.dp,
             )
 
-            Box(Modifier.fillMaxSize()) {
+            // The strip only belongs there while the remote is somewhere in the listing, and a
+            // move between two cards drops focus for a frame before the next card takes it. The
+            // wait absorbs that gap, so stepping along a row does not make the strip blink.
+            var listHasFocus by remember { mutableStateOf(false) }
+            LaunchedEffect(listHasFocus) {
+                if (!listHasFocus) {
+                    delay(FOCUS_SETTLE_MS)
+                    standingOn = null
+                }
+            }
+
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .onFocusChanged { listHasFocus = it.hasFocus },
+            ) {
                 when (layout) {
                     CardLayout.Grid -> LazyVerticalGrid(
                         columns = GridCells.Fixed(COLUMNS),
@@ -177,6 +198,7 @@ fun MediaGridScreen(
                                     SettingsStore.progressKey(item.chatId, item.messageId),
                                 ],
                                 onClick = { details = item },
+                                onFocused = { standingOn = item },
                                 modifier = focusOf(item),
                             )
                         }
@@ -195,6 +217,7 @@ fun MediaGridScreen(
                                     SettingsStore.progressKey(item.chatId, item.messageId),
                                 ],
                                 onClick = { details = item },
+                                onFocused = { standingOn = item },
                                 modifier = focusOf(item),
                             )
                         }
@@ -206,7 +229,8 @@ fun MediaGridScreen(
                     Row(
                         Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(bottom = Tv.SafeV)
+                            // Above the name strip when there is one, rather than through it.
+                            .padding(bottom = if (standingOn != null) Tv.SafeV + 46.dp else Tv.SafeV)
                             .clip(RoundedCornerShape(20.dp))
                             .background(SurfaceRaised)
                             .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -220,6 +244,15 @@ fun MediaGridScreen(
                             color = TextMuted,
                         )
                     }
+                }
+
+                standingOn?.let { item ->
+                    FullName(
+                        name = item.title,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = Tv.SafeH, bottom = Tv.SafeV),
+                    )
                 }
             }
 
@@ -358,7 +391,7 @@ private fun Header(
             if (startVoice != null) {
                 // The microphone says what it does; the word beside it only took room from the
                 // search field.
-                Pill(label = null, icon = TmIcons.Mic, onClick = startVoice)
+                Pill(label = "Voice search", icon = TmIcons.Mic, showLabel = false, onClick = startVoice)
             }
             if (query.isNotBlank()) {
                 Pill("Clear", Icons.Filled.Close) {
@@ -381,6 +414,8 @@ private fun Header(
             Pill(
                 label = if (layout == CardLayout.Grid) "As rows" else "As posters",
                 icon = if (layout == CardLayout.Grid) Icons.AutoMirrored.Filled.List else TmIcons.Grid,
+                // The two glyphs are the ones every app uses for this; the words repeated them.
+                showLabel = false,
                 onClick = onToggleLayout,
             )
             // Telegram pushes new messages into TDLib's database, but this grid was built from a
@@ -390,11 +425,16 @@ private fun Header(
     }
 }
 
+/**
+ * [label] is always given, even where [showLabel] hides it: it is what a screen reader announces,
+ * and an icon with no name is a button nobody can identify.
+ */
 @Composable
 private fun Pill(
-    label: String?,
+    label: String,
     icon: ImageVector,
     tintWhenIdle: Color = TextPrimary,
+    showLabel: Boolean = true,
     onClick: () -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
@@ -414,16 +454,49 @@ private fun Pill(
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
             // Even padding when there are no words, so the pill comes out round rather than as a
             // wide one with a gap in it.
-            .padding(horizontal = if (label == null) 13.dp else 16.dp),
+            .padding(horizontal = if (showLabel) 16.dp else 13.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // The label is the only description there was, so a wordless pill hands it to the screen
-        // reader instead of dropping it.
         Icon(icon, contentDescription = label, tint = foreground, modifier = Modifier.size(22.dp))
-        if (label != null) {
+        if (showLabel) {
             Text(label, style = MaterialTheme.typography.bodyLarge, color = foreground, maxLines = 1)
         }
+    }
+}
+
+/**
+ * The whole name of whatever the remote is standing on, along the bottom corner.
+ *
+ * Both arrangements have to cut the name short: a tile has a quarter of the width and a row has
+ * two lines of it, and a release name beats either. This is the browser's trick of putting the
+ * link under the cursor in the corner of the window. It stays out of the way of the listing, and
+ * a name too long even for half the screen scrolls past instead of ending in an ellipsis.
+ */
+@Composable
+private fun FullName(name: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .widthIn(max = STRIP_MAX_WIDTH)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.Black.copy(alpha = 0.82f))
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        Text(
+            name,
+            style = MaterialTheme.typography.bodyLarge,
+            color = TextPrimary,
+            maxLines = 1,
+            softWrap = false,
+            // Long enough to read a whole line before it starts moving, and again each time it
+            // comes back round.
+            modifier = Modifier.basicMarquee(
+                iterations = Int.MAX_VALUE,
+                initialDelayMillis = 1_500,
+                repeatDelayMillis = 1_500,
+                velocity = 32.dp,
+            ),
+        )
     }
 }
 
@@ -438,6 +511,7 @@ private fun MediaCard(
     item: MediaItem,
     watched: WatchPoint?,
     onClick: () -> Unit,
+    onFocused: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val interactions = remember { MutableInteractionSource() }
@@ -447,6 +521,7 @@ private fun MediaCard(
         animationSpec = tween(140),
         label = "cardBorder",
     )
+    LaunchedEffect(focused) { if (focused) onFocused() }
 
     Column(
         modifier
@@ -486,6 +561,7 @@ private fun MediaRow(
     item: MediaItem,
     watched: WatchPoint?,
     onClick: () -> Unit,
+    onFocused: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val interactions = remember { MutableInteractionSource() }
@@ -495,6 +571,7 @@ private fun MediaRow(
         animationSpec = tween(140),
         label = "rowBorder",
     )
+    LaunchedEffect(focused) { if (focused) onFocused() }
 
     Row(
         modifier
@@ -604,3 +681,9 @@ private const val COLUMNS = 4
 private const val LIST_LEAD = 4
 
 private val ROW_ART_WIDTH = 176.dp
+
+/** Half the panel, so the strip never reaches back across the listing it belongs to. */
+private val STRIP_MAX_WIDTH = 480.dp
+
+/** How long a gap in focus has to last before the name strip counts it as having left. */
+private const val FOCUS_SETTLE_MS = 150L

@@ -35,10 +35,12 @@ class ChatListViewModel : ViewModel() {
 
     private var account: Account? = null
     private var chats: List<ChatSummary>? = null
-
     fun load() {
         _state.value = UiState.Loading("Loading your chats…")
         viewModelScope.launch {
+            // Nothing is worth asking for until there is a line to Telegram. Coming back from
+            // standby this is the whole wait, and without it the list arrives empty.
+            Td.awaitConnected()
             runCatching { repository.chats() }
                 .onSuccess {
                     chats = it
@@ -102,6 +104,7 @@ class MediaListViewModel(
         _state.value = UiState.Loading(if (searching) "Searching…" else "Finding films…")
         pageJob?.cancel()
         pageJob = viewModelScope.launch {
+            Td.awaitConnected()
             runCatching { repository.mediaPage(chatId, cursors, query) }
                 .onSuccess { rawPage ->
                     val page = rawPage.copy(items = rawPage.items.filter(::withinSizeLimits))
