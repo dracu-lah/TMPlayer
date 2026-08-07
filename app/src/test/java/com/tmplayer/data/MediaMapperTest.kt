@@ -32,7 +32,7 @@ class MediaMapperTest {
     fun `a file name wins over a caption`() {
         assertEquals(
             "Arrival.2016.mkv",
-            MediaMapper.displayTitle("Arrival.2016.mkv", "Arrival — great film", "Video"),
+            MediaMapper.displayTitle("Arrival.2016.mkv", "Arrival, a great film", "Video"),
         )
     }
 

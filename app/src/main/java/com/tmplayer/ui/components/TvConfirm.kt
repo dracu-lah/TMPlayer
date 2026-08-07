@@ -64,7 +64,7 @@ fun TvConfirm(
     // Drawn inline, a prompt is an ordinary sibling: it sits above whatever was composed before
     // it and underneath everything composed after, so the same component covered one screen and
     // appeared *behind* the next. A Dialog is a separate window, which puts every prompt over
-    // the whole app — the navigation rail included — no matter where it is called from.
+    // the whole app, the navigation rail included, no matter where it is called from.
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),

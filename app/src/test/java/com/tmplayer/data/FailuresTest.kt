@@ -10,7 +10,7 @@ class FailuresTest {
     @Test
     fun `a revoked session tells the viewer to sign in again`() {
         val text = Failures.humanise("Unauthorized: AUTH_KEY_UNREGISTERED")
-        assertTrue(text, text.contains("sign in again", ignoreCase = true))
+        assertTrue(text, text.contains("sign back in", ignoreCase = true))
     }
 
     @Test
@@ -23,12 +23,12 @@ class FailuresTest {
     @Test
     fun `a missing chat is explained, not just coded`() {
         val text = Failures.humanise("400: CHAT_NOT_FOUND")
-        assertTrue(text, text.contains("no longer available"))
+        assertTrue(text, text.contains("isn't there any more"))
     }
 
     @Test
     fun `a private channel is distinguished from a deleted one`() {
-        assertTrue(Failures.humanise("CHANNEL_PRIVATE").contains("private"))
+        assertTrue(Failures.humanise("CHANNEL_PRIVATE").contains("not in this channel"))
     }
 
     @Test
@@ -55,10 +55,11 @@ class FailuresTest {
     }
 
     @Test
-    fun `an unrecognised failure is passed through rather than hidden`() {
-        // A real message, however technical, beats a vague apology: it can be searched for.
+    fun `an unrecognised failure never shows the viewer a protocol code`() {
+        // The fallback replaces the raw string rather than appending to it.
         val text = Failures.humanise("500: SOMETHING_NEW_AND_ODD")
-        assertEquals("SOMETHING_NEW_AND_ODD", text)
+        assertEquals(Failures.DEFAULT, text)
+        assertTrue(text, !text.contains("SOMETHING_NEW_AND_ODD"))
     }
 
     @Test

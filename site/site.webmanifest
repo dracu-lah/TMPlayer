@@ -1,0 +1,52 @@
+{
+  "name": "TMPlayer",
+  "short_name": "TMPlayer",
+  "description": "An open source Android TV app that signs into your own Telegram account by QR code and streams the videos already in your chats.",
+  "start_url": "/",
+  "scope": "/",
+  "id": "/",
+  "lang": "en",
+  "dir": "ltr",
+  "display": "standalone",
+  "orientation": "landscape",
+  "categories": ["entertainment", "utilities"],
+  "background_color": "#0E0E12",
+  "theme_color": "#0E0E12",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/chats.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "The chat list, with favourites, channels and groups"
+    },
+    {
+      "src": "/screenshots/grid.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Videos in a chat, as poster tiles"
+    },
+    {
+      "src": "/screenshots/details.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "A film details screen with synopsis and cast"
+    }
+  ]
+}

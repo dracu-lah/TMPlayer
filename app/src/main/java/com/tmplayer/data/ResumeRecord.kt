@@ -67,8 +67,8 @@ data class ResumeRecord(
         /**
          * Rebuilds a record, or returns null when the stored line cannot be trusted.
          *
-         * Preferences outlive app versions, so a line written by an older build — or a half
-         * written one — has to be dropped rather than crash the browse screen.
+         * Preferences outlive app versions, so a line written by an older build, or a half
+         * written one, has to be dropped rather than crash the browse screen.
          */
         fun decode(
             key: String,

@@ -11,12 +11,17 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Sits above the video but below any dialog, and clears the transport controls. -->
+    <!--
+      Sits above the video but below any dialog. The bottom margin is overscan clearance, not
+      transport clearance: leanback's control row is around 150dp tall, so nothing sensible fits
+      under it and subtitles are simply covered while it is raised. 48dp keeps descenders off a
+      TV's crop boundary, which the old 24dp did not; the overscan inset alone is 20dp.
+    -->
     <androidx.media3.ui.SubtitleView
         android:id="@+id/subtitles"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginBottom="24dp" />
+        android:layout_marginBottom="48dp" />
 
     <!--
       Full-screen while the film opens: an opaque sheet, not a spinner floating over a black
@@ -31,6 +36,20 @@
         android:orientation="vertical"
         android:paddingLeft="72dp"
         android:paddingRight="72dp">
+
+        <!--
+          Shown only when the overlay is carrying an error, so the loading screen and the failure
+          screen are told apart at a glance from across a room.
+        -->
+        <ImageView
+            android:id="@+id/status_icon"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginBottom="16dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_warning"
+            android:tint="#E5484D"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/status_title"

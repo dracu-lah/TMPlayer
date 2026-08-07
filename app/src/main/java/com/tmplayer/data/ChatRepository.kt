@@ -55,7 +55,7 @@ class ChatRepository(private val td: TdlClient = Td.client) {
 
     /**
      * TDLib serves chats out of its local database, so the list has to be pulled from the
-     * server first. [loadChats] returns 404 once everything is already local — that is the
+     * server first. [loadChats] returns 404 once everything is already local, which is the
      * documented "no more" answer, not a failure.
      */
     suspend fun chats(limit: Int = CHAT_LIMIT): List<ChatSummary> {
@@ -87,7 +87,7 @@ class ChatRepository(private val td: TdlClient = Td.client) {
      * Next page of playable media in [chatId], newest first.
      *
      * The three searches run concurrently and are merged by message id, which is monotonic
-     * per chat — so a straight descending sort restores true chronological order.
+     * per chat, so a straight descending sort restores true chronological order.
      */
     suspend fun mediaPage(
         chatId: Long,

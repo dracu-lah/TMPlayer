@@ -10,8 +10,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 
 /**
- * Dictation through whatever speech recogniser the TV already has — on this stick, the mic in
- * the remote.
+ * Dictation through whatever speech recogniser the TV already has, which on this stick is the
+ * mic in the remote.
  *
  * Handing the job to the system recogniser rather than driving `SpeechRecognizer` ourselves means
  * no `RECORD_AUDIO` permission: the audio is captured by the recogniser app, and TMPlayer only

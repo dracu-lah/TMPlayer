@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** The chat list plus who is signed in — both are needed before the browser can draw. */
+/** The chat list plus who is signed in; both are needed before the browser can draw. */
 data class BrowseData(
     val chats: List<ChatSummary>,
     val account: Account? = null,
@@ -82,7 +82,7 @@ class MediaListViewModel(
     private var pageJob: Job? = null
     private var query = ""
 
-    private val _state = MutableStateFlow<UiState<MediaListState>>(UiState.Loading("Finding movies…"))
+    private val _state = MutableStateFlow<UiState<MediaListState>>(UiState.Loading("Finding films…"))
     val state: StateFlow<UiState<MediaListState>> = _state.asStateFlow()
 
     init {
@@ -99,7 +99,7 @@ class MediaListViewModel(
     fun load() {
         cursors = MediaCursors()
         val searching = query.isNotBlank()
-        _state.value = UiState.Loading(if (searching) "Searching…" else "Finding movies…")
+        _state.value = UiState.Loading(if (searching) "Searching…" else "Finding films…")
         pageJob?.cancel()
         pageJob = viewModelScope.launch {
             runCatching { repository.mediaPage(chatId, cursors, query) }
@@ -114,8 +114,8 @@ class MediaListViewModel(
                             isFiltering -> "No videos here between " +
                                 "${SizeFilter.label(minSizeBytes)} and " +
                                 "${SizeFilter.label(maxSizeBytes)}.\n\n" +
-                                "Widen the size range in Settings to see more."
-                            else -> "Nothing playable in this chat."
+                                "Change the video size limits in Settings to see more."
+                            else -> "No films or videos in this chat."
                         }
                         UiState.Empty(message)
                     } else {

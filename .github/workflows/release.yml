@@ -5,8 +5,8 @@ name: Release
 #     git tag v0.3.0 && git push origin v0.3.0
 #
 # Nothing else builds a signed APK. That matters because this is the only job that can see the
-# signing key, and keeping it off the push-to-main path means an ordinary commit — or a pull
-# request from a stranger — can never reach it.
+# signing key, and keeping it off the push-to-main path means an ordinary commit, or a pull
+# request from a stranger, can never reach it.
 on:
   push:
     tags: ["v*"]
@@ -57,7 +57,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::error::KEYSTORE_BASE64 is not set — see CONTRIBUTING.md for the setup commands"
+            echo "::error::KEYSTORE_BASE64 is not set. See CONTRIBUTING.md for the setup commands"
             exit 1
           fi
           echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
@@ -74,7 +74,7 @@ jobs:
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
         run: |
           if [ -z "$TG_API_ID" ]; then
-            echo "::error::TG_API_ID is not set — the released APK would not be able to sign in"
+            echo "::error::TG_API_ID is not set, so the released APK would not be able to sign in"
             exit 1
           fi
           cat > local.properties <<EOF
@@ -85,7 +85,12 @@ jobs:
       - name: Run unit tests
         run: ./gradlew :app:test
 
+      # Read straight from the environment by the Gradle build. Unlike the Telegram credentials
+      # this one is optional: without it the release still works and the film details panel says
+      # the extras are unavailable, so a missing key must not fail the build.
       - name: Build signed APKs
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
         run: |
           ./gradlew :app:assembleRelease \
             -PtmVersionName=${{ steps.version.outputs.name }} \
@@ -127,7 +132,7 @@ jobs:
 
             | Device | APK |
             |---|---|
-            | Mi TV Stick, most 2018–2021 sticks | `armeabi-v7a` |
+            | Mi TV Stick, most 2018-2021 sticks | `armeabi-v7a` |
             | Chromecast with Google TV, newer boxes | `arm64-v8a` |
             | Emulator / x86 boxes | `x86_64` |
 

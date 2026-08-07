@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,6 +30,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.tv.material3.Icon
@@ -42,7 +44,7 @@ import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
 import com.tmplayer.ui.theme.tmButtonColors
 
-/** Every screen is exactly one of these — no blank frames, ever. */
+/** Every screen is exactly one of these: no blank frames, ever. */
 sealed interface UiState<out T> {
     data class Loading(val label: String = "Loading…") : UiState<Nothing>
 
@@ -52,22 +54,29 @@ sealed interface UiState<out T> {
     /**
      * The request worked; there is simply nothing to show.
      *
-     * Kept apart from [Error] because "Something went wrong / Retry" over an empty list is both
-     * untrue and alarming — a chat with no films in it is a normal answer, not a failure.
+     * Kept apart from [Error] because "That didn't work / Try again" over an empty list is both
+     * untrue and alarming; a chat with no films in it is a normal answer, not a failure.
      */
     data class Empty(val message: String) : UiState<Nothing>
 
     data class Content<T>(val value: T) : UiState<T>
 }
 
+/**
+ * @param loading a placeholder shaped like the content that is coming, where the screen has one.
+ * Waiting under an outline of the real list tells the viewer what is arriving and stops the layout
+ * jumping when it does. Screens with no single predictable shape leave this null and get the
+ * labelled spinner instead.
+ */
 @Composable
 fun <T> StateScaffold(
     state: UiState<T>,
     onRetry: (() -> Unit)? = null,
+    loading: (@Composable () -> Unit)? = null,
     content: @Composable (T) -> Unit,
 ) {
     when (state) {
-        is UiState.Loading -> BigLoader(state.label)
+        is UiState.Loading -> if (loading != null) loading() else BigLoader(state.label)
         is UiState.Error -> BigError(state.message, onRetry)
         is UiState.Empty -> BigEmpty(state.message)
         is UiState.Content -> content(state.value)
@@ -99,8 +108,7 @@ fun BigLoader(label: String? = null) {
  * The indeterminate circular progress indicator Android draws everywhere.
  *
  * Two motions at once, which is what makes it recognisable: the whole arc rotates steadily while
- * its head and tail sweep at different rates, so the arc grows and shrinks as it spins. A single
- * fixed arc spinning at constant speed reads as a cheap imitation of this.
+ * its head and tail sweep at different rates, so the arc grows and shrinks as it spins.
  */
 @Composable
 fun Spinner(size: Dp = 56.dp, color: Color = Accent, strokeWidth: Dp = 5.dp) {
@@ -194,7 +202,7 @@ fun BigError(message: String, onRetry: (() -> Unit)?) {
                 modifier = Modifier.size(56.dp),
             )
             Text(
-                "Something went wrong",
+                "That didn't work",
                 style = MaterialTheme.typography.titleLarge,
                 color = TextPrimary,
             )
@@ -212,7 +220,13 @@ fun BigError(message: String, onRetry: (() -> Unit)?) {
                     colors = tmButtonColors(),
                     modifier = Modifier.focusRequester(focus),
                 ) {
-                    Text("Retry")
+                    Icon(
+                        Icons.Filled.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Try again")
                 }
                 LaunchedEffect(Unit) { focus.requestFocus() }
             }

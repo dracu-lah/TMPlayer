@@ -12,7 +12,7 @@ val localProps = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
-// Optional release signing — create keystore.properties (gitignored) to enable
+// Optional release signing: create keystore.properties (gitignored) to enable
 val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -33,12 +33,26 @@ android {
         versionCode = (findProperty("tmVersionCode") as String?)?.toInt() ?: 302
         versionName = (findProperty("tmVersionName") as String?) ?: "0.3.2"
 
-        // Telegram API credentials — bring your own via local.properties (see README)
+        // Telegram API credentials. Bring your own via local.properties (see README)
         buildConfigField("int", "TG_API_ID", localProps.getProperty("TG_API_ID") ?: "0")
         buildConfigField("String", "TG_API_HASH", "\"${localProps.getProperty("TG_API_HASH") ?: ""}\"")
+
+        // English only. Every androidx and Media3 dependency ships translations for ~80
+        // locales, and none of this app's own strings are translated, so the rest is dead
+        // weight in resources.arsc. Revisit the moment the UI itself is localised.
+        resourceConfigurations += listOf("en")
+
+        // The Movie Database, for posters, cast and trailers. Optional on purpose: with no key
+        // the app builds and runs exactly as before, and the details panel says the extras are
+        // unavailable rather than failing. Contributors should not need a TMDB account.
+        buildConfigField(
+            "String",
+            "TMDB_API_KEY",
+            "\"${System.getenv("TMDB_API_KEY") ?: localProps.getProperty("TMDB_API_KEY") ?: ""}\"",
+        )
     }
 
-    // One APK per ABI keeps the install ~1/3 the size — matters on an 8 GB TV stick.
+    // One APK per ABI keeps the install ~1/3 the size, which matters on an 8 GB TV stick.
     splits {
         abi {
             isEnable = true
@@ -82,6 +96,15 @@ android {
     packaging {
         resources.excludes += setOf("META-INF/*.version", "kotlin/**", "DebugProbesKt.bin")
     }
+
+    testOptions {
+        unitTests {
+            // Without this, every android.jar method is a stub that throws, so a single
+            // Log.w in otherwise pure code fails the test that covers it, which pushes
+            // logging out of exactly the error paths that most need it.
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 kotlin {
@@ -103,11 +126,11 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.kotlinx.coroutines.android)
 
-    // Telegram — prebuilt TDLib 1.8.66 with a typed coroutine API and native libs for every ABI
+    // Telegram: prebuilt TDLib 1.8.66 with a typed coroutine API and native libs for every ABI
     implementation(libs.tdl.coroutines)
     implementation(libs.zxing.core)
 
-    // Playback — Media3 core, the ready-made leanback TV player UI, and NextLib's
+    // Playback: Media3 core, the ready-made leanback TV player UI, and NextLib's
     // FFmpeg audio renderers for DTS / TrueHD / E-AC3 tracks the stick can't decode natively.
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
@@ -119,5 +142,6 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
 
     testImplementation(libs.junit)
+    testImplementation(libs.json)
     testImplementation(libs.kotlinx.coroutines.test)
 }

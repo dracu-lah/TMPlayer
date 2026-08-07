@@ -33,13 +33,14 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -58,7 +59,11 @@ import androidx.tv.material3.Text
 import com.tmplayer.data.Account
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
+import com.tmplayer.data.FilmLookup
+import com.tmplayer.data.Tmdb
 import com.tmplayer.ui.components.Poster
+import com.tmplayer.ui.components.ChatListSkeleton
+import com.tmplayer.ui.components.NetworkImage
 import com.tmplayer.ui.components.StateScaffold
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.player.StreamStats
@@ -80,12 +85,14 @@ enum class BrowseTab(
     val blurb: String,
     val icon: ImageVector,
 ) {
-    Continue("Continue", "Continue watching", "Pick up where you stopped", Icons.Filled.PlayArrow),
-    Favorites("Favourites", "Favourites", "The chats you watch from most", Icons.Filled.Star),
-    Recent("Recent", "Recent", "Newest activity across Telegram", Icons.Filled.Refresh),
+    Continue("Continue", "Continue watching", "Pick up where you left off", Icons.Filled.PlayArrow),
+    Favorites("Favourites", "Favourites", "Chats you've starred", Icons.Filled.Star),
+    // A clock, not the circular-arrow reload glyph: that one is the film grid's genuine refresh
+    // action, so the same picture stood for two unrelated things.
+    Recent("Recent", "Recent", "Chats with something new", TmIcons.Clock),
     Channels("Channels", "Channels", "Broadcast channels you follow", TmIcons.Channel),
-    Groups("Groups", "Groups", "Groups you are a member of", TmIcons.Group),
-    People("People", "People", "Direct chats", Icons.Filled.Person),
+    Groups("Groups", "Groups", "Groups you're in", TmIcons.Group),
+    People("People", "People", "Your one-to-one chats", Icons.Filled.Person),
     All("All chats", "All chats", "Everything, newest first", Icons.Filled.List),
 }
 
@@ -98,18 +105,23 @@ fun BrowseScreen(
     onOpenChat: (ChatSummary) -> Unit,
     onResumeFilm: (ResumeRecord) -> Unit,
     onOpenSettings: () -> Unit,
+    picked: BrowseTab? = null,
+    onPickTab: (BrowseTab) -> Unit = {},
+    /**
+     * Drawn above the content, beside the navigation rail rather than above it.
+     * A banner stacked over the whole screen pushes the rail down far enough to shove Settings
+     * off the bottom edge, which leaves the viewer no way to reach it.
+     */
+    banner: @Composable () -> Unit = {},
 ) {
-    // An unfinished film is the most likely reason the app was opened at all, so it wins the
-    // landing tab. Failing that Favourites, and failing that Recent — an empty first screen is
-    // a worse greeting than a full one.
-    var tab by remember(favorites.isEmpty(), continueWatching.isEmpty()) {
-        mutableStateOf(
-            when {
-                continueWatching.isNotEmpty() -> BrowseTab.Continue
-                favorites.isEmpty() -> BrowseTab.Recent
-                else -> BrowseTab.Favorites
-            },
-        )
+    // An unfinished film wins the landing tab, then Favourites, then Recent, so the first screen
+    // is never empty. Both are read from disk after the first frame, so the tab has to settle
+    // once they arrive; an explicit pick always wins over them. [picked] is hoisted rather than
+    // remembered here because opening a chat swaps this screen out of the composition.
+    val tab = picked ?: when {
+        continueWatching.isNotEmpty() -> BrowseTab.Continue
+        favorites.isEmpty() -> BrowseTab.Recent
+        else -> BrowseTab.Favorites
     }
     var query by remember { mutableStateOf("") }
 
@@ -118,12 +130,13 @@ fun BrowseScreen(
             account = (state as? UiState.Content)?.value?.account,
             selected = tab,
             favoriteCount = favorites.size,
-            onSelect = { tab = it; query = "" },
+            onSelect = { onPickTab(it); query = "" },
             onOpenSettings = onOpenSettings,
         )
 
         Column(Modifier.fillMaxSize().padding(end = Tv.SafeH)) {
-            StateScaffold(state, onRetry = onRetry) { data ->
+            banner()
+            StateScaffold(state, onRetry = onRetry, loading = { ChatListSkeleton() }) { data ->
                 val visible = remember(data.chats, tab, favorites, query) {
                     filterChats(data.chats, tab, favorites, query)
                 }
@@ -149,7 +162,7 @@ fun BrowseScreen(
                                 chats = visible,
                                 favorites = favorites,
                                 // Recency order comes straight from Telegram, so the top of the
-                                // unfiltered list already is "recent" — no sorting to go stale.
+                                // unfiltered list already is "recent", with no sorting to go stale.
                                 recent = if (tab == BrowseTab.Recent && query.isBlank()) {
                                     visible.take(RECENT_COUNT)
                                 } else {
@@ -172,18 +185,40 @@ private fun ContinueList(
     records: List<ResumeRecord>,
     onResume: (ResumeRecord) -> Unit,
 ) {
+    val first = remember { FocusRequester() }
+
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(bottom = Tv.SafeV),
+        // The same start inset the chat list uses, so the cards line up under their heading
+        // instead of butting against the rail.
+        contentPadding = PaddingValues(start = 28.dp, bottom = Tv.SafeV),
     ) {
         items(records, key = { "${it.chatId}_${it.messageId}" }) { record ->
-            ContinueCard(record, onResume)
+            ContinueCard(
+                record = record,
+                onResume = onResume,
+                modifier = if (record === records.firstOrNull()) {
+                    Modifier.focusRequester(first)
+                } else {
+                    Modifier
+                },
+            )
         }
+    }
+
+    // This is the landing tab for anyone with a film on the go, and the remote has nowhere to go
+    // until something holds focus.
+    LaunchedEffect(records.firstOrNull()?.messageId) {
+        runCatching { first.requestFocus() }
     }
 }
 
 @Composable
-private fun ContinueCard(record: ResumeRecord, onResume: (ResumeRecord) -> Unit) {
+private fun ContinueCard(
+    record: ResumeRecord,
+    onResume: (ResumeRecord) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val border by animateColorAsState(
@@ -193,7 +228,7 @@ private fun ContinueCard(record: ResumeRecord, onResume: (ResumeRecord) -> Unit)
     )
 
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(SurfaceDark)
@@ -204,12 +239,7 @@ private fun ContinueCard(record: ResumeRecord, onResume: (ResumeRecord) -> Unit)
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            imageVector = Icons.Filled.PlayArrow,
-            contentDescription = null,
-            tint = Accent,
-            modifier = Modifier.size(36.dp),
-        )
+        ContinueThumbnail(record)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
                 record.title,
@@ -257,6 +287,64 @@ private fun ContinueCard(record: ResumeRecord, onResume: (ResumeRecord) -> Unit)
     }
 }
 
+/**
+ * Film art for a Continue watching row, with a play badge over it.
+ *
+ * There is no Telegram thumbnail to fall back on here: a resume record stores only enough to
+ * reopen the file, so that a film stays resumable even when its chat has not been loaded this
+ * session. TMDB is therefore the only source of art, and when it has nothing (no key, no match,
+ * no network) the row falls back to the play icon it used before. That is a complete row, not a
+ * broken one, so the failure is never mentioned.
+ */
+@Composable
+private fun ContinueThumbnail(record: ResumeRecord) {
+    val art by produceState<String?>(initialValue = null, key1 = record.title) {
+        value = (Tmdb.lookup(record.title) as? FilmLookup.Found)?.details?.backdropUrl
+    }
+
+    Box(
+        Modifier
+            .width(THUMBNAIL_WIDTH)
+            .height(THUMBNAIL_HEIGHT)
+            .clip(RoundedCornerShape(8.dp))
+            .background(SurfaceRaised),
+        contentAlignment = Alignment.Center,
+    ) {
+        NetworkImage(
+            url = art,
+            modifier = Modifier.fillMaxSize(),
+            placeholder = {
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    tint = Accent,
+                    modifier = Modifier.size(30.dp),
+                )
+            },
+        )
+        if (art != null) {
+            // Over real artwork the icon needs its own backing to stay legible.
+            Box(
+                Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.55f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        }
+    }
+}
+
+private val THUMBNAIL_WIDTH = 96.dp
+private val THUMBNAIL_HEIGHT = 54.dp
+
 private fun filterChats(
     chats: List<ChatSummary>,
     tab: BrowseTab,
@@ -290,7 +378,15 @@ private fun NavRail(
             .width(196.dp)
             .fillMaxHeight()
             .background(SurfaceDark)
-            .padding(horizontal = 12.dp, vertical = 20.dp),
+            // The rail is the leftmost thing on the screen, so it alone decides whether the app
+            // clears the TV's overscan crop. Its children each add [RAIL_INSET] of their own, so
+            // the column only has to make up the difference and nothing starts before Tv.SafeH.
+            .padding(
+                start = Tv.SafeH - RAIL_INSET,
+                end = 12.dp,
+                top = Tv.SafeV,
+                bottom = Tv.SafeV,
+            ),
     ) {
         AccountBadge(account)
         Spacer(Modifier.height(18.dp))
@@ -323,7 +419,10 @@ private fun NavRail(
 
 @Composable
 private fun AccountBadge(account: Account?) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier.padding(start = RAIL_INSET),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Box(Modifier.size(40.dp).clip(CircleShape).background(SurfaceRaised)) {
             if (account != null) {
                 Poster(
@@ -337,7 +436,9 @@ private fun AccountBadge(account: Account?) {
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                account?.name ?: "Signing in…",
+                // Not "Signing in…": the viewer is already signed in by the time this draws, and
+                // only the name and picture are still on their way.
+                account?.name ?: "Your account",
                 style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary,
                 maxLines = 1,
@@ -357,7 +458,7 @@ private fun AccountBadge(account: Account?) {
 }
 
 /**
- * Deliberately built from `clickable` rather than a TV Material Card.
+ * Built from `clickable` rather than a TV Material Card.
  *
  * Those cards enlarge on focus, and anything that fills its width visibly bursts past the screen
  * edge when it grows. A rail item signals focus with colour instead, which cannot overflow.
@@ -401,7 +502,7 @@ private fun RailItem(
             .clip(RoundedCornerShape(10.dp))
             .background(background)
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = RAIL_INSET),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = null, tint = foreground, modifier = Modifier.size(24.dp))
@@ -425,10 +526,18 @@ private fun RailItem(
 
 @Composable
 private fun Header(tab: BrowseTab, count: Int) {
+    // A bare number after the blurb leaves the viewer to guess what was counted, so it always
+    // carries its unit, and this one tab counts films rather than chats.
+    val unit = when {
+        tab == BrowseTab.Continue && count == 1 -> "film"
+        tab == BrowseTab.Continue -> "films"
+        count == 1 -> "chat"
+        else -> "chats"
+    }
     Column(Modifier.padding(start = 28.dp, top = Tv.SafeV, bottom = 12.dp)) {
         Text(tab.heading, style = MaterialTheme.typography.headlineLarge, color = TextPrimary)
         Text(
-            if (count > 0) "${tab.blurb}  ·  $count" else tab.blurb,
+            if (count > 0) "${tab.blurb}  ·  $count $unit" else tab.blurb,
             style = MaterialTheme.typography.bodyMedium,
             color = TextMuted,
         )
@@ -438,6 +547,7 @@ private fun Header(tab: BrowseTab, count: Int) {
 @Composable
 private fun SearchRow(query: String, onQuery: (String) -> Unit) {
     val startVoice = rememberVoiceSearch("Say a chat name", onQuery)
+    val searchField = remember { FocusRequester() }
     Row(
         Modifier.fillMaxWidth().padding(start = 28.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -447,13 +557,20 @@ private fun SearchRow(query: String, onQuery: (String) -> Unit) {
             value = query,
             onValueChange = onQuery,
             placeholder = "Search chats",
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).focusRequester(searchField),
         )
         if (startVoice != null) {
-            PillButton("Speak", TmIcons.Mic, startVoice)
+            PillButton("Voice search", TmIcons.Mic, startVoice)
         }
         if (query.isNotBlank()) {
-            PillButton("Clear", Icons.Filled.Close) { onQuery("") }
+            // Clearing the query is what removes this pill from the screen, and a control that
+            // deletes itself while focused takes the focus with it. The next press of the D-pad
+            // then goes nowhere. Focus moves to the search field first, which is where the
+            // viewer wants to be next anyway.
+            PillButton("Clear", Icons.Filled.Close) {
+                runCatching { searchField.requestFocus() }
+                onQuery("")
+            }
         }
     }
 }
@@ -516,11 +633,21 @@ private fun ChatList(
                     )
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         items(recent, key = { "r-${it.id}" }) { chat ->
-                            RecentTile(chat) { onOpenChat(chat) }
+                            RecentTile(
+                                chat = chat,
+                                onClick = { onOpenChat(chat) },
+                                modifier = if (chat === recent.firstOrNull()) {
+                                    Modifier.focusRequester(first)
+                                } else {
+                                    Modifier
+                                },
+                            )
                         }
                     }
                     Text(
-                        "All chats",
+                        // Not "All chats": that is the name of a rail tab, and repeating it as a
+                        // sub-heading inside a different tab reads as if the viewer moved.
+                        "More chats",
                         style = MaterialTheme.typography.titleLarge,
                         color = TextPrimary,
                         modifier = Modifier.padding(top = 32.dp, bottom = 4.dp),
@@ -543,19 +670,21 @@ private fun ChatList(
         }
     }
 
-    // The remote has nowhere to go until something holds focus.
-    LaunchedEffect(chats.firstOrNull()?.id, recent.isEmpty()) {
-        if (recent.isEmpty()) runCatching { first.requestFocus() }
+    // The remote has nowhere to go until something holds focus. The target is the first tile of
+    // the "Jump back in" strip whenever that strip is on screen: it is the largest thing there,
+    // and it is what a viewer with no favourites and no unfinished film lands on.
+    LaunchedEffect(chats.firstOrNull()?.id, recent.firstOrNull()?.id) {
+        runCatching { first.requestFocus() }
     }
 }
 
 @Composable
-private fun RecentTile(chat: ChatSummary, onClick: () -> Unit) {
+private fun RecentTile(chat: ChatSummary, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
 
     Column(
-        Modifier
+        modifier
             .width(RECENT_TILE_WIDTH)
             // Fixed, not wrapped: a chat whose name runs to two lines would otherwise stand
             // taller than its neighbours and leave the row visibly ragged.
@@ -597,7 +726,7 @@ private fun RecentTile(chat: ChatSummary, onClick: () -> Unit) {
     }
 }
 
-/** Scrolls overflowing text, but only while [active] — a wall of moving labels is unreadable. */
+/** Scrolls overflowing text, but only while [active]; a wall of moving labels is unreadable. */
 @OptIn(ExperimentalFoundationApi::class)
 private fun Modifier.marqueeWhen(active: Boolean): Modifier =
     if (active) basicMarquee(iterations = Int.MAX_VALUE) else this
@@ -663,18 +792,33 @@ private fun ChatRow(
 
 @Composable
 private fun EmptyTab(tab: BrowseTab, query: String) {
+    // Each empty tab says what to do about it, in its own words.
     val message = when {
         query.isNotBlank() -> "Nothing matches “$query”."
+        tab == BrowseTab.Continue -> "You haven't started a film yet. Open a chat and pick one."
         tab == BrowseTab.Favorites ->
-            "No favourites yet. Open a chat and press Favourite to pin it here."
-        else -> "Nothing in ${tab.heading.lowercase()}."
+            "No favourites yet. Open a chat and press Favourite to add it here."
+        else -> "Nothing here yet."
     }
-    Box(Modifier.fillMaxSize().padding(start = 28.dp), contentAlignment = Alignment.TopStart) {
+    Column(
+        Modifier.fillMaxSize().padding(start = 28.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        // A search that came back empty is a different situation from a tab that has nothing in
+        // it yet, so the glyph follows whichever one the viewer is actually looking at.
+        Icon(
+            imageVector = if (query.isNotBlank()) Icons.Filled.Search else tab.icon,
+            contentDescription = null,
+            tint = TextMuted.copy(alpha = 0.55f),
+            modifier = Modifier.size(56.dp),
+        )
         Text(message, style = MaterialTheme.typography.titleLarge, color = TextMuted)
     }
 }
 
 private const val RECENT_COUNT = 8
 private const val FOCUS_FADE_MS = 140
+/** Horizontal padding every rail child carries, which is what keeps them out of the overscan. */
+private val RAIL_INSET = 16.dp
 private val RECENT_TILE_WIDTH = 224.dp
 private val RECENT_TILE_HEIGHT = 154.dp

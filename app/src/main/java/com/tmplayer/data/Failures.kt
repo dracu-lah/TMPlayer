@@ -5,10 +5,9 @@ import java.io.IOException
 /**
  * Turns whatever went wrong into a sentence a viewer can act on.
  *
- * TDLib reports failures as terse upper-case codes — `CHAT_NOT_FOUND`, `FLOOD_WAIT_42` — which are
- * meaningful to a protocol implementer and to nobody else. Anything not recognised is passed
- * through rather than replaced by a vague apology: a real message, however technical, at least
- * gives the viewer something to search for or send along in a bug report.
+ * TDLib reports failures as terse upper-case codes (`CHAT_NOT_FOUND`, `FLOOD_WAIT_42`) that are
+ * meaningful to a protocol implementer and to nobody else. Anything unrecognised gets the generic
+ * message and the raw string goes to logcat, where it stays diagnosable from a bug report.
  */
 object Failures {
 
@@ -28,24 +27,26 @@ object Failures {
             raw.startsWith("Unauthorized", ignoreCase = true) ||
                 raw.contains("SESSION_REVOKED") ||
                 raw.contains("AUTH_KEY_UNREGISTERED") ->
-                "This device is no longer signed in to Telegram. Sign in again from Settings."
+                "Telegram signed this TV out. Scan the code again to sign back in."
 
             raw.contains("CHAT_NOT_FOUND") || raw.contains("PEER_ID_INVALID") ->
-                "That chat is no longer available. It may have been deleted or you may have left it."
+                "That chat isn't there any more. It was deleted, or you left it."
 
             raw.contains("CHANNEL_PRIVATE") ->
-                "This channel is private and your account can't read it any more."
+                "You're not in this channel any more, so its videos aren't available."
 
             raw.contains("FILE_REFERENCE") || raw.contains("FILE_ID_INVALID") ->
-                "Telegram's link to this file went stale. Refresh the chat and try again."
+                "Telegram moved this film. Press Refresh, then try again."
 
             raw.contains("Timeout", ignoreCase = true) ||
                 raw.contains("Connection", ignoreCase = true) ||
                 raw.contains("Network", ignoreCase = true) ->
                 OFFLINE
 
-            // TDLib prefixes many failures with a numeric code; it adds nothing on a TV.
-            else -> raw.substringAfter(": ", raw)
+            else -> {
+                android.util.Log.w(TAG, "Unmapped failure: $raw")
+                DEFAULT
+            }
         }
     }
 
@@ -59,11 +60,13 @@ object Failures {
             seconds < 3600 -> "${seconds / 60} minutes"
             else -> "${seconds / 3600} hours"
         }
-        return "Telegram is rate-limiting this account. Try again in about $wait."
+        return "Telegram has asked us to slow down. Try again in about $wait."
     }
 
     private val FLOOD = Regex("""(?:FLOOD_WAIT_|retry after )(\d+)""", RegexOption.IGNORE_CASE)
 
-    const val OFFLINE = "Can't reach Telegram. Check this TV's network connection."
-    private const val DEFAULT = "Something went wrong talking to Telegram."
+    private const val TAG = "Failures"
+
+    const val OFFLINE = "Can't reach Telegram. Check this TV's internet connection."
+    const val DEFAULT = "Telegram didn't answer. Try again in a moment."
 }

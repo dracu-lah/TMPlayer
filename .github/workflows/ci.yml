@@ -21,6 +21,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # House style: no em or en dashes in tracked files. They are awkward to type consistently
+      # and they arrive invisibly on copy-paste, so the build rejects them rather than leaving it
+      # to review. Use a comma, a colon or two sentences.
+      - name: No em or en dashes
+        # The codepoints are written as escapes rather than as the characters themselves, so
+        # this check does not match its own source and report a false positive.
+        run: |
+          if git ls-files -z | xargs -0 grep -InIP '[\x{2012}-\x{2015}]'; then
+            echo "::error::Found an em or en dash. Replace it with ordinary punctuation."
+            exit 1
+          fi
+          echo "Clean: no em or en dashes in tracked files."
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:

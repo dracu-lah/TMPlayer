@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.data.RemoteImages
 import com.tmplayer.data.Thumbnails
 import com.tmplayer.ui.theme.SurfaceDark
 
@@ -53,6 +54,41 @@ fun Poster(
                 fallbackLabel.take(1).uppercase(),
                 style = MaterialTheme.typography.headlineLarge,
             )
+        }
+    }
+}
+
+/**
+ * A picture fetched over HTTP, for film art from TMDB.
+ *
+ * There is deliberately no error state. Art that fails to load leaves [placeholder] showing,
+ * which for a poster is a letter tile and for a backdrop is the plain background. A viewer does
+ * not need to be told that a decorative image did not arrive, and the film still plays.
+ */
+@Composable
+fun NetworkImage(
+    url: String?,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop,
+    alpha: Float = 1f,
+    placeholder: @Composable () -> Unit = {},
+) {
+    val bitmap by produceState<Bitmap?>(initialValue = null, key1 = url) {
+        value = RemoteImages.load(url)
+    }
+
+    Box(modifier, contentAlignment = Alignment.Center) {
+        val loaded = bitmap
+        if (loaded != null) {
+            Image(
+                bitmap = loaded.asImageBitmap(),
+                contentDescription = null,
+                contentScale = contentScale,
+                alpha = alpha,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            placeholder()
         }
     }
 }

@@ -20,7 +20,7 @@ data class MediaItem(
     val date: Int,
     val fileName: String = "",
 ) {
-    /** "4K", "HEVC", "HDR" — read off the file name, which is where releases state it. */
+    /** "4K", "HEVC", "HDR": read off the file name, which is where releases state it. */
     val qualityTags: List<String> get() = MediaMapper.qualityTags(fileName)
 
     val id: String get() = "$chatId:$messageId"
@@ -33,8 +33,8 @@ data class MediaItem(
 /**
  * Turns Telegram messages into playable entries, dropping everything that is not a movie.
  *
- * Films are posted both as videos and — very often, because it preserves quality and
- * multi-track audio — as plain documents, so both shapes are accepted and documents are
+ * Films are posted both as videos and, very often because it preserves quality and
+ * multi-track audio, as plain documents, so both shapes are accepted and documents are
  * screened by MIME type and file extension.
  */
 object MediaMapper {
@@ -82,7 +82,7 @@ object MediaMapper {
             )
         }
 
-        // Silent MP4s — the way most short clips and trailers arrive.
+        // Silent MP4s, the way most short clips and trailers arrive.
         is MessageAnimation -> {
             val animation = content.animation
             MediaItem(
@@ -110,11 +110,10 @@ object MediaMapper {
         return extension in VIDEO_EXTENSIONS
     }
 
-    /** A file name beats a caption, and a caption beats nothing. */
     /**
      * Resolution and codec markers, in the order a viewer scans for them.
      *
-     * Scene releases put this in the file name and nowhere else — the container would have to be
+     * Scene releases put this in the file name and nowhere else; the container would have to be
      * opened to learn it otherwise, which is not worth a download per tile. At most three are
      * returned so a poster never turns into a wall of badges.
      */
@@ -139,6 +138,7 @@ object MediaMapper {
     private val DOLBY_VISION = Regex("""\bdv\b""")
     private val HEVC = Regex("""\b(x265|h265|h\.265|hevc)\b""")
 
+    /** A file name beats a caption, and a caption beats nothing. */
     fun displayTitle(fileName: String?, caption: String?, fallback: String): String {
         val name = fileName?.trim().orEmpty()
         if (name.isNotEmpty()) return name

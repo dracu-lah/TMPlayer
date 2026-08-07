@@ -27,7 +27,7 @@ object StreamStats {
 
     /**
      * Seconds until enough is buffered to start, or `null` when there is nothing solid to base
-     * an estimate on. Guessing is worse than saying nothing.
+     * an estimate on. The caller shows no figure at all until there is one.
      */
     fun etaSeconds(
         bufferedAheadMs: Long,
@@ -69,7 +69,7 @@ object StreamStats {
         else -> String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
     }
 
-    /** `1:23:45` / `4:07` — the form people read on a seek bar. */
+    /** `1:23:45` / `4:07`, the form people read on a seek bar. */
     fun formatClock(ms: Long): String {
         if (ms <= 0) return "0:00"
         val total = ms / 1000

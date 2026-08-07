@@ -1,0 +1,24 @@
+<!--
+  A quaver, not the speaker this button used to carry. On the transport row a speaker reads as
+  volume, but the button opens the audio-language list, and a viewer who presses it expecting a
+  volume slider has been misled by the icon rather than helped by it.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="36dp"
+    android:height="36dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+    <!-- Stem, drawn as a filled bar so the glyph needs no stroke width to stay even. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M11,5h2v12h-2z" />
+    <!-- Flag. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,5c2.5,1 5,2 5,2.5c0,0.5 -2.5,1.5 -5,1.5z" />
+    <!-- Note head. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M8.5,17m-3.5,0a3.5,3 0,1 1,7 0a3.5,3 0,1 1,-7 0" />
+</vector>

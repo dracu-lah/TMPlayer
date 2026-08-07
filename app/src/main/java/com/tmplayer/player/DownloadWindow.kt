@@ -8,7 +8,7 @@ package com.tmplayer.player
  * moves that window, which is the whole reason playback needs this arithmetic rather than
  * just trusting the file length.
  *
- * Pure by design — the seek behaviour that matters most is unit-tested through this function.
+ * Pure by design: the seek behaviour that matters most is unit-tested through this function.
  */
 object DownloadWindow {
 
@@ -35,7 +35,7 @@ object DownloadWindow {
     /**
      * Whether the download has to be restarted at [position].
      *
-     * True when the byte we want sits outside the current window — either behind it (the user
+     * True when the byte we want sits outside the current window, either behind it (the user
      * seeked back) or far enough ahead that waiting for the window to reach it would stall.
      */
     fun needsRestart(

@@ -24,7 +24,7 @@ import java.io.IOException
 import java.io.InterruptedIOException
 import java.io.RandomAccessFile
 
-/** `tdfile://<fileId>` — the only URI scheme [TdDataSource] understands. */
+/** `tdfile://<fileId>`, the only URI scheme [TdDataSource] understands. */
 fun tdFileUri(fileId: Int): Uri = Uri.parse("tdfile://$fileId")
 
 /**
@@ -32,7 +32,7 @@ fun tdFileUri(fileId: Int): Uri = Uri.parse("tdfile://$fileId")
  *
  * TDLib is asked to fill the file starting at whatever byte the player wants; reads then come
  * off the partial file on disk as soon as the bytes land. Seeking works because Media3 re-opens
- * the source at a new offset and this class simply points TDLib at that offset instead —
+ * the source at a new offset and this class simply points TDLib at that offset instead:
  * no full download, no waiting for the end of a 12 GB remux to watch minute 90.
  *
  * Written against TDLib's public file API only.
@@ -55,8 +55,7 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
      *
      * This is the difference between smooth playback and a stutter every few seconds: Media3's
      * extractors issue a great many small reads, and asking TDLib about the file on each one puts
-     * a request round-trip in front of every byte. On a file that is already fully downloaded that
-     * work is entirely wasted, and it is slow enough to starve the buffer it is meant to fill.
+     * a request round-trip in front of every byte.
      */
     @Volatile
     private var windowEnd = 0L
@@ -87,7 +86,7 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
         }
 
         absorb(file)
-        // A finished file needs nothing from TDLib — not even a download request, which would
+        // A finished file needs nothing from TDLib, not even a download request, which would
         // only re-enter its scheduler for bytes that are already sitting on disk.
         if (!completed) blocking { requestDownloadFrom(position) }
 
@@ -100,8 +99,7 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
         if (length == 0) return 0
         if (bytesRemaining == 0L) return C.RESULT_END_OF_INPUT
 
-        // The fast path: no coroutine, no timeout machinery, no TDLib. This is the one that runs
-        // for all but a handful of reads.
+        // Fast path: no coroutine and no TDLib round-trip, which is all but a handful of reads.
         val available = cachedAvailable(position) ?: blocking { awaitBytesAt(position) }
         val wanted = minOf(length.toLong(), bytesRemaining, available).toInt()
 
@@ -230,10 +228,10 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
     }
 
     /**
-     * `limit = 0` means "keep going to the end of the file" — exactly what playback wants.
+     * `limit = 0` means "keep going to the end of the file", exactly what playback wants.
      *
      * The result is checked rather than dropped. A refused request looks exactly like a slow
-     * one from here — no bytes arrive — and swallowing it turns a flood wait or an expired file
+     * one from here (no bytes arrive), and swallowing it turns a flood wait or an expired file
      * reference into a minute of blank screen followed by "Telegram stopped sending", which
      * says nothing a viewer can act on.
      */
@@ -263,7 +261,7 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
 
     /**
      * Media3 calls [open] and [read] on its own loading thread and cancels a load by
-     * interrupting it, so blocking here is expected — it just has to stay interruptible.
+     * interrupting it, so blocking here is expected; it just has to stay interruptible.
      */
     private fun <T> blocking(block: suspend () -> T): T = try {
         runBlocking { withTimeout(OPEN_TIMEOUT_MS) { block() } }

@@ -16,7 +16,7 @@ object CachePolicy {
     const val WORTH_CLEARING_BYTES = 64L * 1024 * 1024
 
     sealed interface Decision {
-        /** Nothing in the way — start playing. */
+        /** Nothing in the way, so start playing. */
         data object Proceed : Decision
 
         /** Old media must go first. [reclaimBytes] is what the viewer gets back. */
@@ -28,7 +28,7 @@ object CachePolicy {
 
     /**
      * @param fileSizeBytes size of the film about to play
-     * @param alreadyCached true when this exact file is the one already on disk — re-watching
+     * @param alreadyCached true when this exact file is the one already on disk; re-watching
      *   must never trigger a clear that would delete the very thing being opened
      * @param cacheBytes what TDLib currently holds in video/document/animation files
      * @param freeBytes free space on the volume TDLib writes to

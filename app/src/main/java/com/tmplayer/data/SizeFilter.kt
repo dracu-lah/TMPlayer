@@ -3,7 +3,7 @@ package com.tmplayer.data
 /**
  * Which files are large enough to be a film and small enough to be worth streaming.
  *
- * A movie chat is full of things that are not movies — trailers, clips, a two-minute sample — and
+ * A movie chat is full of things that are not movies (trailers, clips, a two-minute sample), and
  * at the other end, a 6 GB remux on an 8 GB stick is more trouble than it is worth. Bounding the
  * list by size removes both without the viewer having to read every entry.
  */
@@ -63,7 +63,9 @@ object SizeFilter {
         candidate.coerceIn((currentMin + STEP).coerceAtMost(CEILING), CEILING)
 
     fun label(bytes: Long): String = when {
-        bytes <= FLOOR -> "Any size"
+        // "No minimum" rather than "Any size", so the bottom of the range pairs with the
+        // "No limit" at the top instead of reading as a description of the whole range.
+        bytes <= FLOOR -> "No minimum"
         bytes >= CEILING -> "No limit"
         bytes < GB -> "${bytes / MB} MB"
         bytes % GB == 0L -> "${bytes / GB} GB"
@@ -73,4 +75,23 @@ object SizeFilter {
     /** Where the thumb sits, 0..1. */
     fun fraction(bytes: Long): Float =
         (bytes.toFloat() / CEILING).coerceIn(0f, 1f)
+
+    /**
+     * The current bounds as a sentence, for the line under the slider.
+     *
+     * Written as four cases rather than one template because the ends are not values a viewer
+     * can be shown: "between No minimum and 2.5 GB" is not English, and with both ends open
+     * there is no filter left to describe at all. [label] is still the right thing for the track
+     * ends and the thumbs, where a bare phrase is what is wanted.
+     */
+    fun describe(minBytes: Long, maxBytes: Long): String {
+        val hasMin = minBytes > FLOOR
+        val hasMax = maxBytes < CEILING
+        return when {
+            hasMin && hasMax -> "You'll see videos between ${label(minBytes)} and ${label(maxBytes)}."
+            hasMin -> "You'll see videos from ${label(minBytes)} upwards."
+            hasMax -> "You'll see videos up to ${label(maxBytes)}."
+            else -> "You'll see every video in the chat, whatever its size."
+        }
+    }
 }

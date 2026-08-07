@@ -5,6 +5,7 @@ import androidx.leanback.app.GuidedStepSupportFragment
 import androidx.leanback.widget.GuidanceStylist
 import androidx.leanback.widget.GuidedAction
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
@@ -30,7 +31,7 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
     override fun onProvideTheme(): Int = androidx.leanback.R.style.Theme_Leanback_GuidedStep
 
     override fun onCreateGuidance(savedInstanceState: Bundle?): GuidanceStylist.Guidance {
-        val title = if (trackType == C.TRACK_TYPE_AUDIO) "Audio track" else "Subtitles"
+        val title = if (trackType == C.TRACK_TYPE_AUDIO) "Audio language" else "Subtitles"
         return GuidanceStylist.Guidance(title, "", "", null)
     }
 
@@ -52,7 +53,11 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
         }
 
         if (options.isEmpty() || (trackType == C.TRACK_TYPE_TEXT && options.size == 1)) {
-            val none = if (trackType == C.TRACK_TYPE_AUDIO) "No audio tracks" else "This file has no subtitles"
+            val none = if (trackType == C.TRACK_TYPE_AUDIO) {
+                "This film has no other audio"
+            } else {
+                "This film has no subtitles"
+            }
             actions.add(GuidedAction.Builder(requireContext()).id(ID_NONE).title(none).build())
             return
         }
@@ -104,7 +109,7 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
         return option.group.isTrackSelected(option.trackIndex)
     }
 
-    /** Language first, then codec and channel count — what actually tells dual audio apart. */
+    /** Language first, then sound format and channel layout: what tells dual audio apart. */
     private fun describe(group: Tracks.Group, index: Int, position: Int): String {
         val format = group.getTrackFormat(index)
         val language = format.language
@@ -114,19 +119,34 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
 
         val name = when {
             label != null && language != null && !label.contains(language, ignoreCase = true) ->
-                "$language — $label"
+                "$language ($label)"
             label != null -> label
             language != null -> language
             else -> "Track ${position + 1}"
         }
 
         val details = buildList {
-            format.codecs?.substringBefore('.')?.takeIf { it.isNotBlank() }?.let { add(it) }
-            format.sampleMimeType?.substringAfterLast('/')?.uppercase(Locale.ROOT)?.let { add(it) }
+            soundFormat(format)?.let { add(it) }
             if (format.channelCount > 0) add(channels(format.channelCount))
-        }.distinct()
+        }
 
         return if (details.isEmpty()) name else "$name  ·  ${details.joinToString(" ")}"
+    }
+
+    /**
+     * The two sound-format names a viewer might recognise, and nothing else.
+     *
+     * The raw codec id and the MIME subtype were both shown here before, which produced lines
+     * like "English · ac-3 AC3 5.1". Formats outside this list are left out; the channel layout
+     * beside it already identifies the track.
+     */
+    private fun soundFormat(format: Format): String? {
+        val id = "${format.codecs.orEmpty()} ${format.sampleMimeType.orEmpty()}".lowercase(Locale.ROOT)
+        return when {
+            DOLBY.any { id.contains(it) } -> "Dolby"
+            DTS.any { id.contains(it) } -> "DTS"
+            else -> null
+        }
     }
 
     private fun channels(count: Int) = when (count) {
@@ -140,6 +160,11 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
     companion object {
         private const val ARG_TRACK_TYPE = "track_type"
         private const val ID_NONE = -1L
+
+        // Spelled several ways depending on whether the id came from the MP4 sample entry or
+        // from the MIME type, so both are matched.
+        private val DOLBY = listOf("ac-3", "ac3", "ec-3", "eac3")
+        private val DTS = listOf("dts", "dca")
 
         fun forType(trackType: Int) = TrackPickerFragment().apply {
             arguments = Bundle().apply { putInt(ARG_TRACK_TYPE, trackType) }

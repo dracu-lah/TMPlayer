@@ -7,12 +7,99 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
 /**
- * The three glyphs Material's core icon set does not carry.
+ * The glyphs Material's core icon set does not carry.
  *
  * Declared as vectors rather than pulled from `material-icons-extended`, which would add several
  * thousand unused icons to an app that needs exactly these.
  */
 object TmIcons {
+
+    /** A clock, for "Recent". */
+    val Clock: ImageVector by lazy {
+        icon("Clock") {
+            path(fill = SolidColor(Color.White)) {
+                moveTo(12f, 2f)
+                curveTo(6.48f, 2f, 2f, 6.48f, 2f, 12f)
+                curveTo(2f, 17.52f, 6.48f, 22f, 12f, 22f)
+                curveTo(17.52f, 22f, 22f, 17.52f, 22f, 12f)
+                curveTo(22f, 6.48f, 17.52f, 2f, 12f, 2f)
+                close()
+                moveTo(12f, 20f)
+                curveTo(7.59f, 20f, 4f, 16.41f, 4f, 12f)
+                curveTo(4f, 7.59f, 7.59f, 4f, 12f, 4f)
+                curveTo(16.41f, 4f, 20f, 7.59f, 20f, 12f)
+                curveTo(20f, 16.41f, 16.41f, 20f, 12f, 20f)
+                close()
+            }
+            // Hour hand up, minute hand right, meeting at the centre.
+            path(fill = SolidColor(Color.White)) {
+                moveTo(12.5f, 6f)
+                horizontalLineTo(11f)
+                verticalLineTo(13f)
+                horizontalLineTo(16.75f)
+                verticalLineTo(11.5f)
+                horizontalLineTo(12.5f)
+                close()
+            }
+        }
+    }
+
+    /**
+     * An unfilled star, for a favourite that is not set. Tint alone could not carry it: focus
+     * repaints the icon white.
+     */
+    val StarOutline: ImageVector by lazy {
+        icon("StarOutline") {
+            path(fill = SolidColor(Color.White)) {
+                moveTo(12f, 8.89f)
+                lineTo(13.03f, 12.11f)
+                lineTo(13.26f, 12.83f)
+                horizontalLineTo(16.47f)
+                lineTo(13.86f, 14.73f)
+                lineTo(13.25f, 15.17f)
+                lineTo(14.28f, 18.39f)
+                lineTo(12f, 16.4f)
+                lineTo(9.72f, 18.39f)
+                lineTo(10.75f, 15.17f)
+                lineTo(10.14f, 14.73f)
+                lineTo(7.53f, 12.83f)
+                horizontalLineTo(10.74f)
+                lineTo(10.97f, 12.11f)
+                close()
+                moveTo(12f, 2f)
+                lineTo(9.19f, 8.63f)
+                lineTo(2f, 9.24f)
+                lineTo(7.45f, 13.97f)
+                lineTo(5.82f, 21f)
+                lineTo(12f, 17.27f)
+                lineTo(18.18f, 21f)
+                lineTo(16.54f, 13.97f)
+                lineTo(22f, 9.24f)
+                lineTo(14.81f, 8.62f)
+                close()
+            }
+        }
+    }
+
+    /** An empty circle: the unselected half of a radio pair. */
+    val CircleOutline: ImageVector by lazy {
+        icon("CircleOutline") {
+            path(fill = SolidColor(Color.White)) {
+                moveTo(12f, 2f)
+                curveTo(6.48f, 2f, 2f, 6.48f, 2f, 12f)
+                curveTo(2f, 17.52f, 6.48f, 22f, 12f, 22f)
+                curveTo(17.52f, 22f, 22f, 17.52f, 22f, 12f)
+                curveTo(22f, 6.48f, 17.52f, 2f, 12f, 2f)
+                close()
+                moveTo(12f, 20f)
+                curveTo(7.59f, 20f, 4f, 16.41f, 4f, 12f)
+                curveTo(4f, 7.59f, 7.59f, 4f, 12f, 4f)
+                curveTo(16.41f, 4f, 20f, 7.59f, 20f, 12f)
+                curveTo(20f, 16.41f, 16.41f, 20f, 12f, 20f)
+                close()
+            }
+        }
+    }
 
     /** Broadcast channel. */
     val Channel: ImageVector by lazy {
@@ -47,7 +134,7 @@ object TmIcons {
         }
     }
 
-    /** Two people — a group rather than a single contact. */
+    /** Two people: a group rather than a single contact. */
     val Group: ImageVector by lazy {
         icon("Group") {
             path(fill = SolidColor(Color.White)) {

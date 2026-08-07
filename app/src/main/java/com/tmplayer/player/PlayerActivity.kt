@@ -8,6 +8,7 @@ import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
@@ -65,6 +66,7 @@ class PlayerActivity : FragmentActivity() {
     private lateinit var settings: SettingsStore
     private lateinit var subtitleView: SubtitleView
     private lateinit var statusOverlay: View
+    private lateinit var statusIcon: ImageView
     private lateinit var statusTitle: TextView
     private lateinit var statusText: TextView
     private lateinit var statusDetail: TextView
@@ -85,15 +87,27 @@ class PlayerActivity : FragmentActivity() {
     private var openingFilm = true
     private val speed = SpeedMeter()
 
+    /** The stage the loading screen is currently reporting, kept so it can be re-rendered. */
+    private var statusMessage = ""
+
+    /**
+     * "Resuming from 1:12:40", once the saved position has been read off disk.
+     *
+     * It arrives from a coroutine part-way through the load, and it is the one thing on the
+     * loading screen the viewer cannot work out from anywhere else, so it is carried alongside
+     * every later stage message instead of being replaced by one.
+     */
+    private var resumeNotice: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Deliberately not restoring fragments. A restored playback fragment comes back before
+        // Fragments are not restored. A restored playback fragment comes back before
         // the player is rebuilt, so it would attach with nothing behind it and no transport
         // controls. Starting from a clean fragment manager means the fragment below is always
         // built against a live player, and nothing here is worth restoring anyway: the resume
         // position lives on disk.
         super.onCreate(null)
         setContentView(R.layout.activity_player)
-        // Two hours of a film is two hours with no button presses — without this the TV
+        // Two hours of a film is two hours with no button presses. Without this the TV
         // dims and then sleeps on the viewer.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
@@ -109,6 +123,7 @@ class PlayerActivity : FragmentActivity() {
 
         subtitleView = findViewById(R.id.subtitles)
         statusOverlay = findViewById(R.id.status_overlay)
+        statusIcon = findViewById(R.id.status_icon)
         statusTitle = findViewById(R.id.status_title)
         statusText = findViewById(R.id.status_text)
         statusDetail = findViewById(R.id.status_detail)
@@ -132,7 +147,7 @@ class PlayerActivity : FragmentActivity() {
         )
 
         if (fileId <= 0) {
-            showError("This message has no file to play.")
+            showError("There's nothing to play here.")
             return
         }
 
@@ -152,7 +167,8 @@ class PlayerActivity : FragmentActivity() {
             resumeMs = runCatching { settings.resumePosition(chatId, messageId) }.getOrDefault(0L)
             if (resumeMs > 0) {
                 player?.seekTo(resumeMs)
-                statusText.text = "Resuming from ${StreamStats.formatClock(resumeMs)}"
+                resumeNotice = "Resuming from ${StreamStats.formatClock(resumeMs)}"
+                renderStatusText()
             }
         }
 
@@ -168,7 +184,7 @@ class PlayerActivity : FragmentActivity() {
 
     private fun buildPlayer(): ExoPlayer {
         // Hardware decoders first; NextLib's FFmpeg renderers pick up the audio codecs a TV
-        // stick has no silicon for — DTS and TrueHD tracks are common in movie remuxes.
+        // stick has no silicon for: DTS and TrueHD tracks are common in movie remuxes.
         val renderers = NextRenderersFactory(this)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true)
@@ -217,7 +233,7 @@ class PlayerActivity : FragmentActivity() {
             when (state) {
                 // Only the very first wait earns the full screen; later stalls get the chip.
                 Player.STATE_BUFFERING ->
-                    if (openingFilm) showStatus("Buffering…") else showRebuffering()
+                    if (openingFilm) showStatus("Loading…") else showRebuffering()
 
                 Player.STATE_READY -> hideStatus()
                 Player.STATE_ENDED -> {
@@ -237,19 +253,21 @@ class PlayerActivity : FragmentActivity() {
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
         ->
-            "Lost the connection to Telegram. Check the network and try again."
+            "Lost the connection to Telegram. Check this TV's internet and try again."
 
         PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
         PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
         ->
-            "This device can't decode that video track. Audio-only formats are covered, but the video codec isn't."
+            "This TV can't play this film's video format. A different copy of the film may work."
 
         PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
         PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
         ->
-            "TMPlayer can't read this container format."
+            "TMPlayer can't play this file. A different copy of the film may work."
 
-        else -> error.message ?: "Playback failed."
+        // ExoPlayer's own message names a codec or an internal class; it means nothing on a sofa
+        // and reads as a crash. The exception still reaches logcat through ExoPlayer itself.
+        else -> "This film wouldn't play. Try a different copy of it."
     }
 
     /** Skips [deltaMs], clamped so a burst of remote presses can't run off either end. */
@@ -269,7 +287,7 @@ class PlayerActivity : FragmentActivity() {
     }
 
     /**
-     * MEDIA keys always seek. D-pad seeks only while the transport row is hidden — once it is
+     * MEDIA keys always seek. D-pad seeks only while the transport row is hidden; once it is
      * up, leanback's own scrubbing owns those keys.
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -303,7 +321,7 @@ class PlayerActivity : FragmentActivity() {
     /**
      * Feeds the loading screen from TDLib's own download updates.
      *
-     * The player alone cannot say "how much longer" — it only knows whether it has enough to
+     * The player alone cannot say "how much longer"; it only knows whether it has enough to
      * start. Pairing its buffer with the byte rate coming off TDLib is what turns a spinner into
      * a figure the viewer can act on.
      */
@@ -340,18 +358,29 @@ class PlayerActivity : FragmentActivity() {
             statusProgress.progress = (fraction * 1000).toInt()
             statusDetail.text = listOf(rate, left).filter { it.isNotBlank() }.joinToString("  ·  ")
         } else {
-            rebufferText.text = "Buffering  ·  $rate"
+            rebufferText.text = "Loading  ·  $rate"
         }
     }
 
     private fun showStatus(message: String) {
         openingFilm = true
         statusOverlay.visibility = View.VISIBLE
+        statusIcon.visibility = View.GONE
         rebufferChip.visibility = View.GONE
         statusSpinner?.visibility = View.VISIBLE
         statusProgress.visibility = View.VISIBLE
         statusDetail.visibility = View.VISIBLE
-        if (statusText.text.isNullOrBlank()) statusText.text = message
+        statusMessage = message
+        renderStatusText()
+    }
+
+    /**
+     * Writes the caption, stage first, with the resume notice carried alongside it rather than
+     * replaced by it.
+     */
+    private fun renderStatusText() {
+        statusText.text = listOfNotNull(statusMessage.takeIf { it.isNotBlank() }, resumeNotice)
+            .joinToString("  ·  ")
     }
 
     /** A stall after playback has begun: a small chip, so the film stays on screen. */
@@ -359,18 +388,21 @@ class PlayerActivity : FragmentActivity() {
         openingFilm = false
         statusOverlay.visibility = View.GONE
         rebufferChip.visibility = View.VISIBLE
-        rebufferText.text = "Buffering…"
+        rebufferText.text = "Loading…"
     }
 
     private fun showError(message: String) {
         openingFilm = false
         statusOverlay.visibility = View.VISIBLE
+        // The only state that earns the warning triangle, matching the error screens the rest of
+        // the app already shows.
+        statusIcon.visibility = View.VISIBLE
         rebufferChip.visibility = View.GONE
         statusSpinner?.visibility = View.GONE
         statusProgress.visibility = View.GONE
         statusDetail.visibility = View.GONE
         statusTitle.text = "Can't play this"
-        statusText.text = "$message\n\nPress Back to return."
+        statusText.text = "$message\n\nPress Back to pick something else."
     }
 
     private fun hideStatus() {
@@ -383,7 +415,7 @@ class PlayerActivity : FragmentActivity() {
      * Writes the position every [RESUME_TICK_MS] while a film is on screen.
      *
      * onStop covers Back and Home, but it never runs when the power goes off at the wall or the
-     * system kills the process to reclaim memory — and on a 1 GB stick the second of those is
+     * system kills the process to reclaim memory, and on a 1 GB stick the second of those is
      * routine. Without a heartbeat those are precisely the cases where an hour of a film is lost.
      */
     private fun startResumeHeartbeat() {
@@ -412,7 +444,7 @@ class PlayerActivity : FragmentActivity() {
     }
 
     /**
-     * Runs on a scope that outlives the activity — the write has to survive the user pressing
+     * Runs on a scope that outlives the activity, because the write has to survive the user
      * Back, which is exactly when it matters.
      */
     private fun saveResumePosition() {

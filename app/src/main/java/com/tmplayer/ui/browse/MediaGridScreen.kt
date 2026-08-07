@@ -1,5 +1,8 @@
 package com.tmplayer.ui.browse
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -45,6 +48,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -58,8 +62,10 @@ import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.WatchPoint
+import com.tmplayer.ui.components.MediaGridSkeleton
 import com.tmplayer.ui.components.Poster
 import com.tmplayer.ui.components.StateScaffold
+import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvSearchField
 import com.tmplayer.ui.components.rememberVoiceSearch
@@ -90,7 +96,9 @@ fun MediaGridScreen(
     watchProgress: Map<String, WatchPoint>,
     onToggleFavorite: () -> Unit,
     onPlay: (MediaItem) -> Unit,
+    onPlayFromStart: (MediaItem) -> Unit,
 ) {
+    val context = LocalContext.current
     // The limits are part of the key: changing them in Settings has to rebuild the listing,
     // not leave a stale one filtered by the old bounds.
     val viewModel: MediaListViewModel = viewModel(
@@ -99,6 +107,11 @@ fun MediaGridScreen(
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
     var query by remember { mutableStateOf("") }
+    var details by remember { mutableStateOf<MediaItem?>(null) }
+
+    // Whether anything on this device can play a YouTube link. Checked once rather than per
+    // film, and used to hide the trailer button entirely rather than have it open nothing.
+    val trailersAvailable = remember { canOpenYouTube(context) }
 
     Column(Modifier.fillMaxSize()) {
         Header(
@@ -111,16 +124,26 @@ fun MediaGridScreen(
             onRefresh = viewModel::load,
         )
 
-        StateScaffold(state, onRetry = viewModel::load) { list ->
+        StateScaffold(
+            state,
+            onRetry = viewModel::load,
+            loading = { MediaGridSkeleton() },
+        ) { list ->
             val gridState = rememberLazyGridState()
             val firstItem = remember { FocusRequester() }
 
-            Column(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize()) {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(COLUMNS),
                     state = gridState,
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                    contentPadding = PaddingValues(start = Tv.SafeH, end = Tv.SafeH, bottom = 16.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = Tv.SafeH,
+                        end = Tv.SafeH,
+                        // A television crops its outermost few percent, so the last row needs
+                        // clearance or its titles are cut off the bottom of the panel.
+                        bottom = Tv.SafeV + 16.dp,
+                    ),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
@@ -130,7 +153,7 @@ fun MediaGridScreen(
                             watched = watchProgress[
                                 SettingsStore.progressKey(item.chatId, item.messageId),
                             ],
-                            onClick = { onPlay(item) },
+                            onClick = { details = item },
                             modifier = if (item === list.items.firstOrNull()) {
                                 Modifier.focusRequester(firstItem)
                             } else {
@@ -140,10 +163,19 @@ fun MediaGridScreen(
                     }
                 }
 
-                // Reserved strip rather than a conditional one, so the grid never jumps a row
-                // under the user's thumb the moment another page lands.
-                Box(Modifier.fillMaxWidth().height(44.dp), contentAlignment = Alignment.Center) {
-                    if (list.loadingMore) {
+                // Floated over the grid; a reserved band cost a whole row on a 540dp panel.
+                if (list.loadingMore) {
+                    Row(
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = Tv.SafeV)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(SurfaceRaised)
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Spinner(size = 18.dp, strokeWidth = 2.dp)
                         Text(
                             "Loading more…",
                             style = MaterialTheme.typography.bodyMedium,
@@ -169,6 +201,35 @@ fun MediaGridScreen(
             }
         }
     }
+
+    details?.let { item ->
+        val point = watchProgress[SettingsStore.progressKey(item.chatId, item.messageId)]
+        FilmDetailsPanel(
+            item = item,
+            resumeMs = point?.positionMs ?: 0L,
+            trailersAvailable = trailersAvailable,
+            onPlay = { details = null; onPlay(item) },
+            onPlayFromStart = { details = null; onPlayFromStart(item) },
+            onWatchTrailer = { key -> openYouTube(context, key) },
+            onDismiss = { details = null },
+        )
+    }
+}
+
+/**
+ * Trailers open in YouTube's own app rather than inside TMPlayer.
+ *
+ * Embedding their player requires their SDK and a WebView pointed at an embed URL breaks their
+ * terms, and every Android TV device ships the app.
+ */
+private fun youTubeIntent(key: String) =
+    Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$key"))
+
+private fun canOpenYouTube(context: Context): Boolean =
+    youTubeIntent("test").resolveActivity(context.packageManager) != null
+
+private fun openYouTube(context: Context, key: String) {
+    runCatching { context.startActivity(youTubeIntent(key)) }
 }
 
 @Composable
@@ -195,7 +256,7 @@ private fun Header(
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            "Videos and movie files only",
+            "Films and videos from this chat",
             style = MaterialTheme.typography.bodyMedium,
             color = TextMuted,
         )
@@ -204,30 +265,36 @@ private fun Header(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val searchField = remember { FocusRequester() }
+
             TvSearchField(
                 value = query,
                 onValueChange = onQuery,
-                placeholder = "Search this chat by file name",
+                placeholder = "Search this chat",
                 onSubmit = onSubmit,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).focusRequester(searchField),
             )
             if (startVoice != null) {
-                Pill("Speak", TmIcons.Mic, onClick = startVoice)
+                Pill("Voice search", TmIcons.Mic, onClick = startVoice)
             }
             if (query.isNotBlank()) {
                 Pill("Clear", Icons.Filled.Close) {
+                    // Focus has to leave before the state change, because clearing the query is
+                    // what removes this pill from the layout. Letting it vanish while focused
+                    // strands the remote: the next press goes nowhere or jumps to the rail.
+                    runCatching { searchField.requestFocus() }
                     onQuery("")
                     onSubmit()
                 }
             }
             Pill(
-                label = if (isFavorite) "Favourited" else "Favourite",
-                icon = Icons.Filled.Star,
+                label = if (isFavorite) "Remove favourite" else "Add favourite",
+                icon = if (isFavorite) Icons.Filled.Star else TmIcons.StarOutline,
                 tintWhenIdle = if (isFavorite) Accent else TextPrimary,
                 onClick = onToggleFavorite,
             )
             // Telegram pushes new messages into TDLib's database, but this grid was built from a
-            // search that ran when it opened — a film posted since then needs a fresh search.
+            // search that ran when it opened, so a film posted since then needs a fresh search.
             Pill("Refresh", Icons.Filled.Refresh, onClick = onRefresh)
         }
     }
@@ -321,7 +388,7 @@ private fun MediaCard(
                 }
             }
             if (watched != null && watched.fraction > 0f) {
-                // A thin bar along the bottom of the art — the one place a viewer already looks
+                // A thin bar along the bottom of the art, the one place a viewer already looks
                 // to see whether they have started something.
                 Box(
                     Modifier
@@ -344,7 +411,10 @@ private fun MediaCard(
                 item.title,
                 style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary,
-                maxLines = 2,
+                // One line, not two. A release file name is long enough to fill both, and the
+                // second line cost a row of the grid on a 540dp panel; the full title is one
+                // press away on the details panel now.
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(6.dp))
@@ -352,7 +422,7 @@ private fun MediaCard(
             val size = MediaMapper.formatSize(item.sizeBytes)
             val resume = watched
                 ?.takeIf { it.positionMs > 0 }
-                ?.let { "Resume ${com.tmplayer.player.StreamStats.formatClock(it.positionMs)}" }
+                ?.let { "Stopped at ${com.tmplayer.player.StreamStats.formatClock(it.positionMs)}" }
             Text(
                 listOfNotNull(duration.ifEmpty { null }, size.ifEmpty { null }, resume)
                     .joinToString("  ·  "),

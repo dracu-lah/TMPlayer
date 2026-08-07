@@ -33,7 +33,7 @@ private const val TAG = "Td"
  *
  * TDLib owns the session on disk, so there is exactly one client and it lives as long as the
  * app does. Logging out closes the client for good, which is why [clientLoop] can build a
- * replacement — that is the only supported way to log back in.
+ * replacement; that is the only supported way to log back in.
  */
 object Td {
 
@@ -93,7 +93,7 @@ object Td {
         // The update flow and the one-off getAuthorizationState() often deliver the same state
         // back to back at startup. Acting twice would send TDLib its parameters twice and
         // surface the second attempt's error as a login failure. Comparing against only the
-        // immediately previous state still lets a genuine repeat through — a QR link that
+        // immediately previous state still lets a genuine repeat through: a QR link that
         // expires and sends us back to WaitPhoneNumber has a different state in between.
         if (state == lastHandled) return@withLock
         lastHandled = state
@@ -120,7 +120,7 @@ object Td {
     private suspend fun sendParameters(td: TdlClient) {
         if (BuildConfig.TG_API_ID == 0) {
             _auth.value = AuthState.Failed(
-                "No Telegram API credentials in this build. Add TG_API_ID and TG_API_HASH to local.properties and rebuild — see the README.",
+                "No Telegram API credentials in this build. Add TG_API_ID and TG_API_HASH to local.properties and rebuild. See the README.",
             )
             return
         }
@@ -176,7 +176,7 @@ object Td {
     suspend fun storageUsedBytes(): Long =
         current?.getStorageStatisticsFast()?.valueOrNull?.filesSize ?: 0L
 
-    /** True when this exact file is already fully on disk — the one film worth keeping. */
+    /** True when this exact file is already fully on disk, the one film worth keeping. */
     suspend fun isFileCached(fileId: Int): Boolean {
         val td = current ?: return false
         val file = td.getFile(fileId).valueOrNull ?: return false
@@ -187,7 +187,7 @@ object Td {
      * Drops every cached video, document and animation.
      *
      * A `size` of zero means "keep nothing", and `immunityDelay` of zero waives TDLib's usual
-     * grace period for recently touched files — without that the film the viewer just finished
+     * grace period for recently touched files. Without that, the film the viewer just finished
      * would survive and the space would not actually come back.
      *
      * Photos and thumbnails are untouched: they are tiny and re-fetching them would make the

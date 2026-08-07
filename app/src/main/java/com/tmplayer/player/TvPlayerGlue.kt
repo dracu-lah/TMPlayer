@@ -14,7 +14,7 @@ import com.tmplayer.R
  * Leanback's stock transport controls with three additions: explicit skip buttons, a subtitle
  * picker and an audio-track picker.
  *
- * The rest — progress bar, D-pad scrubbing, auto-hide, play/pause — is leanback's, which is
+ * The rest (progress bar, D-pad scrubbing, auto-hide, play/pause) is leanback's, which is
  * the point: a TV transport UI is not worth rewriting.
  */
 @UnstableApi
@@ -29,17 +29,20 @@ class TvPlayerGlue(
     private val rewind = PlaybackControlsRow.RewindAction(context)
     private val fastForward = PlaybackControlsRow.FastForwardAction(context)
 
+    // Labelled rather than left as bare glyphs: leanback reads label1 out as the action's
+    // accessible name, and shows it as a tooltip on focus, so an unlabelled button is one a
+    // viewer has to press to find out what it does.
     private val subtitles = Action(
         ID_SUBTITLES,
-        null,
+        "Subtitles",
         null,
         ContextCompat.getDrawable(context, R.drawable.ic_subtitles),
     )
     private val audio = Action(
         ID_AUDIO,
+        "Audio",
         null,
-        null,
-        ContextCompat.getDrawable(context, R.drawable.ic_audio_track),
+        ContextCompat.getDrawable(context, R.drawable.ic_audio_language),
     )
 
     override fun onCreatePrimaryActions(primaryActionsAdapter: ArrayObjectAdapter) {

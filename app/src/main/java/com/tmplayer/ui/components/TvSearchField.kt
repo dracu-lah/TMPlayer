@@ -44,6 +44,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.SurfaceDark
+import com.tmplayer.ui.theme.SurfaceRaised
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
 
@@ -70,17 +71,37 @@ fun TvSearchField(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val field = remember { FocusRequester() }
+    val box = remember { FocusRequester() }
+    // Only ever true once the keyboard has actually been opened. Without it the box would claim
+    // focus from the rest of the screen the first time it is composed, which is not the search
+    // field's to take.
+    var wasEditing by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
 
     val active = focused || editing
 
+    // Leaving the keyboard removes the text field from composition, and focus goes with it: press
+    // Back and then Down and the remote is nowhere. Focus is handed back to the box the viewer
+    // pressed to get here.
+    LaunchedEffect(editing) {
+        if (editing) {
+            wasEditing = true
+        } else if (wasEditing) {
+            runCatching { box.requestFocus() }
+        }
+    }
+
     Row(
         modifier
+            .focusRequester(box)
             .height(56.dp)
             .clip(RoundedCornerShape(28.dp))
-            .background(SurfaceDark)
+            // Focus has to be as loud here as it is everywhere else on this screen, where a
+            // focused control either fills with Accent or draws a 3dp border. A 1dp-to-2dp
+            // border change with no fill was the one place the viewer had to hunt for it.
+            .background(if (active) SurfaceRaised else SurfaceDark)
             .border(
-                width = if (active) 2.dp else 1.dp,
+                width = if (active) 3.dp else 1.dp,
                 color = if (active) Accent else TextMuted.copy(alpha = 0.35f),
                 shape = RoundedCornerShape(28.dp),
             )

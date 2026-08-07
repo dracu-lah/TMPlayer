@@ -38,10 +38,9 @@ private val colors = darkColorScheme(
 /**
  * 10-foot UI, sized against the screen this actually runs on.
  *
- * A 1080p TV at density 320 is only 960 x 540 dp — far less room than the pixel count suggests.
+ * A 1080p TV at density 320 is only 960 x 540 dp, far less room than the pixel count suggests.
  * Type is large enough to read from a sofa but small enough that a heading plus a search row does
- * not consume half the height; the earlier sizes were doing exactly that and pushing content off
- * the bottom edge.
+ * not consume half the height and push content off the bottom edge.
  *
  * No style carries a colour. A colour baked in here wins over [LocalContentColor], which is how
  * a button ends up painting its label in the surface colour instead of its own content colour.
@@ -54,6 +53,11 @@ private val typography = Typography(
     titleMedium = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Medium),
     bodyLarge = TextStyle(fontSize = 15.sp),
     bodyMedium = TextStyle(fontSize = 13.sp),
+    // Defined rather than left to inherit. TV Material's default bodySmall is 12sp, a desk size,
+    // and the two places that use it carry the resume position on a Continue card and the
+    // "nothing is deleted from Telegram" reassurance in every destructive prompt, so the least
+    // readable text on those screens was the text that mattered most.
+    bodySmall = TextStyle(fontSize = 13.sp),
     labelLarge = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
 )
 

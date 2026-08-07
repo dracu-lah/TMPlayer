@@ -6,16 +6,20 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -24,6 +28,7 @@ import com.tmplayer.data.AuthState
 import com.tmplayer.data.CachePolicy
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DiskSpace
+import com.tmplayer.data.DiskInfo
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
@@ -34,12 +39,15 @@ import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.auth.IntroScreen
 import com.tmplayer.ui.auth.LoginScreen
 import com.tmplayer.ui.browse.BrowseScreen
+import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.browse.ChatListViewModel
 import com.tmplayer.ui.browse.MediaGridScreen
 import com.tmplayer.ui.components.TvConfirm
+import com.tmplayer.ui.components.LowSpaceWarning
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.theme.TMPlayerTheme
+import com.tmplayer.ui.theme.Tv
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -93,12 +101,15 @@ private fun Root() {
     var passwordError by remember { mutableStateOf<String?>(null) }
     var roomPrompt by remember { mutableStateOf<RoomPrompt?>(null) }
     // Saveable, not just remembered. Playing a film puts a second activity in front of this one,
-    // and a 1 GB stick will happily kill what is behind it — so this composable is routinely
+    // and a 1 GB stick will happily kill what is behind it, so this composable is routinely
     // rebuilt on the way back. Remembered state would come back false, the jump would re-arm, and
     // Back out of the chat would drop the viewer straight into it again: the navigation rail and
     // Settings become unreachable, including the switch that turns this behaviour off.
     var autoOpened by rememberSaveable { mutableStateOf(false) }
     var confirmExit by remember { mutableStateOf(false) }
+    // Hoisted out of BrowseScreen: opening a chat replaces that screen entirely, so a tab held
+    // down there would be forgotten every time the viewer backed out of a film.
+    var pickedTab by rememberSaveable { mutableStateOf<BrowseTab?>(null) }
 
     /**
      * Starts playback, first clearing the previous film when there is no room for both.
@@ -186,15 +197,33 @@ private fun Root() {
         }
 
         when (val current = screen) {
-            is Screen.Chats -> BrowseScreen(
-                state = chatsState,
-                favorites = favorites,
-                continueWatching = continueWatching,
-                onRetry = chatsViewModel::load,
-                onOpenChat = { screen = Screen.Media(it) },
-                onResumeFilm = { play(it.toMediaItem(), chatTitle = it.chatTitle) },
-                onOpenSettings = { screen = Screen.Settings },
-            )
+            is Screen.Chats -> {
+                // Re-measured whenever the viewer comes back to this screen: playing a film is
+                // the very thing that consumes the space this warns about.
+                val disk by produceState(initialValue = DiskInfo(0, 0), key1 = screen) {
+                    value = DiskSpace.read(context)
+                }
+                BrowseScreen(
+                    state = chatsState,
+                    favorites = favorites,
+                    continueWatching = continueWatching,
+                    onRetry = chatsViewModel::load,
+                    onOpenChat = { screen = Screen.Media(it) },
+                    onResumeFilm = { play(it.toMediaItem(), chatTitle = it.chatTitle) },
+                    onOpenSettings = { screen = Screen.Settings },
+                    picked = pickedTab,
+                    onPickTab = { pickedTab = it },
+                    // Passed as a slot so it lands beside the rail. Stacked above the whole
+                    // screen it pushed Settings off the bottom of a 540dp panel entirely.
+                    banner = {
+                        LowSpaceWarning(
+                            disk = disk,
+                            settings = settings,
+                            modifier = Modifier.padding(top = Tv.SafeV, bottom = 4.dp),
+                        )
+                    },
+                )
+            }
 
             is Screen.Media -> {
                 BackHandler {
@@ -214,6 +243,14 @@ private fun Root() {
                     watchProgress = watchProgress,
                     onToggleFavorite = { scope.launch { settings.toggleFavorite(current.chat.id) } },
                     onPlay = { play(it, chatTitle = current.chat.title) },
+                    onPlayFromStart = { item ->
+                        // Clear the saved position before the player starts, so it opens at zero
+                        // rather than seeking back to where the viewer deliberately left off.
+                        scope.launch {
+                            settings.clearResumePosition(item.chatId, item.messageId)
+                            play(item, chatTitle = current.chat.title)
+                        }
+                    },
                 )
             }
 
@@ -233,16 +270,18 @@ private fun Root() {
         roomPrompt?.let { pending ->
             val tooLarge = pending.shortfallBytes > 0
             TvConfirm(
-                title = if (tooLarge) "Not much room left" else "Make room for this film?",
+                title = if (tooLarge) "This film may not fit" else "Make room for this film?",
                 message = if (tooLarge) {
-                    "“${pending.item.title}” needs ${StreamStats.formatBytes(pending.item.sizeBytes)}, " +
-                        "which is ${StreamStats.formatBytes(pending.shortfallBytes)} more than this " +
-                        "device can free. It may stop partway through."
+                    // State what it can free, not the shortfall.
+                    val canFree = (pending.item.sizeBytes - pending.shortfallBytes).coerceAtLeast(0)
+                    "“${pending.item.title}” is ${StreamStats.formatBytes(pending.item.sizeBytes)}. " +
+                        "This TV can only free up ${StreamStats.formatBytes(canFree)}, so the film " +
+                        "may stop partway through."
                 } else {
-                    "TMPlayer keeps one film at a time. Playing this one removes the " +
-                        "${StreamStats.formatBytes(pending.reclaimBytes)} already downloaded."
+                    "TMPlayer keeps one film on this TV at a time. Playing this deletes the last " +
+                        "one and frees ${StreamStats.formatBytes(pending.reclaimBytes)}."
                 },
-                detail = "Nothing is deleted from Telegram — only this device's copy.",
+                detail = "Nothing is deleted from Telegram, only this device's copy.",
                 confirmLabel = if (tooLarge) "Play anyway" else "Make room and play",
                 onConfirm = {
                     val item = pending.item

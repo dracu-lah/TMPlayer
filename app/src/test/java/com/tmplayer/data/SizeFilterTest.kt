@@ -89,7 +89,7 @@ class SizeFilterTest {
 
     @Test
     fun `labels read the way the value would be spoken`() {
-        assertEquals("Any size", SizeFilter.label(0))
+        assertEquals("No minimum", SizeFilter.label(FLOOR))
         assertEquals("No limit", SizeFilter.label(CEILING))
         assertEquals("400 MB", SizeFilter.label(400 * MB))
         assertEquals("2 GB", SizeFilter.label(2 * GB))
@@ -102,5 +102,37 @@ class SizeFilterTest {
         assertEquals(0.5f, SizeFilter.fraction(4 * GB), 0.001f)
         assertEquals(1f, SizeFilter.fraction(CEILING), 0.001f)
         assertEquals(1f, SizeFilter.fraction(99 * GB), 0.001f)
+    }
+
+    // describe() has one case per combination of open and closed ends.
+
+    @Test
+    fun `describes both bounds when both are set`() {
+        assertEquals(
+            "You'll see videos between 400 MB and 2.5 GB.",
+            SizeFilter.describe(400 * MB, 2560 * MB),
+        )
+    }
+
+    @Test
+    fun `drops the floor from the sentence when there is no minimum`() {
+        val text = SizeFilter.describe(FLOOR, 2560 * MB)
+        assertEquals("You'll see videos up to 2.5 GB.", text)
+        assertFalse(text.contains("No minimum"))
+    }
+
+    @Test
+    fun `drops the ceiling from the sentence when there is no limit`() {
+        val text = SizeFilter.describe(400 * MB, CEILING)
+        assertEquals("You'll see videos from 400 MB upwards.", text)
+        assertFalse(text.contains("No limit"))
+    }
+
+    @Test
+    fun `says so plainly when nothing is being filtered`() {
+        val text = SizeFilter.describe(FLOOR, CEILING)
+        assertEquals("You'll see every video in the chat, whatever its size.", text)
+        assertFalse(text.contains("No minimum"))
+        assertFalse(text.contains("No limit"))
     }
 }

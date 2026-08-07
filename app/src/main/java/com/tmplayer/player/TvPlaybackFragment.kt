@@ -22,7 +22,7 @@ class TvPlaybackFragment : VideoSupportFragment() {
         // Leanback shows a buffering spinner of its own, which lands on top of TMPlayer's
         // loading screen and reads as two loaders for the same wait. Disabling it is enough:
         // show() returns immediately once the flag is off. Do not also call
-        // setProgressBarView(null) — that method dereferences its argument to check for a
+        // setProgressBarView(null): that method dereferences its argument to check for a
         // parent, so null takes the activity down before the surface is ever created.
         progressBarManager.disableProgressBar()
 
@@ -47,7 +47,7 @@ class TvPlaybackFragment : VideoSupportFragment() {
         glue = created
     }
 
-    /** True while the transport row is on screen — the activity uses it to route D-pad keys. */
+    /** True while the transport row is on screen; the activity uses it to route D-pad keys. */
     fun controlsVisible(): Boolean = isControlsOverlayVisible
 
     override fun onDestroy() {

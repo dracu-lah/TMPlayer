@@ -45,7 +45,7 @@ data class AuthStep(val state: AuthState, val action: AuthAction)
  * Pure translation of TDLib's authorization state machine into what we show and what we do next.
  *
  * Kept free of Android and TDLib client references so the whole login flow can be exercised
- * by plain JVM unit tests — this is the part that is easy to get subtly wrong.
+ * by plain JVM unit tests. This is the part that is easy to get subtly wrong.
  */
 object AuthReducer {
 
@@ -71,7 +71,7 @@ object AuthReducer {
         is AuthorizationStateLoggingOut, is AuthorizationStateClosing ->
             AuthStep(AuthState.Connecting, AuthAction.None)
 
-        // The client is dead after a logout — a fresh one is needed to log in again.
+        // The client is dead after a logout, so a fresh one is needed to log in again.
         is AuthorizationStateClosed ->
             AuthStep(AuthState.Connecting, AuthAction.RecreateClient)
 

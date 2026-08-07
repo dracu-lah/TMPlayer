@@ -4,7 +4,7 @@
 
   Structure is unchanged from the source: a tile, a darker screen filling the upper two thirds,
   a progress bar across the bottom with its playhead, and the play triangle centred in the
-  screen. Only the fills differ — the original's purple and pink become the surface, accent and
+  screen. Only the fills differ: the original's purple and pink become the surface, accent and
   text colours used everywhere else in the app.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"

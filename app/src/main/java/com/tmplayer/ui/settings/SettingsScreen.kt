@@ -24,9 +24,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -63,6 +67,7 @@ import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.Td
 import com.tmplayer.player.StreamStats
+import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.SurfaceDark
@@ -103,7 +108,10 @@ fun SettingsScreen(
     var prompt by remember { mutableStateOf<Prompt?>(null) }
     // Which end of the range the D-pad is currently moving.
     var editingUpper by remember { mutableStateOf(false) }
-    val firstRow = remember { FocusRequester() }
+    // The range row is where focus lands, and where it is sent back to after a reset. It is the
+    // first control on the screen and it changes nothing on its own, unlike the delete row further
+    // down, which is both destructive and too far down the list to be on screen at all.
+    val rangeRow = remember { FocusRequester() }
 
     suspend fun refresh() {
         cacheBytes = runCatching { Td.storageUsedBytes() }.getOrDefault(0L)
@@ -112,7 +120,7 @@ fun SettingsScreen(
 
     LaunchedEffect(Unit) {
         refresh()
-        runCatching { firstRow.requestFocus() }
+        runCatching { rangeRow.requestFocus() }
     }
 
     val favoriteChats = remember(chats, favorites) { chats.filter { it.id in favorites } }
@@ -129,7 +137,7 @@ fun SettingsScreen(
             Column(Modifier.padding(bottom = 12.dp)) {
                 Text("Settings", style = MaterialTheme.typography.headlineLarge, color = TextPrimary)
                 Text(
-                    "Everything here applies immediately.",
+                    "Changes save as you make them.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextMuted,
                 )
@@ -144,7 +152,7 @@ fun SettingsScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "Video size",
+                    "Video size limits",
                     style = MaterialTheme.typography.titleLarge,
                     color = TextPrimary,
                     modifier = Modifier.weight(1f),
@@ -152,6 +160,10 @@ fun SettingsScreen(
                 ResetChip(
                     enabled = minSize != SizeFilter.DEFAULT_MIN || maxSize != SizeFilter.DEFAULT_MAX,
                 ) {
+                    // Hand focus to the range row before resetting. The chip greys itself out the
+                    // moment the defaults are back, and focus left sitting on a spent control has
+                    // nowhere obvious to go; the row below is what the press just changed anyway.
+                    runCatching { rangeRow.requestFocus() }
                     scope.launch {
                         // Widen first, so the clamp that stops the two ends crossing cannot
                         // block the new floor on its way past the old ceiling.
@@ -163,9 +175,9 @@ fun SettingsScreen(
         }
         item {
             Text(
-                "Showing videos from ${SizeFilter.label(minSize)} to " +
-                    "${SizeFilter.label(maxSize)}. Anything outside that is hidden, which keeps " +
-                    "trailers and clips out of the way.",
+                // Phrased around whichever ends are actually set.
+                SizeFilter.describe(minSize, maxSize) +
+                    " This keeps short clips and trailers out of the list.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextMuted,
                 modifier = Modifier.padding(bottom = 4.dp, start = 4.dp),
@@ -175,6 +187,7 @@ fun SettingsScreen(
             RangeRow(
                 minValue = minSize,
                 maxValue = maxSize,
+                modifier = Modifier.focusRequester(rangeRow),
                 editingUpper = editingUpper,
                 onSwitchEnd = { editingUpper = !editingUpper },
                 onStep = { direction ->
@@ -201,17 +214,17 @@ fun SettingsScreen(
         }
         item {
             ActionRow(
-                title = "Clear cached video now",
-                subtitle = "Frees ${StreamStats.formatBytes(cacheBytes)}",
+                title = "Delete the downloaded film",
+                subtitle = "Frees up ${StreamStats.formatBytes(cacheBytes)}",
                 icon = Icons.Filled.Delete,
-                modifier = Modifier.focusRequester(firstRow),
                 onClick = { prompt = Prompt.ClearCache },
             )
         }
         item {
             ToggleRow(
-                title = "Ask before making room",
-                subtitle = "Confirm before the previous film is deleted for a new one",
+                title = "Ask before deleting a film",
+                subtitle = "Check with you before a new film replaces the last one",
+                icon = Icons.Filled.Notifications,
                 checked = askBeforeClearing,
                 onToggle = { scope.launch { settings.setAskBeforeClearing(!askBeforeClearing) } },
             )
@@ -224,10 +237,11 @@ fun SettingsScreen(
             ToggleRow(
                 title = "Open my favourite straight away",
                 subtitle = if (favoriteChats.size > 1) {
-                    "Goes to the chat marked default below"
+                    "Opens the chat you pick below"
                 } else {
-                    "Skips the chat list when there is one favourite"
+                    "Goes straight to your one favourite chat"
                 },
+                icon = Icons.Filled.Star,
                 checked = jumpToFavorite,
                 onToggle = { scope.launch { settings.setJumpToFavorite(!jumpToFavorite) } },
             )
@@ -235,7 +249,7 @@ fun SettingsScreen(
         if (jumpToFavorite && favoriteChats.size > 1) {
             item {
                 Text(
-                    "Which favourite opens",
+                    "Which favourite opens on launch",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextMuted,
                     modifier = Modifier.padding(top = 8.dp, start = 4.dp),
@@ -244,8 +258,19 @@ fun SettingsScreen(
             items(favoriteChats, key = { "fav-${it.id}" }) { chat ->
                 ActionRow(
                     title = chat.title,
-                    subtitle = if (chat.id == defaultChatId) "Opens on launch" else "Make default",
-                    icon = if (chat.id == defaultChatId) Icons.Filled.Check else Icons.Filled.Star,
+                    subtitle = if (chat.id == defaultChatId) {
+                        "Opens on launch"
+                    } else {
+                        "Open this one instead"
+                    },
+                    // These rows are one choice among equals, so they carry the filled/empty
+                    // circle of a radio button. A star would say nothing: every row here is
+                    // already a favourite.
+                    icon = if (chat.id == defaultChatId) {
+                        Icons.Filled.CheckCircle
+                    } else {
+                        TmIcons.CircleOutline
+                    },
                     tint = if (chat.id == defaultChatId) Accent else TextPrimary,
                     onClick = {
                         scope.launch {
@@ -264,7 +289,7 @@ fun SettingsScreen(
         item {
             ActionRow(
                 title = "Sign out of Telegram",
-                subtitle = "Removes this device from your Telegram sessions",
+                subtitle = "This TV will stop appearing in your Telegram devices",
                 icon = Icons.Filled.ExitToApp,
                 onClick = { prompt = Prompt.SignOut },
             )
@@ -277,7 +302,8 @@ fun SettingsScreen(
                     Spacer(Modifier.height(12.dp))
                 }
                 Text(
-                    "TMPlayer is open source and talks only to Telegram's own servers.",
+                    "TMPlayer only ever connects to Telegram. Nothing you watch is sent " +
+                        "anywhere else.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextMuted,
                 )
@@ -287,15 +313,15 @@ fun SettingsScreen(
 
     when (prompt) {
         Prompt.ClearCache -> TvConfirm(
-            title = "Clear cached video?",
-            message = "Everything downloaded so far is removed, freeing " +
-                "${StreamStats.formatBytes(cacheBytes)}. Films you re-open will download again.",
+            title = "Delete the downloaded film?",
+            message = "This frees up ${StreamStats.formatBytes(cacheBytes)}. Any film you open " +
+                "again will download again.",
             detail = "Your Telegram account, chats and favourites are untouched.",
-            confirmLabel = "Clear now",
+            confirmLabel = "Delete",
             onConfirm = {
                 prompt = null
                 scope.launch {
-                    busy = "Clearing…"
+                    busy = "Deleting…"
                     runCatching { Td.clearMediaCache() }
                     refresh()
                     busy = null
@@ -306,8 +332,8 @@ fun SettingsScreen(
 
         Prompt.SignOut -> TvConfirm(
             title = "Sign out of Telegram?",
-            message = "TMPlayer will forget this account and return to the QR code. " +
-                "Cached video is deleted too.",
+            message = "You'll be signed out and taken back to the sign-in screen. " +
+                "The downloaded film is deleted too.",
             confirmLabel = "Sign out",
             onConfirm = {
                 prompt = null
@@ -339,6 +365,7 @@ private fun RangeRow(
     editingUpper: Boolean,
     onSwitchEnd: () -> Unit,
     onStep: (Int) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
@@ -351,7 +378,7 @@ private fun RangeRow(
     val dim = if (focused) Color.White.copy(alpha = 0.6f) else TextMuted
 
     Column(
-        Modifier
+        modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(background)
@@ -378,20 +405,51 @@ private fun RangeRow(
         RangeTrack(minValue, maxValue, editingUpper, focused)
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("0 MB", style = MaterialTheme.typography.bodyMedium, color = dim)
+            // The ends of the track say what the ends of the range would read as, so the track
+            // and the "From" / "Up to" captions above it cannot disagree with each other.
             Text(
-                if (focused) {
-                    "\u25C0 \u25B6 move the ${if (editingUpper) "upper" else "lower"} end   \u00B7   " +
-                        "OK switches ends"
-                } else {
-                    ""
-                },
+                SizeFilter.label(SizeFilter.FLOOR),
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White,
-                modifier = Modifier.weight(1f),
-                textAlign = TextAlign.Center,
+                color = dim,
             )
-            Text("8 GB", style = MaterialTheme.typography.bodyMedium, color = dim)
+            Row(
+                Modifier.weight(1f),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (focused) {
+                    // Drawn icons rather than the \u25C0 \u25B6 characters: TV firmware fonts often have no
+                    // glyph for those, and a row of tofu boxes would be the only explanation the
+                    // viewer gets for a control nothing else on screen describes.
+                    Icon(
+                        Icons.Filled.KeyboardArrowLeft,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Icon(
+                        Icons.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    // Named after the captions overhead, because "upper" and "lower end" is how
+                    // the widget was built, not how it reads from the sofa.
+                    Text(
+                        "change ${if (editingUpper) "Up to" else "From"}   \u00B7   " +
+                            "OK switches to ${if (editingUpper) "From" else "Up to"}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+            Text(
+                SizeFilter.label(SizeFilter.CEILING),
+                style = MaterialTheme.typography.bodyMedium,
+                color = dim,
+            )
         }
     }
 }
@@ -472,7 +530,7 @@ private fun BoxWithConstraintsScope.Thumb(width: Dp, value: Long, live: Boolean,
     )
 }
 
-/** Right-aligned "Reset to defaults", greyed out when the range is already the default. */
+/** Right-aligned "Reset", greyed out when the range is already the default. */
 @Composable
 private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
     val interactions = remember { MutableInteractionSource() }
@@ -482,20 +540,35 @@ private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
         animationSpec = tween(140),
         label = "resetChip",
     )
-    Box(
+    Row(
         Modifier
             .clip(RoundedCornerShape(20.dp))
             .background(if (enabled) background else SurfaceDark)
+            // Always clickable, never `enabled = false`: pressing this chip is what greys it out,
+            // and a disabled clickable installs no focus target, so the node the viewer was
+            // standing on would vanish underneath them and the next press would go nowhere.
+            // Greyed out it simply does nothing, and the caller moves focus off it.
             .clickable(
                 interactionSource = interactions,
                 indication = null,
-                enabled = enabled,
-                onClick = onClick,
+                onClick = { if (enabled) onClick() },
             )
             .padding(horizontal = 18.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        Icon(
+            Icons.Filled.Refresh,
+            contentDescription = null,
+            tint = when {
+                !enabled -> TextMuted
+                focused -> Color.White
+                else -> TextPrimary
+            },
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.width(8.dp))
         Text(
-            "Reset to defaults",
+            "Reset",
             style = MaterialTheme.typography.bodyLarge,
             color = when {
                 !enabled -> TextMuted
@@ -559,12 +632,12 @@ private fun StorageCard(cacheBytes: Long, freeBytes: Long, totalBytes: Long) {
         }
         Spacer(Modifier.height(16.dp))
         Text(
-            "TMPlayer is holding ${StreamStats.formatBytes(cacheBytes)} of video.",
+            "TMPlayer has ${StreamStats.formatBytes(cacheBytes)} of video saved.",
             style = MaterialTheme.typography.bodyLarge,
             color = TextPrimary,
         )
         Text(
-            "One film is kept at a time — starting another replaces it.",
+            "One film is kept at a time; starting another replaces it.",
             style = MaterialTheme.typography.bodyMedium,
             color = TextMuted,
         )
@@ -611,10 +684,20 @@ private fun ActionRow(
 private fun ToggleRow(
     title: String,
     subtitle: String,
+    icon: ImageVector,
     checked: Boolean,
     onToggle: () -> Unit,
 ) {
     FocusRow(Modifier, onToggle) { focused ->
+        // Carries an icon for the same reason ActionRow does: the two kinds of row are stacked in
+        // one column, and without it their titles would start at two different x positions.
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = if (focused) Color.White else TextPrimary,
+            modifier = Modifier.size(26.dp),
+        )
+        Spacer(Modifier.size(20.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 title,
@@ -635,7 +718,7 @@ private fun ToggleRow(
     }
 }
 
-/** A plain pill switch — big enough to read across a room, with no touch affordances implied. */
+/** A plain pill switch, big enough to read across a room, with no touch affordances implied. */
 @Composable
 private fun Switch(checked: Boolean, focused: Boolean) {
     val track by animateColorAsState(

@@ -20,6 +20,7 @@ private val JUMP_TO_FAVORITE = booleanPreferencesKey("jump_to_favorite")
 private val DEFAULT_CHAT = longPreferencesKey("default_chat")
 private val MIN_SIZE = longPreferencesKey("min_size_bytes")
 private val MAX_SIZE = longPreferencesKey("max_size_bytes")
+private val LOW_SPACE_DISMISSED_FREE = longPreferencesKey("low_space_dismissed_free_bytes")
 
 /** Where playback stopped, so the next launch can offer to continue. */
 private fun resumeKey(chatId: Long, messageId: Long) =
@@ -123,6 +124,30 @@ class SettingsStore(private val context: Context) {
         context.prefs.edit { it[INTRO_SEEN] = true }
     }
 
+    /**
+     * Free space when the viewer last hid the low-space card, or [StorageWarning.NEVER_DISMISSED].
+     *
+     * Stored as a figure rather than a flag so the card can return once things get worse; see
+     * [StorageWarning.shouldShow].
+     */
+    val lowSpaceDismissedAtFreeBytes: Flow<Long> =
+        context.prefs.data.map { it[LOW_SPACE_DISMISSED_FREE] ?: StorageWarning.NEVER_DISMISSED }
+
+    suspend fun dismissLowSpaceWarning(freeBytes: Long) {
+        context.prefs.edit { it[LOW_SPACE_DISMISSED_FREE] = freeBytes }
+    }
+
+    /**
+     * Forget a dismissal once there is comfortable room again.
+     *
+     * Without this, clearing several gigabytes and later filling them back up would be measured
+     * against the old cramped figure, and the warning would stay quiet far past the point where
+     * it was useful.
+     */
+    suspend fun clearLowSpaceDismissal() {
+        context.prefs.edit { it.remove(LOW_SPACE_DISMISSED_FREE) }
+    }
+
     // ---- resume -----------------------------------------------------------------------------
 
     suspend fun resumePosition(chatId: Long, messageId: Long): Long =
@@ -148,10 +173,10 @@ class SettingsStore(private val context: Context) {
     }
 
     /**
-     * Everything half-watched, most recent first — the "Continue watching" row.
+     * Everything half-watched, most recent first: the "Continue watching" row.
      *
      * Entries without a stored description are skipped rather than guessed at: they were written
-     * by a build before the description existed, and an untitled card is worse than no card.
+     * by a build before the description existed, so there is no title to put on the card.
      */
     val continueWatching: Flow<List<ResumeRecord>> = context.prefs.data.map { prefs ->
         buildList {
@@ -180,7 +205,7 @@ class SettingsStore(private val context: Context) {
     ) {
         context.prefs.edit { prefs ->
             val key = resumeKey(chatId, messageId)
-            // Under a minute in, or basically finished — there is nothing worth resuming.
+            // Under a minute in, or basically finished: there is nothing worth resuming.
             if (positionMs < MIN_RESUME_MS) {
                 prefs.remove(key)
                 prefs.remove(durationKey(chatId, messageId))

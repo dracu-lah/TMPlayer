@@ -75,7 +75,7 @@ private fun QrPane(link: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(40.dp),
     ) {
-        // The code itself gets a white plate — contrast is what makes it scannable across a room.
+        // The code itself gets a white plate; contrast is what makes it scannable across a room.
         Box(
             Modifier
                 .size(300.dp)
@@ -101,7 +101,7 @@ private fun QrPane(link: String) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Sign in to Telegram", style = MaterialTheme.typography.headlineLarge)
             Text(
-                "Scan this code with the phone your Telegram account is on.",
+                "Scan this code with the phone that has your Telegram account.",
                 style = MaterialTheme.typography.bodyLarge,
             )
             Spacer(Modifier.height(8.dp))
@@ -110,7 +110,7 @@ private fun QrPane(link: String) {
             Step(3, "Tap “Link Desktop Device” and point the camera here")
             Spacer(Modifier.height(8.dp))
             Text(
-                "The code refreshes on its own. Nothing is sent anywhere except Telegram.",
+                "The code refreshes on its own. TMPlayer only ever connects to Telegram.",
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
@@ -153,7 +153,7 @@ private fun PasswordPane(hint: String, error: String?, onSubmit: (String) -> Uni
         ) {
             Text("Two-step verification", style = MaterialTheme.typography.headlineLarge)
             Text(
-                "Your account is protected by a password. Telegram requires it even after a QR sign-in.",
+                "Your Telegram account has a password. Enter it to finish signing in.",
                 style = MaterialTheme.typography.bodyLarge,
             )
             if (hint.isNotBlank()) {
@@ -197,7 +197,9 @@ private fun PasswordPane(hint: String, error: String?, onSubmit: (String) -> Uni
             }
 
             if (error != null) {
-                Text(error, style = MaterialTheme.typography.bodyLarge, color = Accent)
+                // Red, not the accent blue: the accent is the focus colour on this very screen,
+                // so a wrong password painted in it reads as a status line rather than a problem.
+                Text(error, style = MaterialTheme.typography.bodyLarge, color = Danger)
             }
 
             Button(
@@ -214,3 +216,7 @@ private fun PasswordPane(hint: String, error: String?, onSubmit: (String) -> Uni
 }
 
 private const val QR_PIXELS = 560
+
+// Duplicated from StateScaffold.kt, which declares the same value privately. Both should move into
+// the theme as a named error colour when someone next touches Theme.kt.
+private val Danger = Color(0xFFE5484D)
