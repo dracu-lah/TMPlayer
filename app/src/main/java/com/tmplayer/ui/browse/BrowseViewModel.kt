@@ -7,6 +7,7 @@ import com.tmplayer.data.ChatRepository
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.MediaCursors
 import com.tmplayer.data.MediaItem
+import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.Td
 import com.tmplayer.ui.components.UiState
 import kotlinx.coroutines.Job
@@ -69,7 +70,11 @@ data class MediaListState(
     val endReached: Boolean = false,
 )
 
-class MediaListViewModel(private val chatId: Long) : ViewModel() {
+class MediaListViewModel(
+    private val chatId: Long,
+    private val minSizeBytes: Long,
+    private val maxSizeBytes: Long,
+) : ViewModel() {
 
     private val repository by lazy { ChatRepository() }
     private var cursors = MediaCursors()
@@ -97,13 +102,19 @@ class MediaListViewModel(private val chatId: Long) : ViewModel() {
         pageJob?.cancel()
         pageJob = viewModelScope.launch {
             runCatching { repository.mediaPage(chatId, cursors, query) }
-                .onSuccess { page ->
+                .onSuccess { rawPage ->
+                    val page = rawPage.copy(items = rawPage.items.filter(::withinSizeLimits))
                     cursors = page.cursors
                     _state.value = if (page.items.isEmpty() && page.endReached) {
-                        val message = if (searching) {
-                            "Nothing here matches “$query”."
-                        } else {
-                            "Nothing playable in this chat."
+                        val message = when {
+                            searching -> "Nothing here matches “$query”."
+                            // Say which knob is hiding things, rather than claiming the chat is
+                            // empty when it is the filter doing the work.
+                            isFiltering -> "Nothing in this chat is between " +
+                                "${SizeFilter.label(minSizeBytes)} and " +
+                                "${SizeFilter.label(maxSizeBytes)}. Change the size filter in " +
+                                "Settings to see more."
+                            else -> "Nothing playable in this chat."
                         }
                         UiState.Error(message)
                     } else {
@@ -116,6 +127,12 @@ class MediaListViewModel(private val chatId: Long) : ViewModel() {
         }
     }
 
+    private val isFiltering: Boolean
+        get() = minSizeBytes > SizeFilter.FLOOR || maxSizeBytes < SizeFilter.CEILING
+
+    private fun withinSizeLimits(item: MediaItem) =
+        SizeFilter.matches(item.sizeBytes, minSizeBytes, maxSizeBytes)
+
     /** Called when focus nears the end of the grid. */
     fun loadMore() {
         val current = _state.value as? UiState.Content ?: return
@@ -125,7 +142,8 @@ class MediaListViewModel(private val chatId: Long) : ViewModel() {
         _state.value = UiState.Content(current.value.copy(loadingMore = true))
         pageJob = viewModelScope.launch {
             runCatching { repository.mediaPage(chatId, cursors, query) }
-                .onSuccess { page ->
+                .onSuccess { rawPage ->
+                    val page = rawPage.copy(items = rawPage.items.filter(::withinSizeLimits))
                     cursors = page.cursors
                     val merged = (current.value.items + page.items).distinctBy { it.messageId }
                     _state.value = UiState.Content(

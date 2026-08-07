@@ -17,6 +17,8 @@ private val ASK_BEFORE_CLEARING = booleanPreferencesKey("ask_before_clearing")
 private val INTRO_SEEN = booleanPreferencesKey("intro_seen")
 private val JUMP_TO_FAVORITE = booleanPreferencesKey("jump_to_favorite")
 private val DEFAULT_CHAT = longPreferencesKey("default_chat")
+private val MIN_SIZE = longPreferencesKey("min_size_bytes")
+private val MAX_SIZE = longPreferencesKey("max_size_bytes")
 
 /** Where playback stopped, so the next launch can offer to continue. */
 private fun resumeKey(chatId: Long, messageId: Long) =
@@ -77,6 +79,28 @@ class SettingsStore(private val context: Context) {
         favorites.size == 1 -> favorites.first()
         preferred in favorites -> preferred
         else -> null
+    }
+
+    // ---- size filter ------------------------------------------------------------------------
+
+    val minSizeBytes: Flow<Long> =
+        context.prefs.data.map { it[MIN_SIZE] ?: SizeFilter.DEFAULT_MIN }
+
+    val maxSizeBytes: Flow<Long> =
+        context.prefs.data.map { it[MAX_SIZE] ?: SizeFilter.DEFAULT_MAX }
+
+    suspend fun setMinSizeBytes(value: Long) {
+        context.prefs.edit { prefs ->
+            val max = prefs[MAX_SIZE] ?: SizeFilter.DEFAULT_MAX
+            prefs[MIN_SIZE] = SizeFilter.clampMin(value, max)
+        }
+    }
+
+    suspend fun setMaxSizeBytes(value: Long) {
+        context.prefs.edit { prefs ->
+            val min = prefs[MIN_SIZE] ?: SizeFilter.DEFAULT_MIN
+            prefs[MAX_SIZE] = SizeFilter.clampMax(value, min)
+        }
     }
 
     // ---- prompts ----------------------------------------------------------------------------

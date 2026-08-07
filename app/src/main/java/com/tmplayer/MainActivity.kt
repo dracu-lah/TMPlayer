@@ -25,6 +25,7 @@ import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.Td
 import com.tmplayer.player.PlayerActivity
 import com.tmplayer.player.StreamStats
@@ -77,6 +78,8 @@ private fun Root() {
     val watchProgress by settings.watchProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
     val jumpToFavorite by settings.jumpToFavorite.collectAsStateWithLifecycle(initialValue = true)
     val defaultChatId by settings.defaultChatId.collectAsStateWithLifecycle(initialValue = 0L)
+    val minSize by settings.minSizeBytes.collectAsStateWithLifecycle(initialValue = SizeFilter.DEFAULT_MIN)
+    val maxSize by settings.maxSizeBytes.collectAsStateWithLifecycle(initialValue = SizeFilter.DEFAULT_MAX)
 
     val chatsViewModel: ChatListViewModel = viewModel()
     val chatsState by chatsViewModel.state.collectAsStateWithLifecycle()
@@ -86,6 +89,7 @@ private fun Root() {
     var passwordError by remember { mutableStateOf<String?>(null) }
     var roomPrompt by remember { mutableStateOf<RoomPrompt?>(null) }
     var autoOpened by remember { mutableStateOf(false) }
+    var confirmExit by remember { mutableStateOf(false) }
 
     /**
      * Starts playback, first clearing the previous film when there is no room for both.
@@ -155,6 +159,23 @@ private fun Root() {
             screen = Screen.Media(chat)
         }
 
+        // At the top level Back would leave the app outright. One press asks first, because on
+        // a remote it sits right next to the D-pad and is very easy to hit by accident.
+        if (screen is Screen.Chats) {
+            val activity = LocalContext.current as? ComponentActivity
+            BackHandler { confirmExit = true }
+            if (confirmExit) {
+                TvConfirm(
+                    title = "Leave TMPlayer?",
+                    message = "You'll go back to the Android TV home screen.",
+                    confirmLabel = "Leave",
+                    destructive = false,
+                    onConfirm = { confirmExit = false; activity?.finish() },
+                    onDismiss = { confirmExit = false },
+                )
+            }
+        }
+
         when (val current = screen) {
             is Screen.Chats -> BrowseScreen(
                 state = chatsState,
@@ -174,6 +195,8 @@ private fun Root() {
                     chatId = current.chat.id,
                     chatTitle = current.chat.title,
                     isFavorite = current.chat.id in favorites,
+                    minSizeBytes = minSize,
+                    maxSizeBytes = maxSize,
                     watchProgress = watchProgress,
                     onToggleFavorite = { scope.launch { settings.toggleFavorite(current.chat.id) } },
                     onPlay = { play(it) },

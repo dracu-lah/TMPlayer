@@ -4,10 +4,12 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,6 +41,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,6 +57,7 @@ import androidx.tv.material3.Text
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.Td
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.TvConfirm
@@ -78,6 +87,12 @@ fun SettingsScreen(
     val jumpToFavorite by settings.jumpToFavorite.collectAsStateWithLifecycle(initialValue = true)
     val askBeforeClearing by settings.askBeforeClearing.collectAsStateWithLifecycle(initialValue = true)
     val defaultChatId by settings.defaultChatId.collectAsStateWithLifecycle(initialValue = 0L)
+    val minSize by settings.minSizeBytes.collectAsStateWithLifecycle(
+        initialValue = SizeFilter.DEFAULT_MIN,
+    )
+    val maxSize by settings.maxSizeBytes.collectAsStateWithLifecycle(
+        initialValue = SizeFilter.DEFAULT_MAX,
+    )
 
     var cacheBytes by remember { mutableStateOf(0L) }
     var disk by remember { mutableStateOf(DiskSpace.read(context)) }
@@ -114,6 +129,39 @@ fun SettingsScreen(
                     color = TextMuted,
                 )
             }
+        }
+
+        // ---- what shows up --------------------------------------------------------------
+
+        item { SectionTitle("Video size") }
+        item {
+            Text(
+                "Only files between these sizes are listed, which keeps trailers and clips out " +
+                    "of the way without hiding real films.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextMuted,
+                modifier = Modifier.padding(bottom = 4.dp, start = 4.dp),
+            )
+        }
+        item {
+            SliderRow(
+                title = "Smallest",
+                value = minSize,
+                other = maxSize,
+                onStep = { direction ->
+                    scope.launch { settings.setMinSizeBytes(SizeFilter.step(minSize, direction)) }
+                },
+            )
+        }
+        item {
+            SliderRow(
+                title = "Largest",
+                value = maxSize,
+                other = minSize,
+                onStep = { direction ->
+                    scope.launch { settings.setMaxSizeBytes(SizeFilter.step(maxSize, direction)) }
+                },
+            )
         }
 
         // ---- storage ------------------------------------------------------------------------
@@ -249,6 +297,91 @@ fun SettingsScreen(
         )
 
         null -> Unit
+    }
+}
+
+/**
+ * A slider a remote can actually drive: left and right nudge it, and the value is spelled out
+ * rather than left to be guessed from the thumb position.
+ *
+ * Left/right are consumed here, so focus cannot escape sideways mid-adjustment. Settings is a
+ * single vertical column, so nothing is lost by that.
+ */
+@Composable
+private fun SliderRow(title: String, value: Long, other: Long, onStep: (Int) -> Unit) {
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusedAsState()
+    val background by animateColorAsState(
+        targetValue = if (focused) Accent else SurfaceDark,
+        animationSpec = tween(140),
+        label = "sliderBackground",
+    )
+    val onSurface = if (focused) Color.White else TextPrimary
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(background)
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                when (event.key) {
+                    Key.DirectionLeft -> { onStep(-1); true }
+                    Key.DirectionRight -> { onStep(1); true }
+                    else -> false
+                }
+            }
+            .focusable(interactionSource = interactions)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                SizeFilter.label(value),
+                style = MaterialTheme.typography.titleMedium,
+                color = onSurface,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Track(value = value, other = other, focused = focused)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            if (focused) "Left and right to adjust" else "0 MB to 8 GB",
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (focused) Color.White.copy(alpha = 0.85f) else TextMuted,
+        )
+    }
+}
+
+/** The filled span is the range that will be listed, not merely the value's position. */
+@Composable
+private fun Track(value: Long, other: Long, focused: Boolean) {
+    val low = minOf(value, other)
+    val high = maxOf(value, other)
+
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(12.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (focused) Color.White.copy(alpha = 0.25f) else SurfaceRaised),
+    ) {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val width = maxWidth
+            Box(
+                Modifier
+                    .padding(start = width * SizeFilter.fraction(low))
+                    .width((width * (SizeFilter.fraction(high) - SizeFilter.fraction(low)))
+                        .coerceAtLeast(4.dp))
+                    .fillMaxHeight()
+                    .background(if (focused) Color.White else Accent),
+            )
+        }
     }
 }
 

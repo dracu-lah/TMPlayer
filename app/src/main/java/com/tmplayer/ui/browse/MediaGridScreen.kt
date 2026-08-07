@@ -71,8 +71,13 @@ import com.tmplayer.ui.theme.TextPrimary
 import com.tmplayer.ui.theme.Tv
 
 @Suppress("UNCHECKED_CAST")
-private class MediaListViewModelFactory(private val chatId: Long) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T = MediaListViewModel(chatId) as T
+private class MediaListViewModelFactory(
+    private val chatId: Long,
+    private val minSize: Long,
+    private val maxSize: Long,
+) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T =
+        MediaListViewModel(chatId, minSize, maxSize) as T
 }
 
 @Composable
@@ -80,13 +85,17 @@ fun MediaGridScreen(
     chatId: Long,
     chatTitle: String,
     isFavorite: Boolean,
+    minSizeBytes: Long,
+    maxSizeBytes: Long,
     watchProgress: Map<String, WatchPoint>,
     onToggleFavorite: () -> Unit,
     onPlay: (MediaItem) -> Unit,
 ) {
+    // The limits are part of the key: changing them in Settings has to rebuild the listing,
+    // not leave a stale one filtered by the old bounds.
     val viewModel: MediaListViewModel = viewModel(
-        key = "media-$chatId",
-        factory = MediaListViewModelFactory(chatId),
+        key = "media-$chatId-$minSizeBytes-$maxSizeBytes",
+        factory = MediaListViewModelFactory(chatId, minSizeBytes, maxSizeBytes),
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
     var query by remember { mutableStateOf("") }
@@ -291,6 +300,26 @@ private fun MediaCard(
                 fallbackLabel = item.title,
                 modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f),
             )
+            val tags = item.qualityTags
+            if (tags.isNotEmpty()) {
+                Row(
+                    Modifier.align(Alignment.TopEnd).padding(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    tags.forEach { tag ->
+                        Text(
+                            tag,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color.Black.copy(alpha = 0.72f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+            }
             if (watched != null && watched.fraction > 0f) {
                 // A thin bar along the bottom of the art — the one place a viewer already looks
                 // to see whether they have started something.
