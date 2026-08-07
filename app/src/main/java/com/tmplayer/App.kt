@@ -3,6 +3,7 @@ package com.tmplayer
 import android.app.Application
 import com.tmplayer.data.RemoteImages
 import com.tmplayer.data.Td
+import com.tmplayer.data.Tmdb
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -17,6 +18,9 @@ class App : Application() {
         // Poster art outlives the process: re-fetching every backdrop on each launch would be a
         // visible stall on a stick that is already slow to start.
         RemoteImages.init(cacheDir)
+        // The answers behind that art outlive it by the same reasoning: a film's details are the
+        // same next week, and asking again costs a request per card on every cold start.
+        Tmdb.init(cacheDir)
     }
 
     companion object {

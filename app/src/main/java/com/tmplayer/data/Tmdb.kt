@@ -3,13 +3,17 @@ package com.tmplayer.data
 import android.util.LruCache
 import com.tmplayer.BuildConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
+import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.security.MessageDigest
 
 /** One credited performer, in billing order. */
 data class CastMember(
@@ -71,6 +75,24 @@ object Tmdb {
 
     private val cache = LruCache<String, FilmLookup>(CACHE_ENTRIES)
 
+    @Volatile
+    private var diskDir: File? = null
+
+    /** Guards against two cards looking the same film up at once, which is the common case. */
+    private val inFlight = mutableMapOf<String, Mutex>()
+    private val inFlightLock = Mutex()
+
+    /**
+     * Points the answer cache at a directory on disk.
+     *
+     * The memory cache dies with the process, and this app is routinely killed behind the player
+     * on a 1 GB stick, so without this every launch re-asks TMDB about the same films: the details
+     * panel and the artwork on every Continue watching card. The payloads are a few kilobytes each.
+     */
+    fun init(cacheDir: File) {
+        diskDir = File(cacheDir, "tmdb-answers").apply { mkdirs() }
+    }
+
     fun imageUrl(path: String?, size: String): String? {
         if (path.isNullOrBlank()) return null
         return "$IMAGE_BASE/$size$path"
@@ -79,9 +101,9 @@ object Tmdb {
     /**
      * Looks a film up from its release file name.
      *
-     * Results are cached, failures included: a chat with two hundred films would otherwise fire
-     * two hundred requests every time the grid was scrolled, and a service that is down will
-     * still be down a second later.
+     * Answers are cached in memory, then on disk, failures included: a chat with two hundred films
+     * would otherwise fire two hundred requests every time the grid was scrolled, and a service
+     * that is down will still be down a second later.
      */
     suspend fun lookup(fileName: String): FilmLookup {
         if (!isConfigured) return FilmLookup.Disabled
@@ -92,17 +114,79 @@ object Tmdb {
         val key = parsed.query.lowercase()
         cache.get(key)?.let { return it }
 
-        val result = withContext(Dispatchers.IO) {
-            withTimeoutOrNull(TIMEOUT_MS) { fetch(parsed) }
-                ?: FilmLookup.Failed("The film database took too long to answer.")
-        }
+        // One request per film, however many cards are asking. Whoever queues behind the first
+        // finds the answer in the memory cache and never touches the network.
+        val lock = inFlightLock.withLock { inFlight.getOrPut(key) { Mutex() } }
+        return lock.withLock {
+            cache.get(key)?.let { return@withLock it }
 
-        // A timeout is worth retrying on the next open, so it is the one outcome left uncached.
-        if (result !is FilmLookup.Failed) cache.put(key, result)
-        return result
+            val result = withContext(Dispatchers.IO) {
+                fromDisk(key)
+                    ?: withTimeoutOrNull(TIMEOUT_MS) { fetch(parsed, key) }
+                    ?: FilmLookup.Failed("The film database took too long to answer.")
+            }
+
+            // A timeout is worth retrying on the next open, so it is the one outcome left uncached.
+            if (result !is FilmLookup.Failed) cache.put(key, result)
+            result
+        }.also {
+            inFlightLock.withLock { inFlight.remove(key) }
+        }
     }
 
-    private fun fetch(parsed: ParsedName): FilmLookup = try {
+    /**
+     * A previous answer, if one was stored and has not gone stale.
+     *
+     * A film's details barely change once it is released, so [DISK_TTL_MS] is generous; "no such
+     * film" expires sooner, because that is the answer most likely to be wrong later — TMDB gains
+     * entries, and a release name we could not match today may match after the next scene rename.
+     */
+    private fun fromDisk(key: String): FilmLookup? {
+        val file = cacheFile(key) ?: return null
+        if (!file.exists()) return null
+        return runCatching {
+            val stored = JSONObject(file.readText())
+            val age = System.currentTimeMillis() - stored.optLong("at")
+            val notFound = stored.optBoolean("notFound")
+            val ttl = if (notFound) MISS_TTL_MS else DISK_TTL_MS
+            when {
+                age !in 0..ttl -> null
+                notFound -> FilmLookup.NotFound
+                else -> stored.optJSONObject("details")?.let {
+                    FilmLookup.Found(parseDetails(it, stored.optInt("id")))
+                }
+            }
+        }.getOrNull()
+    }
+
+    private fun toDisk(key: String, id: Int, details: JSONObject?) {
+        val file = cacheFile(key) ?: return
+        runCatching {
+            val stored = JSONObject()
+                .put("at", System.currentTimeMillis())
+                .put("id", id)
+            if (details == null) stored.put("notFound", true) else stored.put("details", details)
+            // Through a temporary file: a write cut halfway would otherwise leave truncated JSON
+            // that every later read has to throw away, which is the cache quietly not working.
+            val temp = File(file.parentFile, "${file.name}.part")
+            temp.writeText(stored.toString())
+            if (!temp.renameTo(file)) temp.delete()
+        }
+    }
+
+    private fun cacheFile(key: String): File? {
+        val dir = diskDir ?: return null
+        val digest = MessageDigest.getInstance("SHA-1").digest(key.toByteArray())
+        return File(dir, digest.joinToString("") { "%02x".format(it) })
+    }
+
+    /** Called when the viewer clears the cache, so answers do not survive a deliberate wipe. */
+    fun clearCache() {
+        cache.evictAll()
+        runCatching { diskDir?.listFiles()?.forEach { it.delete() } }
+    }
+
+    private fun fetch(parsed: ParsedName, key: String): FilmLookup = try {
         val search = buildString {
             append("$API_BASE/search/movie?api_key=${BuildConfig.TMDB_API_KEY}")
             append("&query=${encode(parsed.title)}")
@@ -113,7 +197,7 @@ object Tmdb {
         val first = if (results == null || results.length() == 0) null else results.getJSONObject(0)
 
         when {
-            first != null -> FilmLookup.Found(details(first.getInt("id")))
+            first != null -> FilmLookup.Found(details(first.getInt("id"), key))
 
             // A year narrows the search, but scene names carry the wrong year often enough that
             // giving up on the first miss would lose real matches. Retry on the title alone.
@@ -121,11 +205,18 @@ object Tmdb {
                 val loose = "$API_BASE/search/movie?api_key=${BuildConfig.TMDB_API_KEY}" +
                     "&query=${encode(parsed.title)}"
                 val retry = getJson(loose).optJSONArray("results")
-                if (retry == null || retry.length() == 0) FilmLookup.NotFound
-                else FilmLookup.Found(details(retry.getJSONObject(0).getInt("id")))
+                if (retry == null || retry.length() == 0) {
+                    toDisk(key, id = 0, details = null)
+                    FilmLookup.NotFound
+                } else {
+                    FilmLookup.Found(details(retry.getJSONObject(0).getInt("id"), key))
+                }
             }
 
-            else -> FilmLookup.NotFound
+            else -> {
+                toDisk(key, id = 0, details = null)
+                FilmLookup.NotFound
+            }
         }
     } catch (e: IOException) {
         FilmLookup.Failed(humanise(e))
@@ -135,10 +226,15 @@ object Tmdb {
     }
 
     /** One extra request, batched: TMDB folds credits and videos into the detail response. */
-    private fun details(id: Int): FilmDetails {
+    private fun details(id: Int, key: String): FilmDetails {
         val url = "$API_BASE/movie/$id?api_key=${BuildConfig.TMDB_API_KEY}" +
             "&append_to_response=credits,videos"
-        return parseDetails(getJson(url), id)
+        val json = getJson(url)
+        // Stored as it arrived rather than as a flattened [FilmDetails]: the payload is already
+        // the format this file knows how to read, so nothing needs a second parser or a migration
+        // the day a field is added to the model.
+        toDisk(key, id, json)
+        return parseDetails(json, id)
     }
 
     /**
@@ -243,6 +339,12 @@ object Tmdb {
     private const val API_BASE = "https://api.themoviedb.org/3"
     private const val IMAGE_BASE = "https://image.tmdb.org/t/p"
     private const val CACHE_ENTRIES = 80
+
+    /** A released film's details do not change; a month is short only against how long they last. */
+    private const val DISK_TTL_MS = 30L * 24 * 60 * 60 * 1000
+
+    /** "No such film" is the answer most likely to be wrong later, so it is kept for a week. */
+    private const val MISS_TTL_MS = 7L * 24 * 60 * 60 * 1000
     private const val MAX_CAST = 8
     private const val TIMEOUT_MS = 12_000L
     private const val CONNECT_TIMEOUT_MS = 8_000
