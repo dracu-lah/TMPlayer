@@ -134,7 +134,14 @@ class MediaListViewModel(
     private fun withinSizeLimits(item: MediaItem) =
         SizeFilter.matches(item.sizeBytes, minSizeBytes, maxSizeBytes)
 
-    /** Called when focus nears the end of the grid. */
+    /**
+     * Called when focus nears the end of the listing.
+     *
+     * Scrolling never stops at a page boundary: pages keep being pulled until this one actually
+     * grew, or the chat ran out. Without that, a page whose films are all outside the size limits
+     * adds nothing, the item count does not change, and the screen the viewer is scrolling has no
+     * reason left to ask for more — the listing simply stops short of the end of the chat.
+     */
     fun loadMore() {
         val current = _state.value as? UiState.Content ?: return
         if (current.value.loadingMore || current.value.endReached) return
@@ -142,18 +149,44 @@ class MediaListViewModel(
 
         _state.value = UiState.Content(current.value.copy(loadingMore = true))
         pageJob = viewModelScope.launch {
-            runCatching { repository.mediaPage(chatId, cursors, query) }
-                .onSuccess { rawPage ->
-                    val page = rawPage.copy(items = rawPage.items.filter(::withinSizeLimits))
-                    cursors = page.cursors
-                    val merged = (current.value.items + page.items).distinctBy { it.messageId }
-                    _state.value = UiState.Content(
-                        MediaListState(merged, loadingMore = false, endReached = page.endReached),
-                    )
-                }
-                .onFailure {
-                    _state.value = UiState.Content(current.value.copy(loadingMore = false, endReached = true))
-                }
+            var items = current.value.items
+            var endReached = false
+            var failed = false
+            // A chat can hold thousands of files that the size limits all reject, and the viewer
+            // is watching a "Loading more…" chip the whole time. After this many empty-handed
+            // pages it gives the screen back; the next scroll picks up where the cursors are.
+            var attempts = 0
+
+            while (
+                items.size == current.value.items.size &&
+                !endReached &&
+                !failed &&
+                attempts++ < MAX_EMPTY_PAGES
+            ) {
+                runCatching { repository.mediaPage(chatId, cursors, query) }
+                    .onSuccess { rawPage ->
+                        val page = rawPage.copy(items = rawPage.items.filter(::withinSizeLimits))
+                        cursors = page.cursors
+                        items = (items + page.items).distinctBy { it.messageId }
+                        endReached = page.endReached
+                    }
+                    .onFailure { failed = true }
+            }
+
+            _state.value = UiState.Content(
+                MediaListState(
+                    items = items,
+                    loadingMore = false,
+                    // A page that failed is not the end of the chat, only the end of this attempt.
+                    // Leaving the listing open means scrolling on retries it, rather than a single
+                    // dropped connection cutting the chat short for as long as it stays open.
+                    endReached = endReached,
+                ),
+            )
         }
+    }
+
+    private companion object {
+        const val MAX_EMPTY_PAGES = 8
     }
 }
