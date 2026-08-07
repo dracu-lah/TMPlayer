@@ -4,21 +4,23 @@
 
 <h1 align="center">TMPlayer</h1>
 
-<p align="center">Your Telegram films, on the TV, without downloading them first.</p>
+<p align="center">Your Telegram films, on the TV. Press play and it starts in seconds.</p>
 
 <p align="center">
   <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue" />
   <img alt="Platform" src="https://img.shields.io/badge/platform-Android%20TV%208.0%2B-3ddc84" />
-  <img alt="Tests" src="https://img.shields.io/badge/tests-127%20passing-brightgreen" />
+  <img alt="Tests" src="https://img.shields.io/badge/tests-146%20passing-brightgreen" />
 </p>
 
 ---
 
-You have films sitting in Telegram channels. Watching one on the TV means downloading eight
-gigabytes to a phone, copying it across, and finding somewhere to put it.
+You have films sitting in Telegram channels. Watching one on the TV usually means waiting for all
+eight gigabytes to land on a phone first, then finding a way to get the file across to the
+television and somewhere to keep it.
 
-TMPlayer skips all of that. Scan a QR code with your phone, pick a film, and it starts playing in
-a few seconds. Skip to the ninety-minute mark and it gets there in a few seconds too, because the
+TMPlayer downloads it too. The difference is that it does not make you wait: scan a QR code with
+your phone, pick a film, and it starts playing within seconds while the rest of it arrives behind
+the picture. Skip to the ninety-minute mark and it gets there in a few seconds too, because the
 download moves to wherever you are instead of grinding through everything before it.
 
 It runs on an 8 GB TV stick with a gigabyte of RAM, because that is what it was built and tested
@@ -31,7 +33,8 @@ on.
 ## What it does
 
 **Signs in with a QR code.** Open Telegram on your phone, go to Settings → Devices → Link Desktop
-Device, point it at the TV. No typing an email address with a D-pad. Two-step verification works.
+Device, point it at the TV. No typing an email address with a D-pad. Two-step verification works,
+and a five-page walkthrough on first run says what to press, replayable from Settings.
 
 **Shows films, not messages.** Every chat and channel you are in, listed as poster grids of the
 videos inside them. Text messages never appear. Documents are matched by name and type, because
@@ -50,15 +53,34 @@ subtitles, including image-based PGS and VobSub. Dual audio tracks you can switc
 DTS, TrueHD and E-AC3 decode in software when the stick has no silicon for them, while video stays
 on the hardware decoder.
 
+**Tells you what the film is.** Choosing one shows its poster, year, runtime, rating, genres,
+synopsis and cast from [The Movie Database](https://www.themoviedb.org), matched from the release
+file name, with the trailer a press away. Channel branding, uploader handles and language markers
+are stripped off the name before it is looked up, because that is how films actually arrive.
+
+**Knows a series from a film.** A name carrying `S02E04`, `2x04`, `Season 2 Episode 4` or a whole
+season is looked up in the television side of the database instead, and the panel shows that
+episode's own title, synopsis and still. A **Next** button plays the following episode from the
+same chat.
+
 **Remembers where you stopped.** Every film, with a progress bar on its poster. Hold OK on one to
 forget it, or clear the whole Continue watching list at once from its heading or from Settings.
+Starring a chat keeps it in Favourites, and the chat you last watched from reopens on launch.
 
 **Keeps one film on the device.** An 8 GB stick cannot hold a library. TMPlayer caches the film you
-are watching and clears the previous one, showing you exactly how much space that frees and asking
-before it does it.
+are watching and clears the previous one, telling you exactly how much space that freed. A setting
+turns that into a question first, for anyone who would rather be asked.
 
-**Finds things by voice.** Press Speak and say a channel or a file name. It uses the microphone
-already in your remote and asks for no permissions to do it.
+**Stays out of the way.** Rows or posters, chosen beside the list it rearranges and remembered.
+Size limits so a chat full of stickers and clips does not bury the films. A resolution badge on
+each tile and nothing else, because the codec was never going to change anyone's mind.
+
+**Finds things by voice.** Press the microphone and say a channel or a file name. It uses the
+microphone already in your remote and asks for no permissions to do it.
+
+**Keeps itself current.** It checks GitHub once a launch, puts an amber *Update* on the rail when
+there is a newer release, and downloads and installs it for you. Signing out clears everything it
+ever kept: the session, your history, favourites, artwork and cached answers.
 
 <p align="center">
   <img src="docs/screenshots/settings.webp" width="90%" alt="TMPlayer settings" />

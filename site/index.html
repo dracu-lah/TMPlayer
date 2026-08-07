@@ -153,6 +153,7 @@
       <span class="nav-links">
         <a href="#download">Download</a>
         <a href="#screenshots">Screens</a>
+        <a href="#features">Features</a>
         <a href="#install">Install</a>
         <a href="#feedback">Get in touch</a>
       </span>
@@ -272,9 +273,9 @@
         </figure>
         <figure class="shot" data-reveal>
           <div class="frame">
-            <img src="screenshots/grid.webp" alt="A grid of film posters from a Telegram channel, each tile labelled with a file name, size and quality tags such as 720p, HDR and HEVC." width="1920" height="1080" loading="lazy" decoding="async">
+            <img src="screenshots/grid.webp" alt="A grid of film posters from a Telegram channel, each tile labelled with a file name, its size and its resolution." width="1920" height="1080" loading="lazy" decoding="async">
           </div>
-          <figcaption><b>Grid</b>Videos in a chat, as poster tiles with quality tags, file size and where you stopped watching.</figcaption>
+          <figcaption><b>Grid</b>Videos in a chat, as poster tiles with the resolution, the file size and where you stopped watching.</figcaption>
         </figure>
         <figure class="shot" data-reveal>
           <div class="frame">
@@ -282,6 +283,38 @@
           </div>
           <figcaption><b>Details</b>Poster, synopsis and cast come from The Movie Database when a key is configured. Without one, everything else still works.</figcaption>
         </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="features" aria-labelledby="features-h">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <div class="section-title">
+          <h2 id="features-h">What it does</h2>
+          <p class="section-sub">Built for one television and one remote.</p>
+        </div>
+      </div>
+
+      <div class="two-col" data-reveal>
+        <div class="panel">
+          <h3>Watching</h3>
+          <ul class="ticks">
+            <li><strong>Starts in seconds and seeks properly.</strong> Skipping ahead re-aims the download instead of waiting for it. A setting fetches the whole film first if your connection would rather.</li>
+            <li><strong>Plays what films arrive as.</strong> MKV, MP4, AVI and TS. Embedded subtitles, image-based ones included. Dual audio you can switch mid-film.</li>
+            <li><strong>Remembers where you stopped</strong>, film by film, with a progress bar on the poster and a Continue watching row waiting on launch.</li>
+            <li><strong>Keeps one film on the device.</strong> An 8 GB stick cannot hold a library, so the previous one goes and the app tells you how much that freed.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Finding</h3>
+          <ul class="ticks">
+            <li><strong>Names it properly.</strong> Channel branding, uploader handles and language markers come off the file name, so the poster, synopsis, rating and cast actually match the film.</li>
+            <li><strong>Knows a series from a film.</strong> An episode gets its own title, synopsis and still, and a Next button plays the one after it.</li>
+            <li><strong>Search by voice</strong>, using the microphone already in your remote. Star the chats you watch from and they sit one press away.</li>
+            <li><strong>Updates itself.</strong> It notices a newer release on GitHub and installs it, and signing out clears everything it ever kept.</li>
+          </ul>
+        </div>
       </div>
     </div>
   </section>
@@ -336,7 +369,7 @@ adb install TMPlayer-&lt;version&gt;-armeabi-v7a.apk</code></pre>
           <h3>What it is</h3>
           <ul class="ticks">
             <li>A player for <strong>your own</strong> Telegram account, signed in through Telegram's own official library.</li>
-            <li>A way to watch videos in the chats and channels <strong>you have already joined</strong>, without putting them on a phone first.</li>
+            <li>A way to watch videos in the chats and channels <strong>you have already joined</strong>, without waiting for the whole file or moving it off a phone first.</li>
             <li>Free and open source. You can read every line and build it yourself.</li>
           </ul>
         </div>

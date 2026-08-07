@@ -48,8 +48,12 @@ import com.tmplayer.ui.onboarding.OverviewScreen
 import com.tmplayer.ui.update.UpdateDialog
 import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.theme.TMPlayerTheme
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+
+/** How long a first press of Back stays armed before it is forgotten. */
+private const val EXIT_WINDOW_MS = 2_000L
 
 /** Where the user is. Deliberately three screens deep and no more. */
 private sealed interface Screen {
@@ -138,7 +142,8 @@ private fun Root() {
     // must not be drawn: it would appear fully for a moment and then be replaced, which reads as
     // a glitch rather than as opening the chat the viewer asked to come back to.
     var autoOpenDecided by rememberSaveable { mutableStateOf(false) }
-    var confirmExit by remember { mutableStateOf(false) }
+    // Whether a first press of Back has already been made at the top level.
+    var exitArmed by remember { mutableStateOf(false) }
     // Hoisted out of BrowseScreen: opening a chat replaces that screen entirely, so a tab held
     // down there would be forgotten every time the viewer backed out of a film.
     var pickedTab by rememberSaveable { mutableStateOf<BrowseTab?>(null) }
@@ -251,20 +256,22 @@ private fun Root() {
             autoOpenDecided = true
         }
 
-        // At the top level Back would leave the app outright. One press asks first, because on
-        // a remote it sits right next to the D-pad and is very easy to hit by accident.
+        // At the top level Back would leave the app outright, and on a remote it sits right next
+        // to the D-pad and is very easy to hit by accident. Two presses, the way every other app
+        // on this television does it: a dialog for something this ordinary was too much ceremony,
+        // and it had to be read and answered before the viewer could carry on.
         if (screen is Screen.Chats) {
             val activity = LocalContext.current as? ComponentActivity
-            BackHandler { confirmExit = true }
-            if (confirmExit) {
-                TvConfirm(
-                    title = "Leave TMPlayer?",
-                    message = "You'll go back to the Android TV home screen.",
-                    confirmLabel = "Leave",
-                    destructive = false,
-                    onConfirm = { confirmExit = false; activity?.finish() },
-                    onDismiss = { confirmExit = false },
-                )
+            BackHandler {
+                if (exitArmed) activity?.finish() else { exitArmed = true; toast("Press Back again to leave") }
+            }
+            // The second press has to follow the first, not arrive ten minutes later on a screen
+            // the viewer has long since forgotten pressing Back on.
+            LaunchedEffect(exitArmed) {
+                if (exitArmed) {
+                    delay(EXIT_WINDOW_MS)
+                    exitArmed = false
+                }
             }
         }
 

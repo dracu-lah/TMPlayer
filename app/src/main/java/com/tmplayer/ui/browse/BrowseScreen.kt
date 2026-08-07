@@ -1249,7 +1249,7 @@ private fun EmptyTab(tab: BrowseTab, query: String) {
                 style = MaterialTheme.typography.titleLarge,
                 color = TextMuted,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.widthIn(max = 520.dp),
+                modifier = Modifier.widthIn(max = 400.dp),
             )
         }
     }
