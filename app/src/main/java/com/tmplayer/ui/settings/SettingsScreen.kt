@@ -67,6 +67,7 @@ import com.tmplayer.data.Td
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvConfirm
+import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
@@ -102,6 +103,7 @@ fun SettingsScreen(
         initialValue = SizeFilter.DEFAULT_MAX,
     )
 
+    val toast = rememberToast()
     var cacheBytes by remember { mutableStateOf(0L) }
     var disk by remember { mutableStateOf(DiskSpace.read(context)) }
     var busy by remember { mutableStateOf<String?>(null) }
@@ -290,7 +292,14 @@ fun SettingsScreen(
                     title = "Forget it",
                     subtitle = "Start at the chat list again until you open another chat",
                     icon = Icons.Filled.Close,
-                    onClick = { scope.launch { settings.forgetLastChat() } },
+                    // This row deletes itself on success, so without a word it reads as the app
+                    // having lost the press rather than having done what was asked.
+                    onClick = {
+                        scope.launch {
+                            settings.forgetLastChat()
+                            toast("TMPlayer will start at the chat list")
+                        }
+                    },
                 )
             }
         }
@@ -334,9 +343,11 @@ fun SettingsScreen(
                 prompt = null
                 scope.launch {
                     busy = "Deleting…"
+                    val freed = cacheBytes
                     runCatching { Td.clearMediaCache() }
                     refresh()
                     busy = null
+                    toast("Freed ${StreamStats.formatBytes(freed)}")
                 }
             },
             onDismiss = { prompt = null },
@@ -349,7 +360,13 @@ fun SettingsScreen(
             confirmLabel = "Clear",
             onConfirm = {
                 prompt = null
-                scope.launch { settings.clearWatchHistory() }
+                scope.launch {
+                    val count = history.size
+                    settings.clearWatchHistory()
+                    // The rows being cleared are on the browse screen, not this one; the only
+                    // thing that changes here is a row disappearing further down the list.
+                    toast(if (count == 1) "Continue watching cleared" else "$count films forgotten")
+                }
             },
             onDismiss = { prompt = null },
         )

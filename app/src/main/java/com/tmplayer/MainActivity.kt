@@ -26,6 +26,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.MaterialTheme
 import com.tmplayer.data.AuthState
 import com.tmplayer.data.CachePolicy
+import com.tmplayer.data.CardLayout
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.DiskInfo
@@ -45,6 +46,7 @@ import com.tmplayer.ui.browse.MediaGridScreen
 import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.LowSpaceWarning
 import com.tmplayer.ui.components.UiState
+import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tv
@@ -91,6 +93,26 @@ private fun Root() {
     val lastChatId by settings.lastChatId.collectAsStateWithLifecycle(initialValue = 0L)
     val minSize by settings.minSizeBytes.collectAsStateWithLifecycle(initialValue = SizeFilter.DEFAULT_MIN)
     val maxSize by settings.maxSizeBytes.collectAsStateWithLifecycle(initialValue = SizeFilter.DEFAULT_MAX)
+    val chatLayout by settings.chatLayout.collectAsStateWithLifecycle(initialValue = CardLayout.List)
+    val filmLayout by settings.filmLayout.collectAsStateWithLifecycle(initialValue = CardLayout.Grid)
+
+    val toast = rememberToast()
+
+    // Half-watched entries that can no longer be turned into a card are swept once per launch.
+    // Left alone they are invisible: the tab skips them, so nothing the viewer can press will
+    // ever clear them. The message is only worth showing when something actually went.
+    LaunchedEffect(Unit) {
+        val removed = runCatching { settings.pruneBrokenHistory() }.getOrDefault(0)
+        if (removed > 0) {
+            toast(
+                if (removed == 1) {
+                    "Removed a film TMPlayer can no longer open from Continue watching"
+                } else {
+                    "Removed $removed films TMPlayer can no longer open from Continue watching"
+                },
+            )
+        }
+    }
 
     val chatsViewModel: ChatListViewModel = viewModel()
     val chatsState by chatsViewModel.state.collectAsStateWithLifecycle()
@@ -228,7 +250,21 @@ private fun Root() {
                     onOpenChat = { openChat(it) },
                     onResumeFilm = { resumeFilm(it) },
                     onOpenSettings = { screen = Screen.Settings },
-                    onToggleFavorite = { scope.launch { settings.toggleFavorite(it.id) } },
+                    onToggleFavorite = { chat ->
+                        scope.launch {
+                            // The star lands on a row the menu was covering, and in the Favourites
+                            // tab the row leaves the screen altogether, so the only account of what
+                            // happened is this line.
+                            val nowFavorite = settings.toggleFavorite(chat.id)
+                            toast(
+                                if (nowFavorite) {
+                                    "${chat.title} added to Favourites"
+                                } else {
+                                    "${chat.title} removed from Favourites"
+                                },
+                            )
+                        }
+                    },
                     onRestartFilm = { record ->
                         scope.launch {
                             settings.clearResumePosition(record.chatId, record.messageId)
@@ -236,12 +272,24 @@ private fun Root() {
                         }
                     },
                     onForgetFilm = { record ->
-                        scope.launch { settings.clearResumePosition(record.chatId, record.messageId) }
+                        scope.launch {
+                            settings.clearResumePosition(record.chatId, record.messageId)
+                            toast("${record.title} removed from Continue watching")
+                        }
                     },
-                    onClearHistory = { scope.launch { settings.clearWatchHistory() } },
+                    onClearHistory = {
+                        scope.launch {
+                            settings.clearWatchHistory()
+                            toast("Continue watching cleared")
+                        }
+                    },
                     launchChatId = lastChatId,
                     picked = pickedTab,
                     onPickTab = { pickedTab = it },
+                    layout = chatLayout,
+                    onToggleLayout = {
+                        scope.launch { settings.setChatLayout(chatLayout.toggled()) }
+                    },
                     // Passed as a slot so it lands beside the rail. Stacked above the whole
                     // screen it pushed Settings off the bottom of a 540dp panel entirely.
                     banner = {
@@ -270,7 +318,18 @@ private fun Root() {
                     minSizeBytes = minSize,
                     maxSizeBytes = maxSize,
                     watchProgress = watchProgress,
-                    onToggleFavorite = { scope.launch { settings.toggleFavorite(current.chat.id) } },
+                    onToggleFavorite = {
+                        scope.launch {
+                            val nowFavorite = settings.toggleFavorite(current.chat.id)
+                            toast(
+                                if (nowFavorite) {
+                                    "${current.chat.title} added to Favourites"
+                                } else {
+                                    "${current.chat.title} removed from Favourites"
+                                },
+                            )
+                        }
+                    },
                     onPlay = { play(it, chatTitle = current.chat.title) },
                     onPlayFromStart = { item ->
                         // Clear the saved position before the player starts, so it opens at zero
@@ -279,6 +338,10 @@ private fun Root() {
                             settings.clearResumePosition(item.chatId, item.messageId)
                             play(item, chatTitle = current.chat.title)
                         }
+                    },
+                    layout = filmLayout,
+                    onToggleLayout = {
+                        scope.launch { settings.setFilmLayout(filmLayout.toggled()) }
                     },
                 )
             }

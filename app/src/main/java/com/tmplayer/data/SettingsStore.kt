@@ -22,6 +22,8 @@ private val LAST_CHAT = longPreferencesKey("last_chat")
 private val MIN_SIZE = longPreferencesKey("min_size_bytes")
 private val MAX_SIZE = longPreferencesKey("max_size_bytes")
 private val LOW_SPACE_DISMISSED_FREE = longPreferencesKey("low_space_dismissed_free_bytes")
+private val CHAT_LAYOUT = stringPreferencesKey("chat_layout")
+private val FILM_LAYOUT = stringPreferencesKey("film_layout")
 
 /** Where playback stopped, so the next launch can offer to continue. */
 private fun resumeKey(chatId: Long, messageId: Long) =
@@ -129,6 +131,33 @@ class SettingsStore(private val context: Context) {
             val min = prefs[MIN_SIZE] ?: SizeFilter.DEFAULT_MIN
             prefs[MAX_SIZE] = SizeFilter.clampMax(value, min)
         }
+    }
+
+    // ---- card layout ------------------------------------------------------------------------
+
+    /**
+     * How the chat sections are arranged.
+     *
+     * Rows by default: a chat is a name and a picture, and a name is what the viewer is reading.
+     */
+    val chatLayout: Flow<CardLayout> =
+        context.prefs.data.map { CardLayout.decode(it[CHAT_LAYOUT], CardLayout.List) }
+
+    suspend fun setChatLayout(value: CardLayout) {
+        context.prefs.edit { it[CHAT_LAYOUT] = value.name }
+    }
+
+    /**
+     * How a chat's films are arranged.
+     *
+     * Posters by default: this is the screen where artwork is what the viewer picks from, and four
+     * across is a whole shelf of films rather than four rows of file names.
+     */
+    val filmLayout: Flow<CardLayout> =
+        context.prefs.data.map { CardLayout.decode(it[FILM_LAYOUT], CardLayout.Grid) }
+
+    suspend fun setFilmLayout(value: CardLayout) {
+        context.prefs.edit { it[FILM_LAYOUT] = value.name }
     }
 
     // ---- prompts ----------------------------------------------------------------------------
@@ -254,6 +283,47 @@ class SettingsStore(private val context: Context) {
             }
             for (key in doomed) prefs.remove(key)
         }
+    }
+
+    /**
+     * Drops half-watched entries that can no longer become a card, and says how many went.
+     *
+     * A resume position is written the moment playback starts, but the description beside it comes
+     * from the film that was playing; a build that predates the description, a write interrupted by
+     * the stick killing the app, or a file id that has since been revoked all leave a position on
+     * disk that [continueWatching] can only skip. Skipping it every launch keeps a dead entry
+     * forever, and it counts against nothing the viewer can see or clear. This is the sweep that
+     * gets rid of them, and it uses the same decoder as the tab, so anything it deletes is exactly
+     * what the tab could not show.
+     */
+    suspend fun pruneBrokenHistory(): Int {
+        var removed = 0
+        context.prefs.edit { prefs ->
+            // Collected before anything is removed: [MutablePreferences] is being written to while
+            // its own map is walked otherwise.
+            val doomed = prefs.asMap().keys
+                .map { it.name }
+                .filter { it.startsWith("resume_") }
+                .mapNotNull { name ->
+                    val ids = name.removePrefix("resume_")
+                    val positionMs = prefs[longPreferencesKey(name)] ?: return@mapNotNull ids
+                    val record = ResumeRecord.decode(
+                        key = ids,
+                        encoded = prefs[stringPreferencesKey("meta_$ids")],
+                        positionMs = positionMs,
+                        durationMs = prefs[longPreferencesKey("duration_$ids")] ?: 0L,
+                    )
+                    if (record == null) ids else null
+                }
+
+            for (ids in doomed) {
+                prefs.remove(longPreferencesKey("resume_$ids"))
+                prefs.remove(longPreferencesKey("duration_$ids"))
+                prefs.remove(stringPreferencesKey("meta_$ids"))
+                removed++
+            }
+        }
+        return removed
     }
 
     suspend fun clearResumePosition(chatId: Long, messageId: Long) {
