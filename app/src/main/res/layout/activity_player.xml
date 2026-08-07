@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/player_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black">
+
+    <!-- Leanback's own playback fragment: video surface plus the whole transport UI. -->
+    <FrameLayout
+        android:id="@+id/playback_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Sits above the video but below any dialog, and clears the transport controls. -->
+    <androidx.media3.ui.SubtitleView
+        android:id="@+id/subtitles"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginBottom="24dp" />
+
+    <LinearLayout
+        android:id="@+id/status_overlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="32dp">
+
+        <ProgressBar
+            android:id="@+id/status_spinner"
+            style="?android:attr/progressBarStyleLarge"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:indeterminateTint="@color/accent" />
+
+        <TextView
+            android:id="@+id/status_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:gravity="center"
+            android:maxWidth="900dp"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp" />
+    </LinearLayout>
+
+    <!-- Track pickers are added here so they cover the video, not the other way round. -->
+    <FrameLayout
+        android:id="@+id/overlay_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+</FrameLayout>

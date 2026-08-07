@@ -5,4 +5,9 @@
         <item name="android:windowBackground">@color/background</item>
         <item name="android:colorBackground">@color/background</item>
     </style>
+
+    <!-- Playback runs on leanback's theme so its transport controls style themselves -->
+    <style name="Theme.TMPlayer.Player" parent="Theme.Leanback">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
 </resources>

@@ -1,4 +1,5 @@
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
@@ -67,13 +68,21 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
 
     buildFeatures {
         compose = true
         buildConfig = true
+        viewBinding = false
+    }
+
+    packaging {
+        resources.excludes += setOf("META-INF/*.version", "kotlin/**", "DebugProbesKt.bin")
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
     }
 }
 
@@ -86,7 +95,23 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.kotlinx.coroutines.android)
+
+    // Telegram — prebuilt TDLib 1.8.66 with a typed coroutine API and native libs for every ABI
+    implementation(libs.tdl.coroutines)
+    implementation(libs.zxing.core)
+
+    // Playback — Media3 core, the ready-made leanback TV player UI, and NextLib's
+    // FFmpeg audio renderers for DTS / TrueHD / E-AC3 tracks the stick can't decode natively.
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
+    implementation(libs.androidx.media3.ui.leanback)
+    implementation(libs.androidx.leanback)
+    implementation(libs.androidx.fragment.ktx)
+    implementation(libs.nextlib.media3ext)
+
+    implementation(libs.androidx.datastore.preferences)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

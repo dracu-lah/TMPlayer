@@ -14,15 +14,15 @@ No servers. No bots. No accounts other than your own Telegram. Nothing is hosted
 
 ## Features
 
-- [ ] **QR code login** — scan with the Telegram app on your phone (Settings → Devices → Link Desktop Device). 2FA supported. *(M1)*
-- [ ] **Media-only chat library** — all your chats and channels, showing just their videos and files in a big poster grid. *(M2)*
-- [ ] **Stream-while-downloading playback** — starts in seconds; seeking jumps the download to the target offset instead of waiting. *(M3)*
-- [ ] **Subtitles & audio tracks** — embedded SRT/ASS/VTT and image-based PGS/VobSub, plus audio track switching; ffmpeg-backed audio decoding for codecs TV sticks lack (DTS, TrueHD…). *(M3)*
-- [ ] **Resume watching** — every file remembers its position. *(M3)*
-- [ ] **8 GB-friendly storage guard** — streaming cache is hard-capped (default 1 GB) and auto-cleaned; no manual maintenance. *(M4)*
-- [x] **10-foot UI** — plain, dark, oversized; every screen has proper loading/error states; zero typing after login.
+- [x] **QR code login** — scan with the Telegram app on your phone (Settings → Devices → Link Desktop Device). Two-step verification supported.
+- [x] **Media-only chat library** — all your chats and channels, showing just their videos and movie files in a big poster grid.
+- [x] **Stream-while-downloading playback** — starts in seconds; seeking moves the download to the target offset instead of waiting for the file.
+- [x] **Subtitles & audio tracks** — embedded SRT/ASS/VTT and image-based PGS/VobSub, plus dual-audio switching; FFmpeg-backed audio decoding for codecs TV sticks lack (DTS, TrueHD, E-AC3).
+- [x] **Resume watching** — every file remembers where you stopped.
+- [x] **8 GB-friendly storage guard** — the streaming cache is capped (1 GB by default, 1/2/4 GB in Settings) and trimmed after every film.
+- [x] **10-foot UI** — plain, dark, oversized; every screen has proper loading and error states; zero typing after login.
 
-See [PLAN.md](PLAN.md) for the full design document and milestone plan.
+See [PLAN.md](PLAN.md) for the full design document, and [INSTALL.md](INSTALL.md) to put it on your TV.
 
 ## How it works
 
@@ -32,7 +32,7 @@ See [PLAN.md](PLAN.md) for the full design document and milestone plan.
 
 ## Building
 
-Requirements: JDK 17+, Android SDK (API 35).
+Requirements: JDK 17+ (21 recommended), Android SDK platform 35.
 
 1. Get your own Telegram API credentials at [my.telegram.org](https://my.telegram.org) → *API development tools* (free, 2 minutes). Every fork must use its own pair — they are not distributed with this repo.
 2. Create `local.properties` in the repo root:

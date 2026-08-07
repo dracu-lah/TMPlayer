@@ -202,22 +202,22 @@ Mechanisms (all TDLib built-ins — zero custom file bookkeeping):
 
 **Testing policy (applies to every milestone):** the genuinely custom logic — auth state machine, `TdDataSource` (the §6 seek matrix simulated against a fake TDLib backend), storage-cap policy, resume-position store — gets JVM unit tests with fakes, run via `./gradlew test` before a milestone closes. UI is verified on device/emulator. The on-device seek matrix is M3's hard exit gate. License: **Apache-2.0** (decided).
 
-**M0 — Skeleton (small)**  
+**M0 — Skeleton (small)** — ✅ **done** (2026-08-07)  
 git init; Gradle project; Compose-TV deps; leanback launcher manifest (`LEANBACK_LAUNCHER`, `android.software.leanback`, no-touchscreen); dark theme; placeholder screens with the loading/content/error scaffold; ABI splits; builds + installs on stick via wireless ADB.  ✅ *App icon opens to a placeholder on the TV.*
 
-**M1 — TDLib + QR login (the integration-risk milestone)**  
+**M1 — TDLib + QR login (the integration-risk milestone)** — ✅ **built**, awaiting on-device sign-in  
 Pick prebuilt artifact (order in §8); `TdClient` wrapper (send + updates Flow); auth state machine: `WaitTdlibParameters → WaitPhoneNumber(→requestQrCodeAuthentication) → WaitOtherDeviceConfirmation(render QR, auto-refresh) → [WaitPassword] → Ready`; session survives app restart; logout works.  ✅ *Scan QR with phone → land on an empty Chats screen; relaunch stays logged in.*
 
-**M2 — Chats + media grid**  
+**M2 — Chats + media grid** — ✅ **built**  
 Chat list paging; media-filtered message paging; thumbnails (minithumbnail → thumbnail swap); empty/error/loader states; focus restore.  ✅ *Browse a movie channel comfortably from the couch.*
 
-**M3 — Streaming playback + seeking (the correctness milestone)**  
+**M3 — Streaming playback + seeking (the correctness milestone)** — ✅ **built**; the §6 matrix is unit-tested against `DownloadWindow`, the on-stick pass is still owed  
 `TdDataSource`; PlayerActivity with leanback transport UI; subtitle/audio pickers; buffering overlay with speed; resume save/restore; **pass the full §6 seek matrix on the real stick**.  ✅ *Watch a movie end-to-end incl. jumping around; kill app mid-movie, reopen, resume.*
 
-**M4 — Storage guard + settings + polish**  
+**M4 — Storage guard + settings + polish** — ✅ **built**  
 `optimizeStorage` hooks + cap setting + usage screen; long-session RAM check on 1 GB profile emulator + stick; focus/back-button audit; QR expiry edge cases; error copy pass.  ✅ *After three movie nights, cache stays under cap; app never needs manual cleanup.*
 
-**M5 — Release build**  
+**M5 — Release build** — ✅ **done**; `INSTALL.md` shipped  
 R8 shrink, per-ABI release APKs, self-signed keystore, versioning, `INSTALL.md` (enable Developer options + wireless debugging on the stick, `adb connect <tv-ip>`, `adb install-multiple` / correct-ABI apk).  ✅ *You install a fresh APK on the stick without me.*
 
 Rough effort share: M0 5% · M1 25% · M2 15% · M3 35% · M4 15% · M5 5%. Token estimate held from earlier: ~1.5–3 M tokens through M3 (usable app), +~1–2 M for M4–M5, spread over several sessions. Emulator: Android TV API 28 x86_64 image with 1 GB RAM profile for the worst-case floor (needs a TDLib artifact with x86_64 — selection criterion in §8); real-stick verification for M3/M4 via wireless ADB.
@@ -228,9 +228,9 @@ Rough effort share: M0 5% · M1 25% · M2 15% · M3 35% · M4 15% · M5 5%. Toke
 
 | Risk | Mitigation |
 |---|---|
-| Prebuilt TDLib artifact unusable/stale | Three candidates ranked (§8); JSON-interface fallback needs only a thin typed layer. Decided in first hour of M1. |
-| 1 GB RAM pressure (2020 stick) | Budgets in §2; capped LoadControl; Coil cache small; test on 1 GB emulator profile early (M2), not at the end. |
-| Codec gaps on Amlogic (some DTS audio) | Clear in-player error message v1; ffmpeg-audio decoder extension = v2 backlog. Video (H.264/HEVC) is hardware-covered. |
+| Prebuilt TDLib artifact unusable/stale | Resolved: `dev.g000sha256:tdl-coroutines:9.0.0` (TDLib 1.8.66, natives for all four ABIs). It carries Kotlin 2.3 metadata, which is why the project compiles with Kotlin 2.3.10. |
+| 1 GB RAM pressure (2020 stick) | Budgets in §2; LoadControl capped at 20 MB with no back-buffer; thumbnails decode to RGB_565 behind a 12 MB LRU (no image library at all); 1 GB emulator profile still to be exercised. |
+| Codec gaps on Amlogic (some DTS audio) | Solved earlier than planned: NextLib's FFmpeg audio renderers ship in v1 behind `EXTENSION_RENDERER_MODE_ON`, so hardware decodes video and FFmpeg picks up DTS/TrueHD/E-AC3. Unsupported *video* codecs still surface a clear in-player message. |
 | Seek edge cases (moov-at-end, rapid seeks) | §6 test matrix is a hard M3 exit gate on the real device. |
 | Telegram flood limits on aggressive paging | Modest page sizes (30–40), no prefetch beyond one page, TDLib queues internally. |
 | QR token expiry loops / clock drift | Auto re-render on `updateAuthorizationState`; never surface as error. |
