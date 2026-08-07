@@ -8,12 +8,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -44,6 +47,9 @@ import com.tmplayer.ui.components.BigLoader
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.TextMuted
+import com.tmplayer.ui.theme.TextPrimary
+import com.tmplayer.ui.theme.Tv
+import com.tmplayer.ui.theme.tmButtonColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -65,14 +71,14 @@ fun LoginScreen(
 @Composable
 private fun QrPane(link: String) {
     Row(
-        Modifier.fillMaxSize().padding(horizontal = 72.dp),
+        Modifier.fillMaxSize().padding(horizontal = Tv.SafeH, vertical = Tv.SafeV),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(72.dp),
+        horizontalArrangement = Arrangement.spacedBy(40.dp),
     ) {
         // The code itself gets a white plate — contrast is what makes it scannable across a room.
         Box(
             Modifier
-                .size(420.dp)
+                .size(300.dp)
                 .clip(RoundedCornerShape(24.dp))
                 .background(Color.White),
             contentAlignment = Alignment.Center,
@@ -87,12 +93,12 @@ private fun QrPane(link: String) {
                 Image(
                     bitmap = rendered.asImageBitmap(),
                     contentDescription = "Telegram login QR code",
-                    modifier = Modifier.size(380.dp),
+                    modifier = Modifier.size(268.dp),
                 )
             }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Sign in to Telegram", style = MaterialTheme.typography.headlineLarge)
             Text(
                 "Scan this code with the phone your Telegram account is on.",
@@ -115,7 +121,7 @@ private fun QrPane(link: String) {
 private fun Step(number: Int, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
-            Modifier.size(34.dp).clip(RoundedCornerShape(17.dp)).background(Accent),
+            Modifier.size(28.dp).clip(RoundedCornerShape(14.dp)).background(Accent),
             contentAlignment = Alignment.Center,
         ) {
             Text("$number", style = MaterialTheme.typography.bodyLarge, color = Color.White)
@@ -130,11 +136,20 @@ private fun PasswordPane(hint: String, error: String?, onSubmit: (String) -> Uni
     var password by remember { mutableStateOf("") }
     val focus = remember { FocusRequester() }
 
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    // imePadding + scroll: the TV keyboard covers the lower half of the screen, and without
+    // both of these the field being typed into sits behind it.
+    Box(
+        Modifier
+            .fillMaxSize()
+            .imePadding()
+            .verticalScroll(rememberScrollState())
+            .padding(vertical = Tv.SafeV),
+        contentAlignment = Alignment.Center,
+    ) {
         Column(
-            Modifier.width(720.dp),
+            Modifier.width(640.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text("Two-step verification", style = MaterialTheme.typography.headlineLarge)
             Text(
@@ -148,7 +163,7 @@ private fun PasswordPane(hint: String, error: String?, onSubmit: (String) -> Uni
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(72.dp)
+                    .height(60.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(SurfaceDark)
                     .padding(horizontal = 24.dp),
@@ -158,21 +173,25 @@ private fun PasswordPane(hint: String, error: String?, onSubmit: (String) -> Uni
                     value = password,
                     onValueChange = { password = it },
                     singleLine = true,
-                    textStyle = MaterialTheme.typography.titleLarge,
+                    textStyle = MaterialTheme.typography.titleLarge.copy(color = TextPrimary),
                     cursorBrush = SolidColor(Accent),
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { onSubmit(password) }),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                    // Placeholder and field must be stacked, not siblings: emitted flat they
+                    // are laid out one after the other and the text lands off to the side.
                     decorationBox = { inner ->
-                        if (password.isEmpty()) {
-                            Text(
-                                "Password",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = TextMuted,
-                            )
+                        Box(contentAlignment = Alignment.CenterStart) {
+                            if (password.isEmpty()) {
+                                Text(
+                                    "Password",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = TextMuted,
+                                )
+                            }
+                            inner()
                         }
-                        inner()
                     },
                 )
             }
@@ -181,7 +200,11 @@ private fun PasswordPane(hint: String, error: String?, onSubmit: (String) -> Uni
                 Text(error, style = MaterialTheme.typography.bodyLarge, color = Accent)
             }
 
-            Button(onClick = { onSubmit(password) }, enabled = password.isNotEmpty()) {
+            Button(
+                onClick = { onSubmit(password) },
+                colors = tmButtonColors(),
+                enabled = password.isNotEmpty(),
+            ) {
                 Text("Sign in")
             }
         }
@@ -190,4 +213,4 @@ private fun PasswordPane(hint: String, error: String?, onSubmit: (String) -> Uni
     LaunchedEffect(Unit) { focus.requestFocus() }
 }
 
-private const val QR_PIXELS = 760
+private const val QR_PIXELS = 560

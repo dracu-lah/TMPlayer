@@ -3,17 +3,27 @@ package com.tmplayer.data
 import dev.g000sha256.tdl.TdlClient
 import dev.g000sha256.tdl.TdlResult
 import dev.g000sha256.tdl.dto.ChatListMain
+import dev.g000sha256.tdl.dto.ChatTypeBasicGroup
+import dev.g000sha256.tdl.dto.ChatTypeSupergroup
 import dev.g000sha256.tdl.dto.SearchMessagesFilterAnimation
 import dev.g000sha256.tdl.dto.SearchMessagesFilterDocument
 import dev.g000sha256.tdl.dto.SearchMessagesFilterVideo
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
+/** How a chat is grouped in the navigation rail. */
+enum class ChatKind(val label: String) {
+    Channel("Channels"),
+    Group("Groups"),
+    Direct("People"),
+}
+
 data class ChatSummary(
     val id: Long,
     val title: String,
     val miniThumbnail: ByteArray?,
     val photoFileId: Int,
+    val kind: ChatKind,
 ) {
     override fun equals(other: Any?) = other is ChatSummary && other.id == id
     override fun hashCode() = id.hashCode()
@@ -66,6 +76,7 @@ class ChatRepository(private val td: TdlClient = Td.client) {
                         title = chat.title.ifBlank { "Chat $id" },
                         miniThumbnail = chat.photo?.minithumbnail?.data,
                         photoFileId = chat.photo?.small?.id ?: 0,
+                        kind = kindOf(chat.type),
                     ),
                 )
             }
@@ -78,19 +89,23 @@ class ChatRepository(private val td: TdlClient = Td.client) {
      * The three searches run concurrently and are merged by message id, which is monotonic
      * per chat — so a straight descending sort restores true chronological order.
      */
-    suspend fun mediaPage(chatId: Long, cursors: MediaCursors = MediaCursors()): MediaPage =
+    suspend fun mediaPage(
+        chatId: Long,
+        cursors: MediaCursors = MediaCursors(),
+        query: String = "",
+    ): MediaPage =
         coroutineScope {
             val videos = async {
                 if (cursors.videoDone) null
-                else search(chatId, cursors.video, SearchMessagesFilterVideo())
+                else search(chatId, cursors.video, SearchMessagesFilterVideo(), query)
             }
             val documents = async {
                 if (cursors.documentDone) null
-                else search(chatId, cursors.document, SearchMessagesFilterDocument())
+                else search(chatId, cursors.document, SearchMessagesFilterDocument(), query)
             }
             val animations = async {
                 if (cursors.animationDone) null
-                else search(chatId, cursors.animation, SearchMessagesFilterAnimation())
+                else search(chatId, cursors.animation, SearchMessagesFilterAnimation(), query)
             }
 
             val videoResult = videos.await()
@@ -114,17 +129,30 @@ class ChatRepository(private val td: TdlClient = Td.client) {
             MediaPage(items, next, next.allDone)
         }
 
+    /**
+     * A supergroup is Telegram's one type for both broadcast channels and large groups; only the
+     * `isChannel` flag separates them, and getting it wrong puts a film channel under "Groups".
+     */
+    private fun kindOf(type: dev.g000sha256.tdl.dto.ChatType): ChatKind = when (type) {
+        is ChatTypeSupergroup -> if (type.isChannel) ChatKind.Channel else ChatKind.Group
+        is ChatTypeBasicGroup -> ChatKind.Group
+        else -> ChatKind.Direct
+    }
+
     private class SearchResult(val items: List<MediaItem>, val next: Long, val done: Boolean)
 
     private suspend fun search(
         chatId: Long,
         fromMessageId: Long,
         filter: dev.g000sha256.tdl.dto.SearchMessagesFilter,
+        query: String = "",
     ): SearchResult {
         val found = td.searchChatMessages(
             chatId = chatId,
             topicId = null,
-            query = "",
+            // Telegram matches a document search against its file name, which is exactly how
+            // films are named in these chats.
+            query = query,
             senderId = null,
             fromMessageId = fromMessageId,
             offset = 0,

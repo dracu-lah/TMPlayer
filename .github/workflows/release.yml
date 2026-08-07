@@ -1,0 +1,134 @@
+name: Release
+
+# Releases are cut deliberately, by pushing a tag:
+#
+#     git tag v0.3.0 && git push origin v0.3.0
+#
+# Nothing else builds a signed APK. That matters because this is the only job that can see the
+# signing key, and keeping it off the push-to-main path means an ordinary commit — or a pull
+# request from a stranger — can never reach it.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build signed release
+    runs-on: ubuntu-latest
+    # Attach required reviewers to this environment in repo settings to gate access to the key.
+    environment: release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Derive version from the tag
+        id: version
+        run: |
+          NAME="${GITHUB_REF_NAME#v}"
+          if [[ ! "$NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' is not vMAJOR.MINOR.PATCH"
+            exit 1
+          fi
+          # Android will not install an APK whose versionCode is lower than the installed one,
+          # so it is derived arithmetically from the tag and can only ever increase.
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$NAME"
+          CODE=$(( MAJOR * 10000 + MINOR * 100 + PATCH ))
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "Building $NAME (versionCode $CODE)"
+
+      - name: Restore signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::KEYSTORE_BASE64 is not set — see CONTRIBUTING.md for the setup commands"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
+          cat > keystore.properties <<EOF
+          storeFile=release.keystore
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
+      - name: Write Telegram credentials
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+        run: |
+          if [ -z "$TG_API_ID" ]; then
+            echo "::error::TG_API_ID is not set — the released APK would not be able to sign in"
+            exit 1
+          fi
+          cat > local.properties <<EOF
+          TG_API_ID=$TG_API_ID
+          TG_API_HASH=$TG_API_HASH
+          EOF
+
+      - name: Run unit tests
+        run: ./gradlew :app:test
+
+      - name: Build signed APKs
+        run: |
+          ./gradlew :app:assembleRelease \
+            -PtmVersionName=${{ steps.version.outputs.name }} \
+            -PtmVersionCode=${{ steps.version.outputs.code }}
+
+      - name: Name the APKs after the version
+        id: rename
+        run: |
+          mkdir -p dist
+          for f in app/build/outputs/apk/release/*.apk; do
+            abi=$(basename "$f" | sed -E 's/^app-(.*)-release\.apk$/\1/')
+            cp "$f" "dist/TMPlayer-${{ steps.version.outputs.name }}-$abi.apk"
+          done
+          ls -la dist
+
+      # Anything holding the signing key is deleted before the job can reach a step that
+      # publishes output. Workflow files are cleaned up by the runner anyway; this is belt
+      # and braces against a future step accidentally archiving the workspace.
+      - name: Shred signing material
+        run: rm -f release.keystore keystore.properties local.properties
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: TMPlayer ${{ steps.version.outputs.name }}
+          files: dist/*.apk
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            Android TV only. Pick the APK matching your device:
+
+            | Device | APK |
+            |---|---|
+            | Mi TV Stick, most 2018–2021 sticks | `armeabi-v7a` |
+            | Chromecast with Google TV, newer boxes | `arm64-v8a` |
+            | Emulator / x86 boxes | `x86_64` |
+
+            Not sure? `adb shell getprop ro.product.cpu.abi` tells you.
+
+            ```
+            adb install TMPlayer-${{ steps.version.outputs.name }}-armeabi-v7a.apk
+            ```
+
+            See [INSTALL.md](https://github.com/${{ github.repository }}/blob/main/INSTALL.md)
+            for sideloading steps and the remote-control reference.

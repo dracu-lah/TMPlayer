@@ -45,6 +45,22 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
     private var position = 0L
     private var bytesRemaining = 0L
     private var opened = false
+    private var size = 0L
+
+    /**
+     * Everything below [windowEnd] has already been confirmed on disk, so reads under it need no
+     * call to TDLib at all.
+     *
+     * This is the difference between smooth playback and a stutter every few seconds: Media3's
+     * extractors issue a great many small reads, and asking TDLib about the file on each one puts
+     * a request round-trip in front of every byte. On a file that is already fully downloaded that
+     * work is entirely wasted, and it is slow enough to starve the buffer it is meant to fill.
+     */
+    @Volatile
+    private var windowEnd = 0L
+
+    @Volatile
+    private var completed = false
 
     override fun getUri(): Uri? = uri
 
@@ -58,7 +74,7 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
 
         val file = blocking { td.getFile(fileId).valueOrNull }
             ?: throw IOException("Telegram lost track of file $fileId")
-        val size = if (file.size > 0) file.size else file.expectedSize
+        size = if (file.size > 0) file.size else file.expectedSize
         if (size <= 0) throw IOException("Unknown size for file $fileId")
         if (position > size) throw DataSourceException(C.RESULT_END_OF_INPUT)
 
@@ -68,8 +84,10 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
             minOf(dataSpec.length, size - position)
         }
 
-        // Point TDLib at the byte we actually want next. On a seek this is the whole fix.
-        blocking { requestDownloadFrom(position) }
+        absorb(file)
+        // A finished file needs nothing from TDLib — not even a download request, which would
+        // only re-enter its scheduler for bytes that are already sitting on disk.
+        if (!completed) blocking { requestDownloadFrom(position) }
 
         opened = true
         transferStarted(dataSpec)
@@ -80,7 +98,9 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
         if (length == 0) return 0
         if (bytesRemaining == 0L) return C.RESULT_END_OF_INPUT
 
-        val available = blocking { awaitBytesAt(position) }
+        // The fast path: no coroutine, no timeout machinery, no TDLib. This is the one that runs
+        // for all but a handful of reads.
+        val available = cachedAvailable(position) ?: blocking { awaitBytesAt(position) }
         val wanted = minOf(length.toLong(), bytesRemaining, available).toInt()
 
         val read = synchronized(this) {
@@ -90,8 +110,11 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
         }
         if (read <= 0) {
             // TDLib reported the bytes but the file on disk is shorter: it was trimmed or
-            // re-created underneath us. Reopen on the next read rather than failing playback.
+            // re-created underneath us. Drop the cached window too, so the next read goes back
+            // and asks TDLib what is really there instead of trusting a stale boundary.
             closeHandle()
+            windowEnd = 0
+            completed = false
             throw EOFException("Short read at $position of file $fileId")
         }
 
@@ -103,10 +126,50 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
 
     override fun close() {
         closeHandle()
+        // Media3 may reopen this instance at a different offset; nothing learned about the old
+        // window is safe to carry across.
+        windowEnd = 0
+        completed = false
         uri = null
         if (opened) {
             opened = false
             transferEnded()
+        }
+    }
+
+    /**
+     * How many bytes at [target] are already known-good, or `null` if TDLib has to be asked.
+     *
+     * Never optimistic: it only answers from a boundary that a real [TdFile] confirmed earlier,
+     * and any doubt returns `null` so the slow path re-checks.
+     */
+    private fun cachedAvailable(target: Long): Long? {
+        if (localPath == null) return null
+        if (completed) return (size - target).coerceAtLeast(0).takeIf { it > 0 }
+        val ahead = windowEnd - target
+        return if (ahead > 0) ahead else null
+    }
+
+    /** Records what a fresh [TdFile] tells us, so later reads can skip the round-trip. */
+    private fun absorb(file: TdFile) {
+        val path = file.local.path
+        if (!path.isNullOrEmpty()) {
+            // TDLib moves a file when a download finishes (the partial name is renamed away), so
+            // the handle is dropped on any path change rather than reading a stale inode.
+            synchronized(this) {
+                if (path != localPath) {
+                    runCatching { handle?.close() }
+                    handle = null
+                    localPath = path
+                }
+            }
+        }
+        if (file.local.isDownloadingCompleted) {
+            completed = true
+            windowEnd = size
+        } else {
+            completed = false
+            windowEnd = file.local.downloadOffset + file.local.downloadedPrefixSize
         }
     }
 
@@ -153,18 +216,8 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
     }
 
     private fun available(file: TdFile, target: Long): Long {
-        val size = if (file.size > 0) file.size else file.expectedSize
-        val path = file.local.path
-        if (path.isNullOrEmpty()) return 0
-        // TDLib can move a file (finishing a download renames it out of the partial name), so
-        // the handle is dropped whenever the path changes rather than reading a stale inode.
-        synchronized(this) {
-            if (path != localPath) {
-                runCatching { handle?.close() }
-                handle = null
-                localPath = path
-            }
-        }
+        absorb(file)
+        if (localPath == null) return 0
         return DownloadWindow.availableAt(
             position = target,
             size = size,

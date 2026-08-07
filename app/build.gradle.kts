@@ -26,8 +26,11 @@ android {
         applicationId = "com.tmplayer"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // A release is cut by pushing a git tag, and the workflow passes the version through as
+        // Gradle properties. The literals below are what a local build gets; they are also the
+        // floor, so a hand-built APK never claims to be newer than a released one.
+        versionCode = (findProperty("tmVersionCode") as String?)?.toInt() ?: 2
+        versionName = (findProperty("tmVersionName") as String?) ?: "0.2.0"
 
         // Telegram API credentials — bring your own via local.properties (see README)
         buildConfigField("int", "TG_API_ID", localProps.getProperty("TG_API_ID") ?: "0")
@@ -90,6 +93,7 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.compose.material.icons)
     implementation(libs.androidx.tv.material)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

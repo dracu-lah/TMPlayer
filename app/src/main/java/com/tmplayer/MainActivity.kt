@@ -17,16 +17,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.MaterialTheme
 import com.tmplayer.data.AuthState
+import com.tmplayer.data.CachePolicy
 import com.tmplayer.data.ChatSummary
+import com.tmplayer.data.DiskSpace
+import com.tmplayer.data.MediaItem
+import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import com.tmplayer.player.PlayerActivity
+import com.tmplayer.player.StreamStats
+import com.tmplayer.ui.auth.IntroScreen
 import com.tmplayer.ui.auth.LoginScreen
-import com.tmplayer.ui.browse.ChatListScreen
+import com.tmplayer.ui.browse.BrowseScreen
+import com.tmplayer.ui.browse.ChatListViewModel
 import com.tmplayer.ui.browse.MediaGridScreen
+import com.tmplayer.ui.components.TvConfirm
+import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.theme.TMPlayerTheme
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /** Where the user is. Deliberately three screens deep and no more. */
@@ -35,6 +46,13 @@ private sealed interface Screen {
     data class Media(val chat: ChatSummary) : Screen
     data object Settings : Screen
 }
+
+/** A film waiting on the viewer's answer about clearing space. */
+private data class RoomPrompt(
+    val item: MediaItem,
+    val reclaimBytes: Long,
+    val shortfallBytes: Long,
+)
 
 class MainActivity : ComponentActivity() {
 
@@ -52,44 +70,150 @@ private fun Root() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val auth by Td.auth.collectAsStateWithLifecycle()
+    val settings = remember { SettingsStore(context) }
+
+    val introSeen by settings.introSeen.collectAsStateWithLifecycle(initialValue = true)
+    val favorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
+    val watchProgress by settings.watchProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
+    val jumpToFavorite by settings.jumpToFavorite.collectAsStateWithLifecycle(initialValue = true)
+    val defaultChatId by settings.defaultChatId.collectAsStateWithLifecycle(initialValue = 0L)
+
+    val chatsViewModel: ChatListViewModel = viewModel()
+    val chatsState by chatsViewModel.state.collectAsStateWithLifecycle()
+    val chats = (chatsState as? UiState.Content)?.value?.chats.orEmpty()
 
     var screen by remember { mutableStateOf<Screen>(Screen.Chats) }
     var passwordError by remember { mutableStateOf<String?>(null) }
+    var roomPrompt by remember { mutableStateOf<RoomPrompt?>(null) }
+    var autoOpened by remember { mutableStateOf(false) }
+
+    /**
+     * Starts playback, first clearing the previous film when there is no room for both.
+     * [confirmed] is true once the viewer has answered the prompt.
+     */
+    fun play(item: MediaItem, confirmed: Boolean = false) {
+        scope.launch {
+            val alreadyCached = runCatching { Td.isFileCached(item.fileId) }.getOrDefault(false)
+            val cacheBytes = runCatching { Td.storageUsedBytes() }.getOrDefault(0L)
+            val free = DiskSpace.read(context).freeBytes
+            val decision = CachePolicy.decide(item.sizeBytes, alreadyCached, cacheBytes, free)
+            val ask = runCatching { settings.askBeforeClearing.first() }.getOrDefault(true)
+
+            when (decision) {
+                is CachePolicy.Decision.Proceed ->
+                    context.startActivity(PlayerActivity.intent(context, item))
+
+                is CachePolicy.Decision.FreeUp -> {
+                    if (ask && !confirmed) {
+                        roomPrompt = RoomPrompt(item, decision.reclaimBytes, 0)
+                    } else {
+                        runCatching { Td.clearMediaCache() }
+                        context.startActivity(PlayerActivity.intent(context, item))
+                    }
+                }
+
+                is CachePolicy.Decision.TooLarge -> {
+                    if (!confirmed) {
+                        roomPrompt = RoomPrompt(item, decision.reclaimBytes, decision.shortfallBytes)
+                    } else {
+                        runCatching { Td.clearMediaCache() }
+                        context.startActivity(PlayerActivity.intent(context, item))
+                    }
+                }
+            }
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (auth !is AuthState.Ready) {
             // Signing out drops straight back to the QR code, so forget where we were.
-            LaunchedEffect(Unit) { screen = Screen.Chats }
-            LoginScreen(
-                state = auth,
-                passwordError = passwordError,
-                onSubmitPassword = { password ->
-                    passwordError = null
-                    scope.launch { passwordError = Td.submitPassword(password) }
-                },
-            )
+            LaunchedEffect(Unit) {
+                screen = Screen.Chats
+                autoOpened = false
+            }
+            if (!introSeen) {
+                IntroScreen(onContinue = { scope.launch { settings.markIntroSeen() } })
+            } else {
+                LoginScreen(
+                    state = auth,
+                    passwordError = passwordError,
+                    onSubmitPassword = { password ->
+                        passwordError = null
+                        scope.launch { passwordError = Td.submitPassword(password) }
+                    },
+                )
+            }
             return@Box
         }
 
+        // Straight into the one chat the viewer actually watches, when that is unambiguous.
+        LaunchedEffect(chats, favorites, jumpToFavorite, defaultChatId) {
+            if (autoOpened || chats.isEmpty()) return@LaunchedEffect
+            autoOpened = true
+            val target = settings.autoOpenChatId(favorites, jumpToFavorite, defaultChatId)
+            val chat = chats.firstOrNull { it.id == target } ?: return@LaunchedEffect
+            screen = Screen.Media(chat)
+        }
+
         when (val current = screen) {
-            is Screen.Chats -> ChatListScreen(
+            is Screen.Chats -> BrowseScreen(
+                state = chatsState,
+                favorites = favorites,
+                onRetry = chatsViewModel::load,
                 onOpenChat = { screen = Screen.Media(it) },
                 onOpenSettings = { screen = Screen.Settings },
             )
 
             is Screen.Media -> {
-                BackHandler { screen = Screen.Chats }
+                BackHandler {
+                    // Films posted while the list was open only appear after a fresh search.
+                    chatsViewModel.load()
+                    screen = Screen.Chats
+                }
                 MediaGridScreen(
                     chatId = current.chat.id,
                     chatTitle = current.chat.title,
-                    onPlay = { context.startActivity(PlayerActivity.intent(context, it)) },
+                    isFavorite = current.chat.id in favorites,
+                    watchProgress = watchProgress,
+                    onToggleFavorite = { scope.launch { settings.toggleFavorite(current.chat.id) } },
+                    onPlay = { play(it) },
                 )
             }
 
             is Screen.Settings -> {
-                BackHandler { screen = Screen.Chats }
-                SettingsScreen(onLoggedOut = { screen = Screen.Chats })
+                BackHandler {
+                    chatsViewModel.load()
+                    screen = Screen.Chats
+                }
+                SettingsScreen(
+                    chats = chats,
+                    favorites = favorites,
+                    onLoggedOut = { screen = Screen.Chats },
+                )
             }
+        }
+
+        roomPrompt?.let { pending ->
+            val tooLarge = pending.shortfallBytes > 0
+            TvConfirm(
+                title = if (tooLarge) "Not much room left" else "Make room for this film?",
+                message = if (tooLarge) {
+                    "“${pending.item.title}” needs ${StreamStats.formatBytes(pending.item.sizeBytes)}, " +
+                        "which is ${StreamStats.formatBytes(pending.shortfallBytes)} more than this " +
+                        "device can free. It may stop partway through."
+                } else {
+                    "TMPlayer keeps one film at a time. Playing this one removes the " +
+                        "${StreamStats.formatBytes(pending.reclaimBytes)} already downloaded."
+                },
+                detail = "Nothing is deleted from Telegram — only this device's copy.",
+                confirmLabel = if (tooLarge) "Play anyway" else "Make room and play",
+                onConfirm = {
+                    val item = pending.item
+                    roomPrompt = null
+                    play(item, confirmed = true)
+                },
+                onDismiss = { roomPrompt = null },
+            )
         }
     }
 }

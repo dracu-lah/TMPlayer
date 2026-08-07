@@ -18,31 +18,102 @@
         android:layout_height="match_parent"
         android:layout_marginBottom="24dp" />
 
+    <!--
+      Full-screen while the film opens: an opaque sheet, not a spinner floating over a black
+      surface, so there is never a moment that reads as "nothing is happening".
+    -->
     <LinearLayout
         android:id="@+id/status_overlay"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#F00E0E12"
         android:gravity="center"
         android:orientation="vertical"
-        android:padding="32dp">
+        android:paddingLeft="72dp"
+        android:paddingRight="72dp">
 
-        <ProgressBar
-            android:id="@+id/status_spinner"
-            style="?android:attr/progressBarStyleLarge"
-            android:layout_width="72dp"
-            android:layout_height="72dp"
-            android:indeterminateTint="@color/accent" />
+        <TextView
+            android:id="@+id/status_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="6dp"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="2"
+            android:maxWidth="720dp"
+            android:textColor="@color/text_primary"
+            android:textSize="26sp"
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/status_text"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
+            android:layout_marginBottom="20dp"
             android:gravity="center"
-            android:maxWidth="900dp"
+            android:maxWidth="720dp"
+            android:textColor="#9A9AA5"
+            android:textSize="15sp" />
+
+        <ProgressBar
+            android:id="@+id/status_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="520dp"
+            android:layout_height="8dp"
+            android:max="1000"
+            android:progressTint="@color/accent"
+            android:progressBackgroundTint="#33FFFFFF" />
+
+        <TextView
+            android:id="@+id/status_detail"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="center"
+            android:maxWidth="720dp"
             android:textColor="@color/text_primary"
-            android:textSize="20sp" />
+            android:textSize="15sp" />
+
+        <ProgressBar
+            android:id="@+id/status_spinner"
+            style="?android:attr/progressBarStyleLarge"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginTop="20dp"
+            android:indeterminateTint="@color/accent" />
+    </LinearLayout>
+
+    <!--
+      Mid-film rebuffering gets a corner chip instead. Covering the picture with a full sheet
+      every time the connection hiccups would be far more intrusive than the pause itself.
+    -->
+    <LinearLayout
+        android:id="@+id/rebuffer_chip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_margin="32dp"
+        android:background="#CC17171E"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingLeft="18dp"
+        android:paddingTop="10dp"
+        android:paddingRight="18dp"
+        android:paddingBottom="10dp"
+        android:visibility="gone">
+
+        <ProgressBar
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:indeterminateTint="@color/accent" />
+
+        <TextView
+            android:id="@+id/rebuffer_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp" />
     </LinearLayout>
 
     <!-- Track pickers are added here so they cover the video, not the other way round. -->

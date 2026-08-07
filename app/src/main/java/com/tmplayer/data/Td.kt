@@ -153,7 +153,6 @@ object Td {
             td.setOption("ignore_background_updates", OptionValueBoolean(true))
             td.setOption("message_unload_delay", OptionValueInteger(300))
         }
-        runCatching { trimCache(td, settings.cacheLimitBytes()) }
     }
 
     /** Submits the two-step verification password. Returns null on success, an error otherwise. */
@@ -174,24 +173,32 @@ object Td {
         runCatching { current?.logOut() }
     }
 
-    /** Fire-and-forget cache trim; safe to call from anywhere, does nothing if TDLib is down. */
-    fun trimCacheInBackground(store: SettingsStore) {
-        scope.launch { runCatching { trimCache(client, store.cacheLimitBytes()) } }
-    }
-
     suspend fun storageUsedBytes(): Long =
         current?.getStorageStatisticsFast()?.valueOrNull?.filesSize ?: 0L
 
+    /** True when this exact file is already fully on disk — the one film worth keeping. */
+    suspend fun isFileCached(fileId: Int): Boolean {
+        val td = current ?: return false
+        val file = td.getFile(fileId).valueOrNull ?: return false
+        return file.local.isDownloadingCompleted
+    }
+
     /**
-     * Deletes the oldest cached media until the on-disk footprint fits [limitBytes].
-     * TDLib does the accounting; we only choose the ceiling.
+     * Drops every cached video, document and animation.
+     *
+     * A `size` of zero means "keep nothing", and `immunityDelay` of zero waives TDLib's usual
+     * grace period for recently touched files — without that the film the viewer just finished
+     * would survive and the space would not actually come back.
+     *
+     * Photos and thumbnails are untouched: they are tiny and re-fetching them would make the
+     * whole browse grid grey for no gain.
      */
-    suspend fun trimCache(td: TdlClient = client, limitBytes: Long) {
+    suspend fun clearMediaCache(td: TdlClient = client) {
         td.optimizeStorage(
-            size = limitBytes,
+            size = 0,
             ttl = Int.MAX_VALUE,
             count = Int.MAX_VALUE,
-            immunityDelay = 60,
+            immunityDelay = 0,
             fileTypes = arrayOf(FileTypeVideo(), FileTypeDocument(), FileTypeAnimation()),
             chatIds = longArrayOf(),
             excludeChatIds = longArrayOf(),
@@ -199,4 +206,36 @@ object Td {
             chatLimit = 0,
         )
     }
+
+    fun clearMediaCacheInBackground() {
+        scope.launch { runCatching { clearMediaCache() } }
+    }
+
+    /** The signed-in account, for the avatar and name in the navigation rail. */
+    suspend fun me(): Account? {
+        val user = current?.getMe()?.valueOrNull ?: return null
+        val name = listOf(user.firstName, user.lastName)
+            .filter { it.isNotBlank() }
+            .joinToString(" ")
+            .ifBlank { "Telegram" }
+        return Account(
+            name = name,
+            username = user.usernames?.activeUsernames?.firstOrNull().orEmpty(),
+            miniThumbnail = user.profilePhoto?.minithumbnail?.data,
+            photoFileId = user.profilePhoto?.small?.id ?: 0,
+        )
+    }
+}
+
+/** Who is signed in. Shown in the rail so it is obvious whose library this is. */
+data class Account(
+    val name: String,
+    val username: String,
+    val miniThumbnail: ByteArray?,
+    val photoFileId: Int,
+) {
+    override fun equals(other: Any?) = other is Account && other.name == name &&
+        other.username == username && other.photoFileId == photoFileId
+
+    override fun hashCode() = name.hashCode() * 31 + photoFileId
 }

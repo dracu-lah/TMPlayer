@@ -4,9 +4,11 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
 import androidx.leanback.app.GuidedStepSupportFragment
@@ -33,6 +35,7 @@ import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 
 /**
@@ -58,8 +61,22 @@ class PlayerActivity : FragmentActivity() {
     private lateinit var settings: SettingsStore
     private lateinit var subtitleView: SubtitleView
     private lateinit var statusOverlay: View
+    private lateinit var statusTitle: TextView
     private lateinit var statusText: TextView
+    private lateinit var statusDetail: TextView
+    private lateinit var statusProgress: ProgressBar
+    private lateinit var rebufferChip: View
+    private lateinit var rebufferText: TextView
     private var statusSpinner: View? = null
+
+    private var fileId = 0
+    private var fileSizeBytes = 0L
+    private var durationSec = 0
+    private var resumeMs = 0L
+
+    /** True until the picture first appears; after that a stall is a chip, not a full sheet. */
+    private var openingFilm = true
+    private val speed = SpeedMeter()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,16 +86,23 @@ class PlayerActivity : FragmentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         settings = SettingsStore(this)
-        val fileId = intent.getIntExtra(EXTRA_FILE_ID, 0)
+        fileId = intent.getIntExtra(EXTRA_FILE_ID, 0)
         chatId = intent.getLongExtra(EXTRA_CHAT_ID, 0)
         messageId = intent.getLongExtra(EXTRA_MESSAGE_ID, 0)
         mediaTitle = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         mediaSubtitle = intent.getStringExtra(EXTRA_SUBTITLE).orEmpty()
+        fileSizeBytes = intent.getLongExtra(EXTRA_SIZE, 0)
+        durationSec = intent.getIntExtra(EXTRA_DURATION, 0)
 
         subtitleView = findViewById(R.id.subtitles)
         statusOverlay = findViewById(R.id.status_overlay)
+        statusTitle = findViewById(R.id.status_title)
         statusText = findViewById(R.id.status_text)
+        statusDetail = findViewById(R.id.status_detail)
+        statusProgress = findViewById(R.id.status_progress)
         statusSpinner = findViewById(R.id.status_spinner)
+        rebufferChip = findViewById(R.id.rebuffer_chip)
+        rebufferText = findViewById(R.id.rebuffer_text)
         subtitleView.setApplyEmbeddedStyles(true)
         // A TV's default caption size is tuned for broadcast subtitles; movie subs need to be
         // legible from a sofa, with an outline that survives a bright frame behind them.
@@ -99,7 +123,8 @@ class PlayerActivity : FragmentActivity() {
             return
         }
 
-        showStatus("Starting ${mediaTitle.ifBlank { "playback" }}…")
+        statusTitle.text = mediaTitle.ifBlank { "Opening…" }
+        showStatus("Connecting to Telegram…")
 
         player = buildPlayer().also { exo ->
             exo.addListener(playerListener)
@@ -111,9 +136,14 @@ class PlayerActivity : FragmentActivity() {
         // Reading the saved position is a disk hit; do it off the main thread and seek once
         // it lands. Opening the stream takes longer than this ever will.
         lifecycleScope.launch {
-            val resumeMs = runCatching { settings.resumePosition(chatId, messageId) }.getOrDefault(0L)
-            if (resumeMs > 0) player?.seekTo(resumeMs)
+            resumeMs = runCatching { settings.resumePosition(chatId, messageId) }.getOrDefault(0L)
+            if (resumeMs > 0) {
+                player?.seekTo(resumeMs)
+                statusText.text = "Resuming from ${StreamStats.formatClock(resumeMs)}"
+            }
         }
+
+        observeDownload()
 
         // Replace unconditionally: after process death the restored fragment came up before
         // the player existed, so it has no glue and has to be rebuilt.
@@ -171,7 +201,10 @@ class PlayerActivity : FragmentActivity() {
 
         override fun onPlaybackStateChanged(state: Int) {
             when (state) {
-                Player.STATE_BUFFERING -> showStatus("Buffering…")
+                // Only the very first wait earns the full screen; later stalls get the chip.
+                Player.STATE_BUFFERING ->
+                    if (openingFilm) showStatus("Buffering…") else showRebuffering()
+
                 Player.STATE_READY -> hideStatus()
                 Player.STATE_ENDED -> {
                     lifecycleScope.launch { settings.clearResumePosition(chatId, messageId) }
@@ -253,20 +286,83 @@ class PlayerActivity : FragmentActivity() {
         return super.dispatchKeyEvent(event)
     }
 
+    /**
+     * Feeds the loading screen from TDLib's own download updates.
+     *
+     * The player alone cannot say "how much longer" — it only knows whether it has enough to
+     * start. Pairing its buffer with the byte rate coming off TDLib is what turns a spinner into
+     * a figure the viewer can act on.
+     */
+    private fun observeDownload() {
+        lifecycleScope.launch {
+            Td.client.fileUpdates
+                .filter { it.file.id == fileId }
+                .collect { update ->
+                    val file = update.file
+                    if (fileSizeBytes <= 0 && file.size > 0) fileSizeBytes = file.size
+                    val downloaded = file.local.downloadedPrefixSize
+                    speed.sample(downloaded, SystemClock.elapsedRealtime())
+                    renderProgress()
+                }
+        }
+    }
+
+    private fun renderProgress() {
+        val exo = player ?: return
+        val aheadMs = (exo.bufferedPosition - exo.currentPosition).coerceAtLeast(0)
+        val fraction = StreamStats.progress(aheadMs, BUFFER_PLAYBACK_MS.toLong())
+        val bytesPerMs = StreamStats.bytesPerMs(fileSizeBytes, durationSec)
+        val eta = StreamStats.etaSeconds(
+            bufferedAheadMs = aheadMs,
+            requiredMs = BUFFER_PLAYBACK_MS.toLong(),
+            bytesPerMs = bytesPerMs,
+            speedBytesPerSec = speed.bytesPerSec,
+        )
+
+        val rate = StreamStats.formatSpeed(speed.bytesPerSec)
+        val left = StreamStats.formatEta(eta)
+
+        if (openingFilm) {
+            statusProgress.progress = (fraction * 1000).toInt()
+            statusDetail.text = listOf(rate, left).filter { it.isNotBlank() }.joinToString("  ·  ")
+        } else {
+            rebufferText.text = "Buffering  ·  $rate"
+        }
+    }
+
     private fun showStatus(message: String) {
+        openingFilm = true
         statusOverlay.visibility = View.VISIBLE
+        rebufferChip.visibility = View.GONE
         statusSpinner?.visibility = View.VISIBLE
-        statusText.text = message
+        statusProgress.visibility = View.VISIBLE
+        statusDetail.visibility = View.VISIBLE
+        if (statusText.text.isNullOrBlank()) statusText.text = message
+    }
+
+    /** A stall after playback has begun: a small chip, so the film stays on screen. */
+    private fun showRebuffering() {
+        openingFilm = false
+        statusOverlay.visibility = View.GONE
+        rebufferChip.visibility = View.VISIBLE
+        rebufferText.text = "Buffering…"
     }
 
     private fun showError(message: String) {
+        openingFilm = false
         statusOverlay.visibility = View.VISIBLE
+        rebufferChip.visibility = View.GONE
         statusSpinner?.visibility = View.GONE
+        statusProgress.visibility = View.GONE
+        statusDetail.visibility = View.GONE
+        statusTitle.text = "Can't play this"
         statusText.text = "$message\n\nPress Back to return."
     }
 
     private fun hideStatus() {
+        openingFilm = false
         statusOverlay.visibility = View.GONE
+        rebufferChip.visibility = View.GONE
     }
 
     override fun onStop() {
@@ -280,8 +376,6 @@ class PlayerActivity : FragmentActivity() {
         player?.removeListener(playerListener)
         player?.release()
         player = null
-        // Playing a film is the moment the cache grows, so trim right after it.
-        Td.trimCacheInBackground(settings)
         super.onDestroy()
     }
 
@@ -300,7 +394,7 @@ class PlayerActivity : FragmentActivity() {
         App.backgroundScope.launch {
             runCatching {
                 if (watched) store.clearResumePosition(chat, message)
-                else store.saveResumePosition(chat, message, position)
+                else store.saveResumePosition(chat, message, position, duration)
             }
         }
     }
@@ -311,6 +405,8 @@ class PlayerActivity : FragmentActivity() {
         private const val EXTRA_MESSAGE_ID = "message_id"
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_SUBTITLE = "subtitle"
+        private const val EXTRA_SIZE = "size"
+        private const val EXTRA_DURATION = "duration"
 
         private const val BUFFER_MIN_MS = 15_000
         private const val BUFFER_MAX_MS = 50_000
@@ -324,6 +420,8 @@ class PlayerActivity : FragmentActivity() {
         fun intent(context: Context, item: MediaItem): Intent =
             Intent(context, PlayerActivity::class.java).apply {
                 putExtra(EXTRA_FILE_ID, item.fileId)
+                putExtra(EXTRA_SIZE, item.sizeBytes)
+                putExtra(EXTRA_DURATION, item.durationSec)
                 putExtra(EXTRA_CHAT_ID, item.chatId)
                 putExtra(EXTRA_MESSAGE_ID, item.messageId)
                 putExtra(EXTRA_TITLE, item.title)

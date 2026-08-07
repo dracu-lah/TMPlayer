@@ -2,10 +2,12 @@ package com.tmplayer.ui.browse
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tmplayer.data.Account
 import com.tmplayer.data.ChatRepository
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.MediaCursors
 import com.tmplayer.data.MediaItem
+import com.tmplayer.data.Td
 import com.tmplayer.ui.components.UiState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,28 +15,50 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+/** The chat list plus who is signed in — both are needed before the browser can draw. */
+data class BrowseData(
+    val chats: List<ChatSummary>,
+    val account: Account? = null,
+)
+
 class ChatListViewModel : ViewModel() {
 
     private val repository by lazy { ChatRepository() }
-    private val _state = MutableStateFlow<UiState<List<ChatSummary>>>(UiState.Loading("Loading your chats…"))
-    val state: StateFlow<UiState<List<ChatSummary>>> = _state.asStateFlow()
+    private val _state = MutableStateFlow<UiState<BrowseData>>(UiState.Loading("Loading your chats…"))
+    val state: StateFlow<UiState<BrowseData>> = _state.asStateFlow()
 
     init {
         load()
     }
 
+    private var account: Account? = null
+    private var chats: List<ChatSummary>? = null
+
     fun load() {
         _state.value = UiState.Loading("Loading your chats…")
         viewModelScope.launch {
             runCatching { repository.chats() }
-                .onSuccess { chats ->
-                    _state.value = if (chats.isEmpty()) {
-                        UiState.Error("No chats yet. Open Telegram on your phone, then come back.")
-                    } else {
-                        UiState.Content(chats)
-                    }
+                .onSuccess {
+                    chats = it
+                    publish()
                 }
                 .onFailure { _state.value = UiState.Error(it.message ?: "Couldn't reach Telegram") }
+        }
+        // The avatar is decoration: it must never hold the chat list up, and its failure is not
+        // an error the viewer needs to see. Whichever of the two lands second does the publishing,
+        // so neither can quietly drop the other's result.
+        viewModelScope.launch {
+            account = runCatching { Td.me() }.getOrNull() ?: return@launch
+            publish()
+        }
+    }
+
+    private fun publish() {
+        val loaded = chats ?: return
+        _state.value = if (loaded.isEmpty()) {
+            UiState.Error("No chats yet. Open Telegram on your phone, then come back.")
+        } else {
+            UiState.Content(BrowseData(loaded, account))
         }
     }
 }
@@ -50,6 +74,7 @@ class MediaListViewModel(private val chatId: Long) : ViewModel() {
     private val repository by lazy { ChatRepository() }
     private var cursors = MediaCursors()
     private var pageJob: Job? = null
+    private var query = ""
 
     private val _state = MutableStateFlow<UiState<MediaListState>>(UiState.Loading("Finding movies…"))
     val state: StateFlow<UiState<MediaListState>> = _state.asStateFlow()
@@ -58,16 +83,29 @@ class MediaListViewModel(private val chatId: Long) : ViewModel() {
         load()
     }
 
+    /** Re-runs the listing against [text]; blank means "everything in this chat". */
+    fun search(text: String) {
+        if (text == query) return
+        query = text
+        load()
+    }
+
     fun load() {
         cursors = MediaCursors()
-        _state.value = UiState.Loading("Finding movies…")
+        val searching = query.isNotBlank()
+        _state.value = UiState.Loading(if (searching) "Searching…" else "Finding movies…")
         pageJob?.cancel()
         pageJob = viewModelScope.launch {
-            runCatching { repository.mediaPage(chatId, cursors) }
+            runCatching { repository.mediaPage(chatId, cursors, query) }
                 .onSuccess { page ->
                     cursors = page.cursors
                     _state.value = if (page.items.isEmpty() && page.endReached) {
-                        UiState.Error("Nothing playable in this chat.")
+                        val message = if (searching) {
+                            "Nothing here matches “$query”."
+                        } else {
+                            "Nothing playable in this chat."
+                        }
+                        UiState.Error(message)
                     } else {
                         UiState.Content(MediaListState(page.items, endReached = page.endReached))
                     }
@@ -86,7 +124,7 @@ class MediaListViewModel(private val chatId: Long) : ViewModel() {
 
         _state.value = UiState.Content(current.value.copy(loadingMore = true))
         pageJob = viewModelScope.launch {
-            runCatching { repository.mediaPage(chatId, cursors) }
+            runCatching { repository.mediaPage(chatId, cursors, query) }
                 .onSuccess { page ->
                     cursors = page.cursors
                     val merged = (current.value.items + page.items).distinctBy { it.messageId }

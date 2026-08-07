@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Play-button logo (from art/logo.svg, SVG Repo), recolored for the dark theme -->
+<!--
+  Play mark only (from art/logo.svg, SVG Repo), recolored for the dark theme.
+
+  The original artwork was a filled plate with the triangle punched out of it by an evenOdd
+  fill. Dropping the plate subpath leaves the triangle itself as the whole icon, on a
+  transparent background, so it sits on whatever surface hosts it instead of carrying its own.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="56dp"
     android:height="56dp"
@@ -7,6 +13,5 @@
     android:viewportHeight="56">
     <path
         android:fillColor="@color/accent"
-        android:fillType="evenOdd"
-        android:pathData="M 7.7148 49.5742 L 48.2852 49.5742 C 53.1836 49.5742 55.6446 47.1367 55.6446 42.3086 L 55.6446 13.6914 C 55.6446 8.8633 53.1836 6.4258 48.2852 6.4258 L 7.7148 6.4258 C 2.8398 6.4258 0.3554 8.8398 0.3554 13.6914 L 0.3554 42.3086 C 0.3554 47.1602 2.8398 49.5742 7.7148 49.5742 Z M 23.3710 37.2696 C 22.2460 37.9258 20.9804 37.1992 20.9804 36.0274 L 20.9804 19.9727 C 20.9804 18.8242 22.3163 18.1211 23.3710 18.7305 L 36.8710 26.7461 C 37.8554 27.3086 37.9023 28.6914 36.8710 29.3008 Z" />
+        android:pathData="M 19.5 44.5 C 17.6 45.6 15.5 44.4 15.5 42.4 L 15.5 13.6 C 15.5 11.6 17.8 10.4 19.5 11.4 L 43.6 25.8 C 45.3 26.8 45.3 29.2 43.6 30.2 Z" />
 </vector>

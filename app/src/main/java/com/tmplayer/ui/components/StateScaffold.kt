@@ -1,6 +1,9 @@
 package com.tmplayer.ui.components
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -19,14 +22,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.ui.theme.Accent
+import com.tmplayer.ui.theme.TextMuted
+import com.tmplayer.ui.theme.tmButtonColors
 
 /** Every screen is exactly one of these — no blank frames, ever. */
 sealed interface UiState<out T> {
@@ -54,30 +61,80 @@ fun BigLoader(label: String? = null) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            val transition = rememberInfiniteTransition(label = "spin")
-            val angle by transition.animateFloat(
-                initialValue = 0f,
-                targetValue = 360f,
-                animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing)),
-                label = "angle",
-            )
-            Canvas(Modifier.size(64.dp)) {
-                drawArc(
-                    color = Accent,
-                    startAngle = angle,
-                    sweepAngle = 270f,
-                    useCenter = false,
-                    style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round),
-                )
-            }
+            Spinner()
             if (label != null) {
-                Text(label, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = TextMuted,
+                    textAlign = TextAlign.Center,
+                )
             }
         }
     }
 }
+
+/**
+ * The indeterminate circular progress indicator Android draws everywhere.
+ *
+ * Two motions at once, which is what makes it recognisable: the whole arc rotates steadily while
+ * its head and tail sweep at different rates, so the arc grows and shrinks as it spins. A single
+ * fixed arc spinning at constant speed reads as a cheap imitation of this.
+ */
+@Composable
+fun Spinner(size: Dp = 56.dp, color: Color = Accent, strokeWidth: Dp = 5.dp) {
+    val transition = rememberInfiniteTransition(label = "spinner")
+
+    val rotation by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(ROTATION_MS, easing = LinearEasing)),
+        label = "rotation",
+    )
+    val head by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            tween(SWEEP_MS, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "head",
+    )
+    val tail by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            // Delayed against the head, so the gap between them is what opens and closes.
+            keyframes {
+                durationMillis = SWEEP_MS
+                0f at 0 using FastOutSlowInEasing
+                0f at SWEEP_MS / 2 using FastOutSlowInEasing
+                1f at SWEEP_MS
+            },
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "tail",
+    )
+
+    Canvas(Modifier.size(size)) {
+        val start = rotation + tail * MAX_SWEEP
+        val sweep = (head - tail) * MAX_SWEEP
+        drawArc(
+            color = color,
+            startAngle = start,
+            sweepAngle = sweep.coerceAtLeast(MIN_SWEEP),
+            useCenter = false,
+            style = Stroke(width = strokeWidth.toPx(), cap = StrokeCap.Round),
+        )
+    }
+}
+
+private const val ROTATION_MS = 1_332
+private const val SWEEP_MS = 1_332
+private const val MAX_SWEEP = 300f
+private const val MIN_SWEEP = 12f
 
 @Composable
 fun BigError(message: String, onRetry: (() -> Unit)?) {
@@ -90,7 +147,11 @@ fun BigError(message: String, onRetry: (() -> Unit)?) {
             Text(message, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
             if (onRetry != null) {
                 val focus = remember { FocusRequester() }
-                Button(onClick = onRetry, modifier = Modifier.focusRequester(focus)) {
+                Button(
+                    onClick = onRetry,
+                    colors = tmButtonColors(),
+                    modifier = Modifier.focusRequester(focus),
+                ) {
                     Text("Retry")
                 }
                 LaunchedEffect(Unit) { focus.requestFocus() }
