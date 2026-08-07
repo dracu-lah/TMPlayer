@@ -157,7 +157,6 @@ p { margin: 0 0 1rem; }
 .small { font-size: 0.9rem; }
 
 /* The one small-caps label style the whole page shares. */
-.h1-kicker,
 .spec dt,
 .release-label,
 .badge,
@@ -287,25 +286,6 @@ summary {
 }
 
 h1 { margin-bottom: 0.4em; }
-.h1-kicker {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  font-size: 0.72rem;
-  letter-spacing: 0.2em;
-  color: var(--accent);
-  margin-bottom: clamp(18px, 2.4vw, 26px);
-  line-height: 1;
-}
-.h1-kicker::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-surface-2);
-  flex: none;
-}
 .h1-main { display: block; text-wrap: balance; }
 /* Poppins ships no italic here, so the emphasis is carried by colour. */
 .h1-main em { font-style: normal; color: var(--accent-bright); }
@@ -396,6 +376,30 @@ h1 { margin-bottom: 0.4em; }
   border-radius: 16px;
 }
 .hero-shot img { border-radius: 10px; width: 100%; }
+
+/* On a phone the copy alone is a wall of text before you see anything, so the still
+   comes first and the two buttons run the full width of the column. */
+@media (max-width: 939px) {
+  .hero { display: flex; flex-direction: column; }
+  .hero-media { order: -1; padding-top: clamp(24px, 6vw, 40px); padding-bottom: 0; }
+  .hero-inner { padding-top: clamp(30px, 6vw, 44px); }
+  .cta-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .cta-row .btn { width: 100%; }
+}
+
+/* ---------- FAQ ---------- */
+
+/* Ruled rows, like the hero's credits block, so the page keeps to the two list styles it has. */
+.faq { margin: 0; }
+.faq > div { padding: 18px 0; border-bottom: var(--rule); }
+.faq > div:first-child { border-top: var(--rule); }
+.faq dt {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.faq dd { margin: 0; color: var(--muted); max-width: 68ch; }
 
 /* ---------- Sections ---------- */
 

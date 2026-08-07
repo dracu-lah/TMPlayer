@@ -6,6 +6,7 @@
 <title>TMPlayer: stream your own Telegram films on Android TV</title>
 <meta name="description" content="TMPlayer is a free, open source Android TV app that signs into your own Telegram account by QR code and streams the videos already in your chats. Built for cheap TV sticks with 1 GB of RAM.">
 <link rel="canonical" href="https://tmplayer.org/">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta name="author" content="dracu-lah">
 <meta name="theme-color" content="#0E0E12">
 <meta name="color-scheme" content="dark">
@@ -65,6 +66,8 @@
     "Sign in to your own Telegram account by scanning a QR code",
     "Play videos straight from your chats and channels while they are still downloading",
     "Seeking re-aims the download instead of waiting for it",
+    "Shows how much of the film has downloaded while the controls are up",
+    "Optional download-the-whole-film-first mode for slow connections",
     "Poster, synopsis and cast from The Movie Database when a key is configured",
     "Runs on TV sticks with 1 GB of RAM"
   ],
@@ -81,6 +84,52 @@
     "sameAs": ["https://github.com/dracu-lah", "https://nevil.dev"]
   },
   "codeRepository": "https://github.com/dracu-lah/TMPlayer"
+}
+</script>
+
+<!--
+  The same four questions the page answers in words, in the form search engines read. Every
+  answer below is on the page verbatim; markup that promises more than the page shows is the
+  quickest way to have all of it ignored.
+-->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Do I have to wait for the film to download?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. It starts in seconds and downloads while you watch. If your connection cannot keep up, a setting in the app will fetch the whole film first instead."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is there a server or a bot involved?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Neither. The TV talks to Telegram directly, signed in as you. Nothing passes through anything of mine."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Which file do I download?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Most TV sticks, including the Mi TV Stick, need armeabi-v7a. Newer boxes such as Chromecast with Google TV need arm64-v8a."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I read my messages on it?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. It only ever shows the videos in your chats. You cannot read, reply or send anything from the TV."
+      }
+    }
+  ]
 }
 </script>
 </head>
@@ -119,11 +168,10 @@
       <div class="hero-grid">
         <div class="hero-copy">
           <h1 id="hero-h">
-            <span class="h1-kicker">TMPlayer</span>
             <span class="h1-main">Your Telegram films, <em>on the TV</em>.</span>
           </h1>
-          <p class="lede">The eight gigabyte file stays where it is. The TV plays it from there.</p>
-          <p class="sub">Sign in to <strong>your own</strong> Telegram account by scanning a QR code, then play the videos already sitting in your chats. Playback starts while the file is still arriving, and seeking re-aims the download instead of waiting for it. Built and tested on a Mi TV Stick with 1 GB of RAM.</p>
+          <p class="lede">Press play and it starts in seconds. The rest of the film downloads while you watch.</p>
+          <p class="sub">Scan a QR code to sign in to <strong>your own</strong> Telegram, then play the videos already in your chats. Skip ahead and it fetches that bit next, instead of making you wait.</p>
           <p class="cta-row">
             <a class="btn btn-primary" id="hero-download" href="https://github.com/dracu-lah/TMPlayer/releases/latest" rel="noopener">
               <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg>
@@ -148,12 +196,8 @@
             <dd>Mi TV Stick, 1 GB of RAM</dd>
           </div>
           <div>
-            <dt>Backend</dt>
-            <dd>None. No server, no bot</dd>
-          </div>
-          <div>
-            <dt>Licence</dt>
-            <dd>Apache-2.0</dd>
+            <dt>Costs</dt>
+            <dd>Nothing. No server, no bot</dd>
           </div>
         </dl>
       </div>
@@ -171,7 +215,7 @@
       <div class="section-head" data-reveal>
         <div class="section-title">
           <h2 id="download-h">Download</h2>
-          <p class="section-sub">One APK per processor type, built by the repository's own workflow. Pick the one your stick can run.</p>
+          <p class="section-sub">One file per chip type. Pick the one your stick can run.</p>
         </div>
       </div>
 
@@ -215,7 +259,7 @@
       <div class="section-head" data-reveal>
         <div class="section-title">
           <h2 id="shots-h">What it looks like</h2>
-          <p class="section-sub">Captured on the device, at 1920 by 1080.</p>
+          <p class="section-sub">Taken on the TV itself.</p>
         </div>
       </div>
 
@@ -255,18 +299,18 @@
         <ol class="steps">
           <li>
             <h3>Allow apps from outside the store</h3>
-            <p>On the TV, open <em>Settings</em>, then <em>Device Preferences</em>, then <em>About</em>, and press <em>Build</em> seven times to turn on Developer options. Then enable <em>Unknown sources</em> (or <em>Install unknown apps</em>) for whichever sideloading app you use.</p>
+            <p>On the TV: <em>Settings</em> → <em>Device Preferences</em> → <em>About</em>, then press <em>Build</em> seven times. Now turn on <em>Unknown sources</em> for whichever app you use to copy the file over.</p>
           </li>
           <li>
-            <h3>Get the APK onto the TV</h3>
-            <p>The tidiest way is <code>adb</code> from a computer on the same network. Turn on network debugging in Developer options, then:</p>
+            <h3>Get the file onto the TV</h3>
+            <p>Easiest with a free app from the Play Store, such as Downloader or Send Files to TV, pointed at the download link above. With a computer on the same wifi, <code>adb</code> works too:</p>
             <pre class="code"><code>adb connect &lt;tv-ip&gt;:5555
 adb install TMPlayer-&lt;version&gt;-armeabi-v7a.apk</code></pre>
-            <p>No computer to hand? A sideload helper from the Play Store (Downloader, Send Files to TV, or similar) can fetch the same file straight from the download link above.</p>
+            <p>For that one, turn on network debugging in Developer options first.</p>
           </li>
           <li>
             <h3>Sign in by QR code</h3>
-            <p>Open TMPlayer. It draws a QR code. On the phone that has your Telegram, go to <em>Settings</em>, then <em>Devices</em>, then <em>Link Desktop Device</em>, and point the camera at the TV. No typing an email address with a D-pad. Two-step verification works.</p>
+            <p>Open TMPlayer and it shows a QR code. On your phone, open Telegram, go to <em>Settings</em> → <em>Devices</em> → <em>Link Desktop Device</em>, and point the camera at the TV. Nothing to type with the remote.</p>
           </li>
           <li>
             <h3>Pick a chat and press play</h3>
@@ -291,20 +335,54 @@ adb install TMPlayer-&lt;version&gt;-armeabi-v7a.apk</code></pre>
         <div class="panel">
           <h3>What it is</h3>
           <ul class="ticks">
-            <li>A player for <strong>your own</strong> Telegram account, signed in with your own credentials through TDLib, Telegram's official client library.</li>
-            <li>A way to watch the videos already in chats and channels <strong>you have joined</strong>, without downloading them to a phone first.</li>
-            <li>Free and open source under Apache-2.0. You can read every line, build it yourself, and change it.</li>
+            <li>A player for <strong>your own</strong> Telegram account, signed in through Telegram's own official library.</li>
+            <li>A way to watch videos in the chats and channels <strong>you have already joined</strong>, without putting them on a phone first.</li>
+            <li>Free and open source. You can read every line and build it yourself.</li>
           </ul>
         </div>
         <div class="panel">
           <h3>What it is not</h3>
           <ul class="crosses">
-            <li>Not a content service. It hosts nothing, indexes nothing, and uploads nothing. There is no server and no bot.</li>
-            <li>Not a general Telegram client. You cannot read messages, reply, or send anything.</li>
+            <li>Not a place to find films. It hosts nothing and uploads nothing. There is no server and no bot.</li>
+            <li>Not a Telegram app. You cannot read messages, reply, or send anything.</li>
             <li>Not affiliated with, endorsed by, or connected to Telegram FZ-LLC. What you watch, and where it came from, is your responsibility.</li>
           </ul>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section class="band" id="faq" aria-labelledby="faq-h">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <div class="section-title">
+          <h2 id="faq-h">Common questions</h2>
+          <p class="section-sub">The four that get asked most.</p>
+        </div>
+      </div>
+
+      <dl class="faq" data-reveal>
+        <div>
+          <dt>Do I have to wait for the film to download?</dt>
+          <dd>No. It starts in seconds and downloads while you watch. If your connection cannot
+            keep up, a setting in the app will fetch the whole film first instead.</dd>
+        </div>
+        <div>
+          <dt>Is there a server or a bot involved?</dt>
+          <dd>Neither. The TV talks to Telegram directly, signed in as you. Nothing passes through
+            anything of mine.</dd>
+        </div>
+        <div>
+          <dt>Which file do I download?</dt>
+          <dd>Most TV sticks, including the Mi TV Stick, need <code>armeabi-v7a</code>. Newer
+            boxes such as Chromecast with Google TV need <code>arm64-v8a</code>.</dd>
+        </div>
+        <div>
+          <dt>Can I read my messages on it?</dt>
+          <dd>No. It only ever shows the videos in your chats. You cannot read, reply or send
+            anything from the TV.</dd>
+        </div>
+      </dl>
     </div>
   </section>
 
@@ -313,14 +391,14 @@ adb install TMPlayer-&lt;version&gt;-armeabi-v7a.apk</code></pre>
       <div class="section-head" data-reveal>
         <div class="section-title">
           <h2 id="feedback-h">Missing something?</h2>
-          <p class="section-sub">If the app will not do the thing you wanted, or a particular TV stick refuses to behave, I would rather hear about it.</p>
+          <p class="section-sub">If the app will not do what you wanted, or your TV stick misbehaves, I would rather hear about it.</p>
         </div>
       </div>
 
       <div class="section-body" data-reveal>
         <div class="contact">
           <p class="contact-lede">Tell me what you wanted the app to do, and it might do it next release.</p>
-          <p class="contact-body">Say what you were trying to watch, what happened instead, and which device you are on. That is usually enough for me to reproduce it. If you would rather the request stayed public and trackable, use GitHub Issues instead.</p>
+          <p class="contact-body">Say what you were trying to watch, what happened instead, and which device you are on. That is usually enough for me to find the problem.</p>
 
           <div class="contact-actions">
             <a class="action" href="mailto:nevilnicks4321@gmail.com?subject=TMPlayer%20feature%20request" aria-label="Email nevilnicks4321@gmail.com with a TMPlayer feature request">
@@ -335,7 +413,7 @@ adb install TMPlayer-&lt;version&gt;-armeabi-v7a.apk</code></pre>
             </a>
           </div>
 
-          <p class="contact-note">There is no form on this page, on purpose. It is a static file with nothing behind it, so a send button would have nowhere to send your words. The two links above open your mail app and GitHub, which both actually reach me.</p>
+          <p class="contact-note">There is no form here on purpose: this page is a plain file with nothing behind it, so a send button would have nowhere to send your words. The two links above open your mail app and GitHub, and both actually reach me.</p>
           <p class="contact-by">Built by <strong>Nevil</strong>. More of what I make is at <a href="https://nevil.dev" rel="noopener">nevil.dev</a>.</p>
         </div>
       </div>
