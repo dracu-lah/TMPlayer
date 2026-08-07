@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -58,8 +59,9 @@ data class MenuAction(
  * either a hold of OK or a control taking up room on the screen. A hold is what the launcher and
  * every other TV app already train people to try, and it costs no space at all.
  *
- * Focus starts on the first action rather than on Cancel, unlike [TvConfirm]: nothing in here is
- * destructive by default, and a menu that opens with nothing useful selected wastes the press.
+ * Nothing is selected when it opens. The hold that opened it ends in a release, and on some
+ * remotes in a second press, and either landing on an action would run something the viewer never
+ * chose. Focus sits on the heading instead, and one press of Down puts it on the first action.
  */
 @Composable
 fun TvMenu(
@@ -68,7 +70,7 @@ fun TvMenu(
     onDismiss: () -> Unit,
     subtitle: String? = null,
 ) {
-    val firstAction = remember { FocusRequester() }
+    val heading = remember { FocusRequester() }
 
     // A separate window, for the same reason TvConfirm uses one: drawn inline this would sit
     // behind anything composed after it.
@@ -94,7 +96,14 @@ fun TvMenu(
                     .padding(horizontal = 24.dp, vertical = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Column(Modifier.padding(start = 4.dp, bottom = 8.dp)) {
+                // Focus has to live somewhere for the D-pad to work at all, so it starts here,
+                // on something that does nothing when pressed.
+                Column(
+                    Modifier
+                        .padding(start = 4.dp, bottom = 8.dp)
+                        .focusRequester(heading)
+                        .focusable(),
+                ) {
                     Text(
                         title,
                         style = MaterialTheme.typography.titleLarge,
@@ -113,15 +122,10 @@ fun TvMenu(
                     }
                 }
 
-                actions.forEachIndexed { index, action ->
-                    MenuRow(
-                        action = action,
-                        modifier = if (index == 0) Modifier.focusRequester(firstAction) else Modifier,
-                    )
-                }
+                actions.forEach { action -> MenuRow(action = action) }
 
                 Text(
-                    "Press Back to close this.",
+                    "Press Down to choose, or Back to close this.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextMuted,
                     modifier = Modifier.padding(start = 4.dp, top = 8.dp),
@@ -129,7 +133,7 @@ fun TvMenu(
             }
         }
 
-        LaunchedEffect(Unit) { runCatching { firstAction.requestFocus() } }
+        LaunchedEffect(Unit) { runCatching { heading.requestFocus() } }
     }
 }
 

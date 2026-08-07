@@ -60,7 +60,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.tmplayer.data.CardLayout
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.RemoteImages
@@ -101,12 +100,10 @@ fun SettingsScreen(
     val settings = remember { SettingsStore(context) }
 
     val openLastChat by settings.openLastChat.collectAsStateWithLifecycle(initialValue = true)
-    val askBeforeClearing by settings.askBeforeClearing.collectAsStateWithLifecycle(initialValue = true)
+    val askBeforeClearing by settings.askBeforeClearing.collectAsStateWithLifecycle(initialValue = false)
     val downloadFirst by settings.downloadBeforePlaying.collectAsStateWithLifecycle(initialValue = false)
     val history by settings.continueWatching.collectAsStateWithLifecycle(initialValue = emptyList())
     val favorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
-    val chatLayout by settings.chatLayout.collectAsStateWithLifecycle(initialValue = CardLayout.List)
-    val filmLayout by settings.filmLayout.collectAsStateWithLifecycle(initialValue = CardLayout.Grid)
     val lastChatId by settings.lastChatId.collectAsStateWithLifecycle(initialValue = 0L)
     val minSize by settings.minSizeBytes.collectAsStateWithLifecycle(
         initialValue = SizeFilter.DEFAULT_MIN,
@@ -224,33 +221,9 @@ fun SettingsScreen(
 
         // ---- lists ---------------------------------------------------------------------------
 
+        // Rows or tiles used to be set here. It now sits beside each list it rearranges, where
+        // the viewer can see what they are choosing between.
         item { SectionTitle("Lists") }
-        item {
-            ToggleRow(
-                title = "Chats as tiles",
-                subtitle = if (chatLayout == CardLayout.Grid) {
-                    "Artwork, several across"
-                } else {
-                    "Off: one wide row per chat, with room for the name"
-                },
-                icon = TmIcons.Grid,
-                checked = chatLayout == CardLayout.Grid,
-                onToggle = { scope.launch { settings.setChatLayout(chatLayout.toggled()) } },
-            )
-        }
-        item {
-            ToggleRow(
-                title = "Films as tiles",
-                subtitle = if (filmLayout == CardLayout.Grid) {
-                    "Posters, several across"
-                } else {
-                    "Off: one wide row per film, with room for the file name"
-                },
-                icon = TmIcons.Grid,
-                checked = filmLayout == CardLayout.Grid,
-                onToggle = { scope.launch { settings.setFilmLayout(filmLayout.toggled()) } },
-            )
-        }
         if (favorites.isNotEmpty()) {
             item {
                 ActionRow(

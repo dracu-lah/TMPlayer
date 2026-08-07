@@ -31,8 +31,10 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
@@ -62,6 +64,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.CardLayout
+import com.tmplayer.data.FilmName
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.SettingsStore
@@ -72,6 +75,7 @@ import com.tmplayer.ui.components.StateScaffold
 import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvSearchField
+import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.components.rememberVoiceSearch
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.SurfaceDark
@@ -94,6 +98,8 @@ private class MediaListViewModelFactory(
 fun MediaGridScreen(
     chatId: Long,
     chatTitle: String,
+    chatPhotoFileId: Int,
+    chatMiniThumbnail: ByteArray?,
     isFavorite: Boolean,
     minSizeBytes: Long,
     maxSizeBytes: Long,
@@ -101,6 +107,7 @@ fun MediaGridScreen(
     onToggleFavorite: () -> Unit,
     onPlay: (MediaItem) -> Unit,
     onPlayFromStart: (MediaItem) -> Unit,
+    onToggleLayout: () -> Unit,
     /** Posters four across, or one wide row per film with the full title on it. */
     layout: CardLayout = CardLayout.Grid,
 ) {
@@ -122,11 +129,15 @@ fun MediaGridScreen(
     Column(Modifier.fillMaxSize()) {
         Header(
             chatTitle = chatTitle,
+            chatPhotoFileId = chatPhotoFileId,
+            chatMiniThumbnail = chatMiniThumbnail,
             isFavorite = isFavorite,
             query = query,
             onQuery = { query = it },
             onSubmit = { viewModel.search(query) },
             onToggleFavorite = onToggleFavorite,
+            layout = layout,
+            onToggleLayout = onToggleLayout,
             onRefresh = viewModel::load,
         )
 
@@ -246,12 +257,24 @@ fun MediaGridScreen(
 
     details?.let { item ->
         val point = watchProgress[SettingsStore.progressKey(item.chatId, item.messageId)]
+        // Only what has been loaded so far can be offered. A chat pages in as it is scrolled,
+        // so an episode further down than the viewer has ever been is not here yet, and saying
+        // nothing is better than offering something that turns out to be the wrong file.
+        val loaded = (state as? UiState.Content)?.value?.items.orEmpty()
+        val next = remember(item.id, loaded) {
+            FilmName.nextEpisode(item.fileName.ifBlank { item.title }, loaded) {
+                it.fileName.ifBlank { it.title }
+            }
+        }
+
         FilmDetailsPanel(
             item = item,
             resumeMs = point?.positionMs ?: 0L,
             trailersAvailable = trailersAvailable,
+            nextEpisode = next,
             onPlay = { details = null; onPlay(item) },
             onPlayFromStart = { details = null; onPlayFromStart(item) },
+            onPlayNext = { next?.let { details = null; onPlay(it) } },
             onWatchTrailer = { key -> openYouTube(context, key) },
             onDismiss = { details = null },
         )
@@ -277,11 +300,15 @@ private fun openYouTube(context: Context, key: String) {
 @Composable
 private fun Header(
     chatTitle: String,
+    chatPhotoFileId: Int,
+    chatMiniThumbnail: ByteArray?,
     isFavorite: Boolean,
     query: String,
     onQuery: (String) -> Unit,
     onSubmit: () -> Unit,
     onToggleFavorite: () -> Unit,
+    layout: CardLayout,
+    onToggleLayout: () -> Unit,
     onRefresh: () -> Unit,
 ) {
     val startVoice = rememberVoiceSearch("Say a film name") {
@@ -290,18 +317,30 @@ private fun Header(
     }
 
     Column(Modifier.padding(start = Tv.SafeH, end = Tv.SafeH, top = Tv.SafeV, bottom = 12.dp)) {
-        Text(
-            chatTitle,
-            style = MaterialTheme.typography.headlineLarge,
-            color = TextPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            "Films and videos from this chat",
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextMuted,
-        )
+        // The same picture the chat was picked by, so it is obvious which one this listing is.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Poster(
+                miniThumbnail = chatMiniThumbnail,
+                thumbnailFileId = chatPhotoFileId,
+                fallbackLabel = chatTitle,
+                modifier = Modifier.size(52.dp).clip(CircleShape),
+            )
+            Spacer(Modifier.width(16.dp))
+            Column {
+                Text(
+                    chatTitle,
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    "Films and videos from this chat",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextMuted,
+                )
+            }
+        }
         Spacer(Modifier.height(12.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -336,6 +375,13 @@ private fun Header(
                 icon = if (isFavorite) Icons.Filled.Star else TmIcons.StarOutline,
                 tintWhenIdle = if (isFavorite) Accent else TextPrimary,
                 onClick = onToggleFavorite,
+            )
+            // Which arrangement suits a chat depends on the chat: posters for a film channel,
+            // rows for one that posts long release names. The choice is remembered per screen.
+            Pill(
+                label = if (layout == CardLayout.Grid) "As rows" else "As posters",
+                icon = if (layout == CardLayout.Grid) Icons.AutoMirrored.Filled.List else TmIcons.Grid,
+                onClick = onToggleLayout,
             )
             // Telegram pushes new messages into TDLib's database, but this grid was built from a
             // search that ran when it opened, so a film posted since then needs a fresh search.

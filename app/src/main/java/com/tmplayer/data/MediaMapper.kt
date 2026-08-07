@@ -4,6 +4,8 @@ import dev.g000sha256.tdl.dto.Message
 import dev.g000sha256.tdl.dto.MessageAnimation
 import dev.g000sha256.tdl.dto.MessageDocument
 import dev.g000sha256.tdl.dto.MessageVideo
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 /** One playable thing in a chat, flattened out of whatever message shape Telegram used. */
@@ -111,32 +113,26 @@ object MediaMapper {
     }
 
     /**
-     * Resolution and codec markers, in the order a viewer scans for them.
+     * The one marker worth a badge: how sharp the file is.
      *
      * Scene releases put this in the file name and nowhere else; the container would have to be
-     * opened to learn it otherwise, which is not worth a download per tile. At most three are
-     * returned so a poster never turns into a wall of badges.
+     * opened to learn it otherwise, which is not worth a download per tile. Codec and dynamic
+     * range used to sit here too and no longer do. HEVC and HDR tell somebody choosing what to
+     * watch nothing they can act on, and a tile wearing three badges is harder to read than one
+     * wearing the only badge that decides anything.
      */
     fun qualityTags(fileName: String?): List<String> {
         val name = fileName?.lowercase() ?: return emptyList()
-        return buildList {
-            when {
-                RESOLUTION_4K.containsMatchIn(name) -> add("4K")
-                name.contains("1080p") || name.contains("1080i") -> add("1080p")
-                name.contains("720p") -> add("720p")
-                name.contains("480p") || name.contains("360p") -> add("SD")
-            }
-            when {
-                name.contains("dolby vision") || DOLBY_VISION.containsMatchIn(name) -> add("DV")
-                name.contains("hdr") -> add("HDR")
-            }
-            if (HEVC.containsMatchIn(name)) add("HEVC")
-        }.take(3)
+        return when {
+            RESOLUTION_4K.containsMatchIn(name) -> listOf("4K")
+            name.contains("1080p") || name.contains("1080i") -> listOf("1080p")
+            name.contains("720p") -> listOf("720p")
+            name.contains("480p") || name.contains("360p") -> listOf("SD")
+            else -> emptyList()
+        }
     }
 
     private val RESOLUTION_4K = Regex("""\b(2160p|4k|uhd)\b""")
-    private val DOLBY_VISION = Regex("""\bdv\b""")
-    private val HEVC = Regex("""\b(x265|h265|h\.265|hevc)\b""")
 
     /** A file name beats a caption, and a caption beats nothing. */
     fun displayTitle(fileName: String?, caption: String?, fallback: String): String {
@@ -149,6 +145,18 @@ object MediaMapper {
 
     /** TDLib reports 0 for a file it has never touched, but usually knows the expected size. */
     private fun fileSize(size: Long, expectedSize: Long) = if (size > 0) size else expectedSize
+
+    /**
+     * When the file was posted to the chat, as a date rather than a time.
+     *
+     * The hour is noise on a details page; what a viewer wants to know is whether this is the
+     * copy that went up last week or the one from two years ago.
+     */
+    fun formatPostedDate(epochSeconds: Int): String {
+        if (epochSeconds <= 0) return ""
+        val format = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
+        return format.format(Date(epochSeconds * 1000L))
+    }
 
     fun formatSize(bytes: Long): String = when {
         bytes <= 0 -> ""

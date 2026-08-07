@@ -69,4 +69,23 @@ class MediaMapperTest {
         assertEquals("1m", MediaMapper.formatDuration(20))
         assertEquals("", MediaMapper.formatDuration(0))
     }
+
+    @Test
+    fun `a tile is badged with its resolution and nothing else`() {
+        // Codec and dynamic range are in the name and are deliberately not shown: they change
+        // nothing about what a viewer picks.
+        assertEquals(
+            listOf("1080p"),
+            MediaMapper.qualityTags("Wednesday.S02E04.1080p.10bit.WEBRip.x265.HEVC-PS.mkv"),
+        )
+        assertEquals(listOf("4K"), MediaMapper.qualityTags("Dune.2021.2160p.UHD.HDR.DV.mkv"))
+        assertEquals(listOf("720p"), MediaMapper.qualityTags("Uyir.720p.WEB-DL.mkv"))
+        assertEquals(listOf("SD"), MediaMapper.qualityTags("Old.Film.480p.mkv"))
+    }
+
+    @Test
+    fun `a name with no resolution earns no badge`() {
+        assertEquals(emptyList<String>(), MediaMapper.qualityTags("Ratatouille.mkv"))
+        assertEquals(emptyList<String>(), MediaMapper.qualityTags(null))
+    }
 }

@@ -134,6 +134,10 @@ private fun Root() {
     // Back out of the chat would drop the viewer straight into it again: the navigation rail and
     // Settings become unreachable, including the switch that turns this behaviour off.
     var autoOpened by rememberSaveable { mutableStateOf(false) }
+    // Whether it is settled yet whether this launch jumps into a chat. Until it is, the chat list
+    // must not be drawn: it would appear fully for a moment and then be replaced, which reads as
+    // a glitch rather than as opening the chat the viewer asked to come back to.
+    var autoOpenDecided by rememberSaveable { mutableStateOf(false) }
     var confirmExit by remember { mutableStateOf(false) }
     // Hoisted out of BrowseScreen: opening a chat replaces that screen entirely, so a tab held
     // down there would be forgotten every time the viewer backed out of a film.
@@ -149,7 +153,7 @@ private fun Root() {
             val cacheBytes = runCatching { Td.storageUsedBytes() }.getOrDefault(0L)
             val free = DiskSpace.read(context).freeBytes
             val decision = CachePolicy.decide(item.sizeBytes, alreadyCached, cacheBytes, free)
-            val ask = runCatching { settings.askBeforeClearing.first() }.getOrDefault(true)
+            val ask = runCatching { settings.askBeforeClearing.first() }.getOrDefault(false)
 
             when (decision) {
                 is CachePolicy.Decision.Proceed ->
@@ -199,6 +203,7 @@ private fun Root() {
             LaunchedEffect(Unit) {
                 screen = Screen.Chats
                 autoOpened = false
+                autoOpenDecided = false
             }
             if (!introSeen) {
                 IntroScreen(onContinue = { scope.launch { settings.markIntroSeen() } })
@@ -232,12 +237,18 @@ private fun Root() {
 
         // Straight back into whatever was being watched last. Not routed through openChat: this
         // is not the viewer picking a chat, and rewriting the record it just read would be noise.
-        LaunchedEffect(chats) {
-            if (autoOpened || chats.isEmpty()) return@LaunchedEffect
+        LaunchedEffect(chatsState, autoOpened) {
+            if (autoOpened) {
+                autoOpenDecided = true
+                return@LaunchedEffect
+            }
+            // The chat list is still arriving, and which chat is in it is the whole question.
+            if (chatsState is UiState.Loading) return@LaunchedEffect
+
             autoOpened = true
-            val target = settings.autoOpenTarget() ?: return@LaunchedEffect
-            val chat = chats.firstOrNull { it.id == target } ?: return@LaunchedEffect
-            screen = Screen.Media(chat)
+            val target = settings.autoOpenTarget()
+            chats.firstOrNull { it.id == target }?.let { screen = Screen.Media(it) }
+            autoOpenDecided = true
         }
 
         // At the top level Back would leave the app outright. One press asks first, because on
@@ -260,7 +271,9 @@ private fun Root() {
         when (val current = screen) {
             is Screen.Chats -> {
                 BrowseScreen(
-                    state = chatsState,
+                    // Held on its own loading state until the jump has been decided, so the
+                    // launch looks like one screen loading rather than two screens fighting.
+                    state = if (autoOpenDecided) chatsState else UiState.Loading(),
                     favorites = favorites,
                     continueWatching = continueWatching,
                     onRetry = chatsViewModel::load,
@@ -318,6 +331,7 @@ private fun Root() {
                     launchChatId = lastChatId,
                     picked = pickedTab,
                     onPickTab = { pickedTab = it },
+                    onToggleLayout = { scope.launch { settings.setChatLayout(chatLayout.toggled()) } },
                     layout = chatLayout,
                 )
             }
@@ -334,6 +348,8 @@ private fun Root() {
                 MediaGridScreen(
                     chatId = current.chat.id,
                     chatTitle = current.chat.title,
+                    chatPhotoFileId = current.chat.photoFileId,
+                    chatMiniThumbnail = current.chat.miniThumbnail,
                     isFavorite = current.chat.id in favorites,
                     minSizeBytes = minSize,
                     maxSizeBytes = maxSize,
@@ -359,6 +375,7 @@ private fun Root() {
                             play(item, chatTitle = current.chat.title)
                         }
                     },
+                    onToggleLayout = { scope.launch { settings.setFilmLayout(filmLayout.toggled()) } },
                     layout = filmLayout,
                 )
             }

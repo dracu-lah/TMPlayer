@@ -178,8 +178,14 @@ class SettingsStore(private val context: Context) {
 
     // ---- prompts ----------------------------------------------------------------------------
 
-    /** Whether to confirm before dropping the previous film to make room for a new one. */
-    val askBeforeClearing: Flow<Boolean> = context.prefs.data.map { it[ASK_BEFORE_CLEARING] ?: true }
+    /**
+     * Whether to confirm before dropping the previous film to make room for a new one.
+     *
+     * Off by default. The stick holds one film at a time, so the answer is always yes, and being
+     * asked it every time is a press between the viewer and what they came to watch. Anyone who
+     * wants the question back can turn it on.
+     */
+    val askBeforeClearing: Flow<Boolean> = context.prefs.data.map { it[ASK_BEFORE_CLEARING] ?: false }
 
     suspend fun setAskBeforeClearing(value: Boolean) {
         context.prefs.edit { it[ASK_BEFORE_CLEARING] = value }

@@ -52,6 +52,7 @@ import com.tmplayer.R
 import com.tmplayer.data.CastMember
 import com.tmplayer.data.FilmDetails
 import com.tmplayer.data.FilmLookup
+import com.tmplayer.data.FilmName
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.Tmdb
@@ -84,6 +85,9 @@ fun FilmDetailsPanel(
     onWatchTrailer: (String) -> Unit,
     trailersAvailable: Boolean,
     onDismiss: () -> Unit,
+    /** The episode that follows this one in the same chat, when one has been loaded. */
+    nextEpisode: MediaItem? = null,
+    onPlayNext: () -> Unit = {},
 ) {
     // A Dialog renders in its own window, so this cannot be drawn behind the grid no matter
     // where it is emitted from.
@@ -94,6 +98,10 @@ fun FilmDetailsPanel(
         val lookup by produceState<FilmLookup>(initialValue = FilmLookup.Loading, key1 = item.id) {
             value = Tmdb.lookup(item.fileName.ifBlank { item.title })
         }
+
+        // Read straight off the file name so the screen knows it is showing an episode before
+        // TMDB has said anything, and still knows it if TMDB never answers.
+        val parsed = remember(item.id) { FilmName.parse(item.fileName.ifBlank { item.title }) }
 
         Box(Modifier.fillMaxSize().background(Background)) {
             val details = (lookup as? FilmLookup.Found)?.details
@@ -135,6 +143,27 @@ fun FilmDetailsPanel(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
+
+                    // "S2 E4" from the file name straight away, upgraded to "S2 E4 · Wednesday's
+                    // Child" once the episode itself has been looked up.
+                    val episodeLabel = details?.episodeLabel ?: when {
+                        parsed.season != null && parsed.episode != null ->
+                            "S${parsed.season} E${parsed.episode}"
+                        parsed.episode != null -> "Episode ${parsed.episode}"
+                        parsed.season != null -> "Season ${parsed.season}"
+                        else -> null
+                    }
+                    if (episodeLabel != null) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            episodeLabel,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Accent,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+
                     Spacer(Modifier.height(6.dp))
                     FactsRow(item = item, details = details, state = lookup)
                     Spacer(Modifier.height(14.dp))
@@ -142,18 +171,31 @@ fun FilmDetailsPanel(
                     Actions(
                         resumeMs = resumeMs,
                         trailerKey = details?.trailerKey?.takeIf { trailersAvailable },
+                        isEpisode = parsed.isSeries,
+                        nextLabel = nextEpisode?.let {
+                            val after = FilmName.parse(it.fileName.ifBlank { it.title })
+                            if (after.season != null && after.episode != null) {
+                                "Next: S${after.season} E${after.episode}"
+                            } else {
+                                "Next episode"
+                            }
+                        },
                         onPlay = onPlay,
                         onPlayFromStart = onPlayFromStart,
+                        onPlayNext = onPlayNext,
                         onWatchTrailer = onWatchTrailer,
                     )
 
                     Spacer(Modifier.height(16.dp))
-                    Synopsis(lookup)
+                    Synopsis(lookup, isEpisode = parsed.isSeries)
 
                     if (details != null && details.cast.isNotEmpty()) {
                         Spacer(Modifier.height(18.dp))
                         CastRow(details.cast)
                     }
+
+                    Spacer(Modifier.height(18.dp))
+                    SourceName(item)
 
                     if (lookup is FilmLookup.Found) {
                         Spacer(Modifier.height(18.dp))
@@ -229,8 +271,11 @@ private fun FactsRow(item: MediaItem, details: FilmDetails?, state: FilmLookup) 
 private fun Actions(
     resumeMs: Long,
     trailerKey: String?,
+    isEpisode: Boolean,
+    nextLabel: String?,
     onPlay: () -> Unit,
     onPlayFromStart: () -> Unit,
+    onPlayNext: () -> Unit,
     onWatchTrailer: (String) -> Unit,
 ) {
     val play = remember { FocusRequester() }
@@ -245,10 +290,10 @@ private fun Actions(
             Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(8.dp))
             Text(
-                if (hasResume) {
-                    "Resume from ${com.tmplayer.player.StreamStats.formatClock(resumeMs)}"
-                } else {
-                    "Watch movie"
+                when {
+                    hasResume -> "Resume from ${com.tmplayer.player.StreamStats.formatClock(resumeMs)}"
+                    isEpisode -> "Watch episode"
+                    else -> "Watch movie"
                 },
             )
         }
@@ -256,6 +301,16 @@ private fun Actions(
         if (hasResume) {
             Button(onClick = onPlayFromStart, colors = tmButtonColors()) {
                 Text("Start from the beginning")
+            }
+        }
+
+        // Somebody working through a series is here to watch the next one, and the alternative
+        // is backing out to a grid of near-identical file names and finding it by eye.
+        if (nextLabel != null) {
+            Button(onClick = onPlayNext, colors = tmButtonColors()) {
+                Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(nextLabel)
             }
         }
 
@@ -273,8 +328,9 @@ private fun Actions(
 
 /** The synopsis, or an honest sentence about why there isn't one. */
 @Composable
-private fun Synopsis(lookup: FilmLookup) {
+private fun Synopsis(lookup: FilmLookup, isEpisode: Boolean) {
     val shimmer = rememberShimmer()
+    val noun = if (isEpisode) "episode" else "film"
 
     when (lookup) {
         is FilmLookup.Loading -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -284,7 +340,7 @@ private fun Synopsis(lookup: FilmLookup) {
         }
 
         is FilmLookup.Found -> Text(
-            lookup.details.overview.ifBlank { "No synopsis has been written for this film yet." },
+            lookup.details.overview.ifBlank { "No synopsis has been written for this $noun yet." },
             style = MaterialTheme.typography.bodyLarge,
             color = TextMuted,
             maxLines = 5,
@@ -293,9 +349,48 @@ private fun Synopsis(lookup: FilmLookup) {
 
         // All three remaining cases say the same thing to the viewer: the film is fine, the
         // extras are not here. Only the reason differs, and only the reason is worth varying.
-        is FilmLookup.NotFound -> Notice("We couldn't find this film in the movie database. You can still play it.")
-        is FilmLookup.Failed -> Notice("${lookup.message} You can still play the film.")
-        is FilmLookup.Disabled -> Notice("Film details aren't available in this version. You can still play the film.")
+        is FilmLookup.NotFound -> Notice("We couldn't find this $noun in the movie database. You can still play it.")
+        is FilmLookup.Failed -> Notice("${lookup.message} You can still play the $noun.")
+        is FilmLookup.Disabled -> Notice("Details aren't available in this version. You can still play the $noun.")
+    }
+}
+
+/**
+ * The name Telegram gave the file, verbatim.
+ *
+ * The heading above is whatever the database matched, which is usually right and occasionally
+ * is not. This is the only place the viewer can check what they are actually about to play, and
+ * it fills the gap at the foot of the panel rather than leaving it empty.
+ */
+@Composable
+private fun SourceName(item: MediaItem) {
+    Column {
+        Text("File from Telegram", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            item.fileName.ifBlank { item.title },
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextMuted,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+
+        // Facts about this copy rather than about the film: how sharp it is and when it was
+        // posted. Neither is anywhere else on the screen, and both decide whether this is the
+        // copy worth watching.
+        val provenance = listOfNotNull(
+            MediaMapper.qualityTags(item.fileName).firstOrNull(),
+            MediaMapper.formatPostedDate(item.date).ifEmpty { null }?.let { "posted $it" },
+        )
+        if (provenance.isNotEmpty()) {
+            Spacer(Modifier.height(2.dp))
+            Text(
+                provenance.joinToString("  ·  "),
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextMuted,
+                maxLines = 1,
+            )
+        }
     }
 }
 

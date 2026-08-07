@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -32,6 +33,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.List
@@ -55,6 +57,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -129,10 +132,11 @@ fun BrowseScreen(
     picked: BrowseTab? = null,
     onPickTab: (BrowseTab) -> Unit = {},
     /**
-     * Rows or tiles, chosen in Settings. One arrangement covers every tab: they are all lists of
-     * the same card.
+     * Rows or tiles, chosen from the pill beside the tab name and remembered from then on. One
+     * arrangement covers every tab: they are all lists of the same card.
      */
     layout: CardLayout = CardLayout.List,
+    onToggleLayout: () -> Unit = {},
     /** The newer version on GitHub, if there is one. Shown on the rail, in amber. */
     updateVersion: String? = null,
     onUpdate: () -> Unit = {},
@@ -177,6 +181,7 @@ fun BrowseScreen(
                 Column(Modifier.fillMaxSize()) {
                     if (tab == BrowseTab.Continue) {
                         Header(tab, continueWatching.size) {
+                            LayoutAction(layout, onToggleLayout)
                             if (continueWatching.isNotEmpty()) {
                                 HeaderAction(
                                     label = "Clear history",
@@ -198,6 +203,7 @@ fun BrowseScreen(
                         }
                     } else {
                         Header(tab, visible.size) {
+                            LayoutAction(layout, onToggleLayout)
                             // Stars are added one at a time from a menu, so the only way back from
                             // a tab full of them is here, beside the tab they fill.
                             if (tab == BrowseTab.Favorites && favorites.isNotEmpty()) {
@@ -810,6 +816,22 @@ private fun RailItem(
 // ---- content ---------------------------------------------------------------------------------
 
 /**
+ * Rows or tiles, offered where the arrangement is: beside the list it rearranges.
+ *
+ * It lives here rather than in Settings because it is a matter of taste that changes with the
+ * chat being looked at, and walking to another screen to change how this one looks is a long way
+ * round for something the viewer can see the result of immediately.
+ */
+@Composable
+private fun LayoutAction(layout: CardLayout, onToggle: () -> Unit) {
+    HeaderAction(
+        label = if (layout == CardLayout.Grid) "As rows" else "As tiles",
+        icon = if (layout == CardLayout.Grid) Icons.AutoMirrored.Filled.List else TmIcons.Grid,
+        onClick = onToggle,
+    )
+}
+
+/**
  * A chip beside a heading, for the action that applies to the whole list under it.
  *
  * Sized and coloured like the rows below it rather than like a button, so it reads as part of the
@@ -1202,19 +1224,34 @@ private fun EmptyTab(tab: BrowseTab, query: String) {
             "No favourites yet. Hold OK on any chat to add it here."
         else -> "Nothing here yet."
     }
-    Column(
-        Modifier.fillMaxSize().padding(start = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+    // Centred in the space the missing list would have filled. Pinned to the top left it read as
+    // a caption on an empty screen; in the middle it reads as the screen's own answer. The width
+    // is capped so a sentence that needs two lines breaks near the middle rather than running the
+    // full width of a television and leaving three words underneath.
+    Box(
+        Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 24.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        // A search that came back empty is a different situation from a tab that has nothing in
-        // it yet, so the glyph follows whichever one the viewer is actually looking at.
-        Icon(
-            imageVector = if (query.isNotBlank()) Icons.Filled.Search else tab.icon,
-            contentDescription = null,
-            tint = TextMuted.copy(alpha = 0.55f),
-            modifier = Modifier.size(56.dp),
-        )
-        Text(message, style = MaterialTheme.typography.titleLarge, color = TextMuted)
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            // A search that came back empty is a different situation from a tab that has nothing
+            // in it yet, so the glyph follows whichever one the viewer is actually looking at.
+            Icon(
+                imageVector = if (query.isNotBlank()) Icons.Filled.Search else tab.icon,
+                contentDescription = null,
+                tint = TextMuted.copy(alpha = 0.55f),
+                modifier = Modifier.size(56.dp),
+            )
+            Text(
+                message,
+                style = MaterialTheme.typography.titleLarge,
+                color = TextMuted,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 520.dp),
+            )
+        }
     }
 }
 
