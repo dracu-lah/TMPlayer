@@ -129,12 +129,6 @@ fun BrowseScreen(
     /** Rows or tiles. One arrangement covers every tab: they are all lists of the same card. */
     layout: CardLayout = CardLayout.List,
     onToggleLayout: () -> Unit = {},
-    /**
-     * Drawn above the content, beside the navigation rail rather than above it.
-     * A banner stacked over the whole screen pushes the rail down far enough to shove Settings
-     * off the bottom edge, which leaves the viewer no way to reach it.
-     */
-    banner: @Composable () -> Unit = {},
 ) {
     // An unfinished film wins the landing tab, then Favourites, then Recent, so the first screen
     // is never empty. Both are read from disk after the first frame, so the tab has to settle
@@ -161,7 +155,6 @@ fun BrowseScreen(
         )
 
         Column(Modifier.fillMaxSize().padding(end = Tv.SafeH)) {
-            banner()
             StateScaffold(
                 state,
                 onRetry = onRetry,

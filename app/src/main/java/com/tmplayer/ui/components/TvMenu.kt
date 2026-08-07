@@ -77,7 +77,12 @@ fun TvMenu(
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Box(
-            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.82f)),
+            Modifier
+                .fillMaxSize()
+                // This menu is opened by a hold, so OK is still down as it appears; without this
+                // the release would choose the first action on the viewer's behalf.
+                .ignoreStrayRelease()
+                .background(Color.Black.copy(alpha = 0.82f)),
             contentAlignment = Alignment.Center,
         ) {
             Column(

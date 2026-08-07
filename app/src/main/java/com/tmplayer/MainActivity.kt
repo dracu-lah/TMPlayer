@@ -8,18 +8,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -29,7 +26,6 @@ import com.tmplayer.data.CachePolicy
 import com.tmplayer.data.CardLayout
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DiskSpace
-import com.tmplayer.data.DiskInfo
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
@@ -44,12 +40,10 @@ import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.browse.ChatListViewModel
 import com.tmplayer.ui.browse.MediaGridScreen
 import com.tmplayer.ui.components.TvConfirm
-import com.tmplayer.ui.components.LowSpaceWarning
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.theme.TMPlayerTheme
-import com.tmplayer.ui.theme.Tv
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -237,11 +231,6 @@ private fun Root() {
 
         when (val current = screen) {
             is Screen.Chats -> {
-                // Re-measured whenever the viewer comes back to this screen: playing a film is
-                // the very thing that consumes the space this warns about.
-                val disk by produceState(initialValue = DiskInfo(0, 0), key1 = screen) {
-                    value = DiskSpace.read(context)
-                }
                 BrowseScreen(
                     state = chatsState,
                     favorites = favorites,
@@ -289,15 +278,6 @@ private fun Root() {
                     layout = chatLayout,
                     onToggleLayout = {
                         scope.launch { settings.setChatLayout(chatLayout.toggled()) }
-                    },
-                    // Passed as a slot so it lands beside the rail. Stacked above the whole
-                    // screen it pushed Settings off the bottom of a 540dp panel entirely.
-                    banner = {
-                        LowSpaceWarning(
-                            disk = disk,
-                            settings = settings,
-                            modifier = Modifier.padding(top = Tv.SafeV, bottom = 4.dp),
-                        )
                     },
                 )
             }

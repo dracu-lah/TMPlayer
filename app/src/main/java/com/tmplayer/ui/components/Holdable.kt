@@ -9,6 +9,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.onClick
@@ -48,6 +49,10 @@ fun Modifier.holdable(
             if (event.key !in OK_KEYS) return@onKeyEvent false
             when (event.type) {
                 KeyEventType.KeyDown -> {
+                    // A hold opens a menu in its own window, which takes the key up with it, so
+                    // the release below may never arrive here to clear this. Every fresh press
+                    // starts at repeat zero, and that is the reliable place to start again.
+                    if (event.nativeKeyEvent.repeatCount == 0) held[0] = false
                     if (!held[0] && event.nativeKeyEvent.repeatCount > 0) {
                         held[0] = true
                         onHold()
@@ -65,6 +70,37 @@ fun Modifier.holdable(
             }
         }
         .focusable(interactionSource = interactionSource)
+}
+
+/**
+ * Ignores the release of an OK that was already down when this window appeared.
+ *
+ * A window opened by [holdable] arrives while the viewer is still holding OK. The release then
+ * goes to the new window, where it would land on whatever has just taken focus and choose it: a
+ * hold would open a menu and pick its first line in one gesture. Only a release that follows a
+ * press seen here is a press by the viewer, so that is the only one let through.
+ *
+ * Preview rather than ordinary key handling: the stray release has to be stopped before it
+ * reaches the focused row, not after.
+ */
+@Composable
+fun Modifier.ignoreStrayRelease(): Modifier {
+    val pressed = remember { booleanArrayOf(false) }
+    return onPreviewKeyEvent { event ->
+        if (event.key !in OK_KEYS) return@onPreviewKeyEvent false
+        when (event.type) {
+            KeyEventType.KeyDown -> {
+                // Only the start of a press counts. The hold that opened this window keeps
+                // repeating into it, and treating a repeat as a press would arm the release
+                // this exists to stop.
+                if (event.nativeKeyEvent.repeatCount == 0) pressed[0] = true
+                !pressed[0]
+            }
+
+            KeyEventType.KeyUp -> !pressed[0]
+            else -> false
+        }
+    }
 }
 
 /**

@@ -468,7 +468,7 @@ class PlayerActivity : FragmentActivity() {
         if (!show) return
 
         downloadChip.text = when {
-            downloadComplete -> "Downloaded in full"
+            downloadComplete -> "Download completed"
             speed.bytesPerSec >= StreamStats.MIN_MEANINGFUL_SPEED ->
                 "${StreamStats.formatPercent(downloadedFraction)} downloaded  ·  " +
                     StreamStats.formatSpeed(speed.bytesPerSec)

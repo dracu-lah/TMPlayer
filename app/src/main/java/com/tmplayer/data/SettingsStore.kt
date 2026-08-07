@@ -21,7 +21,6 @@ private val DOWNLOAD_FIRST = booleanPreferencesKey("download_before_playing")
 private val LAST_CHAT = longPreferencesKey("last_chat")
 private val MIN_SIZE = longPreferencesKey("min_size_bytes")
 private val MAX_SIZE = longPreferencesKey("max_size_bytes")
-private val LOW_SPACE_DISMISSED_FREE = longPreferencesKey("low_space_dismissed_free_bytes")
 private val CHAT_LAYOUT = stringPreferencesKey("chat_layout")
 private val FILM_LAYOUT = stringPreferencesKey("film_layout")
 
@@ -173,30 +172,6 @@ class SettingsStore(private val context: Context) {
 
     suspend fun markIntroSeen() {
         context.prefs.edit { it[INTRO_SEEN] = true }
-    }
-
-    /**
-     * Free space when the viewer last hid the low-space card, or [StorageWarning.NEVER_DISMISSED].
-     *
-     * Stored as a figure rather than a flag so the card can return once things get worse; see
-     * [StorageWarning.shouldShow].
-     */
-    val lowSpaceDismissedAtFreeBytes: Flow<Long> =
-        context.prefs.data.map { it[LOW_SPACE_DISMISSED_FREE] ?: StorageWarning.NEVER_DISMISSED }
-
-    suspend fun dismissLowSpaceWarning(freeBytes: Long) {
-        context.prefs.edit { it[LOW_SPACE_DISMISSED_FREE] = freeBytes }
-    }
-
-    /**
-     * Forget a dismissal once there is comfortable room again.
-     *
-     * Without this, clearing several gigabytes and later filling them back up would be measured
-     * against the old cramped figure, and the warning would stay quiet far past the point where
-     * it was useful.
-     */
-    suspend fun clearLowSpaceDismissal() {
-        context.prefs.edit { it.remove(LOW_SPACE_DISMISSED_FREE) }
     }
 
     // ---- resume -----------------------------------------------------------------------------
