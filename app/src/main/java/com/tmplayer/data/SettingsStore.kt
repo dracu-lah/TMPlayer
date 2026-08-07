@@ -16,8 +16,8 @@ private val Context.prefs by preferencesDataStore("tmplayer")
 private val FAVORITES = stringSetPreferencesKey("favorite_chats")
 private val ASK_BEFORE_CLEARING = booleanPreferencesKey("ask_before_clearing")
 private val INTRO_SEEN = booleanPreferencesKey("intro_seen")
-private val JUMP_TO_FAVORITE = booleanPreferencesKey("jump_to_favorite")
-private val DEFAULT_CHAT = longPreferencesKey("default_chat")
+private val OPEN_LAST_CHAT = booleanPreferencesKey("open_last_chat")
+private val LAST_CHAT = longPreferencesKey("last_chat")
 private val MIN_SIZE = longPreferencesKey("min_size_bytes")
 private val MAX_SIZE = longPreferencesKey("max_size_bytes")
 private val LOW_SPACE_DISMISSED_FREE = longPreferencesKey("low_space_dismissed_free_bytes")
@@ -55,36 +55,38 @@ class SettingsStore(private val context: Context) {
     // ---- what opens on launch ---------------------------------------------------------------
 
     /**
-     * Skip the chat list and go straight into a favourite when the answer is unambiguous.
+     * Skip the chat list and reopen whichever chat was last watched.
      *
-     * On by default: most people watch from one channel, and making them re-pick it on every
-     * launch is a whole extra screen for no decision. Switchable off for anyone who doesn't.
+     * On by default: people come back to the same channel evening after evening, and the chat
+     * list is a screen they pass through rather than one they want. This follows what the viewer
+     * actually did last, so it needs no setting up and it keeps up when their habits change.
      */
-    val jumpToFavorite: Flow<Boolean> = context.prefs.data.map { it[JUMP_TO_FAVORITE] ?: true }
+    val openLastChat: Flow<Boolean> = context.prefs.data.map { it[OPEN_LAST_CHAT] ?: true }
 
-    suspend fun setJumpToFavorite(value: Boolean) {
-        context.prefs.edit { it[JUMP_TO_FAVORITE] = value }
+    suspend fun setOpenLastChat(value: Boolean) {
+        context.prefs.edit { it[OPEN_LAST_CHAT] = value }
     }
 
-    /** Which favourite to open when there are several. Zero means "no preference". */
-    val defaultChatId: Flow<Long> = context.prefs.data.map { it[DEFAULT_CHAT] ?: 0L }
+    /** The chat opened most recently, or zero when there has not been one yet. */
+    val lastChatId: Flow<Long> = context.prefs.data.map { it[LAST_CHAT] ?: 0L }
 
-    suspend fun setDefaultChatId(chatId: Long) {
-        context.prefs.edit { if (chatId == 0L) it.remove(DEFAULT_CHAT) else it[DEFAULT_CHAT] = chatId }
+    suspend fun rememberChatOpened(chatId: Long) {
+        context.prefs.edit { it[LAST_CHAT] = chatId }
+    }
+
+    suspend fun forgetLastChat() {
+        context.prefs.edit { it.remove(LAST_CHAT) }
     }
 
     /**
-     * The chat to open immediately, or null to show the browser.
+     * The chat to open immediately, or null to show the chat list.
      *
-     * A single favourite is unambiguous. Several favourites need the viewer to have named one,
-     * otherwise picking for them would be a guess.
+     * Read straight from disk rather than from a collected flow: this runs once, the moment the
+     * chats arrive, and a flow that has not emitted yet would still be reporting its placeholder.
      */
-    fun autoOpenChatId(favorites: Set<Long>, jumpEnabled: Boolean, preferred: Long): Long? = when {
-        !jumpEnabled -> null
-        favorites.isEmpty() -> null
-        favorites.size == 1 -> favorites.first()
-        preferred in favorites -> preferred
-        else -> null
+    suspend fun autoOpenTarget(): Long? {
+        val prefs = context.prefs.data.first()
+        return autoOpenChatId(prefs[LAST_CHAT] ?: 0L, prefs[OPEN_LAST_CHAT] ?: true)
     }
 
     // ---- size filter ------------------------------------------------------------------------
@@ -227,6 +229,10 @@ class SettingsStore(private val context: Context) {
     }
 
     companion object {
+        /** Whether launch should skip the chat list, given what is remembered and the setting. */
+        fun autoOpenChatId(lastChatId: Long, enabled: Boolean): Long? =
+            if (enabled && lastChatId != 0L) lastChatId else null
+
         const val MIN_RESUME_MS = 60_000L
 
         /** Anything within this of the end counts as watched. */

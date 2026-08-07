@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +32,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
@@ -67,7 +67,10 @@ import com.tmplayer.ui.components.NetworkImage
 import com.tmplayer.ui.components.StateScaffold
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.player.StreamStats
+import com.tmplayer.ui.components.MenuAction
+import com.tmplayer.ui.components.holdable
 import com.tmplayer.ui.components.TmIcons
+import com.tmplayer.ui.components.TvMenu
 import com.tmplayer.ui.components.TvSearchField
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.components.rememberVoiceSearch
@@ -105,6 +108,11 @@ fun BrowseScreen(
     onOpenChat: (ChatSummary) -> Unit,
     onResumeFilm: (ResumeRecord) -> Unit,
     onOpenSettings: () -> Unit,
+    onToggleFavorite: (ChatSummary) -> Unit = {},
+    onRestartFilm: (ResumeRecord) -> Unit = {},
+    onForgetFilm: (ResumeRecord) -> Unit = {},
+    /** The chat that reopens on launch, marked on its row so the jump is never unexplained. */
+    launchChatId: Long = 0L,
     picked: BrowseTab? = null,
     onPickTab: (BrowseTab) -> Unit = {},
     /**
@@ -124,6 +132,9 @@ fun BrowseScreen(
         else -> BrowseTab.Favorites
     }
     var query by remember { mutableStateOf("") }
+    // What the viewer held OK on. Only ever one at a time, so two nullable slots cover both lists.
+    var chatMenu by remember { mutableStateOf<ChatSummary?>(null) }
+    var filmMenu by remember { mutableStateOf<ResumeRecord?>(null) }
 
     Row(Modifier.fillMaxSize()) {
         NavRail(
@@ -148,7 +159,11 @@ fun BrowseScreen(
                         if (continueWatching.isEmpty()) {
                             EmptyTab(tab, query = "")
                         } else {
-                            ContinueList(continueWatching, onResumeFilm)
+                            ContinueList(
+                                records = continueWatching,
+                                onResume = onResumeFilm,
+                                onHold = { filmMenu = it },
+                            )
                         }
                     } else {
                         Header(tab, visible.size)
@@ -169,12 +184,68 @@ fun BrowseScreen(
                                     emptyList()
                                 },
                                 onOpenChat = onOpenChat,
+                                onHold = { chatMenu = it },
+                                launchChatId = launchChatId,
                             )
                         }
                     }
                 }
             }
         }
+    }
+
+    chatMenu?.let { chat ->
+        val favorite = chat.id in favorites
+        TvMenu(
+            title = chat.title,
+            subtitle = chat.kind.label,
+            onDismiss = { chatMenu = null },
+            actions = listOf(
+                MenuAction("Open", Icons.Filled.PlayArrow) {
+                    chatMenu = null
+                    onOpenChat(chat)
+                },
+                MenuAction(
+                    label = if (favorite) "Remove from favourites" else "Add to favourites",
+                    icon = if (favorite) Icons.Filled.Star else TmIcons.StarOutline,
+                    detail = if (favorite) {
+                        "Takes it out of the Favourites tab"
+                    } else {
+                        "Keeps it one press away in the Favourites tab"
+                    },
+                ) {
+                    chatMenu = null
+                    onToggleFavorite(chat)
+                },
+            ),
+        )
+    }
+
+    filmMenu?.let { record ->
+        TvMenu(
+            title = record.title,
+            subtitle = StreamStats.formatClock(record.positionMs) + " watched",
+            onDismiss = { filmMenu = null },
+            actions = listOf(
+                MenuAction("Resume", Icons.Filled.PlayArrow, detail = "Carry on where you stopped") {
+                    filmMenu = null
+                    onResumeFilm(record)
+                },
+                MenuAction("Play from the start", Icons.Filled.Refresh) {
+                    filmMenu = null
+                    onRestartFilm(record)
+                },
+                MenuAction(
+                    label = "Remove from Continue watching",
+                    icon = Icons.Filled.Close,
+                    detail = "The film stays in its chat",
+                    destructive = true,
+                ) {
+                    filmMenu = null
+                    onForgetFilm(record)
+                },
+            ),
+        )
     }
 }
 
@@ -184,6 +255,7 @@ fun BrowseScreen(
 private fun ContinueList(
     records: List<ResumeRecord>,
     onResume: (ResumeRecord) -> Unit,
+    onHold: (ResumeRecord) -> Unit,
 ) {
     val first = remember { FocusRequester() }
 
@@ -197,6 +269,7 @@ private fun ContinueList(
             ContinueCard(
                 record = record,
                 onResume = onResume,
+                onHold = onHold,
                 modifier = if (record === records.firstOrNull()) {
                     Modifier.focusRequester(first)
                 } else {
@@ -217,6 +290,7 @@ private fun ContinueList(
 private fun ContinueCard(
     record: ResumeRecord,
     onResume: (ResumeRecord) -> Unit,
+    onHold: (ResumeRecord) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val interactions = remember { MutableInteractionSource() }
@@ -233,8 +307,11 @@ private fun ContinueCard(
             .clip(RoundedCornerShape(16.dp))
             .background(SurfaceDark)
             .border(2.dp, border, RoundedCornerShape(16.dp))
-            .clickable(interactionSource = interactions, indication = null) { onResume(record) }
-            .focusable(interactionSource = interactions)
+            .holdable(
+                interactionSource = interactions,
+                onClick = { onResume(record) },
+                onHold = { onHold(record) },
+            )
             .padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -257,7 +334,13 @@ private fun ContinueCard(
                         append(StreamStats.formatClock(record.remainingMs))
                         append(" left")
                     }
-                    if (record.chatTitle.isNotBlank()) {
+                    // The chat name gives way to the hint while focused. Both are tail information
+                    // on a single line, and only one of them is worth saying to the row the
+                    // viewer is standing on.
+                    if (focused) {
+                        append("  ·  ")
+                        append(HOLD_HINT)
+                    } else if (record.chatTitle.isNotBlank()) {
                         append("  ·  ")
                         append(record.chatTitle)
                     }
@@ -614,6 +697,8 @@ private fun ChatList(
     favorites: Set<Long>,
     recent: List<ChatSummary>,
     onOpenChat: (ChatSummary) -> Unit,
+    onHold: (ChatSummary) -> Unit,
+    launchChatId: Long,
 ) {
     val first = remember { FocusRequester() }
 
@@ -636,6 +721,7 @@ private fun ChatList(
                             RecentTile(
                                 chat = chat,
                                 onClick = { onOpenChat(chat) },
+                                onHold = { onHold(chat) },
                                 modifier = if (chat === recent.firstOrNull()) {
                                     Modifier.focusRequester(first)
                                 } else {
@@ -660,7 +746,9 @@ private fun ChatList(
             ChatRow(
                 chat = chat,
                 favorite = chat.id in favorites,
+                opensOnLaunch = chat.id == launchChatId,
                 onClick = { onOpenChat(chat) },
+                onHold = { onHold(chat) },
                 modifier = if (recent.isEmpty() && chat === chats.firstOrNull()) {
                     Modifier.focusRequester(first)
                 } else {
@@ -679,7 +767,12 @@ private fun ChatList(
 }
 
 @Composable
-private fun RecentTile(chat: ChatSummary, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun RecentTile(
+    chat: ChatSummary,
+    onClick: () -> Unit,
+    onHold: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
 
@@ -696,7 +789,7 @@ private fun RecentTile(chat: ChatSummary, onClick: () -> Unit, modifier: Modifie
                 color = if (focused) Accent else Color.Transparent,
                 shape = RoundedCornerShape(16.dp),
             )
-            .clickable(interactionSource = interactions, indication = null, onClick = onClick)
+            .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold)
             .padding(16.dp),
     ) {
         Poster(
@@ -718,10 +811,11 @@ private fun RecentTile(chat: ChatSummary, onClick: () -> Unit, modifier: Modifie
             modifier = Modifier.weight(1f).marqueeWhen(focused),
         )
         Text(
-            chat.kind.label,
+            if (focused) HOLD_HINT else chat.kind.label,
             style = MaterialTheme.typography.bodyMedium,
             color = TextMuted,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -735,7 +829,9 @@ private fun Modifier.marqueeWhen(active: Boolean): Modifier =
 private fun ChatRow(
     chat: ChatSummary,
     favorite: Boolean,
+    opensOnLaunch: Boolean,
     onClick: () -> Unit,
+    onHold: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val interactions = remember { MutableInteractionSource() }
@@ -752,7 +848,7 @@ private fun ChatRow(
                 color = if (focused) Accent else Color.Transparent,
                 shape = RoundedCornerShape(16.dp),
             )
-            .clickable(interactionSource = interactions, indication = null, onClick = onClick)
+            .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold)
             .padding(horizontal = 24.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -773,10 +869,18 @@ private fun ChatRow(
                 modifier = Modifier.marqueeWhen(focused),
             )
             Text(
-                chat.kind.label,
+                // The row says what it is, then what can be done to it once focus arrives. The
+                // launch marker is what explains the jump straight into a chat on the previous
+                // start, which is otherwise the app appearing to skip a screen on its own.
+                when {
+                    focused -> "${chat.kind.label}  ·  $HOLD_HINT"
+                    opensOnLaunch -> "${chat.kind.label}  ·  Opens on launch"
+                    else -> chat.kind.label
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextMuted,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         if (favorite) {
@@ -797,7 +901,7 @@ private fun EmptyTab(tab: BrowseTab, query: String) {
         query.isNotBlank() -> "Nothing matches “$query”."
         tab == BrowseTab.Continue -> "You haven't started a film yet. Open a chat and pick one."
         tab == BrowseTab.Favorites ->
-            "No favourites yet. Open a chat and press Favourite to add it here."
+            "No favourites yet. Hold OK on any chat to add it here."
         else -> "Nothing here yet."
     }
     Column(
@@ -818,6 +922,16 @@ private fun EmptyTab(tab: BrowseTab, query: String) {
 
 private const val RECENT_COUNT = 8
 private const val FOCUS_FADE_MS = 140
+
+/**
+ * Shown on the focused row only.
+ *
+ * A hold is invisible until someone tries it, and a line of standing instructions above the list
+ * would be read once and then become furniture. Attached to the focused row it arrives exactly
+ * when it is actionable, and it costs no layout because it takes the place of a label that row
+ * was already carrying.
+ */
+private const val HOLD_HINT = "Hold OK for options"
 /** Horizontal padding every rail child carries, which is what keeps them out of the overscan. */
 private val RAIL_INSET = 16.dp
 private val RECENT_TILE_WIDTH = 224.dp

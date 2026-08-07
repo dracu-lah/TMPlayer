@@ -88,8 +88,7 @@ private fun Root() {
     val favorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
     val watchProgress by settings.watchProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
     val continueWatching by settings.continueWatching.collectAsStateWithLifecycle(initialValue = emptyList())
-    val jumpToFavorite by settings.jumpToFavorite.collectAsStateWithLifecycle(initialValue = true)
-    val defaultChatId by settings.defaultChatId.collectAsStateWithLifecycle(initialValue = 0L)
+    val lastChatId by settings.lastChatId.collectAsStateWithLifecycle(initialValue = 0L)
     val minSize by settings.minSizeBytes.collectAsStateWithLifecycle(initialValue = SizeFilter.DEFAULT_MIN)
     val maxSize by settings.maxSizeBytes.collectAsStateWithLifecycle(initialValue = SizeFilter.DEFAULT_MAX)
 
@@ -148,6 +147,23 @@ private fun Root() {
         }
     }
 
+    /** Opening a chat is what makes it the one to reopen on the next launch. */
+    fun openChat(chat: ChatSummary) {
+        screen = Screen.Media(chat)
+        scope.launch { settings.rememberChatOpened(chat.id) }
+    }
+
+    /**
+     * Resuming from the Continue watching row, which counts as a visit to the film's own chat.
+     *
+     * The viewer never passed through that chat's screen, but it is what they were last watching,
+     * and that is the question the next launch is asking.
+     */
+    fun resumeFilm(record: ResumeRecord) {
+        scope.launch { settings.rememberChatOpened(record.chatId) }
+        play(record.toMediaItem(), chatTitle = record.chatTitle)
+    }
+
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (auth !is AuthState.Ready) {
             // Signing out drops straight back to the QR code, so forget where we were.
@@ -170,11 +186,12 @@ private fun Root() {
             return@Box
         }
 
-        // Straight into the one chat the viewer actually watches, when that is unambiguous.
-        LaunchedEffect(chats, favorites, jumpToFavorite, defaultChatId) {
+        // Straight back into whatever was being watched last. Not routed through openChat: this
+        // is not the viewer picking a chat, and rewriting the record it just read would be noise.
+        LaunchedEffect(chats) {
             if (autoOpened || chats.isEmpty()) return@LaunchedEffect
             autoOpened = true
-            val target = settings.autoOpenChatId(favorites, jumpToFavorite, defaultChatId)
+            val target = settings.autoOpenTarget() ?: return@LaunchedEffect
             val chat = chats.firstOrNull { it.id == target } ?: return@LaunchedEffect
             screen = Screen.Media(chat)
         }
@@ -208,9 +225,20 @@ private fun Root() {
                     favorites = favorites,
                     continueWatching = continueWatching,
                     onRetry = chatsViewModel::load,
-                    onOpenChat = { screen = Screen.Media(it) },
-                    onResumeFilm = { play(it.toMediaItem(), chatTitle = it.chatTitle) },
+                    onOpenChat = { openChat(it) },
+                    onResumeFilm = { resumeFilm(it) },
                     onOpenSettings = { screen = Screen.Settings },
+                    onToggleFavorite = { scope.launch { settings.toggleFavorite(it.id) } },
+                    onRestartFilm = { record ->
+                        scope.launch {
+                            settings.clearResumePosition(record.chatId, record.messageId)
+                            resumeFilm(record)
+                        }
+                    },
+                    onForgetFilm = { record ->
+                        scope.launch { settings.clearResumePosition(record.chatId, record.messageId) }
+                    },
+                    launchChatId = lastChatId,
                     picked = pickedTab,
                     onPickTab = { pickedTab = it },
                     // Passed as a slot so it lands beside the rail. Stacked above the whole
@@ -261,7 +289,6 @@ private fun Root() {
                 }
                 SettingsScreen(
                     chats = chats,
-                    favorites = favorites,
                     onLoggedOut = { screen = Screen.Chats },
                 )
             }

@@ -21,17 +21,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -85,16 +83,15 @@ private sealed interface Prompt {
 @Composable
 fun SettingsScreen(
     chats: List<ChatSummary>,
-    favorites: Set<Long>,
     onLoggedOut: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings = remember { SettingsStore(context) }
 
-    val jumpToFavorite by settings.jumpToFavorite.collectAsStateWithLifecycle(initialValue = true)
+    val openLastChat by settings.openLastChat.collectAsStateWithLifecycle(initialValue = true)
     val askBeforeClearing by settings.askBeforeClearing.collectAsStateWithLifecycle(initialValue = true)
-    val defaultChatId by settings.defaultChatId.collectAsStateWithLifecycle(initialValue = 0L)
+    val lastChatId by settings.lastChatId.collectAsStateWithLifecycle(initialValue = 0L)
     val minSize by settings.minSizeBytes.collectAsStateWithLifecycle(
         initialValue = SizeFilter.DEFAULT_MIN,
     )
@@ -123,7 +120,11 @@ fun SettingsScreen(
         runCatching { rangeRow.requestFocus() }
     }
 
-    val favoriteChats = remember(chats, favorites) { chats.filter { it.id in favorites } }
+    // Named, when the chat list has loaded. On a cold start into Settings it may not have, and
+    // the setting still has to describe itself, so the wording below covers both.
+    val lastChatTitle = remember(chats, lastChatId) {
+        chats.firstOrNull { it.id == lastChatId }?.title
+    }
 
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = Tv.SafeH),
@@ -235,50 +236,24 @@ fun SettingsScreen(
         item { SectionTitle("On launch") }
         item {
             ToggleRow(
-                title = "Open my favourite straight away",
-                subtitle = if (favoriteChats.size > 1) {
-                    "Opens the chat you pick below"
-                } else {
-                    "Goes straight to your one favourite chat"
+                title = "Carry on from the last chat",
+                subtitle = when {
+                    lastChatTitle != null -> "Opens $lastChatTitle"
+                    lastChatId != 0L -> "Opens the chat you watched last"
+                    else -> "Skips the chat list once you have watched something"
                 },
-                icon = Icons.Filled.Star,
-                checked = jumpToFavorite,
-                onToggle = { scope.launch { settings.setJumpToFavorite(!jumpToFavorite) } },
+                icon = TmIcons.Clock,
+                checked = openLastChat,
+                onToggle = { scope.launch { settings.setOpenLastChat(!openLastChat) } },
             )
         }
-        if (jumpToFavorite && favoriteChats.size > 1) {
+        if (openLastChat && lastChatId != 0L) {
             item {
-                Text(
-                    "Which favourite opens on launch",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextMuted,
-                    modifier = Modifier.padding(top = 8.dp, start = 4.dp),
-                )
-            }
-            items(favoriteChats, key = { "fav-${it.id}" }) { chat ->
                 ActionRow(
-                    title = chat.title,
-                    subtitle = if (chat.id == defaultChatId) {
-                        "Opens on launch"
-                    } else {
-                        "Open this one instead"
-                    },
-                    // These rows are one choice among equals, so they carry the filled/empty
-                    // circle of a radio button. A star would say nothing: every row here is
-                    // already a favourite.
-                    icon = if (chat.id == defaultChatId) {
-                        Icons.Filled.CheckCircle
-                    } else {
-                        TmIcons.CircleOutline
-                    },
-                    tint = if (chat.id == defaultChatId) Accent else TextPrimary,
-                    onClick = {
-                        scope.launch {
-                            // Tapping the current default clears it rather than doing nothing.
-                            val next = if (chat.id == defaultChatId) 0L else chat.id
-                            settings.setDefaultChatId(next)
-                        }
-                    },
+                    title = "Forget it",
+                    subtitle = "Start at the chat list again until you open another chat",
+                    icon = Icons.Filled.Close,
+                    onClick = { scope.launch { settings.forgetLastChat() } },
                 )
             }
         }
