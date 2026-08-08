@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -73,6 +74,15 @@ object Updates {
     suspend fun check(quiet: Boolean = false) {
         if (quiet && checkedThisLaunch) return
         if (_state.value is UpdateState.Downloading) return
+
+        if (!NetworkMonitor.canTryInternet()) {
+            _state.value = if (quiet) {
+                UpdateState.Idle
+            } else {
+                UpdateState.Failed("Connect to the internet to check for updates.")
+            }
+            return
+        }
         checkedThisLaunch = true
 
         if (!quiet) _state.value = UpdateState.Checking
@@ -95,6 +105,10 @@ object Updates {
      * keep a second copy of the app around on a stick with eight gigabytes on it.
      */
     suspend fun downloadAndInstall(context: Context, release: Release) {
+        if (!NetworkMonitor.canTryInternet()) {
+            _state.value = UpdateState.Failed("Connect to the internet to download the update.")
+            return
+        }
         _state.value = UpdateState.Downloading(release, null)
 
         val file = withContext(Dispatchers.IO) {
@@ -190,19 +204,30 @@ object Updates {
         val version = json.optString("tag_name").removePrefix("v")
         if (version.isBlank()) return null
 
-        // One APK per architecture on every release, so the stick has to be handed its own.
         val assets = json.optJSONArray("assets") ?: return null
-        val abis = Build.SUPPORTED_ABIS.orEmpty()
-        for (abi in abis) {
+        val asset = selectApkAsset(assets, Build.SUPPORTED_ABIS.orEmpty()) ?: return null
+        return Release(
+            version = version,
+            apkUrl = asset.optString("browser_download_url"),
+            sizeBytes = asset.optLong("size"),
+        )
+    }
+
+    /** Prefers the one-file release, with older architecture-specific releases as a fallback. */
+    internal fun selectApkAsset(assets: JSONArray, supportedAbis: Array<out String>): JSONObject? {
+        fun apkAt(index: Int): JSONObject? {
+            val asset = assets.optJSONObject(index) ?: return null
+            return asset.takeIf { it.optString("name").lowercase().endsWith(".apk") }
+        }
+
+        for (i in 0 until assets.length()) {
+            val asset = apkAt(i) ?: continue
+            if (asset.optString("name").contains("universal", ignoreCase = true)) return asset
+        }
+        for (abi in supportedAbis) {
             for (i in 0 until assets.length()) {
-                val asset = assets.optJSONObject(i) ?: continue
-                val name = asset.optString("name")
-                if (!name.endsWith(".apk") || !name.contains(abi)) continue
-                return Release(
-                    version = version,
-                    apkUrl = asset.optString("browser_download_url"),
-                    sizeBytes = asset.optLong("size"),
-                )
+                val asset = apkAt(i) ?: continue
+                if (asset.optString("name").contains(abi, ignoreCase = true)) return asset
             }
         }
         return null

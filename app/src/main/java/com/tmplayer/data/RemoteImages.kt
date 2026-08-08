@@ -52,7 +52,7 @@ object RemoteImages {
             memory.get(url)?.let { return@withLock it }
 
             val bitmap = withContext(Dispatchers.IO) {
-                fromDisk(url) ?: fromNetwork(url)
+                fromDisk(url) ?: if (NetworkMonitor.canTryInternet()) fromNetwork(url) else null
             }
             bitmap?.also { memory.put(url, it) }
         }.also {

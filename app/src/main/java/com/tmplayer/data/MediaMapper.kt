@@ -5,6 +5,7 @@ import dev.g000sha256.tdl.dto.MessageAnimation
 import dev.g000sha256.tdl.dto.MessageDocument
 import dev.g000sha256.tdl.dto.MessageVideo
 import java.text.SimpleDateFormat
+import java.io.File
 import java.util.Date
 import java.util.Locale
 
@@ -21,6 +22,7 @@ data class MediaItem(
     val miniThumbnail: ByteArray?,
     val date: Int,
     val fileName: String = "",
+    val onDevice: Boolean = false,
 ) {
     /** "4K", "HEVC", "HDR": read off the file name, which is where releases state it. */
     val qualityTags: List<String> get() = MediaMapper.qualityTags(fileName)
@@ -62,6 +64,7 @@ object MediaMapper {
                 thumbnailFileId = video.thumbnail?.file?.id ?: 0,
                 miniThumbnail = video.minithumbnail?.data,
                 date = message.date,
+                onDevice = onDevice(video.video),
             )
         }
 
@@ -81,6 +84,7 @@ object MediaMapper {
                 thumbnailFileId = document.thumbnail?.file?.id ?: 0,
                 miniThumbnail = document.minithumbnail?.data,
                 date = message.date,
+                onDevice = onDevice(document.document),
             )
         }
 
@@ -99,6 +103,7 @@ object MediaMapper {
                 thumbnailFileId = animation.thumbnail?.file?.id ?: 0,
                 miniThumbnail = animation.minithumbnail?.data,
                 date = message.date,
+                onDevice = onDevice(animation.animation),
             )
         }
 
@@ -145,6 +150,18 @@ object MediaMapper {
 
     /** TDLib reports 0 for a file it has never touched, but usually knows the expected size. */
     private fun fileSize(size: Long, expectedSize: Long) = if (size > 0) size else expectedSize
+
+    private fun onDevice(file: dev.g000sha256.tdl.dto.File): Boolean {
+        val diskFile = file.local.path.takeIf { it.isNotBlank() }?.let(::File)
+        return LocalFilePolicy.evaluate(
+            downloadCompleted = file.local.isDownloadingCompleted,
+            pathPresent = diskFile != null,
+            regularFile = diskFile?.isFile == true,
+            length = diskFile?.length() ?: 0,
+            size = file.size,
+            expectedSize = file.expectedSize,
+        ) == LocalFileAvailability.Complete
+    }
 
     /**
      * When the file was posted to the chat, as a date rather than a time.

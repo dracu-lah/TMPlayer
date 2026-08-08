@@ -55,6 +55,7 @@ sealed interface FilmLookup {
     data class Found(val details: FilmDetails) : FilmLookup
     data object NotFound : FilmLookup
     data class Failed(val message: String) : FilmLookup
+    data object Offline : FilmLookup
     /** No API key was compiled in, so the feature is simply absent. */
     data object Disabled : FilmLookup
 }
@@ -126,15 +127,18 @@ object Tmdb {
             cache.get(key)?.let { return@withLock it }
 
             val result = withContext(Dispatchers.IO) {
-                fromDisk(key)
-                    ?: withTimeoutOrNull(TIMEOUT_MS) {
+                fromDisk(key) ?: if (!NetworkMonitor.canTryInternet()) {
+                    FilmLookup.Offline
+                } else {
+                    withTimeoutOrNull(TIMEOUT_MS) {
                         if (parsed.isSeries) fetchEpisode(parsed, key) else fetch(parsed, key)
                     }
                     ?: FilmLookup.Failed("The film database took too long to answer.")
+                }
             }
 
             // A timeout is worth retrying on the next open, so it is the one outcome left uncached.
-            if (result !is FilmLookup.Failed) cache.put(key, result)
+            if (result !is FilmLookup.Failed && result !is FilmLookup.Offline) cache.put(key, result)
             result
         }.also {
             inFlightLock.withLock { inFlight.remove(key) }

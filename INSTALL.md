@@ -3,18 +3,11 @@
 TMPlayer is sideloaded. It is not on the Play Store, and it never will be (it needs your own
 Telegram API credentials to exist at all).
 
-## 1. Pick the right APK
+## 1. Download the APK
 
-One APK is built per CPU architecture so the install stays small.
-
-| File | Device |
-| --- | --- |
-| `app-armeabi-v7a-release.apk` | **Mi TV Stick (2020, 1080p)**, older 32-bit sticks |
-| `app-arm64-v8a-release.apk` | **Mi TV Stick 4K**, Mi Box S, Chromecast with Google TV, most modern TVs |
-| `app-x86_64-release.apk` | Android TV emulator only |
-
-Not sure which one your stick is? Install `armeabi-v7a`; 64-bit devices run it fine, it is
-just slightly slower. Or check on the device: **Settings → Device Preferences → About**.
+Download `TMPlayer-<version>-universal.apk` from the Releases page. It contains the native code
+for every supported Android TV architecture, so the same file works on older sticks, newer 64-bit
+boxes and the Android TV emulator.
 
 ## 2. Turn on debugging (once)
 
@@ -34,7 +27,7 @@ installed:
 
 ```bash
 adb connect 192.168.1.42:5555          # your TV's IP
-adb install -r app-armeabi-v7a-release.apk
+adb install -r TMPlayer-<version>-universal.apk
 ```
 
 Accept the *Allow USB debugging?* prompt that appears on the TV.

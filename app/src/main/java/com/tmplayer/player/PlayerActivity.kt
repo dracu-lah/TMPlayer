@@ -1,5 +1,6 @@
 package com.tmplayer.player
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -40,19 +41,28 @@ import com.tmplayer.data.FilmLookup
 import com.tmplayer.data.FilmName
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
+import com.tmplayer.data.LocalFileAvailability
+import com.tmplayer.data.LocalFilePolicy
+import com.tmplayer.data.NetworkMonitor
+import com.tmplayer.data.NetworkStatus
 import com.tmplayer.data.RemoteImages
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import com.tmplayer.data.Tmdb
 import com.tmplayer.data.errorMessage
+import com.tmplayer.data.valueOrNull
+import dev.g000sha256.tdl.TdlClient
+import dev.g000sha256.tdl.dto.File as TdFile
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * Full-screen playback of one Telegram file.
@@ -125,6 +135,9 @@ class PlayerActivity : FragmentActivity() {
     /** The stage the loading screen is currently reporting, kept so it can be re-rendered. */
     private var statusMessage = ""
 
+    /** Used only while this film needs more bytes; completed films ignore connectivity entirely. */
+    private var networkOffline = false
+
     /**
      * "Resuming from 1:12:40", once the saved position has been read off disk.
      *
@@ -191,6 +204,7 @@ class PlayerActivity : FragmentActivity() {
         showStatus("Connecting to Telegram…")
 
         observeDownload()
+        observeConnectivity()
         startResumeHeartbeat()
         findEpisodes()
         findArt()
@@ -209,16 +223,27 @@ class PlayerActivity : FragmentActivity() {
         }
 
         lifecycleScope.launch {
+            val session = Td.awaitAuthorizedSession()
+            val availability = Td.localFileAvailability(fileId)
+            if (
+                availability != LocalFileAvailability.Complete &&
+                NetworkMonitor.status.value == NetworkStatus.Offline &&
+                !Td.connected.value
+            ) {
+                showError("This film isn't fully on this TV. Connect to the internet and try again.")
+                return@launch
+            }
             val downloadFirst = runCatching { settings.downloadBeforePlayingNow() }
                 .getOrDefault(false)
             if (downloadFirst && !fetchWholeFilm()) return@launch
-            startPlayback()
+            if (!session.isCurrent()) return@launch
+            startPlayback(session.client)
         }
     }
 
     /** Builds the player, points it at the file, and puts the leanback surface in front of it. */
-    private fun startPlayback() {
-        player = buildPlayer().also { exo ->
+    private fun startPlayback(client: TdlClient) {
+        player = buildPlayer(client).also { exo ->
             exo.addListener(playerListener)
             exo.setMediaItem(Media3Item.fromUri(tdFileUri(fileId)))
             if (resumeMs > 0) exo.seekTo(resumeMs)
@@ -243,9 +268,14 @@ class PlayerActivity : FragmentActivity() {
      * download failed, in which case the error is on screen and there is nothing to start.
      */
     private suspend fun fetchWholeFilm(): Boolean {
+        if (Td.localFileAvailability(fileId) == LocalFileAvailability.Complete) {
+            showStatus("Starting the film…")
+            return true
+        }
         waitingForWholeFilm = true
         showStatus("Downloading the whole film…")
-        val result = Td.client.downloadFile(
+        val session = Td.awaitConnectedSession()
+        val result = session.client.downloadFile(
             fileId = fileId,
             priority = DOWNLOAD_PRIORITY,
             offset = 0,
@@ -258,11 +288,15 @@ class PlayerActivity : FragmentActivity() {
             showError(Failures.humanise(error))
             return false
         }
+        if (Td.localFileAvailability(fileId) != LocalFileAvailability.Complete) {
+            showError("The download did not finish. Connect to the internet and try again.")
+            return false
+        }
         showStatus("Starting the film…")
         return true
     }
 
-    private fun buildPlayer(): ExoPlayer {
+    private fun buildPlayer(client: TdlClient): ExoPlayer {
         // Hardware decoders first; NextLib's FFmpeg renderers pick up the audio codecs a TV
         // stick has no silicon for: DTS and TrueHD tracks are common in movie remuxes.
         val renderers = NextRenderersFactory(this)
@@ -293,7 +327,7 @@ class PlayerActivity : FragmentActivity() {
         return ExoPlayer.Builder(this, renderers)
             .setLoadControl(loadControl)
             .setTrackSelector(trackSelector)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(TdDataSource.Factory(), extractors))
+            .setMediaSourceFactory(DefaultMediaSourceFactory(TdDataSource.Factory(client), extractors))
             .setSeekBackIncrementMs(TvPlayerGlue.SKIP_MS)
             .setSeekForwardIncrementMs(TvPlayerGlue.SKIP_MS)
             .build()
@@ -362,10 +396,9 @@ class PlayerActivity : FragmentActivity() {
         if (!here.isEpisode || chatId == 0L) return
 
         lifecycleScope.launch {
+            val session = Td.awaitAuthorizedSession()
             val candidates = runCatching {
-                // Built inside the guard: it reaches for the TDLib client, which is not there at
-                // all if the process was killed behind the player and is coming back up.
-                val repository = ChatRepository()
+                val repository = ChatRepository(session.client)
                 val narrowed = repository.mediaPage(chatId, query = here.title).items
                 narrowed.ifEmpty { repository.mediaPage(chatId).items }
             }.getOrNull().orEmpty()
@@ -426,6 +459,7 @@ class PlayerActivity : FragmentActivity() {
      * MEDIA keys always seek. D-pad seeks only while the transport row is hidden; once it is
      * up, leanback's own scrubbing owns those keys.
      */
+    @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
         val pickerOpen = GuidedStepSupportFragment.getCurrentGuidedStepSupportFragment(supportFragmentManager) != null
@@ -463,25 +497,67 @@ class PlayerActivity : FragmentActivity() {
      */
     private fun observeDownload() {
         lifecycleScope.launch {
-            Td.client.fileUpdates
+            val session = Td.awaitAuthorizedSession()
+            session.client.getFile(fileId).valueOrNull?.let(::applyDownloadState)
+            session.client.fileUpdates
                 .filter { it.file.id == fileId }
-                .collect { update ->
-                    val file = update.file
-                    if (fileSizeBytes <= 0 && file.size > 0) fileSizeBytes = file.size
-                    val local = file.local
-                    downloadComplete = local.isDownloadingCompleted
-                    downloadedFraction = StreamStats.downloadedFraction(
-                        downloadOffset = local.downloadOffset,
-                        downloadedPrefixSize = local.downloadedPrefixSize,
-                        size = fileSizeBytes,
-                        completed = downloadComplete,
-                    )
-                    // Sampled on the prefix rather than the window's far end: a seek restarts the
-                    // prefix at zero, and the meter reads that drop as the reset it is, where a
-                    // window that jumped forwards would look like a burst of speed.
-                    speed.sample(local.downloadedPrefixSize, SystemClock.elapsedRealtime())
-                    renderProgress()
+                .collect { update -> applyDownloadState(update.file) }
+        }
+    }
+
+    /** Applies both the initial file snapshot and later TDLib updates to the same meter state. */
+    private fun applyDownloadState(file: TdFile) {
+        if (fileSizeBytes <= 0 && file.size > 0) fileSizeBytes = file.size
+        val local = file.local
+        val diskFile = local.path.takeIf { it.isNotBlank() }?.let(::File)
+        downloadComplete = LocalFilePolicy.evaluate(
+            downloadCompleted = local.isDownloadingCompleted,
+            pathPresent = diskFile != null,
+            regularFile = diskFile?.isFile == true,
+            length = diskFile?.length() ?: 0,
+            size = file.size,
+            expectedSize = file.expectedSize,
+        ) == LocalFileAvailability.Complete
+        downloadedFraction = StreamStats.downloadedFraction(
+            downloadOffset = local.downloadOffset,
+            downloadedPrefixSize = local.downloadedPrefixSize,
+            size = fileSizeBytes,
+            completed = downloadComplete,
+        )
+        // Sampled on the prefix rather than the window's far end: a seek restarts the
+        // prefix at zero, and the meter reads that drop as the reset it is, where a
+        // window that jumped forwards would look like a burst of speed.
+        speed.sample(local.downloadedPrefixSize, SystemClock.elapsedRealtime())
+        renderProgress()
+    }
+
+    /** Keeps a stream's own loading UI honest while leaving completed local playback untouched. */
+    private fun observeConnectivity() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                combine(NetworkMonitor.status, Td.connected) { network, connected ->
+                    network == NetworkStatus.Offline && !connected
+                }.collect { offline ->
+                    val reconnected = networkOffline && !offline
+                    networkOffline = offline
+                    if (downloadComplete) return@collect
+
+                    if (offline) {
+                        if (openingFilm) {
+                            showStatus("Offline. Waiting for internet…")
+                            statusDetail.text = "A fully downloaded film can play without internet."
+                        } else if (player?.playbackState == Player.STATE_BUFFERING) {
+                            showRebuffering()
+                        }
+                    } else if (reconnected && player?.playbackState == Player.STATE_BUFFERING) {
+                        if (openingFilm) {
+                            showStatus("Back online. Resuming…")
+                        } else {
+                            rebufferText.text = "Back online. Resuming…"
+                        }
+                    }
                 }
+            }
         }
     }
 
@@ -583,7 +659,11 @@ class PlayerActivity : FragmentActivity() {
         openingFilm = false
         statusOverlay.visibility = View.GONE
         rebufferChip.visibility = View.VISIBLE
-        rebufferText.text = "Loading…"
+        rebufferText.text = if (networkOffline && !downloadComplete) {
+            "Offline. Waiting for internet…"
+        } else {
+            "Loading…"
+        }
         updateDownloadChip()
     }
 

@@ -69,7 +69,9 @@ import com.tmplayer.data.CardLayout
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.FilmLookup
+import com.tmplayer.data.NetworkMonitor
 import com.tmplayer.data.Tmdb
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tmplayer.data.Updates
 import com.tmplayer.ui.components.Poster
 import com.tmplayer.ui.components.ChatListSkeleton
@@ -579,7 +581,8 @@ private fun ContinueCard(
  */
 @Composable
 private fun ContinueArt(record: ResumeRecord, modifier: Modifier = Modifier, badge: Dp) {
-    val art by produceState<String?>(initialValue = null, key1 = record.title) {
+    val network by NetworkMonitor.status.collectAsStateWithLifecycle()
+    val art by produceState<String?>(initialValue = null, key1 = record.title, key2 = network) {
         value = (Tmdb.lookup(record.title) as? FilmLookup.Found)?.details?.backdropUrl
     }
 

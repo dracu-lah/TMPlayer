@@ -88,7 +88,7 @@ jobs:
       # Read straight from the environment by the Gradle build. Unlike the Telegram credentials
       # this one is optional: without it the release still works and the film details panel says
       # the extras are unavailable, so a missing key must not fail the build.
-      - name: Build signed APKs
+      - name: Build signed universal APK
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
         run: |
@@ -96,14 +96,12 @@ jobs:
             -PtmVersionName=${{ steps.version.outputs.name }} \
             -PtmVersionCode=${{ steps.version.outputs.code }}
 
-      - name: Name the APKs after the version
+      - name: Name the universal APK after the version
         id: rename
         run: |
           mkdir -p dist
-          for f in app/build/outputs/apk/release/*.apk; do
-            abi=$(basename "$f" | sed -E 's/^app-(.*)-release\.apk$/\1/')
-            cp "$f" "dist/TMPlayer-${{ steps.version.outputs.name }}-$abi.apk"
-          done
+          cp app/build/outputs/apk/release/app-universal-release.apk \
+            "dist/TMPlayer-${{ steps.version.outputs.name }}-universal.apk"
           # R8 renames every class, so a crash report from a released APK is unreadable without
           # the mapping for that exact build. It is generated once and then gone; publish it or
           # the next stack trace from a user is undecodable.
@@ -128,18 +126,11 @@ jobs:
           body: |
             ## Install
 
-            Android TV only. Pick the APK matching your device:
-
-            | Device | APK |
-            |---|---|
-            | Mi TV Stick, most 2018-2021 sticks | `armeabi-v7a` |
-            | Chromecast with Google TV, newer boxes | `arm64-v8a` |
-            | Emulator / x86 boxes | `x86_64` |
-
-            Not sure? `adb shell getprop ro.product.cpu.abi` tells you.
+            Android TV only. The universal APK works on every supported TV architecture, so there
+            is no CPU variant to choose.
 
             ```
-            adb install TMPlayer-${{ steps.version.outputs.name }}-armeabi-v7a.apk
+            adb install TMPlayer-${{ steps.version.outputs.name }}-universal.apk
             ```
 
             See [INSTALL.md](https://github.com/${{ github.repository }}/blob/main/INSTALL.md)

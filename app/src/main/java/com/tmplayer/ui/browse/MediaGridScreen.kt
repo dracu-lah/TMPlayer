@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -61,7 +62,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
@@ -73,6 +77,7 @@ import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.WatchPoint
 import com.tmplayer.ui.components.MediaGridSkeleton
+import com.tmplayer.ui.components.ConnectionNotice
 import com.tmplayer.ui.components.Poster
 import com.tmplayer.ui.components.StateScaffold
 import com.tmplayer.ui.components.Spinner
@@ -112,6 +117,10 @@ fun MediaGridScreen(
     onPlay: (MediaItem) -> Unit,
     onPlayFromStart: (MediaItem) -> Unit,
     onToggleLayout: () -> Unit,
+    telegramConnected: Boolean,
+    offline: Boolean,
+    onOfflineAction: (String) -> Unit,
+    connectionNotice: ConnectionNotice,
     /** Posters four across, or one wide row per film with the full title on it. */
     layout: CardLayout = CardLayout.Grid,
 ) {
@@ -123,10 +132,30 @@ fun MediaGridScreen(
         factory = MediaListViewModelFactory(chatId, minSizeBytes, maxSizeBytes),
     )
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val lifecycleOwner = LocalLifecycleOwner.current
     var query by remember { mutableStateOf("") }
     var details by remember { mutableStateOf<MediaItem?>(null) }
     // Whatever the remote is standing on, for the name strip along the bottom.
     var standingOn by remember { mutableStateOf<MediaItem?>(null) }
+    val connectionOffset = if (connectionNotice == ConnectionNotice.Hidden) 0.dp else 56.dp
+    var reconnectPending by remember(chatId) { mutableStateOf(false) }
+
+    DisposableEffect(lifecycleOwner, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshLocalAvailability()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(telegramConnected) {
+        if (!telegramConnected) {
+            reconnectPending = true
+        } else if (reconnectPending) {
+            reconnectPending = false
+            viewModel.load()
+        }
+    }
 
     // Whether anything on this device can play a YouTube link. Checked once rather than per
     // film, and used to hide the trailer button entirely rather than have it open nothing.
@@ -144,7 +173,10 @@ fun MediaGridScreen(
             onToggleFavorite = onToggleFavorite,
             layout = layout,
             onToggleLayout = onToggleLayout,
-            onRefresh = viewModel::load,
+            onRefresh = {
+                viewModel.load()
+                if (offline) onOfflineAction("You're offline. Showing saved films.")
+            },
         )
 
         StateScaffold(
@@ -230,7 +262,13 @@ fun MediaGridScreen(
                         Modifier
                             .align(Alignment.BottomCenter)
                             // Above the name strip when there is one, rather than through it.
-                            .padding(bottom = if (standingOn != null) Tv.SafeV + 46.dp else Tv.SafeV)
+                            .padding(
+                                bottom = if (standingOn != null) {
+                                    Tv.SafeV + 46.dp + connectionOffset
+                                } else {
+                                    Tv.SafeV + connectionOffset
+                                },
+                            )
                             .clip(RoundedCornerShape(20.dp))
                             .background(SurfaceRaised)
                             .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -251,7 +289,7 @@ fun MediaGridScreen(
                         name = item.title,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .padding(end = Tv.SafeH, bottom = Tv.SafeV),
+                            .padding(end = Tv.SafeH, bottom = Tv.SafeV + connectionOffset),
                     )
                 }
             }
@@ -308,7 +346,13 @@ fun MediaGridScreen(
             onPlay = { details = null; onPlay(item) },
             onPlayFromStart = { details = null; onPlayFromStart(item) },
             onPlayNext = { next?.let { details = null; onPlay(it) } },
-            onWatchTrailer = { key -> openYouTube(context, key) },
+            onWatchTrailer = { key ->
+                if (offline) {
+                    onOfflineAction("Connect to the internet to watch the trailer.")
+                } else {
+                    openYouTube(context, key)
+                }
+            },
             onDismiss = { details = null },
         )
     }
@@ -618,6 +662,20 @@ private fun MediaArt(item: MediaItem, watched: WatchPoint?, modifier: Modifier =
             modifier = Modifier.fillMaxSize(),
         )
         val tags = item.qualityTags
+        if (item.onDevice) {
+            Text(
+                "On this TV",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White,
+                maxLines = 1,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Accent.copy(alpha = 0.92f))
+                    .padding(horizontal = 7.dp, vertical = 2.dp),
+            )
+        }
         if (tags.isNotEmpty()) {
             Row(
                 Modifier.align(Alignment.TopEnd).padding(6.dp),

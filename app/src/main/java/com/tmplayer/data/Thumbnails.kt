@@ -44,11 +44,12 @@ object Thumbnails {
     }
 
     private suspend fun downloadThumbnail(fileId: Int): String? {
-        val td = runCatching { Td.client }.getOrNull() ?: return null
+        val td = Td.awaitAuthorizedSession().client
         val file = td.getFile(fileId).valueOrNull ?: return null
         if (file.local.isDownloadingCompleted && !file.local.path.isNullOrEmpty()) {
             return file.local.path
         }
+        if (!NetworkMonitor.canTryInternet() && !Td.connected.value) return null
 
         // Thumbnails are small and plentiful; low priority keeps them behind playback.
         val started = td.downloadFile(

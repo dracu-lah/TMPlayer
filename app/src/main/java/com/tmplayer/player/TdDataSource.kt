@@ -8,7 +8,8 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DataSourceException
 import com.tmplayer.data.Failures
-import com.tmplayer.data.Td
+import com.tmplayer.data.LocalFileAvailability
+import com.tmplayer.data.LocalFilePolicy
 import com.tmplayer.data.errorMessage
 import com.tmplayer.data.valueOrNull
 import dev.g000sha256.tdl.TdlClient
@@ -20,6 +21,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.EOFException
+import java.io.File
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.io.RandomAccessFile
@@ -153,18 +155,26 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
     /** Records what a fresh [TdFile] tells us, so later reads can skip the round-trip. */
     private fun absorb(file: TdFile) {
         val path = file.local.path
-        if (!path.isNullOrEmpty()) {
-            // TDLib moves a file when a download finishes (the partial name is renamed away), so
-            // the handle is dropped on any path change rather than reading a stale inode.
-            synchronized(this) {
-                if (path != localPath) {
-                    runCatching { handle?.close() }
-                    handle = null
-                    localPath = path
-                }
+        val diskFile = path.takeIf { it.isNotBlank() }?.let(::File)
+        val usablePath = path.takeIf { diskFile?.isFile == true }
+        // TDLib moves a file when a download finishes (the partial name is renamed away), so
+        // the handle is dropped on any path change rather than reading a stale inode.
+        synchronized(this) {
+            if (usablePath != localPath) {
+                runCatching { handle?.close() }
+                handle = null
+                localPath = usablePath
             }
         }
-        if (file.local.isDownloadingCompleted) {
+        val availability = LocalFilePolicy.evaluate(
+            downloadCompleted = file.local.isDownloadingCompleted,
+            pathPresent = diskFile != null,
+            regularFile = diskFile?.isFile == true,
+            length = diskFile?.length() ?: 0,
+            size = file.size,
+            expectedSize = file.expectedSize,
+        )
+        if (availability == LocalFileAvailability.Complete) {
             completed = true
             windowEnd = size
         } else {
@@ -189,7 +199,7 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
                     downloadOffset = file.local.downloadOffset,
                     downloadedPrefixSize = file.local.downloadedPrefixSize,
                     active = file.local.isDownloadingActive,
-                    completed = file.local.isDownloadingCompleted,
+                    completed = completed,
                 )
             ) {
                 requestDownloadFrom(target)
@@ -223,7 +233,7 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
             size = size,
             downloadOffset = file.local.downloadOffset,
             downloadedPrefixSize = file.local.downloadedPrefixSize,
-            completed = file.local.isDownloadingCompleted,
+            completed = completed,
         )
     }
 
@@ -272,8 +282,8 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
         throw IOException("Telegram did not respond in time", e)
     }
 
-    class Factory(private val client: TdlClient? = null) : DataSource.Factory {
-        override fun createDataSource(): DataSource = TdDataSource(client ?: Td.client)
+    class Factory(private val client: TdlClient) : DataSource.Factory {
+        override fun createDataSource(): DataSource = TdDataSource(client)
     }
 
     private companion object {

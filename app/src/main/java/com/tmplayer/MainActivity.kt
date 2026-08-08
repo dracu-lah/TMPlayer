@@ -1,13 +1,18 @@
 package com.tmplayer
 
+import android.annotation.SuppressLint
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -27,6 +32,9 @@ import com.tmplayer.data.CardLayout
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.MediaItem
+import com.tmplayer.data.LocalFileAvailability
+import com.tmplayer.data.NetworkMonitor
+import com.tmplayer.data.NetworkStatus
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.SizeFilter
@@ -43,6 +51,8 @@ import com.tmplayer.ui.browse.ChatListViewModel
 import com.tmplayer.ui.browse.MediaGridScreen
 import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.UiState
+import com.tmplayer.ui.components.ConnectionNotice
+import com.tmplayer.ui.components.ConnectionStatus
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.onboarding.OverviewScreen
 import com.tmplayer.ui.update.UpdateDialog
@@ -82,10 +92,13 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
+@SuppressLint("UnsafeOptInUsageError")
 private fun Root() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val auth by Td.auth.collectAsStateWithLifecycle()
+    val networkStatus by NetworkMonitor.status.collectAsStateWithLifecycle()
+    val telegramConnected by Td.connected.collectAsStateWithLifecycle()
     val settings = remember { SettingsStore(context) }
 
     val introSeen by settings.introSeen.collectAsStateWithLifecycle(initialValue = true)
@@ -129,6 +142,36 @@ private fun Root() {
     val chatsState by chatsViewModel.state.collectAsStateWithLifecycle()
     val chats = (chatsState as? UiState.Content)?.value?.chats.orEmpty()
 
+    LaunchedEffect(auth) {
+        if (auth is AuthState.Ready) chatsViewModel.load() else chatsViewModel.reset()
+    }
+
+    var connectionNotice by remember { mutableStateOf(ConnectionNotice.Hidden) }
+    var wasOffline by remember { mutableStateOf(false) }
+    LaunchedEffect(networkStatus, telegramConnected, auth) {
+        val effectivelyOffline = networkStatus == NetworkStatus.Offline && !telegramConnected
+        when {
+            effectivelyOffline -> {
+                delay(OFFLINE_SETTLE_MS)
+                wasOffline = true
+                connectionNotice = ConnectionNotice.Offline
+            }
+            wasOffline && auth is AuthState.Ready && !telegramConnected -> {
+                connectionNotice = ConnectionNotice.Reconnecting
+            }
+            wasOffline -> {
+                connectionNotice = ConnectionNotice.Hidden
+                wasOffline = false
+                if (auth is AuthState.Ready) {
+                    chatsViewModel.load()
+                    Updates.check(quiet = true)
+                    toast("Back online. Library updated.")
+                }
+            }
+            else -> connectionNotice = ConnectionNotice.Hidden
+        }
+    }
+
     var screen by remember { mutableStateOf<Screen>(Screen.Chats) }
     var passwordError by remember { mutableStateOf<String?>(null) }
     var roomPrompt by remember { mutableStateOf<RoomPrompt?>(null) }
@@ -154,7 +197,20 @@ private fun Root() {
      */
     fun play(item: MediaItem, confirmed: Boolean = false, chatTitle: String = "") {
         scope.launch {
-            val alreadyCached = runCatching { Td.isFileCached(item.fileId) }.getOrDefault(false)
+            val local = runCatching { Td.localFileAvailability(item.fileId) }
+                .getOrDefault(LocalFileAvailability.Missing)
+            val canReachTelegram = telegramConnected || networkStatus != NetworkStatus.Offline
+            if (!canReachTelegram && local != LocalFileAvailability.Complete) {
+                toast(
+                    if (local == LocalFileAvailability.Partial) {
+                        "This film is only partly on this TV. Connect to finish downloading it."
+                    } else {
+                        "Connect to the internet to play this film."
+                    },
+                )
+                return@launch
+            }
+            val alreadyCached = local == LocalFileAvailability.Complete
             val cacheBytes = runCatching { Td.storageUsedBytes() }.getOrDefault(0L)
             val free = DiskSpace.read(context).freeBytes
             val decision = CachePolicy.decide(item.sizeBytes, alreadyCached, cacheBytes, free)
@@ -230,6 +286,12 @@ private fun Root() {
                     },
                 )
             }
+            ConnectionStatus(
+                notice = connectionNotice,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 20.dp),
+            )
             return@Box
         }
 
@@ -261,7 +323,7 @@ private fun Root() {
         // on this television does it: a dialog for something this ordinary was too much ceremony,
         // and it had to be read and answered before the viewer could carry on.
         if (screen is Screen.Chats) {
-            val activity = LocalContext.current as? ComponentActivity
+            val activity = LocalActivity.current
             BackHandler {
                 if (exitArmed) activity?.finish() else { exitArmed = true; toast("Press Back again to leave") }
             }
@@ -284,7 +346,12 @@ private fun Root() {
                     favorites = favorites,
                     continueWatching = continueWatching,
                     onRetry = chatsViewModel::load,
-                    onRefresh = chatsViewModel::load,
+                    onRefresh = {
+                        chatsViewModel.load()
+                        if (networkStatus == NetworkStatus.Offline && !telegramConnected) {
+                            toast("You're offline. Showing saved chats.")
+                        }
+                    },
                     onOpenChat = { openChat(it) },
                     onResumeFilm = { resumeFilm(it) },
                     onOpenSettings = { screen = Screen.Settings },
@@ -384,6 +451,10 @@ private fun Root() {
                         }
                     },
                     onToggleLayout = { scope.launch { settings.setFilmLayout(filmLayout.toggled()) } },
+                    telegramConnected = telegramConnected,
+                    offline = networkStatus == NetworkStatus.Offline && !telegramConnected,
+                    onOfflineAction = toast,
+                    connectionNotice = connectionNotice,
                     layout = filmLayout,
                 )
             }
@@ -429,5 +500,14 @@ private fun Root() {
         if (showUpdate) {
             UpdateDialog(onDismiss = { showUpdate = false; Updates.dismiss() })
         }
+
+        ConnectionStatus(
+            notice = connectionNotice,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 20.dp),
+        )
     }
 }
+
+private const val OFFLINE_SETTLE_MS = 750L

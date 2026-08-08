@@ -14,6 +14,48 @@ import androidx.compose.ui.unit.dp
  */
 object TmIcons {
 
+    /** Wi-Fi with a slash, for the passive offline status chip. */
+    val WifiOff: ImageVector by lazy {
+        icon("WifiOff") {
+            path(fill = SolidColor(Color.White)) {
+                moveTo(2.27f, 3.55f)
+                lineTo(20.45f, 21.73f)
+                lineTo(21.73f, 20.45f)
+                lineTo(18.32f, 17.04f)
+                curveTo(19.06f, 16.63f, 19.85f, 16.29f, 20.68f, 16.04f)
+                lineTo(18.62f, 13.98f)
+                curveTo(17.82f, 14.28f, 17.05f, 14.66f, 16.34f, 15.11f)
+                lineTo(14.85f, 13.62f)
+                curveTo(16.24f, 12.72f, 17.85f, 12.08f, 19.58f, 11.79f)
+                lineTo(17.42f, 9.63f)
+                curveTo(15.76f, 10.03f, 14.2f, 10.69f, 12.81f, 11.57f)
+                lineTo(11.26f, 10.02f)
+                curveTo(13.1f, 8.79f, 15.23f, 7.94f, 17.52f, 7.58f)
+                lineTo(15.37f, 5.43f)
+                curveTo(13.12f, 5.92f, 11.01f, 6.81f, 9.16f, 8.03f)
+                lineTo(3.55f, 2.27f)
+                close()
+                moveTo(1.42f, 9.45f)
+                lineTo(3.58f, 11.61f)
+                curveTo(4.39f, 11.2f, 5.24f, 10.84f, 6.13f, 10.57f)
+                lineTo(4.02f, 8.46f)
+                curveTo(3.12f, 8.74f, 2.25f, 9.07f, 1.42f, 9.45f)
+                close()
+                moveTo(5.32f, 13.96f)
+                lineTo(7.43f, 16.07f)
+                curveTo(8.08f, 15.72f, 8.77f, 15.44f, 9.49f, 15.23f)
+                lineTo(7.35f, 13.09f)
+                curveTo(6.65f, 13.34f, 5.97f, 13.63f, 5.32f, 13.96f)
+                close()
+                moveTo(9.17f, 18.02f)
+                lineTo(12f, 20.85f)
+                lineTo(13.48f, 19.37f)
+                lineTo(10.73f, 16.62f)
+                close()
+            }
+        }
+    }
+
     /** A clock, for "Recent". */
     val Clock: ImageVector by lazy {
         icon("Clock") {

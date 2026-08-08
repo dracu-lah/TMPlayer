@@ -22,13 +22,14 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
+import java.util.concurrent.atomic.AtomicLong
 
 private const val TAG = "Td"
 
@@ -43,6 +44,9 @@ object Td {
 
     @Volatile
     private var current: TdlClient? = null
+
+    private val generation = AtomicLong(0)
+    private val _session = MutableStateFlow<TdSession?>(null)
 
     /** Throws if TDLib has not finished starting; every caller here runs after [AuthState.Ready]. */
     val client: TdlClient
@@ -81,6 +85,7 @@ object Td {
             val closed = CompletableDeferred<Unit>()
             val td = TdlClient.create()
             current = td
+            _session.value = TdSession(td, generation.incrementAndGet())
             lastHandled = null
 
             val updates = launch {
@@ -108,6 +113,7 @@ object Td {
             connection.cancel()
             _connected.value = false
             current = null
+            _session.value = null
         }
     }
 
@@ -211,25 +217,42 @@ object Td {
         runCatching { current?.logOut() }
     }
 
-    /**
-     * Waits until Telegram is actually reachable, so a listing is not built from a search that
-     * had nowhere to go. Gives up after [timeoutMs] and lets the caller try anyway, because a
-     * screen stuck on a spinner for ever is worse than one that says the chat looks empty.
-     */
-    suspend fun awaitConnected(timeoutMs: Long = CONNECT_WAIT_MS) {
-        if (_connected.value) return
-        withTimeoutOrNull(timeoutMs) { _connected.first { it } }
+    /** Waits for an authorized client and returns the generation it belongs to. */
+    suspend fun awaitAuthorizedSession(): TdSession =
+        combine(_auth, _session) { auth, session ->
+            session?.takeIf { auth is AuthState.Ready }
+        }.first { it != null }!!
+
+    /** Remote-only work waits without a timeout until this exact session has a connection. */
+    suspend fun awaitConnectedSession(): TdSession {
+        while (true) {
+            val session = awaitAuthorizedSession()
+            _connected.first { it }
+            if (session.isCurrent()) return session
+        }
     }
 
     suspend fun storageUsedBytes(): Long =
         current?.getStorageStatisticsFast()?.valueOrNull?.filesSize ?: 0L
 
-    /** True when this exact file is already fully on disk, the one film worth keeping. */
-    suspend fun isFileCached(fileId: Int): Boolean {
-        val td = current ?: return false
-        val file = td.getFile(fileId).valueOrNull ?: return false
-        return file.local.isDownloadingCompleted
+    /** Verifies both TDLib's flag and the actual file before promising offline playback. */
+    suspend fun localFileAvailability(fileId: Int): LocalFileAvailability {
+        val td = current ?: return LocalFileAvailability.Missing
+        val file = td.getFile(fileId).valueOrNull ?: return LocalFileAvailability.Missing
+        val local = file.local
+        val diskFile = local.path.takeIf { it.isNotBlank() }?.let(::File)
+        return LocalFilePolicy.evaluate(
+            downloadCompleted = local.isDownloadingCompleted,
+            pathPresent = diskFile != null,
+            regularFile = diskFile?.isFile == true,
+            length = diskFile?.length() ?: 0,
+            size = file.size,
+            expectedSize = file.expectedSize,
+        )
     }
+
+    suspend fun isFileCached(fileId: Int): Boolean =
+        localFileAvailability(fileId) == LocalFileAvailability.Complete
 
     /**
      * Drops every cached video, document and animation.
@@ -259,12 +282,10 @@ object Td {
         scope.launch { runCatching { clearMediaCache() } }
     }
 
-    /** Long enough to cover a stick waking its wifi up, short enough not to look frozen. */
-    private const val CONNECT_WAIT_MS = 15_000L
-
     /** The signed-in account, for the avatar and name in the navigation rail. */
-    suspend fun me(): Account? {
-        val user = current?.getMe()?.valueOrNull ?: return null
+    suspend fun me(session: TdSession): Account? {
+        val user = session.client.getMe().valueOrNull ?: return null
+        if (!session.isCurrent()) return null
         val name = listOf(user.firstName, user.lastName)
             .filter { it.isNotBlank() }
             .joinToString(" ")
@@ -276,6 +297,17 @@ object Td {
             photoFileId = user.profilePhoto?.small?.id ?: 0,
         )
     }
+
+    internal fun isCurrent(session: TdSession): Boolean =
+        current === session.client && generation.get() == session.generation && _auth.value is AuthState.Ready
+}
+
+/** A client plus its identity, so late work from a logged-out client cannot update the UI. */
+class TdSession internal constructor(
+    val client: TdlClient,
+    val generation: Long,
+) {
+    fun isCurrent(): Boolean = Td.isCurrent(this)
 }
 
 /** Who is signed in. Shown in the rail so it is obvious whose library this is. */

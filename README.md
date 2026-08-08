@@ -96,22 +96,15 @@ ever kept: the session, your history, favourites, artwork and cached answers.
 
 ## Install it
 
-Grab the APK from [Releases](../../releases) and pick the one matching your device:
-
-| Device | APK |
-|---|---|
-| Mi TV Stick, most 2018-2021 sticks | `armeabi-v7a` |
-| Chromecast with Google TV, newer boxes | `arm64-v8a` |
-| Emulators and x86 boxes | `x86_64` |
-
-Not sure which? Run `adb shell getprop ro.product.cpu.abi`.
+Grab the universal APK from [Releases](../../releases). The same file works on every supported
+Android TV architecture, so there is no CPU variant to identify.
 
 On the TV, turn on Developer options (Settings → About → press *Build* seven times), enable network
 debugging, then:
 
 ```bash
 adb connect <tv-ip>:5555
-adb install TMPlayer-<version>-armeabi-v7a.apk
+adb install TMPlayer-<version>-universal.apk
 ```
 
 [INSTALL.md](INSTALL.md) covers the sideloading steps in full, along with the remote-control

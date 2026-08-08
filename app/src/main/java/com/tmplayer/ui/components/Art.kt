@@ -6,9 +6,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.FilterQuality
@@ -16,7 +18,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tmplayer.data.NetworkMonitor
 import com.tmplayer.data.RemoteImages
+import com.tmplayer.data.Td
 import com.tmplayer.data.Thumbnails
 import com.tmplayer.ui.theme.SurfaceDark
 
@@ -34,8 +39,10 @@ fun Poster(
 ) {
     val mini = remember(miniThumbnail) { Thumbnails.mini(miniThumbnail) }
 
-    val full by produceState<Bitmap?>(initialValue = null, key1 = thumbnailFileId) {
-        value = Thumbnails.full(thumbnailFileId)
+    val telegramConnected by Td.connected.collectAsStateWithLifecycle()
+    var full by remember(thumbnailFileId) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(thumbnailFileId, telegramConnected) {
+        if (full == null) full = Thumbnails.full(thumbnailFileId)
     }
 
     Box(modifier.background(SurfaceDark), contentAlignment = Alignment.Center) {
@@ -73,8 +80,10 @@ fun NetworkImage(
     alpha: Float = 1f,
     placeholder: @Composable () -> Unit = {},
 ) {
-    val bitmap by produceState<Bitmap?>(initialValue = null, key1 = url) {
-        value = RemoteImages.load(url)
+    val network by NetworkMonitor.status.collectAsStateWithLifecycle()
+    var bitmap by remember(url) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(url, network) {
+        if (bitmap == null) bitmap = RemoteImages.load(url)
     }
 
     Box(modifier, contentAlignment = Alignment.Center) {

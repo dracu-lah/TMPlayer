@@ -8,9 +8,11 @@ import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.Failures
 import com.tmplayer.data.MediaCursors
 import com.tmplayer.data.MediaItem
+import com.tmplayer.data.LocalFileAvailability
 import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.Td
 import com.tmplayer.ui.components.UiState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,7 +27,6 @@ data class BrowseData(
 
 class ChatListViewModel : ViewModel() {
 
-    private val repository by lazy { ChatRepository() }
     private val _state = MutableStateFlow<UiState<BrowseData>>(UiState.Loading("Loading your chats…"))
     val state: StateFlow<UiState<BrowseData>> = _state.asStateFlow()
 
@@ -33,28 +34,60 @@ class ChatListViewModel : ViewModel() {
         load()
     }
 
+    private var loadJob: Job? = null
     private var account: Account? = null
     private var chats: List<ChatSummary>? = null
+
     fun load() {
-        _state.value = UiState.Loading("Loading your chats…")
-        viewModelScope.launch {
-            // Nothing is worth asking for until there is a line to Telegram. Coming back from
-            // standby this is the whole wait, and without it the list arrives empty.
-            Td.awaitConnected()
-            runCatching { repository.chats() }
-                .onSuccess {
-                    chats = it
-                    publish()
+        loadJob?.cancel()
+        if (chats == null) _state.value = UiState.Loading("Loading your chats…")
+        loadJob = viewModelScope.launch {
+            val session = Td.awaitAuthorizedSession()
+            val repository = ChatRepository(session.client)
+            try {
+                // Either local read may be briefly unavailable on the first Ready update after
+                // QR sign-in. Neither is treated as the final answer; the connected pass below
+                // retries both without asking the viewer to press Refresh.
+                chats = try {
+                    repository.cachedChats()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Throwable) {
+                    null
                 }
-                .onFailure { _state.value = UiState.Error(Failures.humanise(it)) }
+                account = try {
+                    Td.me(session)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Throwable) {
+                    null
+                }
+                if (!session.isCurrent()) return@launch
+                if (chats != null) publish()
+
+                // The local database is the first answer. Telegram is then synchronized when its
+                // socket is ready, without holding the saved library behind a connection wait.
+                val connected = Td.awaitConnectedSession()
+                if (connected.generation != session.generation) return@launch
+                if (account == null) account = runCatching { Td.me(session) }.getOrNull()
+                chats = repository.syncChats()
+                if (session.isCurrent()) publish()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                if (session.isCurrent() && chats == null) {
+                    _state.value = UiState.Error(Failures.humanise(error))
+                }
+            }
         }
-        // The avatar is decoration: it must never hold the chat list up, and its failure is not
-        // an error the viewer needs to see. Whichever of the two lands second does the publishing,
-        // so neither can quietly drop the other's result.
-        viewModelScope.launch {
-            account = runCatching { Td.me() }.getOrNull() ?: return@launch
-            publish()
-        }
+    }
+
+    /** Removes one account's data immediately when authorization is lost. */
+    fun reset() {
+        loadJob?.cancel()
+        account = null
+        chats = null
+        _state.value = UiState.Loading("Loading your chats…")
     }
 
     private fun publish() {
@@ -71,6 +104,7 @@ data class MediaListState(
     val items: List<MediaItem> = emptyList(),
     val loadingMore: Boolean = false,
     val endReached: Boolean = false,
+    val availabilityRevision: Int = 0,
 )
 
 class MediaListViewModel(
@@ -79,9 +113,9 @@ class MediaListViewModel(
     private val maxSizeBytes: Long,
 ) : ViewModel() {
 
-    private val repository by lazy { ChatRepository() }
     private var cursors = MediaCursors()
     private var pageJob: Job? = null
+    private var availabilityJob: Job? = null
     private var query = ""
 
     private val _state = MutableStateFlow<UiState<MediaListState>>(UiState.Loading("Finding films…"))
@@ -95,18 +129,26 @@ class MediaListViewModel(
     fun search(text: String) {
         if (text == query) return
         query = text
-        load()
+        load(preserveContent = false)
     }
 
-    fun load() {
+    fun load() = load(preserveContent = true)
+
+    private fun load(preserveContent: Boolean) {
+        val previous = if (preserveContent) (_state.value as? UiState.Content)?.value else null
+        val previousCursors = cursors
         cursors = MediaCursors()
         val searching = query.isNotBlank()
-        _state.value = UiState.Loading(if (searching) "Searching…" else "Finding films…")
+        if (previous == null) {
+            _state.value = UiState.Loading(if (searching) "Searching…" else "Finding films…")
+        }
         pageJob?.cancel()
         pageJob = viewModelScope.launch {
-            Td.awaitConnected()
+            val session = Td.awaitAuthorizedSession()
+            val repository = ChatRepository(session.client)
             runCatching { repository.mediaPage(chatId, cursors, query) }
                 .onSuccess { rawPage ->
+                    if (!session.isCurrent()) return@onSuccess
                     val page = rawPage.copy(items = rawPage.items.filter(::withinSizeLimits))
                     cursors = page.cursors
                     _state.value = if (page.items.isEmpty() && page.endReached) {
@@ -127,7 +169,17 @@ class MediaListViewModel(
                     // A first page can come back empty while older pages still hold films.
                     if (page.items.isEmpty() && !page.endReached) loadMore()
                 }
-                .onFailure { _state.value = UiState.Error(Failures.humanise(it)) }
+                .onFailure {
+                    if (it is CancellationException) throw it
+                    if (session.isCurrent()) {
+                        if (previous != null) {
+                            cursors = previousCursors
+                            _state.value = UiState.Content(previous)
+                        } else {
+                            _state.value = UiState.Error(Failures.humanise(it))
+                        }
+                    }
+                }
         }
     }
 
@@ -136,6 +188,33 @@ class MediaListViewModel(
 
     private fun withinSizeLimits(item: MediaItem) =
         SizeFilter.matches(item.sizeBytes, minSizeBytes, maxSizeBytes)
+
+    /** Revalidates badges after playback or a cache clear without rebuilding the whole grid. */
+    fun refreshLocalAvailability() {
+        val current = (_state.value as? UiState.Content)?.value ?: return
+        availabilityJob?.cancel()
+        availabilityJob = viewModelScope.launch {
+            val session = Td.awaitAuthorizedSession()
+            var changed = false
+            val updated = current.items.map { item ->
+                val onDevice = Td.localFileAvailability(item.fileId) == LocalFileAvailability.Complete
+                if (onDevice == item.onDevice) {
+                    item
+                } else {
+                    changed = true
+                    item.copy(onDevice = onDevice)
+                }
+            }
+            if (session.isCurrent() && changed) {
+                _state.value = UiState.Content(
+                    current.copy(
+                        items = updated,
+                        availabilityRevision = current.availabilityRevision + 1,
+                    ),
+                )
+            }
+        }
+    }
 
     /**
      * Called when focus nears the end of the listing.
@@ -152,6 +231,8 @@ class MediaListViewModel(
 
         _state.value = UiState.Content(current.value.copy(loadingMore = true))
         pageJob = viewModelScope.launch {
+            val session = Td.awaitAuthorizedSession()
+            val repository = ChatRepository(session.client)
             var items = current.value.items
             var endReached = false
             var failed = false
@@ -173,10 +254,13 @@ class MediaListViewModel(
                         items = (items + page.items).distinctBy { it.messageId }
                         endReached = page.endReached
                     }
-                    .onFailure { failed = true }
+                    .onFailure {
+                        if (it is CancellationException) throw it
+                        failed = true
+                    }
             }
 
-            _state.value = UiState.Content(
+            if (session.isCurrent()) _state.value = UiState.Content(
                 MediaListState(
                     items = items,
                     loadingMore = false,

@@ -118,7 +118,7 @@
       "name": "Which file do I download?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Most TV sticks, including the Mi TV Stick, need armeabi-v7a. Newer boxes such as Chromecast with Google TV need arm64-v8a."
+        "text": "Download the universal APK. The same file works on every supported Android TV, including 32-bit and 64-bit devices."
       }
     },
     {
@@ -180,7 +180,7 @@
             </a>
             <a class="btn btn-ghost" href="https://github.com/dracu-lah/TMPlayer" rel="noopener">View the source</a>
           </p>
-          <p class="hero-note">Most TV sticks need the <code>armeabi-v7a</code> build. <a href="#download">Pick the right one below.</a></p>
+          <p class="hero-note">One universal APK works across supported Android TV devices. <a href="#download">Get the latest release below.</a></p>
         </div>
 
         <dl class="spec">
@@ -216,7 +216,7 @@
       <div class="section-head" data-reveal>
         <div class="section-title">
           <h2 id="download-h">Download</h2>
-          <p class="section-sub">One file per chip type. Pick the one your stick can run.</p>
+          <p class="section-sub">One file for supported Android TVs. No chip type to look up.</p>
         </div>
       </div>
 
@@ -237,7 +237,7 @@
           <ul class="abi-list" id="abi-list" hidden></ul>
 
           <div class="callout" id="abi-callout" hidden>
-            <p><strong>Wrong build, confusing error.</strong> Installing the APK your device cannot run fails with <code>INSTALL_FAILED_NO_MATCHING_ABIS</code>. To check, run <code>adb shell getprop ro.product.cpu.abi</code> on the TV.</p>
+            <p><strong>One download, no guesswork.</strong> The universal APK includes the native code needed by supported 32-bit TVs, 64-bit TVs and x86_64 emulators.</p>
           </div>
 
           <details id="release-notes-wrap" hidden>
@@ -339,7 +339,7 @@
             <h3>Get the file onto the TV</h3>
             <p>Easiest with a free app from the Play Store, such as Downloader or Send Files to TV, pointed at the download link above. With a computer on the same wifi, <code>adb</code> works too:</p>
             <pre class="code"><code>adb connect &lt;tv-ip&gt;:5555
-adb install TMPlayer-&lt;version&gt;-armeabi-v7a.apk</code></pre>
+adb install TMPlayer-&lt;version&gt;-universal.apk</code></pre>
             <p>For that one, turn on network debugging in Developer options first.</p>
           </li>
           <li>
@@ -408,8 +408,8 @@ adb install TMPlayer-&lt;version&gt;-armeabi-v7a.apk</code></pre>
         </div>
         <div>
           <dt>Which file do I download?</dt>
-          <dd>Most TV sticks, including the Mi TV Stick, need <code>armeabi-v7a</code>. Newer
-            boxes such as Chromecast with Google TV need <code>arm64-v8a</code>.</dd>
+          <dd>Download the universal APK. The same file works on every supported Android TV,
+            including 32-bit and 64-bit devices.</dd>
         </div>
         <div>
           <dt>Can I read my messages on it?</dt>

@@ -10,22 +10,27 @@
   var RELEASES_PAGE = 'https://github.com/' + OWNER + '/' + REPO + '/releases';
   var TIMEOUT_MS = 9000;
 
-  /* One APK per ABI. armeabi-v7a first: it is what most TV sticks run. */
-  var ABIS = [
+  /* The current release is universal. Older split releases remain readable below. */
+  var BUILDS = [
+    {
+      id: 'universal',
+      label: 'Universal APK',
+      note: 'One file for every supported Android TV. No chip type to look up.'
+    },
     {
       id: 'armeabi-v7a',
-      note: 'Mi TV Stick, and most sticks sold between 2018 and 2021. Start here.',
-      recommended: true
+      label: 'armeabi-v7a',
+      note: 'Mi TV Stick, and most sticks sold between 2018 and 2021. Start here.'
     },
     {
       id: 'arm64-v8a',
-      note: 'Chromecast with Google TV, Nvidia Shield, and newer 64-bit boxes.',
-      recommended: false
+      label: 'arm64-v8a',
+      note: 'Chromecast with Google TV, Nvidia Shield, and newer 64-bit boxes.'
     },
     {
       id: 'x86_64',
-      note: 'Emulators and the handful of x86 Android TV boxes.',
-      recommended: false
+      label: 'x86_64',
+      note: 'Emulators and the handful of x86 Android TV boxes.'
     }
   ];
 
@@ -97,13 +102,13 @@
     return svg;
   }
 
-  /* Assets are named TMPlayer-<version>-<abi>.apk, but match loosely so a
+  /* Assets are named TMPlayer-<version>-<build>.apk, but match loosely so a
      rename upstream does not silently empty this list. */
-  function findApk(release, abi) {
+  function findApk(release, build) {
     var assets = (release && release.assets) || [];
     for (var i = 0; i < assets.length; i++) {
       var name = String(assets[i].name || '').toLowerCase();
-      if (name.slice(-4) === '.apk' && name.indexOf(abi) !== -1) {
+      if (name.slice(-4) === '.apk' && name.indexOf(build) !== -1) {
         return assets[i];
       }
     }
@@ -114,6 +119,14 @@
     return ((release && release.assets) || []).filter(function (a) {
       return String(a.name || '').toLowerCase().slice(-4) === '.apk';
     });
+  }
+
+  function assetLabel(asset) {
+    var name = String((asset && asset.name) || '').toLowerCase();
+    for (var i = 0; i < BUILDS.length; i++) {
+      if (name.indexOf(BUILDS[i].id) !== -1) { return BUILDS[i].label; }
+    }
+    return asset.name;
   }
 
   /* ---------- rendering ---------- */
@@ -150,20 +163,25 @@
     el.status.hidden = true;
     clear(el.abiList);
 
-    ABIS.forEach(function (abi) {
-      var asset = findApk(release, abi.id);
-      if (!asset) { return; }
+    var universal = findApk(release, 'universal');
+    var builds = universal ? [BUILDS[0]] : BUILDS.slice(1);
+    var primary = universal || findApk(release, 'armeabi-v7a') || found[0];
 
-      var li = make('li', 'abi' + (abi.recommended ? ' pick' : ''));
+    builds.forEach(function (build) {
+      var asset = findApk(release, build.id);
+      if (!asset) { return; }
+      var recommended = asset === primary;
+
+      var li = make('li', 'abi' + (recommended ? ' pick' : ''));
 
       var text = make('div', 'abi-text');
       var name = make('p', 'abi-name');
-      name.appendChild(document.createTextNode(abi.id));
-      if (abi.recommended) {
-        name.appendChild(make('span', 'badge', 'Most TV sticks'));
+      name.appendChild(document.createTextNode(build.label));
+      if (recommended) {
+        name.appendChild(make('span', 'badge', universal ? 'One file' : 'Most TV sticks'));
       }
       text.appendChild(name);
-      text.appendChild(make('p', 'abi-note', abi.note));
+      text.appendChild(make('p', 'abi-note', build.note));
       li.appendChild(text);
 
       var get = make('div', 'abi-get');
@@ -177,13 +195,15 @@
 
       el.abiList.appendChild(li);
 
-      if (abi.recommended && el.heroBtn) {
+      if (recommended && el.heroBtn) {
         el.heroBtn.href = asset.browser_download_url;
-        el.heroLabel.textContent = 'Download ' + tag + ' for armeabi-v7a';
+        el.heroLabel.textContent = universal
+          ? 'Download ' + tag + ' universal APK'
+          : 'Download ' + tag + ' for armeabi-v7a';
       }
     });
 
-    /* No ABI matched the expected names: fall back to whatever is attached. */
+    /* No known build matched: fall back to whatever APK is attached. */
     if (!el.abiList.firstChild) {
       found.forEach(function (asset) {
         var li = make('li', 'abi');
@@ -198,11 +218,16 @@
         get.appendChild(a);
         li.appendChild(get);
         el.abiList.appendChild(li);
+
+        if (asset === primary && el.heroBtn) {
+          el.heroBtn.href = asset.browser_download_url;
+          el.heroLabel.textContent = 'Download ' + tag;
+        }
       });
     }
 
     el.abiList.hidden = false;
-    el.abiCallout.hidden = false;
+    el.abiCallout.hidden = !universal;
 
     /* Release notes are untrusted text from the API. textContent only. */
     var body = (release.body || '').trim();
@@ -230,10 +255,7 @@
         var list = make('ul', 'prev-assets');
         assets.forEach(function (asset) {
           var item = make('li');
-          var label = asset.name;
-          for (var i = 0; i < ABIS.length; i++) {
-            if (label.toLowerCase().indexOf(ABIS[i].id) !== -1) { label = ABIS[i].id; break; }
-          }
+          var label = assetLabel(asset);
           var a = link(asset.browser_download_url, null, label);
           a.setAttribute('aria-label', 'Download ' + asset.name);
           item.appendChild(a);
@@ -259,7 +281,7 @@
       {
         text: 'The downloads are still there. ',
         link: { href: RELEASES_PAGE, text: 'Open the releases page on GitHub' },
-        after: ' and pick the armeabi-v7a APK, which is what most TV sticks need.'
+        after: ' and download the universal APK.'
       }
     ]);
 

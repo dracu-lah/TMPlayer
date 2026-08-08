@@ -57,7 +57,9 @@ import com.tmplayer.data.FilmLookup
 import com.tmplayer.data.FilmName
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
+import com.tmplayer.data.NetworkMonitor
 import com.tmplayer.data.Tmdb
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tmplayer.ui.components.NetworkImage
 import com.tmplayer.ui.components.Poster
 import com.tmplayer.ui.components.SkeletonBox
@@ -102,10 +104,12 @@ fun FilmDetailsPanel(
         // been out for years and wrong for one added to TMDB last week, or for a lookup that
         // failed while the TV's connection was down.
         var reloads by remember(item.id) { mutableStateOf(0) }
+        val network by NetworkMonitor.status.collectAsStateWithLifecycle()
         val lookup by produceState<FilmLookup>(
             initialValue = FilmLookup.Loading,
             key1 = item.id,
             key2 = reloads,
+            key3 = network,
         ) {
             value = FilmLookup.Loading
             value = Tmdb.lookup(name)
@@ -377,6 +381,7 @@ private fun Synopsis(lookup: FilmLookup, isEpisode: Boolean) {
         // extras are not here. Only the reason differs, and only the reason is worth varying.
         is FilmLookup.NotFound -> Notice("We couldn't find this $noun in the movie database. You can still play it.")
         is FilmLookup.Failed -> Notice("${lookup.message} You can still play the $noun.")
+        is FilmLookup.Offline -> Notice("Connect to the internet for details. Saved films still play.")
         is FilmLookup.Disabled -> Notice("Details aren't available in this version. You can still play the $noun.")
     }
 }

@@ -2,6 +2,7 @@ package com.tmplayer
 
 import android.app.Application
 import com.tmplayer.data.RemoteImages
+import com.tmplayer.data.NetworkMonitor
 import com.tmplayer.data.Td
 import com.tmplayer.data.Tmdb
 import kotlinx.coroutines.CoroutineScope
@@ -12,6 +13,7 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        NetworkMonitor.start(this)
         // TDLib takes a moment to open its database; starting here means the login screen is
         // already showing a QR code by the time the user has finished reading the first line.
         Td.start(this)

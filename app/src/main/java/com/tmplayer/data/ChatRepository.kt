@@ -51,14 +51,14 @@ data class MediaCursors(
     val allDone: Boolean get() = videoDone && documentDone && animationDone
 }
 
-class ChatRepository(private val td: TdlClient = Td.client) {
+class ChatRepository(private val td: TdlClient) {
 
     /**
      * TDLib serves chats out of its local database, so the list has to be pulled from the
      * server first. [loadChats] returns 404 once everything is already local, which is the
      * documented "no more" answer, not a failure.
      */
-    suspend fun chats(limit: Int = CHAT_LIMIT): List<ChatSummary> {
+    suspend fun syncChats(limit: Int = CHAT_LIMIT): List<ChatSummary> {
         var loaded = 0
         while (loaded < limit) {
             val result = td.loadChats(ChatListMain(), CHAT_PAGE)
@@ -66,6 +66,11 @@ class ChatRepository(private val td: TdlClient = Td.client) {
             loaded += CHAT_PAGE
         }
 
+        return cachedChats(limit)
+    }
+
+    /** Reads the chat list already in TDLib's database without requiring a network connection. */
+    suspend fun cachedChats(limit: Int = CHAT_LIMIT): List<ChatSummary> {
         val ids = td.getChats(ChatListMain(), limit).value().chatIds
         return buildList {
             for (id in ids) {
@@ -158,7 +163,7 @@ class ChatRepository(private val td: TdlClient = Td.client) {
             offset = 0,
             limit = PAGE_SIZE,
             filter = filter,
-        ).valueOrNull ?: return SearchResult(emptyList(), fromMessageId, done = true)
+        ).value()
 
         val items = found.messages.mapNotNull { MediaMapper.fromMessage(it) }
         // nextFromMessageId is 0 once the chat has no older matches left.
