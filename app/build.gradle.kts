@@ -30,8 +30,8 @@ android {
         // Gradle properties. The literals below are what a local build gets, and they track the
         // most recent tag: leaving them behind means a local build cannot be installed over the
         // release it is meant to be debugging, since Android refuses the downgrade.
-        versionCode = (findProperty("tmVersionCode") as String?)?.toInt() ?: 10000
-        versionName = (findProperty("tmVersionName") as String?) ?: "1.0.0"
+        versionCode = (findProperty("tmVersionCode") as String?)?.toInt() ?: 10001
+        versionName = (findProperty("tmVersionName") as String?) ?: "1.0.1"
 
         // Telegram API credentials. Bring your own via local.properties (see README)
         buildConfigField("int", "TG_API_ID", localProps.getProperty("TG_API_ID") ?: "0")

@@ -35,6 +35,12 @@ Accept the *Allow USB debugging?* prompt that appears on the TV.
 If you see `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, an older build signed with a different key is
 already there. Run `adb uninstall com.tmplayer` first.
 
+The original 1080p Mi TV Stick (`MiTV-AESP0`, Android TV 9) is supported. Its system is 32-bit
+ARM even though its processor is based on Cortex-A53; use the universal APK, which includes
+`armeabi-v7a`. If its on-screen installer only says *App not installed*, use the ADB command
+above to get the real error. A signature mismatch, a version downgrade, too little free space
+to unpack the APK, or an incomplete copy are the usual causes—not Android 9 itself.
+
 No computer? Any sideload app works (Downloader by AFTVnews, Send Files to TV, a USB stick
 with a file manager). The APK is a normal Android package.
 
