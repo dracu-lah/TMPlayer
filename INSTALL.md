@@ -39,7 +39,7 @@ The original 1080p Mi TV Stick (`MiTV-AESP0`, Android TV 9) is supported. Its sy
 ARM even though its processor is based on Cortex-A53; use the universal APK, which includes
 `armeabi-v7a`. If its on-screen installer only says *App not installed*, use the ADB command
 above to get the real error. A signature mismatch, a version downgrade, too little free space
-to unpack the APK, or an incomplete copy are the usual causes—not Android 9 itself.
+to unpack the APK, or an incomplete copy are the usual causes, rather than Android 9 itself.
 
 No computer? Any sideload app works (Downloader by AFTVnews, Send Files to TV, a USB stick
 with a file manager). The APK is a normal Android package.
