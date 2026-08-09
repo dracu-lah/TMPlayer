@@ -55,7 +55,7 @@ sealed interface UiState<out T> {
      * The request worked; there is simply nothing to show.
      *
      * Kept apart from [Error] because "That didn't work / Try again" over an empty list is both
-     * untrue and alarming; a chat with no films in it is a normal answer, not a failure.
+     * untrue and alarming; a chat with no videos in it is a normal answer, not a failure.
      */
     data class Empty(val message: String) : UiState<Nothing>
 

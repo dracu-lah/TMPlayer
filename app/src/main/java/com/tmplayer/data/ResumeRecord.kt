@@ -1,7 +1,7 @@
 package com.tmplayer.data
 
 /**
- * A film the viewer stopped part way through, with enough detail to start it again.
+ * A video the viewer stopped part way through, with enough detail to start it again.
  *
  * The watch position alone is not enough to build a "Continue watching" row: the chat it came
  * from may not be loaded, or may not even be in the list any more. Everything needed to open the

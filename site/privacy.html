@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy - TMPlayer</title>
+<meta name="description" content="How TMPlayer stores data on your Android TV and which services it contacts.">
+<link rel="canonical" href="https://tmplayer.org/privacy">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#0E0E12">
+<meta property="og:title" content="Privacy - TMPlayer">
+<meta property="og:description" content="How TMPlayer stores data on your Android TV and which services it contacts.">
+<meta property="og:url" content="https://tmplayer.org/privacy">
+<meta property="og:image" content="https://tmplayer.org/og.png">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/poppins-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/poppins-600.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="/" aria-label="TMPlayer home"><img class="brand-mark" src="/favicon.svg" width="30" height="30" alt=""><span class="brand-name">TMPlayer</span></a>
+    <nav class="nav" aria-label="Primary"><span class="nav-links"><a href="/">Home</a><a href="/legal">Lawful use</a></span><a class="nav-cta" href="https://github.com/dracu-lah/TMPlayer" rel="noopener">GitHub</a></nav>
+  </div>
+</header>
+<main id="main" class="policy-page">
+  <div class="wrap policy-wrap">
+    <p class="eyebrow">Effective 9 August 2026</p>
+    <h1>Privacy</h1>
+    <p class="policy-lede">TMPlayer runs on your Android TV and talks directly to the services needed to play media from your own Telegram account. There is no TMPlayer account or developer-operated backend.</p>
+
+    <section>
+      <h2>What stays on your TV</h2>
+      <p>Telegram's TDLib stores your signed-in session, cached chat information, thumbnails, and downloaded media inside TMPlayer's private app storage. TMPlayer also stores your settings, favourites, Continue watching positions, and a temporary update APK when you choose to download an update.</p>
+      <p>Other apps cannot normally read this data. Anyone with control of the TV or a rooted device may still be able to access it, so treat the TV as a signed-in device.</p>
+    </section>
+
+    <section>
+      <h2>Services TMPlayer contacts</h2>
+      <ul>
+        <li><strong>Telegram</strong> handles sign-in, chat and channel lists, file metadata, media downloads, and Telegram-provided sponsored messages where applicable.</li>
+        <li><strong>GitHub</strong> is checked for a newer TMPlayer release. An APK is downloaded only after you choose to update.</li>
+        <li><strong>Your TV's speech-recognition provider</strong> receives audio only when you deliberately start voice search.</li>
+      </ul>
+      <p>TMPlayer does not send filenames, viewing history, or media to a developer-operated service.</p>
+    </section>
+
+    <section>
+      <h2>What TMPlayer does not include</h2>
+      <p>TMPlayer has no developer-operated server, analytics SDK, advertising SDK, crash-reporting service, or cross-app tracking. The developer does not receive your Telegram credentials, chat list, filenames, viewing history, or media.</p>
+    </section>
+
+    <section>
+      <h2>Your controls</h2>
+      <p>Settings lets you delete the downloaded video, clear Continue watching, clear favourites, and sign out. Signing out removes TMPlayer preferences and asks TDLib to log out and clear its local account database. Uninstalling TMPlayer removes its app data through Android.</p>
+    </section>
+
+    <section>
+      <h2>This website</h2>
+      <p>The static website sets no application cookies and includes no analytics script. Hosting and network providers may keep ordinary connection logs under their own policies.</p>
+    </section>
+
+    <section>
+      <h2>Questions</h2>
+      <p>Email <a href="mailto:nevilnicks4321@gmail.com?subject=TMPlayer%20privacy">nevilnicks4321@gmail.com</a> with a privacy question. Material changes to this page will update the effective date above.</p>
+    </section>
+  </div>
+</main>
+<footer class="site-footer"><div class="wrap footer-grid"><div><p class="footer-brand">TMPlayer</p><p class="muted small">An unofficial Telegram media player for Android TV.</p></div><nav class="footer-links" aria-label="Footer"><a href="/">Home</a><a href="/legal">Lawful use</a><a href="https://github.com/dracu-lah/TMPlayer" rel="noopener">Source</a></nav></div></footer>
+</body>
+</html>

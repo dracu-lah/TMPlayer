@@ -3,15 +3,15 @@ package com.tmplayer.data
 import java.util.Calendar
 import java.util.Locale
 
-/** A film title and year recovered from a release file name. */
+/** A video title and year recovered from a descriptive file name. */
 data class ParsedName(
     val title: String,
     val year: Int?,
-    /** Set when the name looks like a TV episode rather than a film. */
+    /** Set when the name looks like an episode rather than a standalone video. */
     val season: Int? = null,
     val episode: Int? = null,
 ) {
-    /** Television rather than film, so the search goes to a different index. */
+    /** Episodic media rather than a standalone video. */
     val isSeries: Boolean get() = season != null || episode != null
 
     /** A single episode, as opposed to a season pack that names no episode at all. */
@@ -22,7 +22,8 @@ data class ParsedName(
 }
 
 /**
- * Turns "Uyir (2026) Malayalam (DS4K 1080p HS WEB-Rip E-AC3 5.1 Atmos).mkv" into "Uyir", 2026.
+ * Turns "Harbour Notes (2026) Malayalam (1080p WEB-Rip E-AC3).mkv" into
+ * "Harbour Notes", 2026.
  *
  * Scene releases follow a loose but real convention: the title comes first, then the year, then
  * an unbounded pile of technical markers. Nobody has written this down as a grammar, so the
@@ -31,10 +32,10 @@ data class ParsedName(
  *
  * There is no Kotlin port of either library, so this is that approach reimplemented against the
  * cases this app actually sees. It is deliberately conservative: a wrong title produces a wrong
- * film on the details panel, which is worse than producing nothing, so anything ambiguous
- * returns a bare title with no year and lets the search engine sort it out.
+ * label in the player, which is worse than producing nothing, so anything ambiguous returns a
+ * bare title with no year.
  */
-object FilmName {
+object MediaName {
 
     fun parse(fileName: String, maxYear: Int = thisYear() + 1): ParsedName {
         val stripped = stripDecoration(stripExtension(fileName))
@@ -85,7 +86,7 @@ object FilmName {
      *
      * The player needs both: somebody who has just pressed Next once too often, or who came back
      * to a series a week later and started one episode too far along, is one press from where they
-     * meant to be rather than backing out of the film to look for it.
+     * meant to be rather than backing out of the video to look for it.
      */
     fun <T> previousEpisode(current: String, candidates: List<T>, nameOf: (T) -> String): T? =
         episodeAt(current, candidates, step = -1, nameOf = nameOf)
@@ -150,9 +151,9 @@ object FilmName {
     private data class Year(val value: Int, val at: Int)
 
     /**
-     * Years are ambiguous because titles contain them: "Blade Runner 2049" and "2012" are films,
-     * not dates. Two rules settle almost every real case: a bracketed year is always the release
-     * year, and a year later than next year cannot be one.
+     * Years are ambiguous because titles can contain them. Two rules settle almost every real
+     * case: a bracketed year is always the recording year, and a year later than next year cannot
+     * be one.
      */
     private fun findYear(text: String, maxYear: Int): Year? {
         // A bracketed year is unambiguous, so it wins outright over anything bare.
@@ -161,8 +162,8 @@ object FilmName {
             .lastOrNull { it.value in MIN_YEAR..maxYear }
             ?.let { return it }
 
-        // Otherwise the last plausible year wins, so "Blade Runner 2049 2017" resolves to 2017
-        // while "Blade Runner 2049" on its own keeps 2049 in the title, being beyond next year.
+        // Otherwise the last plausible year wins, so "Studio Log 2049 2017" resolves to 2017
+        // while "Studio Log 2049" keeps 2049 in the title, being beyond next year.
         return BARE_YEAR.findAll(text)
             .mapNotNull { match -> match.groups[1]?.let { Year(it.value.toInt(), match.range.first) } }
             .lastOrNull { it.value in MIN_YEAR..maxYear }
@@ -172,8 +173,8 @@ object FilmName {
      * Where the technical markers start, or null when the name carries none.
      *
      * A marker at the very front is not a boundary: it would cut the title down to nothing. That
-     * is what saves the Tamil comedy actually called "Tamil Padam" from losing its own name to
-     * the language list below.
+     * is what saves a title such as "Tamil Lessons" from losing its own first word to the language
+     * list below.
      */
     private fun firstTagIndex(text: String): Int? =
         TAGS.findAll(text).map { it.range.first }.filter { it > 0 }.minOrNull()
@@ -181,10 +182,9 @@ object FilmName {
     /**
      * Removes the branding uploaders staple to the front of a file name.
      *
-     * Telegram film channels sign their work, and they do it in whatever renders as a logo:
-     * "🅂🅂_Maareesan_2025...", "@SomeChannel - Film.mkv", "www.tracker.to - Film.mkv". None of it
-     * is part of the title, and all of it poisons a database search, which then quietly returns
-     * nothing at all.
+     * Telegram creators sometimes sign uploads in whatever renders as a logo:
+     * "🅂🅂_Harbour_Notes_2025...", "@CreatorClips - Workshop.mkv", or
+     * "www.creatorfiles.org - Workshop.mkv". None of it is part of the title.
      *
      * Symbols go by Unicode category rather than by an emoji list. The squared and circled letter
      * ranges that channels favour are all OTHER_SYMBOL, alongside every emoji, so one rule covers
@@ -217,7 +217,7 @@ object FilmName {
         val dot = name.lastIndexOf('.')
         if (dot <= 0) return name
         val extension = name.substring(dot + 1).lowercase(Locale.ROOT)
-        // Only strip something that is actually an extension: "Deadpool 2" must keep its 2, and
+        // Only strip something that is actually an extension: "Workshop 2" must keep its 2, and
         // "S.W.A.T" must keep its T.
         return if (extension.length in 2..4 && extension.all { it.isLetterOrDigit() }) {
             name.substring(0, dot)
@@ -263,7 +263,7 @@ object FilmName {
 
     /**
      * The word has to be there. A bare "E04" is too easy to find inside a title, and guessing
-     * wrong turns a film into episode four of a series that does not exist.
+     * wrong turns a standalone video into episode four of a series that does not exist.
      */
     private val EPISODE_ONLY = Regex("""\bep(?:isode)?\s?(\d{1,3})\b""", RegexOption.IGNORE_CASE)
 
@@ -291,13 +291,13 @@ object FilmName {
             "\\d+kbps", "dual ?audio", "multi",
             // Streaming source, which Indian releases in particular carry
             "nf", "amzn", "dsnp", "hmax", "hulu", "sonyliv", "zee5", "hotstar", "jiocinema",
-            // Language. Uploaders name the audio track, and it reads as part of the title
-            // otherwise: "Maareesan Tamil" finds nothing where "Maareesan" finds the film.
+            // Language. Uploaders name the audio track, and it otherwise reads as part of the
+            // title: "Harbour Notes Tamil" should be grouped under "Harbour Notes".
             "tamil", "telugu", "hindi", "malayalam", "kannada", "marathi", "bengali", "punjabi",
             "english", "korean", "japanese", "chinese", "spanish", "french", "russian", "german",
             "italian", "turkish", "arabic",
-            // Edition. These describe a cut of the film, which TMDB knows nothing about, so they
-            // only ever get in the way of the search.
+            // Edition labels describe a particular cut, not the base title, so they only get in
+            // the way of grouping neighbouring files.
             "director'?s ?cut", "theatrical", "imax", "remastered", "criterion",
             "anniversary", "special ?edition", "final ?cut",
             // Release furniture

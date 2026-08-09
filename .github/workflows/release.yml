@@ -2,7 +2,7 @@ name: Release
 
 # Releases are cut deliberately, by pushing a tag:
 #
-#     git tag v0.3.0 && git push origin v0.3.0
+#     git tag v1.0.0 && git push origin v1.0.0
 #
 # Nothing else builds a signed APK. That matters because this is the only job that can see the
 # signing key, and keeping it off the push-to-main path means an ordinary commit, or a pull
@@ -85,12 +85,7 @@ jobs:
       - name: Run unit tests
         run: ./gradlew :app:test
 
-      # Read straight from the environment by the Gradle build. Unlike the Telegram credentials
-      # this one is optional: without it the release still works and the film details panel says
-      # the extras are unavailable, so a missing key must not fail the build.
       - name: Build signed universal APK
-        env:
-          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
         run: |
           ./gradlew :app:assembleRelease \
             -PtmVersionName=${{ steps.version.outputs.name }} \
@@ -109,6 +104,40 @@ jobs:
             "dist/mapping-${{ steps.version.outputs.name }}.txt"
           ls -la dist
 
+      - name: Package GPL source and notices
+        run: |
+          VERSION="${{ steps.version.outputs.name }}"
+          git archive --format=tar.gz --prefix="TMPlayer-$VERSION/" \
+            --output="dist/TMPlayer-$VERSION-source.tar.gz" "$GITHUB_SHA"
+
+          git clone --depth 1 --branch 1.8.0-0.9.0 \
+            https://github.com/anilbeesetti/nextlib.git \
+            "nextlib-1.8.0-0.9.0"
+          test "$(git -C nextlib-1.8.0-0.9.0 rev-parse HEAD)" = \
+            "1b69e9490c172c42f73f7a6f1b9ffd1c8be4a060"
+          rm -rf nextlib-1.8.0-0.9.0/.git
+          mkdir -p nextlib-1.8.0-0.9.0/upstream-sources
+          curl --fail --location --retry 3 \
+            https://ffmpeg.org/releases/ffmpeg-6.0.tar.gz \
+            --output nextlib-1.8.0-0.9.0/upstream-sources/ffmpeg-6.0.tar.gz
+          curl --fail --location --retry 3 \
+            https://github.com/webmproject/libvpx/archive/refs/tags/v1.13.0.tar.gz \
+            --output nextlib-1.8.0-0.9.0/upstream-sources/libvpx-1.13.0.tar.gz
+          curl --fail --location --retry 3 \
+            https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v3.4.1.tar.gz \
+            --output nextlib-1.8.0-0.9.0/upstream-sources/mbedtls-3.4.1.tar.gz
+          sha256sum nextlib-1.8.0-0.9.0/upstream-sources/*.tar.gz \
+            > nextlib-1.8.0-0.9.0/upstream-sources/SHA256SUMS
+          tar -czf "dist/nextlib-corresponding-source-$VERSION.tar.gz" \
+            nextlib-1.8.0-0.9.0
+
+          cp LICENSE "dist/LICENSE-GPL-3.0.txt"
+          cp THIRD_PARTY_NOTICES.md "dist/THIRD_PARTY_NOTICES.md"
+          test -s "dist/TMPlayer-$VERSION-source.tar.gz"
+          test -s "dist/nextlib-corresponding-source-$VERSION.tar.gz"
+          test -s "dist/LICENSE-GPL-3.0.txt"
+          test -s "dist/THIRD_PARTY_NOTICES.md"
+
       # Anything holding the signing key is deleted before the job can reach a step that
       # publishes output. Workflow files are cleaned up by the runner anyway; this is belt
       # and braces against a future step accidentally archiving the workspace.
@@ -120,8 +149,7 @@ jobs:
         with:
           name: TMPlayer ${{ steps.version.outputs.name }}
           files: |
-            dist/*.apk
-            dist/mapping-*.txt
+            dist/*
           generate_release_notes: true
           body: |
             ## Install
@@ -133,5 +161,13 @@ jobs:
             adb install TMPlayer-${{ steps.version.outputs.name }}-universal.apk
             ```
 
-            See [INSTALL.md](https://github.com/${{ github.repository }}/blob/main/INSTALL.md)
+            See [INSTALL.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/INSTALL.md)
             for sideloading steps and the remote-control reference.
+
+            ## Licence and source
+
+            TMPlayer is GPL-3.0. This release includes the exact TMPlayer source, the corresponding
+            source and build material for the bundled GPL native media extension, the licence,
+            third-party notices, and the R8 mapping for this APK.
+
+            See the immutable [source tree for this release](https://github.com/${{ github.repository }}/tree/${{ github.ref_name }}).

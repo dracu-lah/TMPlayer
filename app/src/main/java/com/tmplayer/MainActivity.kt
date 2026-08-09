@@ -72,7 +72,7 @@ private sealed interface Screen {
     data object Settings : Screen
 }
 
-/** A film waiting on the viewer's answer about clearing space. */
+/** A video waiting on the viewer's answer about clearing space. */
 private data class RoomPrompt(
     val item: MediaItem,
     val reclaimBytes: Long,
@@ -110,7 +110,7 @@ private fun Root() {
     val minSize by settings.minSizeBytes.collectAsStateWithLifecycle(initialValue = SizeFilter.DEFAULT_MIN)
     val maxSize by settings.maxSizeBytes.collectAsStateWithLifecycle(initialValue = SizeFilter.DEFAULT_MAX)
     val chatLayout by settings.chatLayout.collectAsStateWithLifecycle(initialValue = CardLayout.List)
-    val filmLayout by settings.filmLayout.collectAsStateWithLifecycle(initialValue = CardLayout.Grid)
+    val mediaLayout by settings.mediaLayout.collectAsStateWithLifecycle(initialValue = CardLayout.Grid)
 
     val toast = rememberToast()
 
@@ -130,9 +130,9 @@ private fun Root() {
         if (removed > 0) {
             toast(
                 if (removed == 1) {
-                    "Removed a film TMPlayer can no longer open from Continue watching"
+                    "Removed a video TMPlayer can no longer open from Continue watching"
                 } else {
-                    "Removed $removed films TMPlayer can no longer open from Continue watching"
+                    "Removed $removed videos TMPlayer can no longer open from Continue watching"
                 },
             )
         }
@@ -175,7 +175,7 @@ private fun Root() {
     var screen by remember { mutableStateOf<Screen>(Screen.Chats) }
     var passwordError by remember { mutableStateOf<String?>(null) }
     var roomPrompt by remember { mutableStateOf<RoomPrompt?>(null) }
-    // Saveable, not just remembered. Playing a film puts a second activity in front of this one,
+    // Saveable, not just remembered. Playing a video puts a second activity in front of this one,
     // and a 1 GB stick will happily kill what is behind it, so this composable is routinely
     // rebuilt on the way back. Remembered state would come back false, the jump would re-arm, and
     // Back out of the chat would drop the viewer straight into it again: the navigation rail and
@@ -188,11 +188,11 @@ private fun Root() {
     // Whether a first press of Back has already been made at the top level.
     var exitArmed by remember { mutableStateOf(false) }
     // Hoisted out of BrowseScreen: opening a chat replaces that screen entirely, so a tab held
-    // down there would be forgotten every time the viewer backed out of a film.
+    // down there would be forgotten every time the viewer backed out of a video.
     var pickedTab by rememberSaveable { mutableStateOf<BrowseTab?>(null) }
 
     /**
-     * Starts playback, first clearing the previous film when there is no room for both.
+     * Starts playback, first clearing the previous video when there is no room for both.
      * [confirmed] is true once the viewer has answered the prompt.
      */
     fun play(item: MediaItem, confirmed: Boolean = false, chatTitle: String = "") {
@@ -203,9 +203,9 @@ private fun Root() {
             if (!canReachTelegram && local != LocalFileAvailability.Complete) {
                 toast(
                     if (local == LocalFileAvailability.Partial) {
-                        "This film is only partly on this TV. Connect to finish downloading it."
+                        "This video is only partly on this TV. Connect to finish downloading it."
                     } else {
-                        "Connect to the internet to play this film."
+                        "Connect to the internet to play this video."
                     },
                 )
                 return@launch
@@ -248,12 +248,12 @@ private fun Root() {
     }
 
     /**
-     * Resuming from the Continue watching row, which counts as a visit to the film's own chat.
+     * Resuming from the Continue watching row, which counts as a visit to the video's own chat.
      *
      * The viewer never passed through that chat's screen, but it is what they were last watching,
      * and that is the question the next launch is asking.
      */
-    fun resumeFilm(record: ResumeRecord) {
+    fun resumeMedia(record: ResumeRecord) {
         scope.launch { settings.rememberChatOpened(record.chatId) }
         play(record.toMediaItem(), chatTitle = record.chatTitle)
     }
@@ -353,7 +353,7 @@ private fun Root() {
                         }
                     },
                     onOpenChat = { openChat(it) },
-                    onResumeFilm = { resumeFilm(it) },
+                    onResumeMedia = { resumeMedia(it) },
                     onOpenSettings = { screen = Screen.Settings },
                     updateVersion = (updateState as? UpdateState.Available)?.release?.version,
                     onUpdate = { showUpdate = true },
@@ -372,13 +372,13 @@ private fun Root() {
                             )
                         }
                     },
-                    onRestartFilm = { record ->
+                    onRestartMedia = { record ->
                         scope.launch {
                             settings.clearResumePosition(record.chatId, record.messageId)
-                            resumeFilm(record)
+                            resumeMedia(record)
                         }
                     },
-                    onForgetFilm = { record ->
+                    onForgetMedia = { record ->
                         scope.launch {
                             settings.clearResumePosition(record.chatId, record.messageId)
                             toast("${record.title} removed from Continue watching")
@@ -413,7 +413,7 @@ private fun Root() {
 
             is Screen.Media -> {
                 BackHandler {
-                    // Films posted while the list was open only appear after a fresh search.
+                    // Videos posted while the list was open only appear after a fresh search.
                     chatsViewModel.load()
                     // Backing out of a chat is the viewer asking for the chat list. Honour that
                     // for the rest of the session rather than jumping them back in.
@@ -442,20 +442,12 @@ private fun Root() {
                         }
                     },
                     onPlay = { play(it, chatTitle = current.chat.title) },
-                    onPlayFromStart = { item ->
-                        // Clear the saved position before the player starts, so it opens at zero
-                        // rather than seeking back to where the viewer deliberately left off.
-                        scope.launch {
-                            settings.clearResumePosition(item.chatId, item.messageId)
-                            play(item, chatTitle = current.chat.title)
-                        }
-                    },
-                    onToggleLayout = { scope.launch { settings.setFilmLayout(filmLayout.toggled()) } },
+                    onToggleLayout = { scope.launch { settings.setMediaLayout(mediaLayout.toggled()) } },
                     telegramConnected = telegramConnected,
                     offline = networkStatus == NetworkStatus.Offline && !telegramConnected,
                     onOfflineAction = toast,
                     connectionNotice = connectionNotice,
-                    layout = filmLayout,
+                    layout = mediaLayout,
                 )
             }
 
@@ -474,15 +466,15 @@ private fun Root() {
         roomPrompt?.let { pending ->
             val tooLarge = pending.shortfallBytes > 0
             TvConfirm(
-                title = if (tooLarge) "This film may not fit" else "Make room for this film?",
+                title = if (tooLarge) "This video may not fit" else "Make room for this video?",
                 message = if (tooLarge) {
                     // State what it can free, not the shortfall.
                     val canFree = (pending.item.sizeBytes - pending.shortfallBytes).coerceAtLeast(0)
                     "“${pending.item.title}” is ${StreamStats.formatBytes(pending.item.sizeBytes)}. " +
-                        "This TV can only free up ${StreamStats.formatBytes(canFree)}, so the film " +
+                        "This TV can only free up ${StreamStats.formatBytes(canFree)}, so the video " +
                         "may stop partway through."
                 } else {
-                    "TMPlayer keeps one film on this TV at a time. Playing this deletes the last " +
+                    "TMPlayer keeps one video on this TV at a time. Playing this deletes the last " +
                         "one and frees ${StreamStats.formatBytes(pending.reclaimBytes)}."
                 },
                 detail = "Nothing is deleted from Telegram, only this device's copy.",

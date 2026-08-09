@@ -1,5 +1,7 @@
 package com.tmplayer.ui.settings
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -62,11 +64,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DiskSpace
-import com.tmplayer.data.RemoteImages
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.Td
-import com.tmplayer.data.Tmdb
 import com.tmplayer.data.UpdateState
 import com.tmplayer.data.Updates
 import com.tmplayer.player.StreamStats
@@ -194,7 +194,7 @@ fun SettingsScreen(
             Text(
                 // Phrased around whichever ends are actually set.
                 SizeFilter.describe(minSize, maxSize) +
-                    " This keeps short clips and trailers out of the list.",
+                    " This keeps short clips out of the list.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextMuted,
                 modifier = Modifier.padding(bottom = 4.dp, start = 4.dp),
@@ -243,9 +243,9 @@ fun SettingsScreen(
                 ActionRow(
                     title = "Clear Continue watching",
                     subtitle = if (history.size == 1) {
-                        "Forgets the one film you have on the go"
+                        "Forgets the one video you have on the go"
                     } else {
-                        "Forgets all ${history.size} films you have on the go"
+                        "Forgets all ${history.size} videos you have on the go"
                     },
                     icon = Icons.Filled.Close,
                     onClick = { prompt = Prompt.ClearHistory },
@@ -258,7 +258,7 @@ fun SettingsScreen(
         item { SectionTitle("Playback") }
         item {
             ToggleRow(
-                title = "Download the whole film first",
+                title = "Download the whole video first",
                 subtitle = if (downloadFirst) {
                     "Waits for all of it, then plays"
                 } else {
@@ -284,7 +284,7 @@ fun SettingsScreen(
         }
         item {
             ActionRow(
-                title = "Delete the downloaded film",
+                title = "Delete the downloaded video",
                 subtitle = "Frees up ${StreamStats.formatBytes(cacheBytes)}",
                 icon = Icons.Filled.Delete,
                 onClick = { prompt = Prompt.ClearCache },
@@ -292,8 +292,8 @@ fun SettingsScreen(
         }
         item {
             ToggleRow(
-                title = "Ask before deleting a film",
-                subtitle = "Check with you before a new film replaces the last one",
+                title = "Ask before deleting a video",
+                subtitle = "Check with you before a new video replaces the last one",
                 icon = Icons.Filled.Notifications,
                 checked = askBeforeClearing,
                 onToggle = { scope.launch { settings.setAskBeforeClearing(!askBeforeClearing) } },
@@ -374,6 +374,34 @@ fun SettingsScreen(
                 onClick = { scope.launch { settings.replayOverview() } },
             )
         }
+        item {
+            ActionRow(
+                title = "Privacy",
+                subtitle = "What stays on this TV and which services TMPlayer contacts",
+                icon = Icons.Filled.Info,
+                onClick = {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse("https://tmplayer.org/privacy")),
+                        )
+                    }
+                },
+            )
+        }
+        item {
+            ActionRow(
+                title = "Lawful use",
+                subtitle = "Use TMPlayer only with media you may access",
+                icon = Icons.Filled.Info,
+                onClick = {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse("https://tmplayer.org/legal")),
+                        )
+                    }
+                },
+            )
+        }
 
         // ---- account ------------------------------------------------------------------------
 
@@ -394,9 +422,9 @@ fun SettingsScreen(
                     Spacer(Modifier.height(12.dp))
                 }
                 Text(
-                    "TMPlayer talks to Telegram for your chats and films, to the film database for " +
-                        "posters and cast, and to GitHub to see whether a newer version is out. " +
-                        "Nothing you watch is sent anywhere.",
+                    "TMPlayer talks directly to Telegram for your chats and videos, and to GitHub " +
+                        "to see whether a newer version is out. It has no developer-run server, " +
+                        "analytics or advertising SDK.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextMuted,
                 )
@@ -406,8 +434,8 @@ fun SettingsScreen(
 
     when (prompt) {
         Prompt.ClearCache -> TvConfirm(
-            title = "Delete the downloaded film?",
-            message = "This frees up ${StreamStats.formatBytes(cacheBytes)}. Any film you open " +
+            title = "Delete the downloaded video?",
+            message = "This frees up ${StreamStats.formatBytes(cacheBytes)}. Any video you open " +
                 "again will download again.",
             detail = "Your Telegram account, chats and favourites are untouched.",
             confirmLabel = "Delete",
@@ -427,8 +455,8 @@ fun SettingsScreen(
 
         Prompt.ClearHistory -> TvConfirm(
             title = "Clear Continue watching?",
-            message = "Every film you have part-watched is forgotten, and the tab empties.",
-            detail = "Nothing is deleted from Telegram; each film stays in the chat it came from.",
+            message = "Every video you have part-watched is forgotten, and the tab empties.",
+            detail = "Nothing is deleted from Telegram; each video stays in the chat it came from.",
             confirmLabel = "Clear",
             onConfirm = {
                 prompt = null
@@ -437,7 +465,7 @@ fun SettingsScreen(
                     settings.clearWatchHistory()
                     // The rows being cleared are on the browse screen, not this one; the only
                     // thing that changes here is a row disappearing further down the list.
-                    toast(if (count == 1) "Continue watching cleared" else "$count films forgotten")
+                    toast(if (count == 1) "Continue watching cleared" else "$count videos forgotten")
                 }
             },
             onDismiss = { prompt = null },
@@ -462,19 +490,17 @@ fun SettingsScreen(
         Prompt.SignOut -> TvConfirm(
             title = "Sign out of Telegram?",
             message = "You'll be signed out and taken back to the sign-in screen. The downloaded " +
-                "film, your favourites and everything you were part-way through go with it.",
+                "video, your favourites and everything you were part-way through go with it.",
             confirmLabel = "Sign out",
             onConfirm = {
                 prompt = null
                 scope.launch {
                     busy = "Signing out…"
                     // Everything this app knows is about the account that is leaving, so it all
-                    // goes: the film on disk, the film database answers and their artwork, and
-                    // every preference. TDLib clears its own database as it logs out.
+                    // goes: the video on disk and every preference. TDLib clears its own database
+                    // as it logs out.
                     runCatching { Td.clearMediaCache() }
                     runCatching { settings.clearEverything() }
-                    runCatching { Tmdb.clearCache() }
-                    runCatching { RemoteImages.clear() }
                     Td.logOut()
                     onLoggedOut()
                 }
@@ -776,7 +802,7 @@ private fun StorageCard(cacheBytes: Long, freeBytes: Long, totalBytes: Long) {
             color = TextPrimary,
         )
         Text(
-            "One film is kept at a time; starting another replaces it.",
+            "One video is kept at a time; starting another replaces it.",
             style = MaterialTheme.typography.bodyMedium,
             color = TextMuted,
         )

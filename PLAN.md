@@ -1,6 +1,6 @@
 # TMPlayer: Telegram Media Player for Android TV
 
-**One-liner:** A sideloaded Android TV app for the Mi TV Stick that logs into your own Telegram account via QR code, shows your chats as a media-only library, and streams movies with proper seeking, subtitles, and resume. Nothing else.
+**One-liner:** A sideloaded Android TV app for the Mi TV Stick that logs into your own Telegram account via QR code, shows playable videos from your chats, and starts them before the download finishes, with proper seeking, subtitles, and resume. Nothing else.
 
 **Guiding principle:** *Super minimal work, works properly.* Every component below is either an existing library used as-is, or a small adapter (< ~400 lines) copied/adapted from a referenced working implementation. The only genuinely custom code is the TDLib↔ExoPlayer streaming bridge, and even that follows a documented, proven pattern.
 
@@ -74,7 +74,7 @@ Every screen has exactly three states, always implemented: **loading** (big cent
 - Top-right small "Settings" affordance reachable by D-pad up.
 
 ### 3.3 Media Grid
-- Grid of poster cards, **3 columns** (big cards ≈ 400 px wide on 1080p, laid-back and oversized on purpose). Card = video thumbnail (TDLib minithumbnail instantly, real thumbnail when fetched), duration badge, one-line filename, size + date caption line.
+- Grid of media tiles, **3 columns** (big cards ≈ 400 px wide on 1080p, laid-back and oversized on purpose). Card = video thumbnail (TDLib minithumbnail instantly, real thumbnail when fetched), duration badge, one-line filename, size + date caption line.
 - Only media messages (filter: `searchMessagesFilterVideo` + video-mime `searchMessagesFilterDocument` pass). Text/photos/stickers never appear.
 - Infinite scroll upward through history, 40 per page, bottom loader row. Empty state: "No videos in this chat."
 - OK = play (auto-resume if a saved position exists; no dialog, just a 3 s "Resuming, press ⏮ to restart" toast overlay; pressing ⏮/rewind at start restarts from 0). Minimal work, no modal.
@@ -148,7 +148,7 @@ Naive implementations download from byte 0 only, so seeking forward = wait for t
   6. Kill network mid-seek → buffering overlay with speed 0, recovers when network returns (TDLib auto-reconnects).
 
 ### What was actually reused (verified 2026-08-07)
-**Verified:** tvgram does NOT stream. It calls `DownloadFile(id, 1, 0, 0, synchronous=true)`, waits for the whole file, then plays `local.path`. That is exactly the anti-pattern this section exists to avoid; tvgram remains a reference for TDLib wiring only, never for playback. Consequently `TdDataSource` is written **clean-room** from the TDLib docs (`downloadFile` offset semantics, `updateFile`, `getFileDownloadedPrefixSize`) and the pattern described in tdlib/td#1498. The project is public Apache-2.0, so GPL sources (official Telegram Android, Telegram X) are behavioral references only; no code is copied from them, ever.
+**Verified:** tvgram does NOT stream. It calls `DownloadFile(id, 1, 0, 0, synchronous=true)`, waits for the whole file, then plays `local.path`. That is exactly the anti-pattern this section exists to avoid; tvgram remains a reference for TDLib wiring only, never for playback. Consequently `TdDataSource` is written **clean-room** from the TDLib docs (`downloadFile` offset semantics, `updateFile`, `getFileDownloadedPrefixSize`) and the pattern described in tdlib/td#1498. The project is public GPL-3.0; these sources remain behavioral references only and no code is copied from them.
 
 ---
 
@@ -158,7 +158,7 @@ Naive implementations download from byte 0 only, so seeking forward = wait for t
 |---|---|
 | Installed APK (single ABI via splits) | ~35-45 MB |
 | TDLib database (metadata) + thumbnails | ~100-200 MB (thumbnails capped by cleanup below) |
-| **Media cache (partial movie files)** | **default cap 1 GB** (settings: 512 MB / 1 GB / 2 GB) |
+| **Media cache (partial video files)** | **default cap 1 GB** (settings: 512 MB / 1 GB / 2 GB) |
 | Headroom left on a ~4.5 GB-free stick | ≥ 3 GB untouched |
 
 Mechanisms (all TDLib built-ins, with zero custom file bookkeeping):
@@ -177,7 +177,7 @@ Mechanisms (all TDLib built-ins, with zero custom file bookkeeping):
 | **TDLib** | **DECIDED: `dev.g000sha256:tdl-coroutines:9.0.0`**, verified on Maven Central: Apache-2.0, TDLib 1.8.66, AAR bundles `libtdjsonjava.so` for armeabi-v7a / arm64-v8a / x86 / x86_64, ~1010 typed suspend request methods + ~184 update `Flow`s | Best fit by a distance; x86_64 native included → emulator works. (TGX bundle ruled out because its README forbids use outside Telegram X; tdlight's Android natives unclear.) **We never compile TDLib ourselves.** |
 | Browse UI | Jetpack **Compose for TV** (`androidx.tv:tv-material`) | Focus scale/border/cards built in: large-view TV cards with ~zero custom styling |
 | **Player UI** | **`androidx.media3:media3-ui-leanback`** (`PlaybackSupportFragment` + `LeanbackPlayerAdapter`), a finished TV player UI | Per requirement "don't build a player": complete transport controls, D-pad seek, press-hold FF/RW. Fallback: Media3 `PlayerView` (also complete, slightly less TV-idiomatic) |
-| Playback engine | `androidx.media3:media3-exoplayer` (+`media3-ui` for `TrackSelectionDialogBuilder`) | Streams, seeks; renders SRT/SSA/VTT **and image-based PGS/VobSub** subtitle tracks; switches between multiple audio + subtitle tracks (dual-audio movies handled natively) |
+| Playback engine | `androidx.media3:media3-exoplayer` (+`media3-ui` for `TrackSelectionDialogBuilder`) | Streams, seeks; renders SRT/SSA/VTT **and image-based PGS/VobSub** subtitle tracks; switches between multiple audio and subtitle tracks |
 | Codec coverage | `io.github.anilbeesetti:nextlib-media3ext` (prebuilt ffmpeg decoder extension used in production by NextPlayer), added at M3 | Covers audio codecs TV sticks often lack a license for (DTS, TrueHD, some E-AC3) without us compiling ffmpeg; video stays hardware-decoded (H.264/HEVC/VP9 via SoC) |
 | QR render | `com.google.zxing:core` (~0.5 MB) | 20 lines: string → Bitmap |
 | Images | Coil 3 (small memory cache) | thumbnails |
@@ -200,7 +200,7 @@ Mechanisms (all TDLib built-ins, with zero custom file bookkeeping):
 
 ## 9. Milestones (each ends runnable on the stick)
 
-**Testing policy (applies to every milestone):** the genuinely custom logic, namely the auth state machine, `TdDataSource` (the §6 seek matrix simulated against a fake TDLib backend), storage-cap policy and resume-position store, gets JVM unit tests with fakes, run via `./gradlew test` before a milestone closes. UI is verified on device/emulator. The on-device seek matrix is M3's hard exit gate. License: **Apache-2.0** (decided).
+**Testing policy (applies to every milestone):** the genuinely custom logic, namely the auth state machine, `TdDataSource` (the §6 seek matrix simulated against a fake TDLib backend), storage-cap policy and resume-position store, gets JVM unit tests with fakes, run via `./gradlew test` before a milestone closes. UI is verified on device/emulator. The on-device seek matrix is M3's hard exit gate. License: **GPL-3.0**.
 
 **M0: Skeleton (small)** Done, 2026-08-07  
 git init; Gradle project; Compose-TV deps; leanback launcher manifest (`LEANBACK_LAUNCHER`, `android.software.leanback`, no-touchscreen); dark theme; placeholder screens with the loading/content/error scaffold; ABI splits; builds + installs on stick via wireless ADB.  Exit: App icon opens to a placeholder on the TV.
@@ -209,13 +209,13 @@ git init; Gradle project; Compose-TV deps; leanback launcher manifest (`LEANBACK
 Pick prebuilt artifact (order in §8); `TdClient` wrapper (send + updates Flow); auth state machine: `WaitTdlibParameters → WaitPhoneNumber(→requestQrCodeAuthentication) → WaitOtherDeviceConfirmation(render QR, auto-refresh) → [WaitPassword] → Ready`; session survives app restart; logout works.  Exit: Scan QR with phone → land on an empty Chats screen; relaunch stays logged in.
 
 **M2: Chats and media grid** Built  
-Chat list paging; media-filtered message paging; thumbnails (minithumbnail → thumbnail swap); empty/error/loader states; focus restore.  Exit: Browse a movie channel comfortably from the couch.
+Chat list paging; media-filtered message paging; thumbnails (minithumbnail → thumbnail swap); empty/error/loader states; focus restore. Exit: Browse playable videos comfortably from the couch.
 
 **M3: Streaming playback and seeking** Built. The §6 matrix is unit-tested against `DownloadWindow`; the on-stick pass is still owed  
-`TdDataSource`; PlayerActivity with leanback transport UI; subtitle/audio pickers; buffering overlay with speed; resume save/restore; **pass the full §6 seek matrix on the real stick**.  Exit: Watch a movie end-to-end incl. jumping around; kill app mid-movie, reopen, resume.
+`TdDataSource`; PlayerActivity with leanback transport UI; subtitle/audio pickers; buffering overlay with speed; resume save/restore; **pass the full §6 seek matrix on the real stick**. Exit: Play a long video end-to-end including jumps; kill the app mid-playback, reopen, resume.
 
 **M4: Storage guard, settings, polish** Built  
-`optimizeStorage` hooks + cap setting + usage screen; long-session RAM check on 1 GB profile emulator + stick; focus/back-button audit; QR expiry edge cases; error copy pass.  Exit: After three movie nights, cache stays under cap; app never needs manual cleanup.
+`optimizeStorage` hooks + cap setting + usage screen; long-session RAM check on 1 GB profile emulator + stick; focus/back-button audit; QR expiry edge cases; error copy pass. Exit: After repeated long viewing sessions, cache stays under cap; the app never needs manual cleanup.
 
 **M5: Release build** Done. `INSTALL.md` shipped  
 R8 shrink, per-ABI release APKs, self-signed keystore, versioning, `INSTALL.md` (enable Developer options + wireless debugging on the stick, `adb connect <tv-ip>`, `adb install-multiple` / correct-ABI apk).  Exit: a fresh APK installs on the stick from a tagged build.

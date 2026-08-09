@@ -48,7 +48,7 @@ TMPlayer appears in the Android TV launcher's app row with a blue play-button ic
 4. If your account has two-step verification, type the password with the on-screen keyboard.
    This is the only typing TMPlayer ever asks for.
 
-You land on your chat list. Open any chat to see only its videos and movie files, and press
+You land on your chat list. Open any chat to see only its playable videos, and press
 **OK** on one to start streaming.
 
 ## Using the remote
@@ -66,7 +66,7 @@ You land on your chat list. Open any chat to see only its videos and movie files
 ## Storage
 
 Telegram keeps what it has streamed so re-watching is instant. TMPlayer caps that at **1 GB**
-and trims it after every film. Change the cap or clear it now under **Settings** on the chat
+and trims it after every video. Change the cap or clear it now under **Settings** on the chat
 list screen. Worth doing on an 8 GB stick if you keep other apps installed.
 
 ## Troubleshooting

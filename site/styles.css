@@ -825,6 +825,35 @@ summary:hover { color: var(--text); }
 .contact-by { margin: 0; color: var(--muted); font-size: 0.91rem; }
 .contact-by strong { color: var(--text); font-weight: 600; }
 
+/* ---------- Policy pages ---------- */
+
+.policy-page { padding: clamp(78px, 11vw, 132px) 0 clamp(72px, 10vw, 120px); }
+.policy-wrap { max-width: 850px; }
+.policy-wrap > h1 {
+  margin: 8px 0 20px;
+  font-size: clamp(3rem, 8vw, 6.4rem);
+  line-height: .92;
+  letter-spacing: -.055em;
+}
+.policy-lede {
+  max-width: 760px;
+  margin: 0 0 clamp(46px, 7vw, 74px);
+  color: var(--text);
+  font-size: clamp(1.15rem, 2.1vw, 1.45rem);
+  line-height: 1.65;
+}
+.policy-wrap section {
+  margin: 0 0 42px;
+  padding-left: clamp(20px, 4vw, 34px);
+  border-left: 2px solid var(--line);
+}
+.policy-wrap section:hover { border-left-color: var(--accent); }
+.policy-wrap h2 { margin: 0 0 12px; font-size: clamp(1.35rem, 3vw, 1.85rem); }
+.policy-wrap p, .policy-wrap li { color: var(--muted); line-height: 1.78; }
+.policy-wrap ul { margin: 14px 0; padding-left: 22px; }
+.policy-wrap li + li { margin-top: 10px; }
+.policy-wrap strong { color: var(--text); }
+
 /* ---------- Footer ---------- */
 
 .site-footer { padding: clamp(44px, 6vw, 64px) 0 clamp(48px, 6vw, 68px); color: var(--muted); border-top: var(--rule); }

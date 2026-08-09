@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -90,7 +90,7 @@ fun OverviewScreen(onDone: () -> Unit) {
                     if (!last) {
                         Spacer(Modifier.width(8.dp))
                         Icon(
-                            Icons.Filled.ArrowForward,
+                            Icons.AutoMirrored.Filled.ArrowForward,
                             contentDescription = null,
                             modifier = Modifier.size(20.dp),
                         )
@@ -136,21 +136,9 @@ private val PAGES = listOf(
         image = R.drawable.overview_chats,
     ),
     Page(
-        title = "Open a chat to see its films",
+        title = "Open a chat to see its videos",
         body = "TMPlayer lists the videos posted in that chat, newest first, with their size and " +
             "quality. Short clips are filtered out; the size limits are yours to change.",
-        image = R.drawable.overview_films,
-    ),
-    Page(
-        title = "Hold OK for more",
-        body = "A press plays. Holding OK opens what else can be done: the story, the cast and a " +
-            "trailer for a film, or the star and the menu for a chat.",
-        image = R.drawable.overview_details,
-    ),
-    Page(
-        title = "It downloads, then plays",
-        body = "The film is fetched from Telegram as you watch, and TMPlayer keeps one film on " +
-            "this TV at a time. Everything else, including this walkthrough, is in Settings.",
-        image = R.drawable.overview_playing,
+        image = R.drawable.overview_media,
     ),
 )

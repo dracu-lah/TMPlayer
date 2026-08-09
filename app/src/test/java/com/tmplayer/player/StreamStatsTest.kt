@@ -68,7 +68,7 @@ class StreamStatsTest {
 
     @Test
     fun `bitrate comes from size over duration`() {
-        // A 1.4 GB film running two hours is roughly 208 KB per second of playback.
+        // A 1.4 GB video running two hours is roughly 208 KB per second of playback.
         val perMs = StreamStats.bytesPerMs(1_400L * 1024 * 1024, 7_200)
         assertEquals(203.7, perMs, 1.0)
     }
@@ -129,7 +129,7 @@ class SpeedMeterTest {
 
     @Test
     fun `downloaded fraction counts from the start of the file, not the start of the window`() {
-        // Seeked to halfway and pulled 100 MB since: the film is downloaded to 60%, even though
+        // Seeked to halfway and pulled 100 MB since: the video is downloaded to 60%, even though
         // only 100 MB of it arrived in this window.
         val fraction = StreamStats.downloadedFraction(
             downloadOffset = 500_000_000,
@@ -161,7 +161,7 @@ class SpeedMeterTest {
     }
 
     @Test
-    fun `percentages round down, so a film still arriving never reads as complete`() {
+    fun `percentages round down, so a video still arriving never reads as complete`() {
         assertEquals("99%", StreamStats.formatPercent(0.999f))
         assertEquals("0%", StreamStats.formatPercent(0.004f))
         assertEquals("100%", StreamStats.formatPercent(1f))

@@ -37,7 +37,7 @@ data class MediaPage(
 )
 
 /**
- * Telegram searches one media kind at a time, so a chat's movies are assembled from three
+ * Telegram searches one media kind at a time, so a chat's videos are assembled from three
  * parallel searches and each keeps its own position.
  */
 data class MediaCursors(
@@ -136,7 +136,7 @@ class ChatRepository(private val td: TdlClient) {
 
     /**
      * A supergroup is Telegram's one type for both broadcast channels and large groups; only the
-     * `isChannel` flag separates them, and getting it wrong puts a film channel under "Groups".
+     * `isChannel` flag separates them, and getting it wrong puts a video channel under "Groups".
      */
     private fun kindOf(type: dev.g000sha256.tdl.dto.ChatType): ChatKind = when (type) {
         is ChatTypeSupergroup -> if (type.isChannel) ChatKind.Channel else ChatKind.Group
@@ -156,7 +156,7 @@ class ChatRepository(private val td: TdlClient) {
             chatId = chatId,
             topicId = null,
             // Telegram matches a document search against its file name, which is exactly how
-            // films are named in these chats.
+            // videos are named in these chats.
             query = query,
             senderId = null,
             fromMessageId = fromMessageId,

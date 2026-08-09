@@ -36,7 +36,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -46,7 +45,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -68,14 +66,9 @@ import com.tmplayer.data.Account
 import com.tmplayer.data.CardLayout
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
-import com.tmplayer.data.FilmLookup
-import com.tmplayer.data.NetworkMonitor
-import com.tmplayer.data.Tmdb
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tmplayer.data.Updates
-import com.tmplayer.ui.components.Poster
+import com.tmplayer.ui.components.MediaPreview
 import com.tmplayer.ui.components.ChatListSkeleton
-import com.tmplayer.ui.components.NetworkImage
 import com.tmplayer.ui.components.StateScaffold
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.player.StreamStats
@@ -104,13 +97,13 @@ enum class BrowseTab(
 ) {
     Continue("Continue", "Continue watching", "Pick up where you left off", Icons.Filled.PlayArrow),
     Favorites("Favourites", "Favourites", "Chats you've starred", Icons.Filled.Star),
-    // A clock, not the circular-arrow reload glyph: that one is the film grid's genuine refresh
+    // A clock, not the circular-arrow reload glyph: that one is the video grid's genuine refresh
     // action, so the same picture stood for two unrelated things.
     Recent("Recent", "Recent", "Chats with something new", TmIcons.Clock),
     Channels("Channels", "Channels", "Broadcast channels you follow", TmIcons.Channel),
     Groups("Groups", "Groups", "Groups you're in", TmIcons.Group),
     People("People", "People", "Your one-to-one chats", Icons.Filled.Person),
-    All("All chats", "All chats", "Everything, newest first", Icons.Filled.List),
+    All("All chats", "All chats", "Everything, newest first", Icons.AutoMirrored.Filled.List),
 }
 
 @Composable
@@ -125,12 +118,12 @@ fun BrowseScreen(
      */
     onRefresh: () -> Unit = onRetry,
     onOpenChat: (ChatSummary) -> Unit,
-    onResumeFilm: (ResumeRecord) -> Unit,
+    onResumeMedia: (ResumeRecord) -> Unit,
     onOpenSettings: () -> Unit,
     onToggleFavorite: (ChatSummary) -> Unit = {},
-    onRestartFilm: (ResumeRecord) -> Unit = {},
-    onForgetFilm: (ResumeRecord) -> Unit = {},
-    /** Empties Continue watching in one go, rather than one held-OK menu per film. */
+    onRestartMedia: (ResumeRecord) -> Unit = {},
+    onForgetMedia: (ResumeRecord) -> Unit = {},
+    /** Empties Continue watching in one go, rather than one held-OK menu per video. */
     onClearHistory: () -> Unit = {},
     /** Unstars every chat in one go, the counterpart to the star in each chat's menu. */
     onClearFavorites: () -> Unit = {},
@@ -148,7 +141,7 @@ fun BrowseScreen(
     updateVersion: String? = null,
     onUpdate: () -> Unit = {},
 ) {
-    // An unfinished film wins the landing tab, then Favourites, then Recent, so the first screen
+    // An unfinished video wins the landing tab, then Favourites, then Recent, so the first screen
     // is never empty. Both are read from disk after the first frame, so the tab has to settle
     // once they arrive; an explicit pick always wins over them. [picked] is hoisted rather than
     // remembered here because opening a chat swaps this screen out of the composition.
@@ -160,7 +153,7 @@ fun BrowseScreen(
     var query by remember { mutableStateOf("") }
     // What the viewer held OK on. Only ever one at a time, so two nullable slots cover both lists.
     var chatMenu by remember { mutableStateOf<ChatSummary?>(null) }
-    var filmMenu by remember { mutableStateOf<ResumeRecord?>(null) }
+    var mediaMenu by remember { mutableStateOf<ResumeRecord?>(null) }
     var confirmClearHistory by remember { mutableStateOf(false) }
     var confirmClearFavorites by remember { mutableStateOf(false) }
 
@@ -206,8 +199,8 @@ fun BrowseScreen(
                             ContinueSection(
                                 records = continueWatching,
                                 layout = layout,
-                                onResume = onResumeFilm,
-                                onHold = { filmMenu = it },
+                                onResume = onResumeMedia,
+                                onHold = { mediaMenu = it },
                             )
                         }
                     } else {
@@ -303,9 +296,9 @@ fun BrowseScreen(
     if (confirmClearHistory) {
         TvConfirm(
             title = "Clear Continue watching?",
-            message = "All ${continueWatching.size} films are forgotten and the tab empties. " +
+            message = "All ${continueWatching.size} videos are forgotten and the tab empties. " +
                 "Nothing is deleted from Telegram.",
-            detail = "You can still find each film in the chat it came from.",
+            detail = "You can still find each video in the chat it came from.",
             confirmLabel = "Clear",
             onConfirm = {
                 confirmClearHistory = false
@@ -315,28 +308,28 @@ fun BrowseScreen(
         )
     }
 
-    filmMenu?.let { record ->
+    mediaMenu?.let { record ->
         TvMenu(
             title = record.title,
             subtitle = StreamStats.formatClock(record.positionMs) + " watched",
-            onDismiss = { filmMenu = null },
+            onDismiss = { mediaMenu = null },
             actions = listOf(
                 MenuAction("Resume", Icons.Filled.PlayArrow, detail = "Carry on where you stopped") {
-                    filmMenu = null
-                    onResumeFilm(record)
+                    mediaMenu = null
+                    onResumeMedia(record)
                 },
                 MenuAction("Play from the start", Icons.Filled.Refresh) {
-                    filmMenu = null
-                    onRestartFilm(record)
+                    mediaMenu = null
+                    onRestartMedia(record)
                 },
                 MenuAction(
                     label = "Remove from Continue watching",
                     icon = Icons.Filled.Close,
-                    detail = "The film stays in its chat",
+                    detail = "The video stays in its chat",
                     destructive = true,
                 ) {
-                    filmMenu = null
-                    onForgetFilm(record)
+                    mediaMenu = null
+                    onForgetMedia(record)
                 },
             ),
         )
@@ -394,7 +387,7 @@ private fun ContinueSection(
         }
     }
 
-    // This is the landing tab for anyone with a film on the go, and the remote has nowhere to go
+    // This is the landing tab for anyone with a video on the go, and the remote has nowhere to go
     // until something holds focus. Re-run on a change of arrangement too: switching rebuilds the
     // list from scratch, and the card that was holding focus leaves the composition with it.
     LaunchedEffect(records.firstOrNull()?.messageId, layout) {
@@ -403,8 +396,8 @@ private fun ContinueSection(
 }
 
 /**
- * A Continue watching card as a tile: the art carries the progress bar, the way a film poster in
- * the grid does, because there is no longer a row of text alongside it to put the bar under.
+ * A Continue watching card as a tile: the preview carries the progress bar, the way the grid
+ * does, because there is no longer a row of text alongside it to put the bar under.
  */
 @Composable
 private fun ContinueTile(
@@ -434,7 +427,7 @@ private fun ContinueTile(
             ),
     ) {
         Box {
-            ContinueArt(record, Modifier.fillMaxWidth().aspectRatio(16f / 9f), badge = 40.dp)
+            ContinueArt(Modifier.fillMaxWidth().aspectRatio(16f / 9f), badge = 40.dp)
             Box(
                 Modifier
                     .align(Alignment.BottomStart)
@@ -509,7 +502,6 @@ private fun ContinueCard(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ContinueArt(
-            record,
             Modifier.width(THUMBNAIL_WIDTH).height(THUMBNAIL_HEIGHT),
             badge = 34.dp,
         )
@@ -547,7 +539,7 @@ private fun ContinueCard(
                 overflow = TextOverflow.Ellipsis,
             )
             // The bar is the whole point of the row: it is what tells the viewer, at a glance,
-            // that this is a film they are part way through rather than one they have not started.
+            // that this is a video they are part way through rather than one they have not started.
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -567,60 +559,29 @@ private fun ContinueCard(
 }
 
 /**
- * Film art for a Continue watching card, with a play badge over it.
+ * Neutral artwork for a Continue watching card.
  *
- * There is no Telegram thumbnail to fall back on here: a resume record stores only enough to
- * reopen the file, so that a film stays resumable even when its chat has not been loaded this
- * session. TMDB is therefore the only source of art, and when it has nothing (no key, no match,
- * no network) the card falls back to the play icon it used before. That is a complete card, not a
- * broken one, so the failure is never mentioned.
+ * A resume record deliberately contains no remote artwork URL. The play mark therefore remains
+ * useful offline, discloses no selected media to another service, and never blocks this screen.
  *
  * [modifier] carries the size, because the row wants a thumbnail and the tile wants the whole
  * width of its column. [badge] follows it: a 34 dp disc that reads as a play button over a 96 dp
  * thumbnail is a speck over art three times that wide.
  */
 @Composable
-private fun ContinueArt(record: ResumeRecord, modifier: Modifier = Modifier, badge: Dp) {
-    val network by NetworkMonitor.status.collectAsStateWithLifecycle()
-    val art by produceState<String?>(initialValue = null, key1 = record.title, key2 = network) {
-        value = (Tmdb.lookup(record.title) as? FilmLookup.Found)?.details?.backdropUrl
-    }
-
+private fun ContinueArt(modifier: Modifier = Modifier, badge: Dp) {
     Box(
         modifier
             .clip(RoundedCornerShape(8.dp))
             .background(SurfaceRaised),
         contentAlignment = Alignment.Center,
     ) {
-        NetworkImage(
-            url = art,
-            modifier = Modifier.fillMaxSize(),
-            placeholder = {
-                Icon(
-                    imageVector = Icons.Filled.PlayArrow,
-                    contentDescription = null,
-                    tint = Accent,
-                    modifier = Modifier.size(badge * 0.88f),
-                )
-            },
+        Icon(
+            imageVector = Icons.Filled.PlayArrow,
+            contentDescription = null,
+            tint = Accent,
+            modifier = Modifier.size(badge * 0.88f),
         )
-        if (art != null) {
-            // Over real artwork the icon needs its own backing to stay legible.
-            Box(
-                Modifier
-                    .size(badge)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.55f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.PlayArrow,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(badge * 0.65f),
-                )
-            }
-        }
     }
 }
 
@@ -638,7 +599,7 @@ private fun filterChats(
         BrowseTab.Channels -> chats.filter { it.kind == ChatKind.Channel }
         BrowseTab.Groups -> chats.filter { it.kind == ChatKind.Group }
         BrowseTab.People -> chats.filter { it.kind == ChatKind.Direct }
-        // Continue watching is a list of films, not chats; it never reaches this filter.
+        // Continue watching is a list of videos, not chats; it never reaches this filter.
         BrowseTab.Continue, BrowseTab.Recent, BrowseTab.All -> chats
     }
     if (query.isBlank()) return byTab
@@ -724,7 +685,7 @@ private fun AccountBadge(account: Account?) {
     ) {
         Box(Modifier.size(40.dp).clip(CircleShape).background(SurfaceRaised)) {
             if (account != null) {
-                Poster(
+                MediaPreview(
                     miniThumbnail = account.miniThumbnail,
                     thumbnailFileId = account.photoFileId,
                     fallbackLabel = account.name,
@@ -904,10 +865,10 @@ private fun HeaderAction(
 @Composable
 private fun Header(tab: BrowseTab, count: Int, action: @Composable () -> Unit = {}) {
     // A bare number after the blurb leaves the viewer to guess what was counted, so it always
-    // carries its unit, and this one tab counts films rather than chats.
+    // carries its unit, and this one tab counts videos rather than chats.
     val unit = when {
-        tab == BrowseTab.Continue && count == 1 -> "film"
-        tab == BrowseTab.Continue -> "films"
+        tab == BrowseTab.Continue && count == 1 -> "video"
+        tab == BrowseTab.Continue -> "videos"
         count == 1 -> "chat"
         else -> "chats"
     }
@@ -1144,7 +1105,7 @@ private fun ChatTile(
             .padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Poster(
+            MediaPreview(
                 miniThumbnail = chat.miniThumbnail,
                 thumbnailFileId = chat.photoFileId,
                 fallbackLabel = chat.title,
@@ -1218,7 +1179,7 @@ private fun ChatRow(
             .padding(horizontal = 24.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Poster(
+        MediaPreview(
             miniThumbnail = chat.miniThumbnail,
             thumbnailFileId = chat.photoFileId,
             fallbackLabel = chat.title,
@@ -1265,7 +1226,7 @@ private fun EmptyTab(tab: BrowseTab, query: String) {
     // Each empty tab says what to do about it, in its own words.
     val message = when {
         query.isNotBlank() -> "Nothing matches “$query”."
-        tab == BrowseTab.Continue -> "You haven't started a film yet. Open a chat and pick one."
+        tab == BrowseTab.Continue -> "You haven't started a video yet. Open a chat and pick one."
         tab == BrowseTab.Favorites ->
             "No favourites yet. Hold OK on any chat to add it here."
         else -> "Nothing here yet."
@@ -1321,7 +1282,7 @@ private val RECENT_TILE_HEIGHT = 154.dp
 /**
  * Columns in the tile arrangement.
  *
- * Three, not the film grid's four: the rail takes 196 dp off a 960 dp screen before this starts,
+ * Three, not the video grid's four: the rail takes 196 dp off a 960 dp screen before this starts,
  * and a fourth column would leave each tile too narrow for a chat name to survive it.
  */
 private const val TILE_COLUMNS = 3

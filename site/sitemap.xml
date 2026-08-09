@@ -2,12 +2,12 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
     <loc>https://tmplayer.org/</loc>
-    <lastmod>2026-08-07</lastmod>
+    <lastmod>2026-08-09</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <image:image>
       <image:loc>https://tmplayer.org/screenshots/hero.webp</image:loc>
-      <image:title>TMPlayer playing a film on a television</image:title>
+      <image:title>TMPlayer browsing Telegram videos on Android TV</image:title>
     </image:image>
     <image:image>
       <image:loc>https://tmplayer.org/screenshots/chats.webp</image:loc>
@@ -15,11 +15,19 @@
     </image:image>
     <image:image>
       <image:loc>https://tmplayer.org/screenshots/grid.webp</image:loc>
-      <image:title>Videos in a Telegram chat, as poster tiles</image:title>
+      <image:title>Playable videos in a Telegram chat</image:title>
     </image:image>
-    <image:image>
-      <image:loc>https://tmplayer.org/screenshots/details.webp</image:loc>
-      <image:title>The TMPlayer film details screen</image:title>
-    </image:image>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/privacy</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/legal</loc>
+    <lastmod>2026-08-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
   </url>
 </urlset>

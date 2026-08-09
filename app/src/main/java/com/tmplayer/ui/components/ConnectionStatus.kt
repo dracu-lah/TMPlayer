@@ -53,7 +53,7 @@ fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier) {
             }
             Text(
                 text = when (notice) {
-                    ConnectionNotice.Offline -> "Offline. Saved films still work."
+                    ConnectionNotice.Offline -> "Offline. Saved videos still work."
                     ConnectionNotice.Reconnecting -> "Back online. Reconnecting to Telegram..."
                     ConnectionNotice.Hidden -> ""
                 },

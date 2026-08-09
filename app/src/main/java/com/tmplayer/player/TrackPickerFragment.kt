@@ -54,9 +54,9 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
 
         if (options.isEmpty() || (trackType == C.TRACK_TYPE_TEXT && options.size == 1)) {
             val none = if (trackType == C.TRACK_TYPE_AUDIO) {
-                "This film has no other audio"
+                "This video has no other audio"
             } else {
-                "This film has no subtitles"
+                "This video has no subtitles"
             }
             actions.add(GuidedAction.Builder(requireContext()).id(ID_NONE).title(none).build())
             return

@@ -12,8 +12,8 @@ Test devices: cheap/low-spec Android TV is the target (Mi TV Stick: 1 GB RAM, 8 
 
 ## Ground rules
 
-- **Existing libraries first.** Before writing a component, check if TDLib, Media3, or an established Apache/MIT library already does it. Custom code needs a reason.
-- **License hygiene (important).** This project is Apache-2.0. Do **not** copy code from GPL projects (official Telegram apps, Telegram X, VLC…). Reading them to understand a pattern is fine; the implementation here must be written clean-room against documented APIs.
+- **Existing libraries first.** Before writing a component, check if TDLib, Media3, or an established GPL-compatible library already does it. Custom code needs a reason.
+- **License hygiene (important).** This project is GPL-3.0. Record the provenance and licence of every dependency or adapted implementation, preserve required notices, and do not copy code whose terms are incompatible with GPL-3.0. Reading other projects to understand a pattern is fine; clean-room implementations against documented APIs are still preferred.
 - **The TV UX rules in [PLAN.md §4](PLAN.md) are non-negotiable:** overscan-safe padding, ≥14 sp text, explicit focus handling, a loading/error state for every async surface, no typing after login.
 - **Low-spec first:** minSdk 26, `armeabi-v7a` must keep working, watch RAM (≤ ~180 MB during playback) and APK size (per-ABI splits).
 - **Tests for core logic.** The auth state machine, the streaming `TdDataSource` (including the seek matrix in PLAN.md §6), and storage-cap policy are unit-tested with fakes, and PRs touching them must keep/extend the tests. UI is verified on-device instead.
@@ -41,8 +41,8 @@ These version constraints are not free choices, and changing them breaks the bui
   `<media3-version>-<nextlib-version>`, so bumping one means bumping both to a pair that exists.
 - **`org.json` is a test-only dependency and must stay that way.** Android already ships
   `org.json` at runtime, but the `android.jar` used to compile unit tests stubs every method to
-  throw, which makes the TMDB response parsing untestable on the JVM. Promoting it to
-  `implementation` would ship a second copy of a library the platform already provides.
+  throw. Promoting it to `implementation` would ship a second copy of a library the platform
+  already provides.
 
 ## Releasing
 
@@ -64,7 +64,7 @@ from a stranger cannot reach them.
 
 ### Repository secrets
 
-The release job needs six secrets, plus one optional seventh. Set them once with the GitHub CLI:
+The release job needs six secrets. Set them once with the GitHub CLI:
 
 ```bash
 gh secret set TG_API_ID          # the app's api_id from my.telegram.org
@@ -73,12 +73,7 @@ gh secret set KEY_ALIAS          # from keystore.properties
 gh secret set KEYSTORE_PASSWORD  # from keystore.properties
 gh secret set KEY_PASSWORD       # from keystore.properties
 base64 -w0 release.keystore | gh secret set KEYSTORE_BASE64
-gh secret set TMDB_API_KEY       # optional: posters, cast and synopses
 ```
-
-`TMDB_API_KEY` is the one secret whose absence is not an error. Without it the release builds
-and runs normally, and the film details panel reports that the extras are unavailable; the
-workflow therefore does not fail the build when it is unset.
 
 GitHub secrets are write-only: once set, nobody can read them back through the UI or API.
 Gate the `release` environment behind required reviewers in repository settings so that only

@@ -177,7 +177,7 @@ fun ChatListSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLay
 }
 
 /**
- * Stand-in for the film listing: the same four columns, the same 16:9 art and the same spacing, so
+ * Stand-in for the video listing: the same four columns, the same 16:9 art and the same spacing, so
  * nothing shifts sideways at the moment the real tiles arrive.
  *
  * It follows [layout] for the same reason it matches the grid's measurements: a screen of tiles
@@ -242,7 +242,7 @@ private fun MediaTileSkeleton(shimmer: Shimmer, modifier: Modifier = Modifier) {
             .background(SurfaceDark),
     ) {
         // Rectangular, not rounded: the card's own clip is what gives the art its top corners,
-        // exactly as it does for the real poster.
+        // exactly as it does for the real media preview.
         SkeletonBox(
             shimmer,
             Modifier.fillMaxWidth().aspectRatio(16f / 9f),

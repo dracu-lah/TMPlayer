@@ -258,7 +258,7 @@ object Td {
      * Drops every cached video, document and animation.
      *
      * A `size` of zero means "keep nothing", and `immunityDelay` of zero waives TDLib's usual
-     * grace period for recently touched files. Without that, the film the viewer just finished
+     * grace period for recently touched files. Without that, the video the viewer just finished
      * would survive and the space would not actually come back.
      *
      * Photos and thumbnails are untouched: they are tiny and re-fetching them would make the

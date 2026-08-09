@@ -4,24 +4,23 @@
 
 <h1 align="center">TMPlayer</h1>
 
-<p align="center">Your Telegram films, on the TV. Press play and it starts in seconds.</p>
+<p align="center">Your Telegram videos, on the TV. Start watching before the download finishes.</p>
 
 <p align="center">
-  <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue" />
+  <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-blue" />
   <img alt="Platform" src="https://img.shields.io/badge/platform-Android%20TV%208.0%2B-3ddc84" />
-  <img alt="Tests" src="https://img.shields.io/badge/tests-149%20passing-brightgreen" />
+  <img alt="Tests" src="https://img.shields.io/badge/tests-152%20passing-brightgreen" />
 </p>
 
 ---
 
-You have films sitting in Telegram channels. Watching one on the TV usually means waiting for all
-eight gigabytes to land on a phone first, then finding a way to get the file across to the
-television and somewhere to keep it.
+You have videos in Telegram chats and channels. Watching one on the TV usually means downloading
+the whole file to another device first, copying it across, and finding somewhere to keep it.
 
 TMPlayer downloads it too. The difference is that it does not make you wait: scan a QR code with
-your phone, pick a film, and it starts playing within seconds while the rest of it arrives behind
-the picture. Skip to the ninety-minute mark and it gets there in a few seconds too, because the
-download moves to wherever you are instead of grinding through everything before it.
+your phone, pick a video, and it starts playing within seconds while the rest arrives in the
+background. Skip well ahead and it fetches that part next, because the download moves to wherever
+you are instead of grinding through everything before it.
 
 It runs on an 8 GB TV stick with a gigabyte of RAM, because that is what it was built and tested
 on.
@@ -34,51 +33,44 @@ on.
 
 **Signs in with a QR code.** Open Telegram on your phone, go to Settings → Devices → Link Desktop
 Device, point it at the TV. No typing an email address with a D-pad. Two-step verification works,
-and a five-page walkthrough on first run says what to press, replayable from Settings.
+and a short walkthrough on first run says what to press, replayable from Settings.
 
-**Shows films, not messages.** Every chat and channel you are in, listed as poster grids of the
-videos inside them. Text messages never appear. Documents are matched by name and type, because
-most films arrive as a plain `.mkv` rather than as a video.
+**Shows media, not messages.** Browse the chats and channels you already have, then see only their
+playable videos. Text messages never appear. Video documents are included too, so an `.mkv` sent
+as a file is not missed.
 
 **Starts fast and seeks properly.** Playback begins while the file is still arriving, and seeking
 re-aims the download rather than waiting for it. This is the whole reason the app exists. Bring the
-controls up and the corner says how much of the film has come down, and how quickly.
+controls up and the corner says how much of the video has arrived, and how quickly.
 
-**Or waits, if your connection would rather.** Settings has a *Download the whole film first*
-switch, off by default. On, the film is fetched in full before it starts, which beats being
+**Or waits, if your connection would rather.** Settings has a *Download the whole video first*
+switch, off by default. On, the video is fetched in full before it starts, which beats being
 stopped every few minutes on a line that cannot keep up with playback.
 
-**Handles the formats films actually come in.** MKV, MP4, AVI, TS, and the rest. Embedded
-subtitles, including image-based PGS and VobSub. Dual audio tracks you can switch between mid-film.
+**Handles real-world media files.** MKV, MP4, AVI, TS, and the rest. Embedded subtitles,
+including image-based PGS and VobSub. Multiple audio tracks you can switch during playback.
 DTS, TrueHD and E-AC3 decode in software when the stick has no silicon for them, while video stays
 on the hardware decoder.
 
-**Tells you what the film is.** Choosing one shows its poster, year, runtime, rating, genres,
-synopsis and cast from [The Movie Database](https://www.themoviedb.org), matched from the release
-file name, with the trailer a press away. Channel branding, uploader handles and language markers
-are stripped off the name before it is looked up, because that is how films actually arrive.
+**Understands episode filenames.** A name carrying `S02E04`, `2x04`, or `Season 2 Episode 4`
+is recognized locally. During playback, previous and next controls can move between neighbouring
+episodes already present in the same chat.
 
-**Knows a series from a film.** A name carrying `S02E04`, `2x04`, `Season 2 Episode 4` or a whole
-season is looked up in the television side of the database instead, and the panel shows that
-episode's own title, synopsis and still. A **Next** button plays the following episode from the
-same chat, and the player itself carries skip-forward and skip-back buttons for the episodes
-either side of the one on screen, beside the poster it puts on the transport row.
-
-**Remembers where you stopped.** Every film, with a progress bar on its poster. Hold OK on one to
-forget it, or clear the whole Continue watching list at once from its heading or from Settings.
+**Remembers where you stopped.** Every video gets its own saved position. Hold OK in Continue
+watching to forget one, or clear the whole list at once from its heading or from Settings.
 Starring a chat keeps it in Favourites, and the chat you last watched from reopens on launch.
 
-**Keeps one film on the device.** An 8 GB stick cannot hold a library. TMPlayer caches the film you
+**Keeps one video on the device.** An 8 GB stick cannot hold a library. TMPlayer caches the video you
 are watching and clears the previous one, telling you exactly how much space that freed. A setting
 turns that into a question first, for anyone who would rather be asked.
 
-**Stays out of the way.** Rows or posters, chosen beside the list it rearranges and remembered.
-Size limits so a chat full of stickers and clips does not bury the films. A resolution badge on
+**Stays out of the way.** Rows or tiles, chosen beside the list it rearranges and remembered.
+Size limits keep a chat full of tiny clips from burying longer videos. A resolution badge on
 each tile and nothing else, because the codec was never going to change anyone's mind. A tile
-cuts a release name short, so the whole name sits in the bottom corner of the screen for whatever
+cuts a long filename short, so the whole name sits in the bottom corner of the screen for whatever
 the remote is standing on, the way a browser shows the link under the cursor.
 
-**Catches up on demand.** A Refresh button beside every listing, for a film posted while the
+**Catches up on demand.** A Refresh button beside every listing, for a video posted while the
 screen was open. Nothing is on a timer: a television that re-fetches by itself is a television
 that moves what you were about to press. Coming back after the TV has been asleep, the app waits
 for Telegram to answer before it says a chat is empty.
@@ -88,7 +80,7 @@ microphone already in your remote and asks for no permissions to do it.
 
 **Keeps itself current.** It checks GitHub once a launch, puts an amber *Update* on the rail when
 there is a newer release, and downloads and installs it for you. Signing out clears everything it
-ever kept: the session, your history, favourites, artwork and cached answers.
+ever kept: the Telegram session, your history, favourites, settings, and downloaded media.
 
 <p align="center">
   <img src="docs/screenshots/settings.webp" width="90%" alt="TMPlayer settings" />
@@ -147,13 +139,7 @@ tools*. Put them in `local.properties` at the repo root:
 sdk.dir=/path/to/Android/Sdk
 TG_API_ID=1234567
 TG_API_HASH=your_api_hash
-TMDB_API_KEY=optional
 ```
-
-`TMDB_API_KEY` is optional. With it, choosing a film shows a poster, synopsis and cast from
-[The Movie Database](https://www.themoviedb.org); without it, that panel says the extras are
-unavailable and everything else works unchanged. A key is free at
-[themoviedb.org/settings/api](https://www.themoviedb.org/settings/api).
 
 Then:
 
@@ -170,7 +156,7 @@ a QR code, which is what CI does on every pull request.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) has the details. The short version: keep it small, prefer an
 existing library to new code, put logic that can be tested behind a pure function and test it, and
-never paste GPL code into an Apache-2.0 project.
+keep the provenance and licence of every dependency or adapted implementation explicit.
 
 Some version constraints in this repo look arbitrary and are not. Each one is documented in
 CONTRIBUTING.md with the reason it exists. Please read that before bumping anything.
@@ -181,12 +167,14 @@ Unofficial client. Not affiliated with, endorsed by, or connected to Telegram FZ
 official Telegram API through TDLib with your own credentials, as
 [permitted for third-party clients](https://core.telegram.org/api/obtaining_api_id).
 
-Film posters, synopses and cast come from [The Movie Database](https://www.themoviedb.org). This
-product uses the TMDB API but is not endorsed or certified by TMDB. Note that TMDB's free tier
-covers non-commercial use; shipping this commercially would need a separate agreement with them.
+TMPlayer does not provide media, recommend channels, or bypass access controls. Use it only with
+content you own or are authorized to access. See the website's [Privacy](https://tmplayer.org/privacy)
+and [Lawful use](https://tmplayer.org/legal) pages.
 
 ## License
 
-[Apache-2.0](LICENSE) © 2026 dracu-lah
+[GNU GPL-3.0](LICENSE) © 2026 dracu-lah
+
+Dependency licences and source locations are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Player mark via [SVG Repo](https://www.svgrepo.com), recoloured.

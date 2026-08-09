@@ -16,10 +16,10 @@ The same ordering has two related risks:
   a new sign-in can send requests to a closed client.
 - `PlayerActivity` guards one restored-process lookup against a missing TDLib client, but its
   download observer and data-source creation still access `Td.client` directly. A restored player
-  can therefore fail before the locally cached film is opened.
+  can therefore fail before the locally cached video is opened.
 
 A full-screen offline dialog is not appropriate. TDLib keeps account and chat data locally, and a
-film whose download is complete can be read from its local path without a network request.
+video whose download is complete can be read from its local path without a network request.
 TMPlayer should remain useful offline and restrict only actions that truly require connectivity.
 
 ## Goals
@@ -27,8 +27,8 @@ TMPlayer should remain useful offline and restrict only actions that truly requi
 - Never request account or chat data before TDLib authorization is ready.
 - Avoid stale work and stale TDLib clients across cold start, QR sign-in, logout and re-login.
 - Clear old account content immediately when authorization leaves the ready state.
-- Show cached account, chat, history, artwork and film information while offline.
-- Play a completely downloaded film without internet.
+- Show cached account, chat, history, artwork and video information while offline.
+- Play a completely downloaded video without internet.
 - Explain connectivity at the component or action that is affected, without blocking the app.
 - Recover automatically when internet and Telegram connectivity return.
 - Show a branded launch experience while the saved Telegram session is being resolved.
@@ -40,7 +40,7 @@ TMPlayer should remain useful offline and restrict only actions that truly requi
 - Keeping partially downloaded playback running beyond the bytes already on disk.
 - Queuing Telegram writes for later. TMPlayer has no message-writing feature.
 - Adding background synchronization through WorkManager.
-- Changing player controls, storage policy or the one-film cache policy.
+- Changing player controls, storage policy or the one-video cache policy.
 
 ## Architecture
 
@@ -70,7 +70,7 @@ online only when it has internet capability and Android reports it as validated.
 
 The Android network signal is advisory UI state, not absolute proof that a particular request will
 succeed. TDLib being connected overrides a false Android offline signal for Telegram operations,
-and the result of an HTTP request remains authoritative for GitHub and TMDB. Callback code uses the
+and the result of an HTTP request remains authoritative for GitHub. Callback code uses the
 capabilities supplied with the callback rather than querying them synchronously from inside it.
 
 TDLib connectivity remains a separate signal. Android can have validated internet while TDLib is
@@ -92,7 +92,7 @@ Requests are divided by what they need:
 2. Remote synchronization waits for authorization and TDLib connectivity. These include loading
    newer chats, refreshing a listing and starting or extending a file download.
 3. Pure local operations do not wait for TDLib connectivity. These include settings, watch history,
-   cached artwork and reading a completed film from disk.
+   cached artwork and reading a completed video from disk.
 
 `Td` will provide explicit suspendable readiness gates for the first two categories. The remote
 gate does not time out and then issue a request anyway. A caller remains in a loading or cached
@@ -131,7 +131,7 @@ no content to show.
 There is no app-wide modal. A reusable, non-focusable connectivity status component appears above
 the current screen without changing D-pad focus:
 
-- Offline: `Offline. Saved films still work.`
+- Offline: `Offline. Saved videos still work.`
 - Restoring: `Back online. Reconnecting to Telegram...`
 
 The component uses the existing dark surfaces, text colors and icon family. It includes text and
@@ -144,15 +144,10 @@ a short `Back online` toast confirms recovery.
 Online-only actions handle offline state locally:
 
 - Refresh keeps existing content and reports `Connect to the internet to refresh.`
-- A non-downloaded film reports `This film needs internet before it can play.`
-- Update checks, trailers and uncached remote artwork fail quietly or show a scoped message instead
-  of replacing the whole screen.
+- A non-downloaded video reports `This video needs internet before it can play.`
+- Update checks fail quietly or show a scoped message instead of replacing the whole screen.
 
-TMDB details and remote artwork remain disk-first. When the network monitor is offline, a cache
-miss returns an explicit offline or absent result immediately instead of waiting through HTTP
-timeouts. Recovery retries only the details currently visible rather than refetching every card.
-
-### Downloaded film behavior
+### Downloaded video behavior
 
 `MediaItem` will carry the local file state reported with its Telegram message. A reusable local
 availability check does not trust `isDownloadingCompleted` alone. It requires a non-empty local
@@ -160,7 +155,7 @@ path and an existing regular file. If TDLib knows the expected size, the file le
 least that size. If the size is unknown, the file must be non-empty. Its result is `Complete`,
 `Partial` or `Missing`.
 
-Film cards can show an `On this TV` badge without making a separate request per card. The badge is
+Video cards can show an `On this TV` badge without making a separate request per card. The badge is
 updated from relevant TDLib file updates and is rechecked when the grid resumes, so clearing the
 cache or completing a download cannot leave stale availability on screen. Continue-watching
 records have their visible cached status resolved through the same check because those records
@@ -179,7 +174,7 @@ not the browsing connectivity component.
 
 Player startup waits for an authorized current TDLib client, but never waits for network when the
 file is complete. The download observer follows the same client readiness rule. If the viewer has
-enabled `Download the whole film first`, `PlayerActivity` checks local availability before calling
+enabled `Download the whole video first`, `PlayerActivity` checks local availability before calling
 the synchronous download function. A complete file starts directly while offline.
 
 ### Recovery
@@ -222,16 +217,15 @@ duplicate refreshes or duplicate success toasts.
 - A completed flag with an empty, deleted or zero-length path is not treated as playable offline.
 - Results from an old session generation cannot publish into a new session.
 - Restored player startup waits for the current client without waiting for internet.
-- `Download the whole film first` makes no download request for a verified complete file.
-- Cached TMDB details and artwork load offline without attempting HTTP.
+- `Download the whole video first` makes no download request for a verified complete file.
 
 ### Device checks on the connected API 28 TV
 
 - Cold-start an existing signed-in session repeatedly.
 - Sign out, scan the QR code and confirm profile and chats load without Retry.
 - Launch with internet disabled and confirm cached content appears after session resolution.
-- Play the completely downloaded film while offline.
-- Confirm a non-downloaded film is blocked only at the play action.
+- Play the completely downloaded video while offline.
+- Confirm a non-downloaded video is blocked only at the play action.
 - Restore internet and confirm reconnecting status, automatic refresh and one success toast.
 - Drop internet during partial playback and confirm the player owns the stall feedback.
 - Confirm Back, Home and D-pad focus remain predictable while connectivity status is visible.
@@ -242,7 +236,7 @@ duplicate refreshes or duplicate success toasts.
 - Cold start never requires Refresh to show the account.
 - The system splash uses the TMPlayer logo and never waits indefinitely for internet.
 - Offline mode does not cover or disable the whole browsing application.
-- A fully downloaded film starts and seeks without internet.
+- A fully downloaded video starts and seeks without internet.
 - Network-required actions explain their requirement at the point of use.
 - Returning connectivity refreshes visible data automatically without a loading-screen flash.
 - Logout and re-login never reuse a closed TDLib client or previous account content.

@@ -35,9 +35,9 @@ data class MediaItem(
 }
 
 /**
- * Turns Telegram messages into playable entries, dropping everything that is not a movie.
+ * Turns Telegram messages into playable entries, dropping everything that is not a video.
  *
- * Films are posted both as videos and, very often because it preserves quality and
+ * Videos are posted both as videos and, very often because it preserves quality and
  * multi-track audio, as plain documents, so both shapes are accepted and documents are
  * screened by MIME type and file extension.
  */

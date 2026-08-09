@@ -1,9 +1,9 @@
 package com.tmplayer.data
 
 /**
- * Which files are large enough to be a film and small enough to be worth streaming.
+ * Which files are large enough to be a video and small enough to be worth streaming.
  *
- * A movie chat is full of things that are not movies (trailers, clips, a two-minute sample), and
+ * A video chat is full of things that are not videos (trailers, clips, a two-minute sample), and
  * at the other end, a 6 GB remux on an 8 GB stick is more trouble than it is worth. Bounding the
  * list by size removes both without the viewer having to read every entry.
  */
@@ -26,7 +26,7 @@ object SizeFilter {
      * A file passes when it sits inside the bounds.
      *
      * Files of unknown size always pass: Telegram sometimes reports zero for a document, and
-     * hiding something because it could not be measured would silently lose real films.
+     * hiding something because it could not be measured would silently lose real videos.
      */
     fun matches(sizeBytes: Long, minBytes: Long, maxBytes: Long): Boolean {
         if (sizeBytes <= 0) return true

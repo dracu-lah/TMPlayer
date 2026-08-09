@@ -30,8 +30,8 @@ android {
         // Gradle properties. The literals below are what a local build gets, and they track the
         // most recent tag: leaving them behind means a local build cannot be installed over the
         // release it is meant to be debugging, since Android refuses the downgrade.
-        versionCode = (findProperty("tmVersionCode") as String?)?.toInt() ?: 502
-        versionName = (findProperty("tmVersionName") as String?) ?: "0.5.2"
+        versionCode = (findProperty("tmVersionCode") as String?)?.toInt() ?: 10000
+        versionName = (findProperty("tmVersionName") as String?) ?: "1.0.0"
 
         // Telegram API credentials. Bring your own via local.properties (see README)
         buildConfigField("int", "TG_API_ID", localProps.getProperty("TG_API_ID") ?: "0")
@@ -42,14 +42,6 @@ android {
         // weight in resources.arsc. Revisit the moment the UI itself is localised.
         resourceConfigurations += listOf("en")
 
-        // The Movie Database, for posters, cast and trailers. Optional on purpose: with no key
-        // the app builds and runs exactly as before, and the details panel says the extras are
-        // unavailable rather than failing. Contributors should not need a TMDB account.
-        buildConfigField(
-            "String",
-            "TMDB_API_KEY",
-            "\"${System.getenv("TMDB_API_KEY") ?: localProps.getProperty("TMDB_API_KEY") ?: ""}\"",
-        )
     }
 
     // Keep the smaller ABI builds for local testing, and also produce the single universal APK
@@ -80,6 +72,12 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release")
+        }
+        create("promo") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".promo"
+            versionNameSuffix = "-promo"
+            matchingFallbacks += listOf("debug")
         }
     }
 
@@ -127,7 +125,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.kotlinx.coroutines.android)
 
-    // Telegram: prebuilt TDLib 1.8.66 with a typed coroutine API and native libs for every ABI
+    // Telegram: prebuilt TDLib 1.8.61 with a typed coroutine API and native libs for every ABI
     implementation(libs.tdl.coroutines)
     implementation(libs.zxing.core)
 

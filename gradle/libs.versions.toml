@@ -16,8 +16,8 @@ leanback = "1.0.0"
 fragment = "1.8.9"
 datastore = "1.2.1"
 junit = "4.13.2"
-# Android ships org.json, but android.jar stubs every method to throw, so the TMDB response
-# parsing is untestable on the JVM without a real implementation on the test classpath only.
+# Android ships org.json, but android.jar stubs every method to throw; update-response parsing
+# therefore needs a real implementation on the JVM test classpath only.
 json = "20240303"
 
 [libraries]

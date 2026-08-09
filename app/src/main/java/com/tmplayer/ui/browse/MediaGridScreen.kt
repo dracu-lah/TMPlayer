@@ -1,6 +1,5 @@
 package com.tmplayer.ui.browse
 
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.animateColorAsState
@@ -30,6 +29,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -57,6 +57,9 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -71,21 +74,28 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.CardLayout
-import com.tmplayer.data.FilmName
 import com.tmplayer.data.MediaItem
+import com.tmplayer.data.MediaFeedEntry
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.SponsoredItem
+import com.tmplayer.data.SponsoredReportOption
+import com.tmplayer.data.SponsoredReportOutcome
 import com.tmplayer.data.WatchPoint
+import com.tmplayer.data.isSponsoredTextFullyVisible
+import com.tmplayer.data.placeSponsored
 import com.tmplayer.ui.components.MediaGridSkeleton
+import com.tmplayer.ui.components.MenuAction
 import com.tmplayer.ui.components.ConnectionNotice
-import com.tmplayer.ui.components.Poster
+import com.tmplayer.ui.components.MediaPreview
 import com.tmplayer.ui.components.StateScaffold
 import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvSearchField
-import com.tmplayer.ui.components.UiState
+import com.tmplayer.ui.components.TvMenu
 import com.tmplayer.ui.components.rememberVoiceSearch
 import com.tmplayer.ui.theme.Accent
+import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
 import com.tmplayer.ui.theme.TextMuted
@@ -115,13 +125,12 @@ fun MediaGridScreen(
     watchProgress: Map<String, WatchPoint>,
     onToggleFavorite: () -> Unit,
     onPlay: (MediaItem) -> Unit,
-    onPlayFromStart: (MediaItem) -> Unit,
     onToggleLayout: () -> Unit,
     telegramConnected: Boolean,
     offline: Boolean,
     onOfflineAction: (String) -> Unit,
     connectionNotice: ConnectionNotice,
-    /** Posters four across, or one wide row per film with the full title on it. */
+    /** Thumbnails four across, or one wide row per video with the full title on it. */
     layout: CardLayout = CardLayout.Grid,
 ) {
     val context = LocalContext.current
@@ -134,11 +143,65 @@ fun MediaGridScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
     var query by remember { mutableStateOf("") }
-    var details by remember { mutableStateOf<MediaItem?>(null) }
     // Whatever the remote is standing on, for the name strip along the bottom.
     var standingOn by remember { mutableStateOf<MediaItem?>(null) }
     val connectionOffset = if (connectionNotice == ConnectionNotice.Hidden) 0.dp else 56.dp
     var reconnectPending by remember(chatId) { mutableStateOf(false) }
+    var reportTarget by remember { mutableStateOf<SponsoredItem?>(null) }
+    var reportTitle by remember { mutableStateOf("") }
+    var reportOptions by remember { mutableStateOf<List<SponsoredReportOption>>(emptyList()) }
+
+    fun handleReport(item: SponsoredItem, optionId: ByteArray = byteArrayOf()) {
+        viewModel.reportSponsored(
+            item = item,
+            optionId = optionId,
+            onResult = { outcome ->
+                when (outcome) {
+                    is SponsoredReportOutcome.Options -> {
+                        reportTarget = item
+                        reportTitle = outcome.title
+                        reportOptions = outcome.options
+                    }
+                    SponsoredReportOutcome.Reported -> {
+                        reportTarget = null
+                        reportOptions = emptyList()
+                        onOfflineAction("Sponsored message reported.")
+                    }
+                    SponsoredReportOutcome.AdsHidden -> {
+                        reportTarget = null
+                        reportOptions = emptyList()
+                        onOfflineAction("Sponsored messages hidden by Telegram.")
+                    }
+                    SponsoredReportOutcome.PremiumRequired -> {
+                        reportTarget = null
+                        reportOptions = emptyList()
+                        onOfflineAction("Telegram Premium is required to hide sponsored messages.")
+                    }
+                    SponsoredReportOutcome.Unavailable -> {
+                        reportTarget = null
+                        reportOptions = emptyList()
+                        onOfflineAction("This sponsored message can no longer be reported.")
+                    }
+                }
+            },
+            onFailure = onOfflineAction,
+        )
+    }
+
+    fun openSponsored(item: SponsoredItem, media: Boolean) {
+        viewModel.clickSponsored(
+            item = item,
+            media = media,
+            onSuccess = {
+                if (item.sponsorUrl.isNotBlank()) {
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.sponsorUrl)))
+                    }.onFailure { onOfflineAction("No app can open this sponsored link.") }
+                }
+            },
+            onFailure = onOfflineAction,
+        )
+    }
 
     DisposableEffect(lifecycleOwner, viewModel) {
         val observer = LifecycleEventObserver { _, event ->
@@ -157,10 +220,6 @@ fun MediaGridScreen(
         }
     }
 
-    // Whether anything on this device can play a YouTube link. Checked once rather than per
-    // film, and used to hide the trailer button entirely rather than have it open nothing.
-    val trailersAvailable = remember { canOpenYouTube(context) }
-
     Column(Modifier.fillMaxSize()) {
         Header(
             chatTitle = chatTitle,
@@ -175,7 +234,7 @@ fun MediaGridScreen(
             onToggleLayout = onToggleLayout,
             onRefresh = {
                 viewModel.load()
-                if (offline) onOfflineAction("You're offline. Showing saved films.")
+                if (offline) onOfflineAction("You're offline. Showing saved videos.")
             },
         )
 
@@ -184,6 +243,9 @@ fun MediaGridScreen(
             onRetry = viewModel::load,
             loading = { MediaGridSkeleton(layout = layout) },
         ) { list ->
+            val feed = remember(list.items, list.sponsored) {
+                placeSponsored(list.items, list.sponsored)
+            }
             val gridState = rememberLazyGridState()
             val listState = rememberLazyListState()
             val firstItem = remember { FocusRequester() }
@@ -223,16 +285,42 @@ fun MediaGridScreen(
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        gridItems(list.items, key = { it.id }) { item ->
-                            MediaCard(
-                                item = item,
-                                watched = watchProgress[
-                                    SettingsStore.progressKey(item.chatId, item.messageId),
-                                ],
-                                onClick = { details = item },
-                                onFocused = { standingOn = item },
-                                modifier = focusOf(item),
-                            )
+                        gridItems(
+                            items = feed,
+                            key = {
+                                when (it) {
+                                    is MediaFeedEntry.Media -> "media-${it.item.id}"
+                                    is MediaFeedEntry.Sponsored -> "sponsor-${it.item.messageId}"
+                                }
+                            },
+                            span = {
+                                if (it is MediaFeedEntry.Sponsored) GridItemSpan(maxLineSpan)
+                                else GridItemSpan(1)
+                            },
+                        ) { entry ->
+                            when (entry) {
+                                is MediaFeedEntry.Media -> {
+                                    val item = entry.item
+                                    MediaCard(
+                                        item = item,
+                                        watched = watchProgress[
+                                            SettingsStore.progressKey(item.chatId, item.messageId),
+                                        ],
+                                        onClick = { onPlay(item) },
+                                        onFocused = { standingOn = item },
+                                        modifier = focusOf(item),
+                                    )
+                                }
+                                is MediaFeedEntry.Sponsored -> SponsoredCard(
+                                    item = entry.item,
+                                    onFullyVisible = {
+                                        viewModel.markSponsoredViewed(entry.item.messageId)
+                                    },
+                                    onOpen = { openSponsored(entry.item, false) },
+                                    onOpenMedia = { openSponsored(entry.item, true) },
+                                    onReport = { handleReport(entry.item) },
+                                )
+                            }
                         }
                     }
 
@@ -242,16 +330,38 @@ fun MediaGridScreen(
                         contentPadding = padding,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        items(list.items, key = { it.id }) { item ->
-                            MediaRow(
-                                item = item,
-                                watched = watchProgress[
-                                    SettingsStore.progressKey(item.chatId, item.messageId),
-                                ],
-                                onClick = { details = item },
-                                onFocused = { standingOn = item },
-                                modifier = focusOf(item),
-                            )
+                        items(
+                            items = feed,
+                            key = {
+                                when (it) {
+                                    is MediaFeedEntry.Media -> "media-${it.item.id}"
+                                    is MediaFeedEntry.Sponsored -> "sponsor-${it.item.messageId}"
+                                }
+                            },
+                        ) { entry ->
+                            when (entry) {
+                                is MediaFeedEntry.Media -> {
+                                    val item = entry.item
+                                    MediaRow(
+                                        item = item,
+                                        watched = watchProgress[
+                                            SettingsStore.progressKey(item.chatId, item.messageId),
+                                        ],
+                                        onClick = { onPlay(item) },
+                                        onFocused = { standingOn = item },
+                                        modifier = focusOf(item),
+                                    )
+                                }
+                                is MediaFeedEntry.Sponsored -> SponsoredCard(
+                                    item = entry.item,
+                                    onFullyVisible = {
+                                        viewModel.markSponsoredViewed(entry.item.messageId)
+                                    },
+                                    onOpen = { openSponsored(entry.item, false) },
+                                    onOpenMedia = { openSponsored(entry.item, true) },
+                                    onReport = { handleReport(entry.item) },
+                                )
+                            }
                         }
                     }
                 }
@@ -301,7 +411,7 @@ fun MediaGridScreen(
             }
 
             // Fetch the next page well before the user reaches the bottom row. The lead is counted
-            // in items, so it has to follow the arrangement: two rows of the grid is eight films,
+            // in items, so it has to follow the arrangement: two rows of the grid is eight videos,
             // while two rows of the list is two.
             val nearEnd by remember(list.items.size, layout) {
                 derivedStateOf {
@@ -317,7 +427,7 @@ fun MediaGridScreen(
                         CardLayout.Grid -> COLUMNS * 2
                         CardLayout.List -> LIST_LEAD
                     }
-                    last >= list.items.size - lead
+                    last >= feed.size - lead
                 }
             }
             LaunchedEffect(gridState, listState, list.items.size, layout) {
@@ -326,56 +436,28 @@ fun MediaGridScreen(
         }
     }
 
-    details?.let { item ->
-        val point = watchProgress[SettingsStore.progressKey(item.chatId, item.messageId)]
-        // Only what has been loaded so far can be offered. A chat pages in as it is scrolled,
-        // so an episode further down than the viewer has ever been is not here yet, and saying
-        // nothing is better than offering something that turns out to be the wrong file.
-        val loaded = (state as? UiState.Content)?.value?.items.orEmpty()
-        val next = remember(item.id, loaded) {
-            FilmName.nextEpisode(item.fileName.ifBlank { item.title }, loaded) {
-                it.fileName.ifBlank { it.title }
-            }
-        }
-
-        FilmDetailsPanel(
-            item = item,
-            resumeMs = point?.positionMs ?: 0L,
-            trailersAvailable = trailersAvailable,
-            nextEpisode = next,
-            onPlay = { details = null; onPlay(item) },
-            onPlayFromStart = { details = null; onPlayFromStart(item) },
-            onPlayNext = { next?.let { details = null; onPlay(it) } },
-            onWatchTrailer = { key ->
-                if (offline) {
-                    onOfflineAction("Connect to the internet to watch the trailer.")
-                } else {
-                    openYouTube(context, key)
-                }
+    val target = reportTarget
+    if (target != null && reportOptions.isNotEmpty()) {
+        TvMenu(
+            title = reportTitle.ifBlank { "Report sponsored message" },
+            subtitle = "Telegram decides what happens after your report",
+            actions = reportOptions.map { option ->
+                MenuAction(
+                    label = option.text,
+                    icon = Icons.Filled.Close,
+                    onSelect = { handleReport(target, option.id) },
+                )
             },
-            onDismiss = { details = null },
+            onDismiss = {
+                reportTarget = null
+                reportOptions = emptyList()
+            },
         )
     }
 }
 
-/**
- * Trailers open in YouTube's own app rather than inside TMPlayer.
- *
- * Embedding their player requires their SDK and a WebView pointed at an embed URL breaks their
- * terms, and every Android TV device ships the app.
- */
-private fun youTubeIntent(key: String) =
-    Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$key"))
-
-private fun canOpenYouTube(context: Context): Boolean =
-    youTubeIntent("test").resolveActivity(context.packageManager) != null
-
-private fun openYouTube(context: Context, key: String) {
-    runCatching { context.startActivity(youTubeIntent(key)) }
-}
-
 @Composable
-private fun Header(
+internal fun Header(
     chatTitle: String,
     chatPhotoFileId: Int,
     chatMiniThumbnail: ByteArray?,
@@ -388,7 +470,7 @@ private fun Header(
     onToggleLayout: () -> Unit,
     onRefresh: () -> Unit,
 ) {
-    val startVoice = rememberVoiceSearch("Say a film name") {
+    val startVoice = rememberVoiceSearch("Say a video name") {
         onQuery(it)
         onSubmit()
     }
@@ -396,7 +478,7 @@ private fun Header(
     Column(Modifier.padding(start = Tv.SafeH, end = Tv.SafeH, top = Tv.SafeV, bottom = 12.dp)) {
         // The same picture the chat was picked by, so it is obvious which one this listing is.
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Poster(
+            MediaPreview(
                 miniThumbnail = chatMiniThumbnail,
                 thumbnailFileId = chatPhotoFileId,
                 fallbackLabel = chatTitle,
@@ -412,7 +494,7 @@ private fun Header(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    "Films and videos from this chat",
+                    "Videos from this chat",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextMuted,
                 )
@@ -453,20 +535,155 @@ private fun Header(
                 tintWhenIdle = if (isFavorite) Accent else TextPrimary,
                 onClick = onToggleFavorite,
             )
-            // Which arrangement suits a chat depends on the chat: posters for a film channel,
-            // rows for one that posts long release names. The choice is remembered per screen.
+            // Which arrangement suits a chat depends on the chat: tiles for visual browsing,
+            // rows for one that posts long file names. The choice is remembered per screen.
             Pill(
-                label = if (layout == CardLayout.Grid) "As rows" else "As posters",
+                label = if (layout == CardLayout.Grid) "As rows" else "As tiles",
                 icon = if (layout == CardLayout.Grid) Icons.AutoMirrored.Filled.List else TmIcons.Grid,
                 // The two glyphs are the ones every app uses for this; the words repeated them.
                 showLabel = false,
                 onClick = onToggleLayout,
             )
             // Telegram pushes new messages into TDLib's database, but this grid was built from a
-            // search that ran when it opened, so a film posted since then needs a fresh search.
+            // search that ran when it opened, so a video posted since then needs a fresh search.
             Pill("Refresh", Icons.Filled.Refresh, onClick = onRefresh)
         }
     }
+}
+
+/**
+ * Telegram-sponsored content stays visually and behaviorally separate from playable media.
+ * The complete disclosure and message text are measured as one block and only marked viewed once
+ * that entire block is inside the TV viewport.
+ */
+@Composable
+private fun SponsoredCard(
+    item: SponsoredItem,
+    onFullyVisible: () -> Unit,
+    onOpen: () -> Unit,
+    onOpenMedia: () -> Unit,
+    onReport: () -> Unit,
+) {
+    var textTop by remember(item.messageId) { mutableStateOf(Float.NaN) }
+    var textBottom by remember(item.messageId) { mutableStateOf(Float.NaN) }
+    var viewportHeight by remember(item.messageId) { mutableStateOf(0f) }
+    val fullyVisible = remember(textTop, textBottom, viewportHeight) {
+        !textTop.isNaN() && !textBottom.isNaN() &&
+            isSponsoredTextFullyVisible(textTop, textBottom, viewportHeight)
+    }
+    LaunchedEffect(item.messageId, fullyVisible) {
+        if (fullyVisible) onFullyVisible()
+    }
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(SurfaceRaised)
+            .border(2.dp, Caution.copy(alpha = 0.8f), RoundedCornerShape(14.dp))
+            .padding(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (item.miniThumbnail != null || item.thumbnailFileId != 0) {
+            val mediaInteractions = remember { MutableInteractionSource() }
+            val mediaFocused by mediaInteractions.collectIsFocusedAsState()
+            MediaPreview(
+                miniThumbnail = item.miniThumbnail,
+                thumbnailFileId = item.thumbnailFileId,
+                fallbackLabel = item.title.ifBlank { item.label },
+                modifier = Modifier
+                    .width(190.dp)
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(9.dp))
+                    .border(
+                        3.dp,
+                        if (mediaFocused) Accent else Color.Transparent,
+                        RoundedCornerShape(9.dp),
+                    )
+                    .clickable(
+                        interactionSource = mediaInteractions,
+                        indication = null,
+                        onClick = onOpenMedia,
+                    ),
+            )
+        }
+
+        Column(
+            Modifier
+                .weight(1f)
+                .onGloballyPositioned { coordinates ->
+                    val bounds = coordinates.boundsInWindow()
+                    textTop = bounds.top
+                    textBottom = bounds.bottom
+                    viewportHeight = coordinates.findRootCoordinates().size.height.toFloat()
+                },
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Text(
+                item.label.uppercase(),
+                style = MaterialTheme.typography.labelMedium,
+                color = Caution,
+            )
+            if (item.title.isNotBlank()) {
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = TextPrimary,
+                )
+            }
+            if (item.text.isNotBlank()) {
+                Text(item.text, style = MaterialTheme.typography.bodyLarge, color = TextPrimary)
+            }
+            if (item.additionalInfo.isNotBlank()) {
+                Text(
+                    item.additionalInfo,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextMuted,
+                )
+            }
+            if (item.sponsorInfo.isNotBlank()) {
+                Text(
+                    item.sponsorInfo,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextMuted,
+                )
+            }
+        }
+
+        Column(
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (item.buttonText.isNotBlank()) {
+                SponsoredButton(item.buttonText, Accent, onOpen)
+            }
+            if (item.canBeReported) {
+                SponsoredButton("Report", SurfaceDark, onReport)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SponsoredButton(label: String, idleColor: Color, onClick: () -> Unit) {
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusedAsState()
+    val background by animateColorAsState(
+        targetValue = if (focused) Color.White else idleColor,
+        animationSpec = tween(140),
+        label = "sponsoredButton",
+    )
+    Text(
+        label,
+        style = MaterialTheme.typography.bodyLarge,
+        color = if (focused) Color.Black else TextPrimary,
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(background)
+            .clickable(interactionSource = interactions, indication = null, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+    )
 }
 
 /**
@@ -545,13 +762,13 @@ private fun FullName(name: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * A poster tile that marks focus with a border rather than by growing.
+ * A media tile that marks focus with a border rather than by growing.
  *
  * TV Material's card scales up when focused, and a card in the outermost grid column visibly
  * runs off the screen edge when it does.
  */
 @Composable
-private fun MediaCard(
+internal fun MediaCard(
     item: MediaItem,
     watched: WatchPoint?,
     onClick: () -> Unit,
@@ -583,7 +800,7 @@ private fun MediaCard(
                 color = TextPrimary,
                 // One line, not two. A release file name is long enough to fill both, and the
                 // second line cost a row of the grid on a 540dp panel; the full title is one
-                // press away on the details panel now.
+                // press away during playback now.
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -594,10 +811,10 @@ private fun MediaCard(
 }
 
 /**
- * The same film as a full-width row.
+ * The same video as a full-width row.
  *
  * This is the arrangement for a chat full of release file names: the title gets the whole width of
- * the panel rather than a quarter of it, so a name that a poster tile cuts after four words is
+ * the panel rather than a quarter of it, so a name that a media tile cuts after four words is
  * readable without opening anything.
  */
 @Composable
@@ -651,11 +868,11 @@ private fun MediaRow(
     }
 }
 
-/** Poster art with whatever belongs on top of it: quality tags, and how far in the viewer got. */
+/** A media preview with its quality tag and saved playback progress. */
 @Composable
 private fun MediaArt(item: MediaItem, watched: WatchPoint?, modifier: Modifier = Modifier) {
     Box(modifier) {
-        Poster(
+        MediaPreview(
             miniThumbnail = item.miniThumbnail,
             thumbnailFileId = item.thumbnailFileId,
             fallbackLabel = item.title,

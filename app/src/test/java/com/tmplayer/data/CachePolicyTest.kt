@@ -11,8 +11,8 @@ private const val MB = 1024L * 1024
 class CachePolicyTest {
 
     @Test
-    fun `re-watching the cached film never clears anything`() {
-        // The film on disk IS the cache; clearing would delete the thing being opened.
+    fun `re-watching the cached video never clears anything`() {
+        // The video on disk IS the cache; clearing would delete the thing being opened.
         val decision = CachePolicy.decide(
             fileSizeBytes = 4 * GB,
             alreadyCached = true,
@@ -34,7 +34,7 @@ class CachePolicyTest {
     }
 
     @Test
-    fun `a previous film is offered up for deletion`() {
+    fun `a previous video is offered up for deletion`() {
         val decision = CachePolicy.decide(
             fileSizeBytes = 1 * GB,
             alreadyCached = false,
@@ -56,8 +56,8 @@ class CachePolicyTest {
     }
 
     @Test
-    fun `a film larger than the whole device reports the shortfall`() {
-        // 1 GB free plus 1 GB reclaimable is 2 GB; a 4 GB film needs 4 GB plus headroom.
+    fun `a video larger than the whole device reports the shortfall`() {
+        // 1 GB free plus 1 GB reclaimable is 2 GB; a 4 GB video needs 4 GB plus headroom.
         val decision = CachePolicy.decide(
             fileSizeBytes = 4 * GB,
             alreadyCached = false,
@@ -71,8 +71,8 @@ class CachePolicyTest {
     }
 
     @Test
-    fun `clearing the cache is enough to make a tight film fit`() {
-        // Only 500 MB free, but 3 GB of old film to reclaim: it fits once that goes.
+    fun `clearing the cache is enough to make a tight video fit`() {
+        // Only 500 MB free, but 3 GB of old video to reclaim: it fits once that goes.
         val decision = CachePolicy.decide(
             fileSizeBytes = 2 * GB,
             alreadyCached = false,
@@ -84,7 +84,7 @@ class CachePolicyTest {
 
     @Test
     fun `headroom is respected, not just raw size`() {
-        // Exactly the film's size free and nothing to reclaim leaves no room for the database.
+        // Exactly the video's size free and nothing to reclaim leaves no room for the database.
         val decision = CachePolicy.decide(
             fileSizeBytes = 1 * GB,
             alreadyCached = false,

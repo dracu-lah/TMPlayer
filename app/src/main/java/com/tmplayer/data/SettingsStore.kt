@@ -23,7 +23,7 @@ private val LAST_CHAT = longPreferencesKey("last_chat")
 private val MIN_SIZE = longPreferencesKey("min_size_bytes")
 private val MAX_SIZE = longPreferencesKey("max_size_bytes")
 private val CHAT_LAYOUT = stringPreferencesKey("chat_layout")
-private val FILM_LAYOUT = stringPreferencesKey("film_layout")
+private val MEDIA_LAYOUT = stringPreferencesKey("media_layout")
 
 /** Where playback stopped, so the next launch can offer to continue. */
 private fun resumeKey(chatId: Long, messageId: Long) =
@@ -32,7 +32,7 @@ private fun resumeKey(chatId: Long, messageId: Long) =
 private fun durationKey(chatId: Long, messageId: Long) =
     longPreferencesKey("duration_${chatId}_$messageId")
 
-/** Title, chat and file id, so a half-watched film can be reopened without its chat loaded. */
+/** Title, chat and file id, so a half-watched video can be reopened without its chat loaded. */
 private fun metaKey(chatId: Long, messageId: Long) =
     stringPreferencesKey("meta_${chatId}_$messageId")
 
@@ -59,7 +59,7 @@ class SettingsStore(private val context: Context) {
      * Wipes every preference: favourites, watch history, size limits, the lot.
      *
      * Signing out has to leave nothing of the previous account behind. TDLib clears its own
-     * database on log out, but everything this app remembers about their chats and their films
+     * database on log out, but everything this app remembers about their chats and their videos
      * lives here, and none of it means anything to whoever signs in next.
      */
     suspend fun clearEverything() {
@@ -111,7 +111,7 @@ class SettingsStore(private val context: Context) {
     // ---- playback ---------------------------------------------------------------------------
 
     /**
-     * Wait for the whole film to arrive before starting it.
+     * Wait for the whole video to arrive before starting it.
      *
      * Off by default, because streaming while it downloads is the point of the app. It is here for
      * a connection too slow or too unsteady to keep up with playback, where waiting once beats
@@ -164,24 +164,23 @@ class SettingsStore(private val context: Context) {
     }
 
     /**
-     * How a chat's films are arranged.
+     * How a chat's videos are arranged.
      *
-     * Posters by default: this is the screen where artwork is what the viewer picks from, and four
-     * across is a whole shelf of films rather than four rows of file names.
+     * Tiles by default: previews make individual uploads easy to identify from across the room.
      */
-    val filmLayout: Flow<CardLayout> =
-        context.prefs.data.map { CardLayout.decode(it[FILM_LAYOUT], CardLayout.Grid) }
+    val mediaLayout: Flow<CardLayout> =
+        context.prefs.data.map { CardLayout.decode(it[MEDIA_LAYOUT], CardLayout.Grid) }
 
-    suspend fun setFilmLayout(value: CardLayout) {
-        context.prefs.edit { it[FILM_LAYOUT] = value.name }
+    suspend fun setMediaLayout(value: CardLayout) {
+        context.prefs.edit { it[MEDIA_LAYOUT] = value.name }
     }
 
     // ---- prompts ----------------------------------------------------------------------------
 
     /**
-     * Whether to confirm before dropping the previous film to make room for a new one.
+     * Whether to confirm before dropping the previous video to make room for a new one.
      *
-     * Off by default. The stick holds one film at a time, so the answer is always yes, and being
+     * Off by default. The stick holds one video at a time, so the answer is always yes, and being
      * asked it every time is a press between the viewer and what they came to watch. Anyone who
      * wants the question back can turn it on.
      */
@@ -219,7 +218,7 @@ class SettingsStore(private val context: Context) {
     /**
      * Every stored resume point, keyed by `chatId:messageId`, read in one pass.
      *
-     * The grid needs a progress bar on every poster at once; asking DataStore per card would be
+     * The grid needs a progress bar on every preview at once; asking DataStore per card would be
      * one disk read per item on a device with very little to spare.
      */
     val watchProgress: Flow<Map<String, WatchPoint>> = context.prefs.data.map { prefs ->
@@ -282,7 +281,7 @@ class SettingsStore(private val context: Context) {
     }
 
     /**
-     * Forgets every half-watched film in one pass, emptying Continue watching.
+     * Forgets every half-watched video in one pass, emptying Continue watching.
      *
      * The keys are collected before anything is removed: [MutablePreferences] is being written to
      * while its own map is walked otherwise.
@@ -301,7 +300,7 @@ class SettingsStore(private val context: Context) {
      * Drops half-watched entries that can no longer become a card, and says how many went.
      *
      * A resume position is written the moment playback starts, but the description beside it comes
-     * from the film that was playing; a build that predates the description, a write interrupted by
+     * from the video that was playing; a build that predates the description, a write interrupted by
      * the stick killing the app, or a file id that has since been revoked all leave a position on
      * disk that [continueWatching] can only skip. Skipping it every launch keeps a dead entry
      * forever, and it counts against nothing the viewer can see or clear. This is the sweep that
@@ -360,7 +359,7 @@ class SettingsStore(private val context: Context) {
     }
 }
 
-/** How far into a film the viewer got, and how long it runs. */
+/** How far into a video the viewer got, and how long it runs. */
 data class WatchPoint(val positionMs: Long, val durationMs: Long) {
     val fraction: Float
         get() = if (durationMs <= 0) 0f else (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)

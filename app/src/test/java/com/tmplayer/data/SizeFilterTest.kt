@@ -23,7 +23,7 @@ class SizeFilterTest {
     }
 
     @Test
-    fun `a film inside the bounds is listed`() {
+    fun `a video inside the bounds is listed`() {
         assertTrue(SizeFilter.matches(1400 * MB, min, max))
     }
 
@@ -45,7 +45,7 @@ class SizeFilterTest {
 
     @Test
     fun `a file of unknown size is never hidden`() {
-        // Telegram reports zero for some documents; hiding those would lose real films.
+        // Telegram reports zero for some documents; hiding those would lose real videos.
         assertTrue(SizeFilter.matches(0, min, max))
         assertTrue(SizeFilter.matches(-1, min, max))
     }

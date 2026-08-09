@@ -43,10 +43,10 @@ object StreamStats {
     }
 
     /**
-     * How far into the film the download has reached, 0..1.
+     * How far into the video the download has reached, 0..1.
      *
      * TDLib fills one contiguous window at a time, so the end of that window is the point the
-     * film is watchable up to. That, rather than the number of bytes sitting on disk, is what
+     * video is watchable up to. That, rather than the number of bytes sitting on disk, is what
      * someone pausing to ask "how much has downloaded?" wants to know.
      */
     fun downloadedFraction(
@@ -60,7 +60,7 @@ object StreamStats {
         return ((downloadOffset + downloadedPrefixSize).toDouble() / size).toFloat().coerceIn(0f, 1f)
     }
 
-    /** `62%`, rounded down so a film still arriving is never reported as fully here. */
+    /** `62%`, rounded down so a video still arriving is never reported as fully here. */
     fun formatPercent(fraction: Float): String {
         val percent = (fraction * 100).toInt().coerceIn(0, 100)
         return "$percent%"

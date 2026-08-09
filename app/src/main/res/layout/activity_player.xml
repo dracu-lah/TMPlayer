@@ -24,7 +24,7 @@
         android:layout_marginBottom="48dp" />
 
     <!--
-      Full-screen while the film opens: an opaque sheet, not a spinner floating over a black
+      Full-screen while the video opens: an opaque sheet, not a spinner floating over a black
       surface, so there is never a moment that reads as "nothing is happening".
     -->
     <LinearLayout
@@ -101,7 +101,7 @@
     </LinearLayout>
 
     <!--
-      How much of the film has arrived, shown only while the transport controls are up. That is
+      How much of the video has arrived, shown only while the transport controls are up. That is
       when the question gets asked, and it keeps a permanent figure off the picture the rest of
       the time. Declared before the rebuffer chip so that one draws over it in the rare frame
       where both are up.
@@ -122,7 +122,7 @@
         android:visibility="gone" />
 
     <!--
-      Mid-film rebuffering gets a corner chip instead. Covering the picture with a full sheet
+      Mid-video rebuffering gets a corner chip instead. Covering the picture with a full sheet
       every time the connection hiccups would be far more intrusive than the pause itself.
     -->
     <LinearLayout

@@ -1,6 +1,5 @@
 package com.tmplayer.player
 
-import android.graphics.drawable.BitmapDrawable
 import android.os.Bundle
 import androidx.leanback.app.VideoSupportFragment
 import androidx.leanback.app.VideoSupportFragmentGlueHost
@@ -53,20 +52,12 @@ class TvPlaybackFragment : VideoSupportFragment() {
         created.seekProvider = PlaybackSeekDataProvider()
         glue = created
 
-        // Both arrive after the film has started: one is a search of the chat, the other a poster
-        // fetched over the internet. Neither holds playback up, and the row rearranges itself
-        // around them when they land.
+        // Neighbouring episodes arrive after playback starts, once the chat search completes.
+        // They never hold playback up; the transport row adds its buttons when they land.
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch {
-                    owner.episodes.collect {
-                        created.setEpisodes(it.previous != null, it.next != null)
-                    }
-                }
-                launch {
-                    owner.art.collect { bitmap ->
-                        created.art = bitmap?.let { BitmapDrawable(resources, it) }
-                    }
+                owner.episodes.collect {
+                    created.setEpisodes(it.previous != null, it.next != null)
                 }
             }
         }

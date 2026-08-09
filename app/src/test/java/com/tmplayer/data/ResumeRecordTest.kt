@@ -8,8 +8,8 @@ class ResumeRecordTest {
 
     private fun encoded(
         fileId: Int = 42,
-        title: String = "Uyir 2026 720p.mkv",
-        chatTitle: String = "Cinema_paradasio",
+        title: String = "Harbour Notes 2026 720p.mkv",
+        chatTitle: String = "Creator Clips",
         sizeBytes: Long = 1_500_000_000,
         durationSec: Int = 8176,
         updatedAt: Long = 1_700_000_000_000,
@@ -22,8 +22,8 @@ class ResumeRecordTest {
         assertEquals(-100123L, record.chatId)
         assertEquals(45L, record.messageId)
         assertEquals(42, record.fileId)
-        assertEquals("Uyir 2026 720p.mkv", record.title)
-        assertEquals("Cinema_paradasio", record.chatTitle)
+        assertEquals("Harbour Notes 2026 720p.mkv", record.title)
+        assertEquals("Creator Clips", record.chatTitle)
         assertEquals(1_500_000_000L, record.sizeBytes)
         assertEquals(8176, record.durationSec)
         assertEquals(250_000L, record.positionMs)
@@ -32,7 +32,7 @@ class ResumeRecordTest {
 
     @Test
     fun `survives a title full of punctuation`() {
-        val nasty = "Uyir (2026) Malayalam (DS4K 1080p HS WEB-Rip E-AC3 5.1 Atmos).mkv"
+        val nasty = "Harbour Notes (2026) Malayalam (1080p WEB-Rip E-AC3).mkv"
         val record = ResumeRecord.decode("1_2", encoded(title = nasty), 90_000L, 0L)!!
         assertEquals(nasty, record.title)
     }

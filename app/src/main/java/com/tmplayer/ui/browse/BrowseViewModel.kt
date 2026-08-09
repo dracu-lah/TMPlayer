@@ -10,6 +10,10 @@ import com.tmplayer.data.MediaCursors
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.LocalFileAvailability
 import com.tmplayer.data.SizeFilter
+import com.tmplayer.data.SponsoredBatch
+import com.tmplayer.data.SponsoredItem
+import com.tmplayer.data.SponsoredMessageRepository
+import com.tmplayer.data.SponsoredReportOutcome
 import com.tmplayer.data.Td
 import com.tmplayer.ui.components.UiState
 import kotlinx.coroutines.CancellationException
@@ -102,6 +106,7 @@ class ChatListViewModel : ViewModel() {
 
 data class MediaListState(
     val items: List<MediaItem> = emptyList(),
+    val sponsored: SponsoredBatch? = null,
     val loadingMore: Boolean = false,
     val endReached: Boolean = false,
     val availabilityRevision: Int = 0,
@@ -116,9 +121,12 @@ class MediaListViewModel(
     private var cursors = MediaCursors()
     private var pageJob: Job? = null
     private var availabilityJob: Job? = null
+    private var sponsoredJob: Job? = null
     private var query = ""
+    private var sponsored: SponsoredBatch? = null
+    private val viewedSponsored = mutableSetOf<Long>()
 
-    private val _state = MutableStateFlow<UiState<MediaListState>>(UiState.Loading("Finding films…"))
+    private val _state = MutableStateFlow<UiState<MediaListState>>(UiState.Loading("Finding videos…"))
     val state: StateFlow<UiState<MediaListState>> = _state.asStateFlow()
 
     init {
@@ -140,9 +148,10 @@ class MediaListViewModel(
         cursors = MediaCursors()
         val searching = query.isNotBlank()
         if (previous == null) {
-            _state.value = UiState.Loading(if (searching) "Searching…" else "Finding films…")
+            _state.value = UiState.Loading(if (searching) "Searching…" else "Finding videos…")
         }
         pageJob?.cancel()
+        loadSponsored()
         pageJob = viewModelScope.launch {
             val session = Td.awaitAuthorizedSession()
             val repository = ChatRepository(session.client)
@@ -151,7 +160,9 @@ class MediaListViewModel(
                     if (!session.isCurrent()) return@onSuccess
                     val page = rawPage.copy(items = rawPage.items.filter(::withinSizeLimits))
                     cursors = page.cursors
-                    _state.value = if (page.items.isEmpty() && page.endReached) {
+                    _state.value = if (
+                        page.items.isEmpty() && page.endReached && sponsored == null
+                    ) {
                         val message = when {
                             searching -> "Nothing in this chat matches “$query”."
                             // Say which knob is hiding things, rather than claiming the chat is
@@ -160,13 +171,19 @@ class MediaListViewModel(
                                 "${SizeFilter.label(minSizeBytes)} and " +
                                 "${SizeFilter.label(maxSizeBytes)}.\n\n" +
                                 "Change the video size limits in Settings to see more."
-                            else -> "No films or videos in this chat."
+                            else -> "No playable videos in this chat."
                         }
                         UiState.Empty(message)
                     } else {
-                        UiState.Content(MediaListState(page.items, endReached = page.endReached))
+                        UiState.Content(
+                            MediaListState(
+                                items = page.items,
+                                sponsored = sponsored,
+                                endReached = page.endReached,
+                            ),
+                        )
                     }
-                    // A first page can come back empty while older pages still hold films.
+                    // A first page can come back empty while older pages still hold videos.
                     if (page.items.isEmpty() && !page.endReached) loadMore()
                 }
                 .onFailure {
@@ -180,6 +197,92 @@ class MediaListViewModel(
                         }
                     }
                 }
+        }
+    }
+
+    /** Sponsored content never blocks or replaces the ordinary media result. */
+    private fun loadSponsored() {
+        sponsoredJob?.cancel()
+        sponsoredJob = viewModelScope.launch {
+            val session = Td.awaitAuthorizedSession()
+            val loaded = runCatching {
+                SponsoredMessageRepository(session.client).load(chatId)
+            }.getOrNull()
+            if (!session.isCurrent()) return@launch
+            sponsored = loaded?.takeIf { it.messages.isNotEmpty() }
+            when (val current = _state.value) {
+                is UiState.Content -> {
+                    _state.value = UiState.Content(current.value.copy(sponsored = sponsored))
+                }
+                is UiState.Empty -> if (sponsored != null) {
+                    _state.value = UiState.Content(
+                        MediaListState(sponsored = sponsored, endReached = true),
+                    )
+                }
+                else -> Unit
+            }
+        }
+    }
+
+    fun markSponsoredViewed(messageId: Long) {
+        if (!viewedSponsored.add(messageId)) return
+        viewModelScope.launch {
+            val session = Td.awaitAuthorizedSession()
+            val result = runCatching {
+                SponsoredMessageRepository(session.client).markViewed(chatId, messageId)
+            }
+            if (result.isFailure && session.isCurrent()) viewedSponsored.remove(messageId)
+        }
+    }
+
+    fun clickSponsored(
+        item: SponsoredItem,
+        media: Boolean,
+        onSuccess: () -> Unit,
+        onFailure: (String) -> Unit,
+    ) {
+        viewModelScope.launch {
+            val session = Td.awaitAuthorizedSession()
+            runCatching {
+                SponsoredMessageRepository(session.client).click(chatId, item.messageId, media)
+            }.onSuccess {
+                if (session.isCurrent()) onSuccess()
+            }.onFailure {
+                if (session.isCurrent()) onFailure(Failures.humanise(it))
+            }
+        }
+    }
+
+    fun reportSponsored(
+        item: SponsoredItem,
+        optionId: ByteArray = byteArrayOf(),
+        onResult: (SponsoredReportOutcome) -> Unit,
+        onFailure: (String) -> Unit,
+    ) {
+        viewModelScope.launch {
+            val session = Td.awaitAuthorizedSession()
+            runCatching {
+                SponsoredMessageRepository(session.client).report(chatId, item.messageId, optionId)
+            }.onSuccess { outcome ->
+                if (!session.isCurrent()) return@onSuccess
+                if (
+                    outcome is SponsoredReportOutcome.Reported ||
+                    outcome is SponsoredReportOutcome.AdsHidden
+                ) {
+                    sponsored = sponsored?.copy(
+                        messages = sponsored?.messages.orEmpty().filterNot {
+                            it.messageId == item.messageId
+                        },
+                    )?.takeIf { it.messages.isNotEmpty() }
+                    val current = (_state.value as? UiState.Content)?.value
+                    if (current != null) {
+                        _state.value = UiState.Content(current.copy(sponsored = sponsored))
+                    }
+                }
+                onResult(outcome)
+            }.onFailure {
+                if (session.isCurrent()) onFailure(Failures.humanise(it))
+            }
         }
     }
 
@@ -220,7 +323,7 @@ class MediaListViewModel(
      * Called when focus nears the end of the listing.
      *
      * Scrolling never stops at a page boundary: pages keep being pulled until this one actually
-     * grew, or the chat ran out. Without that, a page whose films are all outside the size limits
+     * grew, or the chat ran out. Without that, a page whose videos are all outside the size limits
      * adds nothing, the item count does not change, and the screen the viewer is scrolling has no
      * reason left to ask for more, so the listing stops short of the end of the chat.
      */
@@ -263,6 +366,7 @@ class MediaListViewModel(
             if (session.isCurrent()) _state.value = UiState.Content(
                 MediaListState(
                     items = items,
+                    sponsored = current.value.sponsored,
                     loadingMore = false,
                     // A page that failed is not the end of the chat, only the end of this attempt.
                     // Leaving the listing open means scrolling on retries it, rather than a single

@@ -19,19 +19,17 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.tmplayer.data.NetworkMonitor
-import com.tmplayer.data.RemoteImages
 import com.tmplayer.data.Td
 import com.tmplayer.data.Thumbnails
 import com.tmplayer.ui.theme.SurfaceDark
 
 /**
- * Poster art that never leaves a hole in the grid: the blurred inline preview paints
+ * A media preview that never leaves a hole in the grid: the blurred inline preview paints
  * immediately, the real thumbnail replaces it when it arrives, and a letter tile stands in
  * when a message has no art at all.
  */
 @Composable
-fun Poster(
+fun MediaPreview(
     miniThumbnail: ByteArray?,
     thumbnailFileId: Int,
     fallbackLabel: String,
@@ -61,43 +59,6 @@ fun Poster(
                 fallbackLabel.take(1).uppercase(),
                 style = MaterialTheme.typography.headlineLarge,
             )
-        }
-    }
-}
-
-/**
- * A picture fetched over HTTP, for film art from TMDB.
- *
- * There is deliberately no error state. Art that fails to load leaves [placeholder] showing,
- * which for a poster is a letter tile and for a backdrop is the plain background. A viewer does
- * not need to be told that a decorative image did not arrive, and the film still plays.
- */
-@Composable
-fun NetworkImage(
-    url: String?,
-    modifier: Modifier = Modifier,
-    contentScale: ContentScale = ContentScale.Crop,
-    alpha: Float = 1f,
-    placeholder: @Composable () -> Unit = {},
-) {
-    val network by NetworkMonitor.status.collectAsStateWithLifecycle()
-    var bitmap by remember(url) { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(url, network) {
-        if (bitmap == null) bitmap = RemoteImages.load(url)
-    }
-
-    Box(modifier, contentAlignment = Alignment.Center) {
-        val loaded = bitmap
-        if (loaded != null) {
-            Image(
-                bitmap = loaded.asImageBitmap(),
-                contentDescription = null,
-                contentScale = contentScale,
-                alpha = alpha,
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-            placeholder()
         }
     }
 }

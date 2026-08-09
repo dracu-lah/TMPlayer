@@ -63,7 +63,7 @@ fun IntroScreen(onContinue: () -> Unit) {
                 color = TextPrimary,
             )
             Text(
-                "TMPlayer plays films from your own Telegram chats on this TV. Here's what " +
+                "TMPlayer plays videos from your own Telegram chats on this TV. Here's what " +
                     "that means before you sign in.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = TextMuted,
@@ -74,7 +74,7 @@ fun IntroScreen(onContinue: () -> Unit) {
                 Icons.Filled.Lock,
                 "You stay signed in to your own account",
                 "Signing in adds this TV to your Telegram devices, just like a computer does. " +
-                    "Your films come from Telegram and nowhere else.",
+                    "Your media comes from Telegram and nowhere else.",
             )
             Point(
                 Icons.Filled.PlayArrow,
@@ -84,8 +84,8 @@ fun IntroScreen(onContinue: () -> Unit) {
             )
             Point(
                 Icons.Filled.Star,
-                "One film on this TV at a time",
-                "TMPlayer saves the film you're watching and deletes it when you start the " +
+                "One video on this TV at a time",
+                "TMPlayer saves the video you're watching and deletes it when you start the " +
                     "next one, so this TV doesn't fill up. It always asks you first.",
             )
 

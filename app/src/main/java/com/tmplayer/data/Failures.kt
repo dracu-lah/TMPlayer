@@ -36,7 +36,7 @@ object Failures {
                 "You're not in this channel any more, so its videos aren't available."
 
             raw.contains("FILE_REFERENCE") || raw.contains("FILE_ID_INVALID") ->
-                "Telegram moved this film. Press Refresh, then try again."
+                "Telegram moved this video. Press Refresh, then try again."
 
             raw.contains("Timeout", ignoreCase = true) ||
                 raw.contains("Connection", ignoreCase = true) ||

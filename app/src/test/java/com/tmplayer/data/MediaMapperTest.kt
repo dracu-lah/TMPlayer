@@ -14,15 +14,15 @@ class MediaMapperTest {
     }
 
     @Test
-    fun `movies uploaded as generic binaries are recognised by extension`() {
-        // How most film remuxes actually arrive in a Telegram channel.
-        assertTrue(MediaMapper.looksLikeVideo("Dune.2021.2160p.mkv", "application/octet-stream"))
+    fun `videos uploaded as generic binaries are recognised by extension`() {
+        // How most video remuxes actually arrive in a Telegram channel.
+        assertTrue(MediaMapper.looksLikeVideo("Harbour.Notes.2021.2160p.mkv", "application/octet-stream"))
         assertTrue(MediaMapper.looksLikeVideo("clip.AVI", ""))
     }
 
     @Test
     fun `subtitles archives and other junk are kept out of the grid`() {
-        assertFalse(MediaMapper.looksLikeVideo("Dune.2021.srt", "application/x-subrip"))
+        assertFalse(MediaMapper.looksLikeVideo("Harbour.Notes.2021.srt", "application/x-subrip"))
         assertFalse(MediaMapper.looksLikeVideo("pack.rar", "application/x-rar"))
         assertFalse(MediaMapper.looksLikeVideo("cover.jpg", "image/jpeg"))
         assertFalse(MediaMapper.looksLikeVideo("no-extension", ""))
@@ -31,16 +31,16 @@ class MediaMapperTest {
     @Test
     fun `a file name wins over a caption`() {
         assertEquals(
-            "Arrival.2016.mkv",
-            MediaMapper.displayTitle("Arrival.2016.mkv", "Arrival, a great film", "Video"),
+            "Forest.Walk.2016.mkv",
+            MediaMapper.displayTitle("Forest.Walk.2016.mkv", "Forest Walk, a personal clip", "Video"),
         )
     }
 
     @Test
     fun `a caption is used when the upload has no file name`() {
         assertEquals(
-            "Arrival (2016)",
-            MediaMapper.displayTitle("", "Arrival (2016)\n1080p BluRay", "Video"),
+            "Forest Walk (2016)",
+            MediaMapper.displayTitle("", "Forest Walk (2016)\n1080p recording", "Video"),
         )
     }
 
@@ -76,16 +76,16 @@ class MediaMapperTest {
         // nothing about what a viewer picks.
         assertEquals(
             listOf("1080p"),
-            MediaMapper.qualityTags("Wednesday.S02E04.1080p.10bit.WEBRip.x265.HEVC-PS.mkv"),
+            MediaMapper.qualityTags("Creative.Course.S02E04.1080p.10bit.WEBRip.x265.HEVC-PS.mkv"),
         )
-        assertEquals(listOf("4K"), MediaMapper.qualityTags("Dune.2021.2160p.UHD.HDR.DV.mkv"))
-        assertEquals(listOf("720p"), MediaMapper.qualityTags("Uyir.720p.WEB-DL.mkv"))
-        assertEquals(listOf("SD"), MediaMapper.qualityTags("Old.Film.480p.mkv"))
+        assertEquals(listOf("4K"), MediaMapper.qualityTags("Harbour.Notes.2021.2160p.UHD.HDR.DV.mkv"))
+        assertEquals(listOf("720p"), MediaMapper.qualityTags("Kitchen.Journal.720p.WEB-DL.mkv"))
+        assertEquals(listOf("SD"), MediaMapper.qualityTags("Old.Video.480p.mkv"))
     }
 
     @Test
     fun `a name with no resolution earns no badge`() {
-        assertEquals(emptyList<String>(), MediaMapper.qualityTags("Ratatouille.mkv"))
+        assertEquals(emptyList<String>(), MediaMapper.qualityTags("Birthday Wishes.mkv"))
         assertEquals(emptyList<String>(), MediaMapper.qualityTags(null))
     }
 }

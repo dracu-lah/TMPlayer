@@ -3,7 +3,6 @@ package com.tmplayer.player
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.Bundle
 import android.os.SystemClock
@@ -37,19 +36,16 @@ import com.tmplayer.App
 import com.tmplayer.R
 import com.tmplayer.data.ChatRepository
 import com.tmplayer.data.Failures
-import com.tmplayer.data.FilmLookup
-import com.tmplayer.data.FilmName
+import com.tmplayer.data.MediaName
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.LocalFileAvailability
 import com.tmplayer.data.LocalFilePolicy
 import com.tmplayer.data.NetworkMonitor
 import com.tmplayer.data.NetworkStatus
-import com.tmplayer.data.RemoteImages
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
-import com.tmplayer.data.Tmdb
 import com.tmplayer.data.errorMessage
 import com.tmplayer.data.valueOrNull
 import dev.g000sha256.tdl.TdlClient
@@ -102,21 +98,17 @@ class PlayerActivity : FragmentActivity() {
     private var durationSec = 0
     private var resumeMs = 0L
 
-    /** Only used to label the film in "Continue watching"; playback never needs it. */
+    /** Only used to label the video in "Continue watching"; playback never needs it. */
     private var chatTitle = ""
 
     /**
      * The episodes either side of this one, once the chat has been asked about them.
      *
-     * Empty for a film, and empty for an episode whose neighbours are not in the chat. The
+     * Empty for a video, and empty for an episode whose neighbours are not in the chat. The
      * transport row watches this and grows its two extra buttons when they arrive.
      */
     private val _episodes = MutableStateFlow(Episodes())
     val episodes: StateFlow<Episodes> = _episodes.asStateFlow()
-
-    /** The poster for whatever is playing, for the thumbnail beside the title. Null until found. */
-    private val _art = MutableStateFlow<Bitmap?>(null)
-    val art: StateFlow<Bitmap?> = _art.asStateFlow()
 
     /** True until the picture first appears; after that a stall is a chip, not a full sheet. */
     private var openingFilm = true
@@ -125,17 +117,17 @@ class PlayerActivity : FragmentActivity() {
     /** True while the transport row is up: the download figure is shown alongside it. */
     private var controlsUp = false
 
-    /** How far into the film the download has reached, and whether it has reached the end. */
+    /** How far into the video the download has reached, and whether it has reached the end. */
     private var downloadedFraction = 0f
     private var downloadComplete = false
 
-    /** True while the whole film is being fetched before playback, under the "download first" setting. */
+    /** True while the whole video is being fetched before playback, under the "download first" setting. */
     private var waitingForWholeFilm = false
 
     /** The stage the loading screen is currently reporting, kept so it can be re-rendered. */
     private var statusMessage = ""
 
-    /** Used only while this film needs more bytes; completed films ignore connectivity entirely. */
+    /** Used only while this video needs more bytes; completed videos ignore connectivity entirely. */
     private var networkOffline = false
 
     /**
@@ -155,7 +147,7 @@ class PlayerActivity : FragmentActivity() {
         // position lives on disk.
         super.onCreate(null)
         setContentView(R.layout.activity_player)
-        // Two hours of a film is two hours with no button presses. Without this the TV
+        // Two hours of a video is two hours with no button presses. Without this the TV
         // dims and then sleeps on the viewer.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
@@ -181,7 +173,7 @@ class PlayerActivity : FragmentActivity() {
         rebufferText = findViewById(R.id.rebuffer_text)
         downloadChip = findViewById(R.id.download_chip)
         subtitleView.setApplyEmbeddedStyles(true)
-        // A TV's default caption size is tuned for broadcast subtitles; movie subs need to be
+        // A TV's default caption size is tuned for broadcast subtitles; video subs need to be
         // legible from a sofa, with an outline that survives a bright frame behind them.
         subtitleView.setFractionalTextSize(SUBTITLE_TEXT_FRACTION)
         subtitleView.setStyle(
@@ -207,11 +199,10 @@ class PlayerActivity : FragmentActivity() {
         observeConnectivity()
         startResumeHeartbeat()
         findEpisodes()
-        findArt()
 
         // Reading the saved position is a disk hit; do it off the main thread and seek once
         // it lands. Opening the stream takes longer than this ever will. Under "download the
-        // whole film first" there is no player to seek yet, so [startPlayback] applies the same
+        // whole video first" there is no player to seek yet, so [startPlayback] applies the same
         // position as well; whichever of the two arrives second simply sets it again.
         lifecycleScope.launch {
             resumeMs = runCatching { settings.resumePosition(chatId, messageId) }.getOrDefault(0L)
@@ -230,7 +221,7 @@ class PlayerActivity : FragmentActivity() {
                 NetworkMonitor.status.value == NetworkStatus.Offline &&
                 !Td.connected.value
             ) {
-                showError("This film isn't fully on this TV. Connect to the internet and try again.")
+                showError("This video isn't fully on this TV. Connect to the internet and try again.")
                 return@launch
             }
             val downloadFirst = runCatching { settings.downloadBeforePlayingNow() }
@@ -253,7 +244,7 @@ class PlayerActivity : FragmentActivity() {
 
         // Replace unconditionally: after process death the restored fragment came up before
         // the player existed, so it has no glue and has to be rebuilt. State loss is allowed
-        // because nothing here is restored anyway, and under "download the whole film first"
+        // because nothing here is restored anyway, and under "download the whole video first"
         // this can land after the activity has been stopped.
         supportFragmentManager.beginTransaction()
             .replace(R.id.playback_container, TvPlaybackFragment())
@@ -269,11 +260,11 @@ class PlayerActivity : FragmentActivity() {
      */
     private suspend fun fetchWholeFilm(): Boolean {
         if (Td.localFileAvailability(fileId) == LocalFileAvailability.Complete) {
-            showStatus("Starting the film…")
+            showStatus("Starting the video…")
             return true
         }
         waitingForWholeFilm = true
-        showStatus("Downloading the whole film…")
+        showStatus("Downloading the whole video…")
         val session = Td.awaitConnectedSession()
         val result = session.client.downloadFile(
             fileId = fileId,
@@ -292,13 +283,13 @@ class PlayerActivity : FragmentActivity() {
             showError("The download did not finish. Connect to the internet and try again.")
             return false
         }
-        showStatus("Starting the film…")
+        showStatus("Starting the video…")
         return true
     }
 
     private fun buildPlayer(client: TdlClient): ExoPlayer {
         // Hardware decoders first; NextLib's FFmpeg renderers pick up the audio codecs a TV
-        // stick has no silicon for: DTS and TrueHD tracks are common in movie remuxes.
+        // stick has no silicon for: DTS and TrueHD tracks are common in video remuxes.
         val renderers = NextRenderersFactory(this)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true)
@@ -313,7 +304,7 @@ class PlayerActivity : FragmentActivity() {
 
         val trackSelector = DefaultTrackSelector(this).apply {
             parameters = buildUponParameters()
-                // Subtitles stay off until asked for; nobody wants forced captions on a film.
+                // Subtitles stay off until asked for; nobody wants forced captions on a video.
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                 .setPreferredAudioLanguage(null)
                 .build()
@@ -372,27 +363,27 @@ class PlayerActivity : FragmentActivity() {
         PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
         PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
         ->
-            "This TV can't play this film's video format. A different copy of the film may work."
+            "This TV can't play this video's format. A different copy may work."
 
         PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
         PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
         ->
-            "TMPlayer can't play this file. A different copy of the film may work."
+            "TMPlayer can't play this file. A different copy may work."
 
         // ExoPlayer's own message names a codec or an internal class; it means nothing on a sofa
         // and reads as a crash. The exception still reaches logcat through ExoPlayer itself.
-        else -> "This film wouldn't play. Try a different copy of it."
+        else -> "This video wouldn't play. Try a different copy of it."
     }
 
     /**
      * Asks the chat what comes before and after this episode.
      *
-     * Off the critical path on purpose: it costs a search, and the film starts without it. The
+     * Off the critical path on purpose: it costs a search, and the video starts without it. The
      * search is narrowed to the series name, which is what Telegram matches document file names
      * against, and falls back to the plain listing for a chat that names its files some other way.
      */
     private fun findEpisodes() {
-        val here = FilmName.parse(mediaTitle)
+        val here = MediaName.parse(mediaTitle)
         if (!here.isEpisode || chatId == 0L) return
 
         lifecycleScope.launch {
@@ -406,22 +397,9 @@ class PlayerActivity : FragmentActivity() {
 
             fun nameOf(item: MediaItem) = item.fileName.ifBlank { item.title }
             _episodes.value = Episodes(
-                previous = FilmName.previousEpisode(mediaTitle, candidates, ::nameOf),
-                next = FilmName.nextEpisode(mediaTitle, candidates, ::nameOf),
+                previous = MediaName.previousEpisode(mediaTitle, candidates, ::nameOf),
+                next = MediaName.nextEpisode(mediaTitle, candidates, ::nameOf),
             )
-        }
-    }
-
-    /**
-     * The poster, for the thumbnail leanback draws beside the title on the transport row.
-     *
-     * Almost always a cache hit: the details panel looked the same film up to draw the screen the
-     * viewer pressed Play on, and both the answer and the image are kept on disk.
-     */
-    private fun findArt() {
-        lifecycleScope.launch {
-            val details = (Tmdb.lookup(mediaTitle) as? FilmLookup.Found)?.details ?: return@launch
-            _art.value = RemoteImages.load(details.posterUrl)
         }
     }
 
@@ -545,7 +523,7 @@ class PlayerActivity : FragmentActivity() {
                     if (offline) {
                         if (openingFilm) {
                             showStatus("Offline. Waiting for internet…")
-                            statusDetail.text = "A fully downloaded film can play without internet."
+                            statusDetail.text = "A fully downloaded video can play without internet."
                         } else if (player?.playbackState == Player.STATE_BUFFERING) {
                             showRebuffering()
                         }
@@ -564,7 +542,7 @@ class PlayerActivity : FragmentActivity() {
     private fun renderProgress() {
         val rate = StreamStats.formatSpeed(speed.bytesPerSec)
 
-        // Waiting for the whole film: the bar is the film, not the buffer, and the wait is long
+        // Waiting for the whole video: the bar is the video, not the buffer, and the wait is long
         // enough that a percentage and a time left are the only things making it bearable.
         if (waitingForWholeFilm) {
             val remaining = (fileSizeBytes - (fileSizeBytes * downloadedFraction).toLong())
@@ -610,7 +588,7 @@ class PlayerActivity : FragmentActivity() {
     }
 
     /**
-     * The corner figure: how much of the film is down, shown only alongside the transport row.
+     * The corner figure: how much of the video is down, shown only alongside the transport row.
      *
      * It gives way to the rebuffering chip, which occupies the same corner and is the more urgent
      * of the two, and it stays off entirely while a full-screen status sheet is up.
@@ -654,7 +632,7 @@ class PlayerActivity : FragmentActivity() {
             .joinToString("  ·  ")
     }
 
-    /** A stall after playback has begun: a small chip, so the film stays on screen. */
+    /** A stall after playback has begun: a small chip, so the video stays on screen. */
     private fun showRebuffering() {
         openingFilm = false
         statusOverlay.visibility = View.GONE
@@ -690,11 +668,11 @@ class PlayerActivity : FragmentActivity() {
     }
 
     /**
-     * Writes the position every [RESUME_TICK_MS] while a film is on screen.
+     * Writes the position every [RESUME_TICK_MS] while a video is on screen.
      *
      * onStop covers Back and Home, but it never runs when the power goes off at the wall or the
      * system kills the process to reclaim memory, and on a 1 GB stick the second of those is
-     * routine. Without a heartbeat those are precisely the cases where an hour of a film is lost.
+     * routine. Without a heartbeat those are precisely the cases where an hour of a video is lost.
      */
     private fun startResumeHeartbeat() {
         lifecycleScope.launch {
@@ -733,7 +711,7 @@ class PlayerActivity : FragmentActivity() {
         val store = settings
         val chat = chatId
         val message = messageId
-        // Written with the position so "Continue watching" can offer the film back without the
+        // Written with the position so "Continue watching" can offer the video back without the
         // chat it came from being loaded, or still being in the list at all.
         val description = ResumeRecord.encode(
             fileId = fileId,
@@ -751,7 +729,7 @@ class PlayerActivity : FragmentActivity() {
         }
     }
 
-    /** What the transport row offers either side of the film: nulls where there is nothing. */
+    /** What the transport row offers either side of the video: nulls where there is nothing. */
     data class Episodes(val previous: MediaItem? = null, val next: MediaItem? = null)
 
     companion object {

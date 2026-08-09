@@ -11,7 +11,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Poster art for the grid.
+ * Telegram thumbnail data for media previews.
  *
  * Telegram ships a few-hundred-byte blurred JPEG inside every message, so a card can show
  * something the instant it scrolls into view, then swap in the real thumbnail once TDLib has
