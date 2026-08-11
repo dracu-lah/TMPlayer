@@ -134,26 +134,27 @@ internal fun TouchBrowseShell(
                 // that it can never cover the page it is a way back to.
                 modifier = Modifier.width(min(DRAWER_WIDTH, screenWidth * DRAWER_MAX_FRACTION)),
             ) {
-                DrawerHeader(account)
-                HorizontalDivider(color = TextMuted.copy(alpha = 0.18f))
+                DrawerBrand()
+
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                    BrowseTab.entries.forEach { entry ->
-                        DrawerDestination(
-                            label = entry.label,
-                            selected = entry == selected,
-                            badge = if (entry == BrowseTab.Favorites && favoriteCount > 0) {
-                                favoriteCount.toString()
-                            } else {
-                                null
-                            },
-                            icon = {
-                                Icon(entry.icon, contentDescription = null)
-                            },
-                            onClick = { close(); onSelect(entry) },
-                        )
+                    // The three tabs about this viewer's own watching, first because they are
+                    // what somebody opening the app in the evening is reaching for.
+                    DrawerDestinations(LIBRARY_TABS, selected, favoriteCount) {
+                        close(); onSelect(it)
+                    }
+
+                    DrawerSeparator("Chats")
+
+                    // The four ways of slicing the chat list. Grouping them under a heading is
+                    // what turns seven flat destinations into two short lists: the seven read as
+                    // one undifferentiated pile, and the eye had to check every one of them to
+                    // find out that four of them were the same kind of thing.
+                    DrawerDestinations(CHAT_TABS, selected, favoriteCount) {
+                        close(); onSelect(it)
                     }
                 }
-                HorizontalDivider(color = TextMuted.copy(alpha = 0.18f))
+
+                DrawerSeparator()
                 if (updateVersion != null) {
                     DrawerDestination(
                         label = "Update",
@@ -172,13 +173,11 @@ internal fun TouchBrowseShell(
                 DrawerDestination(
                     label = "Settings",
                     selected = false,
-                    // Which build this is rides along with Settings here for the same reason it
-                    // does on the television: it is information, not a place to go to.
-                    badge = "v${Updates.installedVersion}",
+                    badge = null,
                     icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
                     onClick = { close(); onOpenSettings() },
                 )
-                Spacer(Modifier.height(12.dp))
+                DrawerFooter(account)
             }
         },
     ) {
@@ -338,37 +337,102 @@ private fun DrawerDestination(
 }
 
 /**
- * Which app this is and whose account it holds, at the top of the drawer.
+ * One group of destinations.
  *
- * The rail puts the account in the same place on the television, but no mark: a television shows
- * one app at a time and the launcher just handed it over. A drawer is pulled out of a phone that is
- * running a dozen other things, and its header is the conventional and the only place in the touch
- * shell where the app names itself.
+ * Split out so the drawer can be read as the two lists it actually is rather than as one column
+ * of seven, which is what it was: a mark, an app name, an avatar, a name, a handle and then seven
+ * peers, all before the eye reached anything it could act on.
  */
 @Composable
-private fun DrawerHeader(account: Account?) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            AppMark(MarkSize.Inline)
-            Spacer(Modifier.width(12.dp))
-            Text(
-                "TMPlayer",
-                style = MaterialTheme.typography.titleLarge,
-                color = TextPrimary,
-            )
-        }
-        Spacer(Modifier.height(16.dp))
-        AccountRow(account)
+private fun DrawerDestinations(
+    tabs: List<BrowseTab>,
+    selected: BrowseTab,
+    favoriteCount: Int,
+    onPick: (BrowseTab) -> Unit,
+) {
+    tabs.forEach { entry ->
+        DrawerDestination(
+            label = entry.label,
+            selected = entry == selected,
+            // The only badge left in the list. A count is a thing that changes and is worth
+            // noticing; everything else that used to wear one was static text in a shape that
+            // promised otherwise.
+            badge = if (entry == BrowseTab.Favorites && favoriteCount > 0) {
+                favoriteCount.toString()
+            } else {
+                null
+            },
+            icon = { Icon(entry.icon, contentDescription = null) },
+            onClick = { onPick(entry) },
+        )
     }
 }
 
+/**
+ * Which app this is, at the top of the drawer and nothing else.
+ *
+ * A drawer is pulled out of a phone that is running a dozen other things, so it is the
+ * conventional place for the app to name itself once, quietly, the way YouTube and NewPipe both
+ * do. What used to be here as well was the whole account block, which made the first thing in the
+ * drawer the one thing in it nobody opened the drawer to reach.
+ */
 @Composable
-private fun AccountRow(account: Account?) {
+private fun DrawerBrand() {
     Row(
-        Modifier.fillMaxWidth(),
+        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(44.dp).clip(CircleShape).background(SurfaceRaised)) {
+        AppMark(MarkSize.Inline)
+        Spacer(Modifier.width(12.dp))
+        Text(
+            "TMPlayer",
+            style = MaterialTheme.typography.titleMedium,
+            color = TextPrimary,
+        )
+    }
+}
+
+/**
+ * A rule between groups, with an optional heading for the group below it.
+ *
+ * The heading is deliberately quiet: it is a label on a boundary, not a row, and anything with
+ * enough weight to read as a row is one more thing in a drawer that had too many already.
+ */
+@Composable
+private fun DrawerSeparator(heading: String? = null) {
+    HorizontalDivider(
+        color = TextMuted.copy(alpha = 0.18f),
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+    )
+    if (heading != null) {
+        Text(
+            heading,
+            style = MaterialTheme.typography.labelMedium,
+            color = TextMuted,
+            modifier = Modifier.padding(start = 28.dp, top = 4.dp, bottom = 4.dp),
+        )
+    }
+}
+
+/**
+ * Whose library this is, along the bottom edge.
+ *
+ * Moved out of the header and shrunk to one line, because it answers a question that gets asked
+ * once ever ("am I signed in as the right account?") and it was taking the most valuable space in
+ * the sheet to do it. The build number rides here for the same reason: it is a thing to read off
+ * when reporting a problem, not a destination, and as a badge on Settings it looked like one.
+ */
+@Composable
+private fun DrawerFooter(account: Account?) {
+    HorizontalDivider(
+        color = TextMuted.copy(alpha = 0.18f),
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+    )
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(32.dp).clip(CircleShape).background(SurfaceRaised)) {
             if (account != null) {
                 MediaPreview(
                     miniThumbnail = account.miniThumbnail,
@@ -378,27 +442,40 @@ private fun AccountRow(account: Account?) {
                 )
             }
         }
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(
-                account?.name ?: "Your account",
-                style = MaterialTheme.typography.titleMedium,
+                account?.name ?: "Signed in",
+                style = MaterialTheme.typography.bodyMedium,
                 color = TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (!account?.username.isNullOrBlank()) {
-                Text(
-                    "@${account.username}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            Text(
+                listOfNotNull(
+                    account?.username?.takeIf { it.isNotBlank() }?.let { "@$it" },
+                    "v${Updates.installedVersion}",
+                ).joinToString("  ·  "),
+                style = MaterialTheme.typography.labelSmall,
+                color = TextMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
+
+/** What this viewer has been watching. First, because it is what the app is opened for. */
+private val LIBRARY_TABS = listOf(BrowseTab.Continue, BrowseTab.Favorites, BrowseTab.Recent)
+
+/**
+ * The same chat list, sliced four ways.
+ *
+ * Everything the first group does not claim, rather than a second hand-written list: a tab added
+ * later belongs in the drawer whether or not anybody remembers to put it there, and a hand-written
+ * list is how one quietly stops appearing at all.
+ */
+private val CHAT_TABS = BrowseTab.entries - LIBRARY_TABS.toSet()
 
 /**
  * How wide the drawer is on a phone that has room for it.
