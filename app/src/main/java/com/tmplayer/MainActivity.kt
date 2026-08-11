@@ -191,7 +191,15 @@ private fun Root() {
         }
     }
 
-    val chatsViewModel: ChatListViewModel = viewModel()
+    // Given the settings store so the chat list can paint from the last sync's snapshot before
+    // TDLib has finished opening its database.
+    val chatsViewModel: ChatListViewModel = viewModel(
+        factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
+                ChatListViewModel(settings) as T
+        },
+    )
     val chatsState by chatsViewModel.state.collectAsStateWithLifecycle()
     val chats = (chatsState as? UiState.Content)?.value?.chats.orEmpty()
 
@@ -442,9 +450,15 @@ private fun Root() {
                     continueWatching = continueWatching,
                     onRetry = chatsViewModel::load,
                     onRefresh = {
-                        chatsViewModel.load()
-                        if (networkStatus == NetworkStatus.Offline && !telegramConnected) {
-                            toast("You're offline. Showing saved chats.")
+                        // Telegram answers a request made during a flood wait by extending it, so
+                        // the button holds off and says how long rather than digging deeper.
+                        val waiting = chatsViewModel.refreshUnlessRateLimited()
+                        when {
+                            waiting > 0 -> toast(
+                                "Telegram has asked us to slow down. Try again in $waiting seconds.",
+                            )
+                            networkStatus == NetworkStatus.Offline && !telegramConnected ->
+                                toast("You're offline. Showing saved chats.")
                         }
                     },
                     onOpenChat = { openChat(it) },

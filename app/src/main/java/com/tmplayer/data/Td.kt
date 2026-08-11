@@ -30,6 +30,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 
@@ -359,6 +360,39 @@ object Td {
         }
     }
 
+    /**
+     * The same wait, given up on after [timeoutMs].
+     *
+     * The unbounded version is right for work that has nothing else to do, and wrong for anything
+     * a viewer is watching a spinner for: on a device that never gets a socket it waits forever,
+     * and the screen in front of them says "connecting" until they close the app. Null means the
+     * time ran out, which callers turn into an offline state with a Retry rather than a hang.
+     */
+    suspend fun awaitConnectedSessionOrNull(timeoutMs: Long = CONNECT_TIMEOUT_MS): TdSession? =
+        withTimeoutOrNull(timeoutMs) { awaitConnectedSession() }
+
+    /**
+     * When Telegram's flood wait expires, as a wall-clock stamp, or zero when nothing is waiting.
+     *
+     * Recorded rather than only humanised, so a manual Refresh can decline to make things worse.
+     * Pressing it during a flood wait cannot succeed, and every press extends the wait.
+     */
+    @Volatile
+    private var floodWaitUntilMs = 0L
+
+    /** Records a flood wait if [message] carries one. Returns the seconds Telegram named. */
+    fun noteFailure(message: String?): Int? {
+        val seconds = Failures.floodWaitSeconds(message) ?: return null
+        floodWaitUntilMs = System.currentTimeMillis() + seconds * 1000L
+        return seconds
+    }
+
+    /** How long a caller should hold off, in seconds; zero when there is nothing to wait for. */
+    fun floodWaitRemainingSeconds(): Int {
+        val left = floodWaitUntilMs - System.currentTimeMillis()
+        return if (left <= 0) 0 else ((left + 999) / 1000).toInt()
+    }
+
     suspend fun storageUsedBytes(): Long =
         current?.getStorageStatisticsFast()?.valueOrNull?.filesSize ?: 0L
 
@@ -412,6 +446,35 @@ object Td {
     }
 
     /**
+     * Keeps the cache under a ceiling, quietly, instead of waiting to be emptied by hand.
+     *
+     * [clearMediaCache] is the only thing that ever removed anything, it is a button, and it takes
+     * everything at once. Photos and thumbnails were exempt from even that, so they grew for the
+     * life of the install: on a stick with eight gigabytes that is the disk filling up with
+     * pictures of chats nobody has opened in a year. This runs on launch, takes the oldest first
+     * and stops at the ceiling, and it leaves anything touched in the last few minutes alone so it
+     * cannot delete the video currently being streamed out from under the player.
+     */
+    suspend fun trimStorage(maxBytes: Long = CACHE_CEILING_BYTES) {
+        val td = current ?: return
+        runCatching {
+            td.optimizeStorage(
+                size = maxBytes,
+                ttl = CACHE_TTL_SECONDS,
+                count = Int.MAX_VALUE,
+                immunityDelay = CACHE_IMMUNITY_SECONDS,
+                // Every type, photos and thumbnails included, which is the whole difference
+                // between this and the button.
+                fileTypes = emptyArray(),
+                chatIds = longArrayOf(),
+                excludeChatIds = longArrayOf(),
+                returnDeletedFileStatistics = false,
+                chatLimit = 0,
+            )
+        }
+    }
+
+    /**
      * Stops an in-flight download and keeps whatever already landed.
      *
      * `onlyIfPending = false` because the download being cancelled is nearly always the active
@@ -448,6 +511,23 @@ object Td {
             photoFileId = user.profilePhoto?.small?.id ?: 0,
         )
     }
+
+    /** Long enough for a slow stick on a cold morning, short enough not to read as a hang. */
+    private const val CONNECT_TIMEOUT_MS = 30_000L
+
+    /**
+     * What TMPlayer is allowed to keep on disk before the oldest of it starts going.
+     *
+     * Four gigabytes: room for a couple of films and every thumbnail the browser has ever drawn,
+     * on a device whose whole disk is eight.
+     */
+    const val CACHE_CEILING_BYTES = 4L * 1024 * 1024 * 1024
+
+    /** A month. Anything untouched for longer is not a cache, it is a leak. */
+    private const val CACHE_TTL_SECONDS = 30 * 24 * 60 * 60
+
+    /** Recently touched files are left alone, so this cannot delete what is playing. */
+    private const val CACHE_IMMUNITY_SECONDS = 10 * 60
 
     internal fun isCurrent(session: TdSession): Boolean =
         current === session.client && generation.get() == session.generation && _auth.value is AuthState.Ready

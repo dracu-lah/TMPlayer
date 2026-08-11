@@ -633,7 +633,12 @@ class PlayerActivity : FragmentActivity() {
             .setBufferDurationsMs(BUFFER_MIN_MS, BUFFER_MAX_MS, BUFFER_PLAYBACK_MS, BUFFER_REBUFFER_MS)
             .setTargetBufferBytes(TARGET_BUFFER_BYTES)
             .setPrioritizeTimeOverSizeThresholds(false)
-            .setBackBuffer(0, false)
+            // A few seconds of what has already played, kept behind the position. Without it a
+            // back-seek of two seconds fell outside the buffer, which put the read outside TDLib's
+            // download window, which restarted the download from there: the commonest small
+            // gesture in the player was also the most expensive thing it could do. Deliberately
+            // short, and from the last keyframe, because this is memory on a 1 GB stick.
+            .setBackBuffer(BACK_BUFFER_MS, /* retainBackBufferFromKeyframe = */ true)
             .build()
 
         val trackSelector = DefaultTrackSelector(this).apply {
@@ -1444,6 +1449,9 @@ class PlayerActivity : FragmentActivity() {
         private const val BUFFER_PLAYBACK_MS = 2_500
         private const val BUFFER_REBUFFER_MS = 5_000
         private const val TARGET_BUFFER_BYTES = 20 * 1024 * 1024
+
+        /** Enough for the back-seek a thumb makes when it missed a line of dialogue. */
+        private const val BACK_BUFFER_MS = 10_000
         private const val END_GUARD_MS = 1_000L
         private const val NUDGE_MS = 10_000L
         private const val RESUME_TICK_MS = 10_000L

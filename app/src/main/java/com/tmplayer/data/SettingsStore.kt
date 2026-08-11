@@ -30,6 +30,7 @@ private val MIN_SIZE = longPreferencesKey("min_size_bytes")
 private val MAX_SIZE = longPreferencesKey("max_size_bytes")
 private val CHAT_LAYOUT = stringPreferencesKey("chat_layout")
 private val MEDIA_LAYOUT = stringPreferencesKey("media_layout")
+private val CHAT_SNAPSHOT = stringPreferencesKey("chat_snapshot")
 
 /** Where playback stopped, so the next launch can offer to continue. */
 private fun resumeKey(chatId: Long, messageId: Long) =
@@ -201,6 +202,28 @@ class SettingsStore(private val context: Context) {
         context.prefs.edit { prefs ->
             val min = prefs[MIN_SIZE] ?: SizeFilter.DEFAULT_MIN
             prefs[MAX_SIZE] = SizeFilter.clampMax(value, min)
+        }
+    }
+
+    // ---- cold start -------------------------------------------------------------------------
+
+    /**
+     * The chat list as it was at the end of the last sync, for the first frame of the next launch.
+     *
+     * Read straight off disk rather than as a flow: it is wanted once, before anything else has
+     * happened, and a flow that has not emitted yet would hand back an empty list at exactly the
+     * moment the whole point is to have something to draw.
+     */
+    suspend fun cachedChatSnapshot(): List<ChatSummary> =
+        ChatSnapshot.decode(context.prefs.data.first()[CHAT_SNAPSHOT])
+
+    suspend fun saveChatSnapshot(chats: List<ChatSummary>) {
+        val encoded = ChatSnapshot.encode(chats)
+        context.prefs.edit { prefs ->
+            // Written only when it has actually changed. This runs after every sync, and the
+            // whole preference file is rewritten and fsynced per edit, so a list that has not
+            // moved would cost a disk write every couple of minutes for nothing.
+            if (prefs[CHAT_SNAPSHOT] != encoded) prefs[CHAT_SNAPSHOT] = encoded
         }
     }
 

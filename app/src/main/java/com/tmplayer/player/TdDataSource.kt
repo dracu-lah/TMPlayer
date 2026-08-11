@@ -86,7 +86,7 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
             ?: throw IOException("Not a Telegram file URI: ${dataSpec.uri}")
         position = dataSpec.position
 
-        val file = blocking { td.getFile(fileId).valueOrNull }
+        val file = blocking(OPEN_TIMEOUT_MS) { td.getFile(fileId).valueOrNull }
             ?: throw IOException("Telegram lost track of file $fileId")
         size = if (file.size > 0) file.size else file.expectedSize
         if (size <= 0) throw IOException("Unknown size for file $fileId")
@@ -101,7 +101,7 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
         absorb(file)
         // A finished file needs nothing from TDLib, not even a download request, which would
         // only re-enter its scheduler for bytes that are already sitting on disk.
-        if (!completed) blocking { requestDownloadFrom(position) }
+        if (!completed) blocking(OPEN_TIMEOUT_MS) { requestDownloadFrom(position) }
 
         opened = true
         transferStarted(dataSpec)
@@ -113,7 +113,7 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
         if (bytesRemaining == 0L) return C.RESULT_END_OF_INPUT
 
         // Fast path: no coroutine and no TDLib round-trip, which is all but a handful of reads.
-        val available = cachedAvailable(position) ?: blocking { awaitBytesAt(position) }
+        val available = cachedAvailable(position) ?: blocking(READ_TIMEOUT_MS) { awaitBytesAt(position) }
         val wanted = minOf(length.toLong(), bytesRemaining, available).toInt()
 
         val read = synchronized(this) {
@@ -297,8 +297,8 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
      * Media3 calls [open] and [read] on its own loading thread and cancels a load by
      * interrupting it, so blocking here is expected; it just has to stay interruptible.
      */
-    private fun <T> blocking(block: suspend () -> T): T = try {
-        runBlocking { withTimeout(OPEN_TIMEOUT_MS) { block() } }
+    private fun <T> blocking(timeoutMs: Long, block: suspend () -> T): T = try {
+        runBlocking { withTimeout(timeoutMs) { block() } }
     } catch (e: InterruptedException) {
         Thread.currentThread().interrupt()
         throw InterruptedIOException("Cancelled")
@@ -316,5 +316,16 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
         const val POLL_INTERVAL_MS = 1_000L
         const val STALL_TIMEOUT_MS = 60_000L
         const val OPEN_TIMEOUT_MS = 120_000L
+
+        /**
+         * The read's own ceiling, a little above the stall timeout it wraps.
+         *
+         * These were nested the wrong way round: a 120 second outer timeout around a wait that
+         * already gives up at 60, so the outer one could never fire and the two figures had to be
+         * read together to work out that a stalled read fails after a minute. Now the inner wait
+         * is the one that decides, and this is only the backstop for a wait that never returns
+         * at all.
+         */
+        const val READ_TIMEOUT_MS = STALL_TIMEOUT_MS + 10_000L
     }
 }

@@ -61,6 +61,17 @@ data class ChatSummary(
     }
 }
 
+/**
+ * The result of a sync: the list TDLib now holds, and whatever stopped it being complete.
+ *
+ * [failure] is null both when every page arrived and when Telegram said there were no more, which
+ * are the two ways of succeeding. It carries the raw TDLib message so the caller can decide
+ * whether to show it, retry at the delay a flood wait names, or leave the cached list alone.
+ */
+data class ChatSync(val chats: List<ChatSummary>, val failure: String? = null) {
+    val complete: Boolean get() = failure == null
+}
+
 /** One page of media, plus the cursors needed to ask for the next one. */
 data class MediaPage(
     val items: List<MediaItem>,
@@ -90,18 +101,23 @@ class ChatRepository(private val td: TdlClient) {
      * server first. [loadChats] returns 404 once everything is already local, which is the
      * documented "no more" answer, not a failure.
      */
-    suspend fun syncChats(limit: Int = CHAT_LIMIT): List<ChatSummary> = withContext(Dispatchers.IO) {
+    suspend fun syncChats(limit: Int = CHAT_LIMIT): ChatSync = withContext(Dispatchers.IO) {
         var loaded = 0
+        var failure: String? = null
         while (loaded < limit) {
             val result = td.loadChats(ChatListMain(), CHAT_PAGE)
-            // 404 is TDLib's documented "everything is already local", not a failure, but it is
-            // also the answer a dropped connection gives, and pulling for another two pages after
-            // either is work for nothing. Stopping on the first one covers both.
-            if (result is TdlResult.Failure) break
+            if (result is TdlResult.Failure) {
+                // 404 is TDLib's documented "everything is already local". Everything else is a
+                // real failure, and the two were indistinguishable here before: a dropped
+                // connection produced a short list that the screen then presented as the whole
+                // library, with nothing anywhere saying the sync had not worked.
+                if (!result.message.contains("404")) failure = result.message
+                break
+            }
             loaded += CHAT_PAGE
         }
 
-        cachedChats(limit)
+        ChatSync(cachedChats(limit), failure)
     }
 
     /**

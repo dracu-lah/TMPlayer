@@ -2,7 +2,9 @@ package com.tmplayer.ui.browse
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tmplayer.App
 import com.tmplayer.data.Account
+import com.tmplayer.data.AuthState
 import com.tmplayer.data.ChatRepository
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.Failures
@@ -11,6 +13,7 @@ import com.tmplayer.data.MediaCursors
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaPage
 import com.tmplayer.data.LocalFileAvailability
+import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.SponsoredBatch
 import com.tmplayer.data.SponsoredItem
@@ -20,10 +23,12 @@ import com.tmplayer.data.Td
 import com.tmplayer.data.TdSession
 import com.tmplayer.ui.components.UiState
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /** The chat list plus who is signed in; both are needed before the browser can draw. */
@@ -32,13 +37,89 @@ data class BrowseData(
     val account: Account? = null,
 )
 
-class ChatListViewModel : ViewModel() {
+/**
+ * @param settings where the cold-start snapshot lives. Null in the contexts that have no
+ *   Application to hand, in which case the first frame simply waits on TDLib as it used to.
+ */
+class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel() {
 
     private val _state = MutableStateFlow<UiState<BrowseData>>(UiState.Loading("Loading your chats…"))
     val state: StateFlow<UiState<BrowseData>> = _state.asStateFlow()
 
     init {
+        paintFromSnapshot()
         load()
+        watchChatChanges()
+    }
+
+    /**
+     * Draws yesterday's list now, so the screen is not empty while TDLib opens its database.
+     *
+     * Nothing here is trusted for longer than it takes the real list to arrive: [load] is already
+     * running alongside this and overwrites it, and a snapshot that loses the race is simply
+     * dropped rather than painted over content that is newer than it is.
+     */
+    private fun paintFromSnapshot() {
+        val store = settings ?: return
+        viewModelScope.launch {
+            val remembered = runCatching { store.cachedChatSnapshot() }.getOrDefault(emptyList())
+            if (remembered.isEmpty() || chats != null) return@launch
+            chats = remembered
+            publish()
+        }
+    }
+
+    /**
+     * Keeps the list live while it is on screen.
+     *
+     * Nothing subscribed to any of this before, so a chat renamed on a phone kept its old name
+     * here until the app was restarted, and a new profile picture never arrived at all. Only the
+     * two fields a row actually draws are followed; a reordering still waits for the next sync,
+     * which is the cheaper trade because acting on it means re-reading the whole list.
+     */
+    private fun watchChatChanges() {
+        viewModelScope.launch {
+            while (true) {
+                val session = Td.awaitAuthorizedSession()
+                val client = session.client
+                try {
+                    coroutineScope {
+                        launch {
+                            client.chatTitleUpdates.collect { update ->
+                                edit(update.chatId) { it.copy(title = update.title) }
+                            }
+                        }
+                        launch {
+                            client.chatPhotoUpdates.collect { update ->
+                                edit(update.chatId) {
+                                    it.copy(
+                                        miniThumbnail = update.photo?.minithumbnail?.data,
+                                        photoFileId = update.photo?.small?.id ?: 0,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Throwable) {
+                    // The client went away with a sign-out. The loop waits for the next one.
+                }
+                // Nothing to collect from a dead client; wait for the session to be replaced.
+                Td.auth.first { it !is AuthState.Ready }
+            }
+        }
+    }
+
+    /** Applies a change to one row, if that row is on screen. Publishes only when it moved. */
+    private fun edit(chatId: Long, change: (ChatSummary) -> ChatSummary) {
+        val current = chats ?: return
+        val at = current.indexOfFirst { it.id == chatId }
+        if (at < 0) return
+        val updated = change(current[at])
+        if (updated == current[at]) return
+        chats = current.toMutableList().also { it[at] = updated }
+        publish()
     }
 
     private var loadJob: Job? = null
@@ -60,6 +141,27 @@ class ChatListViewModel : ViewModel() {
      */
     fun refreshIfStale() {
         if (chats == null || System.currentTimeMillis() - syncedAt > STALE_AFTER_MS) load()
+    }
+
+    /**
+     * The Refresh button, which declines to make a flood wait worse.
+     *
+     * Telegram answers a request made during one by extending it, so the button that exists to
+     * fix things was the thing making them worse, and it reported the same unhelpful sentence
+     * each time. Returns the seconds left when it refused, so the screen can say so.
+     */
+    fun refreshUnlessRateLimited(): Int {
+        val waiting = Td.floodWaitRemainingSeconds()
+        if (waiting > 0) return waiting
+        load()
+        return 0
+    }
+
+    private fun rememberSnapshot(chats: List<ChatSummary>) {
+        val store = settings ?: return
+        // On the background scope rather than this one: it outlives the screen on purpose, since
+        // the whole value of the write is to the launch after this one.
+        App.backgroundScope.launch { runCatching { store.saveChatSnapshot(chats) } }
     }
 
     fun load() {
@@ -91,12 +193,27 @@ class ChatListViewModel : ViewModel() {
 
                 // The local database is the first answer. Telegram is then synchronized when its
                 // socket is ready, without holding the saved library behind a connection wait.
-                val connected = Td.awaitConnectedSession()
+                // Time-boxed. Waiting forever meant a device that never gets a socket sat on
+                // "Loading your chats…" until it was closed, with a perfectly good cached list
+                // one line of code away.
+                val connected = Td.awaitConnectedSessionOrNull()
+                if (connected == null) {
+                    if (session.isCurrent() && chats == null) {
+                        _state.value = UiState.Error(Failures.OFFLINE)
+                    }
+                    return@launch
+                }
                 if (connected.generation != session.generation) return@launch
                 if (account == null) account = runCatching { Td.me(session) }.getOrNull()
-                chats = repository.syncChats()
-                syncedAt = System.currentTimeMillis()
+                val sync = repository.syncChats()
+                // A failed sync is not an empty library. The pages that did arrive are still
+                // worth showing, and the flood wait inside the message is what stops Refresh
+                // from making the next attempt worse.
+                Td.noteFailure(sync.failure)
+                if (sync.complete || sync.chats.isNotEmpty()) chats = sync.chats
+                if (sync.complete) syncedAt = System.currentTimeMillis()
                 if (session.isCurrent()) publish()
+                if (sync.complete) rememberSnapshot(sync.chats)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Throwable) {

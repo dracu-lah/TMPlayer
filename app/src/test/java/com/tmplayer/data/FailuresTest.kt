@@ -68,4 +68,12 @@ class FailuresTest {
         assertTrue(Failures.humanise("   ").isNotBlank())
         assertTrue(Failures.humanise(null as Throwable?).isNotBlank())
     }
+
+    @Test
+    fun `the flood wait number is available, not only the sentence built from it`() {
+        assertEquals(42, Failures.floodWaitSeconds("FLOOD_WAIT_42"))
+        assertEquals(42, Failures.floodWaitSeconds("Too Many Requests: retry after 42"))
+        assertEquals(null, Failures.floodWaitSeconds("CHAT_NOT_FOUND"))
+        assertEquals(null, Failures.floodWaitSeconds(null))
+    }
 }

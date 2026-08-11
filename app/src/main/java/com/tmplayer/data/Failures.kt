@@ -58,9 +58,16 @@ object Failures {
         }
     }
 
-    /** `FLOOD_WAIT_42` / `Too Many Requests: retry after 42` both carry the same number. */
-    private fun floodWaitSeconds(raw: String): Int? =
-        FLOOD.find(raw)?.groupValues?.get(1)?.toIntOrNull()
+    /**
+     * `FLOOD_WAIT_42` / `Too Many Requests: retry after 42` both carry the same number.
+     *
+     * Public because the number is worth more than the sentence built out of it: Telegram is
+     * saying exactly how long to wait, and everything above this used to read that, turn it into
+     * "try again in about a minute" and throw the figure away, leaving the app to guess at a
+     * retry delay it had already been told.
+     */
+    fun floodWaitSeconds(raw: String?): Int? =
+        raw?.let { FLOOD.find(it)?.groupValues?.get(1)?.toIntOrNull() }
 
     private fun floodMessage(seconds: Int): String {
         val wait = when {
