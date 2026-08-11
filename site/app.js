@@ -15,17 +15,17 @@
     {
       id: 'universal',
       label: 'Universal APK',
-      note: 'One file for every supported Android TV. No chip type to look up.'
+      note: 'One file for every supported device, television or phone. No chip type to look up.'
     },
     {
       id: 'armeabi-v7a',
       label: 'armeabi-v7a',
-      note: 'Mi TV Stick, and most sticks sold between 2018 and 2021. Start here.'
+      note: 'Mi TV Stick, most sticks sold between 2018 and 2021, and older phones. Start here.'
     },
     {
       id: 'arm64-v8a',
       label: 'arm64-v8a',
-      note: 'Chromecast with Google TV, Nvidia Shield, and newer 64-bit boxes.'
+      note: 'Chromecast with Google TV, Nvidia Shield, newer 64-bit boxes, and every current phone.'
     },
     {
       id: 'x86_64',

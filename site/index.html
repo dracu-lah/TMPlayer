@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TMPlayer: play Telegram videos on Android TV</title>
-<meta name="description" content="TMPlayer is a free, open source Android TV app that signs into your own Telegram account by QR code and streams the videos already in your chats. Built for cheap TV sticks with 1 GB of RAM.">
+<title>TMPlayer: play Telegram videos on Android TV and on your phone</title>
+<meta name="description" content="TMPlayer is a free, open source Android app that signs into your own Telegram account and streams the videos already in your chats. One build, two layouts: a ten-foot one for the television and a Material 3 one for the phone.">
 <link rel="canonical" href="https://tmplayer.org/">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta name="author" content="dracu-lah">
@@ -13,22 +13,22 @@
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="TMPlayer">
-<meta property="og:title" content="TMPlayer: play Telegram videos on Android TV">
-<meta property="og:description" content="A free, open source Android TV app that signs into your own Telegram account by QR code and streams the videos already in your chats. Built for cheap TV sticks with 1 GB of RAM.">
+<meta property="og:title" content="TMPlayer: play Telegram videos on Android TV and on your phone">
+<meta property="og:description" content="A free, open source Android app that signs into your own Telegram account and streams the videos already in your chats. One build for the television and the phone.">
 <meta property="og:url" content="https://tmplayer.org/">
 <meta property="og:image" content="https://tmplayer.org/og.png">
 <meta property="og:image:secure_url" content="https://tmplayer.org/og.png">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="TMPlayer, an Android TV media player for videos in your own Telegram chats.">
+<meta property="og:image:alt" content="TMPlayer, an Android media player for the videos in your own Telegram chats, on a television and on a phone.">
 <meta property="og:locale" content="en_GB">
 
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="TMPlayer: play Telegram videos on Android TV">
-<meta name="twitter:description" content="A free, open source Android TV app that signs into your own Telegram account by QR code and streams the videos already in your chats.">
+<meta name="twitter:title" content="TMPlayer: play Telegram videos on Android TV and on your phone">
+<meta name="twitter:description" content="A free, open source Android app that signs into your own Telegram account and streams the videos already in your chats, on the television and on the phone.">
 <meta name="twitter:image" content="https://tmplayer.org/og.png">
-<meta name="twitter:image:alt" content="TMPlayer, an Android TV media player for videos in your own Telegram chats.">
+<meta name="twitter:image:alt" content="TMPlayer, an Android media player for the videos in your own Telegram chats, on a television and on a phone.">
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/icon-512.png" type="image/png" sizes="512x512">
@@ -44,17 +44,19 @@
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "TMPlayer",
-  "alternateName": "TMPlayer for Android TV",
-  "description": "An open source Android TV app that signs into your own Telegram account by QR code and streams the videos already in your chats.",
+  "alternateName": "TMPlayer for Android TV and Android phones",
+  "description": "An open source Android app that signs into your own Telegram account and streams the videos already in your chats, with one layout for the television and another for the phone.",
   "url": "https://tmplayer.org/",
   "image": "https://tmplayer.org/og.png",
   "screenshot": [
-    "https://tmplayer.org/screenshots/chats.webp",
-    "https://tmplayer.org/screenshots/grid.webp"
+    "https://tmplayer.org/screenshots/tv-chats.webp",
+    "https://tmplayer.org/screenshots/tv-grid.webp",
+    "https://tmplayer.org/screenshots/phone-chats.webp",
+    "https://tmplayer.org/screenshots/phone-grid.webp"
   ],
   "applicationCategory": "MultimediaApplication",
   "applicationSubCategory": "Video player",
-  "operatingSystem": "Android TV 8.0 and above",
+  "operatingSystem": "Android 8.0 and above, including Android TV",
   "downloadUrl": "https://github.com/dracu-lah/TMPlayer/releases/latest",
   "installUrl": "https://github.com/dracu-lah/TMPlayer/releases/latest",
   "softwareHelp": "https://github.com/dracu-lah/TMPlayer/blob/main/INSTALL.md",
@@ -68,7 +70,9 @@
     "Shows how much of the video has downloaded while the controls are up",
     "Optional download-the-whole-video-first mode for slow connections",
     "Plays MKV, MP4, AVI and TS with subtitles and multiple audio tracks",
-    "Runs on TV sticks with 1 GB of RAM"
+    "Plays the next episode automatically, with a countdown you can stop",
+    "Forgiving search that tolerates typos and missing accents",
+    "Runs on TV sticks with 1 GB of RAM, and on Android phones"
   ],
   "offers": {
     "@type": "Offer",
@@ -117,7 +121,7 @@
       "name": "Which file do I download?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Download the universal APK. The same file works on every supported Android TV, including 32-bit and 64-bit devices."
+        "text": "Download the universal APK. The same file works on every supported device, television or phone, including 32-bit and 64-bit ones."
       }
     },
     {
@@ -125,7 +129,7 @@
       "name": "Can I read my messages on it?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "No. It only ever shows the videos in your chats. You cannot read, reply or send anything from the TV."
+        "text": "No. It only ever shows the videos in your chats. You cannot read, reply or send anything from it."
       }
     }
   ]
@@ -139,12 +143,16 @@
 <header class="site-header">
   <div class="wrap header-inner">
     <a class="brand" href="/" aria-label="TMPlayer home">
-      <svg class="brand-mark" viewBox="0 0 1024 1024" width="30" height="30" aria-hidden="true" focusable="false">
-        <path fill="#1E1E28" d="M960 1002.666667H64a42.666667 42.666667 0 0 1-42.666667-42.666667V64a42.666667 42.666667 0 0 1 42.666667-42.666667h896a42.666667 42.666667 0 0 1 42.666667 42.666667v896a42.666667 42.666667 0 0 1-42.666667 42.666667z"/>
-        <path fill="#0E0E12" d="M64 64h896v682.666667H64z"/>
-        <path fill="#3A3A46" d="M896 896H597.333333a21.333333 21.333333 0 1 1 0-42.666667h298.666667a21.333333 21.333333 0 1 1 0 42.666667z"/>
-        <path fill="#2AABEE" d="M661.333333 896H128a21.333333 21.333333 0 1 1 0-42.666667h533.333333a21.333333 21.333333 0 1 1 0 42.666667z"/>
-        <path fill="#EDEDF2" d="M640 960c-47.04 0-85.333333-38.293333-85.333333-85.333333s38.293333-85.333333 85.333333-85.333334 85.333333 38.293333 85.333333 85.333334-38.293333 85.333333-85.333333 85.333333zM426.666667 554.666667a21.269333 21.269333 0 0 1-21.333334-21.333334V277.333333a21.333333 21.333333 0 0 1 33.173334-17.749333l192 128a21.333333 21.333333 0 0 1 0 35.498667l-192 128A21.333333 21.333333 0 0 1 426.666667 554.666667z"/>
+      <!-- The same geometry as the launcher icon and favicon, so the tab, the home screen and
+           this header all show one shape. -->
+      <svg class="brand-mark" viewBox="0 0 108 108" width="30" height="30" aria-hidden="true" focusable="false">
+        <rect x="0" y="0" width="108" height="108" rx="24" ry="24" fill="#1E1E28"/>
+        <path fill="#3A3A46" d="M36,33 H72 A5,5 0 0 1 77,38 V60 A5,5 0 0 1 72,65 H36 A5,5 0 0 1 31,60 V38 A5,5 0 0 1 36,33 Z"/>
+        <path fill="#0E0E12" d="M36,34.5 H72 A3.5,3.5 0 0 1 75.5,38 V60 A3.5,3.5 0 0 1 72,63.5 H36 A3.5,3.5 0 0 1 32.5,60 V38 A3.5,3.5 0 0 1 36,34.5 Z"/>
+        <path fill="#EDEDF2" d="M48,40.5 L65,49 L48,57.5 Z"/>
+        <path fill="#2AABEE" d="M36.5,70 H55.5 A2.5,2.5 0 0 1 55.5,75 H36.5 A2.5,2.5 0 0 1 36.5,70 Z"/>
+        <path fill="#3A3A46" d="M66.5,70 H71.5 A2.5,2.5 0 0 1 71.5,75 H66.5 A2.5,2.5 0 0 1 66.5,70 Z"/>
+        <circle cx="62" cy="72.5" r="5.5" fill="#EDEDF2"/>
       </svg>
       <span class="brand-name">TMPlayer</span>
     </a>
@@ -168,7 +176,7 @@
       <div class="hero-grid">
         <div class="hero-copy">
           <h1 id="hero-h">
-            <span class="h1-main">Your Telegram videos, <em>on the TV</em>.</span>
+            <span class="h1-main">Your Telegram videos, <em>on the TV and in your hand</em>.</span>
           </h1>
           <p class="lede">Press play and it starts in seconds. The rest of the video downloads while you watch.</p>
           <p class="sub">Scan a QR code to sign in to <strong>your own</strong> Telegram, then play the videos already in your chats. Skip ahead and it fetches that bit next, instead of making you wait.</p>
@@ -179,13 +187,13 @@
             </a>
             <a class="btn btn-ghost" href="https://github.com/dracu-lah/TMPlayer" rel="noopener">View the source</a>
           </p>
-          <p class="hero-note">One universal APK works across supported Android TV devices. <a href="#download">Get the latest release below.</a></p>
+          <p class="hero-note">One universal APK, one sign-in, both screens. <a href="#download">Get the latest release below.</a></p>
         </div>
 
         <dl class="spec">
           <div>
             <dt>Platform</dt>
-            <dd>Android TV 8.0 and above</dd>
+            <dd>Android 8.0 and above, TV or phone</dd>
           </div>
           <div>
             <dt>Sign in</dt>
@@ -193,7 +201,7 @@
           </div>
           <div>
             <dt>Tested on</dt>
-            <dd>Mi TV Stick, 1 GB of RAM</dd>
+            <dd>Mi TV Stick with 1 GB of RAM, and a phone</dd>
           </div>
           <div>
             <dt>Costs</dt>
@@ -204,8 +212,22 @@
     </div>
 
     <div class="hero-media">
-      <figure class="hero-shot">
-        <img src="screenshots/hero.webp" alt="TMPlayer showing the videos in a Telegram chat as a clean TV-friendly grid." width="1600" height="667" fetchpriority="high" decoding="async">
+      <!-- Both frames are drawn in CSS around the real screenshots. The phone carries the clip
+           rather than a still, because the one thing a picture cannot show is that the video
+           starts before the download has finished. -->
+      <figure class="showcase">
+        <div class="device device-tv">
+          <div class="screen">
+            <img src="screenshots/tv-grid.webp" alt="TMPlayer on a television, showing the videos in a Telegram chat as a grid of tiles with running times and file sizes." width="1920" height="1080" fetchpriority="high" decoding="async">
+          </div>
+          <div class="stand"></div>
+          <div class="foot"></div>
+        </div>
+        <div class="device device-phone">
+          <div class="screen">
+            <video src="screenshots/demo-phone.mp4" width="396" height="880" autoplay muted loop playsinline preload="metadata" aria-label="A phone opening a Telegram chat in TMPlayer and showing its videos as a grid."></video>
+          </div>
+        </div>
       </figure>
     </div>
   </section>
@@ -215,7 +237,7 @@
       <div class="section-head" data-reveal>
         <div class="section-title">
           <h2 id="download-h">Download</h2>
-          <p class="section-sub">One file for supported Android TVs. No chip type to look up.</p>
+          <p class="section-sub">One file for every supported device, television or phone. No chip type to look up.</p>
         </div>
       </div>
 
@@ -236,7 +258,7 @@
           <ul class="abi-list" id="abi-list" hidden></ul>
 
           <div class="callout" id="abi-callout" hidden>
-            <p><strong>One download, no guesswork.</strong> The universal APK includes the native code needed by supported 32-bit TVs, 64-bit TVs and x86_64 emulators.</p>
+            <p><strong>One download, no guesswork.</strong> The universal APK includes the native code needed by 32-bit and 64-bit televisions, by phones, and by x86_64 emulators.</p>
           </div>
 
           <details id="release-notes-wrap" hidden>
@@ -259,22 +281,49 @@
       <div class="section-head" data-reveal>
         <div class="section-title">
           <h2 id="shots-h">What it looks like</h2>
-          <p class="section-sub">Taken on the TV itself.</p>
+          <p class="section-sub">Four screens, in the order you meet them. Every picture below is the app itself, taken on a phone and on a 1080p television layout, filled with demo content that belongs to nobody.</p>
         </div>
       </div>
 
       <div class="shots">
         <figure class="shot" data-reveal>
-          <div class="frame">
-            <img src="screenshots/chats.webp" alt="TMPlayer showing fictional demo chats with Continue, Favourites, Recent, Channels, Groups, People and All chats." width="1920" height="1080" loading="lazy" decoding="async">
+          <div class="device device-phone">
+            <div class="screen">
+              <img src="screenshots/phone-chats.webp" alt="TMPlayer on a phone, listing demo chats: Weekend Clips, Home Projects, Recipe Notes, Travel Diary, Design Study and Family Archive." width="1080" height="2400" loading="lazy" decoding="async">
+            </div>
           </div>
-          <figcaption><b>Chats</b>Every chat and channel you are already in, as a list. Text messages never appear.</figcaption>
+          <figcaption><b>Step one: pick a chat</b>Every chat and channel you are already in, as a list, with the ones you were last watching along the top. Text messages never appear anywhere in the app.</figcaption>
         </figure>
+
         <figure class="shot" data-reveal>
-          <div class="frame">
-            <img src="screenshots/grid.webp" alt="A grid of fictional demo videos from a Telegram chat, with filenames, sizes and resolution badges." width="1920" height="1080" loading="lazy" decoding="async">
+          <div class="device device-phone">
+            <div class="screen">
+              <img src="screenshots/phone-grid.webp" alt="A dense grid of demo videos from a Telegram chat on a phone, each tile carrying its resolution and running time." width="1080" height="2400" loading="lazy" decoding="async">
+            </div>
           </div>
-          <figcaption><b>Videos</b>Playable media in a chat, as tiles with the resolution, file size and saved progress.</figcaption>
+          <figcaption><b>Step two: pick a video</b>The chat's videos as tiles, with the running time and the resolution on each. Press one and it starts in seconds. Long file names are one tap away in the row arrangement.</figcaption>
+        </figure>
+
+        <figure class="shot" data-reveal>
+          <div class="device device-tv">
+            <div class="screen">
+              <img src="screenshots/tv-chats.webp" alt="The same chat list on a television, with a navigation rail down the left for Continue, Favourites, Recent, Channels, Groups, People and All chats." width="1920" height="1080" loading="lazy" decoding="async">
+            </div>
+            <div class="stand"></div>
+            <div class="foot"></div>
+          </div>
+          <figcaption><b>The same account, on the television</b>The remote gets a rail instead of a hamburger, cards big enough to read across a room, and focus you can always see. Nothing needs setting up twice.</figcaption>
+        </figure>
+
+        <figure class="shot" data-reveal>
+          <div class="device device-tv">
+            <div class="screen">
+              <img src="screenshots/tv-settings.webp" alt="TMPlayer settings on a television, showing the video size limits, autoplay of the next episode and how much storage is free." width="1920" height="1080" loading="lazy" decoding="async">
+            </div>
+            <div class="stand"></div>
+            <div class="foot"></div>
+          </div>
+          <figcaption><b>Settings, if you want them</b>Hide clips below a size, let the next episode start on its own, or fetch the whole video before playing when the connection is poor. Changes save as you make them.</figcaption>
         </figure>
       </div>
     </div>
@@ -285,7 +334,7 @@
       <div class="section-head" data-reveal>
         <div class="section-title">
           <h2 id="features-h">What it does</h2>
-          <p class="section-sub">Built for one television and one remote.</p>
+          <p class="section-sub">Built for one television and one remote, and for one thumb.</p>
         </div>
       </div>
 
@@ -300,15 +349,17 @@
             <li><strong>Starts in seconds and seeks properly.</strong> Skipping ahead re-aims the download instead of waiting for it. A setting fetches the whole video first if your connection would rather.</li>
             <li><strong>Plays real-world media files.</strong> MKV, MP4, AVI and TS. Embedded subtitles, image-based ones included. Multiple audio tracks you can switch during playback.</li>
             <li><strong>Remembers where you stopped</strong>, video by video, with a Continue watching row waiting on launch.</li>
-            <li><strong>Keeps one video on the device.</strong> An 8 GB stick cannot hold a library, so the previous one goes and the app tells you how much that freed.</li>
+            <li><strong>Keeps one video on the device.</strong> An 8 GB stick cannot hold a library, so the previous one goes and the app tells you how much that freed. Coming back to a video you stopped half way through keeps the half already on disk.</li>
+            <li><strong>Is a phone app on a phone.</strong> The same library, drawn the way Android draws things in the hand: full-bleed rows, search in the app bar, real switches and sheets, and a player that hides the system bars instead of playing underneath them.</li>
           </ul>
         </div>
         <div class="panel">
           <h3>Browsing</h3>
           <ul class="ticks">
             <li><strong>Shows media, not messages.</strong> Open a chat or channel and TMPlayer filters it down to playable videos, including video files sent as documents.</li>
-            <li><strong>Understands episode filenames.</strong> During playback, previous and next controls move between neighbouring episodes already present in the same chat.</li>
+            <li><strong>Understands episode filenames.</strong> During playback, previous and next controls move between neighbouring episodes already present in the same chat, and when one finishes the next starts on its own after a countdown you can stop.</li>
             <li><strong>Shows the whole file name</strong> in the corner of the screen for whatever the remote is standing on, so a tile that cuts a release name short is no longer hiding anything.</li>
+            <li><strong>Forgives how you type.</strong> Search is matched word by word, so an accent nobody types, two letters the wrong way round, or one wrong keyword among right ones still finds the thing.</li>
             <li><strong>Search by voice</strong>, using the microphone already in your remote. Star the chats you watch from and they sit one press away.</li>
             <li><strong>Updates itself.</strong> It notices a newer release on GitHub and installs it, and signing out clears everything it ever kept.</li>
           </ul>
@@ -322,7 +373,7 @@
       <div class="section-head" data-reveal>
         <div class="section-title">
           <h2 id="install-h">How to install</h2>
-          <p class="section-sub">Four steps. You only do them once.</p>
+          <p class="section-sub">Four steps, on a television or on a phone. You only do them once.</p>
         </div>
       </div>
 
@@ -330,22 +381,24 @@
         <ol class="steps">
           <li>
             <h3>Allow apps from outside the store</h3>
-            <p>On the TV: <em>Settings</em> → <em>Device Preferences</em> → <em>About</em>, then press <em>Build</em> seven times. Now turn on <em>Unknown sources</em> for whichever app you use to copy the file over.</p>
+            <p>On a television: <em>Settings</em> → <em>Device Preferences</em> → <em>About</em>, then press <em>Build</em> seven times. Now turn on <em>Unknown sources</em> for whichever app you use to copy the file over.</p>
+            <p>On a phone: nothing to do yet. Android asks you the first time you open the file, and you say yes then.</p>
           </li>
           <li>
-            <h3>Get the file onto the TV</h3>
-            <p>Easiest with a free app from the Play Store, such as Downloader or Send Files to TV, pointed at the download link above. With a computer on the same wifi, <code>adb</code> works too:</p>
+            <h3>Get the file onto the device</h3>
+            <p>On a phone, tap the download link above and open the file when it lands. On a television it is easiest with a free app from the Play Store, such as Downloader or Send Files to TV, pointed at the same link. With a computer on the same wifi, <code>adb</code> works too:</p>
             <pre class="code"><code>adb connect &lt;tv-ip&gt;:5555
 adb install TMPlayer-&lt;version&gt;-universal.apk</code></pre>
             <p>For that one, turn on network debugging in Developer options first.</p>
           </li>
           <li>
-            <h3>Sign in by QR code</h3>
-            <p>Open TMPlayer and it shows a QR code. On your phone, open Telegram, go to <em>Settings</em> → <em>Devices</em> → <em>Link Desktop Device</em>, and point the camera at the TV. Nothing to type with the remote.</p>
+            <h3>Sign in</h3>
+            <p>On a television it shows a QR code: open Telegram on your phone, go to <em>Settings</em> → <em>Devices</em> → <em>Link Desktop Device</em>, and point the camera at the screen. Nothing to type with the remote.</p>
+            <p>On a phone it asks for your number instead, with the country picker and the code boxes Telegram itself uses. The QR route is still there, for an account that lives on another handset.</p>
           </li>
           <li>
             <h3>Pick a chat and press play</h3>
-            <p>Your chats open into TV-friendly grids or rows of their playable videos. Choose one and it starts in a few seconds.</p>
+            <p>Your chats open into grids or rows of their playable videos: big cards and a focus ring on a television, dense tiles under your thumb on a phone. Choose one and it starts in a few seconds.</p>
           </li>
         </ol>
         <p class="muted small section-note"><a href="https://github.com/dracu-lah/TMPlayer/blob/main/INSTALL.md" rel="noopener">INSTALL.md</a> covers the sideloading steps in full, plus the remote-control reference and troubleshooting.</p>
@@ -405,13 +458,13 @@ adb install TMPlayer-&lt;version&gt;-universal.apk</code></pre>
         </div>
         <div>
           <dt>Which file do I download?</dt>
-          <dd>Download the universal APK. The same file works on every supported Android TV,
-            including 32-bit and 64-bit devices.</dd>
+          <dd>Download the universal APK. The same file works on every supported device,
+            television or phone, including 32-bit and 64-bit ones.</dd>
         </div>
         <div>
           <dt>Can I read my messages on it?</dt>
           <dd>No. It only ever shows the videos in your chats. You cannot read, reply or send
-            anything from the TV.</dd>
+            anything from it.</dd>
         </div>
       </dl>
     </div>
@@ -422,7 +475,7 @@ adb install TMPlayer-&lt;version&gt;-universal.apk</code></pre>
       <div class="section-head" data-reveal>
         <div class="section-title">
           <h2 id="feedback-h">Missing something?</h2>
-          <p class="section-sub">If the app will not do what you wanted, or your TV stick misbehaves, I would rather hear about it.</p>
+          <p class="section-sub">If the app will not do what you wanted, or your TV stick or handset misbehaves, I would rather hear about it.</p>
         </div>
       </div>
 
@@ -458,7 +511,7 @@ adb install TMPlayer-&lt;version&gt;-universal.apk</code></pre>
     <div class="footer-grid">
       <div>
         <p class="footer-brand">TMPlayer</p>
-        <p class="muted small">An unofficial Telegram video player for Android TV. GPL-3.0, &copy; 2026 dracu-lah.</p>
+        <p class="muted small">An unofficial Telegram video player for Android TV and Android phones. GPL-3.0, &copy; 2026 dracu-lah.</p>
       </div>
       <nav class="footer-links" aria-label="Footer">
         <a href="https://github.com/dracu-lah/TMPlayer" rel="noopener">Source on GitHub</a>

@@ -1,9 +1,11 @@
 /* TMPlayer site. Dark only, by design: the app has no light theme either.
 
-   Type: Poppins for everything the reader is meant to read, at four static
-   weights served from /fonts. Machine-facing values (version tags, ABI names,
-   file sizes, adb commands) sit in whatever monospace the reader's system
-   already has, so no second webfont is downloaded for them.
+   Type: Poppins, at four static weights served from /fonts, for every word on
+   the page. The one exception is text meant to be typed or copied verbatim:
+   shell commands and the release notes, which sit in whatever monospace the
+   reader's system already has so their alignment survives. Version tags, ABI
+   names and file sizes used to be monospaced too, which made the download card
+   read as if it had been assembled from two different sites.
 
    Colour: flat fills only. Depth comes from the three surface levels in the
    palette plus solid hairline borders, never from a blended fade. */
@@ -368,14 +370,9 @@ h1 { margin-bottom: 0.4em; }
 
 .hero-media { padding: 0 var(--gutter) clamp(52px, 7vw, 88px); max-width: var(--wrap); margin: 0 auto; }
 
-.hero-shot {
-  margin: 0;
-  padding: 7px;
-  background: var(--surface-2);
-  border: 1px solid var(--line-strong);
-  border-radius: 16px;
-}
-.hero-shot img { border-radius: 10px; width: 100%; }
+/* No box around the hero any more: the devices carry their own edges, and a second border
+   around the pair of them read as a screenshot of a screenshot. */
+.showcase { margin: 0; }
 
 /* On a phone the copy alone is a wall of text before you see anything, so the still
    comes first and the two buttons run the full width of the column. */
@@ -465,7 +462,6 @@ h1 { margin-bottom: 0.4em; }
 }
 .release-version {
   margin: 0;
-  font-family: var(--mono);
   font-size: clamp(1.3rem, 2.8vw, 1.7rem);
   line-height: 1.15;
   letter-spacing: -0.02em;
@@ -524,7 +520,6 @@ h1 { margin-bottom: 0.4em; }
 .abi-text { min-width: 0; }
 .abi-name {
   margin: 0 0 3px;
-  font-family: var(--mono);
   font-size: 0.93rem;
   letter-spacing: -0.01em;
   color: var(--text);
@@ -548,7 +543,6 @@ h1 { margin-bottom: 0.4em; }
 .abi-get { display: flex; align-items: center; gap: 14px; flex: none; }
 .abi-size {
   color: var(--muted);
-  font-family: var(--mono);
   font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
 }
@@ -628,11 +622,11 @@ summary:hover { color: var(--text); }
   gap: 10px;
   flex-wrap: wrap;
 }
-.prev-tag { font-family: var(--mono); font-size: 0.9rem; color: var(--text); }
+.prev-tag { font-size: 0.9rem; font-weight: 600; color: var(--text); }
 .prev-tag:hover { color: var(--accent-bright); }
 .prev-date { color: var(--muted); font-size: 0.78rem; }
 .prev-assets { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 0; padding: 0; list-style: none; }
-.prev-assets a { font-family: var(--mono); font-size: 0.78rem; }
+.prev-assets a { font-size: 0.82rem; }
 
 /* ---------- Screenshots ---------- */
 
@@ -653,6 +647,106 @@ summary:hover { color: var(--text); }
   border-radius: 14px;
 }
 .frame img { border-radius: 9px; width: 100%; background: var(--surface); }
+
+/* ---------- Device frames ---------- */
+
+/* Both frames are drawn in CSS rather than composited into the screenshots
+   themselves, so a re-shot screen is a straight file swap and the bezels stay
+   sharp on a high-density display. The screenshots are the real panel sizes:
+   1080x2400 off the phone and 1920x1080 off the television layout, and the
+   aspect-ratio on .screen is what keeps them from reflowing while they load. */
+
+.device { margin: 0; }
+.device .screen {
+  overflow: hidden;
+  background: var(--bg-deep);
+}
+.device .screen img,
+.device .screen video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* A television: thin bezel, a foot under it, and nothing else. Anything more
+   ornate reads as a picture of a TV rather than as a frame around a screen. */
+.device-tv .screen {
+  aspect-ratio: 16 / 9;
+  border: 8px solid #101016;
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px var(--line-strong), 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+.device-tv .stand {
+  width: 22%;
+  height: 10px;
+  margin: 0 auto;
+  background: #101016;
+  border: 1px solid var(--line-strong);
+  border-top: 0;
+  border-radius: 0 0 4px 4px;
+}
+.device-tv .foot {
+  width: 34%;
+  height: 6px;
+  margin: 0 auto;
+  background: #16161d;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+}
+
+/* A phone: a rounded slab with a punch-hole camera. The radius is deliberately
+   large, because the thing this frame has to communicate at a glance is only
+   "this is the phone screen, not the television one". */
+.device-phone {
+  position: relative;
+  padding: 8px;
+  background: #101016;
+  border: 1px solid var(--line-strong);
+  border-radius: 30px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.6);
+}
+.device-phone .screen {
+  aspect-ratio: 9 / 20;
+  border-radius: 23px;
+}
+.device-phone::after {
+  content: "";
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #05050a;
+}
+
+/* The hero pairing: the television carries the picture and the phone leans on
+   its corner, which is the one image that says "both screens" without a word. */
+.showcase { position: relative; padding-bottom: 6%; }
+.showcase .device-phone {
+  position: absolute;
+  right: 3%;
+  bottom: 0;
+  width: 17%;
+  min-width: 108px;
+}
+
+/* On a phone the hero drops to one device. The reader is already holding the
+   second one, and a thumbnail of a phone on top of a postage-stamp television
+   was a picture of neither. The phone screens still get their own frames
+   further down the page, where they have the room. */
+@media (max-width: 700px) {
+  .showcase { padding-bottom: 0; }
+  .showcase .device-phone { display: none; }
+}
+
+/* A phone screenshot is twice as tall as it is wide, so left to fill the column it would be
+   taller than the viewport. The television one is given the room instead, which is roughly the
+   proportion the two devices have in life. */
+.shot .device-phone { max-width: 290px; width: 100%; margin: 0 auto; }
+.shot .device-tv { width: 100%; }
 
 .shot figcaption { color: var(--muted); font-size: 0.92rem; }
 .shot figcaption b {
@@ -899,7 +993,7 @@ summary:hover { color: var(--text); }
   from { opacity: 0; transform: translate3d(0, 16px, 0); }
   to { opacity: 1; transform: none; }
 }
-.hero-copy > *, .spec, .hero-shot {
+.hero-copy > *, .spec, .showcase {
   animation: rise 0.85s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 .hero-copy > *:nth-child(1) { animation-delay: 0.02s; }
@@ -909,7 +1003,7 @@ summary:hover { color: var(--text); }
 .hero-copy > *:nth-child(5) { animation-delay: 0.26s; }
 .hero-copy > *:nth-child(6) { animation-delay: 0.32s; }
 .spec { animation-delay: 0.3s; }
-.hero-shot { animation-delay: 0.36s; }
+.showcase { animation-delay: 0.36s; }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
@@ -927,7 +1021,9 @@ summary:hover { color: var(--text); }
 
 @media (max-width: 560px) {
   body { font-size: 15.5px; }
-  .hero-shot, .frame { padding: 5px; border-radius: 12px; }
+  .frame { padding: 5px; border-radius: 12px; }
+  .device-phone { padding: 6px; border-radius: 24px; }
+  .device-phone .screen { border-radius: 18px; }
   .abi-get { width: 100%; justify-content: space-between; }
   .spec > div { grid-template-columns: 7rem minmax(0, 1fr); }
 }

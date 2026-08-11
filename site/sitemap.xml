@@ -2,31 +2,39 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
     <loc>https://tmplayer.org/</loc>
-    <lastmod>2026-08-09</lastmod>
+    <lastmod>2026-08-11</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <image:image>
-      <image:loc>https://tmplayer.org/screenshots/hero.webp</image:loc>
+      <image:loc>https://tmplayer.org/screenshots/tv-grid.webp</image:loc>
       <image:title>TMPlayer browsing Telegram videos on Android TV</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://tmplayer.org/screenshots/chats.webp</image:loc>
+      <image:loc>https://tmplayer.org/screenshots/tv-chats.webp</image:loc>
       <image:title>The TMPlayer chat list on Android TV</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://tmplayer.org/screenshots/grid.webp</image:loc>
-      <image:title>Playable videos in a Telegram chat</image:title>
+      <image:loc>https://tmplayer.org/screenshots/tv-settings.webp</image:loc>
+      <image:title>TMPlayer settings on Android TV</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://tmplayer.org/screenshots/phone-chats.webp</image:loc>
+      <image:title>The TMPlayer chat list on an Android phone</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://tmplayer.org/screenshots/phone-grid.webp</image:loc>
+      <image:title>Playable videos in a Telegram chat, on a phone</image:title>
     </image:image>
   </url>
   <url>
     <loc>https://tmplayer.org/privacy</loc>
-    <lastmod>2026-08-09</lastmod>
+    <lastmod>2026-08-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
     <loc>https://tmplayer.org/legal</loc>
-    <lastmod>2026-08-09</lastmod>
+    <lastmod>2026-08-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>

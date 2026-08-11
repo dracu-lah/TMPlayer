@@ -28,18 +28,32 @@
   ],
   "screenshots": [
     {
-      "src": "/screenshots/chats.webp",
+      "src": "/screenshots/tv-chats.webp",
       "sizes": "1920x1080",
       "type": "image/webp",
       "form_factor": "wide",
-      "label": "The chat list, with favourites, channels and groups"
+      "label": "The chat list on a television, with favourites, channels and groups"
     },
     {
-      "src": "/screenshots/grid.webp",
+      "src": "/screenshots/tv-grid.webp",
       "sizes": "1920x1080",
       "type": "image/webp",
       "form_factor": "wide",
-      "label": "Playable videos in a Telegram chat"
+      "label": "Playable videos in a Telegram chat, on a television"
+    },
+    {
+      "src": "/screenshots/phone-chats.webp",
+      "sizes": "1080x2400",
+      "type": "image/webp",
+      "form_factor": "narrow",
+      "label": "The chat list on a phone"
+    },
+    {
+      "src": "/screenshots/phone-grid.webp",
+      "sizes": "1080x2400",
+      "type": "image/webp",
+      "form_factor": "narrow",
+      "label": "Playable videos in a Telegram chat, on a phone"
     }
   ]
 }

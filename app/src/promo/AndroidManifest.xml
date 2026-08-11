@@ -5,6 +5,6 @@
         <activity
             android:name=".PromoCaptureActivity"
             android:exported="true"
-            android:screenOrientation="landscape" />
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode" />
     </application>
 </manifest>

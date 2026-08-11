@@ -1,5 +1,6 @@
 package com.tmplayer
 
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,22 +16,30 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.tmplayer.data.Account
 import com.tmplayer.data.CardLayout
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
+import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaItem
 import com.tmplayer.ui.browse.BrowseData
 import com.tmplayer.ui.browse.BrowseScreen
 import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.browse.Header
 import com.tmplayer.ui.browse.MediaCard
+import com.tmplayer.ui.browse.TouchMediaScaffold
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.theme.Background
@@ -39,19 +48,56 @@ import com.tmplayer.ui.theme.Tv
 
 /**
  * A promo-build-only fixture used to capture honest UI without exposing a real Telegram account.
- * Start it with `--es screen chats`, `media`, or `settings`.
+ *
+ * Start it with `--es screen chats`, `media` or `settings`. Add `--ez tv true` to capture the
+ * television layout on a phone panel resized to 1920x1080, which is how the TV shots on the site
+ * are taken now that the stick is not the only device this app has to look right on.
+ *
+ * Every picture in here is a demo drawable shipped with this build. Nothing on screen belongs to
+ * anybody, which is the point: the shots on the README and the site can be published as they are.
  */
 class PromoCaptureActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        val tv = intent.getBooleanExtra("tv", false)
+        // Before setContent, because the whole tree branches on it during the first composition.
+        FormFactor.override(tv)
+        requestedOrientation = if (tv) {
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
         super.onCreate(savedInstanceState)
-        val screen = intent.getStringExtra("screen") ?: "chats"
+        if (tv) {
+            // A television has no status bar and no gesture pill, and a shot of the TV layout with
+            // a phone's clock and battery in the corner would be a picture of something that does
+            // not exist.
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            WindowInsetsControllerCompat(window, window.decorView).hide(
+                WindowInsetsCompat.Type.systemBars(),
+            )
+        }
+        val start = intent.getStringExtra("screen") ?: "chats"
         setContent {
+            // The fixture navigates, so one recording can walk from the chat list into a chat and
+            // back out the way a viewer would, rather than being three unrelated clips cut together.
+            var screen by remember { mutableStateOf(start) }
             TMPlayerTheme {
                 Box(Modifier.fillMaxSize().background(Background)) {
                     when (screen) {
-                        "media" -> PromoMediaScreen()
-                        "settings" -> SettingsScreen(chats = promoChats(), onLoggedOut = {})
-                        else -> PromoChatsScreen()
+                        "media" -> if (tv) {
+                            TvMediaScreen()
+                        } else {
+                            PhoneMediaScreen(onBack = { screen = "chats" })
+                        }
+                        "settings" -> SettingsScreen(
+                            chats = promoChats(),
+                            onLoggedOut = {},
+                            onBack = { screen = "chats" },
+                        )
+                        else -> PromoChatsScreen(
+                            onOpenChat = { screen = "media" },
+                            onOpenSettings = { screen = "settings" },
+                        )
                     }
                 }
             }
@@ -76,18 +122,18 @@ private fun promoChats(): List<ChatSummary> = listOf(
 )
 
 @Composable
-private fun PromoChatsScreen() {
+private fun PromoChatsScreen(onOpenChat: () -> Unit = {}, onOpenSettings: () -> Unit = {}) {
     val chats = promoChats()
-    val account = Account("Demo account", "local_demo", null, 0)
+    val account = Account("Demo", "demo", null, 0)
     BrowseScreen(
         state = UiState.Content(BrowseData(chats, account)),
         favorites = setOf(102, 104),
         continueWatching = emptyList(),
         onRetry = {},
         onRefresh = {},
-        onOpenChat = {},
+        onOpenChat = { onOpenChat() },
         onResumeMedia = {},
-        onOpenSettings = {},
+        onOpenSettings = onOpenSettings,
         onToggleFavorite = {},
         picked = BrowseTab.Recent,
         onPickTab = {},
@@ -95,8 +141,46 @@ private fun PromoChatsScreen() {
     )
 }
 
+/**
+ * The phone's chat listing: an app bar, then Telegram's dense captionless grid.
+ *
+ * This is the real scaffold and the real card, not a drawing of them, so a shot taken here cannot
+ * quietly disagree with what the app does.
+ */
 @Composable
-private fun PromoMediaScreen() {
+private fun PhoneMediaScreen(onBack: () -> Unit = {}) {
+    val media = promoMedia()
+    TouchMediaScaffold(
+        chatTitle = "Weekend Clips",
+        chatPhotoFileId = 0,
+        chatMiniThumbnail = imageBytes(R.drawable.demo_coast),
+        isFavorite = true,
+        query = "",
+        onQuery = {},
+        onSubmit = {},
+        onBack = onBack,
+        onToggleFavorite = {},
+        layout = CardLayout.Grid,
+        onToggleLayout = {},
+        onRefresh = {},
+    ) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            horizontalArrangement = Arrangement.spacedBy(DENSE_GAP),
+            verticalArrangement = Arrangement.spacedBy(DENSE_GAP),
+        ) {
+            // Twice through the set, so the grid runs past the bottom of the panel the way a real
+            // chat's does. A shot that ends in empty background reads as an empty chat.
+            val tiles = media + media.map { it.copy(messageId = it.messageId + media.size) }
+            items(tiles, key = { it.messageId }) { item ->
+                MediaCard(item = item, watched = null, onClick = {}, onFocused = {}, dense = true)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TvMediaScreen() {
     val media = promoMedia()
     val first = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
@@ -175,3 +259,6 @@ private fun promoMedia(): List<MediaItem> {
         item(6, "Forest trail morning", R.drawable.demo_forest, 391, 1_376, "forest-trail-1080p.mp4"),
     )
 }
+
+/** Telegram's grid gap, matched to [com.tmplayer.ui.browse] so the shot is the real spacing. */
+private val DENSE_GAP = 2.dp
