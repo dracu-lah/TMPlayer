@@ -2,7 +2,6 @@ package com.tmplayer.ui.browse
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,6 +30,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -40,7 +41,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -68,14 +69,8 @@ import com.tmplayer.ui.components.AppMark
 import com.tmplayer.ui.components.MarkSize
 import com.tmplayer.ui.components.MediaPreview
 import com.tmplayer.ui.components.TmIcons
-import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.Avatar
-import com.tmplayer.ui.theme.Background
-import com.tmplayer.ui.theme.Caution
-import com.tmplayer.ui.theme.SurfaceDark
-import com.tmplayer.ui.theme.SurfaceRaised
-import com.tmplayer.ui.theme.TextMuted
-import com.tmplayer.ui.theme.TextPrimary
+import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.launch
 
 /**
@@ -126,9 +121,10 @@ internal fun TouchBrowseShell(
         // Left as it comes, so a drag from the left edge opens the drawer without the hamburger.
         gesturesEnabled = true,
         drawerContent = {
+            // No colours of its own: the sheet, its rows, its rules and its headings all come
+            // from the scheme, which on this device may have been taken from the wallpaper.
             ModalDrawerSheet(
                 drawerState = drawerState,
-                drawerContainerColor = SurfaceDark,
                 // Material's own default is 360dp, which is most of a phone's width given over
                 // to a handful of one-word destinations and a name. The sheet is sized to what
                 // it holds instead, and still yields to the screen on the narrowest devices so
@@ -165,7 +161,7 @@ internal fun TouchBrowseShell(
                             Icon(
                                 Icons.Filled.Refresh,
                                 contentDescription = null,
-                                tint = Caution,
+                                tint = Tone.caution,
                             )
                         },
                         onClick = { close(); onUpdate() },
@@ -194,10 +190,20 @@ internal fun TouchBrowseShell(
             onSearchQueryChange("")
         }
 
+        // The bar slides away as the listing is pushed up and comes back on the first pull down,
+        // which is what gives a 411 dp screen its content back without asking anybody to reach for
+        // anything. It is parked while searching: a field the keyboard is open on must not be able
+        // to scroll off the top of its own results.
+        val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+        LaunchedEffect(searching) {
+            if (searching) scrollBehavior.state.heightOffset = 0f
+        }
+
         Scaffold(
-            containerColor = Background,
+            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
             topBar = {
                 TopAppBar(
+                    scrollBehavior = if (searching) null else scrollBehavior,
                     title = {
                         if (searching && searchQuery != null) {
                             AppBarSearchField(
@@ -237,12 +243,6 @@ internal fun TouchBrowseShell(
                         }
                         actions()
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = SurfaceDark,
-                        titleContentColor = TextPrimary,
-                        navigationIconContentColor = TextPrimary,
-                        actionIconContentColor = TextPrimary,
-                    ),
                 )
             },
         ) { padding ->
@@ -279,8 +279,9 @@ private fun AppBarSearchField(
             value = query,
             onValueChange = onQueryChange,
             singleLine = true,
-            textStyle = MaterialTheme.typography.bodyLarge.copy(color = TextPrimary),
-            cursorBrush = SolidColor(Accent),
+            textStyle = MaterialTheme.typography.bodyLarge
+                .copy(color = MaterialTheme.colorScheme.onSurface),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             modifier = modifier.weight(1f),
             decorationBox = { inner ->
@@ -288,7 +289,7 @@ private fun AppBarSearchField(
                     Text(
                         "Search",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = TextMuted,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                     )
                 }
@@ -323,16 +324,6 @@ private fun DrawerDestination(
         badge = badge?.let { { Text(it) } },
         selected = selected,
         onClick = onClick,
-        colors = NavigationDrawerItemDefaults.colors(
-            selectedContainerColor = Accent.copy(alpha = 0.16f),
-            unselectedContainerColor = Color.Transparent,
-            selectedIconColor = Accent,
-            unselectedIconColor = TextMuted,
-            selectedTextColor = Accent,
-            unselectedTextColor = TextPrimary,
-            selectedBadgeColor = Accent,
-            unselectedBadgeColor = TextMuted,
-        ),
         modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
     )
 }
@@ -385,11 +376,7 @@ private fun DrawerBrand() {
     ) {
         AppMark(MarkSize.Inline)
         Spacer(Modifier.width(12.dp))
-        Text(
-            "TMPlayer",
-            style = MaterialTheme.typography.titleMedium,
-            color = TextPrimary,
-        )
+        Text("TMPlayer", style = MaterialTheme.typography.titleMedium)
     }
 }
 
@@ -401,15 +388,12 @@ private fun DrawerBrand() {
  */
 @Composable
 private fun DrawerSeparator(heading: String? = null) {
-    HorizontalDivider(
-        color = TextMuted.copy(alpha = 0.18f),
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-    )
+    HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
     if (heading != null) {
         Text(
             heading,
             style = MaterialTheme.typography.labelMedium,
-            color = TextMuted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 28.dp, top = 4.dp, bottom = 4.dp),
         )
     }
@@ -425,45 +409,46 @@ private fun DrawerSeparator(heading: String? = null) {
  */
 @Composable
 private fun DrawerFooter(account: Account?) {
-    HorizontalDivider(
-        color = TextMuted.copy(alpha = 0.18f),
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-    )
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(Avatar.Compact).clip(CircleShape).background(SurfaceRaised)) {
-            if (account != null) {
-                MediaPreview(
-                    miniThumbnail = account.miniThumbnail,
-                    thumbnailFileId = account.photoFileId,
-                    fallbackLabel = account.name,
-                    modifier = Modifier.fillMaxSize().clip(CircleShape),
-                )
+    HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+    ListItem(
+        leadingContent = {
+            Box(
+                Modifier
+                    .size(Avatar.Compact)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+            ) {
+                if (account != null) {
+                    MediaPreview(
+                        miniThumbnail = account.miniThumbnail,
+                        thumbnailFileId = account.photoFileId,
+                        fallbackLabel = account.name,
+                        modifier = Modifier.fillMaxSize().clip(CircleShape),
+                    )
+                }
             }
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        },
+        headlineContent = {
             Text(
                 account?.name ?: "Signed in",
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+        },
+        supportingContent = {
             Text(
                 listOfNotNull(
                     account?.username?.takeIf { it.isNotBlank() }?.let { "@$it" },
                     "v${Updates.installedVersion}",
                 ).joinToString("  ·  "),
-                style = MaterialTheme.typography.labelSmall,
-                color = TextMuted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-    }
+        },
+        // The sheet has already painted its own background, and a row that paints a second one
+        // over it draws a panel around the account for no reason anybody looking at it could name.
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+    )
 }
 
 /** What this viewer has been watching. First, because it is what the app is opened for. */

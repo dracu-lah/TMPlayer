@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon as M3Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text as M3Text
@@ -56,6 +57,7 @@ import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
+import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.launch
 import com.tmplayer.ui.components.TmButton
 import com.tmplayer.ui.components.TmSecondaryButton
@@ -256,8 +258,11 @@ private fun TouchUpdateDialog(
         // A download in progress is the one state that must not be dismissed by a stray tap
         // outside it: the dialog is what is holding the download's own progress on screen.
         onDismissRequest = { if (downloading == null) onDismiss() },
+        // Caution is the television's amber, and amber on a white card is barely a colour at all,
+        // so Tone hands the phone a darker one and the dialog's own container, title and body are
+        // left to the scheme entirely.
         icon = {
-            M3Icon(Icons.Filled.Refresh, contentDescription = null, tint = Caution)
+            M3Icon(Icons.Filled.Refresh, contentDescription = null, tint = Tone.caution)
         },
         title = {
             M3Text(
@@ -277,21 +282,19 @@ private fun TouchUpdateDialog(
                     if (downloading.fraction != null) {
                         LinearProgressIndicator(
                             progress = { downloading.fraction.coerceIn(0f, 1f) },
-                            color = Caution,
                             modifier = Modifier.fillMaxWidth(),
                         )
                     } else {
-                        LinearProgressIndicator(
-                            color = Caution,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     }
                 }
             }
         },
+        // Nothing here can be regretted: the worst the filled button does is start a download the
+        // Close beside it can abandon, so it gets to be the filled one.
         confirmButton = {
             if (downloading != null) return@AlertDialog
-            TextButton(onClick = onPrimary) {
+            Button(onClick = onPrimary) {
                 M3Text(
                     when {
                         release != null && !allowed -> "Open that setting"
@@ -305,9 +308,6 @@ private fun TouchUpdateDialog(
             if (downloading != null) return@AlertDialog
             TextButton(onClick = onDismiss) { M3Text("Close") }
         },
-        containerColor = SurfaceDark,
-        titleContentColor = TextPrimary,
-        textContentColor = TextMuted,
     )
 }
 

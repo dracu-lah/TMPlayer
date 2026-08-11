@@ -436,6 +436,49 @@ phase, spot-check TV: D-pad browse, chat open, playback, track picker, settings.
 - TV manual QA: emulator or stick pass over browse, playback, next episode (A1), pickers.
 - Performance sanity on the stick after E: cold start time, scroll a large chat, back-seek.
 
+## Phase H: the phone looks like a Google app (2026-08-12, asked for directly)
+
+Phase B made the phone native: Material's metrics, Material's controls where a control had been
+drawn by hand, a type scale for a device held in the hand. What it did not do is make the phone
+*Material*. The colours stayed six literals from the television, the components stayed hand-rolled
+rows with a background, and there was no light theme at all. On a phone in daylight the app was a
+dark grey rectangle whichever way the system was set, which is the one thing every first-party
+Google app is not.
+
+H1. **A real colour system.** The phone's `androidx.compose.material3` scheme set eleven of the
+    thirty roles a Material component reads, so anything asking for `secondaryContainer`,
+    `outlineVariant` or the `surfaceContainer` ramp got Compose's stock lavender. Now: a complete
+    dark scheme and a complete light one, both generated around Telegram's blue, plus dynamic
+    colour from the wallpaper on Android 12 and later. `Corner` is wired into `MaterialTheme.shapes`
+    and the phone type scale is finally handed to the theme the phone's components actually read,
+    rather than only to the television's.
+
+H2. **`Tone`.** Colour asked for by role and answered per device: the scheme on a phone, the six
+    constants on a television. Every touch path that named a colour now names a job instead, which
+    is what makes a light theme possible at all: a screen that says `SurfaceDark` is a screen that
+    is dark grey on white.
+
+H3. **Appearance, in Settings.** Light, dark or match the phone, and a switch for the wallpaper's
+    colours on the phones that have them. Both survive signing out, because they describe the
+    person holding the phone rather than the account signed into it.
+
+H4. **The components themselves.** `ListItem` for every preference row, chat row and menu row;
+    `Card` for the tiles and the storage card; real `Button`s where a `Text` with a background was
+    doing a button's job; `AlertDialog` and `ModalBottomSheet` left to draw themselves rather than
+    being repainted; `LinearProgressIndicator` for the four hand-drawn progress bars;
+    `OutlinedTextField` for the sign-in fields; pull to refresh on the video grid; an app bar that
+    collapses as the list scrolls.
+
+H5. **System integration.** A window background per theme, so nothing flashes dark before the
+    first frame on a light phone, and status-bar icons that follow the app's own theme rather than
+    the system's, so choosing Light on a dark phone does not make the clock disappear.
+
+H6. **Icons.** The hand-drawn set is tinted by its caller rather than filled white, which is what
+    an icon has to do once a light theme exists.
+
+The television is untouched by all of it. Every change is inside an `isTouch()` branch or inside a
+component the television does not draw.
+
 ## Status checklist (update as work lands)
 
 - [x] Audits complete (playback, screens, data/perf, design language)
@@ -474,6 +517,8 @@ phase, spot-check TV: D-pad browse, chat open, playback, track picker, settings.
       hand from `getChats` without repeating the `getChat` fan-out.
 - [~] Phase G: README and site copy updated; screenshots retaken on real hardware for v1.3.0 and
       not since. The drawer changed shape in v1.4.0, so the phone shots are now out of date.
+- [x] Phase H: the phone's Material 3 pass (H1 to H6). Colour, shape and type systems, the
+      Appearance section, the component sweep, the light-theme system integration and the icons.
 - [x] Verification: `./gradlew test`, `assembleDebug` and `assembleRelease` all green; dash check
       clean. Manual QA on a phone and on the stick has NOT been done: no device was attached.
 
@@ -495,3 +540,12 @@ four ways of slicing the chat list, and the account demoted to a one-line footer
 build number.
 
 Nothing in this release has been run on hardware. Every item above was built and unit-tested only.
+
+## Shipped as v1.5.0 on 2026-08-12
+
+Phase H, the whole of it. The phone has a light theme and a dark one, takes the wallpaper's
+colours where Android offers them, and says so in a new Appearance section that survives signing
+out. Every phone screen was swept onto Material's own components and off the six colour literals
+it was built on. Nothing on the television changed.
+
+Not run on hardware. Built, unit-tested and reviewed against the Material 3 1.4.0 API only.

@@ -41,10 +41,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.tmplayer.ui.theme.Danger
-import com.tmplayer.ui.theme.Accent
-import com.tmplayer.ui.theme.TextMuted
-import com.tmplayer.ui.theme.TextPrimary
+import com.tmplayer.ui.theme.Tone
 
 /** Every screen is exactly one of these: no blank frames, ever. */
 sealed interface UiState<out T> {
@@ -88,6 +85,7 @@ fun <T> StateScaffold(
 /** Large centered spinner + label, readable from the couch. */
 @Composable
 fun BigLoader(label: String? = null) {
+    val muted = Tone.muted
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -98,7 +96,7 @@ fun BigLoader(label: String? = null) {
                 Text(
                     label,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = TextMuted,
+                    color = muted,
                     textAlign = TextAlign.Center,
                 )
             }
@@ -113,7 +111,10 @@ fun BigLoader(label: String? = null) {
  * its head and tail sweep at different rates, so the arc grows and shrinks as it spins.
  */
 @Composable
-fun Spinner(size: Dp = 56.dp, color: Color = Accent, strokeWidth: Dp = 5.dp) {
+fun Spinner(size: Dp = 56.dp, color: Color = Color.Unspecified, strokeWidth: Dp = 5.dp) {
+    // Unspecified rather than a literal, so a caller that says nothing gets the device's own
+    // accent: the scheme's primary on a phone, the app's amber on a television.
+    @Suppress("NAME_SHADOWING") val color = if (color == Color.Unspecified) Tone.accent else color
     // On a phone, Material's own. It is the same two motions drawn below, kept in step with every
     // other spinner on the device and with whatever the system's animation scale is set to,
     // including the accessibility setting that turns animation off entirely. The hand-drawn one
@@ -190,6 +191,7 @@ private const val MIN_SWEEP = 12f
 @Composable
 fun BigEmpty(message: String, icon: ImageVector = Icons.Filled.Search) {
     val touch = isTouch()
+    val muted = Tone.muted
     Box(
         Modifier.fillMaxSize().padding(horizontal = if (touch) PhonePad.Side else 72.dp),
         contentAlignment = Alignment.Center,
@@ -201,7 +203,7 @@ fun BigEmpty(message: String, icon: ImageVector = Icons.Filled.Search) {
             Icon(
                 icon,
                 contentDescription = null,
-                tint = TextMuted.copy(alpha = 0.55f),
+                tint = muted.copy(alpha = 0.55f),
                 modifier = Modifier.size(if (touch) 44.dp else 56.dp),
             )
             Text(
@@ -211,7 +213,7 @@ fun BigEmpty(message: String, icon: ImageVector = Icons.Filled.Search) {
                 } else {
                     MaterialTheme.typography.titleLarge
                 },
-                color = TextMuted,
+                color = muted,
                 textAlign = TextAlign.Center,
                 // A sentence that needs two lines breaks near the middle rather than running the
                 // full width of a television and leaving three words underneath.
@@ -224,6 +226,9 @@ fun BigEmpty(message: String, icon: ImageVector = Icons.Filled.Search) {
 @Composable
 fun BigError(message: String, onRetry: (() -> Unit)?) {
     val touch = isTouch()
+    val danger = Tone.danger
+    val text = Tone.text
+    val muted = Tone.muted
     // 72dp of margin either side is a tenth of a television and a third of a phone, which leaves
     // the sentence in a column too narrow to read.
     Box(
@@ -237,7 +242,7 @@ fun BigError(message: String, onRetry: (() -> Unit)?) {
             Icon(
                 Icons.Filled.Warning,
                 contentDescription = null,
-                tint = Danger,
+                tint = danger,
                 modifier = Modifier.size(if (touch) 44.dp else 56.dp),
             )
             Text(
@@ -247,7 +252,7 @@ fun BigError(message: String, onRetry: (() -> Unit)?) {
                 } else {
                     MaterialTheme.typography.titleLarge
                 },
-                color = TextPrimary,
+                color = text,
             )
             Text(
                 message,
@@ -256,7 +261,7 @@ fun BigError(message: String, onRetry: (() -> Unit)?) {
                 } else {
                     MaterialTheme.typography.bodyLarge
                 },
-                color = TextMuted,
+                color = muted,
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.size(8.dp))

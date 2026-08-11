@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The window behind the app before Compose has drawn a frame, in the phone's dark mode. It has
+      to match the dark scheme's background, because this is the colour the launch animation flies
+      into and a mismatch reads as a flash.
+    -->
+    <color name="window_background">#0F1417</color>
+</resources>

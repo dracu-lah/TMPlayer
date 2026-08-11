@@ -1,22 +1,20 @@
 package com.tmplayer.ui.components
 
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Button as TouchButton
 import androidx.compose.material3.ButtonDefaults as TouchButtonDefaults
+import androidx.compose.material3.FilledTonalButton as TouchTonalButton
+import androidx.compose.material3.MaterialTheme as TouchMaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button as TvButton
 import androidx.tv.material3.ButtonDefaults as TvButtonDefaults
 import com.tmplayer.data.FormFactor
-import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.TextMuted
-import com.tmplayer.ui.theme.TextPrimary
 import com.tmplayer.ui.theme.tmButtonColors
 
 /**
@@ -51,18 +49,25 @@ fun TmButton(
         return
     }
 
+    // Material 3's own filled button, at Material's own height and in the scheme's own colours.
+    // The colour table that used to be here named the television's six literals, which on a phone
+    // with a light theme or a wallpaper palette meant a button that agreed with nothing around it,
+    // and the 48 dp floor it was given has been Material's minimum touch target for a while now
+    // without anyone having to ask for it.
     TouchButton(
         onClick = onClick,
-        // Material's own button is already 40 dp tall, which is short of what a fingertip is
-        // entitled to, and this screen has nothing to gain from the saved 8 dp.
-        modifier = modifier.heightIn(min = 48.dp),
+        modifier = modifier,
         enabled = enabled,
-        colors = TouchButtonDefaults.buttonColors(
-            containerColor = if (destructive) Danger else Accent,
-            contentColor = Color.White,
-            disabledContainerColor = SurfaceDark,
-            disabledContentColor = TextMuted,
-        ),
+        // Nothing in the scheme is "the destructive button", so this is the one place a phone
+        // still states a colour: error, taken from the scheme rather than from a hex.
+        colors = if (destructive) {
+            TouchButtonDefaults.buttonColors(
+                containerColor = TouchMaterialTheme.colorScheme.error,
+                contentColor = TouchMaterialTheme.colorScheme.onError,
+            )
+        } else {
+            TouchButtonDefaults.buttonColors()
+        },
         content = content,
     )
 }
@@ -99,16 +104,13 @@ fun TmSecondaryButton(
         return
     }
 
-    TouchButton(
+    // The tonal button is Material's answer to exactly this question: the same shape and weight as
+    // the filled one beside it, in a container quiet enough that the eye still knows which of the
+    // two is the one being offered.
+    TouchTonalButton(
         onClick = onClick,
-        modifier = modifier.heightIn(min = 48.dp),
+        modifier = modifier,
         enabled = enabled,
-        colors = TouchButtonDefaults.buttonColors(
-            containerColor = SurfaceDark,
-            contentColor = TextPrimary,
-            disabledContainerColor = SurfaceDark,
-            disabledContentColor = TextMuted,
-        ),
         content = content,
     )
 }

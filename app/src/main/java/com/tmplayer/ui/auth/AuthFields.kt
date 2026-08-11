@@ -15,6 +15,11 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.MaterialTheme as M3
+import androidx.compose.material3.Text as M3Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
@@ -27,18 +32,25 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
+import com.tmplayer.ui.theme.Tone
 
 /**
- * The dark rounded field every sign-in pane types into.
+ * The field every sign-in pane types into.
  *
  * Pulled out of the old one-field login form because the number pane now wants three of them, of
  * two different widths, and a field that is redrawn per call site is a field that stops matching
  * the one beside it.
+ *
+ * A phone gets the platform's own outlined field, floating label and all, because a sign-in is the
+ * one screen where looking like every other Android sign-in is the point: people trust the field
+ * they already know, and a hand-drawn box on a light theme cannot borrow that. The television keeps
+ * the dark rounded box, which is sized for a remote and for a room.
  */
 @Composable
 fun PaneField(
@@ -51,7 +63,32 @@ fun PaneField(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     /** Drawn inside the field, ahead of the text: the "+" on a dial code. */
     prefix: String? = null,
+    /**
+     * What the field is called once something has been typed into it. Defaults to the placeholder,
+     * which is the right answer everywhere except the dial code, whose placeholder is "00".
+     */
+    label: String = placeholder,
 ) {
+    if (isTouch()) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            label = { M3Text(label) },
+            // The placeholder survives the move because it is doing a second job on this flow:
+            // it shows the shape of the answer, and a floating label leaves room for it.
+            placeholder = { M3Text(placeholder) },
+            prefix = prefix?.let { { M3Text(it) } },
+            textStyle = M3.typography.titleMedium,
+            visualTransformation = visualTransformation,
+            keyboardOptions = keyboardOptions,
+            keyboardActions = keyboardActions,
+            shape = M3.shapes.medium,
+            modifier = modifier,
+        )
+        return
+    }
+
     Box(
         modifier
             .height(FIELD_HEIGHT)
@@ -107,7 +144,7 @@ fun BackArrow(onBack: () -> Unit, description: String = "Back") {
         Icon(
             Icons.AutoMirrored.Filled.ArrowBack,
             contentDescription = description,
-            tint = TextPrimary,
+            tint = Tone.text,
         )
     }
 }
@@ -120,14 +157,27 @@ fun PaneChooser(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (isTouch()) {
+        ListItem(
+            headlineContent = { M3Text(label, style = M3.typography.titleMedium) },
+            trailingContent = { M3Text(trailing, style = M3.typography.labelLarge) },
+            colors = ListItemDefaults.colors(containerColor = Tone.surface),
+            modifier = modifier
+                .fillMaxWidth()
+                .clip(M3.shapes.medium)
+                // Still spelled out: a ListItem is a row of text until something says otherwise,
+                // and a screen reader had no way to know the country row was something to press.
+                .clickable(role = Role.Button, onClick = onClick),
+        )
+        return
+    }
+
     Box(
         modifier
             .fillMaxWidth()
             .height(FIELD_HEIGHT)
             .clip(RoundedCornerShape(Corner.Medium))
             .background(SurfaceDark)
-            // Spelled out, because a Box with a clickable on it is announced as plain text: a
-            // screen reader had no way to know the country row was something to press.
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.CenterStart,

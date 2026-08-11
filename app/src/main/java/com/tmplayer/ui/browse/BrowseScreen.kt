@@ -10,6 +10,7 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -44,10 +45,15 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon as M3Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme as M3MaterialTheme
 import androidx.compose.material3.Text as M3Text
 import androidx.compose.runtime.Composable
@@ -102,6 +108,7 @@ import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
+import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 
 /** The rail's sections, in the order they appear. */
@@ -335,7 +342,7 @@ fun BrowseScreen(
                         M3Text(
                             "$count ${if (count == 1) "chat" else "chats"}",
                             style = M3MaterialTheme.typography.bodySmall,
-                            color = TextMuted,
+                            color = Tone.muted,
                             modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
                         )
                     }
@@ -551,6 +558,7 @@ private fun ContinueTile(
     onHold: (ResumeRecord) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val touch = isTouch()
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val border by animateColorAsState(
@@ -559,40 +567,23 @@ private fun ContinueTile(
         label = "continueTileBorder",
     )
 
-    Column(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Corner.Medium))
-            .background(if (focused) SurfaceRaised else SurfaceDark)
-            .border(3.dp, border, RoundedCornerShape(Corner.Medium))
-            .holdable(
-                interactionSource = interactions,
-                onClick = { onResume(record) },
-                onHold = { onHold(record) },
-            ),
-    ) {
+    // The art, the bar and the two lines are the same on both screens; only what holds them
+    // differs, so the tile is written once and handed to whichever container the device wants.
+    val body: @Composable ColumnScope.() -> Unit = {
         Box {
             ContinueArt(Modifier.fillMaxWidth().aspectRatio(16f / 9f), badge = 40.dp)
-            Box(
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .background(Color.Black.copy(alpha = 0.55f)),
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxWidth(record.fraction.coerceAtLeast(0.01f))
-                        .fillMaxHeight()
-                        .background(Accent),
-                )
-            }
+            ResumeProgress(
+                fraction = record.fraction,
+                touch = touch,
+                modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth(),
+                overArt = true,
+            )
         }
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             Text(
                 record.title,
                 style = MaterialTheme.typography.titleMedium,
-                color = TextPrimary,
+                color = Tone.text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.marqueeWhen(focused),
@@ -608,11 +599,85 @@ private fun ContinueTile(
                     }
                 },
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextMuted,
+                color = Tone.muted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
+    }
+
+    if (touch) {
+        Card(
+            modifier = modifier
+                .fillMaxWidth()
+                .holdable(
+                    interactionSource = interactions,
+                    onClick = { onResume(record) },
+                    onHold = { onHold(record) },
+                ),
+            shape = M3MaterialTheme.shapes.large,
+            colors = CardDefaults.cardColors(containerColor = Tone.surface),
+            content = body,
+        )
+    } else {
+        Column(
+            modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(Corner.Medium))
+                .background(if (focused) SurfaceRaised else SurfaceDark)
+                .border(3.dp, border, RoundedCornerShape(Corner.Medium))
+                .holdable(
+                    interactionSource = interactions,
+                    onClick = { onResume(record) },
+                    onHold = { onHold(record) },
+                ),
+            content = body,
+        )
+    }
+}
+
+/**
+ * How far through a video is.
+ *
+ * A phone gets the platform's own indicator, so the bar picks up the scheme, the stop mark and the
+ * rounded cap every other progress bar on the device has. A television keeps the two painted boxes
+ * it was drawn with: the bar there sits under a focus border that is doing the same job of saying
+ * "this row", and swapping it would change a screen this pass is not touching. [overArt] is the
+ * difference between a bar lying on a thumbnail, which needs a dark track to stay visible, and one
+ * on a card, which does not.
+ */
+@Composable
+private fun ResumeProgress(
+    fraction: Float,
+    touch: Boolean,
+    modifier: Modifier = Modifier,
+    overArt: Boolean,
+) {
+    val progress = fraction.coerceIn(0.01f, 1f)
+    if (touch) {
+        LinearProgressIndicator(
+            progress = { progress },
+            modifier = modifier,
+            color = Tone.accent,
+            trackColor = if (overArt) Color.Black.copy(alpha = 0.55f) else Tone.surfaceHigh,
+        )
+        return
+    }
+
+    Box(
+        modifier
+            .height(if (overArt) 6.dp else 4.dp)
+            .then(if (overArt) Modifier else Modifier.clip(CircleShape))
+            .background(
+                if (overArt) Color.Black.copy(alpha = 0.55f) else TextMuted.copy(alpha = 0.25f),
+            ),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth(progress)
+                .fillMaxHeight()
+                .background(Accent),
+        )
     }
 }
 
@@ -623,6 +688,7 @@ private fun ContinueCard(
     onHold: (ResumeRecord) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val touch = isTouch()
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val border by animateColorAsState(
@@ -631,21 +697,7 @@ private fun ContinueCard(
         label = "continueBorder",
     )
 
-    Row(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Corner.Large))
-            .background(SurfaceDark)
-            .border(2.dp, border, RoundedCornerShape(Corner.Large))
-            .holdable(
-                interactionSource = interactions,
-                onClick = { onResume(record) },
-                onHold = { onHold(record) },
-            )
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    val body: @Composable RowScope.() -> Unit = {
         ContinueArt(
             Modifier.width(THUMBNAIL_WIDTH).height(THUMBNAIL_HEIGHT),
             badge = 34.dp,
@@ -654,7 +706,7 @@ private fun ContinueCard(
             Text(
                 record.title,
                 style = MaterialTheme.typography.titleMedium,
-                color = TextPrimary,
+                color = Tone.text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.marqueeWhen(focused),
@@ -679,27 +731,57 @@ private fun ContinueCard(
                     }
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = TextMuted,
+                color = Tone.muted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             // The bar is the whole point of the row: it is what tells the viewer, at a glance,
             // that this is a video they are part way through rather than one they have not started.
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .clip(CircleShape)
-                    .background(TextMuted.copy(alpha = 0.25f)),
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxWidth(record.fraction.coerceAtLeast(0.01f))
-                        .fillMaxHeight()
-                        .background(Accent),
-                )
-            }
+            ResumeProgress(
+                fraction = record.fraction,
+                touch = touch,
+                modifier = Modifier.fillMaxWidth(),
+                overArt = false,
+            )
         }
+    }
+
+    if (touch) {
+        Card(
+            modifier = modifier
+                .fillMaxWidth()
+                .holdable(
+                    interactionSource = interactions,
+                    onClick = { onResume(record) },
+                    onHold = { onHold(record) },
+                ),
+            shape = M3MaterialTheme.shapes.large,
+            colors = CardDefaults.cardColors(containerColor = Tone.surface),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                content = body,
+            )
+        }
+    } else {
+        Row(
+            modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(Corner.Large))
+                .background(SurfaceDark)
+                .border(2.dp, border, RoundedCornerShape(Corner.Large))
+                .holdable(
+                    interactionSource = interactions,
+                    onClick = { onResume(record) },
+                    onHold = { onHold(record) },
+                )
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = body,
+        )
     }
 }
 
@@ -718,13 +800,15 @@ private fun ContinueArt(modifier: Modifier = Modifier, badge: Dp) {
     Box(
         modifier
             .clip(RoundedCornerShape(Corner.Small))
-            .background(SurfaceRaised),
+            .background(Tone.surfaceHigh),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = Icons.Filled.PlayArrow,
             contentDescription = null,
-            tint = Accent,
+            // The mark is the app's colour on the raised surface it sits on, which is a pairing
+            // the scheme guarantees is readable whichever way round the phone's theme is.
+            tint = Tone.accent,
             modifier = Modifier.size(badge * 0.88f),
         )
     }
@@ -1219,7 +1303,7 @@ private fun ChatSection(
                         Text(
                             "Jump back in",
                             style = MaterialTheme.typography.titleLarge,
-                            color = TextPrimary,
+                            color = Tone.text,
                             modifier = Modifier.padding(bottom = 14.dp),
                         )
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -1240,7 +1324,7 @@ private fun ChatSection(
                             // a sub-heading inside a different tab reads as if the viewer moved.
                             "More chats",
                             style = MaterialTheme.typography.titleLarge,
-                            color = TextPrimary,
+                            color = Tone.text,
                             modifier = Modifier.padding(top = 32.dp, bottom = 4.dp),
                         )
                     }
@@ -1305,24 +1389,11 @@ private fun ChatTile(
     onHold: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val touch = isTouch()
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
 
-    Column(
-        modifier
-            // Fixed, not wrapped: a chat whose name runs to two lines would otherwise stand
-            // taller than its neighbours and leave the row visibly ragged.
-            .height(RECENT_TILE_HEIGHT)
-            .clip(RoundedCornerShape(Corner.Large))
-            .background(if (focused) SurfaceRaised else SurfaceDark)
-            .border(
-                width = 3.dp,
-                color = if (focused) Accent else Color.Transparent,
-                shape = RoundedCornerShape(Corner.Large),
-            )
-            .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold)
-            .padding(16.dp),
-    ) {
+    val body: @Composable ColumnScope.() -> Unit = {
         Row(verticalAlignment = Alignment.CenterVertically) {
             MediaPreview(
                 miniThumbnail = chat.miniThumbnail,
@@ -1335,7 +1406,7 @@ private fun ChatTile(
                 Icon(
                     Icons.Filled.Star,
                     contentDescription = "Favourite",
-                    tint = Accent,
+                    tint = Tone.accent,
                     modifier = Modifier.size(24.dp),
                 )
             }
@@ -1344,7 +1415,7 @@ private fun ChatTile(
         Text(
             chat.title,
             style = MaterialTheme.typography.titleMedium,
-            color = TextPrimary,
+            color = Tone.text,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             // Ellipsis is enough to keep the row tidy, but it also hides the end of a long
@@ -1359,9 +1430,38 @@ private fun ChatTile(
                 else -> chat.kind.label
             },
             style = MaterialTheme.typography.bodyMedium,
-            color = TextMuted,
+            color = Tone.muted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+        )
+    }
+
+    if (touch) {
+        Card(
+            modifier = modifier
+                // Fixed, not wrapped: a chat whose name runs to two lines would otherwise stand
+                // taller than its neighbours and leave the row visibly ragged.
+                .height(RECENT_TILE_HEIGHT)
+                .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold),
+            shape = M3MaterialTheme.shapes.large,
+            colors = CardDefaults.cardColors(containerColor = Tone.surface),
+        ) {
+            Column(Modifier.fillMaxSize().padding(16.dp), content = body)
+        }
+    } else {
+        Column(
+            modifier
+                .height(RECENT_TILE_HEIGHT)
+                .clip(RoundedCornerShape(Corner.Large))
+                .background(if (focused) SurfaceRaised else SurfaceDark)
+                .border(
+                    width = 3.dp,
+                    color = if (focused) Accent else Color.Transparent,
+                    shape = RoundedCornerShape(Corner.Large),
+                )
+                .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold)
+                .padding(16.dp),
+            content = body,
         )
     }
 }
@@ -1454,6 +1554,15 @@ private fun ChatRow(
     }
 }
 
+/**
+ * The phone's chat row, which is Material's two-line list item and nothing more.
+ *
+ * Everything this used to lay out by hand, the avatar's gap to the text, the two type styles, the
+ * colour each of them takes from the scheme, is what [ListItem] is for, and it gets them right in
+ * a light theme and a dark one without being told which is up. The container is transparent so the
+ * rows sit on the window the way a phone's list of conversations does, and the height is pinned so
+ * the shimmer that stands in for this row lands on the same metric.
+ */
 @Composable
 private fun TouchChatRow(
     chat: ChatSummary,
@@ -1464,50 +1573,47 @@ private fun TouchChatRow(
     modifier: Modifier,
     interactions: MutableInteractionSource,
 ) {
-    Row(
-        modifier
+    ListItem(
+        headlineContent = {
+            M3Text(chat.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        },
+        modifier = modifier
             .fillMaxWidth()
             .height(TOUCH_ROW_HEIGHT)
             // No clip and no background: the row sits on the window, so a press ripples across
             // the whole width of the screen the way a phone's list rows do.
-            .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold)
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        MediaPreview(
-            miniThumbnail = chat.miniThumbnail,
-            thumbnailFileId = chat.photoFileId,
-            fallbackLabel = chat.title,
-            modifier = Modifier.size(TOUCH_AVATAR).clip(CircleShape),
-        )
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                chat.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = TextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
+            .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold),
+        supportingContent = {
+            M3Text(
                 // No hold hint on a phone: there is no focused row for it to attach to, and a
                 // line of instructions on every row is furniture within one screenful.
                 if (opensOnLaunch) "${chat.kind.label}  ·  Opens on launch" else chat.kind.label,
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextMuted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-        if (favorite) {
-            Icon(
-                Icons.Filled.Star,
-                contentDescription = "Favourite",
-                tint = Accent,
-                modifier = Modifier.size(20.dp),
+        },
+        leadingContent = {
+            MediaPreview(
+                miniThumbnail = chat.miniThumbnail,
+                thumbnailFileId = chat.photoFileId,
+                fallbackLabel = chat.title,
+                modifier = Modifier.size(TOUCH_AVATAR).clip(CircleShape),
             )
-        }
-    }
+        },
+        trailingContent = if (favorite) {
+            {
+                M3Icon(
+                    Icons.Filled.Star,
+                    contentDescription = "Favourite",
+                    tint = Tone.accent,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        } else {
+            null
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+    )
 }
 
 @Composable

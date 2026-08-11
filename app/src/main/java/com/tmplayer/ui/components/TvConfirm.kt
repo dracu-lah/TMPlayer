@@ -17,6 +17,8 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon as M3Icon
 import androidx.compose.material3.MaterialTheme as M3MaterialTheme
 import androidx.compose.material3.Text as M3Text
@@ -74,11 +76,19 @@ fun TvConfirm(
     if (touch) {
         AlertDialog(
             onDismissRequest = onDismiss,
+            // The scheme already answers every colour a dialog asks: the container, the title, the
+            // body, and the error red a destructive press is entitled to. Naming them here only
+            // meant naming the television's, which on a phone in daylight is dark grey text on a
+            // white card.
             icon = {
                 M3Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = if (destructive) Danger else Accent,
+                    tint = if (destructive) {
+                        M3MaterialTheme.colorScheme.error
+                    } else {
+                        M3MaterialTheme.colorScheme.primary
+                    },
                 )
             },
             title = { M3Text(title) },
@@ -89,22 +99,28 @@ fun TvConfirm(
                         M3Text(
                             detail,
                             style = M3MaterialTheme.typography.bodySmall,
-                            color = TextMuted,
+                            color = M3MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
             },
+            // A press that cannot be taken back stays a text button in the error colour: filling
+            // it would make the loud option the one the thumb lands on by habit.
             confirmButton = {
-                TextButton(onClick = onConfirm) {
-                    M3Text(confirmLabel, color = if (destructive) Danger else Accent)
+                if (destructive) {
+                    TextButton(
+                        onClick = onConfirm,
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = M3MaterialTheme.colorScheme.error,
+                        ),
+                    ) { M3Text(confirmLabel) }
+                } else {
+                    Button(onClick = onConfirm) { M3Text(confirmLabel) }
                 }
             },
             dismissButton = {
-                TextButton(onClick = onDismiss) { M3Text(cancelLabel, color = TextMuted) }
+                TextButton(onClick = onDismiss) { M3Text(cancelLabel) }
             },
-            containerColor = SurfaceDark,
-            titleContentColor = TextPrimary,
-            textContentColor = TextPrimary,
         )
         return
     }

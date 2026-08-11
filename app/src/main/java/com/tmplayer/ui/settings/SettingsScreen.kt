@@ -2,6 +2,7 @@ package com.tmplayer.ui.settings
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.LocalIndication
@@ -46,12 +47,22 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.IconButton as TouchIconButton
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon as M3Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme as M3Theme
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch as M3Switch
 import androidx.compose.material3.Text as M3Text
 import androidx.compose.material3.TopAppBar
@@ -94,6 +105,7 @@ import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.StorageBreakdown
 import com.tmplayer.data.Td
+import com.tmplayer.data.ThemeChoice
 import com.tmplayer.data.UpdateState
 import com.tmplayer.data.Updates
 import com.tmplayer.player.StreamStats
@@ -112,6 +124,7 @@ import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
+import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 import kotlinx.coroutines.launch
 
@@ -150,6 +163,12 @@ fun SettingsScreen(
     val maxSize by settings.maxSizeBytes.collectAsStateWithLifecycle(
         initialValue = SizeFilter.DEFAULT_MAX,
     )
+    // Both only reach the screen on a phone, but they are read here with the rest so the Appearance
+    // rows are plain state readers like every other row rather than each holding a collector.
+    val themeChoice by settings.themeChoice.collectAsStateWithLifecycle(
+        initialValue = ThemeChoice.Default,
+    )
+    val dynamicColour by settings.dynamicColour.collectAsStateWithLifecycle(initialValue = true)
 
     val toast = rememberToast()
     val updateState by Updates.state.collectAsStateWithLifecycle()
@@ -257,7 +276,38 @@ fun SettingsScreen(
                 ) {
                     Spinner(size = 18.dp, strokeWidth = 2.dp)
                     Spacer(Modifier.size(12.dp))
-                    Text(message, style = MaterialTheme.typography.bodyLarge, color = Accent)
+                    Text(message, style = MaterialTheme.typography.bodyLarge, color = Tone.accent)
+                }
+            }
+        }
+
+        // ---- appearance ----------------------------------------------------------------------
+
+        // First, and phone only. A television has one theme and no wallpaper to take a palette
+        // from, so there is nothing here it could offer.
+        if (touch) {
+            item { SectionTitle("Appearance") }
+            item {
+                ThemePicker(
+                    current = themeChoice,
+                    onPick = { scope.launch { settings.setThemeChoice(it) } },
+                )
+            }
+            // Android 11 and earlier has no wallpaper palette to read, so the row would be a
+            // switch that changes nothing.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                item {
+                    ToggleRow(
+                        title = "Use the wallpaper's colours",
+                        subtitle = if (dynamicColour) {
+                            "TMPlayer takes its colours from your phone's wallpaper"
+                        } else {
+                            "Off: TMPlayer uses its own colours"
+                        },
+                        icon = TmIcons.CircleOutline,
+                        checked = dynamicColour,
+                        onToggle = { scope.launch { settings.setDynamicColour(!dynamicColour) } },
+                    )
                 }
             }
         }
@@ -266,13 +316,22 @@ fun SettingsScreen(
 
         item {
             Row(
-                Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 2.dp),
+                Modifier
+                    .fillMaxWidth()
+                    // Lined up with the headline of a ListItem below, which carries 16dp of its
+                    // own, so the heading does not start to the left of everything it heads.
+                    .padding(
+                        start = if (touch) 16.dp else 0.dp,
+                        end = if (touch) 8.dp else 0.dp,
+                        top = 16.dp,
+                        bottom = 2.dp,
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     "Video size limits",
                     style = sectionStyle(),
-                    color = TextPrimary,
+                    color = if (touch) Tone.accent else TextPrimary,
                     modifier = Modifier.weight(1f),
                 )
                 ResetChip(
@@ -297,8 +356,12 @@ fun SettingsScreen(
                 SizeFilter.describe(minSize, maxSize) +
                     " This keeps short clips out of the list.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextMuted,
-                modifier = Modifier.padding(bottom = 4.dp, start = 4.dp),
+                color = Tone.muted,
+                modifier = Modifier.padding(
+                    bottom = 4.dp,
+                    start = if (touch) 16.dp else 4.dp,
+                    end = if (touch) 16.dp else 0.dp,
+                ),
             )
         }
         item {
@@ -486,7 +549,7 @@ fun SettingsScreen(
                         "${StreamStats.formatBytes(available.release.sizeBytes)} from GitHub, " +
                         "then Android asks you to confirm",
                     icon = Icons.Filled.Refresh,
-                    tint = Caution,
+                    tint = Tone.caution,
                     onClick = { showUpdate = true },
                 )
             }
@@ -557,13 +620,19 @@ fun SettingsScreen(
         }
 
         item {
-            Column(Modifier.padding(top = 20.dp)) {
+            Column(
+                Modifier.padding(
+                    top = 20.dp,
+                    start = if (touch) 16.dp else 0.dp,
+                    end = if (touch) 16.dp else 0.dp,
+                ),
+            ) {
                 Text(
                     "TMPlayer talks directly to Telegram for your chats and videos, and to GitHub " +
                         "to see whether a newer version is out. It has no developer-run server, " +
                         "analytics or advertising SDK.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextMuted,
+                    color = Tone.muted,
                 )
             }
         }
@@ -575,7 +644,6 @@ fun SettingsScreen(
         // all except the hardware Back: no arrow, no title bar, nothing. The heading was a line of
         // text scrolling away with the rest of the list.
         Scaffold(
-            containerColor = Background,
             topBar = {
                 TopAppBar(
                     title = { M3Text("Settings") },
@@ -587,11 +655,6 @@ fun SettingsScreen(
                             )
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = SurfaceDark,
-                        titleContentColor = TextPrimary,
-                        navigationIconContentColor = TextPrimary,
-                    ),
                 )
             },
         ) { padding ->
@@ -825,13 +888,12 @@ private fun TouchRangeRow(
     val low = SizeFilter.snap(range.start.toLong())
     val high = SizeFilter.snap(range.endInclusive.toLong())
 
-    Column(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Corner.Large))
-            .background(SurfaceDark)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = Tone.surface,
+        shape = M3Theme.shapes.large,
     ) {
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
         // The two figures above the track rather than in two stepper rows below it: the thumbs
         // are what the viewer is looking at, so the numbers belong where the eye already is.
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -853,25 +915,21 @@ private fun TouchRangeRow(
                 )
             },
             valueRange = SizeFilter.FLOOR.toFloat()..SizeFilter.CEILING.toFloat(),
-            colors = SliderDefaults.colors(
-                thumbColor = Accent,
-                activeTrackColor = Accent,
-                inactiveTrackColor = SurfaceRaised,
-            ),
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 SizeFilter.label(SizeFilter.FLOOR),
                 style = MaterialTheme.typography.bodySmall,
-                color = TextMuted,
+                color = Tone.muted,
             )
             Spacer(Modifier.weight(1f))
             Text(
                 SizeFilter.label(SizeFilter.CEILING),
                 style = MaterialTheme.typography.bodySmall,
-                color = TextMuted,
+                color = Tone.muted,
             )
         }
+    }
     }
 }
 
@@ -879,8 +937,8 @@ private fun TouchRangeRow(
 @Composable
 private fun RangeEnd(caption: String, value: String) {
     Column {
-        Text(caption, style = MaterialTheme.typography.bodySmall, color = TextMuted)
-        Text(value, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+        Text(caption, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
+        Text(value, style = MaterialTheme.typography.titleMedium, color = Tone.text)
     }
 }
 
@@ -963,6 +1021,25 @@ private fun BoxWithConstraintsScope.Thumb(width: Dp, value: Long, live: Boolean,
 /** Right-aligned "Reset", greyed out when the range is already the default. */
 @Composable
 private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
+    if (isTouch()) {
+        // Material's own chip on a phone: it brings the height, the ripple, the disabled colours
+        // and the outline that the hand-rolled row below had to spell out one at a time. The
+        // television cannot use it, because a chip has no focus appearance to speak of.
+        AssistChip(
+            onClick = onClick,
+            enabled = enabled,
+            label = { M3Text("Reset", maxLines = 1) },
+            leadingIcon = {
+                M3Icon(
+                    Icons.Filled.Refresh,
+                    contentDescription = null,
+                    modifier = Modifier.size(AssistChipDefaults.IconSize),
+                )
+            },
+        )
+        return
+    }
+
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
@@ -970,12 +1047,8 @@ private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
         animationSpec = tween(140),
         label = "resetChip",
     )
-    val touch = isTouch()
     Row(
         Modifier
-            // The chip is only about 38dp tall at TV padding, which a fingertip misses as often
-            // as it hits.
-            .then(if (touch) Modifier.heightIn(min = 48.dp) else Modifier)
             .clip(CircleShape)
             .background(if (enabled) background else SurfaceDark)
             // Always clickable, never `enabled = false`: pressing this chip is what greys it out,
@@ -984,9 +1057,8 @@ private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
             // Greyed out it simply does nothing, and the caller moves focus off it.
             .clickable(
                 interactionSource = interactions,
-                // Focus colour is the whole of the feedback on a TV. A finger never focuses
-                // anything, so it gets the press ripple instead.
-                indication = if (touch) LocalIndication.current else null,
+                // Focus colour is the whole of the feedback on a TV.
+                indication = null,
                 onClick = { if (enabled) onClick() },
             )
             .padding(horizontal = 18.dp, vertical = 9.dp),
@@ -1018,29 +1090,64 @@ private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun SectionTitle(text: String) {
+    val touch = isTouch()
     Text(
         text,
         style = sectionStyle(),
         // Accent on a phone, which is what every Android preference screen does: with the rows
         // un-carded there is no longer a shape separating one group from the next, so the colour
         // is what does the separating.
-        color = if (isTouch()) Accent else TextPrimary,
-        modifier = Modifier.padding(top = if (isTouch()) 20.dp else 16.dp, bottom = 4.dp),
+        color = if (touch) Tone.accent else TextPrimary,
+        modifier = if (touch) {
+            // The 16dp start is the same inset a ListItem gives its headline, so the heading and
+            // the rows under it begin on one line.
+            Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)
+        } else {
+            Modifier.padding(top = 16.dp, bottom = 4.dp)
+        },
     )
 }
 
 /**
  * The heading over a group of rows.
  *
- * Titles on this screen are one step down on a phone: at TV size they are nearly as loud as the
+ * Titles on this screen are two steps down on a phone: at TV size they are nearly as loud as the
  * screen's own heading, which on a narrow column reads as a list of headings with settings hidden
- * between them.
+ * between them. `titleSmall` in the primary colour is what a Material preference screen uses, and
+ * the colour rather than the size is what marks a heading out there.
  */
 @Composable
 private fun sectionStyle() = if (isTouch()) {
-    MaterialTheme.typography.titleMedium
+    MaterialTheme.typography.titleSmall
 } else {
     MaterialTheme.typography.titleLarge
+}
+
+/**
+ * Light, dark or whatever the phone is set to, as three segments rather than three rows.
+ *
+ * The three options are mutually exclusive and short enough to read at a glance, which is exactly
+ * the case a segmented button exists for: a stack of radio rows would take three times the height
+ * to say the same thing, and hide two thirds of the answer behind the one that is chosen.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ThemePicker(current: ThemeChoice, onPick: (ThemeChoice) -> Unit) {
+    val options = ThemeChoice.entries
+    SingleChoiceSegmentedButtonRow(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+    ) {
+        options.forEachIndexed { index, choice ->
+            SegmentedButton(
+                selected = choice == current,
+                onClick = { onPick(choice) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                label = {
+                    M3Text(choice.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                },
+            )
+        }
+    }
 }
 
 @Composable
@@ -1060,13 +1167,20 @@ private fun StorageCard(
     val touch = isTouch()
     val bar = if (touch) 10.dp else 14.dp
 
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Corner.Large))
-            .background(SurfaceDark)
-            .padding(if (touch) 16.dp else 20.dp),
+    // The bands are three roles of one palette on a phone, so they still read as three parts of
+    // the same thing when the wallpaper decides what that palette is. A television has no scheme
+    // to draw from and keeps the three alphas of the app's own green it was designed with.
+    val videoBand = if (touch) M3Theme.colorScheme.primary else Accent
+    val pictureBand = if (touch) M3Theme.colorScheme.secondary else Accent.copy(alpha = 0.6f)
+    val otherBand = if (touch) M3Theme.colorScheme.tertiary else Accent.copy(alpha = 0.3f)
+    val deviceBand = if (touch) Tone.outline else TextMuted.copy(alpha = 0.6f)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Tone.surface),
+        shape = if (touch) M3Theme.shapes.large else RoundedCornerShape(Corner.Large),
     ) {
+    Column(Modifier.padding(if (touch) 16.dp else 20.dp)) {
         Text(
             "${StreamStats.formatBytes(freeBytes)} free of ${StreamStats.formatBytes(totalBytes)}",
             style = if (touch) {
@@ -1074,7 +1188,7 @@ private fun StorageCard(
             } else {
                 MaterialTheme.typography.titleLarge
             },
-            color = TextPrimary,
+            color = Tone.text,
         )
         Spacer(Modifier.height(if (touch) 12.dp else 16.dp))
         Box(
@@ -1082,7 +1196,7 @@ private fun StorageCard(
                 .fillMaxWidth()
                 .height(bar)
                 .clip(CircleShape)
-                .background(SurfaceRaised)
+                .background(Tone.surfaceHigh)
                 // The bar is three coloured boxes and nothing else, so a screen reader had
                 // nothing at all to say about the one graphic on the screen that carries a
                 // figure. Merged into a single node, because the parts mean nothing apart.
@@ -1106,17 +1220,17 @@ private fun StorageCard(
                 Modifier
                     .fillMaxWidth(usedFraction)
                     .fillMaxHeight()
-                    .background(TextMuted.copy(alpha = 0.6f)),
+                    .background(deviceBand),
             )
             Row(Modifier.fillMaxWidth(cacheFraction).fillMaxHeight()) {
                 if (split) {
                     // Weights, not fractions: these three divide TMPlayer's own band between
                     // them, and a band of zero width simply draws nothing.
-                    StorageSlice(breakdown.videoBytes, Accent)
-                    StorageSlice(breakdown.pictureBytes, Accent.copy(alpha = 0.6f))
-                    StorageSlice(breakdown.otherBytes, Accent.copy(alpha = 0.3f))
+                    StorageSlice(breakdown.videoBytes, videoBand)
+                    StorageSlice(breakdown.pictureBytes, pictureBand)
+                    StorageSlice(breakdown.otherBytes, otherBand)
                 } else {
-                    Box(Modifier.fillMaxSize().background(Accent))
+                    Box(Modifier.fillMaxSize().background(videoBand))
                 }
             }
         }
@@ -1128,21 +1242,22 @@ private fun StorageCard(
             } else {
                 MaterialTheme.typography.bodyLarge
             },
-            color = TextPrimary,
+            color = Tone.text,
         )
         if (split) {
             Spacer(Modifier.height(8.dp))
-            StorageLegend("Video", breakdown.videoBytes, Accent)
-            StorageLegend("Pictures", breakdown.pictureBytes, Accent.copy(alpha = 0.6f))
-            StorageLegend("Everything else", breakdown.otherBytes, Accent.copy(alpha = 0.3f))
+            StorageLegend("Video", breakdown.videoBytes, videoBand)
+            StorageLegend("Pictures", breakdown.pictureBytes, pictureBand)
+            StorageLegend("Everything else", breakdown.otherBytes, otherBand)
             Spacer(Modifier.height(8.dp))
         }
         Text(
             "One video is kept at a time; starting another replaces it. Deleting takes the " +
                 "video and leaves the pictures.",
             style = MaterialTheme.typography.bodyMedium,
-            color = TextMuted,
+            color = Tone.muted,
         )
+    }
     }
 }
 
@@ -1167,12 +1282,12 @@ private fun StorageLegend(label: String, bytes: Long, color: Color) {
     ) {
         Box(Modifier.size(10.dp).clip(CircleShape).background(color))
         Spacer(Modifier.width(10.dp))
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = TextMuted)
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
         Spacer(Modifier.weight(1f))
         Text(
             StreamStats.formatBytes(bytes),
             style = MaterialTheme.typography.bodyMedium,
-            color = TextPrimary,
+            color = Tone.text,
         )
     }
 }
@@ -1183,34 +1298,49 @@ private fun ActionRow(
     subtitle: String,
     icon: ImageVector,
     modifier: Modifier = Modifier,
-    tint: Color = TextPrimary,
+    /** Unspecified leaves the icon the colour of the rest of the row. */
+    tint: Color = Color.Unspecified,
     onClick: () -> Unit,
 ) {
-    val touch = isTouch()
-    FocusRow(modifier, onClick) { focused ->
+    val iconTint = if (tint == Color.Unspecified) Tone.text else tint
+    FocusRow(
+        modifier = modifier,
+        onClick = onClick,
+        headline = {
+            M3Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        },
+        supporting = {
+            M3Text(subtitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        },
+        leading = {
+            M3Icon(
+                icon,
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(24.dp),
+            )
+        },
+    ) { focused ->
         Icon(
             icon,
             contentDescription = null,
-            tint = if (focused) Color.White else tint,
-            modifier = Modifier.size(if (touch) 22.dp else 26.dp),
+            tint = if (focused) Color.White else iconTint,
+            modifier = Modifier.size(26.dp),
         )
-        Spacer(Modifier.size(if (touch) 14.dp else 20.dp))
+        Spacer(Modifier.size(20.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium,
                 color = if (focused) Color.White else TextPrimary,
-                maxLines = if (touch) 2 else 1,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 subtitle,
-                style = MaterialTheme.typography.bodySmall.takeIf { touch }
-                    ?: MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyMedium,
                 color = if (focused) Color.White.copy(alpha = 0.85f) else TextMuted,
-                // A phone column is half the width these sentences were written for, and a
-                // subtitle cut off at one line loses the part that says what the row does.
-                maxLines = if (touch) 2 else 1,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
@@ -1225,45 +1355,51 @@ private fun ToggleRow(
     checked: Boolean,
     onToggle: () -> Unit,
 ) {
-    val touch = isTouch()
-    FocusRow(Modifier, onToggle) { focused ->
+    FocusRow(
+        modifier = Modifier,
+        onClick = onToggle,
+        headline = { M3Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        supporting = { M3Text(subtitle, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        leading = {
+            M3Icon(
+                icon,
+                contentDescription = null,
+                tint = Tone.text,
+                modifier = Modifier.size(24.dp),
+            )
+        },
+        // A real switch, not a drawing of one. It animates its knob, it can be dragged as well as
+        // tapped, and TalkBack announces it as "switch, on" without being told: the drawn pill
+        // below reported nothing at all, so the one row on this screen whose state matters most
+        // was the one a screen reader could say least about.
+        trailing = { M3Switch(checked = checked, onCheckedChange = { onToggle() }) },
+    ) { focused ->
         // Carries an icon for the same reason ActionRow does: the two kinds of row are stacked in
         // one column, and without it their titles would start at two different x positions.
         Icon(
             icon,
             contentDescription = null,
             tint = if (focused) Color.White else TextPrimary,
-            modifier = Modifier.size(if (touch) 22.dp else 26.dp),
+            modifier = Modifier.size(26.dp),
         )
-        Spacer(Modifier.size(if (touch) 14.dp else 20.dp))
+        Spacer(Modifier.size(20.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium,
                 color = if (focused) Color.White else TextPrimary,
-                maxLines = if (touch) 2 else 1,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 subtitle,
-                style = MaterialTheme.typography.bodySmall.takeIf { touch }
-                    ?: MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyMedium,
                 color = if (focused) Color.White.copy(alpha = 0.85f) else TextMuted,
-                maxLines = if (touch) 2 else 1,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        // Only touch needs this: the TV row's title is one line and never comes near the switch.
-        if (touch) Spacer(Modifier.size(12.dp))
-        if (touch) {
-            // A real switch, not a drawing of one. It animates its knob, it can be dragged as
-            // well as tapped, and TalkBack announces it as "switch, on" without being told: the
-            // drawn pill below reported nothing at all, so the one row on this screen whose state
-            // matters most was the one a screen reader could say least about.
-            M3Switch(checked = checked, onCheckedChange = { onToggle() })
-        } else {
-            Switch(checked = checked, focused = focused, touch = false)
-        }
+        Switch(checked = checked, focused = focused, touch = false)
     }
 }
 
@@ -1305,10 +1441,23 @@ private fun Switch(checked: Boolean, focused: Boolean, touch: Boolean = false) {
     }
 }
 
+/**
+ * One row of the list, on either machine.
+ *
+ * A phone gets Material's own `ListItem`: it owns the two text styles, the leading and trailing
+ * insets and the heights that every other Android settings screen is built from, and matching that
+ * by hand is how a screen ends up almost right in a dozen small ways. A television cannot use it,
+ * because the focused row there has to fill with colour and take its text white with it, which is
+ * not something a `ListItem` will do. So the slots are drawn on the phone and [content] on the TV.
+ */
 @Composable
 private fun FocusRow(
     modifier: Modifier,
     onClick: () -> Unit,
+    headline: @Composable () -> Unit,
+    supporting: @Composable () -> Unit,
+    leading: @Composable () -> Unit,
+    trailing: (@Composable () -> Unit)? = null,
     content: @Composable androidx.compose.foundation.layout.RowScope.(focused: Boolean) -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
@@ -1321,35 +1470,45 @@ private fun FocusRow(
 
     val touch = isTouch()
 
+    if (touch) {
+        ListItem(
+            headlineContent = headline,
+            supportingContent = supporting,
+            leadingContent = leading,
+            trailingContent = trailing,
+            // Transparent, so the rows read as a list written on the window rather than a stack of
+            // panels: the screen's own background is what shows between them.
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            modifier = modifier
+                .fillMaxWidth()
+                .heightIn(min = 64.dp)
+                .clickable(
+                    interactionSource = interactions,
+                    indication = LocalIndication.current,
+                    // Named as a button, so a screen reader offers "double tap to activate" rather
+                    // than reading two lines of text with nothing to do about them.
+                    role = Role.Button,
+                    onClick = onClick,
+                ),
+        )
+        return
+    }
+
     Row(
         modifier
             .fillMaxWidth()
-            // A fixed height is right on a TV, where every subtitle is one line at that width. A
-            // phone column is narrow enough that some of them wrap, so touch gets a floor and
-            // grows past it rather than clipping the second line.
-            .then(if (touch) Modifier.heightIn(min = 64.dp) else Modifier.height(66.dp))
-            // Full bleed on a phone: a preference screen is a list of settings on the window, not
-            // a stack of rounded cards each announcing itself. The television keeps the card,
-            // where the filled shape is how the focused row is found from a sofa.
-            .then(
-                if (touch) {
-                    Modifier
-                } else {
-                    Modifier.clip(RoundedCornerShape(Corner.Large)).background(background)
-                },
-            )
+            // A fixed height is right on a TV, where every subtitle is one line at that width.
+            .height(66.dp)
+            // The filled card is how the focused row is found from a sofa.
+            .clip(RoundedCornerShape(Corner.Large))
+            .background(background)
             .clickable(
                 interactionSource = interactions,
-                indication = if (touch) LocalIndication.current else null,
-                // Named as a button, so a screen reader offers "double tap to activate" rather
-                // than reading two lines of text with nothing to do about them.
+                indication = null,
                 role = Role.Button,
                 onClick = onClick,
             )
-            .padding(
-                horizontal = if (touch) 16.dp else 20.dp,
-                vertical = if (touch) 12.dp else 0.dp,
-            ),
+            .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         content(focused)

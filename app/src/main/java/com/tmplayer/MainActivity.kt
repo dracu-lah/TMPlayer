@@ -25,6 +25,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.MaterialTheme
@@ -46,6 +47,8 @@ import com.tmplayer.data.UpdateState
 import com.tmplayer.data.Updates
 import com.tmplayer.player.PlayerActivity
 import com.tmplayer.player.StreamStats
+import com.tmplayer.ui.theme.LocalDarkTheme
+import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.auth.IntroScreen
 import com.tmplayer.ui.auth.LoginScreen
 import com.tmplayer.ui.browse.BrowseScreen
@@ -153,6 +156,20 @@ private fun Root() {
     val networkStatus by NetworkMonitor.status.collectAsStateWithLifecycle()
     val telegramConnected by Td.connected.collectAsStateWithLifecycle()
     val settings = remember { SettingsStore(context) }
+
+    // The status and gesture bars draw their icons over the app's own background now that the app
+    // has a light theme, and `enableEdgeToEdge` decided their colour once, from the system's
+    // setting, at launch. Anybody who chose Light on a phone in dark mode got white icons on a
+    // white bar, which is not a subtle failure: the clock and the battery simply vanish.
+    val dark = LocalDarkTheme.current
+    val activity = LocalActivity.current
+    LaunchedEffect(dark, activity) {
+        val window = activity?.window ?: return@LaunchedEffect
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = !dark
+            isAppearanceLightNavigationBars = !dark
+        }
+    }
 
     val introSeen by settings.introSeen.collectAsStateWithLifecycle(initialValue = true)
     val overviewSeen by settings.overviewSeen.collectAsStateWithLifecycle(initialValue = true)
@@ -330,7 +347,7 @@ private fun Root() {
         play(record.toMediaItem(), chatTitle = record.chatTitle)
     }
 
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(Modifier.fillMaxSize().background(Tone.background)) {
         if (auth !is AuthState.Ready) {
             // Signing out drops straight back to the login screen, so forget where we were.
             LaunchedEffect(Unit) {

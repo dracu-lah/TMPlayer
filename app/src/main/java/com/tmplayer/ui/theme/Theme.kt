@@ -1,9 +1,22 @@
 package com.tmplayer.ui.theme
 
+import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme as M3MaterialTheme
-import androidx.compose.material3.darkColorScheme as M3ColorScheme
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography as M3Typography
+import androidx.compose.material3.darkColorScheme as M3DarkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme as M3LightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -16,6 +29,8 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Typography
 import androidx.tv.material3.darkColorScheme
 import com.tmplayer.data.FormFactor
+import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.ThemeChoice
 
 val Background = Color(0xFF0E0E12)
 val SurfaceDark = Color(0xFF17171E)
@@ -179,14 +194,219 @@ private val phoneTypography = Typography(
 )
 
 /**
- * The app's palette as ordinary Material 3, for every stock component on the touch side.
+ * [phoneTypography] again, as the type the stock Material components read.
  *
- * TV Material's controls are built around D-pad focus and never dispatch a tap, so the phone's
- * dialogs, sheets, switches, sliders and app bars all come from `androidx.compose.material3`. They
- * need the app's colours to be recognisably the same product as the television, which is what this
- * provides, once, at the root rather than at each screen that happens to use one.
+ * The same figures twice is not a pleasure, but the two theme systems have their own `Typography`
+ * classes and neither will take the other's. Material 3's own defaults for these roles, so a
+ * component left alone looks like the platform.
  */
-private val m3Colors = M3ColorScheme(
+private val m3PhoneTypography = M3Typography(
+    headlineLarge = TextStyle(fontSize = 32.sp, lineHeight = 40.sp),
+    headlineMedium = TextStyle(fontSize = 28.sp, lineHeight = 36.sp),
+    headlineSmall = TextStyle(fontSize = 24.sp, lineHeight = 32.sp),
+    titleLarge = TextStyle(fontSize = 22.sp, lineHeight = 28.sp),
+    titleMedium = TextStyle(fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight.Medium),
+    titleSmall = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium),
+    bodyLarge = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+    bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+    bodySmall = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
+    labelLarge = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium),
+    labelMedium = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),
+    labelSmall = TextStyle(fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),
+)
+
+/**
+ * The app's palette as a complete Material 3 scheme, dark.
+ *
+ * The six colours at the top of this file are the television's, and they were the phone's as well:
+ * a scheme built from six of the thirty roles Material components actually read, so every card,
+ * chip and sheet that asked for `surfaceContainer` or `secondaryContainer` got Compose's own
+ * lavender defaults, which belong to no app in particular. This is the full set, generated the way
+ * Material generates one, from the app's blue.
+ *
+ * The hue is Telegram's, because that is what the app is: a Telegram client. Tone and chroma are
+ * Material's, so a Material component drawn with it looks like a Material component.
+ */
+private val darkScheme = M3DarkColorScheme(
+    primary = Color(0xFF79D0F5),
+    onPrimary = Color(0xFF003546),
+    primaryContainer = Color(0xFF004D64),
+    onPrimaryContainer = Color(0xFFBEE9FF),
+    inversePrimary = Color(0xFF00677F),
+    secondary = Color(0xFFB4CAD6),
+    onSecondary = Color(0xFF1F333C),
+    secondaryContainer = Color(0xFF354A53),
+    onSecondaryContainer = Color(0xFFD0E6F2),
+    tertiary = Color(0xFFC6C2EA),
+    onTertiary = Color(0xFF2F2D4D),
+    tertiaryContainer = Color(0xFF464364),
+    onTertiaryContainer = Color(0xFFE3DFFF),
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
+    errorContainer = Color(0xFF93000A),
+    onErrorContainer = Color(0xFFFFDAD6),
+    background = Color(0xFF0F1417),
+    onBackground = Color(0xFFDEE3E7),
+    surface = Color(0xFF0F1417),
+    onSurface = Color(0xFFDEE3E7),
+    surfaceVariant = Color(0xFF40484C),
+    onSurfaceVariant = Color(0xFFC0C8CD),
+    surfaceContainerLowest = Color(0xFF0A0F12),
+    surfaceContainerLow = Color(0xFF171C1F),
+    surfaceContainer = Color(0xFF1B2124),
+    surfaceContainerHigh = Color(0xFF262B2E),
+    surfaceContainerHighest = Color(0xFF313539),
+    surfaceBright = Color(0xFF353A3D),
+    surfaceDim = Color(0xFF0F1417),
+    outline = Color(0xFF8A9297),
+    outlineVariant = Color(0xFF40484C),
+    inverseSurface = Color(0xFFDEE3E7),
+    inverseOnSurface = Color(0xFF2B3134),
+    scrim = Color(0xFF000000),
+)
+
+/** The same scheme in daylight, which the app had no version of at all until now. */
+private val lightScheme = M3LightColorScheme(
+    primary = Color(0xFF00677F),
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFB6EAFF),
+    onPrimaryContainer = Color(0xFF001F28),
+    inversePrimary = Color(0xFF79D0F5),
+    secondary = Color(0xFF4C616B),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFCFE6F1),
+    onSecondaryContainer = Color(0xFF071E26),
+    tertiary = Color(0xFF5D5B7D),
+    onTertiary = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFE3DFFF),
+    onTertiaryContainer = Color(0xFF1A1836),
+    error = Color(0xFFBA1A1A),
+    onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFFFFDAD6),
+    onErrorContainer = Color(0xFF410002),
+    background = Color(0xFFF6FAFD),
+    onBackground = Color(0xFF171C1F),
+    surface = Color(0xFFF6FAFD),
+    onSurface = Color(0xFF171C1F),
+    surfaceVariant = Color(0xFFDCE4E9),
+    onSurfaceVariant = Color(0xFF40484C),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFF0F4F8),
+    surfaceContainer = Color(0xFFEAEEF2),
+    surfaceContainerHigh = Color(0xFFE4E9EC),
+    surfaceContainerHighest = Color(0xFFDEE3E7),
+    surfaceBright = Color(0xFFF6FAFD),
+    surfaceDim = Color(0xFFD6DBDF),
+    outline = Color(0xFF70787D),
+    outlineVariant = Color(0xFFC0C8CD),
+    inverseSurface = Color(0xFF2B3134),
+    inverseOnSurface = Color(0xFFECF1F5),
+    scrim = Color(0xFF000000),
+)
+
+/** Material's own shape scale, wired to [Corner] so a stock component and a hand-drawn one agree. */
+private val m3Shapes = Shapes(
+    extraSmall = RoundedCornerShape(Corner.ExtraSmall),
+    small = RoundedCornerShape(Corner.Small),
+    medium = RoundedCornerShape(Corner.Medium),
+    large = RoundedCornerShape(Corner.Large),
+    extraLarge = RoundedCornerShape(Corner.ExtraLarge),
+)
+
+/**
+ * The scheme the phone should draw with, given the viewer's choice and the phone's own.
+ *
+ * Dynamic colour is the Android 12 convention and is what makes an app look like it belongs on the
+ * device it is installed on: the palette comes from the wallpaper, so TMPlayer matches Photos and
+ * Messages rather than insisting on its own blue over the top of them. Anyone who would rather
+ * have the blue can say so, and a phone older than Android 12 has nothing to offer either way.
+ */
+@Composable
+private fun phoneScheme(dark: Boolean, dynamic: Boolean): ColorScheme {
+    val context = LocalContext.current
+    val wallpaper = dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    return when {
+        wallpaper && dark -> dynamicDarkColorScheme(context)
+        wallpaper -> dynamicLightColorScheme(context)
+        dark -> darkScheme
+        else -> lightScheme
+    }
+}
+
+/**
+ * True when the tree being drawn is the phone's, which is the only tree with a light mode.
+ *
+ * Read at the point of use rather than passed down, because nearly every composable in the app
+ * needs it and half of them are shared with the television.
+ */
+val LocalDarkTheme = staticCompositionLocalOf { true }
+
+@Composable
+fun TMPlayerTheme(content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    val touch = !FormFactor.isTv(context)
+    val settings = remember(context) { SettingsStore(context) }
+
+    // Seeded with what the system is already doing, so the first frame is not painted in the wrong
+    // mode and then corrected a frame later once DataStore answers.
+    val systemDark = isSystemInDarkTheme()
+    val choice by settings.themeChoice.collectAsState(initial = ThemeChoice.Default)
+    val dynamic by settings.dynamicColour.collectAsState(initial = true)
+
+    // A television is dark. There is no system light mode on Android TV to follow, a panel in a
+    // dark room is the whole use case, and the choice is not offered there.
+    val dark = when {
+        !touch -> true
+        choice == ThemeChoice.Light -> false
+        choice == ThemeChoice.Dark -> true
+        else -> systemDark
+    }
+
+    val scheme = if (touch) phoneScheme(dark, dynamic) else m3TvColors
+
+    // Both themes, always, and the form factor decides only the type scale.
+    //
+    // Two theme systems are live in this app because the two devices genuinely need different
+    // controls, and a screen that is shared between them ends up reading one theme for its text
+    // and the other for its buttons. Providing both here means neither is ever missing, and it is
+    // what lets the whole touch tree, including Settings, the sign-in and every dialog, move to
+    // the phone scale without threading a theme through fourteen files by hand.
+    // Material's expressive theme entry point is published as internal in material3 1.4.0, so the
+    // motion scheme cannot be swapped wholesale here; the springs live at the call sites that want
+    // them instead. Colour and shape are the parts that matter at the root, and both are set.
+    M3MaterialTheme(
+        colorScheme = scheme,
+        shapes = m3Shapes,
+        // The phone scale, given to the theme the phone's components actually read. It was only
+        // ever handed to the television's MaterialTheme, so a screen that mixed the two, which is
+        // every phone screen, drew half its text at the app's scale and half at Compose's stock
+        // one: a drawer item at 16sp beside a chat row at 16sp that happened to agree, and a
+        // supporting line at 14 beside one at 12 that did not.
+        typography = if (touch) m3PhoneTypography else M3MaterialTheme.typography,
+    ) {
+        MaterialTheme(
+            colorScheme = colors,
+            typography = if (touch) phoneTypography else typography,
+        ) {
+            CompositionLocalProvider(
+                // Without this the default content colour is undefined at the root of the tree and
+                // every unstyled Text inherits whatever Compose falls back to. On the phone it is
+                // the scheme's, so a light theme does not draw its text in the dark theme's grey.
+                LocalContentColor provides if (touch) scheme.onSurface else TextPrimary,
+                LocalDarkTheme provides dark,
+                content = content,
+            )
+        }
+    }
+}
+
+/**
+ * The television's own Material 3 scheme, unchanged.
+ *
+ * The TV half draws with `androidx.tv.material3`, but a handful of shared components reach for a
+ * stock Material control, and those still have to look like this app on a panel.
+ */
+private val m3TvColors = M3DarkColorScheme(
     primary = Accent,
     onPrimary = Color.White,
     background = Background,
@@ -199,26 +419,3 @@ private val m3Colors = M3ColorScheme(
     surfaceContainerHigh = SurfaceRaised,
     error = Danger,
 )
-
-@Composable
-fun TMPlayerTheme(content: @Composable () -> Unit) {
-    val touch = !FormFactor.isTv(LocalContext.current)
-
-    // Both themes, always, and the form factor decides only the type scale.
-    //
-    // Two theme systems are live in this app because the two devices genuinely need different
-    // controls, and a screen that is shared between them ends up reading one theme for its text
-    // and the other for its buttons. Providing both here means neither is ever missing, and it is
-    // what lets the whole touch tree, including Settings, the sign-in and every dialog, move to
-    // the phone scale without threading a theme through fourteen files by hand.
-    M3MaterialTheme(colorScheme = m3Colors) {
-        MaterialTheme(
-            colorScheme = colors,
-            typography = if (touch) phoneTypography else typography,
-        ) {
-            // Without this the default content colour is undefined at the root of the tree and
-            // every unstyled Text inherits whatever Compose falls back to.
-            CompositionLocalProvider(LocalContentColor provides TextPrimary, content = content)
-        }
-    }
-}

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      A television is dark, whatever it reports about night mode. Not every panel runs in it, and
+      the light value in res/values would otherwise put a white window behind an app that has no
+      light theme at all.
+    -->
+    <color name="window_background">#0E0E12</color>
+</resources>

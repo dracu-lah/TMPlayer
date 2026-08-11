@@ -25,14 +25,12 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.tmplayer.ui.theme.Accent
-import com.tmplayer.ui.theme.TextMuted
-import com.tmplayer.ui.theme.TextPrimary
+import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 import com.tmplayer.ui.components.AppMark
 import com.tmplayer.ui.components.MarkSize
@@ -101,7 +99,7 @@ private fun ColumnScope.Intro(touch: Boolean, focus: FocusRequester, onContinue:
             Text(
                 "Welcome to TMPlayer",
                 style = MaterialTheme.typography.headlineLarge,
-                color = TextPrimary,
+                color = Tone.text,
             )
         }
     }
@@ -110,7 +108,7 @@ private fun ColumnScope.Intro(touch: Boolean, focus: FocusRequester, onContinue:
         Text(
             "Welcome to TMPlayer",
             style = MaterialTheme.typography.headlineSmall,
-            color = TextPrimary,
+            color = Tone.text,
             textAlign = TextAlign.Center,
             modifier = Modifier.align(Alignment.CenterHorizontally),
         )
@@ -129,7 +127,7 @@ private fun ColumnScope.Intro(touch: Boolean, focus: FocusRequester, onContinue:
         } else {
             MaterialTheme.typography.bodyLarge
         },
-        color = TextMuted,
+        color = Tone.muted,
     )
     Spacer(Modifier.size(8.dp))
 
@@ -174,7 +172,7 @@ private fun ColumnScope.Intro(touch: Boolean, focus: FocusRequester, onContinue:
         Text("Continue to sign in")
         Spacer(Modifier.width(8.dp))
         Icon(
-            Icons.Filled.ArrowForward,
+            Icons.AutoMirrored.Filled.ArrowForward,
             contentDescription = null,
             modifier = Modifier.size(22.dp),
         )
@@ -187,7 +185,7 @@ private fun Point(touch: Boolean, icon: ImageVector, title: String, body: String
         Icon(
             icon,
             contentDescription = null,
-            tint = Accent,
+            tint = Tone.accent,
             modifier = Modifier.size(if (touch) 20.dp else 24.dp),
         )
         Spacer(Modifier.width(if (touch) 12.dp else 16.dp))
@@ -199,7 +197,7 @@ private fun Point(touch: Boolean, icon: ImageVector, title: String, body: String
                 } else {
                     MaterialTheme.typography.titleMedium
                 },
-                color = TextPrimary,
+                color = Tone.text,
             )
             Text(
                 body,
@@ -208,7 +206,7 @@ private fun Point(touch: Boolean, icon: ImageVector, title: String, body: String
                 } else {
                     MaterialTheme.typography.bodyMedium
                 },
-                color = TextMuted,
+                color = Tone.muted,
             )
         }
     }

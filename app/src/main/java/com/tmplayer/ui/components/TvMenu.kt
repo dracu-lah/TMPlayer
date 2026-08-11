@@ -2,7 +2,6 @@ package com.tmplayer.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,12 +15,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon as M3Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme as M3MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text as M3Text
@@ -51,6 +53,7 @@ import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
+import com.tmplayer.ui.theme.Tone
 
 /** One line of a [TvMenu]. [detail] says what the action will do when the label cannot. */
 data class MenuAction(
@@ -173,16 +176,17 @@ private fun TouchMenuSheet(
     actions: List<MenuAction>,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = SurfaceDark,
-    ) {
-        Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
-            Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
+    // No container colour and no drag handle of our own: the sheet's defaults are the scheme's,
+    // and the handle it draws is the one every other sheet on the phone draws, which is how a
+    // thumb already knows this thing can be pulled down.
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.padding(bottom = 24.dp)) {
+            // The heading is what the sheet is about rather than something that can be chosen, so
+            // it sits in the padding a list section header sits in, not in a row.
+            Column(Modifier.padding(horizontal = 24.dp, vertical = 4.dp)) {
                 M3Text(
                     title,
                     style = M3MaterialTheme.typography.titleMedium,
-                    color = TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -190,23 +194,49 @@ private fun TouchMenuSheet(
                     M3Text(
                         subtitle,
                         style = M3MaterialTheme.typography.bodyMedium,
-                        color = TextMuted,
+                        color = Tone.muted,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
-            Spacer(Modifier.padding(top = 4.dp))
-            actions.forEach { action ->
-                MenuRow(action = action, touch = true)
-                Spacer(Modifier.padding(top = 4.dp))
-            }
+            Spacer(Modifier.height(8.dp))
+            actions.forEach { action -> MenuRow(action = action, touch = true) }
         }
     }
 }
 
 @Composable
 private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Modifier) {
+    // A phone and a remote disagree about what a row of a menu even is. The television's is a
+    // filled tile that changes colour under focus, because focus is the only thing it has to say
+    // where it is; the phone's is a list item on the sheet's own surface, because there is no
+    // focus to show and a stack of coloured tiles reads as a stack of buttons rather than a list.
+    if (touch) {
+        val destructive = action.destructive
+        ListItem(
+            modifier = modifier.clickable(onClick = action.onSelect),
+            headlineContent = {
+                M3Text(action.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            },
+            supportingContent = action.detail?.let {
+                { M3Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            },
+            leadingContent = {
+                M3Icon(action.icon, contentDescription = null, modifier = Modifier.size(24.dp))
+            },
+            colors = ListItemDefaults.colors(
+                // The sheet is already a container, so a row on top of it is transparent and the
+                // destructive one is told apart by its colour rather than by another surface.
+                containerColor = Color.Transparent,
+                headlineColor = if (destructive) Tone.danger else Tone.text,
+                leadingIconColor = if (destructive) Tone.danger else Tone.muted,
+                supportingColor = if (destructive) Tone.danger else Tone.muted,
+            ),
+        )
+        return
+    }
+
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
@@ -227,16 +257,13 @@ private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Mod
     Row(
         modifier
             .fillMaxWidth()
-            // A row of one short label is only about 44dp tall, which is under what a fingertip
-            // is entitled to. The remote does not care either way, so this is a floor, not a size.
-            .then(if (touch) Modifier.heightIn(min = 56.dp) else Modifier)
             .clip(RoundedCornerShape(Corner.Medium))
             .background(background)
             .clickable(
                 interactionSource = interactions,
                 // Nothing on a TV reacts to a press with a ripple, and the focus colour is the
-                // whole feedback. A finger gets no focus colour, so it gets the ripple instead.
-                indication = if (touch) LocalIndication.current else null,
+                // whole feedback.
+                indication = null,
                 onClick = action.onSelect,
             )
             .padding(horizontal = 18.dp, vertical = 14.dp),

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -50,6 +51,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.MaterialTheme as M3
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.AuthState
@@ -68,10 +70,7 @@ import com.tmplayer.ui.components.paneAction
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.Corner
-import com.tmplayer.ui.theme.Danger
-import com.tmplayer.ui.theme.SurfaceDark
-import com.tmplayer.ui.theme.TextMuted
-import com.tmplayer.ui.theme.TextPrimary
+import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -174,7 +173,7 @@ private fun MethodPane(onChoose: (SignInMethod) -> Unit) {
             Text(
                 "Telegram sends a code to your account, and you type it in here.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextMuted,
+                color = Tone.muted,
             )
             Spacer(Modifier.height(8.dp))
             TmSecondaryButton(
@@ -186,7 +185,7 @@ private fun MethodPane(onChoose: (SignInMethod) -> Unit) {
             Text(
                 "For when your account is on another phone.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextMuted,
+                color = Tone.muted,
             )
             return@Pane
         }
@@ -200,7 +199,7 @@ private fun MethodPane(onChoose: (SignInMethod) -> Unit) {
         Text(
             "Quickest here: hold up the phone that already has your account.",
             style = MaterialTheme.typography.bodyMedium,
-            color = TextMuted,
+            color = Tone.muted,
         )
         Spacer(Modifier.height(8.dp))
 
@@ -213,7 +212,7 @@ private fun MethodPane(onChoose: (SignInMethod) -> Unit) {
         Text(
             "Telegram sends a code to your account, and you type it in here.",
             style = MaterialTheme.typography.bodyMedium,
-            color = TextMuted,
+            color = Tone.muted,
         )
     }
 
@@ -350,6 +349,9 @@ private fun TouchPhonePane(
                 // reach for it before they will scroll a list to find their country.
                 onValueChange = { dial = it.filter { c -> c.isDigit() }.take(MAX_DIAL_DIGITS) },
                 placeholder = "00",
+                // The placeholder is the shape of a dial code, which is no use as a name for the
+                // field once it is filled in, so the floating label is given words of its own.
+                label = "Code",
                 prefix = "+",
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Phone,
@@ -378,7 +380,7 @@ private fun TouchPhonePane(
         }
 
         if (error != null) {
-            Text(error, style = MaterialTheme.typography.bodyLarge, color = Danger)
+            Text(error, style = MaterialTheme.typography.bodyLarge, color = Tone.danger)
         }
 
         TmButton(
@@ -514,7 +516,7 @@ private fun TouchCodePane(
         }
 
         if (error != null) {
-            Text(error, style = MaterialTheme.typography.bodyLarge, color = Danger)
+            Text(error, style = MaterialTheme.typography.bodyLarge, color = Tone.danger)
         }
 
         TmButton(
@@ -589,31 +591,40 @@ private fun CodeBoxes(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     for (index in 0 until length) {
                         val filled = index < code.length
+                        // The box waiting for the next digit is the only one with anything to say,
+                        // so it is the only one outlined: without it the row is five identical
+                        // rectangles and nothing tells the eye where a tap will land.
+                        val active = index == code.length
                         Box(
                             Modifier
                                 .weight(1f)
                                 .height(FIELD_HEIGHT)
-                                .clip(RoundedCornerShape(Corner.Medium))
-                                .background(SurfaceDark)
+                                .clip(M3.shapes.medium)
+                                .background(Tone.surfaceHigh)
+                                .border(
+                                    width = if (active) 2.dp else 1.dp,
+                                    color = if (active) Tone.accent else Tone.outline,
+                                    shape = M3.shapes.medium,
+                                )
                                 .padding(2.dp),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
                                 if (filled) code[index].toString() else "",
                                 style = MaterialTheme.typography.headlineSmall,
-                                color = TextPrimary,
+                                color = Tone.text,
                                 textAlign = TextAlign.Center,
                             )
                             // A thin bar under the box being typed into, standing in for the
                             // caret that was turned off above.
-                            if (index == code.length) {
+                            if (active) {
                                 Box(
                                     Modifier
                                         .align(Alignment.BottomCenter)
                                         .padding(bottom = 8.dp)
                                         .width(20.dp)
                                         .height(2.dp)
-                                        .background(Accent),
+                                        .background(Tone.accent),
                                 )
                             }
                         }
@@ -769,11 +780,22 @@ private fun QrPane(link: String, onBack: () -> Unit) {
 @Composable
 private fun Step(number: Int, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
+        // The disc is a quiet marker, not a call to action, so on a phone it takes the scheme's
+        // container pair rather than the accent itself: full accent here competes with the button
+        // underneath it, and on a wallpaper palette it can be loud enough to read as the subject.
+        val touch = isTouch()
         Box(
-            Modifier.size(28.dp).clip(CircleShape).background(Accent),
+            Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(if (touch) M3.colorScheme.primaryContainer else Accent),
             contentAlignment = Alignment.Center,
         ) {
-            Text("$number", style = MaterialTheme.typography.bodyLarge, color = Color.White)
+            Text(
+                "$number",
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (touch) M3.colorScheme.onPrimaryContainer else Color.White,
+            )
         }
         Spacer(Modifier.width(16.dp))
         Text(text, style = MaterialTheme.typography.titleMedium)
@@ -867,7 +889,7 @@ private fun LoginForm(
         if (error != null) {
             // Red, not the accent blue: the accent is the focus colour on this very screen,
             // so a rejection painted in it reads as a status line rather than as a problem.
-            Text(error, style = MaterialTheme.typography.bodyLarge, color = Danger)
+            Text(error, style = MaterialTheme.typography.bodyLarge, color = Tone.danger)
         }
 
         if (touch) {
@@ -900,8 +922,11 @@ private const val QR_PIXELS = 560
 
 private val PLATE = 300.dp
 
-/** Wide enough for "+888", which is the longest code Telegram issues. */
-private val DIAL_WIDTH = 92.dp
+/**
+ * Wide enough for "+888", which is the longest code Telegram issues, and now also for the floating
+ * label above it: an outlined field that cannot fit its own label draws it clipped.
+ */
+private val DIAL_WIDTH = 104.dp
 
 private const val MAX_DIAL_DIGITS = 4
 

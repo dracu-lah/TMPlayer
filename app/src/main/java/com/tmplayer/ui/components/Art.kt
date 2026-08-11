@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -21,7 +22,7 @@ import androidx.tv.material3.Text
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tmplayer.data.Td
 import com.tmplayer.data.Thumbnails
-import com.tmplayer.ui.theme.SurfaceDark
+import com.tmplayer.ui.theme.Tone
 
 /**
  * A media preview that never leaves a hole in the grid: the blurred inline preview paints
@@ -43,7 +44,9 @@ fun MediaPreview(
         if (full == null) full = Thumbnails.full(thumbnailFileId)
     }
 
-    Box(modifier.background(SurfaceDark), contentAlignment = Alignment.Center) {
+    // Whatever this stands in front of, it is the colour behind every avatar and every thumbnail
+    // in the app, so it has to be the scheme's own step above the surface and not a fixed grey.
+    Box(modifier.background(Tone.surface), contentAlignment = Alignment.Center) {
         val bitmap = full ?: mini
         if (bitmap != null) {
             Image(
@@ -64,6 +67,7 @@ fun MediaPreview(
                 } else {
                     MaterialTheme.typography.headlineLarge
                 },
+                color = if (isTouch()) Tone.muted else Color.Unspecified,
             )
         }
     }

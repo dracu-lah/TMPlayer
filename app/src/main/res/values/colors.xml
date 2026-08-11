@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="background">#0E0E12</color>
+
+    <!--
+      What the window is painted before the first frame. Light here and dark in values-night,
+      because the phone now follows the system theme: a fixed dark window meant anybody on a light
+      phone watched a black rectangle for the length of the launch animation, every launch. The
+      television has no light mode and never sees the light value: Android TV runs in night mode.
+    -->
+    <color name="window_background">#F6FAFD</color>
     <color name="accent">#2AABEE</color>
     <color name="text_primary">#EDEDF2</color>
 </resources>

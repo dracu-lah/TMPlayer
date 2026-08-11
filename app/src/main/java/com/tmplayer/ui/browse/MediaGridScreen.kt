@@ -34,6 +34,8 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -45,14 +47,22 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon as M3Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme as M3MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text as M3Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -72,6 +82,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -127,8 +138,11 @@ import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
+import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * A store that lives exactly as long as one media screen.
@@ -150,6 +164,7 @@ private class MediaListViewModelFactory(
         MediaListViewModel(chatId, minSize, maxSize) as T
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MediaGridScreen(
     chatId: Long,
@@ -275,6 +290,19 @@ fun MediaGridScreen(
     val refresh = {
         viewModel.load()
         if (offline) onOfflineAction("You're offline. Showing saved videos.")
+    }
+
+    // A pull has to hold the spinner until the listing has actually come back, and the listing
+    // reports nothing of the sort: a refresh that keeps its content leaves the state a Content the
+    // whole way through. What does change is the instance, once the new page lands, so that is what
+    // the gesture waits on. The timeout is there because a request against a dead connection never
+    // emits anything at all, and a spinner left turning for ever is worse than one that gives up.
+    var refreshing by remember(chatId) { mutableStateOf(false) }
+    LaunchedEffect(refreshing) {
+        if (!refreshing) return@LaunchedEffect
+        val before = viewModel.state.value
+        withTimeoutOrNull(REFRESH_TIMEOUT_MS) { viewModel.state.first { it !== before } }
+        refreshing = false
     }
 
     val listing: @Composable () -> Unit = {
@@ -426,8 +454,11 @@ fun MediaGridScreen(
 
                 // Floated over the grid; a reserved band cost a whole row on a 540dp panel.
                 if (list.loadingMore) {
-                    Row(
-                        Modifier
+                    Surface(
+                        shape = CircleShape,
+                        color = Tone.surfaceHigh,
+                        contentColor = Tone.muted,
+                        modifier = Modifier
                             .align(Alignment.BottomCenter)
                             // Above the name strip when there is one, rather than through it.
                             .padding(
@@ -437,19 +468,20 @@ fun MediaGridScreen(
                                 bottom = (if (touch) navigationBarPadding() else Tv.SafeV) +
                                     (if (standingOn != null) 46.dp else 0.dp) +
                                     connectionOffset,
-                            )
-                            .clip(CircleShape)
-                            .background(SurfaceRaised)
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ),
                     ) {
-                        Spinner(size = 18.dp, strokeWidth = 2.dp)
-                        Text(
-                            "Loading more…",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextMuted,
-                        )
+                        Row(
+                            Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Spinner(size = 18.dp, strokeWidth = 2.dp)
+                            Text(
+                                "Loading more…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Tone.muted,
+                            )
+                        }
                     }
                 }
 
@@ -512,7 +544,21 @@ fun MediaGridScreen(
             layout = layout,
             onToggleLayout = onToggleLayout,
             onRefresh = refresh,
-            content = listing,
+            content = {
+                // The circular arrow stays in the overflow, because a listing that is empty or in
+                // an error state has nothing to drag, but a downward pull is what a phone user
+                // reaches for first and this screen ignored it entirely.
+                PullToRefreshBox(
+                    isRefreshing = refreshing,
+                    onRefresh = {
+                        refreshing = true
+                        refresh()
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    listing()
+                }
+            },
         )
     } else {
         Column(Modifier.fillMaxSize()) {
@@ -584,6 +630,10 @@ internal fun TouchMediaScaffold(
 ) {
     var searching by rememberSaveable { mutableStateOf(false) }
     val field = remember { FocusRequester() }
+    // The bar carries a picture, a name and three actions, which is a lot of a phone screen to
+    // spend on chrome while somebody is scrolling through videos. It leaves on the way down and
+    // comes back on the first flick up, the way every Google app's list screen behaves.
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     val startVoice = rememberVoiceSearch("Say a video name") {
         onQuery(it)
         onSubmit()
@@ -597,9 +647,10 @@ internal fun TouchMediaScaffold(
     }
 
     Scaffold(
-        containerColor = com.tmplayer.ui.theme.Background,
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             TopAppBar(
+                scrollBehavior = scrollBehavior,
                 title = {
                     if (searching) {
                         MediaSearchField(
@@ -660,7 +711,9 @@ internal fun TouchMediaScaffold(
                             } else {
                                 "Add to favourites"
                             },
-                            tint = if (isFavorite) Accent else TextPrimary,
+                            // Only the filled star is coloured. The outline is left to the bar's
+                            // own action colour, so it sits with the other two icons.
+                            tint = if (isFavorite) Tone.accent else LocalContentColor.current,
                         )
                     }
                     // Two icons and a menu, not four icons. A phone app bar has around 200dp to
@@ -674,19 +727,20 @@ internal fun TouchMediaScaffold(
                         ),
                     )
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = SurfaceDark,
-                    titleContentColor = TextPrimary,
-                    navigationIconContentColor = TextPrimary,
-                    actionIconContentColor = TextPrimary,
-                ),
             )
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) { content() }
     }
 
-    LaunchedEffect(searching) { if (searching) field.requestFocus() }
+    LaunchedEffect(searching) {
+        if (!searching) return@LaunchedEffect
+        // Search is reached from a bar that may be half off the top of the screen by the time it
+        // is pressed, and a field nobody can see is a field nobody can type into. Putting the bar
+        // back down is part of opening the search, not a separate gesture.
+        scrollBehavior.state.heightOffset = 0f
+        field.requestFocus()
+    }
 }
 
 @Composable
@@ -696,34 +750,54 @@ private fun MediaSearchField(
     onVoiceSearch: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        BasicTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            singleLine = true,
-            textStyle = M3MaterialTheme.typography.bodyLarge.copy(color = TextPrimary),
-            cursorBrush = SolidColor(Accent),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            modifier = modifier.weight(1f),
-            decorationBox = { inner ->
-                if (query.isEmpty()) {
-                    M3Text(
-                        "Search this chat",
-                        style = M3MaterialTheme.typography.bodyLarge,
-                        color = TextMuted,
-                        maxLines = 1,
-                    )
+    // Not a Material SearchBar: that component owns the whole top of the screen, including its own
+    // back arrow and its own suggestion sheet, and this search lives inside an app bar that already
+    // has an arrow, an avatar and an overflow. What it borrows instead is the shape and the colour,
+    // so the field reads as the same thing the search bar would have been.
+    Surface(
+        shape = M3MaterialTheme.shapes.extraLarge,
+        color = Tone.surfaceHigh,
+        contentColor = Tone.text,
+    ) {
+        Row(
+            Modifier
+                .padding(
+                    start = 16.dp,
+                    // A trailing icon brings its own room with it; without one the text would run
+                    // into the rounded end of the field.
+                    end = if (query.isEmpty() && onVoiceSearch == null) 16.dp else 4.dp,
+                )
+                .defaultMinSize(minHeight = 48.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                singleLine = true,
+                textStyle = M3MaterialTheme.typography.bodyLarge.copy(color = Tone.text),
+                cursorBrush = SolidColor(Tone.accent),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                modifier = modifier.weight(1f),
+                decorationBox = { inner ->
+                    if (query.isEmpty()) {
+                        M3Text(
+                            "Search this chat",
+                            style = M3MaterialTheme.typography.bodyLarge,
+                            color = Tone.muted,
+                            maxLines = 1,
+                        )
+                    }
+                    inner()
+                },
+            )
+            if (query.isNotEmpty()) {
+                IconButton(onClick = { onQueryChange("") }) {
+                    M3Icon(Icons.Filled.Close, contentDescription = "Clear search")
                 }
-                inner()
-            },
-        )
-        if (query.isNotEmpty()) {
-            IconButton(onClick = { onQueryChange("") }) {
-                M3Icon(Icons.Filled.Close, contentDescription = "Clear search")
-            }
-        } else if (onVoiceSearch != null) {
-            IconButton(onClick = onVoiceSearch) {
-                M3Icon(TmIcons.Mic, contentDescription = "Search by voice")
+            } else if (onVoiceSearch != null) {
+                IconButton(onClick = onVoiceSearch) {
+                    M3Icon(TmIcons.Mic, contentDescription = "Search by voice")
+                }
             }
         }
     }
@@ -852,99 +926,143 @@ private fun SponsoredCard(
         if (fullyVisible) onFullyVisible()
     }
 
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Corner.Medium))
-            .background(SurfaceRaised)
-            .border(2.dp, Caution.copy(alpha = 0.8f), RoundedCornerShape(Corner.Medium))
-            .padding(14.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (item.miniThumbnail != null || item.thumbnailFileId != 0) {
-            val mediaInteractions = remember { MutableInteractionSource() }
-            val mediaFocused by mediaInteractions.collectIsFocusedAsState()
-            MediaPreview(
-                miniThumbnail = item.miniThumbnail,
-                thumbnailFileId = item.thumbnailFileId,
-                fallbackLabel = item.title.ifBlank { item.label },
-                modifier = (
-                    if (isTouch()) Modifier.weight(TOUCH_ART_SHARE) else Modifier.width(190.dp)
-                    )
-                    .aspectRatio(16f / 9f)
-                    .clip(RoundedCornerShape(Corner.Small))
-                    .border(
-                        3.dp,
-                        if (mediaFocused) Accent else Color.Transparent,
-                        RoundedCornerShape(Corner.Small),
-                    )
-                    .pressable(mediaInteractions, onOpenMedia),
-            )
-        }
-
-        Column(
+    val touch = isTouch()
+    // The amber edge is the whole point of the treatment: this block is an advertisement and has to
+    // stay tellable from the videos around it. On a phone that outline belongs to a card, which
+    // draws it in the theme's own amber and against the theme's own surface, rather than to a
+    // hand-painted panel that would still be dark grey on a light screen.
+    val body: @Composable () -> Unit = {
+        Row(
             Modifier
-                .weight(if (isTouch()) 1f - TOUCH_ART_SHARE else 1f)
-                .onGloballyPositioned { coordinates ->
-                    val bounds = coordinates.boundsInWindow()
-                    textTop = bounds.top
-                    textBottom = bounds.bottom
-                    viewportHeight = coordinates.findRootCoordinates().size.height.toFloat()
-                },
-            verticalArrangement = Arrangement.spacedBy(5.dp),
+                .fillMaxWidth()
+                .then(
+                    if (touch) {
+                        Modifier
+                    } else {
+                        Modifier
+                            .clip(RoundedCornerShape(Corner.Medium))
+                            .background(SurfaceRaised)
+                            .border(2.dp, Caution.copy(alpha = 0.8f), RoundedCornerShape(Corner.Medium))
+                    },
+                )
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                item.label.uppercase(),
-                style = MaterialTheme.typography.labelMedium,
-                color = Caution,
-            )
-            if (item.title.isNotBlank()) {
-                Text(
-                    item.title,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = TextPrimary,
+            if (item.miniThumbnail != null || item.thumbnailFileId != 0) {
+                val mediaInteractions = remember { MutableInteractionSource() }
+                val mediaFocused by mediaInteractions.collectIsFocusedAsState()
+                MediaPreview(
+                    miniThumbnail = item.miniThumbnail,
+                    thumbnailFileId = item.thumbnailFileId,
+                    fallbackLabel = item.title.ifBlank { item.label },
+                    modifier = (
+                        if (isTouch()) Modifier.weight(TOUCH_ART_SHARE) else Modifier.width(190.dp)
+                        )
+                        .aspectRatio(16f / 9f)
+                        .clip(RoundedCornerShape(Corner.Small))
+                        .border(
+                            3.dp,
+                            if (mediaFocused) Accent else Color.Transparent,
+                            RoundedCornerShape(Corner.Small),
+                        )
+                        .pressable(mediaInteractions, onOpenMedia),
                 )
             }
-            if (item.text.isNotBlank()) {
-                Text(item.text, style = MaterialTheme.typography.bodyLarge, color = TextPrimary)
-            }
-            if (item.additionalInfo.isNotBlank()) {
-                Text(
-                    item.additionalInfo,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextMuted,
-                )
-            }
-            if (item.sponsorInfo.isNotBlank()) {
-                Text(
-                    item.sponsorInfo,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextMuted,
-                )
-            }
-        }
 
-        Column(
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (item.buttonText.isNotBlank()) {
-                SponsoredButton(item.buttonText, Accent, onOpen)
+            Column(
+                Modifier
+                    .weight(if (isTouch()) 1f - TOUCH_ART_SHARE else 1f)
+                    .onGloballyPositioned { coordinates ->
+                        val bounds = coordinates.boundsInWindow()
+                        textTop = bounds.top
+                        textBottom = bounds.bottom
+                        viewportHeight = coordinates.findRootCoordinates().size.height.toFloat()
+                    },
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Text(
+                    item.label.uppercase(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Tone.caution,
+                )
+                if (item.title.isNotBlank()) {
+                    Text(
+                        item.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Tone.text,
+                    )
+                }
+                if (item.text.isNotBlank()) {
+                    Text(item.text, style = MaterialTheme.typography.bodyLarge, color = Tone.text)
+                }
+                if (item.additionalInfo.isNotBlank()) {
+                    Text(
+                        item.additionalInfo,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Tone.muted,
+                    )
+                }
+                if (item.sponsorInfo.isNotBlank()) {
+                    Text(
+                        item.sponsorInfo,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Tone.muted,
+                    )
+                }
             }
-            if (item.canBeReported) {
-                SponsoredButton("Report", SurfaceDark, onReport)
+
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (item.buttonText.isNotBlank()) {
+                    SponsoredButton(item.buttonText, primary = true, onClick = onOpen)
+                }
+                if (item.canBeReported) {
+                    SponsoredButton("Report", primary = false, onClick = onReport)
+                }
             }
         }
     }
+
+    if (touch) {
+        OutlinedCard(
+            shape = RoundedCornerShape(Corner.Medium),
+            border = BorderStroke(2.dp, Tone.caution),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            body()
+        }
+    } else {
+        body()
+    }
 }
 
+/**
+ * The call to action and the report affordance on a sponsored block.
+ *
+ * On a phone these are real buttons. What they were was a [Text] with a rounded background behind
+ * it, which a screen reader announced as a label rather than as something pressable, and whose
+ * touch target came out around 40dp tall. Reporting an advertisement is the one thing on this
+ * screen a viewer has a right to be able to do, so it gets a component that behaves like a button.
+ * The television keeps the hand-drawn one, whose whole job is to invert when the remote lands on it.
+ */
 @Composable
-private fun SponsoredButton(label: String, idleColor: Color, onClick: () -> Unit) {
+private fun SponsoredButton(label: String, primary: Boolean, onClick: () -> Unit) {
+    if (isTouch()) {
+        if (primary) {
+            FilledTonalButton(onClick = onClick) { M3Text(label, maxLines = 1) }
+        } else {
+            TextButton(onClick = onClick) { M3Text(label, maxLines = 1) }
+        }
+        return
+    }
+
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
-        targetValue = if (focused) Color.White else idleColor,
+        targetValue = if (focused) Color.White else if (primary) Accent else SurfaceDark,
         animationSpec = tween(140),
         label = "sponsoredButton",
     )
@@ -1073,6 +1191,19 @@ internal fun MediaCard(
         return
     }
 
+    // A phone has no focus to mark, so the hand-painted panel and its border buy it nothing: what
+    // it wants is the surface, the elevation and the ripple every other card in the system has.
+    if (isTouch()) {
+        Card(
+            onClick = onClick,
+            shape = RoundedCornerShape(Corner.Medium),
+            modifier = modifier.fillMaxWidth(),
+        ) {
+            MediaCardBody(item, watched)
+        }
+        return
+    }
+
     Column(
         modifier
             .fillMaxWidth()
@@ -1081,21 +1212,27 @@ internal fun MediaCard(
             .border(3.dp, border, RoundedCornerShape(Corner.Medium))
             .pressable(interactions, onClick),
     ) {
-        MediaArt(item, watched, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-            Text(
-                item.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = TextPrimary,
-                // One line, not two. A release file name is long enough to fill both, and the
-                // second line cost a row of the grid on a 540dp panel; the full title is one
-                // press away during playback now.
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(6.dp))
-            MetaLine(item, watched)
-        }
+        MediaCardBody(item, watched)
+    }
+}
+
+/** The picture and the caption under it, which both the phone's card and the TV's panel carry. */
+@Composable
+private fun MediaCardBody(item: MediaItem, watched: WatchPoint?) {
+    MediaArt(item, watched, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+    Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+        Text(
+            item.title,
+            style = MaterialTheme.typography.titleMedium,
+            color = Tone.text,
+            // One line, not two. A release file name is long enough to fill both, and the
+            // second line cost a row of the grid on a 540dp panel; the full title is one
+            // press away during playback now.
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(6.dp))
+        MetaLine(item, watched)
     }
 }
 
@@ -1123,43 +1260,67 @@ private fun MediaRow(
     )
     LaunchedEffect(focused) { if (focused) onFocused() }
 
-    Row(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Corner.Medium))
-            .background(if (focused) SurfaceRaised else SurfaceDark)
-            .border(3.dp, border, RoundedCornerShape(Corner.Medium))
-            .pressable(interactions, onClick)
-            .padding(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        MediaArt(
-            item,
-            watched,
-            // A fixed 176dp is a fifth of a television and half a phone held upright, where it
-            // would leave the title about a hundred dp to live in. Reading the whole name is the
-            // reason somebody chose this arrangement, so on a phone the art takes a share of the
-            // row instead and the words keep the rest.
-            (if (isTouch()) Modifier.weight(TOUCH_ART_SHARE) else Modifier.width(ROW_ART_WIDTH))
-                .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(Corner.Small)),
-        )
-        Column(
-            Modifier.weight(if (isTouch()) 1f - TOUCH_ART_SHARE else 1f),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+    val touch = isTouch()
+    val row: @Composable () -> Unit = {
+        Row(
+            (if (touch) Modifier else modifier)
+                .fillMaxWidth()
+                .then(
+                    if (touch) {
+                        Modifier
+                    } else {
+                        Modifier
+                            .clip(RoundedCornerShape(Corner.Medium))
+                            .background(if (focused) SurfaceRaised else SurfaceDark)
+                            .border(3.dp, border, RoundedCornerShape(Corner.Medium))
+                            .pressable(interactions, onClick)
+                    },
+                )
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                item.title,
-                style = MaterialTheme.typography.titleLarge,
-                color = TextPrimary,
-                // Two lines here, unlike the tile: this is the arrangement someone picked in
-                // order to read the name, and a row can afford the height a grid cell cannot.
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+            MediaArt(
+                item,
+                watched,
+                // A fixed 176dp is a fifth of a television and half a phone held upright, where it
+                // would leave the title about a hundred dp to live in. Reading the whole name is
+                // the reason somebody chose this arrangement, so on a phone the art takes a share
+                // of the row instead and the words keep the rest.
+                (if (touch) Modifier.weight(TOUCH_ART_SHARE) else Modifier.width(ROW_ART_WIDTH))
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(Corner.Small)),
             )
-            MetaLine(item, watched)
+            Column(
+                Modifier.weight(if (touch) 1f - TOUCH_ART_SHARE else 1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Tone.text,
+                    // Two lines here, unlike the tile: this is the arrangement someone picked in
+                    // order to read the name, and a row can afford the height a grid cell cannot.
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                MetaLine(item, watched)
+            }
         }
+    }
+
+    // Same reasoning as the tile: on a phone this is a card, with the system's own surface and
+    // ripple, and the border only ever meant anything to a remote.
+    if (touch) {
+        Card(
+            onClick = onClick,
+            shape = RoundedCornerShape(Corner.Medium),
+            modifier = modifier.fillMaxWidth(),
+        ) {
+            row()
+        }
+    } else {
+        row()
     }
 }
 
@@ -1203,13 +1364,15 @@ private fun MediaArt(
                 // viewer about a television they are not holding.
                 "Saved",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White,
+                // The one badge here that is the app speaking rather than a fact about the picture,
+                // so it takes the theme's own colour instead of the plain black plate the tags use.
+                color = Tone.onAccent,
                 maxLines = 1,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(6.dp)
                     .clip(RoundedCornerShape(Corner.ExtraSmall))
-                    .background(Accent.copy(alpha = 0.92f))
+                    .background(Tone.accent.copy(alpha = 0.92f))
                     .padding(horizontal = 7.dp, vertical = 2.dp),
             )
         }
@@ -1250,19 +1413,38 @@ private fun MediaArt(
         if (watched != null && watched.fraction > 0f) {
             // A thin bar along the bottom of the art, the one place a viewer already looks
             // to see whether they have started something.
-            Box(
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .background(Color.Black.copy(alpha = 0.55f)),
-            ) {
+            //
+            // Material draws this one on a phone, gap and rounded ends included, so it matches the
+            // bar under the video the tile opens. The television keeps the two plain rectangles:
+            // its progress bar is read across a room, where a gap in the middle of a 6dp line only
+            // reads as a fault in the panel. The track stays black in both, because it lies over
+            // artwork rather than over any surface the theme knows about.
+            val track = Color.Black.copy(alpha = 0.55f)
+            if (isTouch()) {
+                LinearProgressIndicator(
+                    progress = { watched.fraction },
+                    color = Tone.accent,
+                    trackColor = track,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .height(6.dp),
+                )
+            } else {
                 Box(
                     Modifier
-                        .fillMaxWidth(watched.fraction)
-                        .fillMaxHeight()
-                        .background(Accent),
-                )
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .background(track),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(watched.fraction)
+                            .fillMaxHeight()
+                            .background(Accent),
+                    )
+                }
             }
         }
     }
@@ -1280,7 +1462,7 @@ private fun MetaLine(item: MediaItem, watched: WatchPoint?) {
         listOfNotNull(duration.ifEmpty { null }, size.ifEmpty { null }, resume)
             .joinToString("  ·  "),
         style = MaterialTheme.typography.bodyMedium,
-        color = if (resume != null) Accent else TextMuted,
+        color = if (resume != null) Tone.accent else Tone.muted,
         maxLines = 1,
     )
 }
@@ -1313,6 +1495,9 @@ private val DENSE_GAP = 2.dp
 
 /** Half the panel, so the strip never reaches back across the listing it belongs to. */
 private val STRIP_MAX_WIDTH = 480.dp
+
+/** How long a pull to refresh keeps its spinner before it accepts that nothing is coming back. */
+private const val REFRESH_TIMEOUT_MS = 20_000L
 
 /** How long a gap in focus has to last before the name strip counts it as having left. */
 private const val FOCUS_SETTLE_MS = 150L

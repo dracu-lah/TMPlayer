@@ -31,6 +31,8 @@ private val MAX_SIZE = longPreferencesKey("max_size_bytes")
 private val CHAT_LAYOUT = stringPreferencesKey("chat_layout")
 private val MEDIA_LAYOUT = stringPreferencesKey("media_layout")
 private val CHAT_SNAPSHOT = stringPreferencesKey("chat_snapshot")
+private val THEME_CHOICE = stringPreferencesKey("theme_choice")
+private val DYNAMIC_COLOUR = booleanPreferencesKey("dynamic_colour")
 
 /** Where playback stopped, so the next launch can offer to continue. */
 private fun resumeKey(chatId: Long, messageId: Long) =
@@ -68,9 +70,20 @@ class SettingsStore(private val context: Context) {
      * Signing out has to leave nothing of the previous account behind. TDLib clears its own
      * database on log out, but everything this app remembers about their chats and their videos
      * lives here, and none of it means anything to whoever signs in next.
+     *
+     * Two things survive, and neither is about the account: whether the app is drawn light or
+     * dark, and whether it takes its colours from the wallpaper. Those describe the phone and the
+     * person holding it, not the Telegram account signed into it, and having the app flip to dark
+     * halfway through signing out reads as a fault rather than as privacy.
      */
     suspend fun clearEverything() {
-        context.prefs.edit { it.clear() }
+        context.prefs.edit { prefs ->
+            val theme = prefs[THEME_CHOICE]
+            val dynamic = prefs[DYNAMIC_COLOUR]
+            prefs.clear()
+            theme?.let { prefs[THEME_CHOICE] = it }
+            dynamic?.let { prefs[DYNAMIC_COLOUR] = it }
+        }
     }
 
     /** Unstars every chat at once, which is the only way back from a tab full of them. */
@@ -251,6 +264,34 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setMediaLayout(value: CardLayout) {
         context.prefs.edit { it[MEDIA_LAYOUT] = value.name }
+    }
+
+    // ---- appearance -------------------------------------------------------------------------
+
+    /**
+     * Light, dark, or whatever the phone is set to.
+     *
+     * A television has no such setting and never reads this: a panel in a dark room is dark, and
+     * Android TV has no system-wide light mode to follow.
+     */
+    val themeChoice: Flow<ThemeChoice> =
+        context.prefs.data.map { ThemeChoice.from(it[THEME_CHOICE]) }
+
+    suspend fun setThemeChoice(value: ThemeChoice) {
+        context.prefs.edit { it[THEME_CHOICE] = value.name }
+    }
+
+    /**
+     * Whether to take the palette from the phone's wallpaper, where Android offers one.
+     *
+     * On by default, which is the Android 12 and later convention: an app that ignores the colours
+     * the viewer picked for their phone is the one that looks out of place. Off falls back to the
+     * app's own blue, and on a phone older than Android 12 there is nothing to fall back from.
+     */
+    val dynamicColour: Flow<Boolean> = context.prefs.data.map { it[DYNAMIC_COLOUR] ?: true }
+
+    suspend fun setDynamicColour(value: Boolean) {
+        context.prefs.edit { it[DYNAMIC_COLOUR] = value }
     }
 
     // ---- prompts ----------------------------------------------------------------------------

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Dark window background prevents a white flash before Compose draws -->
+    <!-- A window background in the theme's own colour, so nothing flashes before Compose draws -->
     <style name="Theme.TMPlayer" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/background</item>
-        <item name="android:colorBackground">@color/background</item>
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:colorBackground">@color/window_background</item>
     </style>
 
     <!--

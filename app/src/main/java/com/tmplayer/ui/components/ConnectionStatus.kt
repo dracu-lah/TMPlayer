@@ -9,9 +9,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme as M3
+import androidx.compose.material3.SnackbarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
@@ -35,9 +38,14 @@ fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier) {
         exit = fadeOut(),
     ) {
         val touch = isTouch()
+        // A phone already has a shape for "something happened and you cannot act on it": the
+        // snackbar. Taking its inverse surface rather than a panel colour is what keeps this
+        // legible when the scheme underneath is a light one, or the wallpaper's.
+        val container = if (touch) SnackbarDefaults.color else SurfaceRaised.copy(alpha = 0.96f)
+        val onContainer = if (touch) SnackbarDefaults.contentColor else TextPrimary
         Row(
             Modifier
-                .background(SurfaceRaised.copy(alpha = 0.96f), CircleShape)
+                .background(container, if (touch) M3.shapes.extraSmall else CircleShape)
                 .padding(
                     horizontal = if (touch) 12.dp else 16.dp,
                     vertical = if (touch) 8.dp else 10.dp,
@@ -49,10 +57,15 @@ fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier) {
                 ConnectionNotice.Offline -> Icon(
                     TmIcons.WifiOff,
                     contentDescription = null,
-                    tint = TextPrimary,
+                    tint = onContainer,
                     modifier = Modifier.size(20.dp),
                 )
-                ConnectionNotice.Reconnecting -> Spinner(size = 20.dp, strokeWidth = 2.dp)
+                ConnectionNotice.Reconnecting -> Spinner(
+                    size = 20.dp,
+                    // The television's spinner is left at its accent, where it always was.
+                    color = if (touch) onContainer else Color.Unspecified,
+                    strokeWidth = 2.dp,
+                )
                 ConnectionNotice.Hidden -> Unit
             }
             Text(
@@ -68,7 +81,7 @@ fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier) {
                 } else {
                     MaterialTheme.typography.bodyLarge
                 },
-                color = TextPrimary,
+                color = onContainer,
             )
         }
     }

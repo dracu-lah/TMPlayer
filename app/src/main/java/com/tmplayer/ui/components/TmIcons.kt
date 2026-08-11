@@ -11,13 +11,20 @@ import androidx.compose.ui.unit.dp
  *
  * Declared as vectors rather than pulled from `material-icons-extended`, which would add several
  * thousand unused icons to an app that needs exactly these.
+ *
+ * Every path is filled black, which is what Material fills its own icons with. `Icon` paints a
+ * vector through a tint filter, so the colour asked for at the call site is the colour that lands
+ * and the fill written here never shows; the one moment it does show is an `Icon` given
+ * `Color.Unspecified`, which skips the filter. These used to be filled white for a television that
+ * had no other background, and the phone's light theme turned that into an icon drawn in white on
+ * white. Black is the fill that fails visibly rather than invisibly.
  */
 object TmIcons {
 
     /** Wi-Fi with a slash, for the passive offline status chip. */
     val WifiOff: ImageVector by lazy {
         icon("WifiOff") {
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(2.27f, 3.55f)
                 lineTo(20.45f, 21.73f)
                 lineTo(21.73f, 20.45f)
@@ -59,7 +66,7 @@ object TmIcons {
     /** Wi-Fi, for the setting that says downloads may only happen over it. */
     val Wifi: ImageVector by lazy {
         icon("Wifi") {
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(12f, 21f)
                 lineTo(15.6f, 16.5f)
                 curveTo(14.6f, 15.75f, 13.35f, 15.3f, 12f, 15.3f)
@@ -88,7 +95,7 @@ object TmIcons {
     /** A clock, for "Recent". */
     val Clock: ImageVector by lazy {
         icon("Clock") {
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(12f, 2f)
                 curveTo(6.48f, 2f, 2f, 6.48f, 2f, 12f)
                 curveTo(2f, 17.52f, 6.48f, 22f, 12f, 22f)
@@ -103,7 +110,7 @@ object TmIcons {
                 close()
             }
             // Hour hand up, minute hand right, meeting at the centre.
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(12.5f, 6f)
                 horizontalLineTo(11f)
                 verticalLineTo(13f)
@@ -116,12 +123,12 @@ object TmIcons {
     }
 
     /**
-     * An unfilled star, for a favourite that is not set. Tint alone could not carry it: focus
-     * repaints the icon white.
+     * An unfilled star, for a favourite that is not set. The hole in the middle is cut into the
+     * path rather than left to a tint, because focus repaints the whole glyph one colour.
      */
     val StarOutline: ImageVector by lazy {
         icon("StarOutline") {
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(12f, 8.89f)
                 lineTo(13.03f, 12.11f)
                 lineTo(13.26f, 12.83f)
@@ -155,7 +162,7 @@ object TmIcons {
     /** An empty circle: the unselected half of a radio pair. */
     val CircleOutline: ImageVector by lazy {
         icon("CircleOutline") {
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(12f, 2f)
                 curveTo(6.48f, 2f, 2f, 6.48f, 2f, 12f)
                 curveTo(2f, 17.52f, 6.48f, 22f, 12f, 22f)
@@ -176,7 +183,7 @@ object TmIcons {
     val Channel: ImageVector by lazy {
         icon("Channel") {
             // Megaphone body and handle.
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(3f, 10f)
                 verticalLineTo(14f)
                 horizontalLineTo(7f)
@@ -185,14 +192,14 @@ object TmIcons {
                 lineTo(7f, 10f)
                 close()
             }
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(16.5f, 12f)
                 curveTo(16.5f, 10.23f, 15.48f, 8.71f, 14f, 7.97f)
                 verticalLineTo(16.02f)
                 curveTo(15.48f, 15.29f, 16.5f, 13.77f, 16.5f, 12f)
                 close()
             }
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(14f, 3.23f)
                 verticalLineTo(5.29f)
                 curveTo(16.89f, 6.15f, 19f, 8.83f, 19f, 12f)
@@ -208,7 +215,7 @@ object TmIcons {
     /** Two people: a group rather than a single contact. */
     val Group: ImageVector by lazy {
         icon("Group") {
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(16f, 11f)
                 curveTo(17.66f, 11f, 19f, 9.66f, 19f, 8f)
                 curveTo(19f, 6.34f, 17.66f, 5f, 16f, 5f)
@@ -216,7 +223,7 @@ object TmIcons {
                 curveTo(13f, 9.66f, 14.34f, 11f, 16f, 11f)
                 close()
             }
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(8f, 11f)
                 curveTo(9.66f, 11f, 11f, 9.66f, 11f, 8f)
                 curveTo(11f, 6.34f, 9.66f, 5f, 8f, 5f)
@@ -224,7 +231,7 @@ object TmIcons {
                 curveTo(5f, 9.66f, 6.34f, 11f, 8f, 11f)
                 close()
             }
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(8f, 13f)
                 curveTo(5.67f, 13f, 1f, 14.17f, 1f, 16.5f)
                 verticalLineTo(19f)
@@ -233,7 +240,7 @@ object TmIcons {
                 curveTo(15f, 14.17f, 10.33f, 13f, 8f, 13f)
                 close()
             }
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(16f, 13f)
                 curveTo(15.71f, 13f, 15.38f, 13.02f, 15.03f, 13.05f)
                 curveTo(16.19f, 13.89f, 17f, 15.02f, 17f, 16.5f)
@@ -253,28 +260,28 @@ object TmIcons {
      */
     val Grid: ImageVector by lazy {
         icon("Grid") {
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(3f, 3f)
                 horizontalLineTo(11f)
                 verticalLineTo(11f)
                 horizontalLineTo(3f)
                 close()
             }
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(13f, 3f)
                 horizontalLineTo(21f)
                 verticalLineTo(11f)
                 horizontalLineTo(13f)
                 close()
             }
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(3f, 13f)
                 horizontalLineTo(11f)
                 verticalLineTo(21f)
                 horizontalLineTo(3f)
                 close()
             }
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(13f, 13f)
                 horizontalLineTo(21f)
                 verticalLineTo(21f)
@@ -287,7 +294,7 @@ object TmIcons {
     /** Microphone, for voice search. */
     val Mic: ImageVector by lazy {
         icon("Mic") {
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(12f, 14f)
                 curveTo(13.66f, 14f, 15f, 12.66f, 15f, 11f)
                 verticalLineTo(5f)
@@ -297,7 +304,7 @@ object TmIcons {
                 curveTo(9f, 12.66f, 10.34f, 14f, 12f, 14f)
                 close()
             }
-            path(fill = SolidColor(Color.White)) {
+            path(fill = SolidColor(Color.Black)) {
                 moveTo(17f, 11f)
                 curveTo(17f, 13.76f, 14.76f, 16f, 12f, 16f)
                 curveTo(9.24f, 16f, 7f, 13.76f, 7f, 11f)

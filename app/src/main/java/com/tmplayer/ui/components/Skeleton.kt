@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
@@ -40,9 +41,9 @@ import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.CardLayout
+import com.tmplayer.ui.theme.Avatar
 import com.tmplayer.ui.theme.Corner
-import com.tmplayer.ui.theme.SurfaceDark
-import com.tmplayer.ui.theme.SurfaceRaised
+import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 
 /**
@@ -53,17 +54,25 @@ import com.tmplayer.ui.theme.Tv
  * tree on every frame, which on a 1 GB stick is far more expensive than the drawing itself.
  */
 @Stable
-class Shimmer internal constructor(private val progress: State<Float>) {
+class Shimmer internal constructor(
+    private val progress: State<Float>,
+    /**
+     * The band's three stops, read once where the theme is in scope. A placeholder is the first
+     * thing a screen draws, so on a phone it has to be the scheme's own greys: a dark block
+     * shimmering on a white window is the loading state announcing the wrong app.
+     */
+    private val colors: List<Color>,
+) {
     internal fun brush(width: Float): Brush {
         // A zero-width element would ask for a gradient whose two ends are the same point.
-        if (width <= 0f) return SolidColor(SurfaceDark)
+        if (width <= 0f) return SolidColor(colors.first())
         // The band is as wide as the element and travels from just off its left edge to just off
         // its right, so every placeholder completes a full sweep in step with its neighbours no
         // matter how wide it is. It is fully outside the element at both ends of the animation,
         // which is what hides the jump back to the start.
         val x = (progress.value * 2f - 1f) * width
         return Brush.linearGradient(
-            colors = SweepColors,
+            colors = colors,
             start = Offset(x, 0f),
             end = Offset(x + width, 0f),
         )
@@ -88,7 +97,10 @@ fun rememberShimmer(): Shimmer {
         ),
         label = "sweep",
     )
-    return remember(progress) { Shimmer(progress) }
+    val base = Tone.surface
+    val band = Tone.surfaceHigh
+    val colors = listOf(base, band, base)
+    return remember(progress, base, band) { Shimmer(progress, colors) }
 }
 
 /**
@@ -135,13 +147,14 @@ fun ChatListSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLay
         val room = maxWidth - start - end
         val height = maxHeight - top
 
-        // The rows the real list draws, so the two agree. A phone's chat list is 72dp full-bleed
-        // rows with a 54dp avatar and no gap between them; the television's is an 84dp card with a
-        // 64dp avatar and a 14dp gap. A placeholder built to the other one's figures is exactly
-        // the jump it exists to prevent.
+        // The rows the real list draws, so the two agree. A phone's chat list is Material's
+        // two-line list item: 72dp full bleed, a 56dp avatar, 16dp in from each edge and 16dp
+        // between the picture and the name, with no gap between rows. The television's is an 84dp
+        // card with a 64dp avatar and a 14dp gap. A placeholder built to the other one's figures
+        // is exactly the jump it exists to prevent.
         val rowHeight = if (touch) 72.dp else 84.dp
         val rowGap = if (touch) 0.dp else 14.dp
-        val avatar = if (touch) 54.dp else 64.dp
+        val avatar = if (touch) Avatar.List else 64.dp
         val rowPad = if (touch) 16.dp else 24.dp
 
         Column(
@@ -166,14 +179,14 @@ fun ChatListSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLay
                                 } else {
                                     Modifier
                                         .clip(RoundedCornerShape(Corner.Large))
-                                        .background(SurfaceDark)
+                                        .background(Tone.surface)
                                 },
                             )
                             .padding(horizontal = rowPad),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         SkeletonBox(shimmer, Modifier.size(avatar), CircleShape)
-                        Spacer(Modifier.width(if (touch) 14.dp else 24.dp))
+                        Spacer(Modifier.width(if (touch) 16.dp else 24.dp))
                         // Weighted, so the bars below are measured against the room the name
                         // actually has. Widths in dp were written for a television and run off
                         // the side of a phone, where the row is a third as wide.
@@ -207,7 +220,7 @@ fun ChatListSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLay
                                         .weight(1f)
                                         .height(154.dp)
                                         .clip(RoundedCornerShape(Corner.Large))
-                                        .background(SurfaceDark)
+                                        .background(Tone.surface)
                                         .padding(16.dp),
                                     verticalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
@@ -301,7 +314,7 @@ fun MediaGridSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLa
                             Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(Corner.Medium))
-                                .background(SurfaceDark)
+                                .background(Tone.surface)
                                 .padding(12.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -337,7 +350,7 @@ private fun MediaTileSkeleton(shimmer: Shimmer, modifier: Modifier = Modifier) {
     Column(
         modifier
             .clip(RoundedCornerShape(Corner.Medium))
-            .background(SurfaceDark),
+            .background(Tone.surface),
     ) {
         // Rectangular, not rounded: the card's own clip is what gives the art its top corners,
         // exactly as it does for the real media preview.
@@ -377,7 +390,6 @@ private fun tileColumns(width: Dp, tv: Int, touch: Boolean): Int {
     return ((width + 16.dp) / (TOUCH_TILE_MIN + 16.dp)).toInt().coerceAtLeast(1)
 }
 
-private val SweepColors = listOf(SurfaceDark, SurfaceRaised, SurfaceDark)
 private const val SWEEP_MS = 1_400
 private const val CHAT_TILE_COLUMNS = 3
 private const val GRID_COLUMNS = 4
