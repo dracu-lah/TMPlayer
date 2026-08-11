@@ -47,7 +47,9 @@ import androidx.compose.material3.IconButton as TouchIconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon as M3Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch as M3Switch
 import androidx.compose.material3.Text as M3Text
 import androidx.compose.material3.TopAppBar
@@ -62,6 +64,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -298,6 +302,15 @@ fun SettingsScreen(
                         } else {
                             settings.setMinSizeBytes(SizeFilter.step(minSize, direction))
                         }
+                    }
+                },
+                onSetRange = { low, high ->
+                    scope.launch {
+                        // Widened first for the same reason the reset chip does it: the clamp
+                        // that stops the ends crossing would otherwise refuse a new floor on
+                        // its way past the old ceiling.
+                        settings.setMaxSizeBytes(high)
+                        settings.setMinSizeBytes(low)
                     }
                 },
             )
@@ -678,11 +691,13 @@ private fun RangeRow(
     onSwitchEnd: () -> Unit,
     /** Move one end of the range: the upper one when `upper`, by one step in `direction`. */
     onStep: (upper: Boolean, direction: Int) -> Unit,
+    /** Both ends at once, which is what a dragged range slider reports on a phone. */
+    onSetRange: (min: Long, max: Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val touch = isTouch()
     if (touch) {
-        TouchRangeRow(minValue, maxValue, onStep, modifier)
+        TouchRangeRow(minValue, maxValue, onSetRange, modifier)
         return
     }
 
@@ -784,9 +799,18 @@ private fun RangeRow(
 private fun TouchRangeRow(
     minValue: Long,
     maxValue: Long,
-    onStep: (upper: Boolean, direction: Int) -> Unit,
+    onSetRange: (min: Long, max: Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Held locally while the thumb is down so the track follows the finger at frame rate; the
+    // store is written once, when the finger lifts. Keyed on the stored values so a reset from
+    // the chip above, or the first value arriving off disk, moves the thumbs.
+    var range by remember(minValue, maxValue) {
+        mutableStateOf(minValue.toFloat()..maxValue.toFloat())
+    }
+    val low = SizeFilter.snap(range.start.toLong())
+    val high = SizeFilter.snap(range.endInclusive.toLong())
+
     Column(
         modifier
             .fillMaxWidth()
@@ -794,8 +818,33 @@ private fun TouchRangeRow(
             .background(SurfaceDark)
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
-        RangeTrack(minValue, maxValue, editingUpper = false, focused = false)
-        Spacer(Modifier.height(6.dp))
+        // The two figures above the track rather than in two stepper rows below it: the thumbs
+        // are what the viewer is looking at, so the numbers belong where the eye already is.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RangeEnd("From", SizeFilter.label(low))
+            Spacer(Modifier.weight(1f))
+            RangeEnd("Up to", SizeFilter.label(high))
+        }
+        Spacer(Modifier.height(4.dp))
+        // Material's own control, in place of a hand-drawn track and four arrow buttons. Dragging
+        // a range is what a phone is for, and the stepper needed eighty presses to cross it. It
+        // also brings its own accessibility: TalkBack announces each thumb's value and moves it.
+        RangeSlider(
+            value = range,
+            onValueChange = { range = it },
+            onValueChangeFinished = {
+                onSetRange(
+                    SizeFilter.snap(range.start.toLong()),
+                    SizeFilter.snap(range.endInclusive.toLong()),
+                )
+            },
+            valueRange = SizeFilter.FLOOR.toFloat()..SizeFilter.CEILING.toFloat(),
+            colors = SliderDefaults.colors(
+                thumbColor = Accent,
+                activeTrackColor = Accent,
+                inactiveTrackColor = SurfaceRaised,
+            ),
+        )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 SizeFilter.label(SizeFilter.FLOOR),
@@ -809,41 +858,15 @@ private fun TouchRangeRow(
                 color = TextMuted,
             )
         }
-        Spacer(Modifier.height(6.dp))
-        TouchEnd("From", SizeFilter.label(minValue)) { direction -> onStep(false, direction) }
-        TouchEnd("Up to", SizeFilter.label(maxValue)) { direction -> onStep(true, direction) }
     }
 }
 
-/** One end of the range with the two buttons that move it. */
+/** One end's caption and figure, above the thumb it belongs to. */
 @Composable
-private fun TouchEnd(caption: String, value: String, onStep: (Int) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(caption, style = MaterialTheme.typography.bodySmall, color = TextMuted)
-            Text(value, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
-        }
-        // IconButton is 48dp square whatever glyph goes in it, which is the floor a fingertip is
-        // entitled to and the reason these are not the bare Icons the TV row draws.
-        TouchIconButton(onClick = { onStep(-1) }) {
-            Icon(
-                Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                contentDescription = "Smaller $caption",
-                tint = TextPrimary,
-                modifier = Modifier.size(24.dp),
-            )
-        }
-        TouchIconButton(onClick = { onStep(1) }) {
-            Icon(
-                Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = "Larger $caption",
-                tint = TextPrimary,
-                modifier = Modifier.size(24.dp),
-            )
-        }
+private fun RangeEnd(caption: String, value: String) {
+    Column {
+        Text(caption, style = MaterialTheme.typography.bodySmall, color = TextMuted)
+        Text(value, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
     }
 }
 
@@ -1037,7 +1060,16 @@ private fun StorageCard(cacheBytes: Long, freeBytes: Long, totalBytes: Long) {
                 .fillMaxWidth()
                 .height(bar)
                 .clip(RoundedCornerShape(bar / 2))
-                .background(SurfaceRaised),
+                .background(SurfaceRaised)
+                // The bar is three coloured boxes and nothing else, so a screen reader had
+                // nothing at all to say about the one graphic on the screen that carries a
+                // figure. Merged into a single node, because the parts mean nothing apart.
+                .semantics(mergeDescendants = true) {
+                    contentDescription = "Storage: " +
+                        "${StreamStats.formatBytes(used)} used of " +
+                        "${StreamStats.formatBytes(totalBytes)}, " +
+                        "${StreamStats.formatBytes(cacheBytes)} of it TMPlayer's videos"
+                },
         ) {
             // Everything on the device, then TMPlayer's own slice highlighted inside it.
             Box(

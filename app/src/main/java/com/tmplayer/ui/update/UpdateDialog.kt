@@ -18,6 +18,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon as M3Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Text as M3Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.data.Release
 import com.tmplayer.data.UpdateState
 import com.tmplayer.data.Updates
 import com.tmplayer.player.StreamStats
@@ -77,6 +83,28 @@ fun UpdateDialog(onDismiss: () -> Unit) {
         is UpdateState.Downloading -> current.release
         is UpdateState.Ready -> current.release
         else -> null
+    }
+
+    if (touch) {
+        TouchUpdateDialog(
+            state = state,
+            release = release,
+            allowed = allowed,
+            onPrimary = {
+                when {
+                    release != null && !allowed -> runCatching {
+                        context.startActivity(Updates.unknownSourcesIntent(context))
+                    }
+                    release != null -> scope.launch { Updates.downloadAndInstall(context, release) }
+                    else -> scope.launch { Updates.check() }
+                }
+            },
+            onDismiss = onDismiss,
+        )
+        LaunchedEffect(state) {
+            if (state is UpdateState.Ready) onDismiss()
+        }
+        return
     }
 
     Dialog(
@@ -203,6 +231,83 @@ fun UpdateDialog(onDismiss: () -> Unit) {
 
 /** As wide as this dialog ever gets, on any screen. */
 private val PANEL_MAX = 620.dp
+
+/**
+ * The phone's version: Material's own dialog, in place of the hand-built panel.
+ *
+ * The panel was drawn for a television, where a dialog is a lit card in the middle of a dark room
+ * and every control has to be reachable by D-pad. On a phone all of that is already decided by the
+ * platform: the scrim, the width, the corner radius, the button order, tap-outside to dismiss and
+ * the announcement a screen reader makes on the way in. Writing them again by hand only meant
+ * getting them slightly wrong, and the sizes were the sofa's.
+ */
+@Composable
+private fun TouchUpdateDialog(
+    state: UpdateState,
+    release: Release?,
+    allowed: Boolean,
+    onPrimary: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val downloading = state as? UpdateState.Downloading
+    AlertDialog(
+        // A download in progress is the one state that must not be dismissed by a stray tap
+        // outside it: the dialog is what is holding the download's own progress on screen.
+        onDismissRequest = { if (downloading == null) onDismiss() },
+        icon = {
+            M3Icon(Icons.Filled.Refresh, contentDescription = null, tint = Caution)
+        },
+        title = {
+            M3Text(
+                when {
+                    release == null -> "TMPlayer is up to date"
+                    downloading != null -> "Downloading ${release.version}"
+                    else -> "Update to ${release.version}"
+                },
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                M3Text(body(state, allowed, release?.sizeBytes ?: 0L, "phone"))
+                if (downloading != null) {
+                    // An unknown length becomes the indeterminate bar rather than an empty
+                    // trough, which is what the platform's own control is for.
+                    if (downloading.fraction != null) {
+                        LinearProgressIndicator(
+                            progress = { downloading.fraction.coerceIn(0f, 1f) },
+                            color = Caution,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        LinearProgressIndicator(
+                            color = Caution,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (downloading != null) return@AlertDialog
+            TextButton(onClick = onPrimary) {
+                M3Text(
+                    when {
+                        release != null && !allowed -> "Open that setting"
+                        release != null -> "Download and install"
+                        else -> "Check again"
+                    },
+                )
+            }
+        },
+        dismissButton = {
+            if (downloading != null) return@AlertDialog
+            TextButton(onClick = onDismiss) { M3Text("Close") }
+        },
+        containerColor = SurfaceDark,
+        titleContentColor = TextPrimary,
+        textContentColor = TextMuted,
+    )
+}
 
 /**
  * A plain bar, filled as far as the download has come.

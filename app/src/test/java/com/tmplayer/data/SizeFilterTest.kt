@@ -135,4 +135,20 @@ class SizeFilterTest {
         assertFalse(text.contains("No minimum"))
         assertFalse(text.contains("No limit"))
     }
+
+    @Test
+    fun `a dragged value snaps onto the step grid`() {
+        assertEquals(SizeFilter.STEP * 5, SizeFilter.snap(SizeFilter.STEP * 5 + SizeFilter.STEP / 4))
+        assertEquals(SizeFilter.STEP * 6, SizeFilter.snap(SizeFilter.STEP * 5 + SizeFilter.STEP * 3 / 4))
+    }
+
+    @Test
+    fun `both ends of the range snap to themselves`() {
+        // "No minimum" and "No limit" are the two values a finger is most likely to be aiming at,
+        // and rounding either one onto the grid would put it just inside the range instead.
+        assertEquals(SizeFilter.FLOOR, SizeFilter.snap(SizeFilter.FLOOR))
+        assertEquals(SizeFilter.FLOOR, SizeFilter.snap(SizeFilter.STEP / 4))
+        assertEquals(SizeFilter.CEILING, SizeFilter.snap(SizeFilter.CEILING))
+        assertEquals(SizeFilter.CEILING, SizeFilter.snap(SizeFilter.CEILING - SizeFilter.STEP / 4))
+    }
 }

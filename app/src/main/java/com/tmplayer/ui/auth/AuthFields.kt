@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.VisualTransformation
@@ -124,7 +125,9 @@ fun PaneChooser(
             .height(FIELD_HEIGHT)
             .clip(RoundedCornerShape(12.dp))
             .background(SurfaceDark)
-            .clickable(onClick = onClick)
+            // Spelled out, because a Box with a clickable on it is announced as plain text: a
+            // screen reader had no way to know the country row was something to press.
+            .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.CenterStart,
     ) {

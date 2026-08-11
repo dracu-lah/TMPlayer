@@ -55,6 +55,20 @@ object SizeFilter {
         return moved.coerceIn(FLOOR, CEILING)
     }
 
+    /**
+     * Rounds a dragged value onto the step grid.
+     *
+     * A slider under a thumb reports whatever fraction of the track it is at, which for this range
+     * is a value to the byte; showing "2.43 GB" and storing it would make the readout unrepeatable
+     * and the label arithmetic ugly for no gain. Both ends of the range are snapped to themselves,
+     * since "No minimum" and "No limit" are the two values a viewer is most likely to want exactly.
+     */
+    fun snap(value: Long): Long {
+        if (value <= FLOOR + STEP / 2) return FLOOR
+        if (value >= CEILING - STEP / 2) return CEILING
+        return ((value + STEP / 2) / STEP) * STEP
+    }
+
     /** Keeps the two bounds from crossing over each other. */
     fun clampMin(candidate: Long, currentMax: Long): Long =
         candidate.coerceIn(FLOOR, (currentMax - STEP).coerceAtLeast(FLOOR))
