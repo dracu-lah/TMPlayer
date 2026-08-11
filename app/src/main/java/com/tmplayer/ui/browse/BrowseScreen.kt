@@ -182,7 +182,7 @@ fun BrowseScreen(
 
             Column(Modifier.fillMaxSize()) {
                     if (tab == BrowseTab.Continue) {
-                        Header(tab, continueWatching.size, insets, touch) {
+                        TabHeading(tab, continueWatching.size, insets, touch) {
                             LayoutAction(layout, touch, onToggleLayout)
                             // No Refresh here: this tab is read off this device and cannot be
                             // behind, so the button would be one that visibly does nothing.
@@ -210,7 +210,7 @@ fun BrowseScreen(
                             )
                         }
                     } else {
-                        Header(tab, visible.size, insets, touch) {
+                        TabHeading(tab, visible.size, insets, touch) {
                             LayoutAction(layout, touch, onToggleLayout)
                             RefreshAction(touch, onRefresh)
                             // Stars are added one at a time from a menu, so the only way back from
@@ -919,8 +919,16 @@ private fun HeaderAction(
     }
 }
 
+/**
+ * The heading over a tab's listing.
+ *
+ * Not called `Header`, which is what the media grid's own heading is called one file away. Both
+ * live in this package, and an explicit import of the name from outside the package resolved to
+ * this private one instead of the internal one it meant, which fails to compile somewhere that
+ * has nothing to do with either.
+ */
 @Composable
-private fun Header(
+private fun TabHeading(
     tab: BrowseTab,
     count: Int,
     insets: BrowseInsets,

@@ -111,6 +111,8 @@ private fun PromoMediaScreen() {
             onSubmit = {},
             onToggleFavorite = {},
             layout = CardLayout.Grid,
+            // Screenshots are taken on a TV, so the heading starts inside the overscan.
+            edge = Tv.SafeH,
             onToggleLayout = {},
             onRefresh = {},
         )
