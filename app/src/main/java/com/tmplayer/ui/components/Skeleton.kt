@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.CardLayout
+import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
 import com.tmplayer.ui.theme.Tv
@@ -100,7 +101,7 @@ fun rememberShimmer(): Shimmer {
 fun SkeletonBox(
     shimmer: Shimmer,
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(6.dp),
+    shape: Shape = RoundedCornerShape(Corner.Small),
 ) {
     Box(
         modifier.drawBehind {
@@ -164,7 +165,7 @@ fun ChatListSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLay
                                     Modifier
                                 } else {
                                     Modifier
-                                        .clip(RoundedCornerShape(16.dp))
+                                        .clip(RoundedCornerShape(Corner.Large))
                                         .background(SurfaceDark)
                                 },
                             )
@@ -205,7 +206,7 @@ fun ChatListSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLay
                                     Modifier
                                         .weight(1f)
                                         .height(154.dp)
-                                        .clip(RoundedCornerShape(16.dp))
+                                        .clip(RoundedCornerShape(Corner.Large))
                                         .background(SurfaceDark)
                                         .padding(16.dp),
                                     verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -299,7 +300,7 @@ fun MediaGridSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLa
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
+                                .clip(RoundedCornerShape(Corner.Medium))
                                 .background(SurfaceDark)
                                 .padding(12.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -309,7 +310,7 @@ fun MediaGridSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLa
                                 shimmer,
                                 (if (touch) Modifier.weight(TOUCH_ART_SHARE) else Modifier.width(ROW_ART_WIDTH))
                                     .aspectRatio(16f / 9f),
-                                RoundedCornerShape(8.dp),
+                                RoundedCornerShape(Corner.Small),
                             )
                             Column(
                                 Modifier.weight(if (touch) 1f - TOUCH_ART_SHARE else 1f),
@@ -335,7 +336,7 @@ fun MediaGridSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLa
 private fun MediaTileSkeleton(shimmer: Shimmer, modifier: Modifier = Modifier) {
     Column(
         modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(Corner.Medium))
             .background(SurfaceDark),
     ) {
         // Rectangular, not rounded: the card's own clip is what gives the art its top corners,

@@ -30,10 +30,12 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.tv.material3.Icon
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -176,9 +178,17 @@ private const val SWEEP_MS = 1_332
 private const val MAX_SWEEP = 300f
 private const val MIN_SWEEP = 12f
 
-/** A calm, final statement. No Retry button, because there is nothing to retry. */
+/**
+ * A calm, final statement. No Retry button, because there is nothing to retry.
+ *
+ * The one empty state in the app. The browse tabs drew their own, a copy of this with a
+ * television's margins and a television's type on a phone as well, and the two drifted apart the
+ * moment either was touched: an empty search said one thing in a chat and another in the list of
+ * chats, in two different sizes. [icon] is the only thing that ever legitimately differed, since a
+ * search that found nothing is not the same situation as a tab with nothing in it yet.
+ */
 @Composable
-fun BigEmpty(message: String) {
+fun BigEmpty(message: String, icon: ImageVector = Icons.Filled.Search) {
     val touch = isTouch()
     Box(
         Modifier.fillMaxSize().padding(horizontal = if (touch) PhonePad.Side else 72.dp),
@@ -189,7 +199,7 @@ fun BigEmpty(message: String) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Icon(
-                Icons.Filled.Search,
+                icon,
                 contentDescription = null,
                 tint = TextMuted.copy(alpha = 0.55f),
                 modifier = Modifier.size(if (touch) 44.dp else 56.dp),
@@ -203,6 +213,9 @@ fun BigEmpty(message: String) {
                 },
                 color = TextMuted,
                 textAlign = TextAlign.Center,
+                // A sentence that needs two lines breaks near the middle rather than running the
+                // full width of a television and leaving three words underneath.
+                modifier = Modifier.widthIn(max = 400.dp),
             )
         }
     }

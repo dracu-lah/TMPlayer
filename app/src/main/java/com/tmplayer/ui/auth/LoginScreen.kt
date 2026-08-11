@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -66,6 +67,7 @@ import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.paneAction
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.theme.Accent
+import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.TextMuted
@@ -591,7 +593,7 @@ private fun CodeBoxes(
                             Modifier
                                 .weight(1f)
                                 .height(FIELD_HEIGHT)
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(Corner.Medium))
                                 .background(SurfaceDark)
                                 .padding(2.dp),
                             contentAlignment = Alignment.Center,
@@ -697,7 +699,7 @@ private fun QrPane(link: String, onBack: () -> Unit) {
     val plate: @Composable () -> Unit = {
         Box(
             plateSize
-                .clip(RoundedCornerShape(24.dp))
+                .clip(RoundedCornerShape(Corner.ExtraLarge))
                 .background(Color.White),
             contentAlignment = Alignment.Center,
         ) {
@@ -768,7 +770,7 @@ private fun QrPane(link: String, onBack: () -> Unit) {
 private fun Step(number: Int, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
-            Modifier.size(28.dp).clip(RoundedCornerShape(14.dp)).background(Accent),
+            Modifier.size(28.dp).clip(CircleShape).background(Accent),
             contentAlignment = Alignment.Center,
         ) {
             Text("$number", style = MaterialTheme.typography.bodyLarge, color = Color.White)

@@ -122,6 +122,7 @@ import com.tmplayer.ui.components.TvMenu
 import com.tmplayer.ui.components.rememberVoiceSearch
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.Caution
+import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
 import com.tmplayer.ui.theme.TextMuted
@@ -437,7 +438,7 @@ fun MediaGridScreen(
                                     (if (standingOn != null) 46.dp else 0.dp) +
                                     connectionOffset,
                             )
-                            .clip(RoundedCornerShape(20.dp))
+                            .clip(CircleShape)
                             .background(SurfaceRaised)
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -854,9 +855,9 @@ private fun SponsoredCard(
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(Corner.Medium))
             .background(SurfaceRaised)
-            .border(2.dp, Caution.copy(alpha = 0.8f), RoundedCornerShape(14.dp))
+            .border(2.dp, Caution.copy(alpha = 0.8f), RoundedCornerShape(Corner.Medium))
             .padding(14.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -872,11 +873,11 @@ private fun SponsoredCard(
                     if (isTouch()) Modifier.weight(TOUCH_ART_SHARE) else Modifier.width(190.dp)
                     )
                     .aspectRatio(16f / 9f)
-                    .clip(RoundedCornerShape(9.dp))
+                    .clip(RoundedCornerShape(Corner.Small))
                     .border(
                         3.dp,
                         if (mediaFocused) Accent else Color.Transparent,
-                        RoundedCornerShape(9.dp),
+                        RoundedCornerShape(Corner.Small),
                     )
                     .pressable(mediaInteractions, onOpenMedia),
             )
@@ -952,7 +953,7 @@ private fun SponsoredButton(label: String, idleColor: Color, onClick: () -> Unit
         style = MaterialTheme.typography.bodyLarge,
         color = if (focused) Color.Black else TextPrimary,
         modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(CircleShape)
             .background(background)
             .pressable(interactions, onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
@@ -983,7 +984,7 @@ private fun Pill(
     Row(
         Modifier
             .height(48.dp)
-            .clip(RoundedCornerShape(24.dp))
+            .clip(CircleShape)
             .background(background)
             .pressable(interactions, onClick)
             // Even padding when there are no words, so the pill comes out round rather than as a
@@ -1012,7 +1013,7 @@ private fun FullName(name: String, modifier: Modifier = Modifier) {
     Row(
         modifier
             .widthIn(max = STRIP_MAX_WIDTH)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(Corner.Small))
             .background(Color.Black.copy(alpha = 0.82f))
             .padding(horizontal = 14.dp, vertical = 8.dp),
     ) {
@@ -1075,9 +1076,9 @@ internal fun MediaCard(
     Column(
         modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(Corner.Medium))
             .background(if (focused) SurfaceRaised else SurfaceDark)
-            .border(3.dp, border, RoundedCornerShape(14.dp))
+            .border(3.dp, border, RoundedCornerShape(Corner.Medium))
             .pressable(interactions, onClick),
     ) {
         MediaArt(item, watched, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
@@ -1125,9 +1126,9 @@ private fun MediaRow(
     Row(
         modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(Corner.Medium))
             .background(if (focused) SurfaceRaised else SurfaceDark)
-            .border(3.dp, border, RoundedCornerShape(14.dp))
+            .border(3.dp, border, RoundedCornerShape(Corner.Medium))
             .pressable(interactions, onClick)
             .padding(12.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -1142,7 +1143,7 @@ private fun MediaRow(
             // row instead and the words keep the rest.
             (if (isTouch()) Modifier.weight(TOUCH_ART_SHARE) else Modifier.width(ROW_ART_WIDTH))
                 .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(8.dp)),
+                .clip(RoundedCornerShape(Corner.Small)),
         )
         Column(
             Modifier.weight(if (isTouch()) 1f - TOUCH_ART_SHARE else 1f),
@@ -1207,7 +1208,7 @@ private fun MediaArt(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(6.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(Corner.ExtraSmall))
                     .background(Accent.copy(alpha = 0.92f))
                     .padding(horizontal = 7.dp, vertical = 2.dp),
             )
@@ -1224,7 +1225,7 @@ private fun MediaArt(
                         color = Color.White,
                         maxLines = 1,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(Corner.ExtraSmall))
                             .background(Color.Black.copy(alpha = 0.72f))
                             .padding(horizontal = 6.dp, vertical = 2.dp),
                     )
@@ -1241,7 +1242,7 @@ private fun MediaArt(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(6.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(Corner.ExtraSmall))
                     .background(Color.Black.copy(alpha = 0.72f))
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )

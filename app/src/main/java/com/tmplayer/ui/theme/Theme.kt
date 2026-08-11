@@ -86,6 +86,53 @@ object Tv {
 }
 
 /**
+ * The three sizes a chat's picture is ever drawn at.
+ *
+ * There were five, none of them the same as each other and none of them a Material figure: 54 in
+ * the phone list, 40 on the television's rail, 32 in the drawer's footer, 64 on a card. The list
+ * one is the one that matters, and 56 is what Material's two-line list item is drawn with, which
+ * is what Telegram and the dialler put there.
+ */
+object Avatar {
+    /** A row in a list of chats. */
+    val List = 56.dp
+
+    /** Beside a name in an app bar, a rail or a footer, where the picture is a label. */
+    val Compact = 40.dp
+
+    /** The television's chat card, where the picture is the card. */
+    val Card = 64.dp
+}
+
+/**
+ * The corner radii the app is allowed to use, which is Material's shape scale and nothing else.
+ *
+ * There were nine of them in the source at one point, several a couple of dp apart: 14 next to 16
+ * next to 20, chosen a screen at a time. Nobody can see two dp, but everybody can see that two
+ * things which should match do not, and reading a number off a neighbouring file is how a scale
+ * turns into a list. Five steps, named by what they are for.
+ *
+ * Anything genuinely round (a pill, a track, a rule, an avatar) uses `CircleShape` instead. Its
+ * radius is half its own height, so it is geometry rather than taste and does not belong here.
+ */
+object Corner {
+    /** Badges and small markers drawn over art. */
+    val ExtraSmall = 4.dp
+
+    /** Thumbnails and inline artwork. */
+    val Small = 8.dp
+
+    /** Text fields, list rows and tiles. */
+    val Medium = 12.dp
+
+    /** Cards and the panels inside a screen. */
+    val Large = 16.dp
+
+    /** Dialogs and sheets, which sit above everything else and are shaped to say so. */
+    val ExtraLarge = 28.dp
+}
+
+/**
  * Buttons the user can actually read: a calm raised surface at rest, accent when focused.
  *
  * The TV Material default is a near-white pill in every state, which is far louder than this

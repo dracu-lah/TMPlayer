@@ -79,6 +79,7 @@ import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.Fuzzy
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.Updates
+import com.tmplayer.ui.components.BigEmpty
 import com.tmplayer.ui.components.MediaPreview
 import com.tmplayer.ui.components.ChatListSkeleton
 import com.tmplayer.ui.components.StateScaffold
@@ -94,7 +95,9 @@ import com.tmplayer.ui.components.TvSearchField
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.components.rememberVoiceSearch
 import com.tmplayer.ui.theme.Accent
+import com.tmplayer.ui.theme.Avatar
 import com.tmplayer.ui.theme.Caution
+import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
 import com.tmplayer.ui.theme.TextMuted
@@ -559,9 +562,9 @@ private fun ContinueTile(
     Column(
         modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(Corner.Medium))
             .background(if (focused) SurfaceRaised else SurfaceDark)
-            .border(3.dp, border, RoundedCornerShape(14.dp))
+            .border(3.dp, border, RoundedCornerShape(Corner.Medium))
             .holdable(
                 interactionSource = interactions,
                 onClick = { onResume(record) },
@@ -631,9 +634,9 @@ private fun ContinueCard(
     Row(
         modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(Corner.Large))
             .background(SurfaceDark)
-            .border(2.dp, border, RoundedCornerShape(16.dp))
+            .border(2.dp, border, RoundedCornerShape(Corner.Large))
             .holdable(
                 interactionSource = interactions,
                 onClick = { onResume(record) },
@@ -686,7 +689,7 @@ private fun ContinueCard(
                 Modifier
                     .fillMaxWidth()
                     .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
+                    .clip(CircleShape)
                     .background(TextMuted.copy(alpha = 0.25f)),
             ) {
                 Box(
@@ -714,7 +717,7 @@ private fun ContinueCard(
 private fun ContinueArt(modifier: Modifier = Modifier, badge: Dp) {
     Box(
         modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(Corner.Small))
             .background(SurfaceRaised),
         contentAlignment = Alignment.Center,
     ) {
@@ -827,7 +830,7 @@ private fun AccountBadge(account: Account?) {
         Modifier.padding(start = RAIL_INSET),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(40.dp).clip(CircleShape).background(SurfaceRaised)) {
+        Box(Modifier.size(Avatar.Compact).clip(CircleShape).background(SurfaceRaised)) {
             if (account != null) {
                 MediaPreview(
                     miniThumbnail = account.miniThumbnail,
@@ -906,7 +909,7 @@ private fun RailItem(
         Modifier
             .fillMaxWidth()
             .height(44.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(Corner.Small))
             .background(background)
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
             .padding(horizontal = RAIL_INSET),
@@ -1011,7 +1014,7 @@ private fun HeaderAction(
 
     Row(
         Modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(CircleShape)
             .background(background)
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
             // Even padding with no words, so the chip comes out round rather than as a wide one
@@ -1133,7 +1136,7 @@ private fun PillButton(label: String?, icon: ImageVector?, onClick: () -> Unit) 
     Row(
         Modifier
             .height(48.dp)
-            .clip(RoundedCornerShape(24.dp))
+            .clip(CircleShape)
             .background(background)
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
             // An icon on its own gets even padding, so the pill comes out round rather than as a
@@ -1310,12 +1313,12 @@ private fun ChatTile(
             // Fixed, not wrapped: a chat whose name runs to two lines would otherwise stand
             // taller than its neighbours and leave the row visibly ragged.
             .height(RECENT_TILE_HEIGHT)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(Corner.Large))
             .background(if (focused) SurfaceRaised else SurfaceDark)
             .border(
                 width = 3.dp,
                 color = if (focused) Accent else Color.Transparent,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(Corner.Large),
             )
             .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold)
             .padding(16.dp),
@@ -1325,7 +1328,7 @@ private fun ChatTile(
                 miniThumbnail = chat.miniThumbnail,
                 thumbnailFileId = chat.photoFileId,
                 fallbackLabel = chat.title,
-                modifier = Modifier.size(64.dp).clip(CircleShape),
+                modifier = Modifier.size(Avatar.Card).clip(CircleShape),
             )
             Spacer(Modifier.weight(1f))
             if (favorite) {
@@ -1398,12 +1401,12 @@ private fun ChatRow(
         modifier
             .fillMaxWidth()
             .height(84.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(Corner.Large))
             .background(if (focused) SurfaceRaised else SurfaceDark)
             .border(
                 width = 3.dp,
                 color = if (focused) Accent else Color.Transparent,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(Corner.Large),
             )
             .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold)
             .padding(horizontal = 24.dp),
@@ -1413,7 +1416,7 @@ private fun ChatRow(
             miniThumbnail = chat.miniThumbnail,
             thumbnailFileId = chat.photoFileId,
             fallbackLabel = chat.title,
-            modifier = Modifier.size(64.dp).clip(CircleShape),
+            modifier = Modifier.size(Avatar.Card).clip(CircleShape),
         )
         Spacer(Modifier.width(24.dp))
         Column(Modifier.weight(1f)) {
@@ -1517,35 +1520,11 @@ private fun EmptyTab(tab: BrowseTab, query: String) {
             "No favourites yet. Hold OK on any chat to add it here."
         else -> "Nothing here yet."
     }
-    // Centred in the space the missing list would have filled. Pinned to the top left it read as
-    // a caption on an empty screen; in the middle it reads as the screen's own answer. The width
-    // is capped so a sentence that needs two lines breaks near the middle rather than running the
-    // full width of a television and leaving three words underneath.
-    Box(
-        Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 24.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            // A search that came back empty is a different situation from a tab that has nothing
-            // in it yet, so the glyph follows whichever one the viewer is actually looking at.
-            Icon(
-                imageVector = if (query.isNotBlank()) Icons.Filled.Search else tab.icon,
-                contentDescription = null,
-                tint = TextMuted.copy(alpha = 0.55f),
-                modifier = Modifier.size(56.dp),
-            )
-            Text(
-                message,
-                style = MaterialTheme.typography.titleLarge,
-                color = TextMuted,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.widthIn(max = 400.dp),
-            )
-        }
-    }
+    // The app's one empty state, which this used to be a second copy of. A search that came back
+    // empty is a different situation from a tab with nothing in it yet, so the glyph follows
+    // whichever one the viewer is actually looking at; everything else about the two is the same
+    // and is now said in one place.
+    BigEmpty(message, icon = if (query.isNotBlank()) Icons.Filled.Search else tab.icon)
 }
 
 private const val RECENT_COUNT = 8
@@ -1588,12 +1567,12 @@ private val TOUCH_TILE_MIN = 168.dp
 /**
  * A phone chat row, at Material's list-item metrics.
  *
- * 72 dp with a 54 dp avatar is the two-line list item, and it is what Telegram, Gmail and the
+ * 72 dp with a 56 dp avatar is the two-line list item, and it is what Telegram, Gmail and the
  * dialler all draw. The card it replaced was 84 dp plus a 14 dp gap, so this fits three more
  * chats on a screen while looking less busy.
  */
 private val TOUCH_ROW_HEIGHT = 72.dp
-private val TOUCH_AVATAR = 54.dp
+private val TOUCH_AVATAR = Avatar.List
 
 /**
  * How far the listing keeps from each edge.

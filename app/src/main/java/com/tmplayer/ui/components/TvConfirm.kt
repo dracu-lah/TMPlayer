@@ -37,6 +37,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.SurfaceDark
@@ -132,9 +133,9 @@ fun TvConfirm(
             Column(
                 Modifier
                     .width(panel)
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(RoundedCornerShape(Corner.ExtraLarge))
                     .background(SurfaceDark)
-                    .border(1.dp, TextMuted.copy(alpha = 0.25f), RoundedCornerShape(20.dp))
+                    .border(1.dp, TextMuted.copy(alpha = 0.25f), RoundedCornerShape(Corner.ExtraLarge))
                     .padding(horizontal = 32.dp, vertical = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {

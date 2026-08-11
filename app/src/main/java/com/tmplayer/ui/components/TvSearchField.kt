@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -95,7 +95,7 @@ fun TvSearchField(
         modifier
             .focusRequester(box)
             .height(56.dp)
-            .clip(RoundedCornerShape(28.dp))
+            .clip(CircleShape)
             // Focus has to be as loud here as it is everywhere else on this screen, where a
             // focused control either fills with Accent or draws a 3dp border. A 1dp-to-2dp
             // border change with no fill was the one place the viewer had to hunt for it.
@@ -103,7 +103,7 @@ fun TvSearchField(
             .border(
                 width = if (active) 3.dp else 1.dp,
                 color = if (active) Accent else TextMuted.copy(alpha = 0.35f),
-                shape = RoundedCornerShape(28.dp),
+                shape = CircleShape,
             )
             .then(
                 if (editing) {

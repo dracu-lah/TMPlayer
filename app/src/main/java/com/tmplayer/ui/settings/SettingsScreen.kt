@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -90,6 +92,7 @@ import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.SizeFilter
+import com.tmplayer.data.StorageBreakdown
 import com.tmplayer.data.Td
 import com.tmplayer.data.UpdateState
 import com.tmplayer.data.Updates
@@ -104,6 +107,7 @@ import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.Background
 import com.tmplayer.ui.theme.Caution
+import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
 import com.tmplayer.ui.theme.TextMuted
@@ -151,6 +155,7 @@ fun SettingsScreen(
     val updateState by Updates.state.collectAsStateWithLifecycle()
     var showUpdate by remember { mutableStateOf(false) }
     var cacheBytes by remember { mutableStateOf(0L) }
+    var breakdown by remember { mutableStateOf(StorageBreakdown.EMPTY) }
     var disk by remember { mutableStateOf(DiskSpace.read(context)) }
     var busy by remember { mutableStateOf<String?>(null) }
     var prompt by remember { mutableStateOf<Prompt?>(null) }
@@ -164,7 +169,15 @@ fun SettingsScreen(
     suspend fun refresh() {
         cacheBytes = runCatching { Td.storageUsedBytes() }.getOrDefault(0L)
         disk = DiskSpace.read(context)
+        // Last, and separately: it walks the cache directory, so the card paints its total and
+        // its bar from the fast figure above and fills the three lines in a moment later.
+        breakdown = runCatching { Td.storageBreakdown() }.getOrDefault(StorageBreakdown.EMPTY)
     }
+
+    // What the Delete button would actually free. It takes videos, documents and animations and
+    // leaves the pictures, so quoting the whole cache promised space that never came back. The
+    // total stands in until the breakdown has been read, which is a second at most.
+    val videoBytes = if (breakdown.totalBytes > 0) breakdown.videoBytes else cacheBytes
 
     val touch = isTouch()
     // These rows describe the machine they are running on, and half of them are about it by name.
@@ -405,6 +418,7 @@ fun SettingsScreen(
         item {
             StorageCard(
                 cacheBytes = cacheBytes,
+                breakdown = breakdown,
                 freeBytes = disk.freeBytes,
                 totalBytes = disk.totalBytes,
             )
@@ -412,7 +426,7 @@ fun SettingsScreen(
         item {
             ActionRow(
                 title = "Delete the downloaded video",
-                subtitle = "Frees up ${StreamStats.formatBytes(cacheBytes)}",
+                subtitle = "Frees up ${StreamStats.formatBytes(videoBytes)}",
                 icon = Icons.Filled.Delete,
                 onClick = { prompt = Prompt.ClearCache },
             )
@@ -590,7 +604,7 @@ fun SettingsScreen(
     when (prompt) {
         Prompt.ClearCache -> TvConfirm(
             title = "Delete the downloaded video?",
-            message = "This frees up ${StreamStats.formatBytes(cacheBytes)}. Any video you open " +
+            message = "This frees up ${StreamStats.formatBytes(videoBytes)}. Any video you open " +
                 "again will download again.",
             detail = "Your Telegram account, chats and favourites are untouched.",
             confirmLabel = "Delete",
@@ -598,7 +612,7 @@ fun SettingsScreen(
                 prompt = null
                 scope.launch {
                     busy = "Deleting…"
-                    val freed = cacheBytes
+                    val freed = videoBytes
                     runCatching { Td.clearMediaCache() }
                     refresh()
                     busy = null
@@ -714,7 +728,7 @@ private fun RangeRow(
     Column(
         modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(Corner.Large))
             .background(background)
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
@@ -814,7 +828,7 @@ private fun TouchRangeRow(
     Column(
         modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(Corner.Large))
             .background(SurfaceDark)
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
@@ -893,7 +907,7 @@ private fun End(
                 .padding(top = 3.dp)
                 .height(3.dp)
                 .width(if (active) 56.dp else 0.dp)
-                .clip(RoundedCornerShape(2.dp))
+                .clip(CircleShape)
                 .background(if (focused) Color.White else Accent),
         )
     }
@@ -905,7 +919,7 @@ private fun RangeTrack(minValue: Long, maxValue: Long, editingUpper: Boolean, fo
         Modifier
             .fillMaxWidth()
             .height(18.dp)
-            .clip(RoundedCornerShape(9.dp))
+            .clip(CircleShape)
             .background(if (focused) Color.White.copy(alpha = 0.22f) else SurfaceRaised),
     ) {
         val width = maxWidth
@@ -934,7 +948,7 @@ private fun BoxWithConstraintsScope.Thumb(width: Dp, value: Long, live: Boolean,
             .padding(start = (width * SizeFilter.fraction(value) - w / 2).coerceIn(0.dp, width - w))
             .width(w)
             .fillMaxHeight()
-            .clip(RoundedCornerShape(5.dp))
+            .clip(CircleShape)
             .background(
                 when {
                     focused && live -> Color.White
@@ -962,7 +976,7 @@ private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
             // The chip is only about 38dp tall at TV padding, which a fingertip misses as often
             // as it hits.
             .then(if (touch) Modifier.heightIn(min = 48.dp) else Modifier)
-            .clip(RoundedCornerShape(20.dp))
+            .clip(CircleShape)
             .background(if (enabled) background else SurfaceDark)
             // Always clickable, never `enabled = false`: pressing this chip is what greys it out,
             // and a disabled clickable installs no focus target, so the node the viewer was
@@ -1030,10 +1044,18 @@ private fun sectionStyle() = if (isTouch()) {
 }
 
 @Composable
-private fun StorageCard(cacheBytes: Long, freeBytes: Long, totalBytes: Long) {
+private fun StorageCard(
+    cacheBytes: Long,
+    breakdown: StorageBreakdown,
+    freeBytes: Long,
+    totalBytes: Long,
+) {
     val used = (totalBytes - freeBytes).coerceAtLeast(0)
     val usedFraction = if (totalBytes > 0) used.toFloat() / totalBytes else 0f
     val cacheFraction = if (totalBytes > 0) cacheBytes.toFloat() / totalBytes else 0f
+    // Until the walk finishes there is one figure and nothing to split it into, so the bar keeps
+    // its single band and the lines below stay away rather than showing three zeroes.
+    val split = breakdown.totalBytes > 0
 
     val touch = isTouch()
     val bar = if (touch) 10.dp else 14.dp
@@ -1041,7 +1063,7 @@ private fun StorageCard(cacheBytes: Long, freeBytes: Long, totalBytes: Long) {
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(Corner.Large))
             .background(SurfaceDark)
             .padding(if (touch) 16.dp else 20.dp),
     ) {
@@ -1059,7 +1081,7 @@ private fun StorageCard(cacheBytes: Long, freeBytes: Long, totalBytes: Long) {
             Modifier
                 .fillMaxWidth()
                 .height(bar)
-                .clip(RoundedCornerShape(bar / 2))
+                .clip(CircleShape)
                 .background(SurfaceRaised)
                 // The bar is three coloured boxes and nothing else, so a screen reader had
                 // nothing at all to say about the one graphic on the screen that carries a
@@ -1068,26 +1090,39 @@ private fun StorageCard(cacheBytes: Long, freeBytes: Long, totalBytes: Long) {
                     contentDescription = "Storage: " +
                         "${StreamStats.formatBytes(used)} used of " +
                         "${StreamStats.formatBytes(totalBytes)}, " +
-                        "${StreamStats.formatBytes(cacheBytes)} of it TMPlayer's videos"
+                        "${StreamStats.formatBytes(cacheBytes)} of it TMPlayer's, " +
+                        if (split) {
+                            "${StreamStats.formatBytes(breakdown.videoBytes)} video, " +
+                                "${StreamStats.formatBytes(breakdown.pictureBytes)} pictures, " +
+                                "${StreamStats.formatBytes(breakdown.otherBytes)} other"
+                        } else {
+                            "still being measured"
+                        }
                 },
         ) {
-            // Everything on the device, then TMPlayer's own slice highlighted inside it.
+            // Everything on the device, then TMPlayer's own slice highlighted inside it, and
+            // inside that the three things the slice is made of.
             Box(
                 Modifier
                     .fillMaxWidth(usedFraction)
                     .fillMaxHeight()
                     .background(TextMuted.copy(alpha = 0.6f)),
             )
-            Box(
-                Modifier
-                    .fillMaxWidth(cacheFraction)
-                    .fillMaxHeight()
-                    .background(Accent),
-            )
+            Row(Modifier.fillMaxWidth(cacheFraction).fillMaxHeight()) {
+                if (split) {
+                    // Weights, not fractions: these three divide TMPlayer's own band between
+                    // them, and a band of zero width simply draws nothing.
+                    StorageSlice(breakdown.videoBytes, Accent)
+                    StorageSlice(breakdown.pictureBytes, Accent.copy(alpha = 0.6f))
+                    StorageSlice(breakdown.otherBytes, Accent.copy(alpha = 0.3f))
+                } else {
+                    Box(Modifier.fillMaxSize().background(Accent))
+                }
+            }
         }
         Spacer(Modifier.height(if (touch) 12.dp else 16.dp))
         Text(
-            "TMPlayer has ${StreamStats.formatBytes(cacheBytes)} of video saved.",
+            "TMPlayer has ${StreamStats.formatBytes(cacheBytes)} saved.",
             style = if (touch) {
                 MaterialTheme.typography.bodyMedium
             } else {
@@ -1095,10 +1130,49 @@ private fun StorageCard(cacheBytes: Long, freeBytes: Long, totalBytes: Long) {
             },
             color = TextPrimary,
         )
+        if (split) {
+            Spacer(Modifier.height(8.dp))
+            StorageLegend("Video", breakdown.videoBytes, Accent)
+            StorageLegend("Pictures", breakdown.pictureBytes, Accent.copy(alpha = 0.6f))
+            StorageLegend("Everything else", breakdown.otherBytes, Accent.copy(alpha = 0.3f))
+            Spacer(Modifier.height(8.dp))
+        }
         Text(
-            "One video is kept at a time; starting another replaces it.",
+            "One video is kept at a time; starting another replaces it. Deleting takes the " +
+                "video and leaves the pictures.",
             style = MaterialTheme.typography.bodyMedium,
             color = TextMuted,
+        )
+    }
+}
+
+/** One band of TMPlayer's own slice of the bar, sized by its share of the bytes. */
+@Composable
+private fun RowScope.StorageSlice(bytes: Long, color: Color) {
+    if (bytes <= 0) return
+    Box(Modifier.weight(bytes.toFloat()).fillMaxHeight().background(color))
+}
+
+/** The line naming one of those bands. Merged, so a screen reader reads the pair as a sentence. */
+@Composable
+private fun StorageLegend(label: String, bytes: Long, color: Color) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "$label: ${StreamStats.formatBytes(bytes)}"
+            },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(10.dp).clip(CircleShape).background(color))
+        Spacer(Modifier.width(10.dp))
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = TextMuted)
+        Spacer(Modifier.weight(1f))
+        Text(
+            StreamStats.formatBytes(bytes),
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextPrimary,
         )
     }
 }
@@ -1217,7 +1291,7 @@ private fun Switch(checked: Boolean, focused: Boolean, touch: Boolean = false) {
     Box(
         Modifier
             .size(width = if (touch) 52.dp else 64.dp, height = height)
-            .clip(RoundedCornerShape(height / 2))
+            .clip(CircleShape)
             .background(track),
         contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart,
     ) {
@@ -1225,7 +1299,7 @@ private fun Switch(checked: Boolean, focused: Boolean, touch: Boolean = false) {
             Modifier
                 .padding(horizontal = 4.dp)
                 .size(knob)
-                .clip(RoundedCornerShape(knob / 2))
+                .clip(CircleShape)
                 .background(if (checked && !focused) Color.White else SurfaceDark),
         )
     }
@@ -1261,7 +1335,7 @@ private fun FocusRow(
                 if (touch) {
                     Modifier
                 } else {
-                    Modifier.clip(RoundedCornerShape(16.dp)).background(background)
+                    Modifier.clip(RoundedCornerShape(Corner.Large)).background(background)
                 },
             )
             .clickable(

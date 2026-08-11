@@ -396,6 +396,22 @@ object Td {
     suspend fun storageUsedBytes(): Long =
         current?.getStorageStatisticsFast()?.valueOrNull?.filesSize ?: 0L
 
+    /**
+     * The same total, split into what the card can name.
+     *
+     * `getStorageStatistics` walks the cache directory, so it is the slower of the two calls and
+     * is only made for the Settings screen. `chatLimit = 0` asks for no per-chat detail: the rows
+     * are still returned grouped by chat, but with none of them named, which is all this needs.
+     */
+    suspend fun storageBreakdown(): StorageBreakdown {
+        val td = current ?: return StorageBreakdown.EMPTY
+        val stats = td.getStorageStatistics(chatLimit = 0).valueOrNull ?: return StorageBreakdown.EMPTY
+        val rows = stats.byChat.flatMap { chat ->
+            chat.byFileType.map { row -> row.fileType::class.java.simpleName to row.size }
+        }
+        return StorageBreakdown.of(rows)
+    }
+
     /** Verifies both TDLib's flag and the actual file before promising offline playback. */
     suspend fun localFileAvailability(fileId: Int): LocalFileAvailability {
         val td = current ?: return LocalFileAvailability.Missing

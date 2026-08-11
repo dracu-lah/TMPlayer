@@ -117,9 +117,16 @@ fun Pane(
 @Composable
 fun Modifier.paneAction(): Modifier = if (isTouch()) fillMaxWidth() else this
 
-/** What a phone pane leaves around its content. */
+/**
+ * What a phone pane leaves around its content.
+ *
+ * 16 dp a side is the Material margin and what every list on the device already sits at, the
+ * browse grid included. This was 20, so a screen that used it stood four dp further in than the
+ * screen the viewer had just come from, which is the sort of difference nobody names and everybody
+ * sees when the two are one gesture apart.
+ */
 object PhonePad {
-    val Side = 20.dp
+    val Side = 16.dp
     val Top = 16.dp
 }
 

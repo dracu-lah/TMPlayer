@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.ui.theme.Accent
+import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
@@ -54,7 +55,7 @@ fun PaneField(
     Box(
         modifier
             .height(FIELD_HEIGHT)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Corner.Medium))
             .background(SurfaceDark)
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.CenterStart,
@@ -123,7 +124,7 @@ fun PaneChooser(
         modifier
             .fillMaxWidth()
             .height(FIELD_HEIGHT)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(Corner.Medium))
             .background(SurfaceDark)
             // Spelled out, because a Box with a clickable on it is announced as plain text: a
             // screen reader had no way to know the country row was something to press.

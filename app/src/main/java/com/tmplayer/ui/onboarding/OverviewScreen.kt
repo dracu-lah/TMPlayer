@@ -36,6 +36,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.R
 import com.tmplayer.ui.theme.Accent
+import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
 import com.tmplayer.ui.theme.Tv
@@ -168,8 +169,8 @@ private fun PageImage(image: Int, modifier: Modifier) {
         contentScale = ContentScale.Fit,
         modifier = modifier
             .aspectRatio(16f / 9f)
-            .clip(RoundedCornerShape(16.dp))
-            .border(1.dp, TextMuted.copy(alpha = 0.25f), RoundedCornerShape(16.dp)),
+            .clip(RoundedCornerShape(Corner.Large))
+            .border(1.dp, TextMuted.copy(alpha = 0.25f), RoundedCornerShape(Corner.Large)),
     )
 }
 

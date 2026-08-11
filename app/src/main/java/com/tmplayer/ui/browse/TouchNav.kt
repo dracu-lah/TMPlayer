@@ -69,6 +69,7 @@ import com.tmplayer.ui.components.MarkSize
 import com.tmplayer.ui.components.MediaPreview
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.theme.Accent
+import com.tmplayer.ui.theme.Avatar
 import com.tmplayer.ui.theme.Background
 import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.SurfaceDark
@@ -432,7 +433,7 @@ private fun DrawerFooter(account: Account?) {
         Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(32.dp).clip(CircleShape).background(SurfaceRaised)) {
+        Box(Modifier.size(Avatar.Compact).clip(CircleShape).background(SurfaceRaised)) {
             if (account != null) {
                 MediaPreview(
                     miniThumbnail = account.miniThumbnail,

@@ -44,6 +44,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.SurfaceDark
@@ -106,9 +107,9 @@ fun TvMenu(
             Column(
                 Modifier
                     .width(panel)
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(RoundedCornerShape(Corner.ExtraLarge))
                     .background(SurfaceDark)
-                    .border(1.dp, TextMuted.copy(alpha = 0.25f), RoundedCornerShape(20.dp))
+                    .border(1.dp, TextMuted.copy(alpha = 0.25f), RoundedCornerShape(Corner.ExtraLarge))
                     .padding(horizontal = 24.dp, vertical = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -229,7 +230,7 @@ private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Mod
             // A row of one short label is only about 44dp tall, which is under what a fingertip
             // is entitled to. The remote does not care either way, so this is a floor, not a size.
             .then(if (touch) Modifier.heightIn(min = 56.dp) else Modifier)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(Corner.Medium))
             .background(background)
             .clickable(
                 interactionSource = interactions,

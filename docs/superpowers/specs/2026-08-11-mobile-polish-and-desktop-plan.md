@@ -449,10 +449,12 @@ phase, spot-check TV: D-pad browse, chat open, playback, track picker, settings.
   - [x] B7 remainder: M3 `RangeSlider` for the size filter on touch, figures above the thumbs
   - [x] B8 remainder: `UpdateDialog` is Material's `AlertDialog` with a `LinearProgressIndicator`
         on touch; the TV keeps its focus-driven panel
-  - [~] B15: storage-bar description, player HUD live regions and `Role.Button` on the country
-        row all landed. B10's consistency sweep (corner radii, avatar sizes, merging the two
-        empty states) has NOT been done: it is a broad visual change and there was no device to
-        check it on.
+  - [x] B15: storage-bar description, player HUD live regions and `Role.Button` on the country
+        row all landed.
+  - [x] B10 consistency sweep: `Corner` (Material's five radii) and `Avatar` (three sizes) in
+        Theme.kt, every hand-picked radius mapped onto them, everything genuinely round moved to
+        `CircleShape`, `PhonePad.Side` down to Material's 16dp, and the browse tabs' private copy
+        of the empty state deleted in favour of `BigEmpty`, which now takes the icon.
   - [ ] B8, deliberately not done: `Toast` stays the platform toast rather than a Snackbar. It
         survives the screen that raised it going away, which is the case it exists for, and a
         Snackbar would need a host on screens that have no Scaffold.
@@ -460,15 +462,16 @@ phase, spot-check TV: D-pad browse, chat open, playback, track picker, settings.
       speed action and persists the choice; D8 cycles fit / crop / stretch and pinches on touch;
       D10 follows the video's own shape; D11 routes gestures from the activity so the transport
       row no longer swallows them; D13 is the metered guard and the Wi-Fi-only setting.
-- [~] Phase E: E1 to E7 and E13 as before. Now also E10 (flood wait kept as a number, sync says
+- [x] Phase E: E1 to E7 and E13 as before. Now also E10 (flood wait kept as a number, sync says
       whether it finished, the connection wait is time-boxed, Refresh holds off), E11 (cold-start
       snapshot, live title and photo updates), E12 (a resolution-specific decoder message),
       E14 (tests for the new seams), and the parts of E8 and E9 below.
-      Outstanding: E8's long-lived `fileUpdates` subscription in `TdDataSource` (the back buffer
-      and the timeout shape landed; keeping the window warm from one subscription did not, and it
-      wants a device to measure on). E9's storage breakdown in the Settings card (the ceiling and
-      the sweep that includes photos and thumbnails landed; the card still shows one figure).
-      E11's chat reordering, which still waits for the next sync.
+      E8's long-lived `fileUpdates` subscription now runs from `open` to `close` and keeps the
+      window warm, so a waiting read is woken by the update rather than polling `getFile`, and the
+      stall timeout measures time rather than turns round the loop. E9's card shows the breakdown
+      (`StorageBreakdown`, tested), and the Delete row quotes what deleting actually frees rather
+      than the whole cache. E11 follows `updateChatPosition`, coalesced, and reorders the rows in
+      hand from `getChats` without repeating the `getChat` fan-out.
 - [~] Phase G: README and site copy updated; screenshots retaken on real hardware for v1.3.0 and
       not since. The drawer changed shape in v1.4.0, so the phone shots are now out of date.
 - [x] Verification: `./gradlew test`, `assembleDebug` and `assembleRelease` all green; dash check

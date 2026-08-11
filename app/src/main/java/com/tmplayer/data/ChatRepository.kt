@@ -147,6 +147,17 @@ class ChatRepository(private val td: TdlClient) {
     }
 
     /**
+     * The ids TDLib currently holds, in its own order, and nothing else.
+     *
+     * The order is the point: TDLib sorts the main list by position itself, so a caller that
+     * already has the rows can put them in today's order for one round trip, without the
+     * `getChat` fan-out that makes [cachedChats] the expensive half of a sync.
+     */
+    suspend fun chatOrder(limit: Int = CHAT_LIMIT): List<Long> = withContext(Dispatchers.IO) {
+        td.getChats(ChatListMain(), limit).valueOrNull?.chatIds?.toList() ?: emptyList()
+    }
+
+    /**
      * Next page of playable media in [chatId], newest first.
      *
      * The three searches run concurrently and are merged by message id, which is monotonic

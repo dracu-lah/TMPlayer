@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
@@ -51,6 +52,7 @@ import com.tmplayer.ui.components.PhonePad
 import com.tmplayer.ui.components.ignoreStrayRelease
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.theme.Caution
+import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
@@ -163,9 +165,9 @@ fun UpdateDialog(onDismiss: () -> Unit) {
             Column(
                 Modifier
                     .width(panel)
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(RoundedCornerShape(Corner.ExtraLarge))
                     .background(SurfaceDark)
-                    .border(1.dp, Caution.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+                    .border(1.dp, Caution.copy(alpha = 0.35f), RoundedCornerShape(Corner.ExtraLarge))
                     .padding(if (touch) 22.dp else 28.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -321,7 +323,7 @@ private fun ProgressBar(fraction: Float?) {
         Modifier
             .fillMaxWidth()
             .height(6.dp)
-            .clip(RoundedCornerShape(3.dp))
+            .clip(CircleShape)
             .background(TextMuted.copy(alpha = 0.25f)),
     ) {
         if (fraction != null) {
@@ -329,7 +331,7 @@ private fun ProgressBar(fraction: Float?) {
                 Modifier
                     .fillMaxWidth(fraction.coerceIn(0f, 1f))
                     .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp))
+                    .clip(CircleShape)
                     .background(Caution),
             )
         }

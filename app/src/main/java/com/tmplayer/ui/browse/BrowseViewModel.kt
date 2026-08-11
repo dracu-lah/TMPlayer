@@ -22,12 +22,16 @@ import com.tmplayer.data.SponsoredReportOutcome
 import com.tmplayer.data.Td
 import com.tmplayer.data.TdSession
 import com.tmplayer.ui.components.UiState
+import dev.g000sha256.tdl.dto.ChatListMain
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -73,9 +77,13 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
      * Keeps the list live while it is on screen.
      *
      * Nothing subscribed to any of this before, so a chat renamed on a phone kept its old name
-     * here until the app was restarted, and a new profile picture never arrived at all. Only the
-     * two fields a row actually draws are followed; a reordering still waits for the next sync,
-     * which is the cheaper trade because acting on it means re-reading the whole list.
+     * here until the app was restarted, a new profile picture never arrived at all, and a chat
+     * that had just received something stayed wherever it was until the list was synced again.
+     *
+     * Order is followed through TDLib's own ordering rather than by sorting on the position it
+     * hands out: `getChats` reads the list it already keeps sorted, out of its local database, and
+     * costs one round trip. The three hundred `getChat` calls that make a sync expensive are not
+     * repeated, because every row is already in hand and only its place is in question.
      */
     private fun watchChatChanges() {
         viewModelScope.launch {
@@ -99,6 +107,18 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
                                 }
                             }
                         }
+                        launch {
+                            // A busy account moves several chats at once, and every message in
+                            // any of them is a position update. Coalesced, so one read follows a
+                            // burst instead of one read following each of it.
+                            client.chatPositionUpdates
+                                .filter { it.position.list is ChatListMain }
+                                .conflate()
+                                .collect {
+                                    delay(REORDER_SETTLE_MS)
+                                    reorder(ChatRepository(client))
+                                }
+                        }
                     }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
@@ -109,6 +129,28 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
                 Td.auth.first { it !is AuthState.Ready }
             }
         }
+    }
+
+    /**
+     * Puts the rows already in hand into the order TDLib now holds them in.
+     *
+     * Ids TDLib knows and this screen does not are skipped rather than fetched: a chat that has
+     * only just appeared arrives with the next sync, and chasing it here would put a `getChat`
+     * fan-out behind an update that fires on every incoming message. Rows TDLib no longer lists
+     * are dropped, which is what leaving a chat looks like from here.
+     */
+    private suspend fun reorder(repository: ChatRepository) {
+        val current = chats ?: return
+        val order = runCatching { repository.chatOrder() }.getOrNull() ?: return
+        if (order.isEmpty()) return
+        val byId = current.associateBy { it.id }
+        val sorted = order.mapNotNull(byId::get)
+        // Only when every row survived the move. A short answer means TDLib is holding fewer
+        // chats than the screen is, and quietly dropping the difference would look like the
+        // library shrinking on its own.
+        if (sorted.size != current.size || sorted == current) return
+        chats = sorted
+        publish()
     }
 
     /** Applies a change to one row, if that row is on screen. Publishes only when it moved. */
@@ -239,6 +281,12 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
          * left open while something else was being watched catches up on the way back.
          */
         const val STALE_AFTER_MS = 2 * 60 * 1000L
+
+        /**
+         * How long a burst of position updates is left to finish before the order is re-read.
+         * Telegram sends one per message, and a chat that is being typed in sends a run of them.
+         */
+        const val REORDER_SETTLE_MS = 400L
     }
 
     private fun publish() {
