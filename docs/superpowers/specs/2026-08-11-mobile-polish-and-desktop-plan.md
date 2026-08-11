@@ -466,3 +466,14 @@ phase, spot-check TV: D-pad browse, chat open, playback, track picker, settings.
       show the old TV-scaled phone UI.
 - [x] Verification: `./gradlew test`, `assembleDebug` and `assembleRelease` all green; dash check
       clean. Manual QA on a phone and on the stick has NOT been done.
+
+## Shipped as v1.3.0 on 2026-08-11
+
+Screenshots were retaken on real hardware, which the earlier pass could not do: a phone at
+1080x2400 and a panel resized to 1920x1080 for the television layout, both from the promo fixture.
+The fixture navigates now, so the site's hero clip is one recording rather than three cut together.
+The launcher icon was redrawn inside the adaptive-icon safe circle, and the site was rebuilt around
+CSS device frames with a four-step walkthrough.
+
+Still outstanding, unchanged: the Phase D and E items listed above, the M3 RangeSlider, the
+UpdateDialog, and manual QA on the stick.
