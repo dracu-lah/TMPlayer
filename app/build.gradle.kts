@@ -30,8 +30,8 @@ android {
         // Gradle properties. The literals below are what a local build gets, and they track the
         // most recent tag: leaving them behind means a local build cannot be installed over the
         // release it is meant to be debugging, since Android refuses the downgrade.
-        versionCode = (findProperty("tmVersionCode") as String?)?.toInt() ?: 10200
-        versionName = (findProperty("tmVersionName") as String?) ?: "1.2.0"
+        versionCode = (findProperty("tmVersionCode") as String?)?.toInt() ?: 10300
+        versionName = (findProperty("tmVersionName") as String?) ?: "1.3.0"
 
         // Telegram API credentials. Bring your own via local.properties (see README)
         buildConfigField("int", "TG_API_ID", localProps.getProperty("TG_API_ID") ?: "0")
@@ -40,7 +40,7 @@ android {
         // English only. Every androidx and Media3 dependency ships translations for ~80
         // locales, and none of this app's own strings are translated, so the rest is dead
         // weight in resources.arsc. Revisit the moment the UI itself is localised.
-        resourceConfigurations += listOf("en")
+        androidResources.localeFilters += listOf("en")
 
     }
 
