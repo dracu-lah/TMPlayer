@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -111,6 +112,19 @@ fun BigLoader(label: String? = null) {
  */
 @Composable
 fun Spinner(size: Dp = 56.dp, color: Color = Accent, strokeWidth: Dp = 5.dp) {
+    // On a phone, Material's own. It is the same two motions drawn below, kept in step with every
+    // other spinner on the device and with whatever the system's animation scale is set to,
+    // including the accessibility setting that turns animation off entirely. The hand-drawn one
+    // stays for the television, where TV Material ships no progress indicator at all.
+    if (isTouch()) {
+        CircularProgressIndicator(
+            color = color,
+            strokeWidth = strokeWidth,
+            modifier = Modifier.size(size),
+        )
+        return
+    }
+
     val transition = rememberInfiniteTransition(label = "spinner")
 
     val rotation by transition.animateFloat(

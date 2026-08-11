@@ -1,6 +1,7 @@
 package com.tmplayer.ui.components
 
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -92,6 +93,26 @@ fun Modifier.holdable(
         }
         .focusable(interactionSource = interactionSource)
 }
+
+/**
+ * A plain press, with the feedback each device understands.
+ *
+ * A television marks the thing under the cursor with a border and a colour, and a ripple under a
+ * cursor that is already visible is noise, so `indication = null` was right there and was applied
+ * everywhere. On a phone there is no cursor and no focus: with the indication off, a tap on a
+ * video tile produced no visible response at all until the player opened, which on a slow chat is
+ * a second of the viewer wondering whether the tap landed.
+ */
+@Composable
+fun Modifier.pressable(
+    interactionSource: MutableInteractionSource,
+    onClick: () -> Unit,
+): Modifier = clickable(
+    interactionSource = interactionSource,
+    indication = if (FormFactor.isTv(LocalContext.current)) null else LocalIndication.current,
+    role = Role.Button,
+    onClick = onClick,
+)
 
 /**
  * Ignores the release of an OK that was already down when this window appeared.

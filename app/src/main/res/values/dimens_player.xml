@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The player's chrome, at phone size.
+
+  These were written as literals in the layout and every one of them was a television figure: 72dp
+  of side padding and a 520dp progress bar on a 411dp-wide phone means a loading sheet whose bar is
+  wider than the screen inside margins that leave nothing between them. The television keeps the
+  originals in values-television, which is the resource qualifier for a device reporting
+  UI_MODE_TYPE_TELEVISION, so neither device is guessing about the other.
+-->
+<resources>
+    <dimen name="player_sheet_side">24dp</dimen>
+    <dimen name="player_progress_width">260dp</dimen>
+    <dimen name="player_title_size">20sp</dimen>
+    <dimen name="player_chip_margin">16dp</dimen>
+    <!-- Clear of the transport row, which on a phone is Media3's and about 70dp tall. -->
+    <dimen name="player_subtitle_bottom">32dp</dimen>
+</resources>

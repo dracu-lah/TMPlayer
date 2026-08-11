@@ -84,9 +84,10 @@ fun Pane(
         modifier
             .fillMaxSize()
             // safeDrawing rather than systemBars: it is the one that also clears a notch and the
-            // gesture handle, and this pane is the first screen the app ever shows.
-            .safeDrawingPadding()
-            .imePadding(),
+            // gesture handle, and this pane is the first screen the app ever shows. It already
+            // carries the keyboard inset, so an imePadding() on top of it lifted every sign-in
+            // pane a whole keyboard height too high the moment the keyboard appeared.
+            .safeDrawingPadding(),
     ) {
         // Wide enough to be a tablet or a phone on its side, where a full-width column would run
         // to a line length nobody reads comfortably.

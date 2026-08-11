@@ -8,8 +8,11 @@ import dev.g000sha256.tdl.dto.ChatTypeSupergroup
 import dev.g000sha256.tdl.dto.SearchMessagesFilterAnimation
 import dev.g000sha256.tdl.dto.SearchMessagesFilterDocument
 import dev.g000sha256.tdl.dto.SearchMessagesFilterVideo
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 
 /** How a chat is grouped in the navigation rail. */
 enum class ChatKind(val label: String) {
@@ -18,6 +21,19 @@ enum class ChatKind(val label: String) {
     Direct("People"),
 }
 
+/**
+ * One row of the chat list.
+ *
+ * Equality covers every field, including the bytes of the blurred preview. Identity-only equality
+ * looked harmless (a chat is its id) but it made a refreshed list compare equal to the old one, so
+ * the StateFlow conflated it away and a renamed chat, or one with a new picture, kept its old row
+ * until the app was restarted. The array is compared by content rather than by reference for the
+ * same reason: TDLib hands back a fresh array every read.
+ *
+ * [Immutable] is the promise Compose needs to skip a row whose chat has not changed; it is honest
+ * here because nothing ever writes into that array after construction.
+ */
+@androidx.compose.runtime.Immutable
 data class ChatSummary(
     val id: Long,
     val title: String,
@@ -25,8 +41,24 @@ data class ChatSummary(
     val photoFileId: Int,
     val kind: ChatKind,
 ) {
-    override fun equals(other: Any?) = other is ChatSummary && other.id == id
-    override fun hashCode() = id.hashCode()
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is ChatSummary) return false
+        return id == other.id &&
+            title == other.title &&
+            photoFileId == other.photoFileId &&
+            kind == other.kind &&
+            miniThumbnail.contentEquals(other.miniThumbnail)
+    }
+
+    override fun hashCode(): Int {
+        var result = id.hashCode()
+        result = 31 * result + title.hashCode()
+        result = 31 * result + photoFileId
+        result = 31 * result + kind.hashCode()
+        result = 31 * result + (miniThumbnail?.contentHashCode() ?: 0)
+        return result
+    }
 }
 
 /** One page of media, plus the cursors needed to ask for the next one. */
@@ -58,33 +90,43 @@ class ChatRepository(private val td: TdlClient) {
      * server first. [loadChats] returns 404 once everything is already local, which is the
      * documented "no more" answer, not a failure.
      */
-    suspend fun syncChats(limit: Int = CHAT_LIMIT): List<ChatSummary> {
+    suspend fun syncChats(limit: Int = CHAT_LIMIT): List<ChatSummary> = withContext(Dispatchers.IO) {
         var loaded = 0
         while (loaded < limit) {
             val result = td.loadChats(ChatListMain(), CHAT_PAGE)
+            // 404 is TDLib's documented "everything is already local", not a failure, but it is
+            // also the answer a dropped connection gives, and pulling for another two pages after
+            // either is work for nothing. Stopping on the first one covers both.
             if (result is TdlResult.Failure) break
             loaded += CHAT_PAGE
         }
 
-        return cachedChats(limit)
+        cachedChats(limit)
     }
 
-    /** Reads the chat list already in TDLib's database without requiring a network connection. */
-    suspend fun cachedChats(limit: Int = CHAT_LIMIT): List<ChatSummary> {
+    /**
+     * Reads the chat list already in TDLib's database without requiring a network connection.
+     *
+     * The three hundred `getChat` calls run together rather than one after another. Sequentially
+     * they are three hundred round trips on the first-frame path, which on a stick is most of the
+     * wait before anything appears; TDLib answers them out of its own database and is perfectly
+     * happy to be asked in parallel.
+     */
+    suspend fun cachedChats(limit: Int = CHAT_LIMIT): List<ChatSummary> = withContext(Dispatchers.IO) {
         val ids = td.getChats(ChatListMain(), limit).value().chatIds
-        return buildList {
-            for (id in ids) {
-                val chat = td.getChat(id).valueOrNull ?: continue
-                add(
+        coroutineScope {
+            ids.map { id -> async { td.getChat(id).valueOrNull } }
+                .awaitAll()
+                .filterNotNull()
+                .map { chat ->
                     ChatSummary(
                         id = chat.id,
-                        title = chat.title.ifBlank { "Chat $id" },
+                        title = chat.title.ifBlank { "Chat ${chat.id}" },
                         miniThumbnail = chat.photo?.minithumbnail?.data,
                         photoFileId = chat.photo?.small?.id ?: 0,
                         kind = kindOf(chat.type),
-                    ),
-                )
-            }
+                    )
+                }
         }
     }
 
@@ -99,6 +141,11 @@ class ChatRepository(private val td: TdlClient) {
         cursors: MediaCursors = MediaCursors(),
         query: String = "",
     ): MediaPage =
+        // Off Main for the whole page. The mapper below asks the filesystem twice per message to
+        // decide whether the file is already on disk, and this runs three searches of forty
+        // messages each inside a loop that will do it up to eight times: nearly two thousand
+        // syscalls, and every one of them was landing on the thread drawing the grid.
+        withContext(Dispatchers.IO) {
         coroutineScope {
             val videos = async {
                 if (cursors.videoDone) null
@@ -132,6 +179,7 @@ class ChatRepository(private val td: TdlClient) {
                 animationDone = cursors.animationDone || animationResult?.done ?: true,
             )
             MediaPage(items, next, next.allDone)
+        }
         }
 
     /**

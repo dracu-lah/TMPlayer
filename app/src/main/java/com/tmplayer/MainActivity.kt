@@ -3,6 +3,7 @@ package com.tmplayer
 import android.annotation.SuppressLint
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
@@ -19,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -29,6 +31,7 @@ import androidx.tv.material3.MaterialTheme
 import com.tmplayer.data.AuthState
 import com.tmplayer.data.CachePolicy
 import com.tmplayer.data.CardLayout
+import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.MediaItem
@@ -72,6 +75,50 @@ private sealed interface Screen {
     data object Settings : Screen
 }
 
+/**
+ * Saves which screen is open across a rotation or a process death.
+ *
+ * A plain `remember` lost it: turning the phone inside a chat, or coming back after the system
+ * reclaimed the app while a video was playing, dumped the viewer back at the chat list. [Media]
+ * carries a whole [ChatSummary], which is not parcelable and holds a blurred preview nobody needs
+ * restored, so only the fields the media screen actually reads are written down and the row is
+ * rebuilt from them. The picture reappears the moment the chat list lands.
+ */
+private val ScreenSaver = listSaver<Screen, Any>(
+    save = { screen ->
+        when (screen) {
+            is Screen.Chats -> listOf(SCREEN_CHATS)
+            is Screen.Settings -> listOf(SCREEN_SETTINGS)
+            is Screen.Media -> listOf(
+                SCREEN_MEDIA,
+                screen.chat.id,
+                screen.chat.title,
+                screen.chat.photoFileId,
+                screen.chat.kind.name,
+            )
+        }
+    },
+    restore = { saved ->
+        when (saved.firstOrNull()) {
+            SCREEN_MEDIA -> Screen.Media(
+                ChatSummary(
+                    id = saved[1] as Long,
+                    title = saved[2] as String,
+                    miniThumbnail = null,
+                    photoFileId = saved[3] as Int,
+                    kind = ChatKind.valueOf(saved[4] as String),
+                ),
+            )
+            SCREEN_SETTINGS -> Screen.Settings
+            else -> Screen.Chats
+        }
+    },
+)
+
+private const val SCREEN_CHATS = "chats"
+private const val SCREEN_MEDIA = "media"
+private const val SCREEN_SETTINGS = "settings"
+
 /** A video waiting on the viewer's answer about clearing space. */
 private data class RoomPrompt(
     val item: MediaItem,
@@ -83,6 +130,12 @@ private data class RoomPrompt(
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Asked for rather than inherited. Under targetSdk 35 Android draws behind the bars on
+        // API 35 and above whether or not anybody asked, but the stick and half the phones this
+        // runs on are older than that, and there the window stopped at the status bar and the app
+        // sat in a letterbox of system chrome. This makes the two the same everywhere, and every
+        // screen already handles its own insets.
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         Td.start(this)
         setContent {
@@ -172,9 +225,11 @@ private fun Root() {
         }
     }
 
-    var screen by remember { mutableStateOf<Screen>(Screen.Chats) }
+    var screen by rememberSaveable(stateSaver = ScreenSaver) {
+        mutableStateOf<Screen>(Screen.Chats)
+    }
     // One slot for whatever the current login pane got wrong: only one of them is ever on screen.
-    var signInError by remember { mutableStateOf<String?>(null) }
+    var signInError by rememberSaveable { mutableStateOf<String?>(null) }
     var roomPrompt by remember { mutableStateOf<RoomPrompt?>(null) }
     // Saveable, not just remembered. Playing a video puts a second activity in front of this one,
     // and a 1 GB stick will happily kill what is behind it, so this composable is routinely
@@ -204,7 +259,7 @@ private fun Root() {
             if (!canReachTelegram && local != LocalFileAvailability.Complete) {
                 toast(
                     if (local == LocalFileAvailability.Partial) {
-                        "This video is only partly on this TV. Connect to finish downloading it."
+                        "This video is only partly downloaded. Connect to finish it."
                     } else {
                         "Connect to the internet to play this video."
                     },
@@ -214,7 +269,15 @@ private fun Root() {
             val alreadyCached = local == LocalFileAvailability.Complete
             val cacheBytes = runCatching { Td.storageUsedBytes() }.getOrDefault(0L)
             val free = DiskSpace.read(context).freeBytes
-            val decision = CachePolicy.decide(item.sizeBytes, alreadyCached, cacheBytes, free)
+            // What this same video already has on disk from an interrupted watch. Without it the
+            // policy sees a cache full of "old" media, clears it, and the thing it deletes is the
+            // half of the video the viewer came back to carry on from.
+            val partial = if (local == LocalFileAvailability.Partial) {
+                runCatching { Td.localDownloadedBytes(item.fileId) }.getOrDefault(0L)
+            } else {
+                0L
+            }
+            val decision = CachePolicy.decide(item.sizeBytes, alreadyCached, cacheBytes, free, partial)
             val ask = runCatching { settings.askBeforeClearing.first() }.getOrDefault(false)
 
             when (decision) {
@@ -321,6 +384,17 @@ private fun Root() {
         if (!overviewSeen) {
             OverviewScreen(onDone = { scope.launch { settings.markOverviewSeen() } })
             return@Box
+        }
+
+        // A chat restored from the saved state carries only what could be written down, so its
+        // blurred preview is missing until the real row turns up. Swapping it back in is what
+        // makes a rotation inside a chat look like nothing happened at all.
+        LaunchedEffect(chats, screen) {
+            val open = screen as? Screen.Media ?: return@LaunchedEffect
+            if (open.chat.miniThumbnail != null) return@LaunchedEffect
+            chats.firstOrNull { it.id == open.chat.id }
+                ?.takeIf { it.miniThumbnail != null }
+                ?.let { screen = Screen.Media(it) }
         }
 
         // Straight back into whatever was being watched last. Not routed through openChat: this
@@ -433,15 +507,15 @@ private fun Root() {
             }
 
             is Screen.Media -> {
-                BackHandler {
-                    // Videos posted while the list was open only appear after a fresh search.
-                    chatsViewModel.load()
+                val leaveChat = {
                     // Backing out of a chat is the viewer asking for the chat list. Honour that
                     // for the rest of the session rather than jumping them back in.
                     autoOpened = true
                     screen = Screen.Chats
                 }
+                BackHandler(onBack = leaveChat)
                 MediaGridScreen(
+                    onBack = leaveChat,
                     chatId = current.chat.id,
                     chatTitle = current.chat.title,
                     chatPhotoFileId = current.chat.photoFileId,
@@ -473,13 +547,17 @@ private fun Root() {
             }
 
             is Screen.Settings -> {
-                BackHandler {
-                    chatsViewModel.load()
+                val leaveSettings = {
+                    // Only if it has had time to go stale. Settings cannot change the chat list,
+                    // so a full re-sync on the way out was work nothing had asked for.
+                    chatsViewModel.refreshIfStale()
                     screen = Screen.Chats
                 }
+                BackHandler(onBack = leaveSettings)
                 SettingsScreen(
                     chats = chats,
                     onLoggedOut = { screen = Screen.Chats },
+                    onBack = leaveSettings,
                 )
             }
         }
@@ -492,10 +570,10 @@ private fun Root() {
                     // State what it can free, not the shortfall.
                     val canFree = (pending.item.sizeBytes - pending.shortfallBytes).coerceAtLeast(0)
                     "“${pending.item.title}” is ${StreamStats.formatBytes(pending.item.sizeBytes)}. " +
-                        "This TV can only free up ${StreamStats.formatBytes(canFree)}, so the video " +
+                        "This device can only free up ${StreamStats.formatBytes(canFree)}, so the video " +
                         "may stop partway through."
                 } else {
-                    "TMPlayer keeps one video on this TV at a time. Playing this deletes the last " +
+                    "TMPlayer keeps one video on this device at a time. Playing this deletes the last " +
                         "one and frees ${StreamStats.formatBytes(pending.reclaimBytes)}."
                 },
                 detail = "Nothing is deleted from Telegram, only this device's copy.",

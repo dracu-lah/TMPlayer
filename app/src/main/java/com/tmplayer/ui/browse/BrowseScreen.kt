@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -37,11 +38,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon as M3Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme as M3MaterialTheme
+import androidx.compose.material3.Text as M3Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -68,6 +76,7 @@ import com.tmplayer.data.Account
 import com.tmplayer.data.CardLayout
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
+import com.tmplayer.data.Fuzzy
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.Updates
 import com.tmplayer.ui.components.MediaPreview
@@ -77,6 +86,7 @@ import com.tmplayer.data.ResumeRecord
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.MenuAction
 import com.tmplayer.ui.components.holdable
+import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.TvMenu
@@ -182,20 +192,23 @@ fun BrowseScreen(
 
             Column(Modifier.fillMaxSize()) {
                     if (tab == BrowseTab.Continue) {
-                        TabHeading(tab, continueWatching.size, insets, touch) {
-                            LayoutAction(layout, touch, onToggleLayout)
-                            // No Refresh here: this tab is read off this device and cannot be
-                            // behind, so the button would be one that visibly does nothing.
-                            if (continueWatching.isNotEmpty()) {
-                                HeaderAction(
-                                    label = "Clear history",
-                                    icon = Icons.Filled.Close,
-                                    touch = touch,
-                                    onClick = { confirmClearHistory = true },
-                                )
+                        // On a phone the heading, the count and the chips all live in the app bar
+                        // now, so the content area starts with the content.
+                        if (!touch) {
+                            TabHeading(tab, continueWatching.size, insets) {
+                                LayoutAction(layout, onToggleLayout)
+                                // No Refresh here: this tab is read off this device and cannot be
+                                // behind, so the button would be one that visibly does nothing.
+                                if (continueWatching.isNotEmpty()) {
+                                    HeaderAction(
+                                        label = "Clear history",
+                                        icon = Icons.Filled.Close,
+                                        onClick = { confirmClearHistory = true },
+                                    )
+                                }
                             }
+                            Spacer(Modifier.height(20.dp))
                         }
-                        Spacer(Modifier.height(20.dp))
                         if (continueWatching.isEmpty()) {
                             EmptyTab(tab, query = "")
                         } else {
@@ -210,22 +223,23 @@ fun BrowseScreen(
                             )
                         }
                     } else {
-                        TabHeading(tab, visible.size, insets, touch) {
-                            LayoutAction(layout, touch, onToggleLayout)
-                            RefreshAction(touch, onRefresh)
-                            // Stars are added one at a time from a menu, so the only way back from
-                            // a tab full of them is here, beside the tab they fill.
-                            if (tab == BrowseTab.Favorites && favorites.isNotEmpty()) {
-                                HeaderAction(
-                                    label = "Clear favourites",
-                                    icon = Icons.Filled.Close,
-                                    touch = touch,
-                                    onClick = { confirmClearFavorites = true },
-                                )
+                        if (!touch) {
+                            TabHeading(tab, visible.size, insets) {
+                                LayoutAction(layout, onToggleLayout)
+                                RefreshAction(onRefresh)
+                                // Stars are added one at a time from a menu, so the only way back
+                                // from a tab full of them is here, beside the tab they fill.
+                                if (tab == BrowseTab.Favorites && favorites.isNotEmpty()) {
+                                    HeaderAction(
+                                        label = "Clear favourites",
+                                        icon = Icons.Filled.Close,
+                                        onClick = { confirmClearFavorites = true },
+                                    )
+                                }
                             }
+                            SearchRow(query = query, insets = insets, onQuery = { query = it })
+                            Spacer(Modifier.height(20.dp))
                         }
-                        SearchRow(query = query, insets = insets, onQuery = { query = it })
-                        Spacer(Modifier.height(20.dp))
 
                         if (visible.isEmpty()) {
                             EmptyTab(tab, query)
@@ -262,6 +276,10 @@ fun BrowseScreen(
     }
 
     if (touch) {
+        val voiceSearch = rememberVoiceSearch("Say a chat name") { query = it }
+        val count = (state as? UiState.Content)?.value?.chats?.let {
+            filterChats(it, tab, favorites, query).size
+        } ?: 0
         TouchBrowseShell(
             account = (state as? UiState.Content)?.value?.account,
             selected = tab,
@@ -270,7 +288,57 @@ fun BrowseScreen(
             onOpenSettings = onOpenSettings,
             updateVersion = updateVersion,
             onUpdate = onUpdate,
-            content = pane,
+            title = tab.heading,
+            // Continue watching is a list of videos held on this device, and the box searches
+            // chats. Offering it there would be a field that filters nothing.
+            searchQuery = if (tab == BrowseTab.Continue) null else query,
+            onSearchQueryChange = { query = it },
+            onVoiceSearch = voiceSearch,
+            actions = {
+                BarIcon(
+                    label = if (layout == CardLayout.Grid) "Show as rows" else "Show as tiles",
+                    icon = if (layout == CardLayout.Grid) {
+                        Icons.AutoMirrored.Filled.List
+                    } else {
+                        TmIcons.Grid
+                    },
+                    onClick = onToggleLayout,
+                )
+                if (tab != BrowseTab.Continue) {
+                    BarIcon("Refresh", Icons.Filled.Refresh, onRefresh)
+                }
+                // Everything destructive goes behind the overflow. A "Clear history" button
+                // sitting in the bar beside Refresh is one mis-tap from emptying the tab.
+                val clearHistory = tab == BrowseTab.Continue && continueWatching.isNotEmpty()
+                val clearFavorites = tab == BrowseTab.Favorites && favorites.isNotEmpty()
+                if (clearHistory || clearFavorites) {
+                    BarOverflow(
+                        items = buildList {
+                            if (clearHistory) {
+                                add("Clear Continue watching" to { confirmClearHistory = true })
+                            }
+                            if (clearFavorites) {
+                                add("Clear favourites" to { confirmClearFavorites = true })
+                            }
+                        },
+                    )
+                }
+            },
+            content = {
+                // The count the heading used to carry, now under the title where a phone's app bar
+                // puts a subtitle. Nowhere else on the screen says how much is in the tab.
+                Column(Modifier.fillMaxSize()) {
+                    if (count > 0 && query.isBlank()) {
+                        M3Text(
+                            "$count ${if (count == 1) "chat" else "chats"}",
+                            style = M3MaterialTheme.typography.bodySmall,
+                            color = TextMuted,
+                            modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
+                        )
+                    }
+                    pane()
+                }
+            },
         )
     } else {
         Row(Modifier.fillMaxSize()) {
@@ -369,6 +437,36 @@ fun BrowseScreen(
                 },
             ),
         )
+    }
+}
+
+/**
+ * One button in the phone's app bar.
+ *
+ * Icon-only and stock: [IconButton] brings the 48 dp target and the ripple, both of which the
+ * hand-built chips this replaced had to be told about and one of which they never got.
+ */
+@Composable
+private fun RowScope.BarIcon(label: String, icon: ImageVector, onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        M3Icon(icon, contentDescription = label)
+    }
+}
+
+/** The three dots, and everything that should take two taps rather than one. */
+@Composable
+internal fun RowScope.BarOverflow(items: List<Pair<String, () -> Unit>>) {
+    var open by remember { mutableStateOf(false) }
+    IconButton(onClick = { open = true }) {
+        M3Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+    }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        items.forEach { (label, action) ->
+            DropdownMenuItem(
+                text = { M3Text(label) },
+                onClick = { open = false; action() },
+            )
+        }
     }
 }
 
@@ -646,8 +744,10 @@ private fun filterChats(
         // Continue watching is a list of videos, not chats; it never reaches this filter.
         BrowseTab.Continue, BrowseTab.Recent, BrowseTab.All -> chats
     }
-    if (query.isBlank()) return byTab
-    return byTab.filter { it.title.contains(query.trim(), ignoreCase = true) }
+    // Ranked rather than filtered: a chat whose title is exactly what was typed belongs at the
+    // top, and a plain `contains` had no opinion about order at all. It is also what forgives the
+    // accent nobody types and the letter the remote's keyboard put in the wrong place.
+    return Fuzzy.rank(byTab, query) { it.title }
 }
 
 // ---- navigation rail -------------------------------------------------------------------------
@@ -824,7 +924,16 @@ private fun RailItem(
             modifier = Modifier.weight(1f),
         )
         if (badge != null) {
-            Text(badge, style = MaterialTheme.typography.bodyMedium, color = foreground)
+            // Clamped, because the badge measures before the label and an unusually long one
+            // (a version name with a suffix on it) shortened "Settings" to "S...".
+            Text(
+                badge,
+                style = MaterialTheme.typography.bodyMedium,
+                color = foreground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = RAIL_BADGE_MAX),
+            )
         }
     }
 }
@@ -839,14 +948,13 @@ private fun RailItem(
  * round for something the viewer can see the result of immediately.
  */
 @Composable
-private fun LayoutAction(layout: CardLayout, touch: Boolean, onToggle: () -> Unit) {
+private fun LayoutAction(layout: CardLayout, onToggle: () -> Unit) {
     HeaderAction(
         // A grid of squares and a stack of lines are the two pictures every phone and television
         // uses for this, so the words beside them were only saying it twice.
         label = if (layout == CardLayout.Grid) "As rows" else "As tiles",
         icon = if (layout == CardLayout.Grid) Icons.AutoMirrored.Filled.List else TmIcons.Grid,
         showLabel = false,
-        touch = touch,
         onClick = onToggle,
     )
 }
@@ -860,15 +968,15 @@ private fun LayoutAction(layout: CardLayout, touch: Boolean, onToggle: () -> Uni
  * and this app already draws that same glyph for two of those.
  */
 @Composable
-private fun RefreshAction(touch: Boolean, onRefresh: () -> Unit) {
+private fun RefreshAction(onRefresh: () -> Unit) {
     HeaderAction(
         label = "Refresh",
+        // Icon-only, here as everywhere. The word was kept on the television on the grounds that
+        // the same glyph means three things there and the screen is wide, but a heading whose
+        // chips are two pictures and one picture-with-a-word reads as three unrelated controls,
+        // and the name is still what a screen reader announces.
         icon = Icons.Filled.Refresh,
-        // The word earns its place on a television, where the same glyph means three things and
-        // the screen is wide. A phone has neither the width nor the ambiguity: the chip sits
-        // beside a listing of chats, where the only thing to fetch again is the listing.
-        showLabel = !touch,
-        touch = touch,
+        showLabel = false,
         onClick = onRefresh,
     )
 }
@@ -891,7 +999,6 @@ private fun HeaderAction(
     icon: ImageVector,
     onClick: () -> Unit,
     showLabel: Boolean = true,
-    touch: Boolean = false,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
@@ -904,8 +1011,6 @@ private fun HeaderAction(
 
     Row(
         Modifier
-            .heightIn(min = if (touch) TOUCH_TARGET else 0.dp)
-            .widthIn(min = if (touch) TOUCH_TARGET else 0.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(background)
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
@@ -936,7 +1041,6 @@ private fun TabHeading(
     tab: BrowseTab,
     count: Int,
     insets: BrowseInsets,
-    touch: Boolean,
     action: @Composable () -> Unit = {},
 ) {
     // A bare number after the blurb leaves the viewer to guess what was counted, so it always
@@ -957,24 +1061,13 @@ private fun TabHeading(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            // The top app bar already carries the heading on a phone, and saying it twice, one
-            // line apart, reads as a mistake rather than as emphasis.
-            if (!touch) {
-                Text(
-                    tab.heading,
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = TextPrimary,
-                )
-            }
-            // The blurb and the count together are too long for a phone: they wrap onto a second
-            // line and crowd the chips beside them. The count is the part that changes, and the
-            // blurb only ever repeats what the tab already says, so the phone keeps the count.
             Text(
-                when {
-                    touch -> if (count > 0) "$count $unit" else tab.blurb
-                    count > 0 -> "${tab.blurb}  ·  $count $unit"
-                    else -> tab.blurb
-                },
+                tab.heading,
+                style = MaterialTheme.typography.headlineLarge,
+                color = TextPrimary,
+            )
+            Text(
+                if (count > 0) "${tab.blurb}  ·  $count $unit" else tab.blurb,
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextMuted,
                 maxLines = 1,
@@ -1084,6 +1177,7 @@ private fun ChatSection(
     onHold: (ChatSummary) -> Unit,
     launchChatId: Long,
 ) {
+    val rowsAreFullBleed = isTouch()
     val first = remember { FocusRequester() }
     // The strip is what a viewer lands on when it is there, because it is the largest thing on the
     // screen; otherwise the first card takes it.
@@ -1097,16 +1191,28 @@ private fun ChatSection(
     when (layout) {
         CardLayout.List -> LazyColumn(
             Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = insets.start,
-                end = insets.end,
-                bottom = insets.bottom,
-            ),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            // Rows carry their own side padding on a phone so the ripple reaches both edges, and
+            // they sit against each other with no gap: the list is one surface, not a stack of
+            // cards. The television keeps both, because its cards need room to grow a border.
+            contentPadding = if (rowsAreFullBleed) {
+                PaddingValues(bottom = insets.bottom)
+            } else {
+                PaddingValues(start = insets.start, end = insets.end, bottom = insets.bottom)
+            },
+            verticalArrangement = Arrangement.spacedBy(if (rowsAreFullBleed) 0.dp else 14.dp),
         ) {
             if (recent.isNotEmpty()) {
                 item(key = "recent-strip") {
-                    Column {
+                    // The rows below are full bleed on a phone, but a heading is not a row: with
+                    // the list's side padding dropped for their sake, "Jump back in" was printed
+                    // hard against the panel edge with nothing between it and the glass.
+                    Column(
+                        if (rowsAreFullBleed) {
+                            Modifier.padding(start = insets.start, end = insets.end)
+                        } else {
+                            Modifier
+                        },
+                    ) {
                         Text(
                             "Jump back in",
                             style = MaterialTheme.typography.titleLarge,
@@ -1262,6 +1368,16 @@ private fun ChatTile(
 private fun Modifier.marqueeWhen(active: Boolean): Modifier =
     if (active) basicMarquee(iterations = Int.MAX_VALUE) else this
 
+/**
+ * A chat as a full-bleed row, the way a phone's list of conversations is drawn.
+ *
+ * The card this replaces was 84 dp tall with a 16 dp radius, a border, and a 14 dp gap to the next
+ * one: eight chats to a screen, each announcing itself as a separate object. Telegram, and every
+ * other phone app whose main screen is a list of chats, draws the list as rows on the window
+ * background with a divider's worth of nothing between them, and fits half again as many in. The
+ * television keeps its cards, where focus has to be visible from a sofa and a border is how that
+ * is said.
+ */
 @Composable
 private fun ChatRow(
     chat: ChatSummary,
@@ -1273,6 +1389,10 @@ private fun ChatRow(
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
+    if (isTouch()) {
+        TouchChatRow(chat, favorite, opensOnLaunch, onClick, onHold, modifier, interactions)
+        return
+    }
 
     Row(
         modifier
@@ -1326,6 +1446,62 @@ private fun ChatRow(
                 contentDescription = "Favourite",
                 tint = Accent,
                 modifier = Modifier.size(28.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TouchChatRow(
+    chat: ChatSummary,
+    favorite: Boolean,
+    opensOnLaunch: Boolean,
+    onClick: () -> Unit,
+    onHold: () -> Unit,
+    modifier: Modifier,
+    interactions: MutableInteractionSource,
+) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(TOUCH_ROW_HEIGHT)
+            // No clip and no background: the row sits on the window, so a press ripples across
+            // the whole width of the screen the way a phone's list rows do.
+            .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MediaPreview(
+            miniThumbnail = chat.miniThumbnail,
+            thumbnailFileId = chat.photoFileId,
+            fallbackLabel = chat.title,
+            modifier = Modifier.size(TOUCH_AVATAR).clip(CircleShape),
+        )
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                chat.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                // No hold hint on a phone: there is no focused row for it to attach to, and a
+                // line of instructions on every row is furniture within one screenful.
+                if (opensOnLaunch) "${chat.kind.label}  ·  Opens on launch" else chat.kind.label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (favorite) {
+            Icon(
+                Icons.Filled.Star,
+                contentDescription = "Favourite",
+                tint = Accent,
+                modifier = Modifier.size(20.dp),
             )
         }
     }
@@ -1386,6 +1562,9 @@ private const val FOCUS_FADE_MS = 140
 private const val HOLD_HINT = "Hold OK for options"
 /** Horizontal padding every rail child carries, which is what keeps them out of the overscan. */
 private val RAIL_INSET = 16.dp
+
+/** Enough for a version name, and never enough to eat the item's own label. */
+private val RAIL_BADGE_MAX = 84.dp
 private val RECENT_TILE_WIDTH = 224.dp
 private val RECENT_TILE_HEIGHT = 154.dp
 
@@ -1406,8 +1585,15 @@ private const val TILE_COLUMNS = 3
  */
 private val TOUCH_TILE_MIN = 168.dp
 
-/** The smallest thing a fingertip can be asked to hit, which is Android's own figure. */
-private val TOUCH_TARGET = 48.dp
+/**
+ * A phone chat row, at Material's list-item metrics.
+ *
+ * 72 dp with a 54 dp avatar is the two-line list item, and it is what Telegram, Gmail and the
+ * dialler all draw. The card it replaced was 84 dp plus a 14 dp gap, so this fits three more
+ * chats on a screen while looking less busy.
+ */
+private val TOUCH_ROW_HEIGHT = 72.dp
+private val TOUCH_AVATAR = 54.dp
 
 /**
  * How far the listing keeps from each edge.

@@ -1,8 +1,12 @@
 # TDLib and NextLib both ship consumer rules in their AARs; these are the app-side additions.
 
-# TDLib's JNI bridge and every request/response type crosses the native boundary by name.
+# TDLib's JNI bridge crosses the native boundary by name, so it has to survive verbatim.
 -keep class org.drinkless.tdlib.** { *; }
--keep class dev.g000sha256.tdl.** { *; }
+
+# The Kotlin wrapper does not: it is ordinary Kotlin calling that bridge, and keeping the whole
+# package pinned several thousand generated DTO classes, with their fields and methods, into every
+# release build. Only the ones this app actually references are needed, and R8 works those out.
+-dontwarn dev.g000sha256.tdl.**
 
 # NextLib's FFmpeg renderers are looked up reflectively by DefaultRenderersFactory.
 -keep class io.github.anilbeesetti.nextlib.media3ext.** { *; }

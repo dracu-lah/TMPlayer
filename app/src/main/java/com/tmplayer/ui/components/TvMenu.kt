@@ -18,10 +18,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme as M3MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Text as M3Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -78,6 +81,11 @@ fun TvMenu(
     val heading = remember { FocusRequester() }
     val touch = isTouch()
 
+    if (touch) {
+        TouchMenuSheet(title, subtitle, actions, onDismiss)
+        return
+    }
+
     // A separate window, for the same reason TvConfirm uses one: drawn inline this would sit
     // behind anything composed after it.
     Dialog(
@@ -90,10 +98,7 @@ fun TvMenu(
                 // This menu is opened by a hold, so OK is still down as it appears; without this
                 // the release would choose the first action on the viewer's behalf.
                 .ignoreStrayRelease()
-                .background(Color.Black.copy(alpha = 0.82f))
-                // A dialog window is laid out over the insets, so on a phone the panel would
-                // otherwise run under the status bar and the gesture handle.
-                .then(if (touch) Modifier.safeDrawingPadding() else Modifier),
+                .background(Color.Black.copy(alpha = 0.82f)),
             contentAlignment = Alignment.Center,
         ) {
             val panel = min(maxWidth - PhonePad.Side * 2, MENU_MAX)
@@ -104,27 +109,20 @@ fun TvMenu(
                     .clip(RoundedCornerShape(20.dp))
                     .background(SurfaceDark)
                     .border(1.dp, TextMuted.copy(alpha = 0.25f), RoundedCornerShape(20.dp))
-                    .padding(horizontal = if (touch) 16.dp else 24.dp, vertical = 20.dp),
+                    .padding(horizontal = 24.dp, vertical = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Column(
                     Modifier
                         .padding(start = 4.dp, bottom = 8.dp)
-                        // Focus has to live somewhere for the D-pad to work at all, so on a TV it
-                        // starts here, on something that does nothing when pressed. A finger has
-                        // no such problem, and a focusable heading on a phone only puts a stop in
-                        // the way of the accessibility cursor.
-                        .then(
-                            if (touch) Modifier else Modifier.focusRequester(heading).focusable(),
-                        ),
+                        // Focus has to live somewhere for the D-pad to work at all, so it starts
+                        // here, on something that does nothing when pressed.
+                        .focusRequester(heading)
+                        .focusable(),
                 ) {
                     Text(
                         title,
-                        style = if (touch) {
-                            MaterialTheme.typography.titleMedium
-                        } else {
-                            MaterialTheme.typography.titleLarge
-                        },
+                        style = MaterialTheme.typography.titleLarge,
                         color = TextPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -140,23 +138,68 @@ fun TvMenu(
                     }
                 }
 
-                actions.forEach { action -> MenuRow(action = action, touch = touch) }
+                actions.forEach { action -> MenuRow(action = action, touch = false) }
 
-                // Instructions for a remote only. On a phone there is no Down to press, and the
-                // menu closes by tapping the dark outside it or by the system back gesture.
-                if (!touch) {
-                    Text(
-                        "Press Down to choose, or Back to close this.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextMuted,
-                        modifier = Modifier.padding(start = 4.dp, top = 8.dp),
-                    )
-                }
+                Text(
+                    "Press Down to choose, or Back to close this.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMuted,
+                    modifier = Modifier.padding(start = 4.dp, top = 8.dp),
+                )
             }
         }
 
-        if (!touch) {
-            LaunchedEffect(Unit) { runCatching { heading.requestFocus() } }
+        LaunchedEffect(Unit) { runCatching { heading.requestFocus() } }
+    }
+}
+
+/**
+ * The same menu as the sheet a phone expects.
+ *
+ * The panel it replaces floated in the middle of the screen with no visible way to close it, and
+ * the tap-outside that was supposed to close it could not fire: the dark scrim was part of the
+ * dialog's own content, so a tap on it landed on the content and was swallowed. The only way out
+ * was the system back gesture, which is not something a menu should require anyone to know.
+ *
+ * [ModalBottomSheet] brings the drag handle, the working scrim, the swipe-down dismiss and the
+ * bottom-of-the-screen position a thumb can actually reach, none of which had to be written here.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TouchMenuSheet(
+    title: String,
+    subtitle: String?,
+    actions: List<MenuAction>,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceDark,
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
+            Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
+                M3Text(
+                    title,
+                    style = M3MaterialTheme.typography.titleMedium,
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (subtitle != null) {
+                    M3Text(
+                        subtitle,
+                        style = M3MaterialTheme.typography.bodyMedium,
+                        color = TextMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Spacer(Modifier.padding(top = 4.dp))
+            actions.forEach { action ->
+                MenuRow(action = action, touch = true)
+                Spacer(Modifier.padding(top = 4.dp))
+            }
         }
     }
 }

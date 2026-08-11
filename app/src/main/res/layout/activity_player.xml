@@ -21,7 +21,7 @@
         android:id="@+id/subtitles"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginBottom="48dp" />
+        android:layout_marginBottom="@dimen/player_subtitle_bottom" />
 
     <!--
       Full-screen while the video opens: an opaque sheet, not a spinner floating over a black
@@ -38,8 +38,8 @@
         android:background="#0E0E12"
         android:gravity="center"
         android:orientation="vertical"
-        android:paddingLeft="72dp"
-        android:paddingRight="72dp">
+        android:paddingLeft="@dimen/player_sheet_side"
+        android:paddingRight="@dimen/player_sheet_side">
 
         <!--
           Shown only when the overlay is carrying an error, so the loading screen and the failure
@@ -63,7 +63,7 @@
             android:gravity="center"
             android:maxWidth="820dp"
             android:textColor="@color/text_primary"
-            android:textSize="26sp"
+            android:textSize="@dimen/player_title_size"
             android:textStyle="bold" />
 
         <TextView
@@ -79,7 +79,7 @@
         <ProgressBar
             android:id="@+id/status_progress"
             style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="520dp"
+            android:layout_width="@dimen/player_progress_width"
             android:layout_height="8dp"
             android:max="1000"
             android:progressTint="@color/accent"
@@ -102,6 +102,24 @@
             android:layout_height="44dp"
             android:layout_marginTop="20dp"
             android:indeterminateTint="@color/accent" />
+
+        <!--
+          The error sheet's way out. Before this it said "Press Back to pick something else" and
+          offered nothing focusable at all, so on a remote the whole screen took no input: a video
+          that failed on a moved download window, which the next attempt would have played, was
+          simply the end of the session.
+        -->
+        <Button
+            android:id="@+id/status_retry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:minWidth="160dp"
+            android:paddingLeft="28dp"
+            android:paddingRight="28dp"
+            android:text="Try again"
+            android:textColor="@color/text_primary"
+            android:visibility="gone" />
     </LinearLayout>
 
     <!--
@@ -115,7 +133,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
-        android:layout_margin="32dp"
+        android:layout_margin="@dimen/player_chip_margin"
         android:background="#17171E"
         android:paddingLeft="18dp"
         android:paddingTop="10dp"
@@ -134,7 +152,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
-        android:layout_margin="32dp"
+        android:layout_margin="@dimen/player_chip_margin"
         android:background="#17171E"
         android:gravity="center_vertical"
         android:orientation="horizontal"
@@ -176,6 +194,47 @@
         android:textColor="@color/text_primary"
         android:textSize="16sp"
         android:visibility="gone" />
+
+    <!--
+      Previous and next episode, on a phone.
+
+      The search that finds them already ran on every device; on a phone its result was simply
+      thrown away, because the only thing consuming it was leanback's transport row and a phone has
+      none. These ride with Media3's controller: they appear when it does and go with it, so they
+      are never over the picture on their own.
+    -->
+    <LinearLayout
+        android:id="@+id/episode_row"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="@dimen/player_chip_margin"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <Button
+            android:id="@+id/previous_episode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:paddingLeft="18dp"
+            android:paddingRight="18dp"
+            android:text="Previous"
+            android:textColor="@color/text_primary"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/next_episode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:minWidth="0dp"
+            android:paddingLeft="18dp"
+            android:paddingRight="18dp"
+            android:text="Next"
+            android:textColor="@color/text_primary"
+            android:visibility="gone" />
+    </LinearLayout>
 
     <!-- Track pickers are added here so they cover the video, not the other way round. -->
     <FrameLayout

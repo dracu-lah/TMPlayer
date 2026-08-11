@@ -27,7 +27,7 @@ object Failures {
             raw.startsWith("Unauthorized", ignoreCase = true) ||
                 raw.contains("SESSION_REVOKED") ||
                 raw.contains("AUTH_KEY_UNREGISTERED") ->
-                "Telegram signed this TV out. Scan the code again to sign back in."
+                "Telegram signed this device out. Sign in again to carry on."
 
             raw.contains("CHAT_NOT_FOUND") || raw.contains("PEER_ID_INVALID") ->
                 "That chat isn't there any more. It was deleted, or you left it."
@@ -41,7 +41,7 @@ object Failures {
             raw.contains("No space left", ignoreCase = true) ||
                 raw.contains("ENOSPC") ||
                 raw.contains("Not enough disk space", ignoreCase = true) ->
-                "This TV has run out of storage. Clear space in Settings, then try again."
+                "This device has run out of storage. Clear space in Settings, then try again."
 
             raw.contains("FILE_REFERENCE") || raw.contains("FILE_ID_INVALID") ->
                 "Telegram moved this video. Press Refresh, then try again."
@@ -75,6 +75,6 @@ object Failures {
 
     private const val TAG = "Failures"
 
-    const val OFFLINE = "Can't reach Telegram. Check this TV's internet connection."
+    const val OFFLINE = "Can't reach Telegram. Check this device's internet connection."
     const val DEFAULT = "Telegram didn't answer. Try again in a moment."
 }

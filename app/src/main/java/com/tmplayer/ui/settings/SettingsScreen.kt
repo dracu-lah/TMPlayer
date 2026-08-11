@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -40,8 +41,17 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.IconButton as TouchIconButton
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon as M3Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch as M3Switch
+import androidx.compose.material3.Text as M3Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,6 +61,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -85,7 +96,9 @@ import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.update.UpdateDialog
+import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.theme.Accent
+import com.tmplayer.ui.theme.Background
 import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
@@ -101,10 +114,13 @@ private sealed interface Prompt {
     data object SignOut : Prompt
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     chats: List<ChatSummary>,
     onLoggedOut: () -> Unit,
+    /** Leaving Settings. On a phone this is the app bar's arrow as well as the hardware key. */
+    onBack: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -115,6 +131,7 @@ fun SettingsScreen(
     val openLastChat by settings.openLastChat.collectAsStateWithLifecycle(initialValue = false)
     val askBeforeClearing by settings.askBeforeClearing.collectAsStateWithLifecycle(initialValue = false)
     val downloadFirst by settings.downloadBeforePlaying.collectAsStateWithLifecycle(initialValue = false)
+    val autoplayNext by settings.autoplayNext.collectAsStateWithLifecycle(initialValue = true)
     val history by settings.continueWatching.collectAsStateWithLifecycle(initialValue = emptyList())
     val favorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
     val lastChatId by settings.lastChatId.collectAsStateWithLifecycle(initialValue = 0L)
@@ -166,6 +183,7 @@ fun SettingsScreen(
     // scrolls under the bars rather than stopping short of them.
     val insets = WindowInsets.safeDrawing.asPaddingValues()
 
+    val list: @Composable () -> Unit = {
     LazyColumn(
         Modifier
             .fillMaxSize()
@@ -180,29 +198,49 @@ fun SettingsScreen(
             )
             .padding(horizontal = if (touch) PhonePad.Side else Tv.SafeH),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            top = if (touch) insets.calculateTopPadding() + PhonePad.Top else Tv.SafeV,
+            // The app bar already clears the status bar on a phone, so the list only owes the
+            // gesture bar at the bottom.
+            top = if (touch) 4.dp else Tv.SafeV,
             bottom = if (touch) insets.calculateBottomPadding() + 32.dp else 40.dp,
         ),
-        verticalArrangement = Arrangement.spacedBy(if (touch) 8.dp else 10.dp),
+        // Full-bleed rows sit closer together than cards did: the gap between two rows of a
+        // preference list is a divider's worth of nothing, not a card margin.
+        verticalArrangement = Arrangement.spacedBy(if (touch) 0.dp else 10.dp),
     ) {
-        item {
-            Column(Modifier.padding(bottom = 12.dp)) {
-                Text(
-                    "Settings",
-                    // A headline sized for a sofa takes a quarter of a phone's height before a
-                    // single setting is on screen.
-                    style = if (touch) {
-                        MaterialTheme.typography.headlineSmall
-                    } else {
-                        MaterialTheme.typography.headlineLarge
-                    },
-                    color = TextPrimary,
-                )
-                Text(
-                    "Changes save as you make them.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextMuted,
-                )
+        // The phone's app bar already says "Settings" and offers the way out, so repeating both
+        // one line below reads as a mistake. "Changes save as you make them." goes with them: a
+        // preference screen that saves as you go is what every Android user already assumes, and
+        // the sentence was the first thing on the screen either way.
+        if (!touch) {
+            item {
+                Column(Modifier.padding(bottom = 12.dp)) {
+                    Text(
+                        "Settings",
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = TextPrimary,
+                    )
+                    Text(
+                        "Changes save as you make them.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextMuted,
+                    )
+                }
+            }
+        }
+
+        // Whatever is currently running, at the top rather than below the last row. "Deleting…"
+        // and "Signing out…" were written under a list the viewer would have to scroll past the
+        // end of to read, which is the one place they cannot be looking when they press the row.
+        busy?.let { message ->
+            item {
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Spinner(size = 18.dp, strokeWidth = 2.dp)
+                    Spacer(Modifier.size(12.dp))
+                    Text(message, style = MaterialTheme.typography.bodyLarge, color = Accent)
+                }
             }
         }
 
@@ -268,7 +306,11 @@ fun SettingsScreen(
 
         // Rows or tiles used to be set here. It now sits beside each list it rearranges, where
         // the viewer can see what they are choosing between.
-        item { SectionTitle("Lists") }
+        // The heading only appears when it has something under it. Both rows are conditional, so
+        // a viewer with no favourites and nothing on the go was shown "Lists" over empty space.
+        if (favorites.isNotEmpty() || history.isNotEmpty()) {
+            item { SectionTitle("Lists") }
+        }
         if (favorites.isNotEmpty()) {
             item {
                 ActionRow(
@@ -301,6 +343,19 @@ fun SettingsScreen(
         // ---- playback -----------------------------------------------------------------------
 
         item { SectionTitle("Playback") }
+        item {
+            ToggleRow(
+                title = "Play the next episode automatically",
+                subtitle = if (autoplayNext) {
+                    "Starts after a short countdown you can stop"
+                } else {
+                    "Off: a finished video stays on the last frame"
+                },
+                icon = Icons.Filled.PlayArrow,
+                checked = autoplayNext,
+                onToggle = { scope.launch { settings.setAutoplayNext(!autoplayNext) } },
+            )
+        }
         item {
             ToggleRow(
                 title = "Download the whole video first",
@@ -414,7 +469,7 @@ fun SettingsScreen(
         item {
             ActionRow(
                 title = "Show the walkthrough again",
-                subtitle = "Five screens on how TMPlayer works",
+                subtitle = "How TMPlayer works, in a few screens",
                 icon = Icons.Filled.Info,
                 onClick = { scope.launch { settings.replayOverview() } },
             )
@@ -462,10 +517,6 @@ fun SettingsScreen(
 
         item {
             Column(Modifier.padding(top = 20.dp)) {
-                busy?.let {
-                    Text(it, style = MaterialTheme.typography.bodyLarge, color = Accent)
-                    Spacer(Modifier.height(12.dp))
-                }
                 Text(
                     "TMPlayer talks directly to Telegram for your chats and videos, and to GitHub " +
                         "to see whether a newer version is out. It has no developer-run server, " +
@@ -475,6 +526,38 @@ fun SettingsScreen(
                 )
             }
         }
+    }
+    }
+
+    if (touch) {
+        // A real app bar, because before this there was no way off the phone's Settings screen at
+        // all except the hardware Back: no arrow, no title bar, nothing. The heading was a line of
+        // text scrolling away with the rest of the list.
+        Scaffold(
+            containerColor = Background,
+            topBar = {
+                TopAppBar(
+                    title = { M3Text("Settings") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            M3Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back to chats",
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = SurfaceDark,
+                        titleContentColor = TextPrimary,
+                        navigationIconContentColor = TextPrimary,
+                    ),
+                )
+            },
+        ) { padding ->
+            Box(Modifier.fillMaxSize().padding(padding)) { list() }
+        }
+    } else {
+        list()
     }
 
     when (prompt) {
@@ -887,8 +970,11 @@ private fun SectionTitle(text: String) {
     Text(
         text,
         style = sectionStyle(),
-        color = TextPrimary,
-        modifier = Modifier.padding(top = 16.dp, bottom = 2.dp),
+        // Accent on a phone, which is what every Android preference screen does: with the rows
+        // un-carded there is no longer a shape separating one group from the next, so the colour
+        // is what does the separating.
+        color = if (isTouch()) Accent else TextPrimary,
+        modifier = Modifier.padding(top = if (isTouch()) 20.dp else 16.dp, bottom = 4.dp),
     )
 }
 
@@ -1049,7 +1135,15 @@ private fun ToggleRow(
         }
         // Only touch needs this: the TV row's title is one line and never comes near the switch.
         if (touch) Spacer(Modifier.size(12.dp))
-        Switch(checked = checked, focused = focused, touch = touch)
+        if (touch) {
+            // A real switch, not a drawing of one. It animates its knob, it can be dragged as
+            // well as tapped, and TalkBack announces it as "switch, on" without being told: the
+            // drawn pill below reported nothing at all, so the one row on this screen whose state
+            // matters most was the one a screen reader could say least about.
+            M3Switch(checked = checked, onCheckedChange = { onToggle() })
+        } else {
+            Switch(checked = checked, focused = focused, touch = false)
+        }
     }
 }
 
@@ -1114,11 +1208,22 @@ private fun FocusRow(
             // phone column is narrow enough that some of them wrap, so touch gets a floor and
             // grows past it rather than clipping the second line.
             .then(if (touch) Modifier.heightIn(min = 64.dp) else Modifier.height(66.dp))
-            .clip(RoundedCornerShape(16.dp))
-            .background(background)
+            // Full bleed on a phone: a preference screen is a list of settings on the window, not
+            // a stack of rounded cards each announcing itself. The television keeps the card,
+            // where the filled shape is how the focused row is found from a sofa.
+            .then(
+                if (touch) {
+                    Modifier
+                } else {
+                    Modifier.clip(RoundedCornerShape(16.dp)).background(background)
+                },
+            )
             .clickable(
                 interactionSource = interactions,
                 indication = if (touch) LocalIndication.current else null,
+                // Named as a button, so a screen reader offers "double tap to activate" rather
+                // than reading two lines of text with nothing to do about them.
+                role = Role.Button,
                 onClick = onClick,
             )
             .padding(

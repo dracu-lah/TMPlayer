@@ -1,6 +1,7 @@
 package com.tmplayer.ui.auth
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.aspectRatio
@@ -27,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,6 +64,7 @@ import com.tmplayer.ui.components.TmButton
 import com.tmplayer.ui.components.TmSecondaryButton
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.paneAction
+import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.SurfaceDark
@@ -87,12 +90,12 @@ fun LoginScreen(
     // "Change number" on the code pane. TDLib is happy to be told a different number while it is
     // waiting for a code, so this is a change of screen and nothing more: no logout, no lost
     // session, and the code that was already sent stays valid if the user comes straight back.
-    var changingNumber by remember(state::class) { mutableStateOf(false) }
+    var changingNumber by rememberSaveable(state::class) { mutableStateOf(false) }
 
     when (state) {
         is AuthState.Connecting -> BigLoader("Connecting to Telegram…")
         is AuthState.ChooseMethod -> MethodPane(onChooseMethod)
-        is AuthState.Qr -> QrPane(state.link)
+        is AuthState.Qr -> QrPane(state.link, onBack = onStartOver)
         is AuthState.Phone -> PhonePane(
             error = submitError,
             onSubmit = onSubmitPhoneNumber,
@@ -133,6 +136,21 @@ fun LoginScreen(
 private fun MethodPane(onChoose: (SignInMethod) -> Unit) {
     val focus = remember { FocusRequester() }
     val touch = isTouch()
+    val activity = LocalActivity.current
+    val toast = rememberToast()
+    // The top of the sign-in, so Back here means leaving the app. Two presses, the same guard the
+    // chat list uses: on a remote Back sits right beside the D-pad, and before this a stray press
+    // dropped the viewer out of the app in the middle of scanning a code.
+    var exitArmed by remember { mutableStateOf(false) }
+    BackHandler {
+        if (exitArmed) activity?.finish() else { exitArmed = true; toast("Press Back again to leave") }
+    }
+    LaunchedEffect(exitArmed) {
+        if (exitArmed) {
+            delay(EXIT_WINDOW_MS)
+            exitArmed = false
+        }
+    }
 
     Pane {
         Text("Sign in to Telegram", style = MaterialTheme.typography.headlineLarge)
@@ -217,14 +235,17 @@ private fun PhonePane(
         return
     }
 
-    var number by remember { mutableStateOf("+") }
+    var number by rememberSaveable { mutableStateOf("+") }
 
     LoginForm(
         title = "Your phone number",
         blurb = "The number your Telegram account is registered to, with its country code.",
         note = null,
         value = number,
-        onValueChange = { number = it },
+        // The keyboard type is a request, not a guarantee: a leanback remote's on-screen keyboard
+        // and every hardware keyboard will happily send letters to a field that asked for a
+        // dialpad. What a number is made of is decided here instead.
+        onValueChange = { number = it.keepPhoneCharacters() },
         placeholder = "+44 7700 900000",
         keyboardType = KeyboardType.Phone,
         masked = false,
@@ -254,11 +275,11 @@ private fun TouchPhonePane(
 ) {
     val context = LocalContext.current
     var countries by remember { mutableStateOf(emptyList<Country>()) }
-    var dial by remember { mutableStateOf("") }
+    var dial by rememberSaveable { mutableStateOf("") }
     // What is shown, which is grouped, and what is meant, which is digits. Kept apart so that the
     // formatter can rewrite the one without ever changing the other.
-    var shown by remember { mutableStateOf("") }
-    var picking by remember { mutableStateOf(false) }
+    var shown by rememberSaveable { mutableStateOf("") }
+    var picking by rememberSaveable { mutableStateOf(false) }
     val national = remember(shown) { shown.filter { it.isDigit() } }
     val country = remember(countries, dial) { PhoneCountries.byDialCode(countries, dial) }
     val field = remember { FocusRequester() }
@@ -281,6 +302,11 @@ private fun TouchPhonePane(
         val info = Td.phoneNumberInfo("+$dial$national") ?: return@LaunchedEffect
         val formatted = info.formattedPhoneNumber
             .removePrefix("+$dial")
+            // TDLib groups some countries with hyphens and some with brackets, so a number that
+            // was being typed as digits suddenly grows punctuation the moment the debounce fires.
+            // The grouping is worth keeping; the characters it is drawn with are not, so every
+            // run of them becomes the one space the rest of the field already uses.
+            .replace(SEPARATORS, " ")
             .trim()
             .takeIf { it.filter { c -> c.isDigit() } == national }
             ?: return@LaunchedEffect
@@ -331,7 +357,10 @@ private fun TouchPhonePane(
             )
             PaneField(
                 value = shown,
-                onValueChange = { shown = it },
+                // Digits and the spaces that group them, nothing else. The dialpad is a hint the
+                // IME may ignore, and a letter typed here would sit in the field looking accepted
+                // while being quietly dropped from the number that is actually sent.
+                onValueChange = { shown = it.keepNationalCharacters() },
                 placeholder = "Phone number",
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Phone,
@@ -383,16 +412,23 @@ private fun CodePane(
         return
     }
 
-    var code by remember { mutableStateOf("") }
+    var code by rememberSaveable { mutableStateOf("") }
+    // Most deliveries are a run of digits, but a couple are a word or a phrase, and those have to
+    // keep their letters. The phone's version of this pane already asks the same question.
+    val digits = state.delivery.isDigits()
 
     LoginForm(
         title = "Enter your code",
         blurb = codeBlurb(state),
         note = null,
         value = code,
-        onValueChange = { code = it },
+        // A number keyboard is a hint the leanback remote is free to ignore, so a code that is
+        // only ever digits is held to that here rather than trusted to the keyboard.
+        onValueChange = { entered ->
+            code = if (digits) entered.filter(Char::isDigit).take(MAX_CODE_LENGTH) else entered
+        },
         placeholder = "Code",
-        keyboardType = KeyboardType.Number,
+        keyboardType = if (digits) KeyboardType.Number else KeyboardType.Text,
         masked = false,
         error = error,
         submitLabel = "Sign in",
@@ -424,11 +460,11 @@ private fun TouchCodePane(
 ) {
     val boxed = state.delivery.isDigits()
     val length = state.length.takeIf { it in 1..MAX_CODE_LENGTH } ?: DEFAULT_CODE_LENGTH
-    var code by remember { mutableStateOf("") }
+    var code by rememberSaveable { mutableStateOf("") }
     // Which code has already been sent, so that a rejected one does not resubmit itself forever:
     // the field stays full after a wrong code, and auto-submit would fire on every recomposition.
-    var submitted by remember { mutableStateOf<String?>(null) }
-    var remaining by remember(state.timeout, state.phoneNumber) { mutableStateOf(state.timeout) }
+    var submitted by rememberSaveable { mutableStateOf<String?>(null) }
+    var remaining by rememberSaveable(state.timeout, state.phoneNumber) { mutableStateOf(state.timeout) }
     val field = remember { FocusRequester() }
 
     LaunchedEffect(remaining) {
@@ -632,8 +668,18 @@ private fun PaneHeader(onBack: () -> Unit) {
     }
 }
 
+/**
+ * The QR pane, with a way back off it.
+ *
+ * It used to have none: no header, no button, and no back handler, so anybody who picked QR and
+ * then changed their mind (the account is on this very phone, the other phone is upstairs) had no
+ * way out short of killing the app. Going back means abandoning the half-started sign-in, which is
+ * what [onBack] does; nothing is lost, because nobody is signed in yet.
+ */
 @Composable
-private fun QrPane(link: String) {
+private fun QrPane(link: String, onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+
     val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = link) {
         value = withContext(Dispatchers.Default) { QrCode.render(link, QR_PIXELS) }
     }
@@ -691,8 +737,13 @@ private fun QrPane(link: String) {
     // no room beside a 300dp plate for a paragraph, so the same parts stack instead.
     if (isTouch()) {
         Pane(horizontalAlignment = Alignment.CenterHorizontally) {
+            PaneHeader(onBack = onBack)
             plate()
             words()
+            Spacer(Modifier.height(8.dp))
+            TmSecondaryButton(onClick = onBack, modifier = Modifier.paneAction()) {
+                Text("Sign in another way")
+            }
         }
         return
     }
@@ -703,7 +754,13 @@ private fun QrPane(link: String) {
         horizontalArrangement = Arrangement.spacedBy(40.dp),
     ) {
         plate()
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) { words() }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            words()
+            Spacer(Modifier.height(8.dp))
+            // On a remote this is the only focusable thing on the pane, so it is also what gives
+            // the D-pad somewhere to be: before it, the screen took no input at all.
+            TmSecondaryButton(onClick = onBack) { Text("Sign in another way") }
+        }
     }
 }
 
@@ -834,6 +891,9 @@ private fun LoginForm(
     LaunchedEffect(Unit) { focus.requestFocus() }
 }
 
+/** How long a first press of Back stays armed before it is forgotten, as on the chat list. */
+private const val EXIT_WINDOW_MS = 2_000L
+
 private const val QR_PIXELS = 560
 
 private val PLATE = 300.dp
@@ -854,3 +914,21 @@ private const val FORMAT_DEBOUNCE_MS = 250L
 // The shortest national numbers in use run to seven digits once the country code is counted, so
 // anything below this cannot be a real number and the button stays out of reach.
 private const val MIN_PHONE_DIGITS = 7
+
+/** Whatever TDLib chose to group a number with: hyphens, brackets, dots, runs of spaces. */
+private val SEPARATORS = Regex("[^0-9]+")
+
+/**
+ * What may appear in the international field: digits, one leading plus, and the spaces that group
+ * them. Written as a filter on the whole value rather than on the last keystroke, because a paste
+ * or an autofill arrives as an entire string and would otherwise walk straight past a check that
+ * only looked at what changed.
+ */
+private fun String.keepPhoneCharacters(): String {
+    val kept = filter { it.isDigit() || it == '+' || it == ' ' }
+    val plus = if (kept.startsWith('+')) "+" else ""
+    return plus + kept.filter { it.isDigit() || it == ' ' }
+}
+
+/** The national field, which never carries the plus: the dial code beside it is where that lives. */
+private fun String.keepNationalCharacters(): String = filter { it.isDigit() || it == ' ' }

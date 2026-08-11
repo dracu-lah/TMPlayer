@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
@@ -67,8 +66,9 @@ fun CountryPicker(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            // safeDrawing already carries the keyboard inset; adding imePadding on top of it
+            // pushed the whole list a keyboard height up the screen the moment anyone typed.
             .safeDrawingPadding()
-            .imePadding()
             .padding(horizontal = PhonePad.Side, vertical = PhonePad.Top),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {

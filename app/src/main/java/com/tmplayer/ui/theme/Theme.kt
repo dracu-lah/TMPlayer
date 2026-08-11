@@ -1,8 +1,11 @@
 package com.tmplayer.ui.theme
 
+import androidx.compose.material3.MaterialTheme as M3MaterialTheme
+import androidx.compose.material3.darkColorScheme as M3ColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -12,6 +15,7 @@ import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Typography
 import androidx.tv.material3.darkColorScheme
+import com.tmplayer.data.FormFactor
 
 val Background = Color(0xFF0E0E12)
 val SurfaceDark = Color(0xFF17171E)
@@ -99,14 +103,75 @@ fun tmButtonColors() = ButtonDefaults.colors(
     disabledContentColor = TextMuted,
 )
 
+/**
+ * The same roles at the sizes Material 3 ships for a device held in the hand.
+ *
+ * This is the single change that stops the phone build reading as a prototype. Every screen inside
+ * the pane was drawing at the 10-foot scale: a chat row's title came out at 21sp semibold over a
+ * 13sp subtitle, where a phone expects 16sp medium over 14sp. Nothing about the layouts was wrong
+ * so much as the type was three sizes too big for the device, and the rest of the redesign is
+ * unreadable against a scale that is fighting it.
+ *
+ * The values are Material 3's own defaults for these roles, written out rather than inherited
+ * because the roles here belong to `androidx.tv.material3.Typography`, whose defaults are the
+ * television's. No style carries a colour, for the same reason the television's does not.
+ */
+private val phoneTypography = Typography(
+    headlineLarge = TextStyle(fontSize = 32.sp, lineHeight = 40.sp),
+    headlineMedium = TextStyle(fontSize = 28.sp, lineHeight = 36.sp),
+    headlineSmall = TextStyle(fontSize = 24.sp, lineHeight = 32.sp),
+    titleLarge = TextStyle(fontSize = 22.sp, lineHeight = 28.sp),
+    titleMedium = TextStyle(fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight.Medium),
+    titleSmall = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium),
+    bodyLarge = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+    bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+    bodySmall = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
+    labelLarge = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium),
+    labelMedium = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),
+    labelSmall = TextStyle(fontSize = 11.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),
+)
+
+/**
+ * The app's palette as ordinary Material 3, for every stock component on the touch side.
+ *
+ * TV Material's controls are built around D-pad focus and never dispatch a tap, so the phone's
+ * dialogs, sheets, switches, sliders and app bars all come from `androidx.compose.material3`. They
+ * need the app's colours to be recognisably the same product as the television, which is what this
+ * provides, once, at the root rather than at each screen that happens to use one.
+ */
+private val m3Colors = M3ColorScheme(
+    primary = Accent,
+    onPrimary = Color.White,
+    background = Background,
+    onBackground = TextPrimary,
+    surface = SurfaceDark,
+    onSurface = TextPrimary,
+    surfaceVariant = SurfaceRaised,
+    onSurfaceVariant = TextPrimary,
+    surfaceContainerLow = SurfaceDark,
+    surfaceContainerHigh = SurfaceRaised,
+    error = Danger,
+)
+
 @Composable
 fun TMPlayerTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = colors,
-        typography = typography,
-    ) {
-        // Without this the default content colour is undefined at the root of the tree and every
-        // unstyled Text inherits whatever Compose falls back to.
-        CompositionLocalProvider(LocalContentColor provides TextPrimary, content = content)
+    val touch = !FormFactor.isTv(LocalContext.current)
+
+    // Both themes, always, and the form factor decides only the type scale.
+    //
+    // Two theme systems are live in this app because the two devices genuinely need different
+    // controls, and a screen that is shared between them ends up reading one theme for its text
+    // and the other for its buttons. Providing both here means neither is ever missing, and it is
+    // what lets the whole touch tree, including Settings, the sign-in and every dialog, move to
+    // the phone scale without threading a theme through fourteen files by hand.
+    M3MaterialTheme(colorScheme = m3Colors) {
+        MaterialTheme(
+            colorScheme = colors,
+            typography = if (touch) phoneTypography else typography,
+        ) {
+            // Without this the default content colour is undefined at the root of the tree and
+            // every unstyled Text inherits whatever Compose falls back to.
+            CompositionLocalProvider(LocalContentColor provides TextPrimary, content = content)
+        }
     }
 }

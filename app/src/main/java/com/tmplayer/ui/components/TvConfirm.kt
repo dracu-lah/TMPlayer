@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
@@ -17,6 +16,11 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon as M3Icon
+import androidx.compose.material3.MaterialTheme as M3MaterialTheme
+import androidx.compose.material3.Text as M3Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -61,6 +65,49 @@ fun TvConfirm(
     val cancelFocus = remember { FocusRequester() }
     val touch = isTouch()
 
+    // A phone gets Material's own dialog. The hand-built panel below was close to it and still
+    // missed the things a stock dialog brings for nothing: a tap on the scrim dismisses it (the
+    // scrim here is part of the dialog's own content, so a tap on it went to the content and did
+    // nothing at all), the predictive-back animation works, and a screen reader announces it as a
+    // dialog rather than as a column of text that appeared.
+    if (touch) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            icon = {
+                M3Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (destructive) Danger else Accent,
+                )
+            },
+            title = { M3Text(title) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    M3Text(message, style = M3MaterialTheme.typography.bodyMedium)
+                    if (detail != null) {
+                        M3Text(
+                            detail,
+                            style = M3MaterialTheme.typography.bodySmall,
+                            color = TextMuted,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = onConfirm) {
+                    M3Text(confirmLabel, color = if (destructive) Danger else Accent)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) { M3Text(cancelLabel, color = TextMuted) }
+            },
+            containerColor = SurfaceDark,
+            titleContentColor = TextPrimary,
+            textContentColor = TextPrimary,
+        )
+        return
+    }
+
     // In its own window, not just a Box on top of the layout.
     //
     // Drawn inline, a prompt is an ordinary sibling: it sits above whatever was composed before
@@ -74,16 +121,12 @@ fun TvConfirm(
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.82f))
-                // A dialog window is not laid out inside the app's insets, so on a phone the panel
-                // can otherwise sit under a notch or the gesture bar when the screen is short.
-                .then(if (touch) Modifier.safeDrawingPadding() else Modifier),
+                .background(Color.Black.copy(alpha = 0.82f)),
             contentAlignment = Alignment.Center,
         ) {
             // Sized to the words, not to the screen. These prompts carry one line of question and
             // two buttons; a panel wide enough for a paragraph just leaves the viewer's eye
-            // travelling across empty space to find the answer. On a narrow phone that same 520dp
-            // is wider than the display, so it is a ceiling here rather than a fixed width.
+            // travelling across empty space to find the answer.
             val panel = min(maxWidth - PhonePad.Side * 2, PANEL_MAX)
 
             Column(
@@ -92,10 +135,7 @@ fun TvConfirm(
                     .clip(RoundedCornerShape(20.dp))
                     .background(SurfaceDark)
                     .border(1.dp, TextMuted.copy(alpha = 0.25f), RoundedCornerShape(20.dp))
-                    .padding(
-                        horizontal = if (touch) 22.dp else 32.dp,
-                        vertical = if (touch) 22.dp else 28.dp,
-                    ),
+                    .padding(horizontal = 32.dp, vertical = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Row(
@@ -106,19 +146,9 @@ fun TvConfirm(
                         imageVector = icon,
                         contentDescription = null,
                         tint = if (destructive) Danger else Accent,
-                        modifier = Modifier.size(if (touch) 24.dp else 28.dp),
+                        modifier = Modifier.size(28.dp),
                     )
-                    Text(
-                        title,
-                        // The TV title is sized to be read from a sofa, which on a phone held at
-                        // arm's length wraps a short question onto three lines.
-                        style = if (touch) {
-                            MaterialTheme.typography.titleMedium
-                        } else {
-                            MaterialTheme.typography.titleLarge
-                        },
-                        color = TextPrimary,
-                    )
+                    Text(title, style = MaterialTheme.typography.titleLarge, color = TextPrimary)
                 }
                 Text(message, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
                 if (detail != null) {
@@ -128,49 +158,24 @@ fun TvConfirm(
                 // Cancel is the quiet one and confirm is the loud one, which is the same ranking
                 // the TV colours gave them, only stated by which button is used rather than by a
                 // colour table each caller passes in.
-                if (touch) {
-                    // Stacked and full width: two buttons side by side in a panel this narrow are
-                    // both cramped and off under the thumb, and the answer being committed to
-                    // belongs nearest the bottom of the screen.
-                    Column(
-                        Modifier.padding(top = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(top = 4.dp),
+                ) {
+                    TmSecondaryButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.focusRequester(cancelFocus),
                     ) {
-                        TmButton(
-                            onClick = onConfirm,
-                            destructive = destructive,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(confirmLabel)
-                        }
-                        TmSecondaryButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-                            Text(cancelLabel)
-                        }
+                        Text(cancelLabel)
                     }
-                } else {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.padding(top = 4.dp),
-                    ) {
-                        TmSecondaryButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.focusRequester(cancelFocus),
-                        ) {
-                            Text(cancelLabel)
-                        }
-                        TmButton(onClick = onConfirm, destructive = destructive) {
-                            Text(confirmLabel)
-                        }
+                    TmButton(onClick = onConfirm, destructive = destructive) {
+                        Text(confirmLabel)
                     }
                 }
             }
         }
 
-        // Only the remote needs somewhere for focus to start. A finger chooses by touching, and a
-        // focus ring parked on Cancel would be the only thing on a phone drawing one.
-        if (!touch) {
-            LaunchedEffect(Unit) { runCatching { cancelFocus.requestFocus() } }
-        }
+        LaunchedEffect(Unit) { runCatching { cancelFocus.requestFocus() } }
     }
 }
 

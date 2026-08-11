@@ -60,6 +60,8 @@ private data class Page(val title: String, val body: String, val image: Int)
 @Composable
 fun OverviewScreen(onDone: () -> Unit) {
     var index by remember { mutableIntStateOf(0) }
+    val touch = isTouch()
+    val PAGES = remember(touch) { pages(touch) }
     val page = PAGES[index]
     val last = index == PAGES.lastIndex
     val next = remember { FocusRequester() }
@@ -171,19 +173,37 @@ private fun PageImage(image: Int, modifier: Modifier) {
     )
 }
 
-private val PAGES = listOf(
+/**
+ * The walkthrough, in the words of whichever device is reading it.
+ *
+ * The screenshots are of the television, and so was every sentence: a phone user was told to point
+ * a camera at a TV they are not looking at, and that the rail sorts their chats on the left when
+ * there is no rail, only a drawer. The pictures are the television's either way, so on a phone the
+ * words describe the app rather than the picture, which is the honest version of the same page.
+ */
+private fun pages(touch: Boolean) = listOf(
     Page(
-        title = "Sign in with your phone",
-        body = "TMPlayer shows a code. Open Telegram on your phone, go to Settings then Devices, " +
-            "and point the camera at the TV. Nothing is typed on the remote.",
+        title = if (touch) "Sign in with your number" else "Sign in with your phone",
+        body = if (touch) {
+            "Type the number your Telegram account is registered to and TMPlayer sends you a " +
+                "code. If your account lives on another phone, scan a QR code instead."
+        } else {
+            "TMPlayer shows a code. Open Telegram on your phone, go to Settings then Devices, " +
+                "and point the camera at the TV. Nothing is typed on the remote."
+        },
         // Deliberately blurred: the real code on that screen is a live sign-in token, and a
         // scannable one shipped inside the app would be a working key to somebody's account.
         image = R.drawable.overview_signin,
     ),
     Page(
-        title = "Your Telegram chats, on the left",
-        body = "The rail sorts them: channels, groups, people, or everything at once. Star the " +
-            "chats you watch from and they sit in Favourites, one press away.",
+        title = if (touch) "Your Telegram chats" else "Your Telegram chats, on the left",
+        body = if (touch) {
+            "The menu sorts them: channels, groups, people, or everything at once. Star the " +
+                "chats you watch from and they sit in Favourites, one tap away."
+        } else {
+            "The rail sorts them: channels, groups, people, or everything at once. Star the " +
+                "chats you watch from and they sit in Favourites, one press away."
+        },
         image = R.drawable.overview_chats,
     ),
     Page(

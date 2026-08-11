@@ -84,12 +84,10 @@ object Td {
     val connected: StateFlow<Boolean> = _connected.asStateFlow()
 
     private lateinit var appContext: Context
-    private lateinit var settings: SettingsStore
 
     fun start(context: Context) {
         if (::appContext.isInitialized) return
         appContext = context.applicationContext
-        settings = SettingsStore(appContext)
         scope.launch { clientLoop() }
     }
 
@@ -117,7 +115,7 @@ object Td {
             }
             // The first update may already have been emitted before we subscribed, so ask
             // once directly. Both paths go through the same mutex-guarded handler.
-            launch {
+            val primer = launch {
                 runCatching { td.setLogVerbosityLevel(1) }
                 val now = td.getAuthorizationState()
                 if (now is TdlResult.Success) apply(td, now.result)
@@ -126,6 +124,10 @@ object Td {
             closed.await()
             updates.cancel()
             connection.cancel()
+            // Cancelled with the rest of the generation. It usually finishes long before this,
+            // but a client closed while it is still waiting on TDLib would otherwise leave a
+            // coroutine holding a dead client, once per sign-in, for the life of the process.
+            primer.cancel()
             _connected.value = false
             current = null
             _session.value = null
@@ -376,6 +378,12 @@ object Td {
         )
     }
 
+    /** How much of a file is already on disk, whether or not the download ever finished. */
+    suspend fun localDownloadedBytes(fileId: Int): Long {
+        val td = current ?: return 0L
+        return td.getFile(fileId).valueOrNull?.local?.downloadedSize ?: 0L
+    }
+
     suspend fun isFileCached(fileId: Int): Boolean =
         localFileAvailability(fileId) == LocalFileAvailability.Complete
 
@@ -403,8 +411,26 @@ object Td {
         )
     }
 
-    fun clearMediaCacheInBackground() {
-        scope.launch { runCatching { clearMediaCache() } }
+    /**
+     * Stops an in-flight download and keeps whatever already landed.
+     *
+     * `onlyIfPending = false` because the download being cancelled is nearly always the active
+     * one: a request that has not started yet costs nothing to leave alone.
+     */
+    suspend fun cancelDownload(fileId: Int) {
+        val td = current ?: return
+        runCatching { td.cancelDownloadFile(fileId, onlyIfPending = false) }
+    }
+
+    /**
+     * The same cancellation, for callers that are themselves being cancelled.
+     *
+     * A thumbnail scrolled off the screen is exactly that case: the coroutine waiting on it is
+     * gone, so there is nothing left to suspend in, and TDLib would otherwise keep fetching a
+     * picture for a row nobody is looking at.
+     */
+    fun cancelDownloadInBackground(fileId: Int) {
+        scope.launch { cancelDownload(fileId) }
     }
 
     /** The signed-in account, for the avatar and name in the navigation rail. */

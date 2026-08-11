@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Playback runs on leanback's theme on a television, so its transport controls style themselves
+      from it. It is not used on a phone: Theme.Leanback brings the 10-foot control metrics and a
+      window with no room for a notch, so the phone gets the plain full-screen theme in
+      res/values/themes.xml instead.
+    -->
+    <style name="Theme.TMPlayer.Player" parent="Theme.Leanback">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>

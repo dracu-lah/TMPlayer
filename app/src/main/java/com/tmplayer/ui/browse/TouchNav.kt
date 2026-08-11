@@ -13,12 +13,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,12 +43,22 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
@@ -51,6 +67,7 @@ import com.tmplayer.data.Updates
 import com.tmplayer.ui.components.AppMark
 import com.tmplayer.ui.components.MarkSize
 import com.tmplayer.ui.components.MediaPreview
+import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.Background
 import com.tmplayer.ui.theme.Caution
@@ -59,38 +76,6 @@ import com.tmplayer.ui.theme.SurfaceRaised
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
 import kotlinx.coroutines.launch
-
-/**
- * The phone half of the app's chrome, in ordinary Material 3.
- *
- * TV Material's controls are built around D-pad focus and never dispatch a tap, which was
- * confirmed on a touch-only phone: a control that looked pressable simply was not. So every
- * interactive part of the touch layout comes from `androidx.compose.material3` and the TV branch
- * keeps `androidx.tv.material3` to itself. The two are never mixed inside one control.
- *
- * The palette is the app's own, so a phone and a television are recognisably the same product; it
- * is only the type scale that is left at the Material default, because the TV scale is sized for a
- * sofa and is far too large in the hand.
- */
-@Composable
-private fun TouchMaterialTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            primary = Accent,
-            onPrimary = Color.White,
-            background = Background,
-            onBackground = TextPrimary,
-            surface = SurfaceDark,
-            onSurface = TextPrimary,
-            surfaceVariant = SurfaceRaised,
-            onSurfaceVariant = TextPrimary,
-            surfaceContainerLow = SurfaceDark,
-            surfaceContainerHigh = SurfaceRaised,
-            error = Caution,
-        ),
-        content = content,
-    )
-}
 
 /**
  * The touch shell: a drawer of destinations behind a hamburger, with [content] filling the rest.
@@ -110,8 +95,22 @@ internal fun TouchBrowseShell(
     onOpenSettings: () -> Unit,
     updateVersion: String?,
     onUpdate: () -> Unit,
+    /** What the bar says when it is not being searched in. */
+    title: String = selected.heading,
+    /**
+     * The live search text, or null on a tab that cannot be searched.
+     *
+     * Passing null is what removes the magnifier altogether, rather than leaving a control that
+     * opens a field nothing is listening to.
+     */
+    searchQuery: String? = null,
+    onSearchQueryChange: (String) -> Unit = {},
+    /** Offered inside the field when the device can hear; absent when it cannot. */
+    onVoiceSearch: (() -> Unit)? = null,
+    /** The bar's own buttons, to the right of the magnifier. */
+    actions: @Composable RowScope.() -> Unit = {},
     content: @Composable () -> Unit,
-) = TouchMaterialTheme {
+) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
@@ -183,18 +182,60 @@ internal fun TouchBrowseShell(
             }
         },
     ) {
+        // Whether the bar is currently a search field rather than a title. Saveable, because a
+        // rotation in the middle of typing a chat name should not throw the query away.
+        var searching by rememberSaveable { mutableStateOf(false) }
+        val searchFocus = remember { FocusRequester() }
+
+        // Back leaves the search before it leaves the screen: the field is a mode, and the hardware
+        // key is how a phone user closes a mode.
+        BackHandler(enabled = searching) {
+            searching = false
+            onSearchQueryChange("")
+        }
+
         Scaffold(
             containerColor = Background,
             topBar = {
                 TopAppBar(
-                    title = { Text(selected.heading, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    title = {
+                        if (searching && searchQuery != null) {
+                            AppBarSearchField(
+                                query = searchQuery,
+                                onQueryChange = onSearchQueryChange,
+                                onVoiceSearch = onVoiceSearch,
+                                modifier = Modifier.focusRequester(searchFocus),
+                            )
+                        } else {
+                            Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    },
                     navigationIcon = {
                         // An IconButton, not a bare clickable icon: it carries Material's own
                         // 48 dp touch target around a 24 dp glyph, which is the whole reason a
                         // hamburger drawn at icon size is still hittable with a thumb.
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Filled.Menu, contentDescription = "Open navigation")
+                        if (searching) {
+                            IconButton(
+                                onClick = { searching = false; onSearchQueryChange("") },
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close search")
+                            }
+                        } else {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Filled.Menu, contentDescription = "Open navigation")
+                            }
                         }
+                    },
+                    actions = {
+                        // Searching takes the whole bar. Half a bar of buttons beside a field the
+                        // user is typing into is where a phone's app bar stops being readable.
+                        if (searching) return@TopAppBar
+                        if (searchQuery != null) {
+                            IconButton(onClick = { searching = true }) {
+                                Icon(Icons.Filled.Search, contentDescription = "Search")
+                            }
+                        }
+                        actions()
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = SurfaceDark,
@@ -206,6 +247,64 @@ internal fun TouchBrowseShell(
             },
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) { content() }
+        }
+
+        // The magnifier was pressed to type, so the keyboard should already be up by the time the
+        // field finishes drawing.
+        LaunchedEffect(searching) {
+            if (searching) searchFocus.requestFocus()
+        }
+    }
+}
+
+/**
+ * The search box that lives inside the app bar, in place of the title.
+ *
+ * This replaces a pill that sat permanently above the listing with a mic beside it and a Clear
+ * button beside that: three controls, always on screen, in the space a phone wants to spend on
+ * content. The Telegram idiom, and Material's, is a magnifier that becomes the bar.
+ *
+ * A [BasicTextField] rather than a `TextField`, because Material's own field brings a container,
+ * a label slot and a good deal of vertical padding that a 64 dp app bar has no room for.
+ */
+@Composable
+private fun AppBarSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onVoiceSearch: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = TextPrimary),
+            cursorBrush = SolidColor(Accent),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            modifier = modifier.weight(1f),
+            decorationBox = { inner ->
+                if (query.isEmpty()) {
+                    Text(
+                        "Search",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextMuted,
+                        maxLines = 1,
+                    )
+                }
+                inner()
+            },
+        )
+        // Clear lives inside the field, where a phone user reaches for it, rather than as a
+        // separate labelled button in the row below.
+        if (query.isNotEmpty()) {
+            IconButton(onClick = { onQueryChange("") }) {
+                Icon(Icons.Filled.Close, contentDescription = "Clear search")
+            }
+        } else if (onVoiceSearch != null) {
+            IconButton(onClick = onVoiceSearch) {
+                Icon(TmIcons.Mic, contentDescription = "Search by voice")
+            }
         }
     }
 }

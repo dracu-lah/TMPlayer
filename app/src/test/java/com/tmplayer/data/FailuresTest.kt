@@ -10,7 +10,7 @@ class FailuresTest {
     @Test
     fun `a revoked session tells the viewer to sign in again`() {
         val text = Failures.humanise("Unauthorized: AUTH_KEY_UNREGISTERED")
-        assertTrue(text, text.contains("sign back in", ignoreCase = true))
+        assertTrue(text, text.contains("sign in again", ignoreCase = true))
     }
 
     @Test

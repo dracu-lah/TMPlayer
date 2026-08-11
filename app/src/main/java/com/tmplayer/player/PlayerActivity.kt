@@ -13,6 +13,11 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.updatePadding
 import androidx.fragment.app.FragmentActivity
 import androidx.leanback.app.GuidedStepSupportFragment
 import androidx.media3.common.AudioAttributes
@@ -97,6 +102,12 @@ class PlayerActivity : FragmentActivity() {
     private lateinit var rebufferText: TextView
     private lateinit var downloadChip: TextView
     private var statusSpinner: View? = null
+    private var statusRetry: android.widget.Button? = null
+
+    /** The phone's episode buttons; null on a TV, where the transport row grows its own. */
+    private var episodeRow: View? = null
+    private var previousEpisodeButton: android.widget.Button? = null
+    private var nextEpisodeButton: android.widget.Button? = null
 
     /** The touch transport row, on a phone. Null on a TV, where leanback's fragment has it. */
     private var touchSurface: PlayerView? = null
@@ -131,6 +142,9 @@ class PlayerActivity : FragmentActivity() {
     private var downloadedFraction = 0f
     private var downloadComplete = false
 
+    /** When the loading sheet was last redrawn, so [applyDownloadState] can throttle itself. */
+    private var lastProgressRender = 0L
+
     /** True while the whole video is being fetched before playback, under the "download first" setting. */
     private var waitingForWholeFilm = false
 
@@ -161,9 +175,12 @@ class PlayerActivity : FragmentActivity() {
         // position lives on disk.
         super.onCreate(null)
         setContentView(R.layout.activity_player)
-        // Two hours of a video is two hours with no button presses. Without this the TV
-        // dims and then sleeps on the viewer.
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        keepScreenOn(true)
+        // Edge to edge, so the picture reaches the corners of the screen rather than sitting in a
+        // letterbox of system chrome, and so the insets read below are real.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        setSystemBarsHidden(true)
 
         settings = SettingsStore(this)
         fileId = intent.getIntExtra(EXTRA_FILE_ID, 0)
@@ -183,6 +200,9 @@ class PlayerActivity : FragmentActivity() {
         statusDetail = findViewById(R.id.status_detail)
         statusProgress = findViewById(R.id.status_progress)
         statusSpinner = findViewById(R.id.status_spinner)
+        statusRetry = findViewById<android.widget.Button>(R.id.status_retry).apply {
+            setOnClickListener { retryPlayback() }
+        }
         rebufferChip = findViewById(R.id.rebuffer_chip)
         rebufferText = findViewById(R.id.rebuffer_text)
         downloadChip = findViewById(R.id.download_chip)
@@ -203,13 +223,14 @@ class PlayerActivity : FragmentActivity() {
         )
 
         if (fileId <= 0) {
-            showError("There's nothing to play here.")
+            showError("There's nothing to play here.", retryable = false)
             return
         }
 
         statusTitle.text = mediaTitle.ifBlank { "Opening…" }
         showStatus("Connecting to Telegram…")
 
+        if (!FormFactor.isTv(this)) wireEpisodeButtons()
         observeDownload()
         observeConnectivity()
         startResumeHeartbeat()
@@ -236,7 +257,7 @@ class PlayerActivity : FragmentActivity() {
                 NetworkMonitor.status.value == NetworkStatus.Offline &&
                 !Td.connected.value
             ) {
-                showError("This video isn't fully on this TV. Connect to the internet and try again.")
+                showError("This video isn't fully downloaded. Connect to the internet and try again.")
                 return@launch
             }
             val downloadFirst = runCatching { settings.downloadBeforePlayingNow() }
@@ -286,6 +307,10 @@ class PlayerActivity : FragmentActivity() {
      */
     private fun attachTouchSurface(exo: ExoPlayer) {
         val view = PlayerView(this)
+        // D2's other half: with the text renderer live there is finally something for these to
+        // choose, so the phone gets Media3's own subtitle and settings buttons. Both were dead
+        // weight before, which is why they were off.
+        view.setShowSubtitleButton(true)
         view.layoutParams = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT,
@@ -313,6 +338,78 @@ class PlayerActivity : FragmentActivity() {
             onSkip = ::skipBy,
             onFeedback = ::showGestureFeedback,
         ).attach(view)
+
+        // The controller sits above the gesture bar rather than under it. The window draws behind
+        // the system bars now, and without this the play button and the scrub bar were the two
+        // things the home gesture happened to be drawn on top of.
+        ViewCompat.setOnApplyWindowInsetsListener(view) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
+            view.setControllerShowTimeoutMs(CONTROLLER_TIMEOUT_MS)
+            view.updatePadding(
+                left = maxOf(bars.left, cutout.left),
+                right = maxOf(bars.right, cutout.right),
+                bottom = bars.bottom,
+                top = bars.top,
+            )
+            insets
+        }
+    }
+
+    /**
+     * Hides the status and navigation bars while the picture is up, and puts them back with the
+     * transport row.
+     *
+     * Nothing did this before, so on a phone the two system bars sat permanently over a
+     * full-screen video: the top of the picture wore a clock and the bottom wore a gesture
+     * handle, for the whole film. Swiping from either edge still brings them back, because the
+     * behaviour is the transient one rather than the sticky one that ignores the swipe.
+     */
+    private fun setSystemBarsHidden(hidden: Boolean) {
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (hidden) {
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+        } else {
+            controller.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    /**
+     * Shows the phone's previous and next buttons once the chat has been asked about them.
+     *
+     * They are hidden until the search comes back, and hidden for good on a video that is not part
+     * of a series, so nothing appears that would do nothing when pressed.
+     */
+    private fun wireEpisodeButtons() {
+        episodeRow = findViewById(R.id.episode_row)
+        previousEpisodeButton = findViewById(R.id.previous_episode)
+        nextEpisodeButton = findViewById(R.id.next_episode)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                episodes.collect { found ->
+                    previousEpisodeButton?.apply {
+                        visibility = if (found.previous != null) View.VISIBLE else View.GONE
+                        setOnClickListener { found.previous?.let(::playEpisode) }
+                    }
+                    nextEpisodeButton?.apply {
+                        visibility = if (found.next != null) View.VISIBLE else View.GONE
+                        setOnClickListener { found.next?.let(::playEpisode) }
+                    }
+                    updateEpisodeRow()
+                }
+            }
+        }
+    }
+
+    /** The buttons ride with the transport row, so they are never over the picture on their own. */
+    private fun updateEpisodeRow() {
+        val found = _episodes.value
+        val show = controlsUp &&
+            statusOverlay.visibility != View.VISIBLE &&
+            (found.previous != null || found.next != null)
+        episodeRow?.visibility = if (show) View.VISIBLE else View.GONE
     }
 
     /** A figure for whatever a gesture is changing, gone again shortly after the finger lifts. */
@@ -377,16 +474,25 @@ class PlayerActivity : FragmentActivity() {
 
         val trackSelector = DefaultTrackSelector(this).apply {
             parameters = buildUponParameters()
-                // Subtitles stay off until asked for; nobody wants forced captions on a video.
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                // Not disabled outright any more. Turning the whole text renderer off meant a
+                // phone viewer could not enable an embedded subtitle track by any route at all:
+                // the only picker in the app is leanback's, which does not exist on a phone.
+                // Selecting none by default keeps captions off until asked for, which is the
+                // behaviour that was wanted, while leaving the track there to be chosen.
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .setPreferredTextLanguage(null)
+                .setSelectUndeterminedTextLanguage(false)
                 .setPreferredAudioLanguage(null)
                 .build()
         }
 
         // Constant-bitrate seeking rescues formats that ship without a seek index.
+        // Constant-bitrate seeking rescues formats that ship without a seek index. "Always" also
+        // applies it to files that do have one, where the estimate is worse than the index and a
+        // seek lands somewhere other than where it was asked to; it is only worth it for a file
+        // with no other way to seek at all.
         val extractors = DefaultExtractorsFactory()
             .setConstantBitrateSeekingEnabled(true)
-            .setConstantBitrateSeekingAlwaysEnabled(true)
 
         return ExoPlayer.Builder(this, renderers)
             .setLoadControl(loadControl)
@@ -396,15 +502,43 @@ class PlayerActivity : FragmentActivity() {
             .setSeekForwardIncrementMs(TvPlayerGlue.SKIP_MS)
             .build()
             .apply {
-                setAudioAttributes(AudioAttributes.DEFAULT, /* handleAudioFocus = */ true)
+                // Movie, not the default "unknown". It is what tells the system this is long-form
+                // video, which is what the volume curve, the ducking behaviour and any connected
+                // audio device's own processing all key off.
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                        .setUsage(C.USAGE_MEDIA)
+                        .build(),
+                    /* handleAudioFocus = */ true,
+                )
                 setHandleAudioBecomingNoisy(true)
                 setWakeMode(C.WAKE_MODE_LOCAL)
             }
     }
 
+    /**
+     * Two hours of a video is two hours with no button presses, so the screen is held awake while
+     * something is actually on it. Held only while playing: a video left paused overnight, or an
+     * error sheet nobody came back to, used to keep a stick's display lit until the power went off.
+     */
+    private fun keepScreenOn(on: Boolean) {
+        if (on) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
     private val playerListener = object : Player.Listener {
         override fun onCues(cueGroup: CueGroup) {
             subtitleView.setCues(cueGroup.cues)
+        }
+
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            // A long download before the first frame is still the viewer waiting on this screen,
+            // so the loading sheet counts as something worth staying awake for.
+            keepScreenOn(isPlaying || openingFilm)
         }
 
         override fun onPlaybackStateChanged(state: Int) {
@@ -419,16 +553,15 @@ class PlayerActivity : FragmentActivity() {
                     recoveryAttempts = 0
                     hideStatus()
                 }
-                Player.STATE_ENDED -> {
-                    lifecycleScope.launch { settings.clearResumePosition(chatId, messageId) }
-                    finish()
-                }
+                Player.STATE_ENDED -> onVideoEnded()
                 else -> Unit
             }
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            if (!recoverFrom(error)) showError(friendlyError(error))
+            if (!recoverFrom(error)) {
+                showError(friendlyError(error), retryable = isRecoverable(error))
+            }
         }
     }
 
@@ -488,16 +621,42 @@ class PlayerActivity : FragmentActivity() {
         else -> false
     }
 
-    private fun friendlyError(error: PlaybackException) = when (error.errorCode) {
+    /**
+     * The sentence to put on the error sheet.
+     *
+     * The cause chain comes first. [TdDataSource] already turns a flood wait, an expired file
+     * reference or a full disk into a sentence naming the actual problem, and Media3 wraps that
+     * exception rather than replacing it; reading only the error code threw all of that away and
+     * told every viewer to try a different copy of a file that was perfectly fine.
+     */
+    private fun friendlyError(error: PlaybackException): String =
+        specificCause(error) ?: byErrorCode(error)
+
+    private fun specificCause(error: PlaybackException): String? {
+        var cause: Throwable? = error.cause
+        var hops = 0
+        while (cause != null && hops < MAX_CAUSE_HOPS) {
+            val message = cause.message?.trim()
+            if (!message.isNullOrEmpty()) {
+                val humanised = Failures.humanise(message)
+                if (humanised != Failures.DEFAULT) return humanised
+            }
+            cause = cause.cause
+            hops++
+        }
+        return null
+    }
+
+    private fun byErrorCode(error: PlaybackException) = when (error.errorCode) {
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
         ->
-            "Lost the connection to Telegram. Check this TV's internet and try again."
+            "Lost the connection to Telegram. Check this device's internet and try again."
 
         PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
         PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
         ->
-            "This TV can't play this video's format. A different copy may work."
+            "This device can't play this video's format. A different copy may work."
 
         PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
         PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
@@ -549,6 +708,63 @@ class PlayerActivity : FragmentActivity() {
     fun playEpisode(item: MediaItem) {
         startActivity(intent(this, item, chatTitle))
         finish()
+    }
+
+    /**
+     * What happens when the credits run out.
+     *
+     * The activity used to close the instant the video ended, which for one video of a series
+     * meant being thrown back to the grid to find the next one by hand, and for anything else
+     * meant the screen going away before the viewer had registered that it was over. Now the next
+     * episode starts on its own after a countdown that can be stopped, and where there is no next
+     * episode the last frame stays up with a way to watch it again.
+     */
+    private fun onVideoEnded() {
+        lifecycleScope.launch {
+            settings.clearResumePosition(chatId, messageId)
+            val next = _episodes.value.next
+            val autoplay = runCatching { settings.autoplayNextNow() }.getOrDefault(true)
+            if (next == null || !autoplay) {
+                showFinished()
+                return@launch
+            }
+            for (second in AUTOPLAY_COUNTDOWN_SEC downTo 1) {
+                showStatus("Next: ${next.title}")
+                statusDetail.text = "Starting in $second…  Press Back to stop."
+                statusProgress.progress =
+                    (1000 * (AUTOPLAY_COUNTDOWN_SEC - second) / AUTOPLAY_COUNTDOWN_SEC)
+                delay(1_000)
+            }
+            playEpisode(next)
+        }
+    }
+
+    /** The end of the last video there is: the picture stays, with a way to watch it again. */
+    private fun showFinished() {
+        openingFilm = false
+        keepScreenOn(false)
+        statusOverlay.visibility = View.VISIBLE
+        statusIcon.visibility = View.GONE
+        rebufferChip.visibility = View.GONE
+        statusSpinner?.visibility = View.GONE
+        statusProgress.visibility = View.GONE
+        statusDetail.visibility = View.GONE
+        statusTitle.text = mediaTitle.ifBlank { "Finished" }
+        statusText.text = "That's the end."
+        statusRetry?.apply {
+            text = "Watch again"
+            visibility = View.VISIBLE
+            setOnClickListener {
+                text = "Try again"
+                setOnClickListener { retryPlayback() }
+                player?.seekTo(0)
+                player?.playWhenReady = true
+                hideStatus()
+                keepScreenOn(true)
+            }
+            requestFocus()
+        }
+        updateDownloadChip()
     }
 
     /** Skips [deltaMs], clamped so a burst of remote presses can't run off either end. */
@@ -643,7 +859,15 @@ class PlayerActivity : FragmentActivity() {
         // prefix at zero, and the meter reads that drop as the reset it is, where a
         // window that jumped forwards would look like a burst of speed.
         speed.sample(local.downloadedPrefixSize, SystemClock.elapsedRealtime())
-        renderProgress()
+        // Sampled rather than rendered per update. TDLib emits one of these every few hundred
+        // kilobytes, which at a few MB/s is a dozen a second, and each one re-laid-out the whole
+        // loading sheet on the main thread at exactly the moment the decoder was starting up. No
+        // figure on that sheet changes usefully faster than twice a second.
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastProgressRender >= PROGRESS_RENDER_MS || downloadComplete) {
+            lastProgressRender = now
+            renderProgress()
+        }
     }
 
     /** Keeps a stream's own loading UI honest while leaving completed local playback untouched. */
@@ -721,6 +945,10 @@ class PlayerActivity : FragmentActivity() {
     /** Leanback raising or hiding the transport row; the download figure rides with it. */
     fun onControlsVisibilityChanged(visible: Boolean) {
         controlsUp = visible
+        // The system bars ride with the transport row: raising one to reach for a control and
+        // being handed the other is what every video app on the platform does.
+        setSystemBarsHidden(!visible)
+        updateEpisodeRow()
         updateDownloadChip()
     }
 
@@ -755,6 +983,7 @@ class PlayerActivity : FragmentActivity() {
         statusSpinner?.visibility = View.VISIBLE
         statusProgress.visibility = View.VISIBLE
         statusDetail.visibility = View.VISIBLE
+        statusRetry?.visibility = View.GONE
         statusMessage = message
         renderStatusText()
         updateDownloadChip()
@@ -782,8 +1011,14 @@ class PlayerActivity : FragmentActivity() {
         updateDownloadChip()
     }
 
-    private fun showError(message: String) {
+    /**
+     * @param retryable false for a failure no amount of trying again will change: a codec this
+     *   device has not got, or a container nothing here can parse. Offering a button that is
+     *   certain to fail again is worse than offering none.
+     */
+    private fun showError(message: String, retryable: Boolean = true) {
         openingFilm = false
+        keepScreenOn(false)
         statusOverlay.visibility = View.VISIBLE
         // The only state that earns the warning triangle, matching the error screens the rest of
         // the app already shows.
@@ -793,14 +1028,44 @@ class PlayerActivity : FragmentActivity() {
         statusProgress.visibility = View.GONE
         statusDetail.visibility = View.GONE
         statusTitle.text = "Can't play this"
-        statusText.text = "$message\n\nPress Back to pick something else."
+        statusText.text = if (retryable) {
+            message
+        } else {
+            "$message\n\nPress Back to pick something else."
+        }
+        statusRetry?.visibility = if (retryable) View.VISIBLE else View.GONE
+        if (retryable) statusRetry?.requestFocus()
         updateDownloadChip()
+    }
+
+    /**
+     * Starts the whole load again from where it stopped.
+     *
+     * A fresh prepare rather than a fresh activity: the position, the title, the download meter
+     * and the episode search are all already set up against this file, and the failures that reach
+     * this button are the ones a second attempt fixes, so there is nothing to rebuild.
+     */
+    private fun retryPlayback() {
+        statusRetry?.visibility = View.GONE
+        recoveryAttempts = 0
+        showStatus("Trying again…")
+        val exo = player
+        if (exo != null) {
+            exo.prepare()
+            exo.playWhenReady = true
+            return
+        }
+        lifecycleScope.launch {
+            val session = Td.awaitAuthorizedSession()
+            if (session.isCurrent()) startPlayback(session.client)
+        }
     }
 
     private fun hideStatus() {
         openingFilm = false
         statusOverlay.visibility = View.GONE
         rebufferChip.visibility = View.GONE
+        updateEpisodeRow()
         updateDownloadChip()
     }
 
@@ -830,6 +1095,7 @@ class PlayerActivity : FragmentActivity() {
 
     override fun onDestroy() {
         saveResumePosition()
+        stopDownload()
         gestureHud?.removeCallbacks(hideGestureHud)
         // Dropped before the player is released so the view never holds a released instance.
         touchSurface?.player = null
@@ -838,6 +1104,24 @@ class PlayerActivity : FragmentActivity() {
         player?.release()
         player = null
         super.onDestroy()
+    }
+
+    /**
+     * Tells TDLib to stop fetching this video once nobody is watching it.
+     *
+     * Streaming asks for everything from the current byte to the end of the file, and TDLib
+     * honours that long after the activity has gone: backing out of a 12 GB remux left the stick
+     * pulling all 12 GB down in the background, filling the disk it had just been asked to make
+     * room in. A finished file is left alone, since there is nothing left to cancel and the
+     * bytes already on disk are what makes offline playback work.
+     */
+    private fun stopDownload() {
+        if (downloadComplete) return
+        val id = fileId
+        if (id <= 0) return
+        App.backgroundScope.launch {
+            runCatching { Td.cancelDownload(id) }
+        }
     }
 
     /**
@@ -892,8 +1176,17 @@ class PlayerActivity : FragmentActivity() {
         private const val NUDGE_MS = 10_000L
         private const val RESUME_TICK_MS = 10_000L
 
+        /** Twice a second: faster than the eye needs and slower than TDLib talks. */
+        private const val PROGRESS_RENDER_MS = 500L
+
         /** Long enough to read the figure a drag left behind, short enough to stay out of the way. */
         private const val GESTURE_HUD_MS = 900L
+
+        /** Long enough to read the row and reach for something on it, short enough to get out. */
+        private const val CONTROLLER_TIMEOUT_MS = 3_500
+
+        /** Long enough to read the next title and to stop it; short enough not to be a wait. */
+        private const val AUTOPLAY_COUNTDOWN_SEC = 8
 
         /**
          * Four attempts over roughly twelve seconds. Enough to ride out a moved download window or
@@ -904,6 +1197,10 @@ class PlayerActivity : FragmentActivity() {
 
         /** 1..32; the same top slot the streaming path asks for. */
         private const val DOWNLOAD_PRIORITY = 32
+
+        /** Deep enough for Media3's own wrapping, short enough not to walk a cycle. */
+        private const val MAX_CAUSE_HOPS = 6
+
         private const val SUBTITLE_TEXT_FRACTION = 0.065f
 
         fun intent(context: Context, item: MediaItem, chatTitle: String = ""): Intent =

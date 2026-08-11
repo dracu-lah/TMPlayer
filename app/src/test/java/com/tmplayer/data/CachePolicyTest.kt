@@ -95,6 +95,38 @@ class CachePolicyTest {
     }
 
     @Test
+    fun `carrying on with a half-downloaded video keeps the half it has`() {
+        // The 2 GB already on disk IS most of the cache, and it belongs to the video being
+        // opened. Clearing it would restart the download from byte zero, which is precisely what
+        // somebody resuming a video is trying not to do.
+        val decision = CachePolicy.decide(
+            fileSizeBytes = 4 * GB,
+            alreadyCached = false,
+            cacheBytes = 2 * GB,
+            freeBytes = 3 * GB,
+            targetPartialBytes = 2 * GB,
+        )
+        assertEquals(Decision.Proceed, decision)
+    }
+
+    @Test
+    fun `a half-downloaded video still falls through when the rest will not fit`() {
+        // 1 GB left to fetch and only 500 MB free, so keeping the partial is not an option and the
+        // ordinary arithmetic takes over. It then answers on the whole video rather than on the
+        // remainder, because clearing is what would have to happen and clearing takes the partial
+        // with it: 3.5 GB reachable against a 4 GB video is short, and saying so is the honest
+        // answer rather than promising room that only exists while the partial survives.
+        val decision = CachePolicy.decide(
+            fileSizeBytes = 4 * GB,
+            alreadyCached = false,
+            cacheBytes = 3 * GB,
+            freeBytes = 500 * MB,
+            targetPartialBytes = 3 * GB,
+        )
+        assertTrue(decision is Decision.TooLarge)
+    }
+
+    @Test
     fun `an unknown file size does not block playback`() {
         // Some documents arrive with no size; refusing to play them would be worse than trying.
         val decision = CachePolicy.decide(

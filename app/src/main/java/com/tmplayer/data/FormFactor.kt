@@ -26,6 +26,17 @@ object FormFactor {
      */
     fun isTv(context: Context): Boolean = cached ?: compute(context).also { cached = it }
 
+    /**
+     * Answers [isTv] with [value] from here on, whatever the hardware says.
+     *
+     * This exists for the screenshot fixture, which captures the television layout on a phone
+     * panel resized to 1920x1080. Nothing in a release build calls it: the promo activity is the
+     * only caller and it is not part of a release APK.
+     */
+    fun override(value: Boolean) {
+        cached = value
+    }
+
     private fun compute(context: Context): Boolean {
         val app = context.applicationContext
         if (app.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)) return true

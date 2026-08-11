@@ -2,6 +2,7 @@ package com.tmplayer.ui.browse
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -35,11 +36,23 @@ import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon as M3Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme as M3MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text as M3Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -47,6 +60,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -56,17 +70,24 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -91,6 +112,8 @@ import com.tmplayer.ui.components.MediaGridSkeleton
 import com.tmplayer.ui.components.MenuAction
 import com.tmplayer.ui.components.ConnectionNotice
 import com.tmplayer.ui.components.MediaPreview
+import com.tmplayer.ui.components.isTouch
+import com.tmplayer.ui.components.pressable
 import com.tmplayer.ui.components.StateScaffold
 import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.components.TmIcons
@@ -105,6 +128,16 @@ import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
 import com.tmplayer.ui.theme.Tv
 import kotlinx.coroutines.delay
+
+/**
+ * A store that lives exactly as long as one media screen.
+ *
+ * The alternative was the activity's own store, which lives as long as the app and never forgets
+ * anything put into it.
+ */
+private class MediaScreenStore : ViewModelStoreOwner {
+    override val viewModelStore = ViewModelStore()
+}
 
 @Suppress("UNCHECKED_CAST")
 private class MediaListViewModelFactory(
@@ -127,6 +160,8 @@ fun MediaGridScreen(
     maxSizeBytes: Long,
     watchProgress: Map<String, WatchPoint>,
     onToggleFavorite: () -> Unit,
+    /** Leaving the chat. On a phone this is the app bar's arrow as well as the hardware key. */
+    onBack: () -> Unit = {},
     onPlay: (MediaItem) -> Unit,
     onToggleLayout: () -> Unit,
     telegramConnected: Boolean,
@@ -143,7 +178,16 @@ fun MediaGridScreen(
     val edge = if (touch) TOUCH_EDGE else Tv.SafeH
     // The limits are part of the key: changing them in Settings has to rebuild the listing,
     // not leave a stale one filtered by the old bounds.
+    //
+    // Scoped to this screen rather than to the activity. Against the activity's store nothing was
+    // ever evicted, so every chat visited in a session left behind a whole item list, each of them
+    // holding a few hundred minithumbnail byte arrays, and every change to the size limits added
+    // another copy of the same chat beside it. On a 1 GB stick that is the likeliest way this app
+    // gets killed, and the cost of the change is one re-listing when a chat is reopened.
+    val owner = remember(chatId, minSizeBytes, maxSizeBytes) { MediaScreenStore() }
+    DisposableEffect(owner) { onDispose { owner.viewModelStore.clear() } }
     val viewModel: MediaListViewModel = viewModel(
+        viewModelStoreOwner = owner,
         key = "media-$chatId-$minSizeBytes-$maxSizeBytes",
         factory = MediaListViewModelFactory(chatId, minSizeBytes, maxSizeBytes),
     )
@@ -227,25 +271,12 @@ fun MediaGridScreen(
         }
     }
 
-    Column(Modifier.fillMaxSize()) {
-        Header(
-            chatTitle = chatTitle,
-            chatPhotoFileId = chatPhotoFileId,
-            chatMiniThumbnail = chatMiniThumbnail,
-            isFavorite = isFavorite,
-            query = query,
-            onQuery = { query = it },
-            onSubmit = { viewModel.search(query) },
-            onToggleFavorite = onToggleFavorite,
-            layout = layout,
-            edge = edge,
-            onToggleLayout = onToggleLayout,
-            onRefresh = {
-                viewModel.load()
-                if (offline) onOfflineAction("You're offline. Showing saved videos.")
-            },
-        )
+    val refresh = {
+        viewModel.load()
+        if (offline) onOfflineAction("You're offline. Showing saved videos.")
+    }
 
+    val listing: @Composable () -> Unit = {
         StateScaffold(
             state,
             onRetry = viewModel::load,
@@ -270,12 +301,19 @@ fun MediaGridScreen(
             fun focusOf(item: MediaItem): Modifier =
                 if (item === list.items.firstOrNull()) Modifier.focusRequester(firstItem) else Modifier
 
+            // Telegram's own media grid is dense: tiles butted almost together, edge to edge,
+            // square, with the running time in a corner and no caption. It reads as a sheet of
+            // pictures rather than as a list of cards, and it fits half again as many on a
+            // screen. Row mode keeps the file names, so nothing is actually lost by it.
+            val dense = touch && layout == CardLayout.Grid
+            val gap = if (dense) DENSE_GAP else 16.dp
             val padding = PaddingValues(
-                start = edge,
-                end = edge,
+                start = if (dense) 0.dp else edge,
+                end = if (dense) 0.dp else edge,
                 // A television crops its outermost few percent, so the last row needs
-                // clearance or its titles are cut off the bottom of the panel.
-                bottom = if (touch) 16.dp else Tv.SafeV + 16.dp,
+                // clearance or its titles are cut off the bottom of the panel. A phone crops
+                // nothing but does put a gesture bar over the last row.
+                bottom = if (touch) navigationBarPadding() + 16.dp else Tv.SafeV + 16.dp,
             )
 
             // The strip only belongs there while the remote is somewhere in the listing, and a
@@ -300,8 +338,8 @@ fun MediaGridScreen(
                         state = gridState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = padding,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(gap),
+                        verticalArrangement = Arrangement.spacedBy(gap),
                     ) {
                         gridItems(
                             items = feed,
@@ -324,6 +362,7 @@ fun MediaGridScreen(
                                         watched = watchProgress[
                                             SettingsStore.progressKey(item.chatId, item.messageId),
                                         ],
+                                        dense = dense,
                                         onClick = { onPlay(item) },
                                         onFocused = { standingOn = item },
                                         modifier = focusOf(item),
@@ -391,11 +430,12 @@ fun MediaGridScreen(
                             .align(Alignment.BottomCenter)
                             // Above the name strip when there is one, rather than through it.
                             .padding(
-                                bottom = if (standingOn != null) {
-                                    Tv.SafeV + 46.dp + connectionOffset
-                                } else {
-                                    Tv.SafeV + connectionOffset
-                                },
+                                // Tv.SafeV is overscan clearance and means nothing on a phone,
+                                // where it only floated the chip well clear of the bottom edge
+                                // for no reason. The gesture bar is the real obstacle there.
+                                bottom = (if (touch) navigationBarPadding() else Tv.SafeV) +
+                                    (if (standingOn != null) 46.dp else 0.dp) +
+                                    connectionOffset,
                             )
                             .clip(RoundedCornerShape(20.dp))
                             .background(SurfaceRaised)
@@ -457,6 +497,42 @@ fun MediaGridScreen(
         }
     }
 
+    if (touch) {
+        TouchMediaScaffold(
+            chatTitle = chatTitle,
+            chatPhotoFileId = chatPhotoFileId,
+            chatMiniThumbnail = chatMiniThumbnail,
+            isFavorite = isFavorite,
+            query = query,
+            onQuery = { query = it },
+            onSubmit = { viewModel.search(query) },
+            onBack = onBack,
+            onToggleFavorite = onToggleFavorite,
+            layout = layout,
+            onToggleLayout = onToggleLayout,
+            onRefresh = refresh,
+            content = listing,
+        )
+    } else {
+        Column(Modifier.fillMaxSize()) {
+            Header(
+                chatTitle = chatTitle,
+                chatPhotoFileId = chatPhotoFileId,
+                chatMiniThumbnail = chatMiniThumbnail,
+                isFavorite = isFavorite,
+                query = query,
+                onQuery = { query = it },
+                onSubmit = { viewModel.search(query) },
+                onToggleFavorite = onToggleFavorite,
+                layout = layout,
+                edge = edge,
+                onToggleLayout = onToggleLayout,
+                onRefresh = refresh,
+            )
+            listing()
+        }
+    }
+
     val target = reportTarget
     if (target != null && reportOptions.isNotEmpty()) {
         TvMenu(
@@ -474,6 +550,181 @@ fun MediaGridScreen(
                 reportOptions = emptyList()
             },
         )
+    }
+}
+
+/**
+ * The phone's version of this screen's chrome: a real app bar.
+ *
+ * What it replaces had no back affordance at all (only the hardware key knew how to leave), a 32sp
+ * title padded by the television's overscan constant so that it sat under the status bar, and a row
+ * of five labelled pills underneath it. That is most of a phone screen spent before the first video.
+ *
+ * Everything moves into the bar: an arrow, the chat's own picture, its name, and the actions as
+ * icons. Search expands to fill the bar the way it does on the chat list, so the two screens are
+ * searched the same way.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun TouchMediaScaffold(
+    chatTitle: String,
+    chatPhotoFileId: Int,
+    chatMiniThumbnail: ByteArray?,
+    isFavorite: Boolean,
+    query: String,
+    onQuery: (String) -> Unit,
+    onSubmit: () -> Unit,
+    onBack: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    layout: CardLayout,
+    onToggleLayout: () -> Unit,
+    onRefresh: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    var searching by rememberSaveable { mutableStateOf(false) }
+    val field = remember { FocusRequester() }
+    val startVoice = rememberVoiceSearch("Say a video name") {
+        onQuery(it)
+        onSubmit()
+    }
+
+    // Back leaves the search first and the chat second, which is the order a phone user means it.
+    BackHandler(enabled = searching) {
+        searching = false
+        onQuery("")
+        onSubmit()
+    }
+
+    Scaffold(
+        containerColor = com.tmplayer.ui.theme.Background,
+        topBar = {
+            TopAppBar(
+                title = {
+                    if (searching) {
+                        MediaSearchField(
+                            query = query,
+                            onQueryChange = { onQuery(it); onSubmit() },
+                            onVoiceSearch = startVoice,
+                            modifier = Modifier.focusRequester(field),
+                        )
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            MediaPreview(
+                                miniThumbnail = chatMiniThumbnail,
+                                thumbnailFileId = chatPhotoFileId,
+                                fallbackLabel = chatTitle,
+                                modifier = Modifier.size(BAR_AVATAR).clip(CircleShape),
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            M3Text(
+                                chatTitle,
+                                // Material's default bar title is 22sp, which with an avatar in
+                                // front of it left room for about eight characters of a chat name.
+                                // Telegram's own chat bar is around this size for the same reason.
+                                style = M3MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                },
+                navigationIcon = {
+                    IconButton(
+                        onClick = {
+                            if (searching) {
+                                searching = false
+                                onQuery("")
+                                onSubmit()
+                            } else {
+                                onBack()
+                            }
+                        },
+                    ) {
+                        M3Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = if (searching) "Close search" else "Back to chats",
+                        )
+                    }
+                },
+                actions = {
+                    if (searching) return@TopAppBar
+                    IconButton(onClick = { searching = true }) {
+                        M3Icon(Icons.Filled.Search, contentDescription = "Search this chat")
+                    }
+                    IconButton(onClick = onToggleFavorite) {
+                        M3Icon(
+                            if (isFavorite) Icons.Filled.Star else TmIcons.StarOutline,
+                            contentDescription = if (isFavorite) {
+                                "Remove from favourites"
+                            } else {
+                                "Add to favourites"
+                            },
+                            tint = if (isFavorite) Accent else TextPrimary,
+                        )
+                    }
+                    // Two icons and a menu, not four icons. A phone app bar has around 200dp to
+                    // divide between the title and the actions, and with four of them the chat's
+                    // name was cut to "Weeke..." on a 1080p panel.
+                    BarOverflow(
+                        listOf(
+                            (if (layout == CardLayout.Grid) "Show as rows" else "Show as tiles")
+                                to onToggleLayout,
+                            "Refresh" to onRefresh,
+                        ),
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = SurfaceDark,
+                    titleContentColor = TextPrimary,
+                    navigationIconContentColor = TextPrimary,
+                    actionIconContentColor = TextPrimary,
+                ),
+            )
+        },
+    ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) { content() }
+    }
+
+    LaunchedEffect(searching) { if (searching) field.requestFocus() }
+}
+
+@Composable
+private fun MediaSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onVoiceSearch: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            singleLine = true,
+            textStyle = M3MaterialTheme.typography.bodyLarge.copy(color = TextPrimary),
+            cursorBrush = SolidColor(Accent),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            modifier = modifier.weight(1f),
+            decorationBox = { inner ->
+                if (query.isEmpty()) {
+                    M3Text(
+                        "Search this chat",
+                        style = M3MaterialTheme.typography.bodyLarge,
+                        color = TextMuted,
+                        maxLines = 1,
+                    )
+                }
+                inner()
+            },
+        )
+        if (query.isNotEmpty()) {
+            IconButton(onClick = { onQueryChange("") }) {
+                M3Icon(Icons.Filled.Close, contentDescription = "Clear search")
+            }
+        } else if (onVoiceSearch != null) {
+            IconButton(onClick = onVoiceSearch) {
+                M3Icon(TmIcons.Mic, contentDescription = "Search by voice")
+            }
+        }
     }
 }
 
@@ -569,7 +820,9 @@ internal fun Header(
             )
             // Telegram pushes new messages into TDLib's database, but this grid was built from a
             // search that ran when it opened, so a video posted since then needs a fresh search.
-            Pill("Refresh", Icons.Filled.Refresh, onClick = onRefresh)
+            // Icon only, like the refresh on the chat list: the circular arrow is the one glyph
+            // nobody has to be told the meaning of, and the word cost the search field 90dp.
+            Pill("Refresh", Icons.Filled.Refresh, showLabel = false, onClick = onRefresh)
         }
     }
 }
@@ -615,8 +868,9 @@ private fun SponsoredCard(
                 miniThumbnail = item.miniThumbnail,
                 thumbnailFileId = item.thumbnailFileId,
                 fallbackLabel = item.title.ifBlank { item.label },
-                modifier = Modifier
-                    .width(190.dp)
+                modifier = (
+                    if (isTouch()) Modifier.weight(TOUCH_ART_SHARE) else Modifier.width(190.dp)
+                    )
                     .aspectRatio(16f / 9f)
                     .clip(RoundedCornerShape(9.dp))
                     .border(
@@ -624,17 +878,13 @@ private fun SponsoredCard(
                         if (mediaFocused) Accent else Color.Transparent,
                         RoundedCornerShape(9.dp),
                     )
-                    .clickable(
-                        interactionSource = mediaInteractions,
-                        indication = null,
-                        onClick = onOpenMedia,
-                    ),
+                    .pressable(mediaInteractions, onOpenMedia),
             )
         }
 
         Column(
             Modifier
-                .weight(1f)
+                .weight(if (isTouch()) 1f - TOUCH_ART_SHARE else 1f)
                 .onGloballyPositioned { coordinates ->
                     val bounds = coordinates.boundsInWindow()
                     textTop = bounds.top
@@ -704,7 +954,7 @@ private fun SponsoredButton(label: String, idleColor: Color, onClick: () -> Unit
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
             .background(background)
-            .clickable(interactionSource = interactions, indication = null, onClick = onClick)
+            .pressable(interactions, onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
     )
 }
@@ -735,7 +985,7 @@ private fun Pill(
             .height(48.dp)
             .clip(RoundedCornerShape(24.dp))
             .background(background)
-            .clickable(interactionSource = interactions, indication = null, onClick = onClick)
+            .pressable(interactions, onClick)
             // Even padding when there are no words, so the pill comes out round rather than as a
             // wide one with a gap in it.
             .padding(horizontal = if (showLabel) 16.dp else 13.dp),
@@ -797,6 +1047,8 @@ internal fun MediaCard(
     onClick: () -> Unit,
     onFocused: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The phone's grid: square corners, no caption, running time over the picture. */
+    dense: Boolean = false,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
@@ -807,13 +1059,26 @@ internal fun MediaCard(
     )
     LaunchedEffect(focused) { if (focused) onFocused() }
 
+    if (dense) {
+        MediaArt(
+            item = item,
+            watched = watched,
+            durationOverlay = true,
+            modifier = modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .pressable(interactions, onClick),
+        )
+        return
+    }
+
     Column(
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(if (focused) SurfaceRaised else SurfaceDark)
             .border(3.dp, border, RoundedCornerShape(14.dp))
-            .clickable(interactionSource = interactions, indication = null, onClick = onClick),
+            .pressable(interactions, onClick),
     ) {
         MediaArt(item, watched, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
@@ -863,7 +1128,7 @@ private fun MediaRow(
             .clip(RoundedCornerShape(14.dp))
             .background(if (focused) SurfaceRaised else SurfaceDark)
             .border(3.dp, border, RoundedCornerShape(14.dp))
-            .clickable(interactionSource = interactions, indication = null, onClick = onClick)
+            .pressable(interactions, onClick)
             .padding(12.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -871,12 +1136,18 @@ private fun MediaRow(
         MediaArt(
             item,
             watched,
-            Modifier
-                .width(ROW_ART_WIDTH)
+            // A fixed 176dp is a fifth of a television and half a phone held upright, where it
+            // would leave the title about a hundred dp to live in. Reading the whole name is the
+            // reason somebody chose this arrangement, so on a phone the art takes a share of the
+            // row instead and the words keep the rest.
+            (if (isTouch()) Modifier.weight(TOUCH_ART_SHARE) else Modifier.width(ROW_ART_WIDTH))
                 .aspectRatio(16f / 9f)
                 .clip(RoundedCornerShape(8.dp)),
         )
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(
+            Modifier.weight(if (isTouch()) 1f - TOUCH_ART_SHARE else 1f),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             Text(
                 item.title,
                 style = MaterialTheme.typography.titleLarge,
@@ -891,9 +1162,32 @@ private fun MediaRow(
     }
 }
 
+/**
+ * How much room the gesture bar or the navigation buttons take at the bottom of a phone.
+ *
+ * Read rather than assumed: it is 0 on a device with hardware keys, about 24 dp under gesture
+ * navigation and about 48 dp under three buttons, and the last row of a grid was drawn under all
+ * three of them.
+ */
+@Composable
+private fun navigationBarPadding(): Dp = with(LocalDensity.current) {
+    WindowInsets.navigationBars.getBottom(this).toDp()
+}
+
 /** A media preview with its quality tag and saved playback progress. */
 @Composable
-private fun MediaArt(item: MediaItem, watched: WatchPoint?, modifier: Modifier = Modifier) {
+private fun MediaArt(
+    item: MediaItem,
+    watched: WatchPoint?,
+    modifier: Modifier = Modifier,
+    /**
+     * The running time over the bottom corner of the picture.
+     *
+     * Only the captionless phone grid asks for it. Everywhere else the meta line under the tile
+     * already carries the duration, and saying it twice a centimetre apart reads as a mistake.
+     */
+    durationOverlay: Boolean = false,
+) {
     Box(modifier) {
         MediaPreview(
             miniThumbnail = item.miniThumbnail,
@@ -904,7 +1198,9 @@ private fun MediaArt(item: MediaItem, watched: WatchPoint?, modifier: Modifier =
         val tags = item.qualityTags
         if (item.onDevice) {
             Text(
-                "On this TV",
+                // Not "On this TV": the same badge is drawn on a phone, where it was telling the
+                // viewer about a television they are not holding.
+                "Saved",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White,
                 maxLines = 1,
@@ -934,6 +1230,21 @@ private fun MediaArt(item: MediaItem, watched: WatchPoint?, modifier: Modifier =
                     )
                 }
             }
+        }
+        val duration = MediaMapper.formatDuration(item.durationSec)
+        if (durationOverlay && duration.isNotEmpty()) {
+            Text(
+                duration,
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White,
+                maxLines = 1,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(6.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Color.Black.copy(alpha = 0.72f))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
         }
         if (watched != null && watched.fraction > 0f) {
             // A thin bar along the bottom of the art, the one place a viewer already looks
@@ -985,6 +1296,19 @@ private val TOUCH_EDGE = 16.dp
 private const val LIST_LEAD = 4
 
 private val ROW_ART_WIDTH = 176.dp
+
+/**
+ * How much of a list row the art takes on a phone, where a width in dp cannot work: the same row
+ * is 360dp upright and twice that on its side. Two fifths leaves a thumbnail big enough to
+ * recognise and a title wide enough to read at both.
+ */
+private const val TOUCH_ART_SHARE = 0.4f
+
+/** The chat's picture in the app bar, at Material's own app-bar avatar size. */
+private val BAR_AVATAR = 40.dp
+
+/** Telegram's own media grid: barely a hairline between tiles, so it reads as one sheet. */
+private val DENSE_GAP = 2.dp
 
 /** Half the panel, so the strip never reaches back across the listing it belongs to. */
 private val STRIP_MAX_WIDTH = 480.dp

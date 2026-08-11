@@ -218,5 +218,5 @@ object AuthReducer {
     }
 
     private const val UNSUPPORTED_STEP =
-        "This account needs a step TMPlayer can't do on a TV. Finish signing in on your phone first, then try again."
+        "This account needs a step TMPlayer can't do. Finish signing in in the Telegram app first, then try again."
 }

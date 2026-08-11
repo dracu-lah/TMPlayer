@@ -32,14 +32,25 @@ object CachePolicy {
      *   must never trigger a clear that would delete the very thing being opened
      * @param cacheBytes what TDLib currently holds in video/document/animation files
      * @param freeBytes free space on the volume TDLib writes to
+     * @param targetPartialBytes how much of this same video is already on disk from an earlier,
+     *   unfinished watch. Clearing the cache deletes that too, so a viewer coming back to the
+     *   video they stopped half way through would restart the download from byte zero: the very
+     *   case the cache is supposed to help with. Those bytes are therefore kept whenever the
+     *   remainder fits without a clear.
      */
     fun decide(
         fileSizeBytes: Long,
         alreadyCached: Boolean,
         cacheBytes: Long,
         freeBytes: Long,
+        targetPartialBytes: Long = 0,
     ): Decision {
         if (alreadyCached) return Decision.Proceed
+
+        if (targetPartialBytes > 0) {
+            val remaining = (fileSizeBytes - targetPartialBytes).coerceAtLeast(0)
+            if (freeBytes >= remaining + HEADROOM_BYTES) return Decision.Proceed
+        }
 
         val freeAfterClearing = freeBytes + cacheBytes
         val needed = fileSizeBytes + HEADROOM_BYTES

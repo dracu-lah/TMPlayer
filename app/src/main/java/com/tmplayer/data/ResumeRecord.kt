@@ -65,6 +65,15 @@ data class ResumeRecord(
         ).joinToString(SEP.toString())
 
         /**
+         * Just the timestamp out of an encoded line, for the history cap.
+         *
+         * Reading the whole record would be a full decode per entry on every write of a resume
+         * position, and the cap only ever needs to know which entries are the oldest.
+         */
+        fun updatedAtOf(encoded: String?): Long? =
+            encoded?.split(SEP)?.getOrNull(5)?.toLongOrNull()
+
+        /**
          * Rebuilds a record, or returns null when the stored line cannot be trusted.
          *
          * Preferences outlive app versions, so a line written by an older build, or a half

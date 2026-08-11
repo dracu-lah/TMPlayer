@@ -2,6 +2,7 @@ package com.tmplayer.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -19,6 +20,7 @@ private val INTRO_SEEN = booleanPreferencesKey("intro_seen")
 private val OVERVIEW_SEEN = booleanPreferencesKey("overview_seen")
 private val OPEN_LAST_CHAT = booleanPreferencesKey("open_last_chat")
 private val DOWNLOAD_FIRST = booleanPreferencesKey("download_before_playing")
+private val AUTOPLAY_NEXT = booleanPreferencesKey("autoplay_next")
 private val LAST_CHAT = longPreferencesKey("last_chat")
 private val MIN_SIZE = longPreferencesKey("min_size_bytes")
 private val MAX_SIZE = longPreferencesKey("max_size_bytes")
@@ -86,6 +88,21 @@ class SettingsStore(private val context: Context) {
     suspend fun setOpenLastChat(value: Boolean) {
         context.prefs.edit { it[OPEN_LAST_CHAT] = value }
     }
+
+    /**
+     * Whether the next episode starts on its own when one finishes.
+     *
+     * On by default, because it is what a series is for and what every other player does. The
+     * countdown before it starts is the way out for anybody who meant to stop.
+     */
+    val autoplayNext: Flow<Boolean> = context.prefs.data.map { it[AUTOPLAY_NEXT] ?: true }
+
+    suspend fun setAutoplayNext(value: Boolean) {
+        context.prefs.edit { it[AUTOPLAY_NEXT] = value }
+    }
+
+    /** Read from disk at the end of a video, where a flow's placeholder would be a wrong answer. */
+    suspend fun autoplayNextNow(): Boolean = context.prefs.data.first()[AUTOPLAY_NEXT] ?: true
 
     /** The chat opened most recently, or zero when there has not been one yet. */
     val lastChatId: Flow<Long> = context.prefs.data.map { it[LAST_CHAT] ?: 0L }
@@ -277,9 +294,38 @@ class SettingsStore(private val context: Context) {
                 prefs[key] = positionMs
                 if (durationMs > 0) prefs[durationKey(chatId, messageId)] = durationMs
                 if (description != null) prefs[metaKey(chatId, messageId)] = description
+                evictOldestHistory(prefs)
             }
         }
     }
+
+    /**
+     * Keeps the history to [MAX_HISTORY] entries, oldest out first.
+     *
+     * Nothing bounded it before, so a viewer who watches a video a day accumulates a key per video
+     * forever, and every one of them is walked on every read of Continue watching and rewritten on
+     * every ten-second heartbeat. The cap is generous: nobody scrolls past two hundred half-watched
+     * videos, and past that the list is a cost rather than a feature.
+     */
+    private fun evictOldestHistory(prefs: MutablePreferences) {
+        val stamps = prefs.asMap().keys
+            .mapNotNull { it.name.removePrefixOrNull("meta_") }
+            .mapNotNull { ids ->
+                val meta = prefs[stringPreferencesKey("meta_$ids")] ?: return@mapNotNull null
+                ids to (ResumeRecord.updatedAtOf(meta) ?: 0L)
+            }
+        if (stamps.size <= MAX_HISTORY) return
+        stamps.sortedBy { it.second }
+            .take(stamps.size - MAX_HISTORY)
+            .forEach { (ids, _) ->
+                prefs.remove(longPreferencesKey("resume_$ids"))
+                prefs.remove(longPreferencesKey("duration_$ids"))
+                prefs.remove(stringPreferencesKey("meta_$ids"))
+            }
+    }
+
+    private fun String.removePrefixOrNull(prefix: String): String? =
+        if (startsWith(prefix)) removePrefix(prefix) else null
 
     /**
      * Forgets every half-watched video in one pass, emptying Continue watching.
@@ -352,6 +398,9 @@ class SettingsStore(private val context: Context) {
             if (enabled && lastChatId != 0L) lastChatId else null
 
         const val MIN_RESUME_MS = 60_000L
+
+        /** How many half-watched videos are kept before the oldest start dropping off. */
+        const val MAX_HISTORY = 200
 
         /** Anything within this of the end counts as watched. */
         const val END_MARGIN_MS = 30_000L

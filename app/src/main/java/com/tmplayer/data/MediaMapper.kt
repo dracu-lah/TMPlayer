@@ -9,7 +9,16 @@ import java.io.File
 import java.util.Date
 import java.util.Locale
 
-/** One playable thing in a chat, flattened out of whatever message shape Telegram used. */
+/**
+ * One playable thing in a chat, flattened out of whatever message shape Telegram used.
+ *
+ * Equality is over every field. It used to be over the id alone, which made a list whose badges
+ * had changed compare equal to the list before them, so the change never reached the screen and a
+ * revision counter had to be bolted on beside it to force the update through. Comparing the whole
+ * item removes the need for that counter and lets Compose skip the rows that genuinely did not
+ * move. The blurred preview is compared by content because TDLib hands back a fresh array each read.
+ */
+@androidx.compose.runtime.Immutable
 data class MediaItem(
     val chatId: Long,
     val messageId: Long,
@@ -24,14 +33,51 @@ data class MediaItem(
     val fileName: String = "",
     val onDevice: Boolean = false,
 ) {
-    /** "4K", "HEVC", "HDR": read off the file name, which is where releases state it. */
-    val qualityTags: List<String> get() = MediaMapper.qualityTags(fileName)
+    /**
+     * "4K", "1080p": read off the file name, which is where releases state it.
+     *
+     * Computed once and kept, rather than on every read. As a `get()` it ran a regex over the file
+     * name every time a tile recomposed, which on a scrolling grid is several hundred times a
+     * second for an answer that cannot change.
+     */
+    val qualityTags: List<String> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        MediaMapper.qualityTags(fileName)
+    }
 
     val id: String get() = "$chatId:$messageId"
 
-    // Only the identity matters for list diffing; the byte array must not take part.
-    override fun equals(other: Any?) = other is MediaItem && other.id == id
-    override fun hashCode() = id.hashCode()
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is MediaItem) return false
+        return chatId == other.chatId &&
+            messageId == other.messageId &&
+            fileId == other.fileId &&
+            title == other.title &&
+            sizeBytes == other.sizeBytes &&
+            durationSec == other.durationSec &&
+            mimeType == other.mimeType &&
+            thumbnailFileId == other.thumbnailFileId &&
+            date == other.date &&
+            fileName == other.fileName &&
+            onDevice == other.onDevice &&
+            miniThumbnail.contentEquals(other.miniThumbnail)
+    }
+
+    override fun hashCode(): Int {
+        var result = chatId.hashCode()
+        result = 31 * result + messageId.hashCode()
+        result = 31 * result + fileId
+        result = 31 * result + title.hashCode()
+        result = 31 * result + sizeBytes.hashCode()
+        result = 31 * result + durationSec
+        result = 31 * result + mimeType.hashCode()
+        result = 31 * result + thumbnailFileId
+        result = 31 * result + date
+        result = 31 * result + fileName.hashCode()
+        result = 31 * result + onDevice.hashCode()
+        result = 31 * result + (miniThumbnail?.contentHashCode() ?: 0)
+        return result
+    }
 }
 
 /**
