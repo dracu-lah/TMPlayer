@@ -173,7 +173,8 @@ private fun Root() {
     }
 
     var screen by remember { mutableStateOf<Screen>(Screen.Chats) }
-    var passwordError by remember { mutableStateOf<String?>(null) }
+    // One slot for whatever the current login pane got wrong: only one of them is ever on screen.
+    var signInError by remember { mutableStateOf<String?>(null) }
     var roomPrompt by remember { mutableStateOf<RoomPrompt?>(null) }
     // Saveable, not just remembered. Playing a video puts a second activity in front of this one,
     // and a 1 GB stick will happily kill what is behind it, so this composable is routinely
@@ -260,7 +261,7 @@ private fun Root() {
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (auth !is AuthState.Ready) {
-            // Signing out drops straight back to the QR code, so forget where we were.
+            // Signing out drops straight back to the login screen, so forget where we were.
             LaunchedEffect(Unit) {
                 screen = Screen.Chats
                 autoOpened = false
@@ -275,14 +276,30 @@ private fun Root() {
             } else {
                 LoginScreen(
                     state = auth,
-                    passwordError = passwordError,
+                    submitError = signInError,
                     onSubmitPassword = { password ->
-                        passwordError = null
-                        scope.launch { passwordError = Td.submitPassword(password) }
+                        signInError = null
+                        scope.launch { signInError = Td.submitPassword(password) }
                     },
-                    onScanAgain = {
-                        passwordError = null
+                    onStartOver = {
+                        signInError = null
                         scope.launch { Td.restartSignIn() }
+                    },
+                    onChooseMethod = { method ->
+                        signInError = null
+                        scope.launch { Td.chooseSignInMethod(method) }
+                    },
+                    onSubmitPhoneNumber = { number ->
+                        signInError = null
+                        scope.launch { signInError = Td.submitPhoneNumber(number) }
+                    },
+                    onSubmitCode = { code ->
+                        signInError = null
+                        scope.launch { signInError = Td.submitCode(code) }
+                    },
+                    onCancelPhoneEntry = {
+                        signInError = null
+                        scope.launch { Td.cancelPhoneEntry() }
                     },
                 )
             }

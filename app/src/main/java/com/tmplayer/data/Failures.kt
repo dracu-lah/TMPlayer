@@ -35,6 +35,14 @@ object Failures {
             raw.contains("CHANNEL_PRIVATE") ->
                 "You're not in this channel any more, so its videos aren't available."
 
+            // The size check before playback only knows what the file claims to be. A remux that
+            // was under-reported, or a second video arriving alongside this one, still fills the
+            // disk part-way through, and "Telegram didn't answer" is a poor account of that.
+            raw.contains("No space left", ignoreCase = true) ||
+                raw.contains("ENOSPC") ||
+                raw.contains("Not enough disk space", ignoreCase = true) ->
+                "This TV has run out of storage. Clear space in Settings, then try again."
+
             raw.contains("FILE_REFERENCE") || raw.contains("FILE_ID_INVALID") ->
                 "Telegram moved this video. Press Refresh, then try again."
 

@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Android TV: D-pad app, no touchscreen required -->
+    <!--
+      Built for a D-pad first, but leanback stays optional: a phone reports no leanback feature at
+      all, and requiring it is a hard install barrier rather than a hint.
+    -->
     <uses-feature
         android:name="android.software.leanback"
-        android:required="true" />
+        android:required="false" />
     <uses-feature
         android:name="android.hardware.touchscreen"
         android:required="false" />
@@ -26,17 +29,22 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:resizeableActivity="true"
         android:theme="@style/Theme.TMPlayer">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:screenOrientation="landscape"
             android:windowSoftInputMode="adjustResize">
+            <!--
+              Both launcher categories: a TV launcher only looks for the leanback one, a phone
+              launcher only for the plain one, and the app has to appear in whichever it is on.
+            -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
@@ -46,7 +54,7 @@
             android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
             android:exported="false"
             android:launchMode="singleTask"
-            android:screenOrientation="landscape"
+            android:screenOrientation="sensorLandscape"
             android:theme="@style/Theme.TMPlayer.Player" />
 
         <!-- Hands the downloaded update to the installer; nothing else is ever shared. -->

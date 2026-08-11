@@ -27,16 +27,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.tv.material3.Button
-import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
-import com.tmplayer.ui.theme.tmButtonColors
 
 /**
  * The one prompt shape used everywhere something is about to be deleted, signed out of, or
@@ -105,17 +103,16 @@ fun TvConfirm(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.padding(top = 4.dp),
                 ) {
-                    Button(
+                    // Cancel is the quiet one and confirm is the loud one, which is the same
+                    // ranking the TV colours gave them, only stated by which button is used
+                    // rather than by a colour table each caller passes in.
+                    TmSecondaryButton(
                         onClick = onDismiss,
-                        colors = tmButtonColors(),
                         modifier = Modifier.focusRequester(cancelFocus),
                     ) {
                         Text(cancelLabel)
                     }
-                    Button(
-                        onClick = onConfirm,
-                        colors = if (destructive) destructiveButtonColors() else tmButtonColors(),
-                    ) {
+                    TmButton(onClick = onConfirm, destructive = destructive) {
                         Text(confirmLabel)
                     }
                 }
@@ -126,16 +123,4 @@ fun TvConfirm(
     }
 }
 
-@Composable
-private fun destructiveButtonColors() = ButtonDefaults.colors(
-    containerColor = SurfaceDark,
-    contentColor = Danger,
-    focusedContainerColor = Danger,
-    focusedContentColor = Color.White,
-    pressedContainerColor = Danger,
-    pressedContentColor = Color.White,
-    disabledContainerColor = SurfaceDark,
-    disabledContentColor = TextMuted,
-)
 
-private val Danger = Color(0xFFE5484D)

@@ -31,7 +31,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.Button
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -40,7 +39,8 @@ import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
 import com.tmplayer.ui.theme.Tv
-import com.tmplayer.ui.theme.tmButtonColors
+import com.tmplayer.ui.components.TmButton
+import com.tmplayer.ui.components.TmSecondaryButton
 
 /** One page: what it shows, and the picture of the app actually showing it. */
 private data class Page(val title: String, val body: String, val image: Int)
@@ -81,9 +81,8 @@ fun OverviewScreen(onDone: () -> Unit) {
 
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
+                TmButton(
                     onClick = { if (last) onDone() else index++ },
-                    colors = tmButtonColors(),
                     modifier = Modifier.focusRequester(next),
                 ) {
                     Text(if (last) "Start" else "Next")
@@ -97,7 +96,7 @@ fun OverviewScreen(onDone: () -> Unit) {
                     }
                 }
                 if (!last) {
-                    Button(onClick = onDone, colors = tmButtonColors()) { Text("Skip") }
+                    TmSecondaryButton(onClick = onDone) { Text("Skip") }
                 }
             }
         }

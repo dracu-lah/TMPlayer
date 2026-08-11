@@ -60,8 +60,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -74,6 +76,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.CardLayout
+import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaFeedEntry
 import com.tmplayer.data.MediaMapper
@@ -134,6 +137,10 @@ fun MediaGridScreen(
     layout: CardLayout = CardLayout.Grid,
 ) {
     val context = LocalContext.current
+    // A phone has neither overscan to clear nor a fixed width to plan a grid against, so both of
+    // those figures are asked for again below rather than assumed.
+    val touch = !FormFactor.isTv(context)
+    val edge = if (touch) TOUCH_EDGE else Tv.SafeH
     // The limits are part of the key: changing them in Settings has to rebuild the listing,
     // not leave a stale one filtered by the old bounds.
     val viewModel: MediaListViewModel = viewModel(
@@ -231,6 +238,7 @@ fun MediaGridScreen(
             onSubmit = { viewModel.search(query) },
             onToggleFavorite = onToggleFavorite,
             layout = layout,
+            edge = edge,
             onToggleLayout = onToggleLayout,
             onRefresh = {
                 viewModel.load()
@@ -243,6 +251,16 @@ fun MediaGridScreen(
             onRetry = viewModel::load,
             loading = { MediaGridSkeleton(layout = layout) },
         ) { list ->
+            // The grid's column count is the one thing on this screen that cannot be a constant on
+            // a phone: it has to follow the width, and the width follows which way up the phone is
+            // being held. Everything that counts in columns, the paging lead included, reads it
+            // from here so there is only ever one figure in play.
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+            val columns = if (touch) {
+                ((maxWidth - edge * 2) / TOUCH_TILE_MIN).toInt().coerceAtLeast(1)
+            } else {
+                COLUMNS
+            }
             val feed = remember(list.items, list.sponsored) {
                 placeSponsored(list.items, list.sponsored)
             }
@@ -253,11 +271,11 @@ fun MediaGridScreen(
                 if (item === list.items.firstOrNull()) Modifier.focusRequester(firstItem) else Modifier
 
             val padding = PaddingValues(
-                start = Tv.SafeH,
-                end = Tv.SafeH,
+                start = edge,
+                end = edge,
                 // A television crops its outermost few percent, so the last row needs
                 // clearance or its titles are cut off the bottom of the panel.
-                bottom = Tv.SafeV + 16.dp,
+                bottom = if (touch) 16.dp else Tv.SafeV + 16.dp,
             )
 
             // The strip only belongs there while the remote is somewhere in the listing, and a
@@ -278,7 +296,7 @@ fun MediaGridScreen(
             ) {
                 when (layout) {
                     CardLayout.Grid -> LazyVerticalGrid(
-                        columns = GridCells.Fixed(COLUMNS),
+                        columns = GridCells.Fixed(columns),
                         state = gridState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = padding,
@@ -406,14 +424,16 @@ fun MediaGridScreen(
 
             // Switching arrangement rebuilds the list, taking the focused card with it, so the
             // first item has to be asked for again or the remote is left with nowhere to go.
-            LaunchedEffect(list.items.firstOrNull()?.id, layout) {
-                runCatching { firstItem.requestFocus() }
+            // Only on a remote. A phone has no focus to place, and asking for it there only puts a
+            // highlight on a card nobody pointed at.
+            LaunchedEffect(list.items.firstOrNull()?.id, layout, touch) {
+                if (!touch) runCatching { firstItem.requestFocus() }
             }
 
             // Fetch the next page well before the user reaches the bottom row. The lead is counted
             // in items, so it has to follow the arrangement: two rows of the grid is eight videos,
             // while two rows of the list is two.
-            val nearEnd by remember(list.items.size, layout) {
+            val nearEnd by remember(list.items.size, layout, columns) {
                 derivedStateOf {
                     // The two states report the same figure through unrelated item types, so the
                     // index comes out of each branch rather than the item it came from.
@@ -424,7 +444,7 @@ fun MediaGridScreen(
                             listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
                     } ?: 0
                     val lead = when (layout) {
-                        CardLayout.Grid -> COLUMNS * 2
+                        CardLayout.Grid -> columns * 2
                         CardLayout.List -> LIST_LEAD
                     }
                     last >= feed.size - lead
@@ -432,6 +452,7 @@ fun MediaGridScreen(
             }
             LaunchedEffect(gridState, listState, list.items.size, layout) {
                 snapshotFlow { nearEnd }.collect { if (it) viewModel.loadMore() }
+            }
             }
         }
     }
@@ -467,6 +488,8 @@ internal fun Header(
     onSubmit: () -> Unit,
     onToggleFavorite: () -> Unit,
     layout: CardLayout,
+    /** How far in from the side the header starts, which is overscan on a TV and taste on a phone. */
+    edge: Dp,
     onToggleLayout: () -> Unit,
     onRefresh: () -> Unit,
 ) {
@@ -475,7 +498,7 @@ internal fun Header(
         onSubmit()
     }
 
-    Column(Modifier.padding(start = Tv.SafeH, end = Tv.SafeH, top = Tv.SafeV, bottom = 12.dp)) {
+    Column(Modifier.padding(start = edge, end = edge, top = Tv.SafeV, bottom = 12.dp)) {
         // The same picture the chat was picked by, so it is obvious which one this listing is.
         Row(verticalAlignment = Alignment.CenterVertically) {
             MediaPreview(
@@ -951,6 +974,12 @@ private fun MetaLine(item: MediaItem, watched: WatchPoint?) {
 }
 
 private const val COLUMNS = 4
+
+/** The narrowest a video tile may be on a phone before the grid drops a column. */
+private val TOUCH_TILE_MIN = 168.dp
+
+/** No overscan to clear on a phone, so the margin is only what keeps art off the bezel. */
+private val TOUCH_EDGE = 16.dp
 
 /** How many rows from the bottom the next page is fetched in the list arrangement. */
 private const val LIST_LEAD = 4

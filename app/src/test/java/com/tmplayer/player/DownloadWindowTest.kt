@@ -169,6 +169,27 @@ class DownloadWindowTest {
         )
     }
 
+    /**
+     * The sequence that took playback down on a real film: seek forward, watch, seek back.
+     *
+     * TDLib had moved its window to the forward position, so the far end of that window was a
+     * long way past the byte the player now wanted. Judging the read on that end alone said
+     * "half a megabyte available" for bytes that had been freed, and the partial file keeps its
+     * length, so the read succeeded and returned a hole. The extractor died on the zeroes.
+     * Only the near end of the window rules that out.
+     */
+    @Test
+    fun `a byte behind a window that has moved forward is not readable`() {
+        val available = DownloadWindow.availableAt(
+            position = 120_000,
+            size = size,
+            downloadOffset = 600_000,
+            downloadedPrefixSize = 500_000,
+            completed = false,
+        )
+        assertEquals(0, available)
+    }
+
     @Test
     fun `a negative position reads nothing`() {
         assertEquals(

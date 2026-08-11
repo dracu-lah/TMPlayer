@@ -1,10 +1,14 @@
 package com.tmplayer.ui.components
 
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import com.tmplayer.data.FormFactor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -28,13 +32,30 @@ import androidx.compose.ui.semantics.semantics
  * instant a long press is meant to happen and it needs no timer of ours to measure.
  *
  * Click therefore fires on key up, not key down, so that a hold does not also count as a press.
+ *
+ * None of that applies to a finger. There are no key events to read on a phone, and the semantics
+ * below describe the gestures without ever performing them, so a card wired only to the remote
+ * path is inert under touch. `combinedClickable` is what does work there: its long press fires on
+ * a real screen even though it did not on the remote, and it brings the press ripple that a touch
+ * viewer expects and that focus colour alone cannot stand in for.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun Modifier.holdable(
     interactionSource: MutableInteractionSource,
     onClick: () -> Unit,
     onHold: () -> Unit,
 ): Modifier {
+    if (!FormFactor.isTv(LocalContext.current)) {
+        return combinedClickable(
+            interactionSource = interactionSource,
+            indication = LocalIndication.current,
+            role = Role.Button,
+            onLongClick = onHold,
+            onClick = onClick,
+        )
+    }
+
     // Not Compose state: nothing renders from it, and it is written from inside a key callback
     // whose only job is to remember, until the key comes back up, that this press was a hold.
     val held = remember { booleanArrayOf(false) }

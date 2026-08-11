@@ -74,4 +74,61 @@ class AuthReducerTest {
         assertTrue(step.state is AuthState.Failed)
         assertEquals(AuthAction.None, step.action)
     }
+
+    @Test
+    fun `until a method is picked the same prompt offers the choice and sends nothing`() {
+        val step = AuthReducer.reduce(
+            AuthorizationStateWaitPhoneNumber(),
+            SignInMethod.Undecided,
+        )
+        assertEquals(AuthState.ChooseMethod, step.state)
+        assertEquals(AuthAction.None, step.action)
+    }
+
+    @Test
+    fun `picking the phone route asks for a number instead of a QR code`() {
+        val step = AuthReducer.reduce(AuthorizationStateWaitPhoneNumber(), SignInMethod.Phone)
+        assertEquals(AuthState.Phone(), step.state)
+        assertEquals(AuthAction.None, step.action)
+    }
+
+    @Test
+    fun `picking QR still requests a link`() {
+        val step = AuthReducer.reduce(AuthorizationStateWaitPhoneNumber(), SignInMethod.Qr)
+        assertEquals(AuthAction.RequestQrCode, step.action)
+        assertEquals(AuthState.Connecting, step.state)
+    }
+
+    @Test
+    fun `the code screen names the number Telegram texted`() {
+        val codeInfo = AuthenticationCodeInfo("+447700900000", AuthenticationCodeTypeSms(5), null, 60)
+        val step = AuthReducer.reduce(AuthorizationStateWaitCode(codeInfo), SignInMethod.Phone)
+        assertEquals(AuthState.Code("+447700900000"), step.state)
+        assertEquals(AuthAction.None, step.action)
+    }
+
+    @Test
+    fun `a code demanded of the QR route is still a dead end`() {
+        val codeInfo = AuthenticationCodeInfo("+10000000000", AuthenticationCodeTypeSms(5), null, 60)
+        val step = AuthReducer.reduce(AuthorizationStateWaitCode(codeInfo), SignInMethod.Qr)
+        assertTrue(step.state is AuthState.Failed)
+        assertEquals(AuthAction.None, step.action)
+    }
+
+    @Test
+    fun `two-step verification follows the phone route as well`() {
+        val step = AuthReducer.reduce(
+            AuthorizationStateWaitPassword("my cat", true, false, "a**@b.com"),
+            SignInMethod.Phone,
+        )
+        assertEquals(AuthState.Password("my cat"), step.state)
+        assertEquals(AuthAction.None, step.action)
+    }
+
+    @Test
+    fun `an undecided user who is already signed in is not asked to choose`() {
+        val step = AuthReducer.reduce(AuthorizationStateReady(), SignInMethod.Undecided)
+        assertEquals(AuthState.Ready, step.state)
+        assertEquals(AuthAction.OnReady, step.action)
+    }
 }

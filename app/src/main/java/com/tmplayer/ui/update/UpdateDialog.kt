@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.tv.material3.Button
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -44,8 +43,9 @@ import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
-import com.tmplayer.ui.theme.tmButtonColors
 import kotlinx.coroutines.launch
+import com.tmplayer.ui.components.TmButton
+import com.tmplayer.ui.components.TmSecondaryButton
 
 /**
  * What happens after the viewer presses Update: confirm, download, then Android takes over.
@@ -127,31 +127,28 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                     when {
                         state is UpdateState.Downloading -> Unit
 
-                        release != null && !allowed -> Button(
+                        release != null && !allowed -> TmButton(
                             onClick = {
                                 runCatching {
                                     context.startActivity(Updates.unknownSourcesIntent(context))
                                 }
                             },
-                            colors = tmButtonColors(),
                             modifier = Modifier.focusRequester(confirm),
                         ) { Text("Open that setting") }
 
-                        release != null -> Button(
+                        release != null -> TmButton(
                             onClick = { scope.launch { Updates.downloadAndInstall(context, release) } },
-                            colors = tmButtonColors(),
                             modifier = Modifier.focusRequester(confirm),
                         ) { Text("Download and install") }
 
-                        else -> Button(
+                        else -> TmButton(
                             onClick = { scope.launch { Updates.check() } },
-                            colors = tmButtonColors(),
                             modifier = Modifier.focusRequester(confirm),
                         ) { Text("Check again") }
                     }
 
                     if (state !is UpdateState.Downloading) {
-                        Button(onClick = onDismiss, colors = tmButtonColors()) { Text("Close") }
+                        TmSecondaryButton(onClick = onDismiss) { Text("Close") }
                     }
                 }
             }

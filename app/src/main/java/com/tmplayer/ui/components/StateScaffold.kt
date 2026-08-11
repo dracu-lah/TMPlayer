@@ -36,13 +36,12 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.tv.material3.Icon
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
-import com.tmplayer.ui.theme.tmButtonColors
 
 /** Every screen is exactly one of these: no blank frames, ever. */
 sealed interface UiState<out T> {
@@ -162,7 +161,6 @@ private const val ROTATION_MS = 1_332
 private const val SWEEP_MS = 1_332
 private const val MAX_SWEEP = 300f
 private const val MIN_SWEEP = 12f
-private val Danger = Color(0xFFE5484D)
 
 /** A calm, final statement. No Retry button, because there is nothing to retry. */
 @Composable
@@ -215,9 +213,8 @@ fun BigError(message: String, onRetry: (() -> Unit)?) {
             Spacer(Modifier.size(8.dp))
             if (onRetry != null) {
                 val focus = remember { FocusRequester() }
-                Button(
+                TmButton(
                     onClick = onRetry,
-                    colors = tmButtonColors(),
                     modifier = Modifier.focusRequester(focus),
                 ) {
                     Icon(

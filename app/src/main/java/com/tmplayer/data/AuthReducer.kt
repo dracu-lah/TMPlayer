@@ -14,13 +14,36 @@ import dev.g000sha256.tdl.dto.AuthorizationStateWaitPhoneNumber
 import dev.g000sha256.tdl.dto.AuthorizationStateWaitRegistration
 import dev.g000sha256.tdl.dto.AuthorizationStateWaitTdlibParameters
 
+/**
+ * How the user has said they want to sign in.
+ *
+ * TDLib asks one question, [AuthorizationStateWaitPhoneNumber], for both routes: a QR link and a
+ * real phone number are two different answers to it. Nothing but the user can tell them apart, so
+ * the choice is carried in here rather than inferred from the TDLib state.
+ */
+enum class SignInMethod {
+    /** Nothing picked yet, so the login screen offers the choice. */
+    Undecided,
+    Qr,
+    Phone,
+}
+
 /** What the UI is showing during login. */
 sealed interface AuthState {
     /** Talking to Telegram, nothing for the user to do yet. */
     data object Connecting : AuthState
 
+    /** Telegram wants an answer and the user has not said which way they want to give it. */
+    data object ChooseMethod : AuthState
+
     /** Scan [link] with Telegram on your phone: Settings -> Devices -> Link Desktop Device. */
     data class Qr(val link: String) : AuthState
+
+    /** Waiting for a phone number, in international form. */
+    data class Phone(val wrong: Boolean = false) : AuthState
+
+    /** Waiting for the login code Telegram just sent to [phoneNumber]. */
+    data class Code(val phoneNumber: String, val wrong: Boolean = false) : AuthState
 
     /** Two-step verification is on; [hint] is the user's own password hint (may be blank). */
     data class Password(val hint: String, val wrong: Boolean = false) : AuthState
@@ -49,14 +72,28 @@ data class AuthStep(val state: AuthState, val action: AuthAction)
  */
 object AuthReducer {
 
-    fun reduce(state: AuthorizationState): AuthStep = when (state) {
+    fun reduce(
+        state: AuthorizationState,
+        method: SignInMethod = SignInMethod.Qr,
+    ): AuthStep = when (state) {
         // TDLib always asks for its parameters first; nothing works until we answer.
         is AuthorizationStateWaitTdlibParameters ->
             AuthStep(AuthState.Connecting, AuthAction.SendParameters)
 
-        // We never ask for a phone number: answer this by requesting a QR login link instead.
-        is AuthorizationStateWaitPhoneNumber ->
-            AuthStep(AuthState.Connecting, AuthAction.RequestQrCode)
+        // The one question with two answers: a QR link, or the number typed on this device.
+        is AuthorizationStateWaitPhoneNumber -> when (method) {
+            SignInMethod.Undecided -> AuthStep(AuthState.ChooseMethod, AuthAction.None)
+            SignInMethod.Qr -> AuthStep(AuthState.Connecting, AuthAction.RequestQrCode)
+            SignInMethod.Phone -> AuthStep(AuthState.Phone(), AuthAction.None)
+        }
+
+        // Only the phone route asks for a code, and only it can answer one: nothing typed on a TV
+        // remote reaches the phone that a QR-linked account would be sending the code to.
+        is AuthorizationStateWaitCode -> when (method) {
+            SignInMethod.Phone ->
+                AuthStep(AuthState.Code(state.codeInfo.phoneNumber), AuthAction.None)
+            else -> AuthStep(AuthState.Failed(UNSUPPORTED_STEP), AuthAction.None)
+        }
 
         is AuthorizationStateWaitOtherDeviceConfirmation ->
             AuthStep(AuthState.Qr(state.link), AuthAction.None)
@@ -75,17 +112,16 @@ object AuthReducer {
         is AuthorizationStateClosed ->
             AuthStep(AuthState.Connecting, AuthAction.RecreateClient)
 
-        // Reachable only if the QR link is confirmed on an account that then demands an SMS
-        // code, an e-mail, or a sign-up. None of those can be completed from a TV remote.
-        is AuthorizationStateWaitCode,
+        // Reachable when the account demands an e-mail address or a sign-up. Neither can be
+        // completed from here, whichever way the sign-in was started.
         is AuthorizationStateWaitEmailAddress,
         is AuthorizationStateWaitEmailCode,
         is AuthorizationStateWaitRegistration ->
-            AuthStep(
-                AuthState.Failed("This account needs a step TMPlayer can't do on a TV. Finish signing in on your phone first, then try again."),
-                AuthAction.None,
-            )
+            AuthStep(AuthState.Failed(UNSUPPORTED_STEP), AuthAction.None)
 
         else -> AuthStep(AuthState.Connecting, AuthAction.None)
     }
+
+    private const val UNSUPPORTED_STEP =
+        "This account needs a step TMPlayer can't do on a TV. Finish signing in on your phone first, then try again."
 }

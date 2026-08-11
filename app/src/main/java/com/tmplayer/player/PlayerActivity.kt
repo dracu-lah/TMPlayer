@@ -9,6 +9,7 @@ import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -28,6 +29,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.ui.CaptionStyleCompat
+import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -36,6 +38,7 @@ import com.tmplayer.App
 import com.tmplayer.R
 import com.tmplayer.data.ChatRepository
 import com.tmplayer.data.Failures
+import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaName
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
@@ -56,6 +59,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -93,6 +98,11 @@ class PlayerActivity : FragmentActivity() {
     private lateinit var downloadChip: TextView
     private var statusSpinner: View? = null
 
+    /** The touch transport row, on a phone. Null on a TV, where leanback's fragment has it. */
+    private var touchSurface: PlayerView? = null
+    private var gestureHud: TextView? = null
+    private val hideGestureHud = Runnable { gestureHud?.visibility = View.GONE }
+
     private var fileId = 0
     private var fileSizeBytes = 0L
     private var durationSec = 0
@@ -129,6 +139,10 @@ class PlayerActivity : FragmentActivity() {
 
     /** Used only while this video needs more bytes; completed videos ignore connectivity entirely. */
     private var networkOffline = false
+
+    /** Automatic recoveries since playback was last healthy, and the one currently pending. */
+    private var recoveryAttempts = 0
+    private var recoveryJob: Job? = null
 
     /**
      * "Resuming from 1:12:40", once the saved position has been read off disk.
@@ -172,6 +186,7 @@ class PlayerActivity : FragmentActivity() {
         rebufferChip = findViewById(R.id.rebuffer_chip)
         rebufferText = findViewById(R.id.rebuffer_text)
         downloadChip = findViewById(R.id.download_chip)
+        gestureHud = findViewById(R.id.gesture_hud)
         subtitleView.setApplyEmbeddedStyles(true)
         // A TV's default caption size is tuned for broadcast subtitles; video subs need to be
         // legible from a sofa, with an outline that survives a bright frame behind them.
@@ -232,23 +247,81 @@ class PlayerActivity : FragmentActivity() {
         }
     }
 
-    /** Builds the player, points it at the file, and puts the leanback surface in front of it. */
+    /** Builds the player, points it at the file, and puts a video surface in front of it. */
     private fun startPlayback(client: TdlClient) {
-        player = buildPlayer(client).also { exo ->
-            exo.addListener(playerListener)
-            exo.setMediaItem(Media3Item.fromUri(tdFileUri(fileId)))
-            if (resumeMs > 0) exo.seekTo(resumeMs)
-            exo.prepare()
-            exo.playWhenReady = true
+        val exo = buildPlayer(client).also { built ->
+            built.addListener(playerListener)
+            built.setMediaItem(Media3Item.fromUri(tdFileUri(fileId)))
+            if (resumeMs > 0) built.seekTo(resumeMs)
+            built.prepare()
+            built.playWhenReady = true
         }
+        player = exo
 
-        // Replace unconditionally: after process death the restored fragment came up before
-        // the player existed, so it has no glue and has to be rebuilt. State loss is allowed
-        // because nothing here is restored anyway, and under "download the whole video first"
-        // this can land after the activity has been stopped.
-        supportFragmentManager.beginTransaction()
-            .replace(R.id.playback_container, TvPlaybackFragment())
-            .commitAllowingStateLoss()
+        // Which surface depends only on the hardware. A remote drives leanback's transport row and
+        // nothing else, a thumb drives Media3's and nothing else, and neither works on the other.
+        if (FormFactor.isTv(this)) {
+            // Replace unconditionally: after process death the restored fragment came up before
+            // the player existed, so it has no glue and has to be rebuilt. State loss is allowed
+            // because nothing here is restored anyway, and under "download the whole video first"
+            // this can land after the activity has been stopped.
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.playback_container, TvPlaybackFragment())
+                .commitAllowingStateLoss()
+        } else {
+            attachTouchSurface(exo)
+        }
+    }
+
+    /**
+     * The phone's video surface and transport row, in place of leanback's.
+     *
+     * Leanback's playback fragment is built around a D-pad: its transport row is raised by a key
+     * press and scrubbed by a key press, and there is no touch anywhere in it. On a phone that
+     * leaves a picture nobody can pause, which is the whole of why playback on a phone read as
+     * nothing happening at all. Media3's own view is the same player behind a control row made for
+     * a thumb, so the surface is the only thing being swapped: the activity still owns the
+     * ExoPlayer, and the loading sheet, the chips, the resume writes and the retry logic sit over
+     * this exactly as they sit over the TV.
+     */
+    private fun attachTouchSurface(exo: ExoPlayer) {
+        val view = PlayerView(this)
+        view.layoutParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT,
+        )
+        view.useController = true
+        // Two spinners for one wait. TMPlayer's own loading sheet and rebuffer chip already say
+        // what is happening, and they say it with a speed and a percentage.
+        view.setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+        // The activity draws subtitles itself, into a view sized and styled for this app, and it
+        // is fed straight off onCues. Leaving Media3's own subtitle view up renders every line
+        // twice, slightly offset.
+        view.subtitleView?.visibility = View.GONE
+        view.setControllerVisibilityListener(
+            PlayerView.ControllerVisibilityListener { visibility ->
+                onControlsVisibilityChanged(visibility == View.VISIBLE)
+            },
+        )
+        view.player = exo
+        findViewById<FrameLayout>(R.id.playback_container).addView(view)
+        touchSurface = view
+
+        PlayerGestures(
+            context = this,
+            window = window,
+            onSkip = ::skipBy,
+            onFeedback = ::showGestureFeedback,
+        ).attach(view)
+    }
+
+    /** A figure for whatever a gesture is changing, gone again shortly after the finger lifts. */
+    private fun showGestureFeedback(text: String) {
+        val hud = gestureHud ?: return
+        hud.text = text
+        hud.visibility = View.VISIBLE
+        hud.removeCallbacks(hideGestureHud)
+        hud.postDelayed(hideGestureHud, GESTURE_HUD_MS)
     }
 
     /**
@@ -340,7 +413,12 @@ class PlayerActivity : FragmentActivity() {
                 Player.STATE_BUFFERING ->
                     if (openingFilm) showStatus("Loading…") else showRebuffering()
 
-                Player.STATE_READY -> hideStatus()
+                // Playing again is the only proof that a recovery worked, so the budget is
+                // refilled here rather than when the retry is issued.
+                Player.STATE_READY -> {
+                    recoveryAttempts = 0
+                    hideStatus()
+                }
                 Player.STATE_ENDED -> {
                     lifecycleScope.launch { settings.clearResumePosition(chatId, messageId) }
                     finish()
@@ -350,8 +428,64 @@ class PlayerActivity : FragmentActivity() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            showError(friendlyError(error))
+            if (!recoverFrom(error)) showError(friendlyError(error))
         }
+    }
+
+    /**
+     * Puts a stream back on its feet after a recoverable failure, instead of ending the session.
+     *
+     * A streamed file fails in ways a local one does not: the connection drops for a moment, or a
+     * read lands on bytes Telegram has since moved away from. None of that means the video is
+     * unplayable, but the player has no way to know that, so before this the first such error was
+     * the end of the film and the only way out was Back. Returns false when the error is one no
+     * amount of retrying will fix, and the error sheet is the honest answer.
+     */
+    private fun recoverFrom(error: PlaybackException): Boolean {
+        val exo = player ?: return false
+        if (!isRecoverable(error)) return false
+        if (recoveryAttempts >= MAX_RECOVERY_ATTEMPTS) return false
+
+        val resumeAt = exo.currentPosition.coerceAtLeast(0)
+        recoveryJob?.cancel()
+        recoveryJob = lifecycleScope.launch {
+            showRebuffering()
+            // Being offline is a wait, not a failure, so it never spends the retry budget: on a
+            // phone leaving the house that budget would be gone long before the signal came back.
+            if (networkOffline) {
+                combine(NetworkMonitor.status, Td.connected) { network, connected ->
+                    network != NetworkStatus.Offline || connected
+                }.first { it }
+            } else {
+                val attempt = ++recoveryAttempts
+                delay(RECOVERY_BACKOFF_MS shl (attempt - 1))
+            }
+            val live = player ?: return@launch
+            live.seekTo(resumeAt)
+            live.prepare()
+            live.playWhenReady = true
+        }
+        return true
+    }
+
+    /**
+     * Whether retrying is worth anything.
+     *
+     * A malformed container counts, which reads oddly until you remember these bytes arrive over
+     * a moving download window: a container that will not parse is far more often a read that
+     * caught the file mid-move than a genuinely broken remux, and re-preparing settles it. A
+     * codec this TV does not have is the opposite, and no number of attempts will conjure one.
+     */
+    private fun isRecoverable(error: PlaybackException): Boolean = when (error.errorCode) {
+        PlaybackException.ERROR_CODE_IO_UNSPECIFIED,
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+        PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
+        PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE,
+        PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+        -> true
+
+        else -> false
     }
 
     private fun friendlyError(error: PlaybackException) = when (error.errorCode) {
@@ -453,9 +587,12 @@ class PlayerActivity : FragmentActivity() {
                 return true
             }
             KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_LEFT -> {
-                val fragment = supportFragmentManager.findFragmentById(R.id.playback_container)
-                val controlsUp = (fragment as? TvPlaybackFragment)?.controlsVisible() ?: true
-                if (!controlsUp) {
+                // Only asked of leanback, and only when leanback is what is on screen. A phone
+                // has no such fragment, and its transport row handles the arrows of an attached
+                // keyboard itself, so there is nothing here to route.
+                val fragment = supportFragmentManager
+                    .findFragmentById(R.id.playback_container) as? TvPlaybackFragment
+                if (fragment != null && !fragment.controlsVisible()) {
                     val step = if (event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) NUDGE_MS else -NUDGE_MS
                     skipBy(step)
                     // Fall through so leanback also raises the controls: the user needs to see
@@ -693,6 +830,10 @@ class PlayerActivity : FragmentActivity() {
 
     override fun onDestroy() {
         saveResumePosition()
+        gestureHud?.removeCallbacks(hideGestureHud)
+        // Dropped before the player is released so the view never holds a released instance.
+        touchSurface?.player = null
+        touchSurface = null
         player?.removeListener(playerListener)
         player?.release()
         player = null
@@ -750,6 +891,16 @@ class PlayerActivity : FragmentActivity() {
         private const val END_GUARD_MS = 1_000L
         private const val NUDGE_MS = 10_000L
         private const val RESUME_TICK_MS = 10_000L
+
+        /** Long enough to read the figure a drag left behind, short enough to stay out of the way. */
+        private const val GESTURE_HUD_MS = 900L
+
+        /**
+         * Four attempts over roughly twelve seconds. Enough to ride out a moved download window or
+         * a lift lost signal, short enough that a video which really will not play says so.
+         */
+        private const val MAX_RECOVERY_ATTEMPTS = 4
+        private const val RECOVERY_BACKOFF_MS = 800L
 
         /** 1..32; the same top slot the streaming path asks for. */
         private const val DOWNLOAD_PRIORITY = 32

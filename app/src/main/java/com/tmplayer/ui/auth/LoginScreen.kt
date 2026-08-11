@@ -37,38 +37,167 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.AuthState
+import com.tmplayer.data.SignInMethod
 import com.tmplayer.ui.components.BigError
 import com.tmplayer.ui.components.BigLoader
+import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
 import com.tmplayer.ui.theme.Tv
-import com.tmplayer.ui.theme.tmButtonColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.tmplayer.ui.components.TmButton
+import com.tmplayer.ui.components.TmSecondaryButton
 
 @Composable
 fun LoginScreen(
     state: AuthState,
     onSubmitPassword: (String) -> Unit,
-    passwordError: String?,
-    onScanAgain: () -> Unit = {},
+    submitError: String?,
+    onStartOver: () -> Unit = {},
+    onChooseMethod: (SignInMethod) -> Unit = {},
+    onSubmitPhoneNumber: (String) -> Unit = {},
+    onSubmitCode: (String) -> Unit = {},
+    onCancelPhoneEntry: () -> Unit = {},
 ) {
     when (state) {
         is AuthState.Connecting -> BigLoader("Connecting to Telegram…")
+        is AuthState.ChooseMethod -> MethodPane(onChooseMethod)
         is AuthState.Qr -> QrPane(state.link)
+        is AuthState.Phone ->
+            PhonePane(submitError, onSubmitPhoneNumber, onCancelPhoneEntry)
+        is AuthState.Code ->
+            CodePane(state.phoneNumber, submitError, onSubmitCode, onStartOver)
         is AuthState.Password ->
-            PasswordPane(state.hint, passwordError, onSubmitPassword, onScanAgain)
+            PasswordPane(state.hint, submitError, onSubmitPassword, onStartOver)
         is AuthState.Ready -> BigLoader("Signing in…")
         is AuthState.Failed -> BigError(state.message, onRetry = null)
     }
+}
+
+/**
+ * The first thing anybody sees. QR holds the focus because it is the right answer on a TV, where
+ * typing a number costs a minute on an on-screen keyboard; the phone route is there for the device
+ * that would otherwise have to scan a code being displayed on itself.
+ */
+@Composable
+private fun MethodPane(onChoose: (SignInMethod) -> Unit) {
+    val focus = remember { FocusRequester() }
+
+    Box(
+        Modifier.fillMaxSize().padding(horizontal = Tv.SafeH, vertical = Tv.SafeV),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier.width(640.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text("Sign in to Telegram", style = MaterialTheme.typography.headlineLarge)
+            Text(
+                "Two ways in, and both end up at the same account.",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Spacer(Modifier.height(8.dp))
+
+            TmButton(
+                onClick = { onChoose(SignInMethod.Qr) },
+                modifier = Modifier.fillMaxWidth().focusRequester(focus),
+            ) {
+                Text("Scan a QR code")
+            }
+            Text(
+                "Quickest here: hold up the phone that already has your account.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextMuted,
+            )
+            Spacer(Modifier.height(8.dp))
+
+            TmButton(
+                onClick = { onChoose(SignInMethod.Phone) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Use my phone number")
+            }
+            Text(
+                "Telegram sends a code to your account, and you type it in here.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextMuted,
+            )
+        }
+    }
+
+    LaunchedEffect(Unit) { focus.requestFocus() }
+}
+
+@Composable
+private fun PhonePane(
+    error: String?,
+    onSubmit: (String) -> Unit,
+    onBack: () -> Unit,
+) {
+    var number by remember { mutableStateOf("+") }
+
+    // Back is what anybody who picked the wrong route reaches for, and nothing has been sent yet.
+    BackHandler(onBack = onBack)
+
+    LoginForm(
+        title = "Your phone number",
+        blurb = "The number your Telegram account is registered to, with its country code.",
+        note = null,
+        value = number,
+        onValueChange = { number = it },
+        placeholder = "+44 7700 900000",
+        keyboardType = KeyboardType.Phone,
+        masked = false,
+        error = error,
+        submitLabel = "Send me a code",
+        canSubmit = number.count { it.isDigit() } >= MIN_PHONE_DIGITS,
+        onSubmit = { onSubmit(number) },
+        backLabel = "Back",
+        onBack = onBack,
+    )
+}
+
+@Composable
+private fun CodePane(
+    phoneNumber: String,
+    error: String?,
+    onSubmit: (String) -> Unit,
+    onStartOver: () -> Unit,
+) {
+    var code by remember { mutableStateOf("") }
+
+    BackHandler(onBack = onStartOver)
+
+    LoginForm(
+        title = "Enter your code",
+        blurb = "Telegram has sent a code to $phoneNumber. It arrives in the Telegram app first, " +
+            "and by text only if you are not signed in anywhere.",
+        note = null,
+        value = code,
+        onValueChange = { code = it },
+        placeholder = "Code",
+        keyboardType = KeyboardType.Number,
+        masked = false,
+        error = error,
+        submitLabel = "Sign in",
+        canSubmit = code.isNotEmpty(),
+        onSubmit = { onSubmit(code) },
+        // Not "Back": the code has been sent, so the way out is a fresh start, which is what
+        // restarting the sign-in actually does.
+        backLabel = "Start over",
+        onBack = onStartOver,
+    )
 }
 
 @Composable
@@ -139,13 +268,57 @@ private fun PasswordPane(
     hint: String,
     error: String?,
     onSubmit: (String) -> Unit,
-    onScanAgain: () -> Unit,
+    onStartOver: () -> Unit,
 ) {
     var password by remember { mutableStateOf("") }
-    val focus = remember { FocusRequester() }
 
     // The remote's Back is what anybody stuck here reaches for first, and it did nothing.
-    BackHandler(onBack = onScanAgain)
+    BackHandler(onBack = onStartOver)
+
+    LoginForm(
+        title = "Two-step verification",
+        blurb = "Your Telegram account has a password. Enter it to finish signing in.",
+        note = hint.takeIf { it.isNotBlank() }?.let { "Hint: $it" },
+        value = password,
+        onValueChange = { password = it },
+        placeholder = "Password",
+        keyboardType = KeyboardType.Password,
+        masked = true,
+        error = error,
+        submitLabel = "Sign in",
+        canSubmit = password.isNotEmpty(),
+        onSubmit = { onSubmit(password) },
+        // The way out: scanned with the wrong account, or the password is not to hand. Nothing is
+        // lost, because nobody is signed in yet.
+        backLabel = "Start over",
+        onBack = onStartOver,
+    )
+}
+
+/**
+ * The one typed pane, worn by the number, the code and the password in turn.
+ *
+ * All three ask a single question, take a single line, and offer the same way back out, so they
+ * are one layout with different words rather than three that have to be kept looking alike.
+ */
+@Composable
+private fun LoginForm(
+    title: String,
+    blurb: String,
+    note: String?,
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    keyboardType: KeyboardType,
+    masked: Boolean,
+    error: String?,
+    submitLabel: String,
+    canSubmit: Boolean,
+    onSubmit: () -> Unit,
+    backLabel: String,
+    onBack: () -> Unit,
+) {
+    val focus = remember { FocusRequester() }
 
     // imePadding + scroll: the TV keyboard covers the lower half of the screen, and without
     // both of these the field being typed into sits behind it.
@@ -162,13 +335,10 @@ private fun PasswordPane(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("Two-step verification", style = MaterialTheme.typography.headlineLarge)
-            Text(
-                "Your Telegram account has a password. Enter it to finish signing in.",
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            if (hint.isNotBlank()) {
-                Text("Hint: $hint", style = MaterialTheme.typography.bodyMedium)
+            Text(title, style = MaterialTheme.typography.headlineLarge)
+            Text(blurb, style = MaterialTheme.typography.bodyLarge)
+            if (note != null) {
+                Text(note, style = MaterialTheme.typography.bodyMedium)
             }
 
             Box(
@@ -181,22 +351,29 @@ private fun PasswordPane(
                 contentAlignment = Alignment.CenterStart,
             ) {
                 BasicTextField(
-                    value = password,
-                    onValueChange = { password = it },
+                    value = value,
+                    onValueChange = onValueChange,
                     singleLine = true,
                     textStyle = MaterialTheme.typography.titleLarge.copy(color = TextPrimary),
                     cursorBrush = SolidColor(Accent),
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { onSubmit(password) }),
+                    visualTransformation = if (masked) {
+                        PasswordVisualTransformation()
+                    } else {
+                        VisualTransformation.None
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = keyboardType,
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { onSubmit() }),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus),
                     // Placeholder and field must be stacked, not siblings: emitted flat they
                     // are laid out one after the other and the text lands off to the side.
                     decorationBox = { inner ->
                         Box(contentAlignment = Alignment.CenterStart) {
-                            if (password.isEmpty()) {
+                            if (value.isEmpty()) {
                                 Text(
-                                    "Password",
+                                    placeholder,
                                     style = MaterialTheme.typography.titleLarge,
                                     color = TextMuted,
                                 )
@@ -209,22 +386,19 @@ private fun PasswordPane(
 
             if (error != null) {
                 // Red, not the accent blue: the accent is the focus colour on this very screen,
-                // so a wrong password painted in it reads as a status line rather than a problem.
+                // so a rejection painted in it reads as a status line rather than as a problem.
                 Text(error, style = MaterialTheme.typography.bodyLarge, color = Danger)
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    onClick = { onSubmit(password) },
-                    colors = tmButtonColors(),
-                    enabled = password.isNotEmpty(),
+                TmButton(
+                    onClick = onSubmit,
+                    enabled = canSubmit,
                 ) {
-                    Text("Sign in")
+                    Text(submitLabel)
                 }
-                // The way out: scanned with the wrong account, or the password is not to hand.
-                // Nothing is lost, because nobody is signed in yet.
-                Button(onClick = onScanAgain, colors = tmButtonColors()) {
-                    Text("Scan again")
+                TmSecondaryButton(onClick = onBack) {
+                    Text(backLabel)
                 }
             }
         }
@@ -235,6 +409,9 @@ private fun PasswordPane(
 
 private const val QR_PIXELS = 560
 
+// The shortest national numbers in use run to seven digits once the country code is counted, so
+// anything below this cannot be a real number and the button stays out of reach.
+private const val MIN_PHONE_DIGITS = 7
+
 // Duplicated from StateScaffold.kt, which declares the same value privately. Both should move into
 // the theme as a named error colour when someone next touches Theme.kt.
-private val Danger = Color(0xFFE5484D)

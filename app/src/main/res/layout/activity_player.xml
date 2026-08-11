@@ -26,12 +26,16 @@
     <!--
       Full-screen while the video opens: an opaque sheet, not a spinner floating over a black
       surface, so there is never a moment that reads as "nothing is happening".
+
+      Fully opaque, with no alpha at all. At 94 per cent the first frames of the video showed
+      through behind the text, which does not read as a deliberate scrim, only as a sheet that
+      has not finished drawing.
     -->
     <LinearLayout
         android:id="@+id/status_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#F00E0E12"
+        android:background="#0E0E12"
         android:gravity="center"
         android:orientation="vertical"
         android:paddingLeft="72dp"
@@ -112,7 +116,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
         android:layout_margin="32dp"
-        android:background="#CC17171E"
+        android:background="#17171E"
         android:paddingLeft="18dp"
         android:paddingTop="10dp"
         android:paddingRight="18dp"
@@ -131,7 +135,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
         android:layout_margin="32dp"
-        android:background="#CC17171E"
+        android:background="#17171E"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingLeft="18dp"
@@ -153,6 +157,25 @@
             android:textColor="@color/text_primary"
             android:textSize="14sp" />
     </LinearLayout>
+
+    <!--
+      What a touch gesture is doing, while it is doing it: the jump, the brightness, the volume.
+      A drag on a phone changes something the picture itself cannot show, so without a figure on
+      screen the viewer is adjusting blind. Never raised on a TV, which has buttons for all three.
+    -->
+    <TextView
+        android:id="@+id/gesture_hud"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="#17171E"
+        android:paddingLeft="20dp"
+        android:paddingTop="12dp"
+        android:paddingRight="20dp"
+        android:paddingBottom="12dp"
+        android:textColor="@color/text_primary"
+        android:textSize="16sp"
+        android:visibility="gone" />
 
     <!-- Track pickers are added here so they cover the video, not the other way round. -->
     <FrameLayout

@@ -32,6 +32,9 @@ androidx-compose-foundation = { group = "androidx.compose.foundation", name = "f
 androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 # Icons only. The "extended" set is thousands of vectors; core carries the handful used here.
 androidx-compose-material-icons = { group = "androidx.compose.material", name = "material-icons-core" }
+# The touch half of the app. tv-material's components are driven by focus and ignore a tap
+# outright, so a phone needs the ordinary Material 3 components behind the same screens.
+androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-tv-material = { group = "androidx.tv", name = "tv-material", version.ref = "tvMaterial" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
 androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycle" }

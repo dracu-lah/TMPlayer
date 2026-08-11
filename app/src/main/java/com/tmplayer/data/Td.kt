@@ -56,6 +56,17 @@ object Td {
     private val gate = Mutex()
     private var lastHandled: AuthorizationState? = null
 
+    /**
+     * The way the user chose to sign in, and the deferred that ends the current client's life.
+     *
+     * Both belong to the login flow rather than to a single update, because the choice has to
+     * survive being asked the same TDLib question twice and [replay] has no `closed` of its own.
+     */
+    private var method = SignInMethod.Undecided
+
+    @Volatile
+    private var closedSignal: CompletableDeferred<Unit>? = null
+
     private val _auth = MutableStateFlow<AuthState>(AuthState.Connecting)
     val auth: StateFlow<AuthState> = _auth.asStateFlow()
 
@@ -87,9 +98,11 @@ object Td {
             current = td
             _session.value = TdSession(td, generation.incrementAndGet())
             lastHandled = null
+            method = SignInMethod.Undecided
+            closedSignal = closed
 
             val updates = launch {
-                td.authorizationStateUpdates.collect { apply(td, it.authorizationState, closed) }
+                td.authorizationStateUpdates.collect { apply(td, it.authorizationState) }
             }
             val connection = launch {
                 td.connectionStateUpdates.collect { update ->
@@ -105,7 +118,7 @@ object Td {
             launch {
                 runCatching { td.setLogVerbosityLevel(1) }
                 val now = td.getAuthorizationState()
-                if (now is TdlResult.Success) apply(td, now.result, closed)
+                if (now is TdlResult.Success) apply(td, now.result)
             }
 
             closed.await()
@@ -117,11 +130,7 @@ object Td {
         }
     }
 
-    private suspend fun apply(
-        td: TdlClient,
-        state: AuthorizationState,
-        closed: CompletableDeferred<Unit>,
-    ) = gate.withLock {
+    private suspend fun apply(td: TdlClient, state: AuthorizationState) = gate.withLock {
         // The update flow and the one-off getAuthorizationState() often deliver the same state
         // back to back at startup. Acting twice would send TDLib its parameters twice and
         // surface the second attempt's error as a login failure. Comparing against only the
@@ -130,7 +139,7 @@ object Td {
         if (state == lastHandled) return@withLock
         lastHandled = state
 
-        val step = AuthReducer.reduce(state)
+        val step = AuthReducer.reduce(state, method)
         // Never let a stale "connecting" overwrite a terminal failure the user still needs to read.
         if (_auth.value !is AuthState.Failed || step.state !is AuthState.Connecting) {
             _auth.value = step.state
@@ -144,8 +153,66 @@ object Td {
                 if (result is TdlResult.Failure) _auth.value = AuthState.Failed(Failures.humanise(result.message))
             }
             AuthAction.OnReady -> onReady(td)
-            AuthAction.RecreateClient -> closed.complete(Unit)
+            AuthAction.RecreateClient -> closedSignal?.complete(Unit)
             AuthAction.None -> Unit
+        }
+    }
+
+    /**
+     * Runs the last TDLib state through the reducer again after [method] has moved.
+     *
+     * TDLib is not told anything here and sends nothing new: the state it is sitting in has simply
+     * come to mean something different, because the user has now said which way they are signing
+     * in. Clearing [lastHandled] is what lets the same state through the duplicate guard once more.
+     */
+    private suspend fun replay() {
+        val td = current ?: return
+        val state = gate.withLock { lastHandled.also { lastHandled = null } } ?: return
+        apply(td, state)
+    }
+
+    /** The user picked a route on the first login screen. */
+    suspend fun chooseSignInMethod(chosen: SignInMethod) {
+        method = chosen
+        replay()
+    }
+
+    /**
+     * Sends the phone number Telegram should text. Returns null on success, an error otherwise.
+     *
+     * The settings argument is left at TDLib's own default: flash calls and the SMS retriever both
+     * want permissions this app does not hold, and neither exists on a TV at all.
+     */
+    suspend fun submitPhoneNumber(phoneNumber: String): String? {
+        val td = current ?: return "Not connected"
+        return when (val result = td.setAuthenticationPhoneNumber(phoneNumber)) {
+            is TdlResult.Success -> null
+            is TdlResult.Failure -> {
+                _auth.value = AuthState.Phone(wrong = true)
+                if (result.message.contains("PHONE_NUMBER_INVALID")) {
+                    "That number isn't one Telegram recognises. Include the country code, as in +44."
+                } else {
+                    Failures.humanise(result.message)
+                }
+            }
+        }
+    }
+
+    /** Submits the login code Telegram sent. Returns null on success, an error otherwise. */
+    suspend fun submitCode(code: String): String? {
+        val td = current ?: return "Not connected"
+        val phoneNumber = (_auth.value as? AuthState.Code)?.phoneNumber.orEmpty()
+        return when (val result = td.checkAuthenticationCode(code)) {
+            is TdlResult.Success -> null
+            is TdlResult.Failure -> {
+                _auth.value = AuthState.Code(phoneNumber, wrong = true)
+                when {
+                    result.message.contains("PHONE_CODE_INVALID") -> "Wrong code"
+                    result.message.contains("PHONE_CODE_EXPIRED") ->
+                        "That code has expired. Start over to have a new one sent."
+                    else -> Failures.humanise(result.message)
+                }
+            }
         }
     }
 
@@ -206,15 +273,28 @@ object Td {
     }
 
     /**
-     * Abandons a half-finished sign-in and goes back to a fresh QR code.
+     * Abandons a half-finished sign-in and goes back to the choice of method.
      *
-     * The password step is a dead end otherwise: somebody who scanned with the wrong account, or
-     * who cannot remember the password, has nothing to press. Logging out here throws away an
-     * attempt rather than an account, since nobody is signed in yet.
+     * The password and code steps are dead ends otherwise: somebody who scanned with the wrong
+     * account, who cannot remember the password, or who typed the wrong number, has nothing to
+     * press. Logging out here throws away an attempt rather than an account, since nobody is
+     * signed in yet.
      */
     suspend fun restartSignIn() {
+        method = SignInMethod.Undecided
         _auth.value = AuthState.Connecting
         runCatching { current?.logOut() }
+    }
+
+    /**
+     * Steps back from the number entry to the choice of method.
+     *
+     * Nothing has been sent to Telegram yet at that point, so unlike [restartSignIn] this is a
+     * local change of mind and TDLib stays exactly where it is.
+     */
+    suspend fun cancelPhoneEntry() {
+        method = SignInMethod.Undecided
+        replay()
     }
 
     /** Waits for an authorized client and returns the generation it belongs to. */

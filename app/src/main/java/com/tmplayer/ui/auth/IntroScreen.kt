@@ -19,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.Button
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -33,7 +32,7 @@ import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
 import com.tmplayer.ui.theme.Tv
-import com.tmplayer.ui.theme.tmButtonColors
+import com.tmplayer.ui.components.TmButton
 
 /**
  * Shown once, before the QR code.
@@ -90,9 +89,8 @@ fun IntroScreen(onContinue: () -> Unit) {
             )
 
             Spacer(Modifier.size(10.dp))
-            Button(
+            TmButton(
                 onClick = onContinue,
-                colors = tmButtonColors(),
                 modifier = Modifier.focusRequester(focus),
             ) {
                 // Trailing, unlike the leading icons elsewhere: it points where the button goes.

@@ -23,6 +23,14 @@ val TextMuted = Color(0xFF9A9AA5)
 /** Amber: worth noticing, nothing has gone wrong. A newer version being out is the whole use. */
 val Caution = Color(0xFFF5A524)
 
+/**
+ * Red: something failed, or the press about to happen cannot be taken back.
+ *
+ * Lives here rather than beside each use because four files had grown their own copy of the same
+ * literal, and once one of them widened its visibility the rest stopped compiling.
+ */
+val Danger = Color(0xFFE5484D)
+
 private val colors = darkColorScheme(
     primary = Accent,
     onPrimary = Color.White,

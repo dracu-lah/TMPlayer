@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -54,6 +55,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,6 +68,7 @@ import com.tmplayer.data.Account
 import com.tmplayer.data.CardLayout
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
+import com.tmplayer.data.FormFactor
 import com.tmplayer.data.Updates
 import com.tmplayer.ui.components.MediaPreview
 import com.tmplayer.ui.components.ChatListSkeleton
@@ -157,37 +160,37 @@ fun BrowseScreen(
     var confirmClearHistory by remember { mutableStateOf(false) }
     var confirmClearFavorites by remember { mutableStateOf(false) }
 
-    Row(Modifier.fillMaxSize()) {
-        NavRail(
-            account = (state as? UiState.Content)?.value?.account,
-            selected = tab,
-            favoriteCount = favorites.size,
-            onSelect = { onPickTab(it); query = "" },
-            onOpenSettings = onOpenSettings,
-            updateVersion = updateVersion,
-            onUpdate = onUpdate,
-        )
+    // One question, answered by the shared detector, decides the whole shape of this screen: a
+    // permanent rail beside the listing on a television, a drawer behind a hamburger on a phone.
+    // Everything below the chrome is the same composition either way, told only how much room it
+    // has and how far in from the edge it may start.
+    val touch = !FormFactor.isTv(LocalContext.current)
+    val insets = if (touch) TouchInsets else TvInsets
+    // Fixed columns suit a screen whose size is known in advance; a phone's is not, and it turns
+    // when the viewer does, so the grid is asked for a tile width instead and works out the rest.
+    val tiles = if (touch) GridCells.Adaptive(TOUCH_TILE_MIN) else GridCells.Fixed(TILE_COLUMNS)
 
-        Column(Modifier.fillMaxSize().padding(end = Tv.SafeH)) {
-            StateScaffold(
-                state,
-                onRetry = onRetry,
-                loading = { ChatListSkeleton(layout = layout) },
-            ) { data ->
-                val visible = remember(data.chats, tab, favorites, query) {
-                    filterChats(data.chats, tab, favorites, query)
-                }
+    val pane: @Composable () -> Unit = {
+        StateScaffold(
+            state,
+            onRetry = onRetry,
+            loading = { ChatListSkeleton(layout = layout) },
+        ) { data ->
+            val visible = remember(data.chats, tab, favorites, query) {
+                filterChats(data.chats, tab, favorites, query)
+            }
 
-                Column(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize()) {
                     if (tab == BrowseTab.Continue) {
-                        Header(tab, continueWatching.size) {
-                            LayoutAction(layout, onToggleLayout)
+                        Header(tab, continueWatching.size, insets, touch) {
+                            LayoutAction(layout, touch, onToggleLayout)
                             // No Refresh here: this tab is read off this device and cannot be
                             // behind, so the button would be one that visibly does nothing.
                             if (continueWatching.isNotEmpty()) {
                                 HeaderAction(
                                     label = "Clear history",
                                     icon = Icons.Filled.Close,
+                                    touch = touch,
                                     onClick = { confirmClearHistory = true },
                                 )
                             }
@@ -199,25 +202,29 @@ fun BrowseScreen(
                             ContinueSection(
                                 records = continueWatching,
                                 layout = layout,
+                                insets = insets,
+                                tiles = tiles,
+                                autoFocus = !touch,
                                 onResume = onResumeMedia,
                                 onHold = { mediaMenu = it },
                             )
                         }
                     } else {
-                        Header(tab, visible.size) {
-                            LayoutAction(layout, onToggleLayout)
-                            RefreshAction(onRefresh)
+                        Header(tab, visible.size, insets, touch) {
+                            LayoutAction(layout, touch, onToggleLayout)
+                            RefreshAction(touch, onRefresh)
                             // Stars are added one at a time from a menu, so the only way back from
                             // a tab full of them is here, beside the tab they fill.
                             if (tab == BrowseTab.Favorites && favorites.isNotEmpty()) {
                                 HeaderAction(
                                     label = "Clear favourites",
                                     icon = Icons.Filled.Close,
+                                    touch = touch,
                                     onClick = { confirmClearFavorites = true },
                                 )
                             }
                         }
-                        SearchRow(query = query, onQuery = { query = it })
+                        SearchRow(query = query, insets = insets, onQuery = { query = it })
                         Spacer(Modifier.height(20.dp))
 
                         if (visible.isEmpty()) {
@@ -241,6 +248,9 @@ fun BrowseScreen(
                                     emptyList()
                                 },
                                 layout = layout,
+                                insets = insets,
+                                tiles = tiles,
+                                autoFocus = !touch,
                                 onOpenChat = onOpenChat,
                                 onHold = { chatMenu = it },
                                 launchChatId = launchChatId,
@@ -248,7 +258,33 @@ fun BrowseScreen(
                         }
                     }
                 }
-            }
+        }
+    }
+
+    if (touch) {
+        TouchBrowseShell(
+            account = (state as? UiState.Content)?.value?.account,
+            selected = tab,
+            favoriteCount = favorites.size,
+            onSelect = { onPickTab(it); query = "" },
+            onOpenSettings = onOpenSettings,
+            updateVersion = updateVersion,
+            onUpdate = onUpdate,
+            content = pane,
+        )
+    } else {
+        Row(Modifier.fillMaxSize()) {
+            NavRail(
+                account = (state as? UiState.Content)?.value?.account,
+                selected = tab,
+                favoriteCount = favorites.size,
+                onSelect = { onPickTab(it); query = "" },
+                onOpenSettings = onOpenSettings,
+                updateVersion = updateVersion,
+                onUpdate = onUpdate,
+            )
+
+            Column(Modifier.fillMaxSize().padding(end = Tv.SafeH)) { pane() }
         }
     }
 
@@ -342,6 +378,10 @@ fun BrowseScreen(
 private fun ContinueSection(
     records: List<ResumeRecord>,
     layout: CardLayout,
+    insets: BrowseInsets,
+    tiles: GridCells,
+    /** Only a remote needs somewhere to stand; on a phone a stolen focus only opens the keyboard. */
+    autoFocus: Boolean,
     onResume: (ResumeRecord) -> Unit,
     onHold: (ResumeRecord) -> Unit,
 ) {
@@ -353,7 +393,11 @@ private fun ContinueSection(
 
     // The same start inset the chat list uses, so the cards line up under their heading instead of
     // butting against the rail.
-    val padding = PaddingValues(start = 28.dp, end = 4.dp, bottom = Tv.SafeV)
+    val padding = PaddingValues(
+        start = insets.start,
+        end = insets.end,
+        bottom = insets.bottom,
+    )
 
     when (layout) {
         CardLayout.List -> LazyColumn(
@@ -371,7 +415,7 @@ private fun ContinueSection(
         }
 
         CardLayout.Grid -> LazyVerticalGrid(
-            columns = GridCells.Fixed(TILE_COLUMNS),
+            columns = tiles,
             contentPadding = padding,
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -390,8 +434,8 @@ private fun ContinueSection(
     // This is the landing tab for anyone with a video on the go, and the remote has nowhere to go
     // until something holds focus. Re-run on a change of arrangement too: switching rebuilds the
     // list from scratch, and the card that was holding focus leaves the composition with it.
-    LaunchedEffect(records.firstOrNull()?.messageId, layout) {
-        runCatching { first.requestFocus() }
+    LaunchedEffect(records.firstOrNull()?.messageId, layout, autoFocus) {
+        if (autoFocus) runCatching { first.requestFocus() }
     }
 }
 
@@ -795,13 +839,14 @@ private fun RailItem(
  * round for something the viewer can see the result of immediately.
  */
 @Composable
-private fun LayoutAction(layout: CardLayout, onToggle: () -> Unit) {
+private fun LayoutAction(layout: CardLayout, touch: Boolean, onToggle: () -> Unit) {
     HeaderAction(
         // A grid of squares and a stack of lines are the two pictures every phone and television
         // uses for this, so the words beside them were only saying it twice.
         label = if (layout == CardLayout.Grid) "As rows" else "As tiles",
         icon = if (layout == CardLayout.Grid) Icons.AutoMirrored.Filled.List else TmIcons.Grid,
         showLabel = false,
+        touch = touch,
         onClick = onToggle,
     )
 }
@@ -815,8 +860,13 @@ private fun LayoutAction(layout: CardLayout, onToggle: () -> Unit) {
  * and this app already draws that same glyph for two of those.
  */
 @Composable
-private fun RefreshAction(onRefresh: () -> Unit) {
-    HeaderAction(label = "Refresh", icon = Icons.Filled.Refresh, onClick = onRefresh)
+private fun RefreshAction(touch: Boolean, onRefresh: () -> Unit) {
+    HeaderAction(
+        label = "Refresh",
+        icon = Icons.Filled.Refresh,
+        touch = touch,
+        onClick = onRefresh,
+    )
 }
 
 /**
@@ -827,6 +877,9 @@ private fun RefreshAction(onRefresh: () -> Unit) {
  *
  * [label] is always given, even where [showLabel] hides it: it is what a screen reader announces,
  * and an icon with no name is a button nobody can identify.
+ *
+ * [touch] only sets a floor under the height. The chip is sized by its padding for a remote, which
+ * lands it a few dp short of the 48 dp a fingertip needs, and nothing else about it has to change.
  */
 @Composable
 private fun HeaderAction(
@@ -834,6 +887,7 @@ private fun HeaderAction(
     icon: ImageVector,
     onClick: () -> Unit,
     showLabel: Boolean = true,
+    touch: Boolean = false,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
@@ -846,6 +900,8 @@ private fun HeaderAction(
 
     Row(
         Modifier
+            .heightIn(min = if (touch) TOUCH_TARGET else 0.dp)
+            .widthIn(min = if (touch) TOUCH_TARGET else 0.dp)
             .clip(RoundedCornerShape(20.dp))
             .background(background)
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
@@ -853,6 +909,7 @@ private fun HeaderAction(
             // with a gap where the label used to be.
             .padding(horizontal = if (showLabel) 18.dp else 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
     ) {
         Icon(icon, contentDescription = label, tint = foreground, modifier = Modifier.size(20.dp))
         if (showLabel) {
@@ -863,7 +920,13 @@ private fun HeaderAction(
 }
 
 @Composable
-private fun Header(tab: BrowseTab, count: Int, action: @Composable () -> Unit = {}) {
+private fun Header(
+    tab: BrowseTab,
+    count: Int,
+    insets: BrowseInsets,
+    touch: Boolean,
+    action: @Composable () -> Unit = {},
+) {
     // A bare number after the blurb leaves the viewer to guess what was counted, so it always
     // carries its unit, and this one tab counts videos rather than chats.
     val unit = when {
@@ -873,11 +936,24 @@ private fun Header(tab: BrowseTab, count: Int, action: @Composable () -> Unit = 
         else -> "chats"
     }
     Row(
-        Modifier.fillMaxWidth().padding(start = 28.dp, top = Tv.SafeV, bottom = 12.dp),
+        Modifier.fillMaxWidth().padding(
+            start = insets.start,
+            end = insets.end,
+            top = insets.top,
+            bottom = 12.dp,
+        ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(tab.heading, style = MaterialTheme.typography.headlineLarge, color = TextPrimary)
+            // The top app bar already carries the heading on a phone, and saying it twice, one
+            // line apart, reads as a mistake rather than as emphasis.
+            if (!touch) {
+                Text(
+                    tab.heading,
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = TextPrimary,
+                )
+            }
             Text(
                 if (count > 0) "${tab.blurb}  ·  $count $unit" else tab.blurb,
                 style = MaterialTheme.typography.bodyMedium,
@@ -896,11 +972,11 @@ private fun Header(tab: BrowseTab, count: Int, action: @Composable () -> Unit = 
 }
 
 @Composable
-private fun SearchRow(query: String, onQuery: (String) -> Unit) {
+private fun SearchRow(query: String, insets: BrowseInsets, onQuery: (String) -> Unit) {
     val startVoice = rememberVoiceSearch("Say a chat name", onQuery)
     val searchField = remember { FocusRequester() }
     Row(
-        Modifier.fillMaxWidth().padding(start = 28.dp),
+        Modifier.fillMaxWidth().padding(start = insets.start, end = insets.end),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -978,6 +1054,10 @@ private fun ChatSection(
     favorites: Set<Long>,
     recent: List<ChatSummary>,
     layout: CardLayout,
+    insets: BrowseInsets,
+    tiles: GridCells,
+    /** Only a remote needs somewhere to stand; on a phone a stolen focus only opens the keyboard. */
+    autoFocus: Boolean,
     onOpenChat: (ChatSummary) -> Unit,
     onHold: (ChatSummary) -> Unit,
     launchChatId: Long,
@@ -995,7 +1075,11 @@ private fun ChatSection(
     when (layout) {
         CardLayout.List -> LazyColumn(
             Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 28.dp, bottom = Tv.SafeV),
+            contentPadding = PaddingValues(
+                start = insets.start,
+                end = insets.end,
+                bottom = insets.bottom,
+            ),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             if (recent.isNotEmpty()) {
@@ -1045,11 +1129,15 @@ private fun ChatSection(
         }
 
         CardLayout.Grid -> LazyVerticalGrid(
-            columns = GridCells.Fixed(TILE_COLUMNS),
+            columns = tiles,
             modifier = Modifier.fillMaxSize(),
             // The end inset keeps a focused tile in the last column from having its border
             // clipped by the panel edge, which the rows never had to worry about.
-            contentPadding = PaddingValues(start = 28.dp, end = 4.dp, bottom = Tv.SafeV),
+            contentPadding = PaddingValues(
+                start = insets.start,
+                end = insets.end,
+                bottom = insets.bottom,
+            ),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -1068,8 +1156,8 @@ private fun ChatSection(
 
     // The remote has nowhere to go until something holds focus. Switching arrangement is included:
     // it rebuilds the list, and the card that was holding focus goes with the old one.
-    LaunchedEffect(chats.firstOrNull()?.id, recent.firstOrNull()?.id, layout) {
-        runCatching { first.requestFocus() }
+    LaunchedEffect(chats.firstOrNull()?.id, recent.firstOrNull()?.id, layout, autoFocus) {
+        if (autoFocus) runCatching { first.requestFocus() }
     }
 }
 
@@ -1286,3 +1374,27 @@ private val RECENT_TILE_HEIGHT = 154.dp
  * and a fourth column would leave each tile too narrow for a chat name to survive it.
  */
 private const val TILE_COLUMNS = 3
+
+/**
+ * The narrowest a tile may be before the grid drops a column.
+ *
+ * A phone held upright has about 400 dp to spend, so this is what puts two tiles across it and
+ * four or five across the same phone turned on its side, without either arrangement being spelled
+ * out anywhere.
+ */
+private val TOUCH_TILE_MIN = 168.dp
+
+/** The smallest thing a fingertip can be asked to hit, which is Android's own figure. */
+private val TOUCH_TARGET = 48.dp
+
+/**
+ * How far the listing keeps from each edge.
+ *
+ * A television crops its outermost few percent, so the TV figures are overscan clearance and have
+ * nothing to do with taste. A phone crops nothing, and spending 32 dp a side of a 400 dp screen on
+ * a margin that exists to defeat a cathode ray tube is a third of a tile thrown away.
+ */
+private class BrowseInsets(val start: Dp, val end: Dp, val top: Dp, val bottom: Dp)
+
+private val TvInsets = BrowseInsets(start = 28.dp, end = 4.dp, top = Tv.SafeV, bottom = Tv.SafeV)
+private val TouchInsets = BrowseInsets(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)

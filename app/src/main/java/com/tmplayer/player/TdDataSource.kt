@@ -52,18 +52,29 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
     private var size = 0L
 
     /**
-     * Everything below [windowEnd] has already been confirmed on disk, so reads under it need no
-     * call to TDLib at all.
+     * The stretch of the file a real [TdFile] last confirmed was on disk, so reads inside it need
+     * no call to TDLib at all.
      *
      * This is the difference between smooth playback and a stutter every few seconds: Media3's
      * extractors issue a great many small reads, and asking TDLib about the file on each one puts
      * a request round-trip in front of every byte.
+     *
+     * Held as one value rather than a pair of fields because both ends have to move together. A
+     * reader that caught a new start against an old end would be trusting a window that never
+     * existed, which is the same class of bug as trusting no start at all.
      */
     @Volatile
-    private var windowEnd = 0L
+    private var window = Window.EMPTY
 
     @Volatile
     private var completed = false
+
+    /** Bytes `[start, end)` of the file, as TDLib last reported them. */
+    private data class Window(val start: Long, val end: Long) {
+        companion object {
+            val EMPTY = Window(0, 0)
+        }
+    }
 
     override fun getUri(): Uri? = uri
 
@@ -115,7 +126,7 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
             // re-created underneath us. Drop the cached window too, so the next read goes back
             // and asks TDLib what is really there instead of trusting a stale boundary.
             closeHandle()
-            windowEnd = 0
+            window = Window.EMPTY
             completed = false
             throw EOFException("Short read at $position of file $fileId")
         }
@@ -130,7 +141,7 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
         closeHandle()
         // Media3 may reopen this instance at a different offset; nothing learned about the old
         // window is safe to carry across.
-        windowEnd = 0
+        window = Window.EMPTY
         completed = false
         uri = null
         if (opened) {
@@ -142,14 +153,26 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
     /**
      * How many bytes at [target] are already known-good, or `null` if TDLib has to be asked.
      *
-     * Never optimistic: it only answers from a boundary that a real [TdFile] confirmed earlier,
-     * and any doubt returns `null` so the slow path re-checks.
+     * Never optimistic: it only answers from a window that a real [TdFile] confirmed earlier, and
+     * any doubt returns `null` so the slow path re-checks.
+     *
+     * Both ends of that window matter. TDLib fills one stretch at a time and frees what falls
+     * outside it, but the partial file on disk keeps its length, so a read below the window
+     * succeeds and hands back a hole instead of failing. Seeking forward and then back put the
+     * player exactly there: the window had moved on, the bytes underneath were gone, and the
+     * extractor was handed zeroes and died on them. Checking only the far end is what let that
+     * through, so the arithmetic is deferred to [DownloadWindow] rather than repeated here.
      */
     private fun cachedAvailable(target: Long): Long? {
         if (localPath == null) return null
-        if (completed) return (size - target).coerceAtLeast(0).takeIf { it > 0 }
-        val ahead = windowEnd - target
-        return if (ahead > 0) ahead else null
+        val known = window
+        return DownloadWindow.availableAt(
+            position = target,
+            size = size,
+            downloadOffset = known.start,
+            downloadedPrefixSize = known.end - known.start,
+            completed = completed,
+        ).takeIf { it > 0 }
     }
 
     /** Records what a fresh [TdFile] tells us, so later reads can skip the round-trip. */
@@ -176,10 +199,11 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
         )
         if (availability == LocalFileAvailability.Complete) {
             completed = true
-            windowEnd = size
+            window = Window(0, size)
         } else {
             completed = false
-            windowEnd = file.local.downloadOffset + file.local.downloadedPrefixSize
+            val start = file.local.downloadOffset
+            window = Window(start, start + file.local.downloadedPrefixSize)
         }
     }
 

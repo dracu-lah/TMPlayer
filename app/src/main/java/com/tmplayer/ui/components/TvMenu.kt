@@ -37,6 +37,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.SurfaceRaised
@@ -197,4 +198,3 @@ private fun MenuRow(action: MenuAction, modifier: Modifier = Modifier) {
     }
 }
 
-private val Danger = Color(0xFFE5484D)
