@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!--
+      The themed icon is a silhouette: Android throws away these colours and refills the whole
+      layer with one wallpaper tint, so a shape that relied on a fill difference would merge into
+      its neighbour and vanish. The screen is therefore drawn as four bars of frame rather than a
+      filled panel, which leaves the play triangle standing in a hole instead of on top of a slab.
+      Geometry matches ic_launcher_foreground so the themed and coloured icons sit identically.
+    -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M31,33 H77 V37.5 H31 Z M31,60.5 H77 V65 H31 Z M31,33 H35.5 V65 H31 Z M72.5,33 H77 V65 H72.5 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,41 L64,49 L48,57 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36.5,70 H55.5 A2.5,2.5 0 0 1 55.5,75 H36.5 A2.5,2.5 0 0 1 36.5,70 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M66.5,70 H71.5 A2.5,2.5 0 0 1 71.5,75 H66.5 A2.5,2.5 0 0 1 66.5,70 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M56.5,72.5 A5.5,5.5 0 1 1 67.5,72.5 A5.5,5.5 0 1 1 56.5,72.5 Z" />
+</vector>

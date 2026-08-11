@@ -2,4 +2,11 @@
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@drawable/ic_launcher_background" />
     <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <!--
+      Themed icons: on Android 13 and later the launcher tints this single layer to the wallpaper
+      palette. Without it the app is the one coloured square on an otherwise themed home screen.
+      It is a separate drawable from the foreground because the tint collapses every fill to one
+      colour, which a layer built out of contrasting fills cannot survive.
+    -->
+    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />
 </adaptive-icon>

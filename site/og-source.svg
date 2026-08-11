@@ -5,13 +5,19 @@
   <rect x="40" y="40" width="1120" height="550" rx="2" fill="none" stroke="#2d2d39" stroke-width="2"/>
   <path d="M40 40h248" stroke="#2aabee" stroke-width="4"/>
 
-  <g transform="translate(84 80) scale(.082)">
-    <rect width="1024" height="1024" rx="196" fill="#1e1e28"/>
-    <rect x="88" y="112" width="848" height="560" rx="36" fill="#0e0e12"/>
-    <path d="M390 246 682 392 390 538Z" fill="#ededf2"/>
-    <rect x="128" y="806" width="470" height="46" rx="23" fill="#2aabee"/>
-    <rect x="700" y="806" width="196" height="46" rx="23" fill="#3a3a46"/>
-    <circle cx="650" cy="829" r="72" fill="#ededf2"/>
+  <!-- The launcher mark, at the same geometry as site/logo.svg and the Android adaptive icon. -->
+  <g transform="translate(84 80) scale(.7778)">
+    <rect width="108" height="108" rx="24" fill="#1e1e28"/>
+    <!-- Zoomed like the favicon: a social card never masks the tile, so the safe circle's margin
+         would only make the mark small at the one size an unfurler shows it. -->
+    <g transform="translate(-18.9 -18.9) scale(1.35)">
+    <path fill="#3a3a46" d="M36,33 H72 A5,5 0 0 1 77,38 V60 A5,5 0 0 1 72,65 H36 A5,5 0 0 1 31,60 V38 A5,5 0 0 1 36,33 Z"/>
+    <path fill="#0e0e12" d="M36,34.5 H72 A3.5,3.5 0 0 1 75.5,38 V60 A3.5,3.5 0 0 1 72,63.5 H36 A3.5,3.5 0 0 1 32.5,60 V38 A3.5,3.5 0 0 1 36,34.5 Z"/>
+    <path fill="#ededf2" d="M48,40.5 L65,49 L48,57.5 Z"/>
+    <path fill="#2aabee" d="M36.5,70 H55.5 A2.5,2.5 0 0 1 55.5,75 H36.5 A2.5,2.5 0 0 1 36.5,70 Z"/>
+    <path fill="#3a3a46" d="M66.5,70 H71.5 A2.5,2.5 0 0 1 71.5,75 H66.5 A2.5,2.5 0 0 1 66.5,70 Z"/>
+    <circle cx="62" cy="72.5" r="5.5" fill="#ededf2"/>
+    </g>
   </g>
   <text x="190" y="136" fill="#ededf2" font-family="Noto Sans, sans-serif" font-size="48" font-weight="700">TMPlayer</text>
   <text x="84" y="290" fill="#ededf2" font-family="Noto Sans, sans-serif" font-size="66" font-weight="700" letter-spacing="-2">Your Telegram videos,</text>

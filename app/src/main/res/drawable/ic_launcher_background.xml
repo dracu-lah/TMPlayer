@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Solid black: the launcher masks this to whatever shape it uses, so it must be full-bleed. -->
+<!--
+  The player tile's own surface colour, flooded across the whole layer. The launcher crops this to
+  whatever shape it likes, so it must be full bleed, and it is now the only thing that reaches the
+  edge: the mark itself stays in the safe circle on the foreground layer.
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="@android:color/black" />
+    <solid android:color="#1E1E28" />
 </shape>

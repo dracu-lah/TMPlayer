@@ -5,29 +5,30 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     <!--
-      Only the middle 72 of these 108 units is guaranteed to survive the launcher's mask, and
-      it may animate within the rest. 1024 units of artwork are mapped onto 62 and centred, so
-      the tile's own corners are never the thing that gets clipped.
+      Every shape below is kept inside a circle of radius 31 around the centre of the 108 unit
+      canvas. A circular or pill launcher mask only guarantees the middle 66 units, and the
+      Android 12 splash screen is tighter still at roughly the middle 65, so anything further out
+      than that comes back to the user with a corner sliced off. The old mark drew the whole
+      player tile edge to edge and lost its corners in both places; the tile is now the background
+      layer's job, and the foreground carries only the screen, the play triangle and the progress
+      bar that the mark has always been about.
     -->
-    <group
-        android:scaleX="0.060547"
-        android:scaleY="0.060547"
-        android:translateX="23"
-        android:translateY="23">
-        <path
-            android:fillColor="#1E1E28"
-            android:pathData="M960 1002.666667H64a42.666667 42.666667 0 0 1-42.666667-42.666667V64a42.666667 42.666667 0 0 1 42.666667-42.666667h896a42.666667 42.666667 0 0 1 42.666667 42.666667v896a42.666667 42.666667 0 0 1-42.666667 42.666667z" />
-        <path
-            android:fillColor="#0E0E12"
-            android:pathData="M64 64h896v682.666667H64z" />
-        <path
-            android:fillColor="#3A3A46"
-            android:pathData="M896 896H597.333333a21.333333 21.333333 0 1 1 0-42.666667h298.666667a21.333333 21.333333 0 1 1 0 42.666667z" />
-        <path
-            android:fillColor="#2AABEE"
-            android:pathData="M661.333333 896H128a21.333333 21.333333 0 1 1 0-42.666667h533.333333a21.333333 21.333333 0 1 1 0 42.666667z" />
-        <path
-            android:fillColor="#EDEDF2"
-            android:pathData="M640 960c-47.04 0-85.333333-38.293333-85.333333-85.333333s38.293333-85.333333 85.333333-85.333334 85.333333 38.293333 85.333333 85.333334-38.293333 85.333333-85.333333 85.333333zM426.666667 554.666667a21.269333 21.269333 0 0 1-21.333334-21.333334V277.333333a21.333333 21.333333 0 0 1 33.173334-17.749333l192 128a21.333333 21.333333 0 0 1 0 35.498667l-192 128A21.333333 21.333333 0 0 1 426.666667 554.666667z" />
-    </group>
+    <path
+        android:fillColor="#3A3A46"
+        android:pathData="M36,33 H72 A5,5 0 0 1 77,38 V60 A5,5 0 0 1 72,65 H36 A5,5 0 0 1 31,60 V38 A5,5 0 0 1 36,33 Z" />
+    <path
+        android:fillColor="#0E0E12"
+        android:pathData="M36,34.5 H72 A3.5,3.5 0 0 1 75.5,38 V60 A3.5,3.5 0 0 1 72,63.5 H36 A3.5,3.5 0 0 1 32.5,60 V38 A3.5,3.5 0 0 1 36,34.5 Z" />
+    <path
+        android:fillColor="#EDEDF2"
+        android:pathData="M48,40.5 L65,49 L48,57.5 Z" />
+    <path
+        android:fillColor="#2AABEE"
+        android:pathData="M36.5,70 H55.5 A2.5,2.5 0 0 1 55.5,75 H36.5 A2.5,2.5 0 0 1 36.5,70 Z" />
+    <path
+        android:fillColor="#3A3A46"
+        android:pathData="M66.5,70 H71.5 A2.5,2.5 0 0 1 71.5,75 H66.5 A2.5,2.5 0 0 1 66.5,70 Z" />
+    <path
+        android:fillColor="#EDEDF2"
+        android:pathData="M56.5,72.5 A5.5,5.5 0 1 1 67.5,72.5 A5.5,5.5 0 1 1 56.5,72.5 Z" />
 </vector>
