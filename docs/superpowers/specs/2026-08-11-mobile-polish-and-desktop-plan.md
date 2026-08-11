@@ -442,30 +442,37 @@ phase, spot-check TV: D-pad browse, chat open, playback, track picker, settings.
 - [x] Plan rewritten (desktop dropped, audits merged)
 - [x] Phase A: correctness fixes (A1 to A11, all landed)
 - [x] Phase C: Fuzzy.kt + tests, chat filter, video search fallback
-- [x] Phase B: phone-native redesign, except the parts noted below
+- [x] Phase B: phone-native redesign
   - [x] B1 theme, B2 rows, B3 app-bar search, B4 toolbar actions (icon-only refresh on TV too),
         B5 blurbs out, B6 media-grid app bar and dense grid, B7 Settings, B8 dialogs and sheets,
         B9 ripple, B11 player chrome, B12 copy, B13 system integration, B14 skeletons
-  - [ ] B7 remainder: M3 `RangeSlider` for the size filter (the touch stepper row is unchanged)
-  - [ ] B8 remainder: `UpdateDialog` is still the hand-built one; `Toast` is still the platform
-        toast rather than a Snackbar (it survives the screen that raised it going away, which is
-        the case it exists for, and a Snackbar would need a host on screens that have no Scaffold)
-  - [ ] B10 full consistency sweep and B15 remainder (storage-bar description, player HUD
-        live regions)
-- [~] Phase D: D1, D2, D4, D5, D6 (watch again), D9, D12 landed.
-      Outstanding: D3 (MediaSession and PiP), D7 (TV speed), D8 (aspect and pinch),
-      D10 (orientation), D11 (gesture and controller event routing), D13 (metered guard)
-- [~] Phase E: E1 (repository off Main, parallel getChat), E2 (no full sync on Back),
-      E3 (ViewModel store scoped to the screen), E4 (real equality, hoisted qualityTags,
-      revision counter gone), E5 (heap-sized LRU, onTrimMemory), E6 (history capped at 200),
-      E7 (HUD throttled), E13 (proguard, locale filters) landed.
-      Outstanding: E8 (TdDataSource shape), E9 (cache story), E10 (flood-wait backoff),
-      E11 (cold-start snapshot and live chat updates), E12 (track sanity), E14 (seam tests)
-- [~] Phase G: README and site copy updated. Screenshots NOT retaken: it needs the app running on
-      a real phone, which this pass could not do. `docs/screenshots/` and `site/screenshots/` still
-      show the old TV-scaled phone UI.
+  - [x] B7 remainder: M3 `RangeSlider` for the size filter on touch, figures above the thumbs
+  - [x] B8 remainder: `UpdateDialog` is Material's `AlertDialog` with a `LinearProgressIndicator`
+        on touch; the TV keeps its focus-driven panel
+  - [~] B15: storage-bar description, player HUD live regions and `Role.Button` on the country
+        row all landed. B10's consistency sweep (corner radii, avatar sizes, merging the two
+        empty states) has NOT been done: it is a broad visual change and there was no device to
+        check it on.
+  - [ ] B8, deliberately not done: `Toast` stays the platform toast rather than a Snackbar. It
+        survives the screen that raised it going away, which is the case it exists for, and a
+        Snackbar would need a host on screens that have no Scaffold.
+- [x] Phase D: D1 to D13 all landed. D3 is a `MediaSession` plus phone PiP; D7 adds a television
+      speed action and persists the choice; D8 cycles fit / crop / stretch and pinches on touch;
+      D10 follows the video's own shape; D11 routes gestures from the activity so the transport
+      row no longer swallows them; D13 is the metered guard and the Wi-Fi-only setting.
+- [~] Phase E: E1 to E7 and E13 as before. Now also E10 (flood wait kept as a number, sync says
+      whether it finished, the connection wait is time-boxed, Refresh holds off), E11 (cold-start
+      snapshot, live title and photo updates), E12 (a resolution-specific decoder message),
+      E14 (tests for the new seams), and the parts of E8 and E9 below.
+      Outstanding: E8's long-lived `fileUpdates` subscription in `TdDataSource` (the back buffer
+      and the timeout shape landed; keeping the window warm from one subscription did not, and it
+      wants a device to measure on). E9's storage breakdown in the Settings card (the ceiling and
+      the sweep that includes photos and thumbnails landed; the card still shows one figure).
+      E11's chat reordering, which still waits for the next sync.
+- [~] Phase G: README and site copy updated; screenshots retaken on real hardware for v1.3.0 and
+      not since. The drawer changed shape in v1.4.0, so the phone shots are now out of date.
 - [x] Verification: `./gradlew test`, `assembleDebug` and `assembleRelease` all green; dash check
-      clean. Manual QA on a phone and on the stick has NOT been done.
+      clean. Manual QA on a phone and on the stick has NOT been done: no device was attached.
 
 ## Shipped as v1.3.0 on 2026-08-11
 
@@ -475,5 +482,13 @@ The fixture navigates now, so the site's hero clip is one recording rather than 
 The launcher icon was redrawn inside the adaptive-icon safe circle, and the site was rebuilt around
 CSS device frames with a four-step walkthrough.
 
-Still outstanding, unchanged: the Phase D and E items listed above, the M3 RangeSlider, the
-UpdateDialog, and manual QA on the stick.
+## Shipped as v1.4.0 on 2026-08-12
+
+The rest of Phase D, the Material remainder of Phase B, and the Phase E items listed above. Also,
+outside the plan and asked for directly: the phone's navigation drawer was rebuilt. It opened with
+a mark, an app name, an avatar, a name and a handle stacked over seven flat destinations; it now
+has a single brand row, the three tabs about the viewer's own watching, a headed group for the
+four ways of slicing the chat list, and the account demoted to a one-line footer carrying the
+build number.
+
+Nothing in this release has been run on hardware. Every item above was built and unit-tested only.
