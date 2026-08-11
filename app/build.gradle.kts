@@ -135,6 +135,9 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.media3.ui.leanback)
+    // The transport controls the system draws for us: notification, lock screen, headset
+    // buttons and the Assistant, none of which the app has to lay out itself.
+    implementation(libs.androidx.media3.session)
     implementation(libs.androidx.leanback)
     implementation(libs.androidx.fragment.ktx)
     implementation(libs.nextlib.media3ext)

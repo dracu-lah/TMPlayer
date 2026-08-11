@@ -4,10 +4,12 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.tmplayer.player.PlaybackSpeed
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -21,6 +23,8 @@ private val OVERVIEW_SEEN = booleanPreferencesKey("overview_seen")
 private val OPEN_LAST_CHAT = booleanPreferencesKey("open_last_chat")
 private val DOWNLOAD_FIRST = booleanPreferencesKey("download_before_playing")
 private val AUTOPLAY_NEXT = booleanPreferencesKey("autoplay_next")
+private val WIFI_ONLY = booleanPreferencesKey("wifi_only_downloads")
+private val PLAYBACK_SPEED = floatPreferencesKey("playback_speed")
 private val LAST_CHAT = longPreferencesKey("last_chat")
 private val MIN_SIZE = longPreferencesKey("min_size_bytes")
 private val MAX_SIZE = longPreferencesKey("max_size_bytes")
@@ -144,6 +148,39 @@ class SettingsStore(private val context: Context) {
     /** Read once at the start of playback, where a flow that has not emitted yet would lie. */
     suspend fun downloadBeforePlayingNow(): Boolean =
         context.prefs.data.first()[DOWNLOAD_FIRST] ?: false
+
+    /**
+     * Refuse to fetch video over a connection the viewer pays for by the byte.
+     *
+     * Off by default, because a great many people watch on mobile data by choice and an app that
+     * silently refuses to play is worse than one that asks. On, it is absolute: a video that is
+     * not already downloaded will not open until there is Wi-Fi.
+     */
+    val wifiOnlyDownloads: Flow<Boolean> = context.prefs.data.map { it[WIFI_ONLY] ?: false }
+
+    suspend fun setWifiOnlyDownloads(value: Boolean) {
+        context.prefs.edit { it[WIFI_ONLY] = value }
+    }
+
+    /** Read at the start of playback, where the flow's first emission has not arrived yet. */
+    suspend fun wifiOnlyDownloadsNow(): Boolean = context.prefs.data.first()[WIFI_ONLY] ?: false
+
+    /**
+     * The speed the last video was left at, applied to the next one.
+     *
+     * Somebody who watches everything at 1.25x should say so once rather than every episode, and
+     * on a television there is no gear menu to say it in twice.
+     */
+    val playbackSpeed: Flow<Float> = context.prefs.data.map {
+        PlaybackSpeed.sanitise(it[PLAYBACK_SPEED] ?: PlaybackSpeed.DEFAULT)
+    }
+
+    suspend fun setPlaybackSpeed(value: Float) {
+        context.prefs.edit { it[PLAYBACK_SPEED] = PlaybackSpeed.sanitise(value) }
+    }
+
+    suspend fun playbackSpeedNow(): Float =
+        PlaybackSpeed.sanitise(context.prefs.data.first()[PLAYBACK_SPEED] ?: PlaybackSpeed.DEFAULT)
 
     // ---- size filter ------------------------------------------------------------------------
 

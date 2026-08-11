@@ -6,7 +6,7 @@ import android.media.AudioManager
 import android.provider.Settings
 import android.view.GestureDetector
 import android.view.MotionEvent
-import android.view.View
+import android.view.ScaleGestureDetector
 import android.view.Window
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -20,15 +20,28 @@ import kotlin.math.roundToInt
  * volume. Everything is worked out from the view it is attached to, so nothing is carried between
  * one drag and the next beyond the drag in progress.
  *
- * Attached as a touch listener that never consumes the event, so Media3's own controller still
- * gets the single tap that raises and hides it.
+ * Fed from the activity's own [android.app.Activity.dispatchTouchEvent] rather than attached to
+ * the video view, and it never consumes an event, so Media3's controller still gets the tap that
+ * raises and hides it. Hanging this off the view was the bug: the moment the controller came up,
+ * its buttons and its scrub bar were the views under the finger, the video view saw nothing, and
+ * double-tap seek and both drags silently stopped working for as long as the row was on screen.
  */
 class PlayerGestures(
     context: Context,
     private val window: Window,
     private val onSkip: (Long) -> Unit,
     private val onFeedback: (String) -> Unit,
+    private val onPinch: (expanding: Boolean) -> Unit = {},
 ) {
+
+    /**
+     * True while the transport row is up, in which case vertical drags are left alone.
+     *
+     * The row is what the finger came for: the scrub bar is a horizontal drag but a thumb rarely
+     * travels in a straight line, and stealing that as a volume change would make the one control
+     * everybody uses unreliable. Double taps and pinches still work, since neither collides.
+     */
+    var controlsVisible = false
 
     private val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
@@ -74,6 +87,7 @@ class PlayerGestures(
             ): Boolean {
                 val from = start ?: return false
                 if (viewHeight <= 0) return false
+                if (controlsVisible || scaling) return false
                 if (dragKind == DRAG_NONE && !begin(from, distanceX, distanceY)) return false
 
                 // Measured from where the finger went down rather than summed step by step, so a
@@ -89,18 +103,59 @@ class PlayerGestures(
         },
     )
 
+    /** True between the first and last finger of a pinch, so no drag is read out of it. */
+    private var scaling = false
+
+    private val scaleDetector = ScaleGestureDetector(
+        context,
+        object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+
+            override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                scaling = true
+                dragKind = DRAG_NONE
+                return true
+            }
+
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                // One step per pinch, not one per frame: the control has three stops, and
+                // reporting every intermediate scale factor would run through all of them
+                // before the fingers had finished moving.
+                if (detector.scaleFactor > 1f + PINCH_THRESHOLD) {
+                    onPinch(true)
+                    return true
+                }
+                if (detector.scaleFactor < 1f - PINCH_THRESHOLD) {
+                    onPinch(false)
+                    return true
+                }
+                return false
+            }
+
+            override fun onScaleEnd(detector: ScaleGestureDetector) {
+                scaling = false
+            }
+        },
+    )
+
+    /**
+     * Offers one touch event to the gestures. Always returns false: nothing here consumes.
+     *
+     * [width] and [height] are the video surface's, which is the frame the left half, right half
+     * and drag range are all measured against.
+     */
     @SuppressLint("ClickableViewAccessibility")
-    fun attach(view: View) {
-        view.setOnTouchListener { touched, event ->
-            viewWidth = touched.width
-            viewHeight = touched.height
-            detector.onTouchEvent(event)
-            val finished = event.actionMasked == MotionEvent.ACTION_UP ||
-                event.actionMasked == MotionEvent.ACTION_CANCEL
-            if (finished) dragKind = DRAG_NONE
-            // Never consumed: the controller still owns the tap that raises it.
-            false
+    fun onTouchEvent(event: MotionEvent, width: Int, height: Int): Boolean {
+        viewWidth = width
+        viewHeight = height
+        scaleDetector.onTouchEvent(event)
+        detector.onTouchEvent(event)
+        val finished = event.actionMasked == MotionEvent.ACTION_UP ||
+            event.actionMasked == MotionEvent.ACTION_CANCEL
+        if (finished) {
+            dragKind = DRAG_NONE
+            scaling = false
         }
+        return false
     }
 
     /**
@@ -167,5 +222,8 @@ class PlayerGestures(
         const val DRAG_RANGE = 0.7f
 
         const val MIN_BRIGHTNESS = 0.02f
+
+        /** How far apart the fingers have to travel before it counts as a deliberate pinch. */
+        const val PINCH_THRESHOLD = 0.15f
     }
 }

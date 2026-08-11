@@ -1,11 +1,16 @@
 package com.tmplayer.player
 
 import android.annotation.SuppressLint
+import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
 import android.os.SystemClock
+import android.util.Rational
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
@@ -25,6 +30,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem as Media3Item
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -32,6 +38,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.session.MediaSession
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
@@ -48,6 +55,8 @@ import com.tmplayer.data.MediaName
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.LocalFileAvailability
+import com.tmplayer.data.MeteredDecision
+import com.tmplayer.data.MeteredPolicy
 import com.tmplayer.data.LocalFilePolicy
 import com.tmplayer.data.NetworkMonitor
 import com.tmplayer.data.NetworkStatus
@@ -65,6 +74,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -134,6 +144,28 @@ class PlayerActivity : FragmentActivity() {
     /** True until the picture first appears; after that a stall is a chip, not a full sheet. */
     private var openingFilm = true
     private val speed = SpeedMeter()
+
+    /**
+     * The transport controls the system draws: notification, lock screen, headset and Assistant.
+     *
+     * Held for the life of the activity because it is the activity that owns the player. There is
+     * no service behind it on purpose: playback cannot outlive this screen anyway, and a service
+     * would only be a second lifetime to keep in step with this one.
+     */
+    private var mediaSession: MediaSession? = null
+
+    /** How the picture is fitted to the screen, and the speed it plays at. Both are remembered. */
+    private var videoScale = VideoScale.Fit
+    private var playbackSpeed = PlaybackSpeed.DEFAULT
+
+    /** The picture's own shape, once the decoder has reported it. Zero until then. */
+    private var videoWidth = 0
+    private var videoHeight = 0
+
+    /** True while the activity is a thumbnail in the corner of somebody else's screen. */
+    private var inPictureInPicture = false
+
+    private var gestures: PlayerGestures? = null
 
     /** True while the transport row is up: the download figure is shown alongside it. */
     private var controlsUp = false
@@ -260,9 +292,12 @@ class PlayerActivity : FragmentActivity() {
                 showError("This video isn't fully downloaded. Connect to the internet and try again.")
                 return@launch
             }
+            if (!allowedOnThisConnection(availability)) return@launch
             val downloadFirst = runCatching { settings.downloadBeforePlayingNow() }
                 .getOrDefault(false)
             if (downloadFirst && !fetchWholeFilm()) return@launch
+            playbackSpeed = runCatching { settings.playbackSpeedNow() }
+                .getOrDefault(PlaybackSpeed.DEFAULT)
             if (!session.isCurrent()) return@launch
             startPlayback(session.client)
         }
@@ -278,6 +313,7 @@ class PlayerActivity : FragmentActivity() {
             built.playWhenReady = true
         }
         player = exo
+        attachMediaSession(exo)
 
         // Which surface depends only on the hardware. A remote drives leanback's transport row and
         // nothing else, a thumb drives Media3's and nothing else, and neither works on the other.
@@ -332,12 +368,16 @@ class PlayerActivity : FragmentActivity() {
         findViewById<FrameLayout>(R.id.playback_container).addView(view)
         touchSurface = view
 
-        PlayerGestures(
+        view.resizeMode = videoScale.resizeMode
+
+        // Fed from dispatchTouchEvent rather than attached here: see [PlayerGestures].
+        gestures = PlayerGestures(
             context = this,
             window = window,
             onSkip = ::skipBy,
             onFeedback = ::showGestureFeedback,
-        ).attach(view)
+            onPinch = ::pinchScale,
+        )
 
         // The controller sits above the gesture bar rather than under it. The window draws behind
         // the system bars now, and without this the play button and the scrub bar were the two
@@ -412,6 +452,65 @@ class PlayerActivity : FragmentActivity() {
         episodeRow?.visibility = if (show) View.VISIBLE else View.GONE
     }
 
+    /**
+     * Every touch in the window is offered to the gestures before any view sees it.
+     *
+     * The gestures never consume, so this changes nothing about who handles the tap; it only
+     * means the transport row being on screen no longer hides the whole picture from them. The
+     * row's own buttons and scrub bar sit in front of the video, and while it was up, every
+     * double-tap seek and every drag went to those views instead and did nothing at all.
+     */
+    override fun dispatchTouchEvent(event: android.view.MotionEvent): Boolean {
+        val surface = touchSurface
+        if (surface != null && !inPictureInPicture) {
+            gestures?.onTouchEvent(event, surface.width, surface.height)
+        }
+        return super.dispatchTouchEvent(event)
+    }
+
+    /**
+     * A pinch on the picture steps the fitting one stop, out towards filling the screen or back
+     * towards the video's own shape.
+     */
+    private fun pinchScale(expanding: Boolean) {
+        val stops = VideoScale.entries
+        val at = videoScale.ordinal
+        val target = if (expanding) (at + 1).coerceAtMost(stops.lastIndex) else (at - 1).coerceAtLeast(0)
+        if (target == at) return
+        applyScale(stops[target])
+    }
+
+    /** The next picture shape along, from the television's own button. */
+    fun cycleScale() = applyScale(videoScale.next())
+
+    private fun applyScale(scale: VideoScale) {
+        videoScale = scale
+        touchSurface?.resizeMode = scale.resizeMode
+        // The television has no PlayerView to set a resize mode on; it draws onto leanback's bare
+        // surface, where the player's own scaling mode is the only lever. That lever has two
+        // positions, so Stretch is not offered there and Crop is what a second press reaches.
+        player?.videoScalingMode = if (scale == VideoScale.Fit) {
+            C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+        } else {
+            C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+        }
+        tvFragment()?.showVideoScale(scale)
+        showGestureFeedback(scale.label)
+    }
+
+    /** The next speed along, applied now and remembered for the next video. */
+    fun cycleSpeed() {
+        val next = PlaybackSpeed.next(playbackSpeed)
+        playbackSpeed = next
+        player?.setPlaybackSpeed(next)
+        tvFragment()?.showPlaybackSpeed(next)
+        showGestureFeedback(PlaybackSpeed.label(next))
+        lifecycleScope.launch { runCatching { settings.setPlaybackSpeed(next) } }
+    }
+
+    private fun tvFragment(): TvPlaybackFragment? =
+        supportFragmentManager.findFragmentById(R.id.playback_container) as? TvPlaybackFragment
+
     /** A figure for whatever a gesture is changing, gone again shortly after the finger lifts. */
     private fun showGestureFeedback(text: String) {
         val hud = gestureHud ?: return
@@ -455,6 +554,71 @@ class PlayerActivity : FragmentActivity() {
         }
         showStatus("Starting the video…")
         return true
+    }
+
+    /**
+     * Checks the video against the connection before a byte of it is fetched.
+     *
+     * Nothing distinguished Wi-Fi from mobile data anywhere in the app before this, so opening a
+     * large video on a train quietly started pulling all of it. A file already on disk is never
+     * questioned, and neither is a small one; only a large pull over a metered connection stops to
+     * ask, and only the first time in a session, because being asked before every episode is its
+     * own kind of broken.
+     *
+     * Returns false when there is nothing to start: the sheet on screen is the answer.
+     */
+    private suspend fun allowedOnThisConnection(availability: LocalFileAvailability): Boolean {
+        val wifiOnly = runCatching { settings.wifiOnlyDownloadsNow() }.getOrDefault(false)
+        val decision = MeteredPolicy.decide(
+            metered = NetworkMonitor.metered.value,
+            wifiOnly = wifiOnly,
+            alreadyDownloaded = availability == LocalFileAvailability.Complete,
+            warnedThisSession = meteredWarningAccepted,
+            sizeBytes = fileSizeBytes,
+        )
+        return when (decision) {
+            MeteredDecision.Allow -> true
+            MeteredDecision.Block -> {
+                showError(
+                    "This video isn't downloaded yet, and TMPlayer is set to use Wi-Fi only. " +
+                        "Connect to Wi-Fi, or turn that off in Settings.",
+                    retryable = false,
+                )
+                false
+            }
+            MeteredDecision.Warn -> awaitMeteredConsent()
+        }
+    }
+
+    /** The prompt itself: the loading sheet, holding, with one button that carries on. */
+    private suspend fun awaitMeteredConsent(): Boolean {
+        val consented = CompletableDeferred<Boolean>()
+        openingFilm = false
+        statusOverlay.visibility = View.VISIBLE
+        statusIcon.visibility = View.GONE
+        rebufferChip.visibility = View.GONE
+        statusSpinner?.visibility = View.GONE
+        statusProgress.visibility = View.GONE
+        statusDetail.visibility = View.GONE
+        statusTitle.text = "You're on mobile data"
+        statusText.text = "This video is ${MediaMapper.formatSize(fileSizeBytes)}. " +
+            "Playing it now will use that much of your allowance."
+        statusRetry?.apply {
+            text = "Play anyway"
+            visibility = View.VISIBLE
+            setOnClickListener {
+                text = "Try again"
+                setOnClickListener { retryPlayback() }
+                consented.complete(true)
+            }
+            requestFocus()
+        }
+        val answer = consented.await()
+        // Remembered for the process, not on disk: a session is the unit of consent here, and
+        // writing it down would mean asking once ever, which is not the same promise.
+        meteredWarningAccepted = true
+        showStatus("Starting the video…")
+        return answer
     }
 
     private fun buildPlayer(client: TdlClient): ExoPlayer {
@@ -514,7 +678,27 @@ class PlayerActivity : FragmentActivity() {
                 )
                 setHandleAudioBecomingNoisy(true)
                 setWakeMode(C.WAKE_MODE_LOCAL)
+                setPlaybackSpeed(playbackSpeed)
             }
+    }
+
+    /**
+     * Hands the player to the system so the transport controls exist outside this screen.
+     *
+     * That is the notification, the lock screen, the headset's pause button, a car's steering
+     * wheel and the Assistant, none of which the app draws or handles itself. It is also what
+     * makes picture in picture's own play and pause buttons work.
+     */
+    private fun attachMediaSession(exo: ExoPlayer) {
+        mediaSession?.release()
+        mediaSession = runCatching {
+            MediaSession.Builder(this, exo)
+                // Distinct per activity instance: stepping to the next episode builds a second
+                // activity before the first has been destroyed, and two sessions sharing an id
+                // is the one thing the builder refuses outright.
+                .setId("tmplayer-$chatId-$messageId-${SystemClock.elapsedRealtime()}")
+                .build()
+        }.getOrNull()
     }
 
     /**
@@ -533,6 +717,12 @@ class PlayerActivity : FragmentActivity() {
     private val playerListener = object : Player.Listener {
         override fun onCues(cueGroup: CueGroup) {
             subtitleView.setCues(cueGroup.cues)
+        }
+
+        override fun onVideoSizeChanged(size: VideoSize) {
+            videoWidth = size.width
+            videoHeight = size.height
+            followVideoOrientation()
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -656,7 +846,16 @@ class PlayerActivity : FragmentActivity() {
         PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
         PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
         ->
-            "This device can't play this video's format. A different copy may work."
+            // A remux with a single video track bypasses the selector's viewport constraints, so
+            // a 4K stream reaches a decoder built for 1080p and dies with a class name in it. The
+            // resolution is the whole of what went wrong and it is worth saying so: "a different
+            // copy may work" sends somebody looking for a bad file rather than a smaller one.
+            if (videoHeight >= UHD_HEIGHT) {
+                "This video is ${videoHeight}p, which this device's decoder can't manage. " +
+                    "A 1080p copy will play."
+            } else {
+                "This device can't play this video's format. A different copy may work."
+            }
 
         PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
         PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
@@ -942,9 +1141,77 @@ class PlayerActivity : FragmentActivity() {
         updateDownloadChip()
     }
 
+    /**
+     * Turns the window to suit the video, once the decoder has said what shape it is.
+     *
+     * The manifest used to nail this activity to landscape, which is right for almost every film
+     * and wrong for the one case where it is most obviously wrong: a clip shot on a phone played
+     * as a narrow strip between two black fields, with the phone held sideways. A television
+     * reports a single orientation and ignores every request made here, so this is touch only.
+     */
+    private fun followVideoOrientation() {
+        if (FormFactor.isTv(this)) return
+        if (videoWidth <= 0 || videoHeight <= 0) return
+        requestedOrientation = if (videoWidth >= videoHeight) {
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        } else {
+            // Not locked to portrait: a tall video is still watchable sideways, and somebody
+            // lying down should be allowed to decide that for themselves.
+            ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+        }
+    }
+
+    /**
+     * Leaving the app puts the video in the corner of whatever comes next, rather than stopping it.
+     *
+     * Before this, pressing Home during a film ended the film: [onStop] paused it and coming back
+     * meant finding the resume point again. Only on a phone, only while something is actually
+     * playing, and never over an error sheet or a countdown, none of which are worth a floating
+     * window.
+     */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (FormFactor.isTv(this)) return
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return
+        if (player?.isPlaying != true) return
+        if (statusOverlay.visibility == View.VISIBLE) return
+        runCatching { enterPictureInPictureMode(pictureInPictureParams()) }
+    }
+
+    private fun pictureInPictureParams(): PictureInPictureParams {
+        val builder = PictureInPictureParams.Builder()
+        // Android refuses anything narrower than 1:2.39 or wider than 2.39:1, and a video that
+        // falls outside that takes the whole request down with it, so it is only offered when
+        // the picture's own shape is known to be inside the range.
+        if (videoWidth > 0 && videoHeight > 0) {
+            val ratio = videoWidth.toFloat() / videoHeight
+            if (ratio in PIP_MIN_RATIO..PIP_MAX_RATIO) {
+                builder.setAspectRatio(Rational(videoWidth, videoHeight))
+            }
+        }
+        return builder.build()
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration,
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        inPictureInPicture = isInPictureInPictureMode
+        // At thumbnail size there is room for the picture and nothing else. The system draws its
+        // own play and pause over the window, fed by the media session.
+        touchSurface?.useController = !isInPictureInPictureMode
+        if (isInPictureInPictureMode) touchSurface?.hideController()
+        subtitleView.visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
+        episodeRow?.visibility = View.GONE
+        downloadChip.visibility = View.GONE
+        gestures?.controlsVisible = false
+    }
+
     /** Leanback raising or hiding the transport row; the download figure rides with it. */
     fun onControlsVisibilityChanged(visible: Boolean) {
         controlsUp = visible
+        gestures?.controlsVisible = visible
         // The system bars ride with the transport row: raising one to reach for a control and
         // being handed the other is what every video app on the platform does.
         setSystemBarsHidden(!visible)
@@ -1090,13 +1357,18 @@ class PlayerActivity : FragmentActivity() {
     override fun onStop() {
         super.onStop()
         saveResumePosition()
-        player?.pause()
+        // In picture in picture the activity is stopped while the video is still on screen and
+        // still the point of it; pausing here would stop the very thing the mode exists for.
+        if (!inPictureInPicture) player?.pause()
     }
 
     override fun onDestroy() {
         saveResumePosition()
         stopDownload()
         gestureHud?.removeCallbacks(hideGestureHud)
+        // Released before the player it wraps, or it is left holding a released instance.
+        mediaSession?.release()
+        mediaSession = null
         // Dropped before the player is released so the view never holds a released instance.
         touchSurface?.player = null
         touchSurface = null
@@ -1202,6 +1474,22 @@ class PlayerActivity : FragmentActivity() {
         private const val MAX_CAUSE_HOPS = 6
 
         private const val SUBTITLE_TEXT_FRACTION = 0.065f
+
+        /** Anything at or above this is 4K territory, where a stick's decoder gives up. */
+        private const val UHD_HEIGHT = 1600
+
+        /** Android's own limits on a picture-in-picture window's shape. */
+        private const val PIP_MIN_RATIO = 1f / 2.39f
+        private const val PIP_MAX_RATIO = 2.39f
+
+        /**
+         * Whether the viewer has already said yes to mobile data this session.
+         *
+         * Process-wide rather than per activity, because stepping through a series builds a new
+         * activity per episode and being asked again at every one is the prompt becoming the
+         * problem it was added to solve.
+         */
+        private var meteredWarningAccepted = false
 
         fun intent(context: Context, item: MediaItem, chatTitle: String = ""): Intent =
             Intent(context, PlayerActivity::class.java).apply {

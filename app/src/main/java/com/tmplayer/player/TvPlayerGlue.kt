@@ -26,6 +26,8 @@ class TvPlayerGlue(
     private val onPickAudio: () -> Unit,
     private val onPreviousEpisode: () -> Unit = {},
     private val onNextEpisode: () -> Unit = {},
+    private val onCycleSpeed: () -> Unit = {},
+    private val onCycleScale: () -> Unit = {},
 ) : PlaybackTransportControlGlue<LeanbackPlayerAdapter>(context, adapter) {
 
     private val rewind = PlaybackControlsRow.RewindAction(context)
@@ -87,9 +89,46 @@ class TvPlayerGlue(
         }
     }
 
+    /**
+     * Playback speed and picture shape, which on a phone live inside Media3's own gear menu.
+     *
+     * A remote has no gear menu and leanback ships neither control, so a television had no way to
+     * slow a mumbled scene down or to crop the bars off a 2.39:1 film. One button each, stepping
+     * through a short list, is what a D-pad can drive; the label carries the current value so the
+     * button says what pressing it just did.
+     */
+    private val speed = Action(
+        ID_SPEED,
+        PlaybackSpeed.label(PlaybackSpeed.DEFAULT),
+        null,
+        ContextCompat.getDrawable(context, R.drawable.ic_speed),
+    )
+    private val scale = Action(
+        ID_SCALE,
+        VideoScale.Fit.label,
+        null,
+        ContextCompat.getDrawable(context, R.drawable.ic_aspect),
+    )
+    private var secondary: ArrayObjectAdapter? = null
+
     override fun onCreateSecondaryActions(secondaryActionsAdapter: ArrayObjectAdapter) {
+        secondary = secondaryActionsAdapter
         secondaryActionsAdapter.add(subtitles)
         secondaryActionsAdapter.add(audio)
+        secondaryActionsAdapter.add(speed)
+        secondaryActionsAdapter.add(scale)
+    }
+
+    /** Repaints the two labels after the activity has applied a new speed or picture shape. */
+    fun setPlaybackSpeed(value: Float) = relabel(speed, PlaybackSpeed.label(value))
+
+    fun setVideoScale(value: VideoScale) = relabel(scale, value.label)
+
+    private fun relabel(action: Action, label: String) {
+        val adapter = secondary ?: return
+        action.label1 = label
+        val at = adapter.indexOf(action)
+        if (at >= 0) adapter.notifyArrayItemRangeChanged(at, 1)
     }
 
     override fun onActionClicked(action: Action) {
@@ -100,6 +139,8 @@ class TvPlayerGlue(
             skipNext.id -> onNextEpisode()
             ID_SUBTITLES -> onPickSubtitles()
             ID_AUDIO -> onPickAudio()
+            ID_SPEED -> onCycleSpeed()
+            ID_SCALE -> onCycleScale()
             else -> super.onActionClicked(action)
         }
     }
@@ -107,6 +148,8 @@ class TvPlayerGlue(
     companion object {
         private const val ID_SUBTITLES = 1001L
         private const val ID_AUDIO = 1002L
+        private const val ID_SPEED = 1003L
+        private const val ID_SCALE = 1004L
         const val SKIP_MS = 30_000L
     }
 }

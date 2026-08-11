@@ -132,6 +132,7 @@ fun SettingsScreen(
     val askBeforeClearing by settings.askBeforeClearing.collectAsStateWithLifecycle(initialValue = false)
     val downloadFirst by settings.downloadBeforePlaying.collectAsStateWithLifecycle(initialValue = false)
     val autoplayNext by settings.autoplayNext.collectAsStateWithLifecycle(initialValue = true)
+    val wifiOnly by settings.wifiOnlyDownloads.collectAsStateWithLifecycle(initialValue = false)
     val history by settings.continueWatching.collectAsStateWithLifecycle(initialValue = emptyList())
     val favorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
     val lastChatId by settings.lastChatId.collectAsStateWithLifecycle(initialValue = 0L)
@@ -369,6 +370,19 @@ fun SettingsScreen(
                 onToggle = {
                     scope.launch { settings.setDownloadBeforePlaying(!downloadFirst) }
                 },
+            )
+        }
+        item {
+            ToggleRow(
+                title = "Only download over Wi-Fi",
+                subtitle = if (wifiOnly) {
+                    "Videos you haven't downloaded won't open on mobile data"
+                } else {
+                    "Off: a large video warns you once before it starts on mobile data"
+                },
+                icon = TmIcons.Wifi,
+                checked = wifiOnly,
+                onToggle = { scope.launch { settings.setWifiOnlyDownloads(!wifiOnly) } },
             )
         }
 

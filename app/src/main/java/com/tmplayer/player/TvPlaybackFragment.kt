@@ -42,6 +42,8 @@ class TvPlaybackFragment : VideoSupportFragment() {
             onPickAudio = { owner.showTrackPicker(C.TRACK_TYPE_AUDIO) },
             onPreviousEpisode = { owner.episodes.value.previous?.let(owner::playEpisode) },
             onNextEpisode = { owner.episodes.value.next?.let(owner::playEpisode) },
+            onCycleSpeed = { owner.cycleSpeed() },
+            onCycleScale = { owner.cycleScale() },
         )
         created.host = VideoSupportFragmentGlueHost(this)
         created.title = owner.mediaTitle
@@ -65,6 +67,11 @@ class TvPlaybackFragment : VideoSupportFragment() {
 
     /** True while the transport row is on screen; the activity uses it to route D-pad keys. */
     fun controlsVisible(): Boolean = isControlsOverlayVisible
+
+    /** The activity applies the change and then asks the row to say what it now reads. */
+    fun showPlaybackSpeed(value: Float) = glue?.setPlaybackSpeed(value)
+
+    fun showVideoScale(value: VideoScale) = glue?.setVideoScale(value)
 
     // Leanback raises and hides the transport row itself, on a key press, on pause, and on its
     // own auto-hide timer. Overriding both ends of that is the only way to hear about it, and the

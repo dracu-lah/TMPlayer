@@ -56,6 +56,35 @@ object TmIcons {
         }
     }
 
+    /** Wi-Fi, for the setting that says downloads may only happen over it. */
+    val Wifi: ImageVector by lazy {
+        icon("Wifi") {
+            path(fill = SolidColor(Color.White)) {
+                moveTo(12f, 21f)
+                lineTo(15.6f, 16.5f)
+                curveTo(14.6f, 15.75f, 13.35f, 15.3f, 12f, 15.3f)
+                curveTo(10.65f, 15.3f, 9.4f, 15.75f, 8.4f, 16.5f)
+                close()
+                moveTo(12f, 12.3f)
+                curveTo(14.05f, 12.3f, 15.93f, 12.99f, 17.42f, 14.15f)
+                lineTo(19.3f, 11.8f)
+                curveTo(17.29f, 10.19f, 14.76f, 9.3f, 12f, 9.3f)
+                curveTo(9.24f, 9.3f, 6.71f, 10.19f, 4.7f, 11.8f)
+                lineTo(6.58f, 14.15f)
+                curveTo(8.07f, 12.99f, 9.95f, 12.3f, 12f, 12.3f)
+                close()
+                moveTo(12f, 6.3f)
+                curveTo(15.46f, 6.3f, 18.63f, 7.5f, 21.13f, 9.5f)
+                lineTo(23f, 7.16f)
+                curveTo(19.99f, 4.75f, 16.17f, 3.3f, 12f, 3.3f)
+                curveTo(7.83f, 3.3f, 4.01f, 4.75f, 1f, 7.16f)
+                lineTo(2.87f, 9.5f)
+                curveTo(5.37f, 7.5f, 8.54f, 6.3f, 12f, 6.3f)
+                close()
+            }
+        }
+    }
+
     /** A clock, for "Recent". */
     val Clock: ImageVector by lazy {
         icon("Clock") {

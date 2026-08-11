@@ -26,6 +26,17 @@ object NetworkMonitor {
     private val _status = MutableStateFlow(NetworkStatus.Unknown)
     val status: StateFlow<NetworkStatus> = _status.asStateFlow()
 
+    /**
+     * Whether the connection currently in use is one the viewer pays for by the byte.
+     *
+     * Nothing in the app distinguished the two before, so a multi-gigabyte remux would start
+     * pulling over cellular as readily as over the house Wi-Fi, with no warning and no way to say
+     * no. Defaults to false: an unknown network is treated as unmetered, because a guess that
+     * blocks playback is worse than a guess that allows it.
+     */
+    private val _metered = MutableStateFlow(false)
+    val metered: StateFlow<Boolean> = _metered.asStateFlow()
+
     @Volatile
     private var started = false
 
@@ -37,9 +48,9 @@ object NetworkMonitor {
 
             val manager = context.applicationContext
                 .getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            _status.value = statusOf(
-                manager.activeNetwork?.let(manager::getNetworkCapabilities),
-            )
+            val initial = manager.activeNetwork?.let(manager::getNetworkCapabilities)
+            _status.value = statusOf(initial)
+            _metered.value = meteredOf(initial)
             manager.registerDefaultNetworkCallback(
                 object : ConnectivityManager.NetworkCallback() {
                     override fun onCapabilitiesChanged(
@@ -47,10 +58,12 @@ object NetworkMonitor {
                         capabilities: NetworkCapabilities,
                     ) {
                         _status.value = statusOf(capabilities)
+                        _metered.value = meteredOf(capabilities)
                     }
 
                     override fun onLost(network: Network) {
                         _status.value = NetworkStatus.Offline
+                        _metered.value = false
                     }
                 },
             )
@@ -59,6 +72,11 @@ object NetworkMonitor {
 
     /** Unknown is allowed to try; only a confirmed offline state should suppress a request. */
     fun canTryInternet(): Boolean = _status.value != NetworkStatus.Offline
+
+    /** Absent capabilities mean an unknown network, which is read as unmetered on purpose. */
+    private fun meteredOf(capabilities: NetworkCapabilities?): Boolean =
+        capabilities != null &&
+            !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
 
     private fun statusOf(capabilities: NetworkCapabilities?): NetworkStatus =
         if (

@@ -57,12 +57,36 @@
           routed the new intent at the live instance, which never re-read its extras, and the
           finish() that followed closed it: next and previous simply ended playback.
         -->
+        <!--
+          Orientation is decided by the video rather than by the manifest. sensorLandscape forced a
+          vertical clip into a landscape window, where it played as a tall sliver between two black
+          fields; fullUser lets the activity ask for landscape once it knows the picture is wide,
+          and leave a portrait video upright. A television reports one orientation and ignores all
+          of this.
+
+          Picture in picture so leaving the app pauses nothing: before this, pressing Home during a
+          film stopped it outright.
+        -->
         <activity
             android:name=".player.PlayerActivity"
             android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
             android:exported="false"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="fullUser"
+            android:supportsPictureInPicture="true"
             android:theme="@style/Theme.TMPlayer.Player" />
+
+        <!--
+          Media3's session service is not used: the session lives in the player activity, which is
+          the only thing that can play anything. The receiver is what the platform routes headset
+          and Bluetooth transport buttons through.
+        -->
+        <receiver
+            android:name="androidx.media3.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
 
         <!-- Hands the downloaded update to the installer; nothing else is ever shared. -->
         <provider
