@@ -864,6 +864,10 @@ private fun RefreshAction(touch: Boolean, onRefresh: () -> Unit) {
     HeaderAction(
         label = "Refresh",
         icon = Icons.Filled.Refresh,
+        // The word earns its place on a television, where the same glyph means three things and
+        // the screen is wide. A phone has neither the width nor the ambiguity: the chip sits
+        // beside a listing of chats, where the only thing to fetch again is the listing.
+        showLabel = !touch,
         touch = touch,
         onClick = onRefresh,
     )
@@ -962,12 +966,22 @@ private fun TabHeading(
                     color = TextPrimary,
                 )
             }
+            // The blurb and the count together are too long for a phone: they wrap onto a second
+            // line and crowd the chips beside them. The count is the part that changes, and the
+            // blurb only ever repeats what the tab already says, so the phone keeps the count.
             Text(
-                if (count > 0) "${tab.blurb}  ·  $count $unit" else tab.blurb,
+                when {
+                    touch -> if (count > 0) "$count $unit" else tab.blurb
+                    count > 0 -> "${tab.blurb}  ·  $count $unit"
+                    else -> tab.blurb
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
+        Spacer(Modifier.width(12.dp))
         // A heading can carry several actions, and butted together they read as one wide control
         // with a seam down it. The gap is what makes them separate buttons.
         Row(

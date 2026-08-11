@@ -307,7 +307,7 @@ private fun AccountRow(account: Account?) {
  * Sized to the longest destination name plus its badge rather than to the screen, because that is
  * all the sheet ever holds.
  */
-private val DRAWER_WIDTH = 280.dp
+private val DRAWER_WIDTH = 260.dp
 
 /** On a small screen the drawer gives way, so the listing behind it stays visible and tappable. */
-private const val DRAWER_MAX_FRACTION = 0.78f
+private const val DRAWER_MAX_FRACTION = 0.68f
