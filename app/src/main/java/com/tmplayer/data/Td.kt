@@ -8,6 +8,8 @@ import dev.g000sha256.tdl.TdlClient
 import dev.g000sha256.tdl.TdlResult
 import dev.g000sha256.tdl.dto.AuthorizationState
 import dev.g000sha256.tdl.dto.ConnectionStateReady
+import dev.g000sha256.tdl.dto.CountryInfo
+import dev.g000sha256.tdl.dto.PhoneNumberInfo
 import dev.g000sha256.tdl.dto.ConnectionStateUpdating
 import dev.g000sha256.tdl.dto.FileTypeAnimation
 import dev.g000sha256.tdl.dto.FileTypeDocument
@@ -201,11 +203,13 @@ object Td {
     /** Submits the login code Telegram sent. Returns null on success, an error otherwise. */
     suspend fun submitCode(code: String): String? {
         val td = current ?: return "Not connected"
-        val phoneNumber = (_auth.value as? AuthState.Code)?.phoneNumber.orEmpty()
+        // Copied rather than rebuilt: the screen's delivery route, digit count and resend timer all
+        // live in this state, and a fresh Code() would blank them the moment a digit was mistyped.
+        val current = _auth.value as? AuthState.Code ?: AuthState.Code("")
         return when (val result = td.checkAuthenticationCode(code)) {
             is TdlResult.Success -> null
             is TdlResult.Failure -> {
-                _auth.value = AuthState.Code(phoneNumber, wrong = true)
+                _auth.value = current.copy(wrong = true)
                 when {
                     result.message.contains("PHONE_CODE_INVALID") -> "Wrong code"
                     result.message.contains("PHONE_CODE_EXPIRED") ->
@@ -213,6 +217,47 @@ object Td {
                     else -> Failures.humanise(result.message)
                 }
             }
+        }
+    }
+
+    /**
+     * Every country Telegram knows, with its dial codes, in Telegram's own spelling.
+     *
+     * Hidden entries are dropped here rather than in the picker: they are countries Telegram will
+     * not accept a number from, so nothing above this layer has any use for them.
+     */
+    suspend fun countries(): List<CountryInfo> {
+        val td = current ?: return emptyList()
+        return td.getCountries().valueOrNull?.countries.orEmpty().filterNot { it.isHidden }.toList()
+    }
+
+    /** The ISO code Telegram guesses from the IP address, blank if it will not guess. */
+    suspend fun guessedCountryCode(): String {
+        val td = current ?: return ""
+        return td.getCountryCode().valueOrNull?.text.orEmpty()
+    }
+
+    /**
+     * Telegram's own reading of a half-typed number: which country it belongs to, and how that
+     * country groups its digits.
+     *
+     * Worth the round trip rather than a local formatter, because this is the same table the
+     * Telegram apps format against, so a number looks here exactly as it looks there.
+     */
+    suspend fun phoneNumberInfo(phoneNumber: String): PhoneNumberInfo? =
+        current?.getPhoneNumberInfo(phoneNumber)?.valueOrNull
+
+    /**
+     * Asks Telegram to send the code again, by whatever route it has decided is next.
+     *
+     * The reason is left to TDLib's default: the app has not been told the code failed to arrive,
+     * only that the user pressed the button, and guessing at a reason would be inventing one.
+     */
+    suspend fun resendCode(): String? {
+        val td = current ?: return "Not connected"
+        return when (val result = td.resendAuthenticationCode()) {
+            is TdlResult.Success -> null
+            is TdlResult.Failure -> Failures.humanise(result.message)
         }
     }
 

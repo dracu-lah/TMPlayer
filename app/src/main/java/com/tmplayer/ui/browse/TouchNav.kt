@@ -40,12 +40,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.min
 import com.tmplayer.data.Account
 import com.tmplayer.data.Updates
+import com.tmplayer.ui.components.AppMark
+import com.tmplayer.ui.components.MarkSize
 import com.tmplayer.ui.components.MediaPreview
 import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.Background
@@ -110,6 +114,7 @@ internal fun TouchBrowseShell(
 ) = TouchMaterialTheme {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
     fun close() = scope.launch { drawerState.close() }
 
     // Back closes the drawer before it leaves the screen, which is what every phone user expects
@@ -124,6 +129,11 @@ internal fun TouchBrowseShell(
             ModalDrawerSheet(
                 drawerState = drawerState,
                 drawerContainerColor = SurfaceDark,
+                // Material's own default is 360dp, which is most of a phone's width given over
+                // to a handful of one-word destinations and a name. The sheet is sized to what
+                // it holds instead, and still yields to the screen on the narrowest devices so
+                // that it can never cover the page it is a way back to.
+                modifier = Modifier.width(min(DRAWER_WIDTH, screenWidth * DRAWER_MAX_FRACTION)),
             ) {
                 DrawerHeader(account)
                 HorizontalDivider(color = TextMuted.copy(alpha = 0.18f))
@@ -228,11 +238,35 @@ private fun DrawerDestination(
     )
 }
 
-/** Whose account this is, at the top of the drawer, where the rail puts the same thing. */
+/**
+ * Which app this is and whose account it holds, at the top of the drawer.
+ *
+ * The rail puts the account in the same place on the television, but no mark: a television shows
+ * one app at a time and the launcher just handed it over. A drawer is pulled out of a phone that is
+ * running a dozen other things, and its header is the conventional and the only place in the touch
+ * shell where the app names itself.
+ */
 @Composable
 private fun DrawerHeader(account: Account?) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AppMark(MarkSize.Inline)
+            Spacer(Modifier.width(12.dp))
+            Text(
+                "TMPlayer",
+                style = MaterialTheme.typography.titleLarge,
+                color = TextPrimary,
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+        AccountRow(account)
+    }
+}
+
+@Composable
+private fun AccountRow(account: Account?) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp),
+        Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(44.dp).clip(CircleShape).background(SurfaceRaised)) {
@@ -266,3 +300,14 @@ private fun DrawerHeader(account: Account?) {
         }
     }
 }
+
+/**
+ * How wide the drawer is on a phone that has room for it.
+ *
+ * Sized to the longest destination name plus its badge rather than to the screen, because that is
+ * all the sheet ever holds.
+ */
+private val DRAWER_WIDTH = 280.dp
+
+/** On a small screen the drawer gives way, so the listing behind it stays visible and tappable. */
+private const val DRAWER_MAX_FRACTION = 0.78f

@@ -165,7 +165,11 @@ private const val MIN_SWEEP = 12f
 /** A calm, final statement. No Retry button, because there is nothing to retry. */
 @Composable
 fun BigEmpty(message: String) {
-    Box(Modifier.fillMaxSize().padding(horizontal = 72.dp), contentAlignment = Alignment.Center) {
+    val touch = isTouch()
+    Box(
+        Modifier.fillMaxSize().padding(horizontal = if (touch) PhonePad.Side else 72.dp),
+        contentAlignment = Alignment.Center,
+    ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -174,11 +178,15 @@ fun BigEmpty(message: String) {
                 Icons.Filled.Search,
                 contentDescription = null,
                 tint = TextMuted.copy(alpha = 0.55f),
-                modifier = Modifier.size(56.dp),
+                modifier = Modifier.size(if (touch) 44.dp else 56.dp),
             )
             Text(
                 message,
-                style = MaterialTheme.typography.titleLarge,
+                style = if (touch) {
+                    MaterialTheme.typography.titleMedium
+                } else {
+                    MaterialTheme.typography.titleLarge
+                },
                 color = TextMuted,
                 textAlign = TextAlign.Center,
             )
@@ -188,7 +196,13 @@ fun BigEmpty(message: String) {
 
 @Composable
 fun BigError(message: String, onRetry: (() -> Unit)?) {
-    Box(Modifier.fillMaxSize().padding(horizontal = 72.dp), contentAlignment = Alignment.Center) {
+    val touch = isTouch()
+    // 72dp of margin either side is a tenth of a television and a third of a phone, which leaves
+    // the sentence in a column too narrow to read.
+    Box(
+        Modifier.fillMaxSize().padding(horizontal = if (touch) PhonePad.Side else 72.dp),
+        contentAlignment = Alignment.Center,
+    ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -197,16 +211,24 @@ fun BigError(message: String, onRetry: (() -> Unit)?) {
                 Icons.Filled.Warning,
                 contentDescription = null,
                 tint = Danger,
-                modifier = Modifier.size(56.dp),
+                modifier = Modifier.size(if (touch) 44.dp else 56.dp),
             )
             Text(
                 "That didn't work",
-                style = MaterialTheme.typography.titleLarge,
+                style = if (touch) {
+                    MaterialTheme.typography.titleMedium
+                } else {
+                    MaterialTheme.typography.titleLarge
+                },
                 color = TextPrimary,
             )
             Text(
                 message,
-                style = MaterialTheme.typography.bodyLarge,
+                style = if (touch) {
+                    MaterialTheme.typography.bodyMedium
+                } else {
+                    MaterialTheme.typography.bodyLarge
+                },
                 color = TextMuted,
                 textAlign = TextAlign.Center,
             )
@@ -225,7 +247,11 @@ fun BigError(message: String, onRetry: (() -> Unit)?) {
                     Spacer(Modifier.width(8.dp))
                     Text("Try again")
                 }
-                LaunchedEffect(Unit) { focus.requestFocus() }
+                // The remote needs somewhere to land; a finger does not, and taking focus on a
+                // phone only draws a ring around the button.
+                if (!touch) {
+                    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+                }
             }
         }
     }

@@ -57,7 +57,13 @@ fun MediaPreview(
         } else {
             Text(
                 fallbackLabel.take(1).uppercase(),
-                style = MaterialTheme.typography.headlineLarge,
+                // The tile this letter stands in for is a third of the size on a phone, where a
+                // headline glyph fills it corner to corner and reads as a mistake.
+                style = if (isTouch()) {
+                    MaterialTheme.typography.titleLarge
+                } else {
+                    MaterialTheme.typography.headlineLarge
+                },
             )
         }
     }

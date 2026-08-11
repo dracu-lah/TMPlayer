@@ -1,7 +1,14 @@
 package com.tmplayer.data
 
 import dev.g000sha256.tdl.dto.AuthenticationCodeInfo
+import dev.g000sha256.tdl.dto.AuthenticationCodeTypeCall
+import dev.g000sha256.tdl.dto.AuthenticationCodeTypeFlashCall
+import dev.g000sha256.tdl.dto.AuthenticationCodeTypeFragment
+import dev.g000sha256.tdl.dto.AuthenticationCodeTypeMissedCall
 import dev.g000sha256.tdl.dto.AuthenticationCodeTypeSms
+import dev.g000sha256.tdl.dto.AuthenticationCodeTypeSmsPhrase
+import dev.g000sha256.tdl.dto.AuthenticationCodeTypeSmsWord
+import dev.g000sha256.tdl.dto.AuthenticationCodeTypeTelegramMessage
 import dev.g000sha256.tdl.dto.AuthorizationStateClosed
 import dev.g000sha256.tdl.dto.AuthorizationStateClosing
 import dev.g000sha256.tdl.dto.AuthorizationStateLoggingOut
@@ -103,8 +110,72 @@ class AuthReducerTest {
     fun `the code screen names the number Telegram texted`() {
         val codeInfo = AuthenticationCodeInfo("+447700900000", AuthenticationCodeTypeSms(5), null, 60)
         val step = AuthReducer.reduce(AuthorizationStateWaitCode(codeInfo), SignInMethod.Phone)
-        assertEquals(AuthState.Code("+447700900000"), step.state)
+        assertEquals("+447700900000", (step.state as AuthState.Code).phoneNumber)
         assertEquals(AuthAction.None, step.action)
+    }
+
+    @Test
+    fun `the code screen is told how the code was sent and how long it is`() {
+        val codeInfo = AuthenticationCodeInfo(
+            "+447700900000",
+            AuthenticationCodeTypeTelegramMessage(6),
+            AuthenticationCodeTypeSms(5),
+            60,
+        )
+        val state = AuthReducer.reduce(
+            AuthorizationStateWaitCode(codeInfo),
+            SignInMethod.Phone,
+        ).state as AuthState.Code
+        assertEquals(CodeDelivery.TelegramApp, state.delivery)
+        assertEquals(6, state.length)
+        assertEquals(60, state.timeout)
+        // Named, so the resend button can offer the route rather than just "again".
+        assertEquals(CodeDelivery.Sms, state.next)
+    }
+
+    @Test
+    fun `a next type that repeats the current one is not offered as an alternative`() {
+        val codeInfo = AuthenticationCodeInfo(
+            "+447700900000",
+            AuthenticationCodeTypeSms(5),
+            AuthenticationCodeTypeSms(5),
+            30,
+        )
+        assertEquals(null, AuthReducer.codeState(codeInfo).next)
+    }
+
+    @Test
+    fun `a code with no length of its own reports zero rather than inventing one`() {
+        val codeInfo = AuthenticationCodeInfo(
+            "+447700900000",
+            AuthenticationCodeTypeSmsWord("k"),
+            null,
+            0,
+        )
+        val state = AuthReducer.codeState(codeInfo)
+        assertEquals(CodeDelivery.SmsWord, state.delivery)
+        assertEquals(0, state.length)
+    }
+
+    @Test
+    fun `every delivery route TDLib can name is one the screen can name back`() {
+        assertEquals(CodeDelivery.Call, AuthReducer.delivery(AuthenticationCodeTypeCall(5)))
+        assertEquals(
+            CodeDelivery.MissedCall,
+            AuthReducer.delivery(AuthenticationCodeTypeMissedCall("+44", 5)),
+        )
+        assertEquals(
+            CodeDelivery.FlashCall,
+            AuthReducer.delivery(AuthenticationCodeTypeFlashCall("pattern")),
+        )
+        assertEquals(
+            CodeDelivery.Fragment,
+            AuthReducer.delivery(AuthenticationCodeTypeFragment("https://fragment.com", 5)),
+        )
+        assertEquals(
+            CodeDelivery.SmsPhrase,
+            AuthReducer.delivery(AuthenticationCodeTypeSmsPhrase("word")),
+        )
     }
 
     @Test

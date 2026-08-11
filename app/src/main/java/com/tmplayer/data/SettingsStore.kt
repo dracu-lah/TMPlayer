@@ -76,11 +76,12 @@ class SettingsStore(private val context: Context) {
     /**
      * Skip the chat list and reopen whichever chat was last watched.
      *
-     * On by default: people come back to the same channel evening after evening, and the chat
-     * list is a screen they pass through rather than one they want. This follows what the viewer
-     * actually did last, so it needs no setting up and it keeps up when their habits change.
+     * Off by default. Opening straight into a chat is the right thing for somebody who watches
+     * one channel every evening, and the wrong thing for everybody else: the app opens somewhere
+     * they did not ask to be, and the way back to the listing has to be discovered before the app
+     * can be used at all. A shortcut is worth having, but not before its owner has said so.
      */
-    val openLastChat: Flow<Boolean> = context.prefs.data.map { it[OPEN_LAST_CHAT] ?: true }
+    val openLastChat: Flow<Boolean> = context.prefs.data.map { it[OPEN_LAST_CHAT] ?: false }
 
     suspend fun setOpenLastChat(value: Boolean) {
         context.prefs.edit { it[OPEN_LAST_CHAT] = value }

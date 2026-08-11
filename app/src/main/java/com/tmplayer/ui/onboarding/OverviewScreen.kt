@@ -39,8 +39,11 @@ import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.TextPrimary
 import com.tmplayer.ui.theme.Tv
+import com.tmplayer.ui.components.Pane
 import com.tmplayer.ui.components.TmButton
 import com.tmplayer.ui.components.TmSecondaryButton
+import com.tmplayer.ui.components.isTouch
+import com.tmplayer.ui.components.paneAction
 
 /** One page: what it shows, and the picture of the app actually showing it. */
 private data class Page(val title: String, val body: String, val image: Int)
@@ -65,58 +68,107 @@ fun OverviewScreen(onDone: () -> Unit) {
     // leaves altogether from the first one rather than trapping anybody here.
     BackHandler { if (index == 0) onDone() else index-- }
 
-    Row(
-        Modifier.fillMaxSize().padding(horizontal = Tv.SafeH, vertical = Tv.SafeV),
-        horizontalArrangement = Arrangement.spacedBy(48.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    if (isTouch()) {
+        // Stacked rather than side by side: a screenshot placed beside the words in a portrait
+        // column would be a couple of centimetres wide, which is not a picture of anything. It
+        // goes under the text at full width, where it is actually legible, and the buttons follow
+        // it so the thumb finds them at the bottom of the reading order.
+        Pane(spacing = 12.dp) {
             Text(
                 "Step ${index + 1} of ${PAGES.size}",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.labelLarge,
                 color = Accent,
             )
-            Text(page.title, style = MaterialTheme.typography.headlineLarge, color = TextPrimary)
-            Text(page.body, style = MaterialTheme.typography.bodyLarge, color = TextMuted)
+            Text(page.title, style = MaterialTheme.typography.headlineSmall, color = TextPrimary)
+            Text(page.body, style = MaterialTheme.typography.bodyMedium, color = TextMuted)
 
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TmButton(
-                    onClick = { if (last) onDone() else index++ },
-                    modifier = Modifier.focusRequester(next),
-                ) {
-                    Text(if (last) "Start" else "Next")
-                    if (!last) {
-                        Spacer(Modifier.width(8.dp))
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                }
+            PageImage(page.image, Modifier.fillMaxWidth())
+
+            TmButton(
+                onClick = { if (last) onDone() else index++ },
+                modifier = Modifier.focusRequester(next).paneAction(),
+            ) {
+                Text(if (last) "Start" else "Next")
                 if (!last) {
-                    TmSecondaryButton(onClick = onDone) { Text("Skip") }
+                    Spacer(Modifier.width(8.dp))
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
                 }
             }
+            if (!last) {
+                TmSecondaryButton(onClick = onDone, modifier = Modifier.paneAction()) {
+                    Text("Skip")
+                }
+            }
+            // Clears the gesture bar's own strip, which a button flush to the bottom of the scroll
+            // would otherwise sit under.
+            Spacer(Modifier.height(8.dp))
         }
+    } else {
+        Row(
+            Modifier.fillMaxSize().padding(horizontal = Tv.SafeH, vertical = Tv.SafeV),
+            horizontalArrangement = Arrangement.spacedBy(48.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Step ${index + 1} of ${PAGES.size}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Accent,
+                )
+                Text(
+                    page.title,
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = TextPrimary,
+                )
+                Text(page.body, style = MaterialTheme.typography.bodyLarge, color = TextMuted)
 
-        Image(
-            painter = painterResource(page.image),
-            // The title beside it is the description; a second reading of the same thing is noise.
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .weight(1.25f)
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(16.dp))
-                .border(1.dp, TextMuted.copy(alpha = 0.25f), RoundedCornerShape(16.dp)),
-        )
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TmButton(
+                        onClick = { if (last) onDone() else index++ },
+                        modifier = Modifier.focusRequester(next),
+                    ) {
+                        Text(if (last) "Start" else "Next")
+                        if (!last) {
+                            Spacer(Modifier.width(8.dp))
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                    if (!last) {
+                        TmSecondaryButton(onClick = onDone) { Text("Skip") }
+                    }
+                }
+            }
+
+            PageImage(page.image, Modifier.weight(1.25f).fillMaxWidth())
+        }
     }
 
     // Focus follows the page, so Next stays under the thumb through the whole walk.
     LaunchedEffect(index) { runCatching { next.requestFocus() } }
+}
+
+/** The screenshot for a page, framed the same way whichever device is showing it. */
+@Composable
+private fun PageImage(image: Int, modifier: Modifier) {
+    Image(
+        painter = painterResource(image),
+        // The title beside it is the description; a second reading of the same thing is noise.
+        contentDescription = null,
+        contentScale = ContentScale.Fit,
+        modifier = modifier
+            .aspectRatio(16f / 9f)
+            .clip(RoundedCornerShape(16.dp))
+            .border(1.dp, TextMuted.copy(alpha = 0.25f), RoundedCornerShape(16.dp)),
+    )
 }
 
 private val PAGES = listOf(

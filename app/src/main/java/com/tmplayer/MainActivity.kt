@@ -301,6 +301,10 @@ private fun Root() {
                         signInError = null
                         scope.launch { Td.cancelPhoneEntry() }
                     },
+                    onResendCode = {
+                        signInError = null
+                        scope.launch { signInError = Td.resendCode() }
+                    },
                 )
             }
             ConnectionStatus(

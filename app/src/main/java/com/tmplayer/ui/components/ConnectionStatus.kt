@@ -34,11 +34,15 @@ fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier) {
         enter = fadeIn(),
         exit = fadeOut(),
     ) {
+        val touch = isTouch()
         Row(
             Modifier
                 .background(SurfaceRaised.copy(alpha = 0.96f), RoundedCornerShape(24.dp))
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(
+                    horizontal = if (touch) 12.dp else 16.dp,
+                    vertical = if (touch) 8.dp else 10.dp,
+                ),
+            horizontalArrangement = Arrangement.spacedBy(if (touch) 8.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             when (notice) {
@@ -57,7 +61,13 @@ fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier) {
                     ConnectionNotice.Reconnecting -> "Back online. Reconnecting to Telegram..."
                     ConnectionNotice.Hidden -> ""
                 },
-                style = MaterialTheme.typography.bodyLarge,
+                // A phone screen is narrower than this sentence at TV size, and the pill would run
+                // off both edges rather than sit in a corner of the screen.
+                style = if (touch) {
+                    MaterialTheme.typography.bodyMedium
+                } else {
+                    MaterialTheme.typography.bodyLarge
+                },
                 color = TextPrimary,
             )
         }

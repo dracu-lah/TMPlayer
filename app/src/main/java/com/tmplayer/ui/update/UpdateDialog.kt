@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +31,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.min
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -38,7 +41,9 @@ import androidx.tv.material3.Text
 import com.tmplayer.data.UpdateState
 import com.tmplayer.data.Updates
 import com.tmplayer.player.StreamStats
+import com.tmplayer.ui.components.PhonePad
 import com.tmplayer.ui.components.ignoreStrayRelease
+import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.TextMuted
@@ -46,6 +51,7 @@ import com.tmplayer.ui.theme.TextPrimary
 import kotlinx.coroutines.launch
 import com.tmplayer.ui.components.TmButton
 import com.tmplayer.ui.components.TmSecondaryButton
+import com.tmplayer.ui.components.paneAction
 
 /**
  * What happens after the viewer presses Update: confirm, download, then Android takes over.
@@ -60,6 +66,7 @@ fun UpdateDialog(onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     val state by Updates.state.collectAsStateWithLifecycle()
     val confirm = remember { FocusRequester() }
+    val touch = isTouch()
 
     // The TV has to be told, once, that installs from TMPlayer are allowed. Android will not take
     // that answer from in here, so the viewer is sent to the switch and comes back with Back.
@@ -76,20 +83,62 @@ fun UpdateDialog(onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        Box(
+        BoxWithConstraints(
             Modifier
                 .fillMaxSize()
                 .ignoreStrayRelease()
-                .background(Color.Black.copy(alpha = 0.82f)),
+                .background(Color.Black.copy(alpha = 0.82f))
+                // A dialog is its own window and is handed the whole screen, insets included, so
+                // on a phone this panel has to keep clear of the status bar and gesture handle
+                // itself.
+                .then(if (touch) Modifier.safeDrawingPadding() else Modifier),
             contentAlignment = Alignment.Center,
         ) {
+            // A ceiling rather than a width: 620dp is a comfortable paragraph on a television and
+            // half again the width of a phone held upright.
+            val panel = min(maxWidth - PhonePad.Side * 2, PANEL_MAX)
+
+            // Written once and placed in whichever direction the device wants them. A phone
+            // stacks them full width under the thumb; a remote steps along a row.
+            val buttons: @Composable () -> Unit = {
+                when {
+                    state is UpdateState.Downloading -> Unit
+
+                    release != null && !allowed -> TmButton(
+                        onClick = {
+                            runCatching {
+                                context.startActivity(Updates.unknownSourcesIntent(context))
+                            }
+                        },
+                        modifier = Modifier.focusRequester(confirm).paneAction(),
+                    ) { Text("Open that setting") }
+
+                    release != null -> TmButton(
+                        onClick = { scope.launch { Updates.downloadAndInstall(context, release) } },
+                        modifier = Modifier.focusRequester(confirm).paneAction(),
+                    ) { Text("Download and install") }
+
+                    else -> TmButton(
+                        onClick = { scope.launch { Updates.check() } },
+                        modifier = Modifier.focusRequester(confirm).paneAction(),
+                    ) { Text("Check again") }
+                }
+
+                if (state !is UpdateState.Downloading) {
+                    TmSecondaryButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.paneAction(),
+                    ) { Text("Close") }
+                }
+            }
+
             Column(
                 Modifier
-                    .width(620.dp)
+                    .width(panel)
                     .clip(RoundedCornerShape(20.dp))
                     .background(SurfaceDark)
                     .border(1.dp, Caution.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
-                    .padding(28.dp),
+                    .padding(if (touch) 22.dp else 28.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -97,23 +146,32 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                         Icons.Filled.Refresh,
                         contentDescription = null,
                         tint = Caution,
-                        modifier = Modifier.size(28.dp),
+                        modifier = Modifier.size(if (touch) 24.dp else 28.dp),
                     )
-                    Spacer(Modifier.width(14.dp))
+                    Spacer(Modifier.width(if (touch) 10.dp else 14.dp))
                     Text(
                         when {
                             release == null -> "TMPlayer is up to date"
                             state is UpdateState.Downloading -> "Downloading ${release.version}"
                             else -> "Update to ${release.version}"
                         },
-                        style = MaterialTheme.typography.titleLarge,
+                        // A sofa-sized heading over a version number wraps on a phone.
+                        style = if (touch) {
+                            MaterialTheme.typography.titleMedium
+                        } else {
+                            MaterialTheme.typography.titleLarge
+                        },
                         color = TextPrimary,
                     )
                 }
 
                 Text(
-                    body(state, allowed, release?.sizeBytes ?: 0L),
-                    style = MaterialTheme.typography.bodyLarge,
+                    body(state, allowed, release?.sizeBytes ?: 0L, if (touch) "phone" else "TV"),
+                    style = if (touch) {
+                        MaterialTheme.typography.bodyMedium
+                    } else {
+                        MaterialTheme.typography.bodyLarge
+                    },
                     color = TextMuted,
                 )
 
@@ -123,33 +181,10 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                 }
 
                 Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    when {
-                        state is UpdateState.Downloading -> Unit
-
-                        release != null && !allowed -> TmButton(
-                            onClick = {
-                                runCatching {
-                                    context.startActivity(Updates.unknownSourcesIntent(context))
-                                }
-                            },
-                            modifier = Modifier.focusRequester(confirm),
-                        ) { Text("Open that setting") }
-
-                        release != null -> TmButton(
-                            onClick = { scope.launch { Updates.downloadAndInstall(context, release) } },
-                            modifier = Modifier.focusRequester(confirm),
-                        ) { Text("Download and install") }
-
-                        else -> TmButton(
-                            onClick = { scope.launch { Updates.check() } },
-                            modifier = Modifier.focusRequester(confirm),
-                        ) { Text("Check again") }
-                    }
-
-                    if (state !is UpdateState.Downloading) {
-                        TmSecondaryButton(onClick = onDismiss) { Text("Close") }
-                    }
+                if (touch) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { buttons() }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { buttons() }
                 }
             }
         }
@@ -159,8 +194,15 @@ fun UpdateDialog(onDismiss: () -> Unit) {
     LaunchedEffect(state) {
         if (state is UpdateState.Ready) onDismiss()
     }
-    LaunchedEffect(Unit) { runCatching { confirm.requestFocus() } }
+    // Only a remote needs a starting point. A finger picks its own, and focus parked on the
+    // primary button is a ring a phone viewer has no way to explain.
+    if (!touch) {
+        LaunchedEffect(Unit) { runCatching { confirm.requestFocus() } }
+    }
 }
+
+/** As wide as this dialog ever gets, on any screen. */
+private val PANEL_MAX = 620.dp
 
 /**
  * A plain bar, filled as far as the download has come.
@@ -189,12 +231,18 @@ private fun ProgressBar(fraction: Float?) {
     }
 }
 
-private fun body(state: UpdateState, allowed: Boolean, sizeBytes: Long): String = when {
+/** @param device what to call the machine this is running on, which the install notice names. */
+private fun body(
+    state: UpdateState,
+    allowed: Boolean,
+    sizeBytes: Long,
+    device: String,
+): String = when {
     state is UpdateState.Failed -> state.message
     state is UpdateState.Checking -> "Asking GitHub…"
     state is UpdateState.Downloading -> "From the project's GitHub releases. Keep this on screen."
     state is UpdateState.Available && !allowed ->
-        "This TV blocks installs from TMPlayer until you say otherwise. Turn on \"allow apps " +
+        "This $device blocks installs from TMPlayer until you say otherwise. Turn on \"allow apps " +
             "from this source\", press Back to come here again, then start the update."
     state is UpdateState.Available ->
         "TMPlayer downloads it (${StreamStats.formatBytes(sizeBytes)}) from the project's GitHub " +

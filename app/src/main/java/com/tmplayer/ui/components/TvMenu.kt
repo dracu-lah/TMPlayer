@@ -2,6 +2,7 @@ package com.tmplayer.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,13 +10,15 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.min
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Icon
@@ -72,6 +76,7 @@ fun TvMenu(
     subtitle: String? = null,
 ) {
     val heading = remember { FocusRequester() }
+    val touch = isTouch()
 
     // A separate window, for the same reason TvConfirm uses one: drawn inline this would sit
     // behind anything composed after it.
@@ -79,35 +84,47 @@ fun TvMenu(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        Box(
+        BoxWithConstraints(
             Modifier
                 .fillMaxSize()
                 // This menu is opened by a hold, so OK is still down as it appears; without this
                 // the release would choose the first action on the viewer's behalf.
                 .ignoreStrayRelease()
-                .background(Color.Black.copy(alpha = 0.82f)),
+                .background(Color.Black.copy(alpha = 0.82f))
+                // A dialog window is laid out over the insets, so on a phone the panel would
+                // otherwise run under the status bar and the gesture handle.
+                .then(if (touch) Modifier.safeDrawingPadding() else Modifier),
             contentAlignment = Alignment.Center,
         ) {
+            val panel = min(maxWidth - PhonePad.Side * 2, MENU_MAX)
+
             Column(
                 Modifier
-                    .width(480.dp)
+                    .width(panel)
                     .clip(RoundedCornerShape(20.dp))
                     .background(SurfaceDark)
                     .border(1.dp, TextMuted.copy(alpha = 0.25f), RoundedCornerShape(20.dp))
-                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                    .padding(horizontal = if (touch) 16.dp else 24.dp, vertical = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // Focus has to live somewhere for the D-pad to work at all, so it starts here,
-                // on something that does nothing when pressed.
                 Column(
                     Modifier
                         .padding(start = 4.dp, bottom = 8.dp)
-                        .focusRequester(heading)
-                        .focusable(),
+                        // Focus has to live somewhere for the D-pad to work at all, so on a TV it
+                        // starts here, on something that does nothing when pressed. A finger has
+                        // no such problem, and a focusable heading on a phone only puts a stop in
+                        // the way of the accessibility cursor.
+                        .then(
+                            if (touch) Modifier else Modifier.focusRequester(heading).focusable(),
+                        ),
                 ) {
                     Text(
                         title,
-                        style = MaterialTheme.typography.titleLarge,
+                        style = if (touch) {
+                            MaterialTheme.typography.titleMedium
+                        } else {
+                            MaterialTheme.typography.titleLarge
+                        },
                         color = TextPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -123,23 +140,29 @@ fun TvMenu(
                     }
                 }
 
-                actions.forEach { action -> MenuRow(action = action) }
+                actions.forEach { action -> MenuRow(action = action, touch = touch) }
 
-                Text(
-                    "Press Down to choose, or Back to close this.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextMuted,
-                    modifier = Modifier.padding(start = 4.dp, top = 8.dp),
-                )
+                // Instructions for a remote only. On a phone there is no Down to press, and the
+                // menu closes by tapping the dark outside it or by the system back gesture.
+                if (!touch) {
+                    Text(
+                        "Press Down to choose, or Back to close this.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextMuted,
+                        modifier = Modifier.padding(start = 4.dp, top = 8.dp),
+                    )
+                }
             }
         }
 
-        LaunchedEffect(Unit) { runCatching { heading.requestFocus() } }
+        if (!touch) {
+            LaunchedEffect(Unit) { runCatching { heading.requestFocus() } }
+        }
     }
 }
 
 @Composable
-private fun MenuRow(action: MenuAction, modifier: Modifier = Modifier) {
+private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Modifier) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
@@ -160,11 +183,16 @@ private fun MenuRow(action: MenuAction, modifier: Modifier = Modifier) {
     Row(
         modifier
             .fillMaxWidth()
+            // A row of one short label is only about 44dp tall, which is under what a fingertip
+            // is entitled to. The remote does not care either way, so this is a floor, not a size.
+            .then(if (touch) Modifier.heightIn(min = 56.dp) else Modifier)
             .clip(RoundedCornerShape(14.dp))
             .background(background)
             .clickable(
                 interactionSource = interactions,
-                indication = null,
+                // Nothing on a TV reacts to a press with a ripple, and the focus colour is the
+                // whole feedback. A finger gets no focus colour, so it gets the ripple instead.
+                indication = if (touch) LocalIndication.current else null,
                 onClick = action.onSelect,
             )
             .padding(horizontal = 18.dp, vertical = 14.dp),
@@ -197,4 +225,7 @@ private fun MenuRow(action: MenuAction, modifier: Modifier = Modifier) {
         }
     }
 }
+
+/** As wide as this menu ever gets, on any screen. */
+private val MENU_MAX = 480.dp
 
