@@ -100,6 +100,8 @@ internal fun TouchBrowseShell(
     onOpenDownloads: () -> Unit,
     updateVersion: String?,
     onUpdate: () -> Unit,
+    /** Downloads in flight, badged on the Downloads row so a fetch is never invisible. */
+    downloadCount: Int = 0,
     /** What the bar says when it is not being searched in. */
     title: String = selected.heading,
     /**
@@ -154,22 +156,12 @@ internal fun TouchBrowseShell(
                         close(); onSelect(it)
                     }
 
-                    // Folders only earn a heading of their own when there are any. An account
-                    // with none would otherwise get a rule and the word "Folders" over nothing.
-                    val folders = sections.filterIsInstance<BrowseSection.Folder>()
-                    if (folders.isNotEmpty()) {
-                        DrawerSeparator("Folders")
-                        DrawerDestinations(folders, selected, favoriteCount, unreadCount) {
-                            close(); onSelect(it)
-                        }
-                    }
-
                     DrawerSeparator("Chats")
 
-                    // The four ways of slicing the chat list. Grouping them under a heading is
-                    // what turns seven flat destinations into two short lists: the seven read as
-                    // one undifferentiated pile, and the eye had to check every one of them to
-                    // find out that four of them were the same kind of thing.
+                    // The ways of slicing the chat list. Grouping them under a heading is what
+                    // turns a dozen flat destinations into short lists: flat, they read as one
+                    // undifferentiated pile, and the eye had to check every one of them to find
+                    // out that several were the same kind of thing.
                     DrawerDestinations(
                         sections.filter { it !in LIBRARY_TABS && it !is BrowseSection.Folder },
                         selected,
@@ -177,6 +169,18 @@ internal fun TouchBrowseShell(
                         unreadCount,
                     ) {
                         close(); onSelect(it)
+                    }
+
+                    // Folders last, and only with a heading when there are any: an account with
+                    // none would otherwise get a rule and the word "Folders" over nothing. They
+                    // follow the fixed tabs because they are the personal part of this list, and
+                    // a group that changes size does less damage at the bottom than in the middle.
+                    val folders = sections.filterIsInstance<BrowseSection.Folder>()
+                    if (folders.isNotEmpty()) {
+                        DrawerSeparator("Folders")
+                        DrawerDestinations(folders, selected, favoriteCount, unreadCount) {
+                            close(); onSelect(it)
+                        }
                     }
                 }
 
@@ -199,7 +203,11 @@ internal fun TouchBrowseShell(
                 DrawerDestination(
                     label = "Downloads",
                     selected = false,
-                    badge = null,
+                    // How many videos are coming down right now, which is the one thing on this
+                    // row worth interrupting somebody for. A download outlives the screen it was
+                    // started from, so without a mark here the only evidence it is still running
+                    // is a notification the viewer may well have swiped away.
+                    badge = downloadCount.takeIf { it > 0 }?.toString(),
                     icon = { Icon(TmIcons.Download, contentDescription = null) },
                     onClick = { close(); onOpenDownloads() },
                 )
@@ -512,7 +520,7 @@ private fun DrawerFooter(account: Account?) {
  * destination added later belongs in the drawer whether or not anybody remembers to list it, and a
  * second hand-written list is how one quietly stops appearing at all.
  */
-private val LIBRARY_TABS = listOf(BrowseTab.Continue, BrowseTab.Favorites, BrowseTab.Recent)
+internal val LIBRARY_TABS = listOf(BrowseTab.Continue, BrowseTab.Favorites, BrowseTab.Recent)
     .map(BrowseSection::of)
 
 /**

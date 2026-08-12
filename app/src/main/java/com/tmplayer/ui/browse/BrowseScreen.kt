@@ -52,6 +52,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon as M3Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -97,6 +98,8 @@ import com.tmplayer.data.ResumeRecord
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.MenuAction
 import com.tmplayer.ui.components.holdable
+import com.tmplayer.ui.components.AppMark
+import kotlinx.coroutines.delay
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvConfirm
@@ -214,11 +217,13 @@ sealed interface BrowseSection {
 }
 
 /**
- * Every place the rail offers, with the viewer's folders slotted in.
+ * Every place the rail offers, with the viewer's folders after the chat tabs.
  *
- * Folders sit between the tabs about this viewer's own watching and the tabs that slice the chat
- * list by type, which is where Telegram itself puts them and where they are most useful: somebody
- * who has made a folder called "Films" is reaching for it far more often than for "Groups".
+ * Folders come last of the three groups because they are the only part of this list that is not
+ * the same on every device: the tabs above are the app's own way of slicing a chat list and are
+ * where somebody looks when they do not know where a thing is, while a folder is something this
+ * viewer built and knows the name of. Putting the fixed, learnable set first and the personal set
+ * after it also keeps the rail from changing shape halfway down when a folder is added or renamed.
  */
 internal fun browseSections(folders: List<ChatFolderSummary>): List<BrowseSection> = buildList {
     add(BrowseSection.of(BrowseTab.Continue))
@@ -226,12 +231,12 @@ internal fun browseSections(folders: List<ChatFolderSummary>): List<BrowseSectio
     add(BrowseSection.of(BrowseTab.Recent))
     add(BrowseSection.of(BrowseTab.Unread))
     add(BrowseSection.of(BrowseTab.Saved))
-    folders.forEach { add(BrowseSection.Folder(it.id, it.title)) }
     add(BrowseSection.of(BrowseTab.Channels))
     add(BrowseSection.of(BrowseTab.Groups))
     add(BrowseSection.of(BrowseTab.People))
     add(BrowseSection.of(BrowseTab.All))
     add(BrowseSection.of(BrowseTab.Archived))
+    folders.forEach { add(BrowseSection.Folder(it.id, it.title)) }
 }
 
 @Composable
@@ -250,6 +255,8 @@ fun BrowseScreen(
     onOpenSettings: () -> Unit,
     /** The phone's Downloads screen, from the drawer. Never reached on a television. */
     onOpenDownloads: () -> Unit = {},
+    /** How many downloads are running, for the badge on that row of the drawer. */
+    downloadCount: Int = 0,
     onToggleFavorite: (ChatSummary) -> Unit = {},
     /**
      * The three that write to Telegram rather than to this device. Defaulted to nothing so a
@@ -257,6 +264,7 @@ fun BrowseScreen(
      */
     onTogglePinned: (ChatSummary) -> Unit = {},
     onToggleArchived: (ChatSummary) -> Unit = {},
+    onToggleMuted: (ChatSummary) -> Unit = {},
     onMarkRead: (ChatSummary) -> Unit = {},
     onRestartMedia: (ResumeRecord) -> Unit = {},
     onForgetMedia: (ResumeRecord) -> Unit = {},
@@ -445,6 +453,7 @@ fun BrowseScreen(
             onSelect = { onPickTab(it); query = "" },
             onOpenSettings = onOpenSettings,
             onOpenDownloads = onOpenDownloads,
+            downloadCount = downloadCount,
             updateVersion = updateVersion,
             onUpdate = onUpdate,
             title = tab.heading,
@@ -550,11 +559,25 @@ fun BrowseScreen(
                 add(
                     MenuAction(
                         label = if (chat.isPinned) "Unpin" else "Pin to the top",
-                        icon = TmIcons.Bookmark,
+                        icon = TmIcons.Pin,
                         detail = "Changes this chat in Telegram, on every device",
                     ) {
                         chatMenu = null
                         onTogglePinned(chat)
+                    },
+                )
+                add(
+                    MenuAction(
+                        label = if (chat.isMuted) "Unmute" else "Mute",
+                        icon = if (chat.isMuted) TmIcons.Bell else TmIcons.BellOff,
+                        detail = if (chat.isMuted) {
+                            "Lets it notify you again, on every device"
+                        } else {
+                            "Silences it in Telegram, on every device"
+                        },
+                    ) {
+                        chatMenu = null
+                        onToggleMuted(chat)
                     },
                 )
                 if (chat.unreadCount > 0) {
@@ -1100,7 +1123,7 @@ private fun NavRail(
                 .weight(1f)
                 .verticalScroll(rememberScrollState()),
         ) {
-            sections.forEach { entry ->
+            val item: @Composable (BrowseSection) -> Unit = { entry ->
                 RailItem(
                     label = entry.label,
                     icon = entry.icon,
@@ -1115,6 +1138,33 @@ private fun NavRail(
                     onClick = { onSelect(entry) },
                 )
                 Spacer(Modifier.height(4.dp))
+            }
+
+            // The same three groups the phone's drawer is divided into, and for the same reason:
+            // a dozen flat rows read as one undifferentiated pile, and the eye has to check every
+            // one of them to discover that several are the same kind of thing. The rail carried
+            // the whole list flat while the drawer beside it did not, which is one app answering
+            // the same question two ways.
+            //
+            // The viewer's own watching leads, because it is what somebody sitting down in the
+            // evening is reaching for. It needs no heading: it is at the top, under the account,
+            // and a label on the first group is a word before anything it could be dividing.
+            sections.filter { it in LIBRARY_TABS }.forEach { item(it) }
+
+            val chatTabs = sections.filter { it !in LIBRARY_TABS && it !is BrowseSection.Folder }
+            if (chatTabs.isNotEmpty()) {
+                RailHeading("Chats")
+                chatTabs.forEach { item(it) }
+            }
+
+            // Folders last, and only with a heading when there are any: an account with none would
+            // otherwise get a rule and the word "Folders" over nothing. They follow the fixed tabs
+            // because they are the personal part of this list, and a group that changes size does
+            // less damage at the bottom than in the middle.
+            val folders = sections.filterIsInstance<BrowseSection.Folder>()
+            if (folders.isNotEmpty()) {
+                RailHeading("Folders")
+                folders.forEach { item(it) }
             }
         }
         Spacer(Modifier.height(4.dp))
@@ -1142,6 +1192,29 @@ private fun NavRail(
             onClick = onOpenSettings,
         )
     }
+}
+
+/**
+ * The name of a group of rail items, on the rule that starts it.
+ *
+ * Deliberately quiet, and deliberately not focusable: it is a label on a boundary, not a row, and
+ * anything a remote can land on is one more press between the viewer and the tab they wanted.
+ */
+@Composable
+private fun RailHeading(text: String) {
+    Spacer(Modifier.height(10.dp))
+    HorizontalDivider(
+        modifier = Modifier.padding(start = RAIL_INSET, end = 4.dp),
+        color = Tone.outline.copy(alpha = 0.5f),
+    )
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = Tone.muted,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(start = RAIL_INSET + 4.dp, top = 8.dp, bottom = 6.dp),
+    )
 }
 
 @Composable
@@ -1414,8 +1487,66 @@ private fun TabHeading(
         ) {
             action()
         }
+        if (!isTouch()) {
+            Spacer(Modifier.width(20.dp))
+            TvStatusCluster()
+        }
     }
 }
+
+/**
+ * The clock, the date and the app's mark, in the top right corner of the television.
+ *
+ * A phone has a status bar and always has: the time is four millimetres above whatever is on
+ * screen, and an app that drew its own would be drawing it twice. A television has nothing of the
+ * kind. The app fills the panel edge to edge with the system bars hidden, so somebody halfway
+ * through deciding what to watch has no way to know what time it is without reaching for a phone,
+ * which is the thing a television is meant to save them doing. Every launcher on the platform puts
+ * a clock in this corner for that reason, and Leanback puts the app's badge in it for the other:
+ * on a shared screen it is worth saying which app is talking.
+ *
+ * The tick is aligned to the wall clock rather than run every minute from whenever the screen
+ * happened to open, so the minute changes when the minute changes.
+ */
+@Composable
+private fun TvStatusCluster() {
+    var now by remember { mutableStateOf(java.util.Date()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val date = java.util.Date()
+            now = date
+            delay(MS_PER_MINUTE - (date.time % MS_PER_MINUTE))
+        }
+    }
+    val locale = java.util.Locale.getDefault()
+    // The viewer's own choice of 12 or 24 hour, which is a setting on the device and not a taste
+    // this app has any business overriding.
+    val clock = remember(locale) { java.text.SimpleDateFormat("h:mm a", locale) }
+    val clock24 = remember(locale) { java.text.SimpleDateFormat("HH:mm", locale) }
+    val day = remember(locale) { java.text.SimpleDateFormat("EEE d MMM", locale) }
+    val twentyFour = android.text.format.DateFormat.is24HourFormat(LocalContext.current)
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                (if (twentyFour) clock24 else clock).format(now),
+                style = MaterialTheme.typography.titleMedium,
+                color = Tone.text,
+                maxLines = 1,
+            )
+            Text(
+                day.format(now),
+                style = MaterialTheme.typography.bodySmall,
+                color = Tone.muted,
+                maxLines = 1,
+            )
+        }
+        Spacer(Modifier.width(14.dp))
+        AppMark(size = 36.dp)
+    }
+}
+
+private const val MS_PER_MINUTE = 60_000L
 
 @Composable
 private fun SearchRow(query: String, insets: BrowseInsets, onQuery: (String) -> Unit) {
@@ -1790,15 +1921,20 @@ private fun ChatRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        UnreadBadge(chat)
-        if (favorite) {
-            Spacer(Modifier.width(12.dp))
-            Icon(
-                Icons.Filled.Star,
-                contentDescription = "Favourite",
-                tint = Tone.accent,
-                modifier = Modifier.size(28.dp),
-            )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            UnreadBadge(chat)
+            ChatMarkers(chat, size = 20.dp)
+            if (favorite) {
+                Icon(
+                    Icons.Filled.Star,
+                    contentDescription = "Favourite",
+                    tint = Tone.accent,
+                    modifier = Modifier.size(28.dp),
+                )
+            }
         }
     }
 }
@@ -1806,15 +1942,41 @@ private fun ChatRow(
 /**
  * What the second line of a chat row says about the chat, beyond what kind of thing it is.
  *
- * Pinned and muted are stated in words rather than as two more glyphs at the end of the row. A row
- * already carries an avatar, a star and an unread count, and a fourth and fifth small picture on
- * the same line stops being information and becomes a pattern nobody decodes from a sofa.
+ * Pinned and muted used to be spelled out here. They are glyphs now, drawn by [ChatMarkers] where
+ * Telegram draws them, for the reason every messaging app on the phone reached the same conclusion:
+ * a pin and a struck-through bell are read without being read, and the words were spending a third
+ * of a one-line caption on something a 16 dp shape says on its own. The line is then free to say
+ * what the chat actually is.
  */
-private fun chatCaption(chat: ChatSummary): String = buildList {
-    add(chat.kind.label)
-    if (chat.isPinned) add("Pinned")
-    if (chat.isMuted) add("Muted")
-}.joinToString("  ·  ")
+private fun chatCaption(chat: ChatSummary): String = chat.kind.label
+
+/**
+ * The pin and the silent bell, at the end of the row where a chat list puts them.
+ *
+ * Both are drawn muted rather than in the accent colour: they are facts about the row, not calls
+ * to look at it, and the one thing on a chat row allowed to ask for attention is the unread count.
+ * They sit to the right of that count for the same reason: the number is what the eye goes down the
+ * list looking for, so it keeps the position nearest the text and the markers trail after it.
+ */
+@Composable
+private fun ChatMarkers(chat: ChatSummary, size: Dp) {
+    if (chat.isMuted) {
+        Icon(
+            TmIcons.BellOff,
+            contentDescription = "Muted",
+            tint = Tone.muted,
+            modifier = Modifier.size(size),
+        )
+    }
+    if (chat.isPinned) {
+        Icon(
+            TmIcons.Pin,
+            contentDescription = "Pinned",
+            tint = Tone.muted,
+            modifier = Modifier.size(size),
+        )
+    }
+}
 
 /**
  * The count of unread messages, drawn the way Telegram draws it.
@@ -1903,13 +2065,14 @@ private fun TouchChatRow(
                 modifier = Modifier.size(TOUCH_AVATAR).clip(CircleShape),
             )
         },
-        trailingContent = if (favorite || chat.unreadCount > 0) {
+        trailingContent = if (favorite || chat.unreadCount > 0 || chat.isPinned || chat.isMuted) {
             {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     UnreadBadge(chat)
+                    ChatMarkers(chat, size = 16.dp)
                     if (favorite) {
                         M3Icon(
                             Icons.Filled.Star,

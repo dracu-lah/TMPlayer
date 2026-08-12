@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
@@ -439,6 +440,102 @@ object TmIcons {
             }
         }
     }
+
+    /** The two bars, for holding a download where it is. */
+    val Pause: ImageVector by lazy {
+        icon("Pause") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(6f, 5f)
+                horizontalLineTo(10f)
+                verticalLineTo(19f)
+                horizontalLineTo(6f)
+                close()
+                moveTo(14f, 5f)
+                horizontalLineTo(18f)
+                verticalLineTo(19f)
+                horizontalLineTo(14f)
+                close()
+            }
+        }
+    }
+
+    /**
+     * The pushpin Telegram marks a pinned chat with.
+     *
+     * A row used to say the word "Pinned" in its second line. Telegram itself does not, and neither
+     * does any other list of conversations on the phone: the pin is a shape people already read at
+     * a glance, and the words were spending a third of a narrow line saying something the glyph
+     * says in 16 dp.
+     */
+    val Pin: ImageVector by lazy {
+        icon(
+            "Pin",
+            "M16,9V4l1,0c0.55,0 1,-0.45 1,-1v0c0,-0.55 -0.45,-1 -1,-1H7C6.45,2 6,2.45 6,3v0" +
+                "c0,0.55 0.45,1 1,1l1,0v5c0,1.66 -1.34,3 -3,3v0c0,0.55 0.45,1 1,1h4.97l0.01,7" +
+                "l1,1l1,-1l-0.01,-7H19c0.55,0 1,-0.45 1,-1v0C17.34,12 16,10.66 16,9z",
+        )
+    }
+
+    /**
+     * Three nodes joined by two lines: the share glyph Android has used since Holo.
+     *
+     * Material's core set carries `Share`, which is the other one, the arrow leaving a box, and
+     * that is what an iPhone shares with. On Android the three dots are what people press.
+     */
+    val Share: ImageVector by lazy {
+        icon(
+            "Share",
+            "M18,16.08c-0.76,0 -1.44,0.3 -1.96,0.77L8.91,12.7C8.96,12.47 9,12.24 9,12" +
+                "s-0.04,-0.47 -0.09,-0.7l7.05,-4.11C17.5,7.69 18.21,8 19,8c1.66,0 3,-1.34 3,-3" +
+                "s-1.34,-3 -3,-3s-3,1.34 -3,3c0,0.24 0.04,0.47 0.09,0.7L9.04,9.81C8.5,9.31 7.79,9 " +
+                "7,9c-1.66,0 -3,1.34 -3,3s1.34,3 3,3c0.79,0 1.5,-0.31 2.04,-0.81l7.12,4.16" +
+                "c-0.05,0.21 -0.08,0.43 -0.08,0.65c0,1.61 1.31,2.92 2.92,2.92s2.92,-1.31 2.92,-2.92" +
+                "S19.61,16.08 18,16.08z",
+        )
+    }
+
+    /** The plain bell, for giving a silenced chat its voice back. */
+    val Bell: ImageVector by lazy {
+        icon(
+            "Bell",
+            "M12,22c1.1,0 2,-0.9 2,-2h-4C10,21.1 10.89,22 12,22zM18,16v-5c0,-3.07 -1.64,-5.64 " +
+                "-4.5,-6.32V4c0,-0.83 -0.67,-1.5 -1.5,-1.5S10.5,3.17 10.5,4v0.68C7.63,5.36 6,7.92 " +
+                "6,11v5l-2,2v1h16v-1L18,16z",
+        )
+    }
+
+    /** The struck-through bell, for a chat whose notifications the viewer has turned off. */
+    val BellOff: ImageVector by lazy {
+        icon(
+            "BellOff",
+            "M20,18.69L7.84,6.14 5.27,3.49 4,4.76l2.8,2.8v0.01c-0.52,0.99 -0.8,2.16 -0.8,3.42" +
+                "v5l-2,2v1h13.73l2,2L21,19.72l-1,-1.03zM12,22c1.11,0 2,-0.89 2,-2h-4" +
+                "c0,1.11 0.89,2 2,2zM18,14.68V11c0,-3.08 -2.13,-5.64 -5,-6.32V4" +
+                "c0,-0.83 -0.67,-1.5 -1.5,-1.5S10,3.17 10,4v0.68c-0.15,0.03 -0.29,0.08 -0.43,0.12" +
+                " -0.17,0.05 -0.34,0.11 -0.51,0.18h-0.01c-0.1,0.04 -0.2,0.09 -0.3,0.13" +
+                " -0.01,0 -0.01,0 -0.02,0.01 -0.23,0.11 -0.44,0.24 -0.65,0.37l0,0L18,14.68z",
+        )
+    }
+
+    /**
+     * The same builder again, given SVG path data rather than the drawing DSL.
+     *
+     * The glyphs above it are written out call by call, which is readable for a circle and absurd
+     * for a bell with a slash through it: those arrive as path data, and hand-translating forty
+     * curves into `curveTo` calls is forty chances to put a video's mute marker slightly wrong.
+     * [PathParser] is the same parser an XML vector drawable goes through, so what is drawn is what
+     * the icon set drew.
+     */
+    private fun icon(name: String, pathData: String): ImageVector = ImageVector.Builder(
+        name = name,
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f,
+    ).addPath(
+        pathData = PathParser().parsePathString(pathData).toNodes(),
+        fill = SolidColor(Color.Black),
+    ).build()
 
     private fun icon(
         name: String,

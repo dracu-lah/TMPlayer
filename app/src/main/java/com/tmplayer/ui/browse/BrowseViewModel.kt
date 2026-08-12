@@ -336,6 +336,12 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
         act(onFailure) { it.setArchived(chat.id, archived) }
     }
 
+    fun setMuted(chat: ChatSummary, muted: Boolean, onFailure: (String) -> Unit) {
+        // No arrange(): muting changes what a row says, not where it sits.
+        edit(chat.id) { it.copy(isMuted = muted) }
+        act(onFailure) { it.setMuted(chat.id, muted) }
+    }
+
     fun markRead(chat: ChatSummary, onFailure: (String) -> Unit) {
         edit(chat.id) { it.copy(unreadCount = 0) }
         act(onFailure) { it.markRead(chat.id) }

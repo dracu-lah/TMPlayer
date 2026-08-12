@@ -154,7 +154,7 @@ fun SettingsScreen(
     // Matches the stored default, so the switch does not show as on for the frame before the
     // first value arrives and then visibly flick off.
     val openLastChat by settings.openLastChat.collectAsStateWithLifecycle(initialValue = false)
-    val askBeforeClearing by settings.askBeforeClearing.collectAsStateWithLifecycle(initialValue = false)
+    val askBeforeClearing by settings.askBeforeClearing.collectAsStateWithLifecycle(initialValue = true)
     val downloadFirst by settings.downloadBeforePlaying.collectAsStateWithLifecycle(initialValue = false)
     val autoplayNext by settings.autoplayNext.collectAsStateWithLifecycle(initialValue = true)
     val wifiOnly by settings.wifiOnlyDownloads.collectAsStateWithLifecycle(initialValue = false)
@@ -536,8 +536,13 @@ fun SettingsScreen(
             // the number you wanted cost you a lap of the whole list. Two arrows say which way
             // they go and cannot pass the ends.
             StepperRow(
-                title = "Downloaded videos to keep",
-                subtitle = "The oldest is deleted when a new one needs the room.",
+                title = "Videos to keep when watching",
+                // Says which downloads it governs, because it does not govern all of them any
+                // more. Playing a video may clear the room it needs; a video the viewer ticked and
+                // asked for by name is never deleted to make space for another one they ticked,
+                // and the Downloads screen is where those are removed by hand.
+                subtitle = "Playing a video may delete the oldest to make room. Videos you " +
+                    "download on purpose are kept until you delete them.",
                 value = SettingsStore.keepVideosLabel(keepVideos),
                 icon = TmIcons.Download,
                 canDecrease = SettingsStore.stepKeepVideos(keepVideos, -1) != keepVideos,
@@ -564,7 +569,8 @@ fun SettingsScreen(
         item {
             ToggleRow(
                 title = "Ask before deleting a video",
-                subtitle = "Check with you before an older video is deleted to make room",
+                subtitle = "Check with you before an older video is deleted to make room. " +
+                    "Off means it happens silently.",
                 icon = Icons.Filled.Notifications,
                 checked = askBeforeClearing,
                 onToggle = { scope.launch { settings.setAskBeforeClearing(!askBeforeClearing) } },

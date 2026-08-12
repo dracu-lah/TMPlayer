@@ -251,6 +251,96 @@ class CacheShelfTest {
 }
 
 /**
+ * Several videos ticked at once, which is the same decision as one video taken repeatedly.
+ *
+ * What these are really guarding is that a batch never promises more than the shelf will hold: a
+ * device that keeps three videos must take three of the twenty asked for, not queue all twenty and
+ * evict nineteen of them on the way in.
+ */
+class CacheBatchTest {
+
+    private fun candidates(vararg sizes: Long): List<CacheShelf.Candidate> =
+        sizes.mapIndexed { index, size -> CacheShelf.Candidate(fileId = index + 10, sizeBytes = size) }
+
+    @Test
+    fun `a selection that fits is taken whole`() {
+        val batch = CacheShelf.planBatch(
+            candidates = candidates(GB, GB, GB),
+            held = emptyList(),
+            freeBytes = 20 * GB,
+            keepCount = 5,
+        )
+        assertEquals(listOf(0, 1, 2), batch.fits)
+        assertEquals(null, batch.stoppedBy)
+    }
+
+    @Test
+    fun `a device that keeps one video takes one of the three ticked`() {
+        val batch = CacheShelf.planBatch(
+            candidates = candidates(GB, GB, GB),
+            held = emptyList(),
+            freeBytes = 20 * GB,
+            keepCount = 1,
+        )
+        assertEquals(listOf(0), batch.fits)
+        assertEquals(CacheShelf.Stopper.Count, batch.stoppedBy)
+    }
+
+    @Test
+    fun `a full shelf takes none of them`() {
+        val batch = CacheShelf.planBatch(
+            candidates = candidates(GB, GB),
+            held = shelf(2 to GB, 3 to GB),
+            freeBytes = 20 * GB,
+            keepCount = 2,
+        )
+        assertTrue("nothing should have been taken: ${batch.fits}", batch.fits.isEmpty())
+        assertEquals(CacheShelf.Stopper.Count, batch.stoppedBy)
+    }
+
+    @Test
+    fun `an empty selection asks for nothing and refuses nothing`() {
+        val batch = CacheShelf.planBatch(
+            candidates = emptyList(),
+            held = emptyList(),
+            freeBytes = 20 * GB,
+            keepCount = 3,
+        )
+        assertTrue(batch.fits.isEmpty())
+        assertTrue(batch.alreadyHere.isEmpty())
+        assertEquals(null, batch.stoppedBy)
+    }
+
+    @Test
+    fun `one oversized video in the middle does not refuse the small ones behind it`() {
+        val batch = CacheShelf.planBatch(
+            candidates = candidates(GB, 60 * GB, GB),
+            held = emptyList(),
+            freeBytes = 8 * GB,
+            keepCount = CacheShelf.UNLIMITED,
+        )
+        assertEquals(listOf(0, 2), batch.fits)
+        assertEquals(CacheShelf.Stopper.Space, batch.stoppedBy)
+    }
+
+    @Test
+    fun `a video already on the device costs the shelf nothing`() {
+        val batch = CacheShelf.planBatch(
+            candidates = listOf(
+                CacheShelf.Candidate(fileId = 10, sizeBytes = GB, alreadyHere = true),
+                CacheShelf.Candidate(fileId = 11, sizeBytes = GB),
+            ),
+            held = emptyList(),
+            freeBytes = 20 * GB,
+            keepCount = 1,
+        )
+        assertEquals(listOf(0), batch.alreadyHere)
+        assertEquals(listOf(1), batch.fits)
+        assertEquals(null, batch.stoppedBy)
+    }
+}
+
+/**
  * The ceiling, which used to be a constant four gigabytes and is now a share of the volume.
  *
  * The case that mattered is the first one: the stick this app was written for reports 4.85 GB of

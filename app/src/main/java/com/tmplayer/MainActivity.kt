@@ -1,6 +1,7 @@
 package com.tmplayer
 
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
@@ -39,6 +40,7 @@ import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.LocalFileAvailability
 import com.tmplayer.data.NetworkMonitor
+import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.NetworkStatus
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
@@ -69,6 +71,7 @@ import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.theme.TMPlayerTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -166,9 +169,45 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         Td.start(this)
+        noteRequestedScreen(intent)
         setContent {
             TMPlayerTheme { Root() }
         }
+    }
+
+    /**
+     * The activity is `singleTask`, so a second launch arrives here rather than as a new instance.
+     *
+     * Pressing a download's notification while the app is already open is exactly that case, and
+     * without this it brought the app forward on whatever screen it was last left on: the viewer
+     * pressed a row about a download and got the chat list.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        noteRequestedScreen(intent)
+    }
+
+    private fun noteRequestedScreen(intent: Intent?) {
+        val asked = intent?.getStringExtra(EXTRA_OPEN) ?: return
+        requestedScreen.value = asked
+    }
+
+    companion object {
+        /** Which screen a launch is asking for, when it is asking for one. */
+        const val EXTRA_OPEN = "com.tmplayer.extra.OPEN"
+
+        const val OPEN_DOWNLOADS = SCREEN_DOWNLOADS
+
+        /**
+         * The ask, waiting to be read by the composition.
+         *
+         * A flow rather than the intent itself, because the composable that owns the current
+         * screen cannot see the activity's intent, and because it has to be cleared once acted on:
+         * left set, a rotation would send the viewer back to Downloads every time they turned the
+         * phone.
+         */
+        internal val requestedScreen = MutableStateFlow<String?>(null)
     }
 }
 
@@ -215,6 +254,13 @@ private fun Root() {
     var showUpdate by remember { mutableStateOf(false) }
     LaunchedEffect(auth) {
         if (auth is AuthState.Ready) Updates.check(quiet = true)
+    }
+
+    // The downloads an earlier run of the app was in the middle of, back on the Downloads screen
+    // as paused rows. Waits for TDLib, because restoring asks it how much of each file is actually
+    // on disk, and a queue restored against a closed database would claim every video was at zero.
+    LaunchedEffect(auth) {
+        if (auth is AuthState.Ready) OfflineDownloads.restore(context)
     }
 
     // Half-watched entries that can no longer be turned into a card are swept once per launch.
@@ -283,6 +329,18 @@ private fun Root() {
     var roomPrompt by remember { mutableStateOf<RoomPrompt?>(null) }
     // Where leaving the Downloads screen goes back to.
     var downloadsCameFrom by remember { mutableStateOf<Screen>(Screen.Chats) }
+
+    // A launch that asked for a particular screen, which is how the download notification opens
+    // the list it is about. Cleared as it is acted on, so it happens once per press.
+    val requestedScreen by MainActivity.requestedScreen.collectAsStateWithLifecycle()
+    LaunchedEffect(requestedScreen) {
+        if (requestedScreen != SCREEN_DOWNLOADS) return@LaunchedEffect
+        // Back from the Downloads screen goes wherever the viewer already was, not to the chat
+        // list: they were reading a chat, pressed a notification, and Back should return them to it.
+        if (screen !is Screen.Downloads) downloadsCameFrom = screen
+        screen = Screen.Downloads
+        MainActivity.requestedScreen.value = null
+    }
     // Saveable, not just remembered. Playing a video puts a second activity in front of this one,
     // and a 1 GB stick will happily kill what is behind it, so this composable is routinely
     // rebuilt on the way back. Remembered state would come back false, the jump would re-arm, and
@@ -312,6 +370,12 @@ private fun Root() {
     // middle of it means nothing is being prepared any more, and restoring true would leave every
     // video on the screen refusing to open.
     var preparing by remember { mutableStateOf(false) }
+
+    // Everything unfinished: coming down, waiting its turn, held or failed. That is the number
+    // the drawer badges, because every one of them is a video the viewer is still owed. Held here
+    // because the chat list is where the drawer lives, and a download is started from a different
+    // screen entirely and outlives it.
+    val activeDownloads by OfflineDownloads.active.collectAsStateWithLifecycle()
 
     /**
      * The preparation itself, split out only so [play] can wrap the whole of it in one pending
@@ -628,6 +692,7 @@ private fun Root() {
                         downloadsCameFrom = Screen.Chats
                         screen = Screen.Downloads
                     },
+                    downloadCount = activeDownloads.size,
                     updateVersion = (updateState as? UpdateState.Available)?.release?.version,
                     onUpdate = { showUpdate = true },
                     // Each of these three changes the chat in Telegram, so each says out loud
@@ -651,6 +716,12 @@ private fun Root() {
                             } else {
                                 "${chat.title} archived"
                             },
+                        )
+                    },
+                    onToggleMuted = { chat ->
+                        chatsViewModel.setMuted(chat, !chat.isMuted) { toast(it) }
+                        toast(
+                            if (chat.isMuted) "${chat.title} unmuted" else "${chat.title} muted",
                         )
                     },
                     onMarkRead = { chat ->

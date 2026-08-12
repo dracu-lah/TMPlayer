@@ -63,6 +63,7 @@ import com.tmplayer.data.SignInMethod
 import com.tmplayer.data.Td
 import com.tmplayer.ui.components.BigError
 import com.tmplayer.ui.components.BigLoader
+import com.tmplayer.ui.components.ConnectingPane
 import com.tmplayer.ui.components.Pane
 import com.tmplayer.ui.components.TmButton
 import com.tmplayer.ui.components.TmSecondaryButton
@@ -93,15 +94,33 @@ fun LoginScreen(
     // session, and the code that was already sent stays valid if the user comes straight back.
     var changingNumber by rememberSaveable(state::class) { mutableStateOf(false) }
 
+    val touch = isTouch()
+
     when (state) {
-        is AuthState.Connecting -> BigLoader("Connecting to Telegram…")
-        is AuthState.ChooseMethod -> MethodPane(onChooseMethod)
-        is AuthState.Qr -> QrPane(state.link, onBack = onStartOver)
+        is AuthState.Connecting -> ConnectingPane()
+        // No screen of its own any more. There were two ways in and a pane whose whole job was to
+        // ask which, when the right answer is a property of the device the app is running on:
+        // typing a number on a television costs a minute of D-pad, and scanning a code with the
+        // phone that is displaying it cannot be done at all. So each one opens on the way in that
+        // suits it and carries a button to the other, and nobody is asked a question the app can
+        // answer for them.
+        is AuthState.ChooseMethod -> {
+            LaunchedEffect(touch) {
+                onChooseMethod(if (touch) SignInMethod.Phone else SignInMethod.Qr)
+            }
+            ConnectingPane("Getting ready")
+        }
+        is AuthState.Qr -> QrPane(
+            link = state.link,
+            onUsePhone = { onChooseMethod(SignInMethod.Phone) },
+        )
         is AuthState.Phone -> PhonePane(
             state = state,
             error = submitError,
             onSubmit = onSubmitPhoneNumber,
-            onBack = onCancelPhoneEntry,
+            // The first screen on a phone, so there is nothing behind it; on a television the QR
+            // pane is, and going back there is what [onCancelPhoneEntry] arranges.
+            onBack = if (touch) null else onCancelPhoneEntry,
             onUseQr = { onChooseMethod(SignInMethod.Qr) },
         )
         is AuthState.Code ->
@@ -125,7 +144,7 @@ fun LoginScreen(
             }
         is AuthState.Password ->
             PasswordPane(state, submitError, onSubmitPassword, onStartOver)
-        is AuthState.Ready -> BigLoader("Signing in…")
+        is AuthState.Ready -> ConnectingPane("Signing in")
         is AuthState.Failed -> BigError(state.message, onRetry = null)
     }
 }
@@ -181,108 +200,46 @@ private fun rememberSubmission(state: AuthState, error: String?): Submission {
 }
 
 /**
- * The first thing anybody sees. QR holds the focus because it is the right answer on a TV, where
- * typing a number costs a minute on an on-screen keyboard; the phone route is there for the device
- * that would otherwise have to scan a code being displayed on itself.
+ * Back on the first screen of the sign-in, which means leaving the app.
+ *
+ * Two presses, the same guard the chat list uses: on a remote Back sits right beside the D-pad,
+ * and before this a stray press dropped the viewer out of the app in the middle of scanning a code.
  */
 @Composable
-private fun MethodPane(onChoose: (SignInMethod) -> Unit) {
-    val focus = remember { FocusRequester() }
-    val touch = isTouch()
+private fun ExitOnBack() {
     val activity = LocalActivity.current
     val toast = rememberToast()
-    // The top of the sign-in, so Back here means leaving the app. Two presses, the same guard the
-    // chat list uses: on a remote Back sits right beside the D-pad, and before this a stray press
-    // dropped the viewer out of the app in the middle of scanning a code.
-    var exitArmed by remember { mutableStateOf(false) }
+    var armed by remember { mutableStateOf(false) }
     BackHandler {
-        if (exitArmed) activity?.finish() else { exitArmed = true; toast("Press Back again to leave") }
+        if (armed) activity?.finish() else { armed = true; toast("Press Back again to leave") }
     }
-    LaunchedEffect(exitArmed) {
-        if (exitArmed) {
+    LaunchedEffect(armed) {
+        if (armed) {
             delay(EXIT_WINDOW_MS)
-            exitArmed = false
+            armed = false
         }
     }
-
-    Pane {
-        Text("Sign in to Telegram", style = MaterialTheme.typography.headlineLarge)
-        Text(
-            "Two ways in, and both end up at the same account.",
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        Spacer(Modifier.height(8.dp))
-
-        // On a phone the account almost always lives on this very device, so the number is the
-        // first thing offered and the QR code the second. On a TV it is the other way round.
-        if (touch) {
-            TmButton(
-                onClick = { onChoose(SignInMethod.Phone) },
-                modifier = Modifier.paneAction(),
-            ) {
-                Text("Use my phone number")
-            }
-            Text(
-                "Telegram sends a code to your account, and you type it in here.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Tone.muted,
-            )
-            Spacer(Modifier.height(8.dp))
-            TmSecondaryButton(
-                onClick = { onChoose(SignInMethod.Qr) },
-                modifier = Modifier.paneAction(),
-            ) {
-                Text("Scan a QR code")
-            }
-            Text(
-                "For when your account is on another phone.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Tone.muted,
-            )
-            return@Pane
-        }
-
-        TmButton(
-            onClick = { onChoose(SignInMethod.Qr) },
-            modifier = Modifier.fillMaxWidth().focusRequester(focus),
-        ) {
-            Text("Scan a QR code")
-        }
-        Text(
-            "Quickest here: hold up the phone that already has your account.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Tone.muted,
-        )
-        Spacer(Modifier.height(8.dp))
-
-        TmButton(
-            onClick = { onChoose(SignInMethod.Phone) },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Use my phone number")
-        }
-        Text(
-            "Telegram sends a code to your account, and you type it in here.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Tone.muted,
-        )
-    }
-
-    // Only the remote needs somewhere to start. Asking for focus on a phone opens the keyboard
-    // over a pane that has no field on it.
-    if (!touch) LaunchedEffect(Unit) { focus.requestFocus() }
 }
 
+/**
+ * The number pane, which is where a phone's sign-in begins.
+ *
+ * Back means two different things on the two devices, and both are what the viewer expects. On a
+ * phone this is the first screen, so Back leaves the app, guarded the way the chat list guards it.
+ * On a television it was reached from the QR pane, so Back goes there. The one exception is a
+ * number being changed part way through a sign-in, where Back belongs to the code pane that sent
+ * the viewer here, and that is what [onBack] carries.
+ */
 @Composable
 private fun PhonePane(
     state: AuthState,
     error: String?,
     onSubmit: (String) -> Unit,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     onUseQr: () -> Unit,
 ) {
-    // Back is what anybody who picked the wrong route reaches for, and nothing has been sent yet.
-    BackHandler(onBack = onBack)
+    // Nothing has been sent yet, so leaving costs nothing either way.
+    if (onBack == null) ExitOnBack() else BackHandler(onBack = onBack)
 
     if (isTouch()) {
         TouchPhonePane(state, error, onSubmit, onBack, onUseQr)
@@ -310,8 +267,10 @@ private fun PhonePane(
         busy = submission.busy,
         canSubmit = number.count { it.isDigit() } >= MIN_PHONE_DIGITS,
         onSubmit = { submission.start { onSubmit(number) } },
-        backLabel = "Back",
-        onBack = onBack,
+        // On a television the other way in is one press away, and it is the quicker one, so the
+        // secondary button says where it goes rather than only that it goes back.
+        backLabel = if (onBack == null) "Scan a QR code instead" else "Back",
+        onBack = onBack ?: onUseQr,
     )
 }
 
@@ -328,7 +287,8 @@ private fun TouchPhonePane(
     state: AuthState,
     error: String?,
     onSubmit: (String) -> Unit,
-    onBack: () -> Unit,
+    /** Null when this is the first screen of the sign-in and there is nothing behind it. */
+    onBack: (() -> Unit)?,
     onUseQr: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -369,7 +329,9 @@ private fun TouchPhonePane(
     val submit = { submission.start { onSubmit("+$dial$national") } }
 
     Pane {
-        PaneHeader(onBack = onBack)
+        // No arrow on the first screen: an arrow that leaves the app is not what a back arrow
+        // means anywhere else, and the pane's own buttons are the two ways on from here.
+        if (onBack != null) PaneHeader(onBack = onBack)
         Text("Your phone number", style = MaterialTheme.typography.headlineLarge)
         Text(
             "Telegram will send a code to the account this number belongs to.",
@@ -740,16 +702,20 @@ private fun PaneHeader(onBack: () -> Unit) {
 }
 
 /**
- * The QR pane, with a way back off it.
+ * The QR pane, which is where a television's sign-in begins.
  *
- * It used to have none: no header, no button, and no back handler, so anybody who picked QR and
- * then changed their mind (the account is on this very phone, the other phone is upstairs) had no
- * way out short of killing the app. Going back means abandoning the half-started sign-in, which is
- * what [onBack] does; nothing is lost, because nobody is signed in yet.
+ * It used to have no way off it at all: no header, no button, no back handler, so anybody who
+ * picked QR and then changed their mind (the account is on this very phone, the other phone is
+ * upstairs) was stuck short of killing the app. The way off is now the other way in, [onUsePhone],
+ * rather than a chooser to go back to: nothing is lost either way, because nobody is signed in yet.
+ *
+ * Back means two different things on the two devices, and both are what the viewer expects. On a
+ * television this is the first screen, so Back leaves the app, guarded the way the chat list guards
+ * it. On a phone it was reached from the number pane, so Back goes there.
  */
 @Composable
-private fun QrPane(link: String, onBack: () -> Unit) {
-    BackHandler(onBack = onBack)
+private fun QrPane(link: String, onUsePhone: () -> Unit) {
+    if (isTouch()) BackHandler(onBack = onUsePhone) else ExitOnBack()
 
     val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = link) {
         value = withContext(Dispatchers.Default) { QrCode.render(link, QR_PIXELS) }
@@ -808,12 +774,12 @@ private fun QrPane(link: String, onBack: () -> Unit) {
     // no room beside a 300dp plate for a paragraph, so the same parts stack instead.
     if (isTouch()) {
         Pane(horizontalAlignment = Alignment.CenterHorizontally) {
-            PaneHeader(onBack = onBack)
+            PaneHeader(onBack = onUsePhone)
             plate()
             words()
             Spacer(Modifier.height(8.dp))
-            TmSecondaryButton(onClick = onBack, modifier = Modifier.paneAction()) {
-                Text("Sign in another way")
+            TmSecondaryButton(onClick = onUsePhone, modifier = Modifier.paneAction()) {
+                Text("Use my phone number")
             }
         }
         return
@@ -830,7 +796,7 @@ private fun QrPane(link: String, onBack: () -> Unit) {
             Spacer(Modifier.height(8.dp))
             // On a remote this is the only focusable thing on the pane, so it is also what gives
             // the D-pad somewhere to be: before it, the screen took no input at all.
-            TmSecondaryButton(onClick = onBack) { Text("Sign in another way") }
+            TmSecondaryButton(onClick = onUsePhone) { Text("Use my phone number") }
         }
     }
 }

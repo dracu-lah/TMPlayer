@@ -54,12 +54,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -101,6 +103,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -128,7 +131,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.CardLayout
+import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.OfflineDownloads
@@ -146,6 +151,7 @@ import com.tmplayer.ui.components.MediaGridSkeleton
 import com.tmplayer.ui.components.MenuAction
 import com.tmplayer.ui.components.ConnectionNotice
 import com.tmplayer.ui.components.MediaPreview
+import com.tmplayer.ui.components.holdable
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.pressable
 import com.tmplayer.ui.components.StateScaffold
@@ -159,8 +165,10 @@ import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.focusRing
 import com.tmplayer.ui.theme.Tv
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -319,6 +327,79 @@ fun MediaGridScreen(
     // Whichever video a long press is asking about, and nothing while none is.
     var showingDetailsOf by remember(chatId) { mutableStateOf<MediaItem?>(null) }
 
+    // The videos ticked for one batch download, held as the items themselves rather than as ids:
+    // the download is worked out and started well after the tick, by which time paging may have
+    // handed the listing a fresh list, and an id with nothing to look it up in is not a video.
+    var selected by remember(chatId) { mutableStateOf<Map<String, MediaItem>>(emptyMap()) }
+    var selecting by remember(chatId) { mutableStateOf(false) }
+    // What "Select all" means, which is every video the listing has fetched so far. The bar lives
+    // above the listing and cannot see inside it, so the loaded page is passed out to here.
+    var listedItems by remember(chatId) { mutableStateOf<List<MediaItem>>(emptyList()) }
+    val scope = rememberCoroutineScope()
+    val settings = remember(context) { SettingsStore(context) }
+
+    fun leaveSelection() {
+        selecting = false
+        selected = emptyMap()
+    }
+
+    fun toggle(item: MediaItem) {
+        selected = if (selected.containsKey(item.id)) selected - item.id else selected + (item.id to item)
+    }
+
+    // Only while there is a selection to leave, so Back still leaves the chat the rest of the time.
+    BackHandler(enabled = selecting) { leaveSelection() }
+
+    fun downloadSelection() {
+        val chosen = selected.values.toList()
+        if (chosen.isEmpty()) return
+        // Android 13 counts a download's progress notification as one the viewer has to have
+        // agreed to. Asked here rather than at first launch, because here is the one moment the
+        // request explains itself.
+        askForNotifications(context)
+        leaveSelection()
+        scope.launch {
+            // Off the main thread for the whole of the decision. Between here and the plan sits a
+            // walk of every download record with a TDLib round trip to measure each one, a
+            // statvfs() for the free space and a stat() per ticked video, and resumed onto the
+            // thread drawing the grid that is the listing frozen for the length of it.
+            val (taken, message) = withContext(Dispatchers.Default) {
+                val held = runCatching {
+                    settings.downloadHistory.first().mapNotNull { record ->
+                        val bytes = Td.localDownloadedBytes(record.fileId)
+                        if (bytes <= 0) null else CacheShelf.Held(record.fileId, bytes, record.updatedAt)
+                    }
+                }.getOrDefault(emptyList())
+                val coming = OfflineDownloads.active.value
+                val candidates = chosen.map { item ->
+                    CacheShelf.Candidate(
+                        fileId = item.fileId,
+                        sizeBytes = item.sizeBytes,
+                        partialBytes = runCatching { Td.localDownloadedBytes(item.fileId) }
+                            .getOrDefault(0L),
+                        alreadyHere = coming.containsKey(item.fileId) ||
+                            runCatching { Td.isFileCached(item.fileId) }.getOrDefault(false),
+                    )
+                }
+                val batch = CacheShelf.planBatch(
+                    candidates = candidates,
+                    held = held,
+                    freeBytes = DiskSpace.read(context).freeBytes,
+                    // The disk decides here, and nothing else. "Keep videos" is a rule about what
+                    // playing a video may evict, and applying it to a tick meant a viewer who
+                    // selected three films was told two of them were refused because the device
+                    // keeps one at a time: not queued, not remembered, gone. Ticking three videos
+                    // is a viewer asking for three videos, so all three go on the queue and the
+                    // only thing that can turn one away is there being no room for it.
+                    keepCount = CacheShelf.UNLIMITED,
+                )
+                batch.fits.map { chosen[it] } to batchMessage(batch, chosen.size)
+            }
+            taken.forEach { OfflineDownloads.start(context, it, chatTitle) }
+            onOfflineAction(message)
+        }
+    }
+
     var refreshing by remember(chatId) { mutableStateOf(false) }
     LaunchedEffect(refreshing) {
         if (!refreshing) return@LaunchedEffect
@@ -346,6 +427,7 @@ fun MediaGridScreen(
             val feed = remember(list.items, list.sponsored) {
                 placeSponsored(list.items, list.sponsored)
             }
+            LaunchedEffect(list.items) { listedItems = list.items }
             val gridState = rememberLazyGridState()
             val listState = rememberLazyListState()
             val firstItem = remember { FocusRequester() }
@@ -414,11 +496,10 @@ fun MediaGridScreen(
                                             SettingsStore.progressKey(item.chatId, item.messageId),
                                         ],
                                         dense = dense,
-                                        onClick = { onPlay(item) },
-                                        onLongClick = if (touch) {
+                                        selected = if (selecting) selected.containsKey(item.id) else null,
+                                        onClick = { if (selecting) toggle(item) else onPlay(item) },
+                                        onLongClick = if (selecting) null else {
                                             { showingDetailsOf = item }
-                                        } else {
-                                            null
                                         },
                                         onFocused = { standingOn = item },
                                         modifier = focusOf(item),
@@ -460,11 +541,10 @@ fun MediaGridScreen(
                                         watched = watchProgress[
                                             SettingsStore.progressKey(item.chatId, item.messageId),
                                         ],
-                                        onClick = { onPlay(item) },
-                                        onLongClick = if (touch) {
+                                        selected = if (selecting) selected.containsKey(item.id) else null,
+                                        onClick = { if (selecting) toggle(item) else onPlay(item) },
+                                        onLongClick = if (selecting) null else {
                                             { showingDetailsOf = item }
-                                        } else {
-                                            null
                                         },
                                         onFocused = { standingOn = item },
                                         modifier = focusOf(item),
@@ -492,6 +572,10 @@ fun MediaGridScreen(
                             SettingsStore.progressKey(item.chatId, item.messageId),
                         ],
                         onPlay = { onPlay(item) },
+                        onSelectVideos = {
+                            selected = mapOf(item.id to item)
+                            selecting = true
+                        },
                         onDismiss = { showingDetailsOf = null },
                     )
                 }
@@ -588,6 +672,17 @@ fun MediaGridScreen(
             layout = layout,
             onToggleLayout = onToggleLayout,
             onRefresh = refresh,
+            selectionBar = if (!selecting) null else {
+                {
+                    SelectionBar(
+                        count = selected.size,
+                        onDownload = { downloadSelection() },
+                        onSelectAll = { selected = listedItems.associateBy { it.id } },
+                        onCancel = { leaveSelection() },
+                        edge = edge,
+                    )
+                }
+            },
             content = {
                 // The circular arrow stays in the overflow, because a listing that is empty or in
                 // an error state has nothing to drag, but a downward pull is what a phone user
@@ -606,20 +701,34 @@ fun MediaGridScreen(
         )
     } else {
         Column(Modifier.fillMaxSize()) {
-            Header(
-                chatTitle = chatTitle,
-                chatPhotoFileId = chatPhotoFileId,
-                chatMiniThumbnail = chatMiniThumbnail,
-                isFavorite = isFavorite,
-                query = query,
-                onQuery = { query = it },
-                onSubmit = { viewModel.search(query) },
-                onToggleFavorite = onToggleFavorite,
-                layout = layout,
-                edge = edge,
-                onToggleLayout = onToggleLayout,
-                onRefresh = refresh,
-            )
+            // The bar takes the heading's place rather than sitting under it. The remote reaches it
+            // by pressing Up out of the grid, which is the one move that already had a meaning
+            // there, and the search field it covers is no use while videos are being ticked.
+            if (selecting) {
+                SelectionBar(
+                    count = selected.size,
+                    onDownload = { downloadSelection() },
+                    onSelectAll = { selected = listedItems.associateBy { it.id } },
+                    onCancel = { leaveSelection() },
+                    edge = edge,
+                )
+            } else {
+                Header(
+                    chatTitle = chatTitle,
+                    chatPhotoFileId = chatPhotoFileId,
+                    chatMiniThumbnail = chatMiniThumbnail,
+                    isFavorite = isFavorite,
+                    query = query,
+                    onQuery = { query = it },
+                    onSubmit = { viewModel.search(query) },
+                    onToggleFavorite = onToggleFavorite,
+                    layout = layout,
+                    edge = edge,
+                    onToggleLayout = onToggleLayout,
+                    onRefresh = refresh,
+                    onBack = onBack,
+                )
+            }
             listing()
         }
     }
@@ -670,6 +779,12 @@ internal fun TouchMediaScaffold(
     layout: CardLayout,
     onToggleLayout: () -> Unit,
     onRefresh: () -> Unit,
+    /**
+     * The contextual bar shown while videos are being ticked, which takes the whole of the app bar
+     * rather than sitting under it: that is what every phone list does when a selection starts, and
+     * leaving the ordinary bar in place would leave a back arrow that quietly abandons the picks.
+     */
+    selectionBar: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     var searching by rememberSaveable { mutableStateOf(false) }
@@ -693,7 +808,7 @@ internal fun TouchMediaScaffold(
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
+            if (selectionBar != null) selectionBar() else TopAppBar(
                 scrollBehavior = scrollBehavior,
                 title = {
                     if (searching) {
@@ -862,6 +977,7 @@ internal fun Header(
     edge: Dp,
     onToggleLayout: () -> Unit,
     onRefresh: () -> Unit,
+    onBack: () -> Unit,
 ) {
     val startVoice = rememberVoiceSearch("Say a video name") {
         onQuery(it)
@@ -871,6 +987,12 @@ internal fun Header(
     Column(Modifier.padding(start = edge, end = edge, top = Tv.SafeV, bottom = 12.dp)) {
         // The same picture the chat was picked by, so it is obvious which one this listing is.
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // The way out, drawn. The phone's version of this screen has had a back arrow in its
+            // app bar all along and the television had nothing: the remote's own Back key worked,
+            // which is not the same as the screen saying so, and it is the one key on a stick
+            // remote that people are least sure of.
+            Pill("Back to chats", Icons.AutoMirrored.Filled.ArrowBack, showLabel = false, onClick = onBack)
+            Spacer(Modifier.width(16.dp))
             MediaPreview(
                 miniThumbnail = chatMiniThumbnail,
                 thumbnailFileId = chatPhotoFileId,
@@ -943,6 +1065,77 @@ internal fun Header(
             // nobody has to be told the meaning of, and the word cost the search field 90dp.
             Pill("Refresh", Icons.Filled.Refresh, showLabel = false, onClick = onRefresh)
         }
+    }
+}
+
+/**
+ * What is on offer while videos are being ticked, on the two devices this screen runs on.
+ *
+ * A phone gets the contextual app bar it already knows: a cross where the back arrow was, the count
+ * where the chat's name was, and the actions on the right. A television gets the same three actions
+ * as the pills the heading is built from, because a remote can only reach what can take focus, and
+ * an icon-only bar drawn for a thumb is a row of unlabelled squares from a sofa.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SelectionBar(
+    count: Int,
+    onDownload: () -> Unit,
+    onSelectAll: () -> Unit,
+    onCancel: () -> Unit,
+    edge: Dp,
+) {
+    val label = if (count == 1) "1 selected" else "$count selected"
+
+    if (isTouch()) {
+        TopAppBar(
+            title = { M3Text(label, style = M3MaterialTheme.typography.titleMedium) },
+            navigationIcon = {
+                IconButton(onClick = onCancel) {
+                    M3Icon(Icons.Filled.Close, contentDescription = "Stop selecting")
+                }
+            },
+            actions = {
+                TextButton(onClick = onSelectAll) { M3Text("Select all") }
+                // Words, not a bare arrow. The one control on this bar that actually does
+                // something to the ticked videos was a 24 dp glyph in the corner, which is the
+                // same shape and place as a dozen other icon buttons in the app and says nothing
+                // about what it is about to start.
+                Button(
+                    onClick = onDownload,
+                    enabled = count > 0,
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(end = 8.dp),
+                ) {
+                    M3Icon(
+                        TmIcons.Download,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    M3Text("Download selected")
+                }
+            },
+        )
+        return
+    }
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = edge, end = edge, top = Tv.SafeV, bottom = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.headlineSmall,
+            color = Tone.text,
+            modifier = Modifier.weight(1f),
+        )
+        Pill("Download", TmIcons.Download, onClick = onDownload)
+        Pill("Select all", Icons.Filled.Check, onClick = onSelectAll)
+        Pill("Cancel", Icons.Filled.Close, onClick = onCancel)
     }
 }
 
@@ -1213,8 +1406,15 @@ internal fun MediaCard(
     modifier: Modifier = Modifier,
     /** The phone's grid: smaller art, small type, running time over the picture. */
     dense: Boolean = false,
-    /** A long press on a phone, which shows the whole name a tile had to cut. */
+    /** A long press on a phone, or a hold of OK on a remote, which opens the tile's own menu. */
     onLongClick: (() -> Unit)? = null,
+    /**
+     * Ticked, unticked, or `null` for the ordinary card that is not being picked at all.
+     *
+     * Three states rather than a boolean, because an unticked tile in a selection still has to say
+     * that it can be ticked, and a tile outside one must not carry any such mark.
+     */
+    selected: Boolean? = null,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
@@ -1230,6 +1430,7 @@ internal fun MediaCard(
             modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(Corner.Small))
+                .selectionEdge(selected, RoundedCornerShape(Corner.Small))
                 .longPressable(onClick, onLongClick)
                 .padding(DENSE_GAP),
         ) {
@@ -1238,6 +1439,7 @@ internal fun MediaCard(
                 watched = watched,
                 durationOverlay = true,
                 compact = true,
+                selected = selected,
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(16f / 9f)
@@ -1268,10 +1470,14 @@ internal fun MediaCard(
             // The same hairline the television's panel carries, for the same reason: in daylight a
             // card's fill is a shade off the page it sits on, and the caption under it is one line
             // on some tiles and two on others.
-            border = BorderStroke(1.dp, Tone.outline),
+            border = if (selected == true) {
+                BorderStroke(SELECTED_EDGE, Tone.accent)
+            } else {
+                BorderStroke(1.dp, Tone.outline)
+            },
             modifier = modifier.fillMaxWidth().longPressable(onClick, onLongClick),
         ) {
-            MediaCardBody(item, watched)
+            MediaCardBody(item, watched, selected)
         }
         return
     }
@@ -1281,6 +1487,7 @@ internal fun MediaCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(Corner.Medium))
             .background(if (focused) Tone.surfaceHigh else Tone.surface)
+            .selectionEdge(selected, RoundedCornerShape(Corner.Medium))
             // A hairline under the focus border, so a tile has an edge even when the remote is
             // somewhere else. Without it a card is only as visible as its own fill, which in
             // daylight is a near-white panel on a near-white page: the pictures line up, but the
@@ -1288,16 +1495,16 @@ internal fun MediaCard(
             // a line higher than a two-line title does. The edge is what says where one tile ends.
             .border(1.dp, Tone.outline, RoundedCornerShape(Corner.Medium))
             .border(3.dp, border, RoundedCornerShape(Corner.Medium))
-            .pressable(interactions, onClick),
+            .holdOrPress(interactions, onClick, onLongClick),
     ) {
-        MediaCardBody(item, watched)
+        MediaCardBody(item, watched, selected)
     }
 }
 
 /** The picture and the caption under it, which both the phone's card and the TV's panel carry. */
 @Composable
-private fun MediaCardBody(item: MediaItem, watched: WatchPoint?) {
-    MediaArt(item, watched, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+private fun MediaCardBody(item: MediaItem, watched: WatchPoint?, selected: Boolean? = null) {
+    MediaArt(item, watched, Modifier.fillMaxWidth().aspectRatio(16f / 9f), selected = selected)
     Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
         Text(
             item.title,
@@ -1334,6 +1541,8 @@ private fun MediaRow(
     onFocused: () -> Unit,
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
+    /** As on the tile: ticked, unticked, or `null` outside a selection entirely. */
+    selected: Boolean? = null,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
@@ -1357,7 +1566,8 @@ private fun MediaRow(
                             .clip(RoundedCornerShape(Corner.Medium))
                             .background(if (focused) Tone.surfaceHigh else Tone.surface)
                             .border(3.dp, border, RoundedCornerShape(Corner.Medium))
-                            .pressable(interactions, onClick)
+                            .selectionEdge(selected, RoundedCornerShape(Corner.Medium))
+                            .holdOrPress(interactions, onClick, onLongClick)
                     },
                 )
                 .padding(12.dp),
@@ -1374,6 +1584,7 @@ private fun MediaRow(
                 (if (touch) Modifier.weight(TOUCH_ART_SHARE) else Modifier.width(ROW_ART_WIDTH))
                     .aspectRatio(16f / 9f)
                     .clip(RoundedCornerShape(Corner.Small)),
+                selected = selected,
             )
             Column(
                 Modifier.weight(if (touch) 1f - TOUCH_ART_SHARE else 1f),
@@ -1398,6 +1609,7 @@ private fun MediaRow(
     if (touch) {
         Card(
             shape = RoundedCornerShape(Corner.Medium),
+            border = if (selected == true) BorderStroke(SELECTED_EDGE, Tone.accent) else null,
             modifier = modifier.fillMaxWidth().longPressable(onClick, onLongClick),
         ) {
             row()
@@ -1438,6 +1650,12 @@ private fun MediaArt(
      * same figures, two of them cover most of the artwork they are annotating.
      */
     compact: Boolean = false,
+    /**
+     * The tick, or the empty ring inviting one. Over the artwork rather than beside the title,
+     * because the picture is the part of a tile a viewer is looking at, and on a television it is
+     * the only part big enough for a mark to be read from a sofa.
+     */
+    selected: Boolean? = null,
 ) {
     val tagStyle = if (compact) {
         M3MaterialTheme.typography.labelSmall
@@ -1455,7 +1673,47 @@ private fun MediaArt(
             modifier = Modifier.fillMaxSize(),
         )
         val tags = item.qualityTags
-        if (item.onDevice) {
+
+        // What the download queue is doing with this video, if anything. Read through
+        // [derivedStateOf] so a grid of forty tiles does not all recompose once a second because
+        // one of them is counting bytes: only the tile whose own entry changed is invalidated.
+        val queue = OfflineDownloads.active.collectAsStateWithLifecycle()
+        val coming by remember(item.fileId) {
+            androidx.compose.runtime.derivedStateOf { queue.value[item.fileId] }
+        }
+        val waiting = coming
+        if (waiting != null) {
+            // Takes the "Saved" badge's corner, and takes precedence over it: a video being
+            // fetched is the more urgent fact, and both in one corner would overlap. This is the
+            // whole answer to "I ticked three films and only one of them looks like anything is
+            // happening": the other two say so on their own tiles.
+            Text(
+                when (waiting.stage) {
+                    OfflineDownloads.Stage.Running ->
+                        waiting.fraction?.let { "${(it * 100).toInt()}%" } ?: "Downloading"
+                    OfflineDownloads.Stage.Queued -> "Queued"
+                    OfflineDownloads.Stage.Paused -> "Paused"
+                    OfflineDownloads.Stage.Offline -> "Waiting"
+                    OfflineDownloads.Stage.NoWifi -> "Wi-Fi"
+                    OfflineDownloads.Stage.Failed -> "Failed"
+                },
+                style = tagStyle,
+                color = Tone.onAccent,
+                maxLines = 1,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(inset)
+                    .clip(RoundedCornerShape(Corner.ExtraSmall))
+                    .background(
+                        if (waiting.stage == OfflineDownloads.Stage.Failed) {
+                            Tone.danger.copy(alpha = 0.92f)
+                        } else {
+                            Tone.accent.copy(alpha = 0.92f)
+                        },
+                    )
+                    .padding(horizontal = plateH + 1.dp, vertical = plateV),
+            )
+        } else if (item.onDevice) {
             Text(
                 // Not "On this TV": the same badge is drawn on a phone, where it was telling the
                 // viewer about a television they are not holding.
@@ -1544,6 +1802,38 @@ private fun MediaArt(
                 }
             }
         }
+        if (selected != null) {
+            val ring = if (compact) 30.dp else 44.dp
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        if (selected) {
+                            Tone.accent.copy(alpha = 0.34f)
+                        } else {
+                            Color.Black.copy(alpha = 0.28f)
+                        },
+                    ),
+            )
+            Box(
+                Modifier
+                    .align(Alignment.Center)
+                    .size(ring)
+                    .clip(CircleShape)
+                    .background(if (selected) Tone.accent else Color.Black.copy(alpha = 0.55f))
+                    .border(2.dp, Color.White, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (selected) {
+                    M3Icon(
+                        Icons.Filled.Check,
+                        contentDescription = "Selected",
+                        tint = Tone.onAccent,
+                        modifier = Modifier.size(ring * 0.6f),
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -1558,6 +1848,35 @@ private fun MediaArt(
 private fun Modifier.longPressable(onClick: () -> Unit, onLongClick: (() -> Unit)?): Modifier =
     if (onLongClick == null) clickable(onClick = onClick)
     else combinedClickable(onClick = onClick, onLongClick = onLongClick)
+
+/**
+ * The remote's equivalent: OK opens the video, holding OK opens its menu.
+ *
+ * A television has no second button, so the menu that a phone reaches by long press had nowhere to
+ * live on this screen and the tiles here were a plain press only. That was tolerable while the menu
+ * only repeated what the name strip already says, and is not once it is the way into picking
+ * several videos at once.
+ */
+@Composable
+private fun Modifier.holdOrPress(
+    interactions: MutableInteractionSource,
+    onClick: () -> Unit,
+    onHold: (() -> Unit)?,
+): Modifier =
+    if (onHold == null) pressable(interactions, onClick)
+    else holdable(interactions, onClick, onHold)
+
+/**
+ * The band that says a card has been ticked.
+ *
+ * Drawn on top of the focus border rather than instead of it, and thicker than it: on a television
+ * these two answer different questions at the same time, one being "where is the remote" and the
+ * other "what will be downloaded", and a selection read across a room has to survive the remote
+ * standing somewhere else entirely.
+ */
+@Composable
+private fun Modifier.selectionEdge(selected: Boolean?, shape: Shape): Modifier =
+    if (selected != true) this else border(SELECTED_EDGE, Tone.accent, shape)
 
 /**
  * What can be done with the video being held down.
@@ -1576,6 +1895,7 @@ private fun MediaActionsSheet(
     chatTitle: String,
     watched: WatchPoint?,
     onPlay: () -> Unit,
+    onSelectVideos: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -1602,12 +1922,29 @@ private fun MediaActionsSheet(
             ),
         )
         when {
+            // On the list already, at whatever stage: the one thing to offer is taking it off
+            // again. Which stage it is in is what the wording says, since "stop the download" on
+            // a video that is fourth in the queue describes something that is not happening.
             downloading != null -> add(
                 MenuAction(
-                    label = "Stop the download",
+                    label = when (downloading.stage) {
+                        OfflineDownloads.Stage.Queued -> "Take out of the queue"
+                        OfflineDownloads.Stage.Paused -> "Remove the paused download"
+                        OfflineDownloads.Stage.Failed -> "Remove the failed download"
+                        OfflineDownloads.Stage.Offline -> "Stop waiting for a connection"
+                        OfflineDownloads.Stage.NoWifi -> "Stop waiting for Wi-Fi"
+                        OfflineDownloads.Stage.Running -> "Stop the download"
+                    },
                     icon = Icons.Filled.Close,
-                    detail = downloading.fraction
-                        ?.let { "${(it * 100).toInt()}% so far. What arrived is kept." },
+                    detail = when (downloading.stage) {
+                        OfflineDownloads.Stage.Queued -> "Waiting its turn. Nothing has been fetched yet."
+                        OfflineDownloads.Stage.Offline ->
+                            "It carries on by itself when the signal is back."
+                        OfflineDownloads.Stage.NoWifi ->
+                            "It starts by itself on Wi-Fi."
+                        else -> downloading.fraction
+                            ?.let { "${(it * 100).toInt()}% so far. What arrived is kept." }
+                    },
                     onSelect = {
                         OfflineDownloads.cancel(context, item.fileId)
                         onDismiss()
@@ -1638,11 +1975,19 @@ private fun MediaActionsSheet(
                 ),
             )
         }
+        add(
+            MenuAction(
+                label = "Select videos",
+                icon = Icons.Filled.Check,
+                detail = "Tick several and download them in one go",
+                onSelect = { onDismiss(); onSelectVideos() },
+            ),
+        )
         if (onDisk) {
             add(
                 MenuAction(
                     label = "Share",
-                    icon = Icons.Filled.Share,
+                    icon = TmIcons.Share,
                     onSelect = {
                         scope.launch { shareVideo(context, item, send = true) }
                         onDismiss()
@@ -1669,6 +2014,31 @@ private fun MediaActionsSheet(
         actions = actions,
         onDismiss = onDismiss,
     )
+}
+
+/**
+ * What to say about a selection the device could not take whole.
+ *
+ * The count is quoted rather than hidden behind "some could not be downloaded", because the limit
+ * is the viewer's own setting and saying the number is what tells them where to go and change it.
+ * [wanted] is everything ticked, including whatever was on the device already: those are subtracted
+ * here, so the sentence counts the videos that actually needed fetching.
+ */
+private fun batchMessage(batch: CacheShelf.Batch, wanted: Int): String {
+    val taken = batch.fits.size
+    val needed = wanted - batch.alreadyHere.size
+    // The count limit no longer refuses a tick, so the only thing left to explain is the disk.
+    val noRoom = "There is no more room on this device."
+    return when {
+        needed == 0 && wanted == 1 -> "That video is on this device already."
+        needed == 0 -> "Those videos are already downloading or downloaded."
+        taken == 0 -> "None of them will fit. $noRoom"
+        taken < needed -> "Queued $taken of $needed. $noRoom"
+        taken == 1 -> "Downloading 1 video."
+        // They are fetched one at a time, so what the viewer is told is what they will see on the
+        // Downloads screen: one coming down and the rest waiting their turn.
+        else -> "Queued $taken videos. They download one at a time."
+    }
 }
 
 /**
@@ -1804,6 +2174,16 @@ private val BAR_AVATAR = 40.dp
 
 /** Barely a hairline between tiles, so the grid still reads as one sheet of pictures. */
 private val DENSE_GAP = 4.dp
+
+/**
+ * Thicker than the focus border it is drawn over, so the two never read as the same mark.
+ *
+ * Halved from five. A five dp edge on every tile of a selection is a grid that turns into a wall
+ * of accent the moment more than two or three videos are ticked, and it ate enough of each
+ * thumbnail to change what the picture showed. Two and a half still reads as deliberate against
+ * the two dp focus ring, and the tick in the corner is what actually says "selected" anyway.
+ */
+private val SELECTED_EDGE = 2.5.dp
 
 /** Half the panel, so the strip never reaches back across the listing it belongs to. */
 private val STRIP_MAX_WIDTH = 480.dp

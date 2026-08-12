@@ -149,4 +149,97 @@ object CacheShelf {
         val reclaim = doomed.sumOf { it.bytes }
         return if (doomed.isEmpty()) Plan.Proceed else Plan.Evict(doomed.map { it.fileId }, reclaim)
     }
+
+    /** One of several videos asked for at once. [partialBytes] is what an earlier attempt left. */
+    data class Candidate(
+        val fileId: Int,
+        val sizeBytes: Long,
+        val partialBytes: Long = 0,
+        /** Already on the device or already coming down, so it costs nothing and asks for nothing. */
+        val alreadyHere: Boolean = false,
+    )
+
+    /** Why the shelf turned a video away, which is the difference between "full" and "too small". */
+    enum class Stopper { Count, Space }
+
+    /**
+     * Indices into the candidates given, so the caller keeps its own objects and their order.
+     *
+     * [stoppedBy] is null when everything asked for was taken, and otherwise says which limit bit
+     * first. It carries no wording: what the viewer is told depends on the screen doing the telling.
+     */
+    data class Batch(
+        val fits: List<Int>,
+        val alreadyHere: List<Int>,
+        val stoppedBy: Stopper?,
+    )
+
+    /**
+     * How much of a selection this device can actually keep.
+     *
+     * Twenty videos queued onto a device that keeps three is not twenty downloads: it is three
+     * kept and seventeen deleted on arrival, each one evicting the last, which costs the viewer
+     * their data allowance and leaves them with less than they would have had by asking for three.
+     * So the answer is worked out before a byte is fetched, and it is worked out by running the
+     * single video decision above once per candidate against a shelf that grows as each is
+     * accepted. The rules therefore live in exactly one place, and a batch is only ever what a
+     * sequence of ordinary downloads would have been.
+     *
+     * Nothing here is evicted. [plan] is willing to give up the oldest video to make room, which is
+     * right when a viewer presses Play on one thing, and wrong here: they ticked these on top of
+     * what they already had, and quietly deleting last week's film to honour the tick is not what
+     * the tick meant. Anything short of [Plan.Proceed] is therefore a refusal.
+     *
+     * A refusal is not the end of the loop. A single large video in the middle of a selection can
+     * be the only one that will not fit, and stopping there would refuse the small ones behind it
+     * for no reason.
+     */
+    fun planBatch(
+        candidates: List<Candidate>,
+        held: List<Held>,
+        freeBytes: Long,
+        keepCount: Int,
+    ): Batch {
+        val shelf = held.distinctBy { it.fileId }.toMutableList()
+        var free = freeBytes
+        val fits = mutableListOf<Int>()
+        val alreadyHere = mutableListOf<Int>()
+        var stoppedBy: Stopper? = null
+        // Each acceptance has to land newer than everything on the shelf, or the video just
+        // granted a slot would be the oldest thing there and the next candidate would evict it.
+        var arrival = (shelf.maxOfOrNull { it.updatedAt } ?: 0L) + 1
+
+        for ((index, candidate) in candidates.withIndex()) {
+            if (candidate.alreadyHere) {
+                alreadyHere += index
+                continue
+            }
+            val plan = plan(
+                targetFileId = candidate.fileId,
+                targetSizeBytes = candidate.sizeBytes,
+                targetPartialBytes = candidate.partialBytes,
+                alreadyCached = false,
+                held = shelf,
+                freeBytes = free,
+                keepCount = keepCount,
+            )
+            if (plan !is Plan.Proceed) {
+                if (stoppedBy == null) {
+                    stoppedBy = if (plan is Plan.NotEnoughSpace) {
+                        Stopper.Space
+                    } else if (keepCount != UNLIMITED && shelf.size >= keepCount) {
+                        Stopper.Count
+                    } else {
+                        Stopper.Space
+                    }
+                }
+                continue
+            }
+            fits += index
+            shelf += Held(candidate.fileId, maxOf(candidate.sizeBytes, candidate.partialBytes), arrival++)
+            free -= (candidate.sizeBytes - candidate.partialBytes).coerceAtLeast(0)
+        }
+
+        return Batch(fits = fits, alreadyHere = alreadyHere, stoppedBy = stoppedBy)
+    }
 }

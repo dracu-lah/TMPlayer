@@ -40,6 +40,15 @@ private val THEME_CHOICE = stringPreferencesKey("theme_choice")
 private val DYNAMIC_COLOUR = booleanPreferencesKey("dynamic_colour")
 private val KEEP_VIDEOS = intPreferencesKey("keep_videos")
 private val VIDEO_SCALE = stringPreferencesKey("video_scale")
+
+/**
+ * The downloads that have not finished, so a killed process comes back to its queue.
+ *
+ * One key holding every unfinished request, because it is only ever read whole at launch and
+ * rewritten whole as the queue moves. A key per download would leave orphans behind whenever a
+ * write was interrupted, which for a list this short buys nothing.
+ */
+private val DOWNLOAD_QUEUE = stringPreferencesKey("download_queue")
 private val SCREEN_ORIENTATION = stringPreferencesKey("screen_orientation")
 
 /**
@@ -429,13 +438,20 @@ class SettingsStore(private val context: Context) {
     // ---- prompts ----------------------------------------------------------------------------
 
     /**
-     * Whether to confirm before dropping the previous video to make room for a new one.
+     * Whether to confirm before dropping an older video to make room for a new one.
      *
-     * Off by default. The stick holds one video at a time, so the answer is always yes, and being
-     * asked it every time is a press between the viewer and what they came to watch. Anyone who
-     * wants the question back can turn it on.
+     * On by default now, and it was off. The reasoning for off was a television that holds one
+     * video at a time, where the answer is always yes and the question is a press between the
+     * viewer and what they came to watch. That reasoning does not survive a queue: a phone can now
+     * hold a shelf of films the viewer ticked, packed for a journey, and pressing Play on a fourth
+     * video to see what it is would have deleted the oldest of them without a word. Deleting
+     * something somebody spent an evening's data downloading is not a thing to do silently.
+     *
+     * It costs the television nothing it cannot get back: the prompt only appears when there is
+     * genuinely something substantial to delete, and anyone who does not want to be asked can turn
+     * it off in Settings, which is where it was already.
      */
-    val askBeforeClearing: Flow<Boolean> = read { it[ASK_BEFORE_CLEARING] ?: false }
+    val askBeforeClearing: Flow<Boolean> = read { it[ASK_BEFORE_CLEARING] ?: true }
 
     suspend fun setAskBeforeClearing(value: Boolean) {
         context.prefs.edit { it[ASK_BEFORE_CLEARING] = value }
@@ -530,6 +546,33 @@ class SettingsStore(private val context: Context) {
                 add(record)
             }
         }.sortedByDescending { it.updatedAt }
+    }
+
+    /**
+     * The unfinished downloads, as the last write of the queue left them.
+     *
+     * Read once at launch by [OfflineDownloads.restore]. Not a flow: nothing watches this, because
+     * the live queue is the one in memory and this is only its footprint on disk.
+     */
+    suspend fun downloadQueueNow(): List<DownloadRequest> =
+        DownloadRequest.decodeAll(context.prefs.data.first()[DOWNLOAD_QUEUE])
+
+    /**
+     * Records the queue as it now stands. An empty list clears the key rather than storing "".
+     *
+     * Written on every change to the queue, which is a handful of writes per download rather than
+     * one per second: progress is deliberately not stored, since a resumed download asks TDLib how
+     * many bytes are actually on disk rather than trusting a number the crash may have caught mid
+     * write.
+     */
+    suspend fun saveDownloadQueue(requests: List<DownloadRequest>) {
+        context.prefs.edit { prefs ->
+            if (requests.isEmpty()) {
+                prefs.remove(DOWNLOAD_QUEUE)
+            } else {
+                prefs[DOWNLOAD_QUEUE] = DownloadRequest.encodeAll(requests)
+            }
+        }
     }
 
     /** Remembers a video as one that has been fetched, so Downloads can name it later. */

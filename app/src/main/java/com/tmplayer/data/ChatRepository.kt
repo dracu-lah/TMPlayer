@@ -3,6 +3,7 @@ package com.tmplayer.data
 import dev.g000sha256.tdl.TdlClient
 import dev.g000sha256.tdl.TdlResult
 import dev.g000sha256.tdl.dto.Chat
+import dev.g000sha256.tdl.dto.ChatNotificationSettings
 import dev.g000sha256.tdl.dto.ChatListArchive
 import dev.g000sha256.tdl.dto.ChatListFolder
 import dev.g000sha256.tdl.dto.ChatListMain
@@ -413,6 +414,46 @@ class ChatRepository(private val td: TdlClient) {
             td.toggleChatIsPinned(list, chat.id, pinned)
         }
 
+    /**
+     * Silences a chat, or gives it its voice back.
+     *
+     * The row could already say a chat was muted and the app had no way to mute one, which is a
+     * state the viewer can see and not reach. Telegram has no mute flag: muting is a number of
+     * seconds to stay quiet for, and "forever" is that number at its largest.
+     *
+     * The chat's existing settings are read first and only the two mute fields are changed. The
+     * alternative, sending a freshly built settings object, would quietly reset the sound, the
+     * previews and the story settings of every chat the viewer ever muted from here, none of which
+     * they asked about and none of which this app has any business having an opinion on.
+     */
+    suspend fun setMuted(chatId: Long, muted: Boolean): TdlResult<dev.g000sha256.tdl.dto.Ok> =
+        withContext(Dispatchers.IO) {
+            val now = td.getChat(chatId).valueOrNull?.notificationSettings
+            val settings = ChatNotificationSettings(
+                // False either way: the chat is being given an answer of its own, and leaving it
+                // on the account-wide default is what "unmute" would mean if the default were mute.
+                useDefaultMuteFor = false,
+                muteFor = if (muted) MUTE_FOREVER else 0,
+                useDefaultSound = now?.useDefaultSound ?: true,
+                soundId = now?.soundId ?: 0,
+                useDefaultShowPreview = now?.useDefaultShowPreview ?: true,
+                showPreview = now?.showPreview ?: true,
+                useDefaultMuteStories = now?.useDefaultMuteStories ?: true,
+                muteStories = now?.muteStories ?: false,
+                useDefaultStorySound = now?.useDefaultStorySound ?: true,
+                storySoundId = now?.storySoundId ?: 0,
+                useDefaultShowStoryPoster = now?.useDefaultShowStoryPoster ?: true,
+                showStoryPoster = now?.showStoryPoster ?: true,
+                useDefaultDisablePinnedMessageNotifications =
+                    now?.useDefaultDisablePinnedMessageNotifications ?: true,
+                disablePinnedMessageNotifications = now?.disablePinnedMessageNotifications ?: false,
+                useDefaultDisableMentionNotifications =
+                    now?.useDefaultDisableMentionNotifications ?: true,
+                disableMentionNotifications = now?.disableMentionNotifications ?: false,
+            )
+            td.setChatNotificationSettings(chatId, settings)
+        }
+
     suspend fun setArchived(chatId: Long, archived: Boolean): TdlResult<dev.g000sha256.tdl.dto.Ok> =
         withContext(Dispatchers.IO) {
             // Telegram has no "unarchive": a chat is moved from one list to the other, and the
@@ -475,6 +516,14 @@ class ChatRepository(private val td: TdlClient) {
     }
 
     companion object {
+        /**
+         * Telegram's "forever", which is a count of seconds like any other mute.
+         *
+         * Its own clients send this exact number for the option they label Mute forever, so a chat
+         * silenced from here reads as muted rather than as muted for an oddly specific 68 years.
+         */
+        private const val MUTE_FOREVER = Int.MAX_VALUE
+
         const val PAGE_SIZE = 40
         const val CHAT_LIMIT = 300
 
