@@ -28,8 +28,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import kotlinx.coroutines.runBlocking
 import com.tmplayer.data.Account
 import com.tmplayer.data.CardLayout
+import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.ThemeChoice
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.FormFactor
@@ -43,6 +46,7 @@ import com.tmplayer.ui.browse.TouchMediaScaffold
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.theme.Background
+import com.tmplayer.ui.theme.LocalDarkTheme
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tv
 
@@ -76,12 +80,35 @@ class PromoCaptureActivity : ComponentActivity() {
                 WindowInsetsCompat.Type.systemBars(),
             )
         }
+        // `--es theme light|dark` pins the appearance, so the site can carry a light picture for
+        // its light theme and a dark one for its dark theme rather than showing a black phone on
+        // a white page. Written to this build's own preferences, which are its own: the promo
+        // application id is separate, so nothing here can touch a real install's setting.
+        intent.getStringExtra("theme")?.let { wanted ->
+            val choice = when (wanted.lowercase()) {
+                "light" -> ThemeChoice.Light
+                "dark" -> ThemeChoice.Dark
+                else -> ThemeChoice.System
+            }
+            runBlocking { SettingsStore(applicationContext).setThemeChoice(choice) }
+        }
+
         val start = intent.getStringExtra("screen") ?: "chats"
         setContent {
             // The fixture navigates, so one recording can walk from the chat list into a chat and
             // back out the way a viewer would, rather than being three unrelated clips cut together.
             var screen by remember { mutableStateOf(start) }
             TMPlayerTheme {
+                // The real app does this from MainActivity, which the fixture does not run
+                // through. Without it a light shot carries a white clock on a white status bar,
+                // which is a picture of a bug the app does not have.
+                val dark = LocalDarkTheme.current
+                LaunchedEffect(dark) {
+                    WindowCompat.getInsetsController(window, window.decorView).apply {
+                        isAppearanceLightStatusBars = !dark
+                        isAppearanceLightNavigationBars = !dark
+                    }
+                }
                 Box(Modifier.fillMaxSize().background(Background)) {
                     when (screen) {
                         "media" -> if (tv) {
