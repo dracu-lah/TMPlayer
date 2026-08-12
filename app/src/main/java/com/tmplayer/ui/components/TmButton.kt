@@ -13,6 +13,7 @@ import androidx.tv.material3.Button as TvButton
 import androidx.tv.material3.ButtonDefaults as TvButtonDefaults
 import com.tmplayer.data.FormFactor
 import com.tmplayer.ui.theme.Danger
+import com.tmplayer.ui.theme.LocalDarkTheme
 import com.tmplayer.ui.theme.SurfaceDark
 import com.tmplayer.ui.theme.TextMuted
 import com.tmplayer.ui.theme.tmButtonColors
@@ -54,19 +55,28 @@ fun TmButton(
     // with a light theme or a wallpaper palette meant a button that agreed with nothing around it,
     // and the 48 dp floor it was given has been Material's minimum touch target for a while now
     // without anyone having to ask for it.
+    val scheme = TouchMaterialTheme.colorScheme
     TouchButton(
         onClick = onClick,
         modifier = modifier,
         enabled = enabled,
-        // Nothing in the scheme is "the destructive button", so this is the one place a phone
-        // still states a colour: error, taken from the scheme rather than from a hex.
-        colors = if (destructive) {
-            TouchButtonDefaults.buttonColors(
-                containerColor = TouchMaterialTheme.colorScheme.error,
-                contentColor = TouchMaterialTheme.colorScheme.onError,
+        colors = when {
+            // Nothing in the scheme is "the destructive button", so this is the one place a phone
+            // still states a colour: error, taken from the scheme rather than from a hex.
+            destructive -> TouchButtonDefaults.buttonColors(
+                containerColor = scheme.error,
+                contentColor = scheme.onError,
             )
-        } else {
-            TouchButtonDefaults.buttonColors()
+            // A dark theme's primary is a pale tint, so the filled button came out as a slab of
+            // near-white blue on a black screen: the brightest thing in the room, and a page with
+            // two of them read as a warning rather than as a next step. The container pair is the
+            // same blue at the tone a dark theme is actually built for, so the button is dark, the
+            // label on it is light, and the contrast is better than what it replaces.
+            LocalDarkTheme.current -> TouchButtonDefaults.buttonColors(
+                containerColor = scheme.primaryContainer,
+                contentColor = scheme.onPrimaryContainer,
+            )
+            else -> TouchButtonDefaults.buttonColors()
         },
         content = content,
     )

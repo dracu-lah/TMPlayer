@@ -277,11 +277,13 @@ private fun TouchPhonePane(
     val context = LocalContext.current
     var countries by remember { mutableStateOf(emptyList<Country>()) }
     var dial by rememberSaveable { mutableStateOf("") }
-    // What is shown, which is grouped, and what is meant, which is digits. Kept apart so that the
-    // formatter can rewrite the one without ever changing the other.
-    var shown by rememberSaveable { mutableStateOf("") }
+    // Plain digits, exactly as typed. Telegram's own grouping used to be pulled in and written back
+    // into the field a moment after typing, which meant the text under the cursor changed length
+    // while the cursor sat still: a space appearing to the left of it moved the caret a character
+    // back, and on keyboards that report a selection of their own it jumped further still. The
+    // grouping was never worth that, so the field is now left alone and the spaces are gone.
+    var national by rememberSaveable { mutableStateOf("") }
     var picking by rememberSaveable { mutableStateOf(false) }
-    val national = remember(shown) { shown.filter { it.isDigit() } }
     val country = remember(countries, dial) { PhoneCountries.byDialCode(countries, dial) }
     val field = remember { FocusRequester() }
 
@@ -292,26 +294,6 @@ private fun TouchPhonePane(
         if (dial.isNotEmpty()) return@LaunchedEffect
         val iso = Td.guessedCountryCode().ifBlank { PhoneCountries.deviceCountryCode(context) }
         if (dial.isEmpty()) dial = PhoneCountries.byIso(countries, iso)?.dialCode.orEmpty()
-    }
-
-    // Telegram's own grouping, from Telegram's own table, so that a number typed here breaks
-    // where it breaks in the app the user already has. Debounced because it is a round trip and
-    // the field must never wait on it: what is typed is shown at once, and tidied a moment later.
-    LaunchedEffect(national, dial) {
-        if (national.isEmpty() || dial.isEmpty()) return@LaunchedEffect
-        delay(FORMAT_DEBOUNCE_MS)
-        val info = Td.phoneNumberInfo("+$dial$national") ?: return@LaunchedEffect
-        val formatted = info.formattedPhoneNumber
-            .removePrefix("+$dial")
-            // TDLib groups some countries with hyphens and some with brackets, so a number that
-            // was being typed as digits suddenly grows punctuation the moment the debounce fires.
-            // The grouping is worth keeping; the characters it is drawn with are not, so every
-            // run of them becomes the one space the rest of the field already uses.
-            .replace(SEPARATORS, " ")
-            .trim()
-            .takeIf { it.filter { c -> c.isDigit() } == national }
-            ?: return@LaunchedEffect
-        if (formatted != shown) shown = formatted
     }
 
     if (picking) {
@@ -360,11 +342,11 @@ private fun TouchPhonePane(
                 modifier = Modifier.width(DIAL_WIDTH),
             )
             PaneField(
-                value = shown,
-                // Digits and the spaces that group them, nothing else. The dialpad is a hint the
-                // IME may ignore, and a letter typed here would sit in the field looking accepted
-                // while being quietly dropped from the number that is actually sent.
-                onValueChange = { shown = it.keepNationalCharacters() },
+                value = national,
+                // Digits and nothing else. The dialpad is a hint the IME may ignore, and a letter
+                // typed here would sit in the field looking accepted while being quietly dropped
+                // from the number that is actually sent.
+                onValueChange = { national = it.keepNationalCharacters() },
                 placeholder = "Phone number",
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Phone,
@@ -935,15 +917,9 @@ private const val DEFAULT_CODE_LENGTH = 5
 
 private const val MAX_CODE_LENGTH = 8
 
-/** Long enough that a fast typist is not sending a request per keystroke. */
-private const val FORMAT_DEBOUNCE_MS = 250L
-
 // The shortest national numbers in use run to seven digits once the country code is counted, so
 // anything below this cannot be a real number and the button stays out of reach.
 private const val MIN_PHONE_DIGITS = 7
-
-/** Whatever TDLib chose to group a number with: hyphens, brackets, dots, runs of spaces. */
-private val SEPARATORS = Regex("[^0-9]+")
 
 /**
  * What may appear in the international field: digits, one leading plus, and the spaces that group
@@ -957,5 +933,8 @@ private fun String.keepPhoneCharacters(): String {
     return plus + kept.filter { it.isDigit() || it == ' ' }
 }
 
-/** The national field, which never carries the plus: the dial code beside it is where that lives. */
-private fun String.keepNationalCharacters(): String = filter { it.isDigit() || it == ' ' }
+/**
+ * The national field: digits only. It carries no plus, because the dial code beside it is where
+ * that lives, and no spaces, because nothing groups them any more.
+ */
+private fun String.keepNationalCharacters(): String = filter { it.isDigit() }

@@ -3,6 +3,7 @@ package com.tmplayer.data
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import androidx.core.content.FileProvider
 import com.tmplayer.BuildConfig
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +16,9 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+
+/** A failure the viewer can be told about in words, rather than as "something went wrong". */
+private class UpdateFailure(val text: String) : java.io.IOException(text)
 
 /** A release on GitHub, reduced to the three things this app does anything with. */
 data class Release(
@@ -86,7 +90,13 @@ object Updates {
         checkedThisLaunch = true
 
         if (!quiet) _state.value = UpdateState.Checking
-        val release = withContext(Dispatchers.IO) { runCatching { fetchLatest() }.getOrNull() }
+        val attempt = withContext(Dispatchers.IO) { runCatching { fetchLatest() } }
+        val release = attempt.getOrNull()
+        // Every way this can go wrong used to arrive as the same sentence, which on a television
+        // left nothing to act on and nothing in the log either: a rate-limited API, a release with
+        // no APK on it and a stick with no route out all read as "could not reach GitHub". The
+        // throw is kept, named and written out, so the next report says which of them it was.
+        attempt.exceptionOrNull()?.let { Log.w(TAG, "Update check failed", it) }
 
         _state.value = when {
             release != null && isNewer(release.version, installedVersion) ->
@@ -94,7 +104,10 @@ object Updates {
 
             release != null -> UpdateState.Idle
             quiet -> UpdateState.Idle
-            else -> UpdateState.Failed("Could not reach GitHub. Try again in a moment.")
+            else -> UpdateState.Failed(
+                attempt.exceptionOrNull().let { if (it is UpdateFailure) it.text else null }
+                    ?: "Could not reach GitHub. Try again in a moment.",
+            )
         }
     }
 
@@ -198,14 +211,35 @@ object Updates {
             connectTimeout = CONNECT_TIMEOUT_MS
             readTimeout = READ_TIMEOUT_MS
             setRequestProperty("Accept", "application/vnd.github+json")
+            // GitHub asks every caller to name itself and answers 403 to some that do not. The
+            // default here is whatever the platform puts on the wire, which is not a name.
+            setRequestProperty("User-Agent", "TMPlayer/${BuildConfig.VERSION_NAME}")
         }
-        val body = connection.use { it.inputStream.bufferedReader().readText() }
+        val body = connection.use {
+            // Reading the stream without asking what the status was turned a 403 into an
+            // IOException with nothing in it. An anonymous caller gets sixty requests an hour from
+            // an address, and a household behind one address can spend them, so the number is
+            // worth saying out loud rather than reporting as a network that is down.
+            val code = it.responseCode
+            if (code !in 200..299) {
+                it.errorStream?.close()
+                throw UpdateFailure(
+                    if (code == 403 || code == 429) {
+                        "GitHub is rate limiting this connection. Try again in an hour."
+                    } else {
+                        "GitHub answered $code. Try again in a moment."
+                    },
+                )
+            }
+            it.inputStream.bufferedReader().readText()
+        }
         val json = JSONObject(body)
         val version = json.optString("tag_name").removePrefix("v")
-        if (version.isBlank()) return null
+        if (version.isBlank()) throw UpdateFailure("GitHub sent a release with no version on it.")
 
-        val assets = json.optJSONArray("assets") ?: return null
-        val asset = selectApkAsset(assets, Build.SUPPORTED_ABIS.orEmpty()) ?: return null
+        val assets = json.optJSONArray("assets")
+        val asset = assets?.let { selectApkAsset(it, Build.SUPPORTED_ABIS.orEmpty()) }
+            ?: throw UpdateFailure("The newest release has no APK this device can install.")
         return Release(
             version = version,
             apkUrl = asset.optString("browser_download_url"),
@@ -256,6 +290,8 @@ object Updates {
         } finally {
             disconnect()
         }
+
+    private const val TAG = "Updates"
 
     private const val CONNECT_TIMEOUT_MS = 8_000
     private const val READ_TIMEOUT_MS = 20_000
