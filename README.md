@@ -26,7 +26,7 @@ No messages, no server, no account except yours.
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/phone.webp" width="80%" alt="TMPlayer on a phone, showing a chat's videos as a grid of tiles with their names, lengths and sizes" />
+  <img src="docs/screenshots/devices.webp" width="90%" alt="A chat's videos in TMPlayer on a television and on a phone at the same time, each tile carrying its quality, running time and size" />
 </p>
 
 ## Runs on
