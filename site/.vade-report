@@ -1,0 +1,50 @@
+## Vercel Web Analytics Installation
+
+Successfully installed and configured Vercel Web Analytics for the TMPlayer static website.
+
+### What was implemented:
+
+1. **Fetched latest documentation**: Retrieved the official Vercel Analytics quickstart guide from https://vercel.com/docs/analytics/quickstart to ensure we used the most up-to-date installation method.
+
+2. **Identified project structure**: Determined that this is a vanilla HTML/JavaScript static website without a build system, located in the `site/` directory with 8 HTML pages.
+
+3. **Implemented CDN-based analytics**: Added the Vercel Web Analytics script tag to all HTML pages using the recommended CDN approach for static sites:
+   ```html
+   <!-- Vercel Web Analytics -->
+   <script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>
+   ```
+
+### Files modified:
+
+- `site/index.html` - Home page
+- `site/download/index.html` - Download page
+- `site/features/index.html` - Features page
+- `site/faq/index.html` - FAQ page
+- `site/android-tv/index.html` - Android TV page
+- `site/install/index.html` - Installation guide page
+- `site/legal/index.html` - Legal information page
+- `site/privacy/index.html` - Privacy policy page
+
+### Implementation details:
+
+- The analytics script was added in the `<head>` section of each page, right after the stylesheet link and before other inline scripts
+- Used the `defer` attribute to ensure non-blocking page load performance
+- The script uses the official Vercel CDN (cdn.vercel-insights.com)
+- All existing code structure and formatting was preserved
+
+### Why this approach:
+
+For static HTML sites without a build system, Vercel recommends using the CDN script tag approach rather than the npm package. This method:
+- Works seamlessly with Vercel deployments
+- Requires no build step or dependencies
+- Automatically tracks page views across all pages
+- Maintains excellent performance with the deferred loading
+
+### Next steps for the user:
+
+1. Deploy the site to Vercel
+2. Enable Web Analytics in the Vercel dashboard (Analytics section)
+3. Once deployed, verify analytics are working by checking the browser's Network tab for requests to `/_vercel/insights/`
+4. View analytics data in the Vercel dashboard
+
+The implementation follows the official Vercel documentation and is production-ready.
