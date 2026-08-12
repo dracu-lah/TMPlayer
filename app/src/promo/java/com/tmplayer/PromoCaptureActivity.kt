@@ -2,6 +2,7 @@ package com.tmplayer
 
 import android.content.pm.ActivityInfo
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.annotation.DrawableRes
@@ -30,6 +31,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.runBlocking
 import com.tmplayer.data.Account
+import com.tmplayer.data.AuthState
+import com.tmplayer.ui.auth.LoginScreen
 import com.tmplayer.data.CardLayout
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.ThemeChoice
@@ -44,8 +47,9 @@ import com.tmplayer.ui.browse.Header
 import com.tmplayer.ui.browse.MediaCard
 import com.tmplayer.ui.browse.TouchMediaScaffold
 import com.tmplayer.ui.components.UiState
+import com.tmplayer.ui.onboarding.OverviewScreen
 import com.tmplayer.ui.settings.SettingsScreen
-import com.tmplayer.ui.theme.Background
+import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.LocalDarkTheme
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tv
@@ -94,6 +98,12 @@ class PromoCaptureActivity : ComponentActivity() {
         }
 
         val start = intent.getStringExtra("screen") ?: "chats"
+        if (start == "signin") {
+            // The number field takes focus the moment it appears, which is right in the app and
+            // wrong in a screenshot: half the picture would be somebody's keyboard, and the
+            // autofill strip above it offers the number of whoever is holding the phone.
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
+        }
         setContent {
             // The fixture navigates, so one recording can walk from the chat list into a chat and
             // back out the way a viewer would, rather than being three unrelated clips cut together.
@@ -109,13 +119,25 @@ class PromoCaptureActivity : ComponentActivity() {
                         isAppearanceLightNavigationBars = !dark
                     }
                 }
-                Box(Modifier.fillMaxSize().background(Background)) {
+                // The theme's own background, not the television's literal. Painting the dark
+                // constant here put a black page behind a light-mode screen, so every light shot
+                // taken from this fixture was of something the app never draws.
+                Box(Modifier.fillMaxSize().background(Tone.background)) {
                     when (screen) {
                         "media" -> if (tv) {
                             TvMediaScreen()
                         } else {
                             PhoneMediaScreen(onBack = { screen = "chats" })
                         }
+                        // The number pane, not the QR one. A shipped picture of a real QR is a
+                        // working key to an account, which is why the old shot had to be blurred;
+                        // an empty number field says the same thing and hides nothing.
+                        "signin" -> LoginScreen(
+                            state = AuthState.Phone(),
+                            onSubmitPassword = {},
+                            submitError = null,
+                        )
+                        "overview" -> OverviewScreen(onDone = { screen = "chats" })
                         "settings" -> SettingsScreen(
                             chats = promoChats(),
                             onLoggedOut = {},

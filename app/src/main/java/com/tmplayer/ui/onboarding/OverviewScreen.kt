@@ -45,6 +45,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.R
 import com.tmplayer.ui.theme.Corner
+import com.tmplayer.ui.theme.LocalDarkTheme
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 import com.tmplayer.ui.components.Pane
@@ -53,8 +54,20 @@ import com.tmplayer.ui.components.TmSecondaryButton
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.paneAction
 
-/** One page: what it shows, and the picture of the app actually showing it. */
-private data class Page(val title: String, val body: String, val image: Int)
+/**
+ * One page: what it shows, and the picture of the app actually showing it.
+ *
+ * Three pictures, because there are three ways this app looks. [image] is the television, which
+ * is dark and has no other mode to be in. [phoneLight] and [phoneDark] are the phone, where a
+ * dark screenshot on a light page is somebody else's app.
+ */
+private data class Page(
+    val title: String,
+    val body: String,
+    val image: Int,
+    val phoneLight: Int,
+    val phoneDark: Int,
+)
 
 /**
  * A short walk through the app, in pictures of the app itself.
@@ -129,7 +142,7 @@ fun OverviewScreen(onDone: () -> Unit) {
                         style = M3MaterialTheme.typography.bodyMedium,
                         color = Tone.muted,
                     )
-                    PageImage(shown.image, Modifier.fillMaxWidth())
+                    PageImage(shown, Modifier.fillMaxWidth())
                 }
             }
 
@@ -197,7 +210,7 @@ fun OverviewScreen(onDone: () -> Unit) {
                 }
             }
 
-            PageImage(page.image, Modifier.weight(1.25f).fillMaxWidth())
+            PageImage(page, Modifier.weight(1.25f).fillMaxWidth())
         }
     }
 
@@ -209,16 +222,27 @@ fun OverviewScreen(onDone: () -> Unit) {
     }
 }
 
-/** The screenshot for a page, framed the same way whichever device is showing it. */
+/**
+ * The screenshot for a page, in the shape and the appearance of the device reading it.
+ *
+ * A television gets the landscape shot of a television. A phone gets the top of a phone screen,
+ * light or dark to match what the reader is looking at, which is why the box is taller there.
+ */
 @Composable
-private fun PageImage(image: Int, modifier: Modifier) {
+private fun PageImage(page: Page, modifier: Modifier) {
+    val touch = isTouch()
+    val image = when {
+        !touch -> page.image
+        LocalDarkTheme.current -> page.phoneDark
+        else -> page.phoneLight
+    }
     Image(
         painter = painterResource(image),
         // The title beside it is the description; a second reading of the same thing is noise.
         contentDescription = null,
         contentScale = ContentScale.Fit,
         modifier = modifier
-            .aspectRatio(16f / 9f)
+            .aspectRatio(if (touch) 108f / 140f else 16f / 9f)
             .clip(RoundedCornerShape(Corner.Large))
             .border(1.dp, Tone.outline, RoundedCornerShape(Corner.Large)),
     )
@@ -245,6 +269,8 @@ private fun pages(touch: Boolean) = listOf(
         // Deliberately blurred: the real code on that screen is a live sign-in token, and a
         // scannable one shipped inside the app would be a working key to somebody's account.
         image = R.drawable.overview_signin,
+        phoneLight = R.drawable.overview_signin_touch,
+        phoneDark = R.drawable.overview_signin_touch_dark,
     ),
     Page(
         title = if (touch) "Your Telegram chats" else "Your Telegram chats, on the left",
@@ -256,11 +282,15 @@ private fun pages(touch: Boolean) = listOf(
                 "chats you watch from and they sit in Favourites, one press away."
         },
         image = R.drawable.overview_chats,
+        phoneLight = R.drawable.overview_chats_touch,
+        phoneDark = R.drawable.overview_chats_touch_dark,
     ),
     Page(
         title = "Open a chat to see its videos",
         body = "TMPlayer lists the videos posted in that chat, newest first, with their size and " +
             "quality. Short clips are filtered out; the size limits are yours to change.",
         image = R.drawable.overview_media,
+        phoneLight = R.drawable.overview_media_touch,
+        phoneDark = R.drawable.overview_media_touch_dark,
     ),
 )

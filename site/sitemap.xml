@@ -25,6 +25,14 @@
       <image:loc>https://tmplayer.org/screenshots/phone-grid.webp</image:loc>
       <image:title>Playable videos in a Telegram chat, on a phone</image:title>
     </image:image>
+    <image:image>
+      <image:loc>https://tmplayer.org/screenshots/phone-chats-light.webp</image:loc>
+      <image:title>The TMPlayer chat list on an Android phone, in the light theme</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://tmplayer.org/screenshots/phone-grid-light.webp</image:loc>
+      <image:title>Playable videos in a Telegram chat, on a phone, in the light theme</image:title>
+    </image:image>
   </url>
   <url>
     <loc>https://tmplayer.org/privacy</loc>

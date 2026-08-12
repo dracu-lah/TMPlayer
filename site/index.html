@@ -232,17 +232,22 @@
 <main id="main">
 
   <!--
-    The whole of the first screen is one idea and one control. Everything the page used to shout at
-    the reader in the hero has moved below the fold, where it can take its time.
+    One opening section rather than two stacked bands. The sentence, the single control, the two
+    devices and the four facts are all the same idea: what this is, and what it looks like. They
+    used to be a full-height hero followed by a separate showcase band, which read as two arrivals.
   -->
-  <section class="hero" aria-labelledby="hero-h">
+  <section class="hero" id="showcase" aria-labelledby="hero-h">
+    <div class="wrap hero-wrap">
     <div class="hero-inner">
       <p class="eyebrow">
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="m12 2 2.9 6.1 6.6.9-4.8 4.6 1.2 6.6L12 17.1 6.1 20.2l1.2-6.6L2.5 9l6.6-.9L12 2Z"/></svg>
         Free and open source, for Android
       </p>
 
-      <h1 id="hero-h">Your Telegram videos, <em>on the TV</em>.</h1>
+      <!-- The full stop is hung outside the measure. Centring counts it as a character
+           the width of a comma, and at this size that is enough to push a short headline
+           visibly left of the middle. -->
+      <h1 id="hero-h">Your <svg class="h1-mark" viewBox="0 0 108 108" aria-hidden="true" focusable="false"><rect x="0" y="0" width="108" height="108" rx="26" ry="26" fill="#1E1E28"/><path fill="#3A3A46" d="M36,33 H72 A5,5 0 0 1 77,38 V60 A5,5 0 0 1 72,65 H36 A5,5 0 0 1 31,60 V38 A5,5 0 0 1 36,33 Z"/><path fill="#0E0E12" d="M36,34.5 H72 A3.5,3.5 0 0 1 75.5,38 V60 A3.5,3.5 0 0 1 72,63.5 H36 A3.5,3.5 0 0 1 32.5,60 V38 A3.5,3.5 0 0 1 36,34.5 Z"/><path fill="#EDEDF2" d="M48,40.5 L65,49 L48,57.5 Z"/><path fill="#2AABEE" d="M36.5,70 H55.5 A2.5,2.5 0 0 1 55.5,75 H36.5 A2.5,2.5 0 0 1 36.5,70 Z"/><path fill="#3A3A46" d="M66.5,70 H71.5 A2.5,2.5 0 0 1 71.5,75 H66.5 A2.5,2.5 0 0 1 66.5,70 Z"/><circle cx="62" cy="72.5" r="5.5" fill="#EDEDF2"/></svg> Telegram videos, <em>on the TV</em><span class="stop">.</span></h1>
       <p class="lede">Press play and it starts in seconds. The rest downloads while you watch.</p>
 
       <!--
@@ -269,13 +274,6 @@
       </p>
     </div>
 
-    <a class="scroll-cue" href="#showcase" aria-label="See what it looks like">
-      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.7-.3l-5-5a1 1 0 1 1 1.4-1.4l4.3 4.3 4.3-4.3a1 1 0 1 1 1.4 1.4l-5 5a1 1 0 0 1-.7.3Z"/></svg>
-    </a>
-  </section>
-
-  <section class="band band-showcase" id="showcase" aria-label="TMPlayer running on a television and on a phone">
-    <div class="wrap">
       <!-- Both frames are drawn in CSS around the real screenshots. The phone carries the clip
            rather than a still, because the one thing a picture cannot show is that the video
            starts before the download has finished. -->
@@ -381,7 +379,7 @@
       <div class="section-head" data-reveal>
         <div class="section-title">
           <h2 id="shots-h">What it looks like</h2>
-          <p class="section-sub">Four screens, in the order you meet them. Every picture below is the app itself, taken on a phone and on a 1080p television layout, filled with demo content that belongs to nobody.</p>
+          <p class="section-sub">Four screens, in the order you meet them. Every picture is the app itself, filled with demo content that belongs to nobody.</p>
         </div>
       </div>
 
@@ -389,7 +387,16 @@
         <figure class="shot" data-reveal>
           <div class="device device-phone">
             <div class="screen">
-              <img src="screenshots/phone-chats.webp" alt="TMPlayer on a phone, listing demo chats: Weekend Clips, Home Projects, Recipe Notes, Travel Diary, Design Study and Family Archive." width="1080" height="2400" loading="lazy" decoding="async">
+              <!--
+                The phone shots follow the page. The source carries the light file and the img
+                carries the dark one, so a browser downloads exactly one of the two; app.js
+                rewrites the source's media attribute when the reader presses the toggle, which
+                is the part prefers-color-scheme on its own cannot do.
+              -->
+              <picture>
+                <source data-theme-src srcset="screenshots/phone-chats-light.webp" media="(prefers-color-scheme: light)">
+                <img src="screenshots/phone-chats.webp" alt="TMPlayer on a phone, listing demo chats: Weekend Clips, Home Projects, Recipe Notes, Travel Diary, Design Study and Family Archive." width="1080" height="2400" loading="lazy" decoding="async">
+              </picture>
             </div>
           </div>
           <figcaption><b>Step one: pick a chat</b>Every chat and channel you are already in, as a list, with the ones you were last watching along the top. Text messages never appear anywhere in the app.</figcaption>
@@ -398,7 +405,10 @@
         <figure class="shot" data-reveal>
           <div class="device device-phone">
             <div class="screen">
-              <img src="screenshots/phone-grid.webp" alt="A dense grid of demo videos from a Telegram chat on a phone, each tile carrying its resolution and running time." width="1080" height="2400" loading="lazy" decoding="async">
+              <picture>
+                <source data-theme-src srcset="screenshots/phone-grid-light.webp" media="(prefers-color-scheme: light)">
+                <img src="screenshots/phone-grid.webp" alt="A dense grid of demo videos from a Telegram chat on a phone, each tile carrying its resolution and running time." width="1080" height="2400" loading="lazy" decoding="async">
+              </picture>
             </div>
           </div>
           <figcaption><b>Step two: pick a video</b>The chat's videos as tiles, with the running time and the resolution on each. Press one and it starts in seconds. Long file names are one tap away in the row arrangement.</figcaption>
@@ -440,10 +450,6 @@
         </div>
       </div>
 
-      <div class="callout" data-reveal>
-        <p><strong>Bring your own media.</strong> TMPlayer does not provide videos or channels. Use it only with content you own or are authorized to access.</p>
-      </div>
-
       <div class="two-col" data-reveal>
         <div class="panel">
           <h3>
@@ -457,20 +463,28 @@
             <li><strong>Plays real-world media files.</strong> MKV, MP4, AVI and TS. Embedded subtitles, image-based ones included. Multiple audio tracks you can switch during playback.</li>
             <li><strong>Remembers where you stopped</strong>, video by video, with a Continue watching row waiting on launch.</li>
             <li><strong>Keeps one video on the device.</strong> An 8 GB stick cannot hold a library, so the previous one goes and the app tells you how much that freed. Coming back to a video you stopped half way through keeps the half already on disk.</li>
-            <li><strong>Is a phone app on a phone.</strong> The same library, drawn the way Android draws things in the hand: full-bleed rows, search in the app bar, real switches and sheets, and a player that hides the system bars instead of playing underneath them.</li>
+            <li><strong>Is a phone app on a phone.</strong> The same library, drawn the way Android draws things in the hand.</li>
           </ul>
         </div>
         <div class="panel">
           <h3>
             <span class="panel-icon icon-browse" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><path fill="currentColor" d="M10.5 3a7.5 7.5 0 1 1-4.6 13.4l-3.2 3.2a1 1 0 0 1-1.4-1.4l3.2-3.2A7.5 7.5 0 0 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z"/></svg>
+              <!--
+                The lens is centred on 10.9,10.9 and the handle runs out to the bottom right, so
+                the whole glyph spans roughly 4.6 to 19.4 on both axes and sits in the middle of
+                its badge. The drawing this replaces had the lens up and to the left with the
+                handle leaving the box, which pulled the visual mass into one corner.
+              -->
+              <svg viewBox="0 0 24 24" width="22" height="22" focusable="false">
+                <path fill="currentColor" d="M10.9 4.6a6.3 6.3 0 1 0 0 12.6 6.3 6.3 0 1 0 0-12.6Zm0 2.2a4.1 4.1 0 1 1 0 8.2 4.1 4.1 0 1 1 0-8.2Z"/>
+                <line x1="15.6" y1="15.6" x2="18.4" y2="18.4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              </svg>
             </span>
             Browsing
           </h3>
           <ul class="ticks">
             <li><strong>Shows media, not messages.</strong> Open a chat or channel and TMPlayer filters it down to playable videos, including video files sent as documents.</li>
             <li><strong>Understands episode filenames.</strong> During playback, previous and next controls move between neighbouring episodes already present in the same chat, and when one finishes the next starts on its own after a countdown you can stop.</li>
-            <li><strong>Shows the whole file name</strong> in the corner of the screen for whatever the remote is standing on, so a tile that cuts a release name short is no longer hiding anything.</li>
             <li><strong>Forgives how you type.</strong> Search is matched word by word, so an accent nobody types, two letters the wrong way round, or one wrong keyword among right ones still finds the thing.</li>
             <li><strong>Search by voice</strong>, using the microphone already in your remote. Star the chats you watch from and they sit one press away.</li>
             <li><strong>Updates itself.</strong> It notices a newer release on GitHub and installs it, and signing out clears everything it ever kept.</li>
@@ -500,7 +514,13 @@
           </li>
           <li>
             <h3>Get the file onto the device</h3>
-            <p>On a phone, tap the download link above and open the file when it lands. On a television it is easiest with a free app from the Play Store, such as Downloader or Send Files to TV, pointed at the same link. With a computer on the same wifi, <code>adb</code> works too:</p>
+            <p>On a phone, tap the download link above and open the file when it lands. On a television it is easiest with a free app from the Play Store, such as Downloader or
+              <a class="inline-link" href="https://play.google.com/store/apps/details?id=com.yablio.sendfilestotv" target="_blank" rel="noopener">
+                <!-- Cast: a screen with the three arcs, drawn here in the same 24 by 24 box and the
+                     same stroke weight as every other glyph on the page. Nothing is fetched, and
+                     another developer's store artwork is not ours to copy. -->
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="M3 4h18a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-7v-2h7V6H3v2H1V6a2 2 0 0 1 2-2Zm-2 16a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm0-4a1 1 0 0 1 0-2 3 3 0 0 1 3 3 1 1 0 1 1-2 0 1 1 0 0 0-1-1Zm0-4a1 1 0 0 1 0-2 7 7 0 0 1 7 7 1 1 0 1 1-2 0 5 5 0 0 0-5-5Z"/></svg>Send files to TV</a>,
+              pointed at the same link. With a computer on the same wifi, <code>adb</code> works too:</p>
             <pre class="code"><code>adb connect &lt;tv-ip&gt;:5555
 adb install TMPlayer-&lt;version&gt;-universal.apk</code></pre>
             <p>For that one, turn on network debugging in Developer options first.</p>
@@ -573,28 +593,47 @@ adb install TMPlayer-&lt;version&gt;-universal.apk</code></pre>
         </div>
       </div>
 
-      <dl class="faq" data-reveal>
-        <div>
-          <dt>Do I have to wait for the video to download?</dt>
-          <dd>No. It starts in seconds and downloads while you watch. If your connection cannot
-            keep up, a setting in the app will fetch the whole video first instead.</dd>
-        </div>
-        <div>
-          <dt>Is there a server or a bot involved?</dt>
-          <dd>Neither. The TV talks to Telegram directly, signed in as you. Nothing passes through
-            anything of mine.</dd>
-        </div>
-        <div>
-          <dt>Which file do I download?</dt>
-          <dd>Download the universal APK. The same file works on every supported device,
-            television or phone, including 32-bit and 64-bit ones.</dd>
-        </div>
-        <div>
-          <dt>Can I read my messages on it?</dt>
-          <dd>No. It only ever shows the videos in your chats. You cannot read, reply or send
-            anything from it.</dd>
-        </div>
-      </dl>
+      <!--
+        A real accordion, built from native details and summary so it opens with a keyboard, is
+        announced as a disclosure, and works with JavaScript off. Every row starts closed: four
+        questions are short enough to scan as four headings, and opening one on load would only
+        tell the reader which answer I think they wanted. The height animation lives on the
+        inner .faq-body, since details itself cannot be transitioned.
+      -->
+      <div class="faq" data-reveal>
+        <details class="faq-item" name="faq">
+          <summary>
+            <span class="faq-q">Do I have to wait for the video to download?</span>
+            <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
+          </summary>
+          <div class="faq-body"><p>No. It starts in seconds and downloads while you watch. If your connection cannot
+            keep up, a setting in the app will fetch the whole video first instead.</p></div>
+        </details>
+        <details class="faq-item" name="faq">
+          <summary>
+            <span class="faq-q">Is there a server or a bot involved?</span>
+            <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
+          </summary>
+          <div class="faq-body"><p>Neither. The TV talks to Telegram directly, signed in as you. Nothing passes through
+            anything of mine.</p></div>
+        </details>
+        <details class="faq-item" name="faq">
+          <summary>
+            <span class="faq-q">Which file do I download?</span>
+            <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
+          </summary>
+          <div class="faq-body"><p>Download the universal APK. The same file works on every supported device,
+            television or phone, including 32-bit and 64-bit ones.</p></div>
+        </details>
+        <details class="faq-item" name="faq">
+          <summary>
+            <span class="faq-q">Can I read my messages on it?</span>
+            <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
+          </summary>
+          <div class="faq-body"><p>No. It only ever shows the videos in your chats. You cannot read, reply or send
+            anything from it.</p></div>
+        </details>
+      </div>
     </div>
   </section>
 
@@ -612,7 +651,7 @@ adb install TMPlayer-&lt;version&gt;-universal.apk</code></pre>
       <div class="section-body" data-reveal>
         <div class="contact">
           <p class="contact-lede">Tell me what you wanted the app to do, and it might do it next release.</p>
-          <p class="contact-body">Say what you were trying to watch, what happened instead, and which device you are on. That is usually enough for me to find the problem.</p>
+          <p class="contact-body">Say what you were trying to watch, what happened instead, and which device you are on. That is usually enough to find the problem.</p>
 
           <div class="contact-actions">
             <a class="action" href="mailto:nevilnicks4321@gmail.com?subject=TMPlayer%20feature%20request" aria-label="Email nevilnicks4321@gmail.com with a TMPlayer feature request">
@@ -633,7 +672,6 @@ adb install TMPlayer-&lt;version&gt;-universal.apk</code></pre>
             </a>
           </div>
 
-          <p class="contact-note">There is no form here on purpose: this page is a plain file with nothing behind it, so a send button would have nowhere to send your words. The two links above open your mail app and GitHub, and both actually reach me.</p>
           <p class="contact-by">Built by <strong>Nevil</strong>. More of what I make is at <a href="https://nevil.dev" rel="noopener">nevil.dev</a>.</p>
         </div>
       </div>
@@ -641,6 +679,15 @@ adb install TMPlayer-&lt;version&gt;-universal.apk</code></pre>
   </section>
 
 </main>
+
+<!--
+  Back to top. A real button, so it is in the tab order and announces itself; app.js gives it the
+  class that fades it in past the first screen and takes it away again at the foot of the page, so
+  it never covers the legal text a reader has just scrolled to.
+-->
+<button class="to-top" id="to-top" type="button" aria-label="Back to top">
+  <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 4.5a1 1 0 0 1 .71.29l6 6a1 1 0 0 1-1.42 1.42L13 7.91V19a1 1 0 1 1-2 0V7.91l-4.29 4.3a1 1 0 1 1-1.42-1.42l6-6A1 1 0 0 1 12 4.5Z"/></svg>
+</button>
 
 <footer class="site-footer">
   <div class="wrap footer-inner">

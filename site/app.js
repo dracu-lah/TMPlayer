@@ -415,10 +415,30 @@
     button.setAttribute('title', 'Switch to ' + next + ' theme');
   }
 
+  /* The phone screenshots exist in both of the app's own themes, and the page
+     shows whichever one matches the page. Markup does the work for a reader who
+     has chosen nothing: the <source> carries the light file behind a
+     prefers-color-scheme media query and the <img> carries the dark one, so a
+     browser fetches exactly one of the two and no script has to run.
+
+     What that markup cannot do is follow the toggle, because the button changes
+     an attribute and the media query only knows about the system. Pressing it
+     therefore rewrites the media attribute to "all" or "none", which is a
+     picture the browser re-evaluates on the spot. The television shots are not
+     in here: the app's ten-foot layout is dark only, so a light one would be a
+     photograph of something that does not exist. */
+  function paintShots(theme) {
+    var sources = document.querySelectorAll('source[data-theme-src]');
+    for (var i = 0; i < sources.length; i++) {
+      sources[i].media = theme === 'light' ? 'all' : 'none';
+    }
+  }
+
   function apply(next) {
     root.setAttribute('data-theme', next);
     try { localStorage.setItem(KEY, next); } catch (e) {}
     paintChrome(next);
+    paintShots(next);
     label();
   }
 
@@ -463,7 +483,7 @@
     });
   }
 
-  if (stored()) { paintChrome(stored()); }
+  if (stored()) { paintChrome(stored()); paintShots(stored()); }
   label();
 })();
 
@@ -508,6 +528,7 @@
 
   var header = document.querySelector('.site-header');
   var showcase = document.querySelector('.showcase');
+  var toTop = document.getElementById('to-top');
   var reduced = window.matchMedia
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var ticking = false;
@@ -521,6 +542,20 @@
         if (header.className.indexOf('is-stuck') === -1) { header.className += ' is-stuck'; }
       } else {
         header.className = header.className.replace(/\s*is-stuck/g, '');
+      }
+    }
+
+    /* Past the first screen the button is there; within the last stretch of the
+       page it goes away again, because that is exactly where the footer's links
+       and legal text are and a floating circle on top of them helps nobody. */
+    if (toTop) {
+      var doc = document.documentElement;
+      var remaining = doc.scrollHeight - (y + (window.innerHeight || 800));
+      var wanted = y > 600 && remaining > 140;
+      if (wanted) {
+        if (toTop.className.indexOf('is-on') === -1) { toTop.className += ' is-on'; }
+      } else {
+        toTop.className = toTop.className.replace(/\s*is-on/g, '');
       }
     }
 
@@ -543,6 +578,18 @@
     } else {
       frame();
     }
+  }
+
+  /* Smooth where the browser can, an instant jump where it cannot, and an
+     instant jump for a reader who has asked for less motion. */
+  if (toTop) {
+    toTop.addEventListener('click', function () {
+      try {
+        window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' });
+      } catch (e) {
+        window.scrollTo(0, 0);
+      }
+    });
   }
 
   window.addEventListener('scroll', onScroll, { passive: true });
