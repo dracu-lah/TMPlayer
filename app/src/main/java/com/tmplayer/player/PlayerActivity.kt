@@ -755,17 +755,32 @@ class PlayerActivity : FragmentActivity() {
     /** The next picture shape along, from the television's own button. */
     fun cycleScale() = applyScale(videoScale.next())
 
+    /**
+     * Which lever shapes the picture, and why only one of them may move at a time.
+     *
+     * There are two, and on a phone they were both being pulled. The PlayerView sizes its own
+     * surface to the chosen shape, and the codec's scaling mode then scaled the frames again
+     * inside that surface: Crop asked the view to grow past the screen and asked the decoder to
+     * crop within it at the same time, so the two transforms cancelled and Crop landed on the same
+     * letterboxed picture as Fit, while Stretch came out narrower than the video's own shape. Two
+     * of the three stops did nothing a viewer could see, on a screen with 217px of black down each
+     * side of a 1920x1056 film.
+     *
+     * The phone therefore leaves the codec on plain scale-to-fit and lets the view own the shape.
+     * The television has no PlayerView to set a resize mode on: it draws onto leanback's bare
+     * surface, where the scaling mode is the only lever there is, and it has two positions, which
+     * is why Stretch is not offered there and Crop is what a second press reaches.
+     */
+    private fun scalingModeFor(scale: VideoScale): Int = when {
+        !FormFactor.isTv(this) -> C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+        scale == VideoScale.Fit -> C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+        else -> C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+    }
+
     private fun applyScale(scale: VideoScale) {
         videoScale = scale
         touchSurface?.resizeMode = scale.resizeMode
-        // The television has no PlayerView to set a resize mode on; it draws onto leanback's bare
-        // surface, where the player's own scaling mode is the only lever. That lever has two
-        // positions, so Stretch is not offered there and Crop is what a second press reaches.
-        player?.videoScalingMode = if (scale == VideoScale.Fit) {
-            C.VIDEO_SCALING_MODE_SCALE_TO_FIT
-        } else {
-            C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
-        }
+        player?.videoScalingMode = scalingModeFor(scale)
         tvFragment()?.showVideoScale(scale)
         scaleButton?.text = scale.label
         showGestureFeedback(scale.label)
@@ -983,13 +998,7 @@ class PlayerActivity : FragmentActivity() {
                 setHandleAudioBecomingNoisy(true)
                 setWakeMode(C.WAKE_MODE_LOCAL)
                 setPlaybackSpeed(playbackSpeed)
-                // The television draws onto leanback's bare surface, where this is the only lever
-                // the picture shape has; the phone's PlayerView takes its resize mode instead.
-                videoScalingMode = if (videoScale == VideoScale.Fit) {
-                    C.VIDEO_SCALING_MODE_SCALE_TO_FIT
-                } else {
-                    C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
-                }
+                videoScalingMode = scalingModeFor(videoScale)
             }
     }
 
