@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme as M3
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 
 /**
  * A colour by the job it does, rather than by its hex.
@@ -70,6 +71,18 @@ object Tone {
     val danger: Color
         @Composable @ReadOnlyComposable get() =
             M3.colorScheme.error
+
+    /**
+     * What to write on a background this list has no "on" role for.
+     *
+     * [onAccent] is the better answer wherever the background is [accent], because the scheme
+     * tuned that pair rather than guessing it. This is for the few places carrying a colour of
+     * their own, the amber update item among them, where there is no pair to look up. The
+     * threshold is where black and white come out equally readable under the WCAG contrast
+     * formula, so each side is picked only while it is the better of the two.
+     */
+    fun readableOn(background: Color): Color =
+        if (background.luminance() > 0.1791f) Color(0xFF10131A) else Color.White
 
     /**
      * Worth noticing, nothing has gone wrong.

@@ -244,7 +244,7 @@ private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Mod
         label = "menuRow",
     )
     val foreground = when {
-        focused -> Color.White
+        focused -> Tone.onAccent
         action.destructive -> Danger
         else -> Tone.text
     }
@@ -283,7 +283,7 @@ private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Mod
                 Text(
                     action.detail,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (focused) Color.White.copy(alpha = 0.85f) else Tone.muted,
+                    color = if (focused) Tone.onAccent.copy(alpha = 0.85f) else Tone.muted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

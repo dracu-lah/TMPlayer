@@ -775,7 +775,7 @@ private fun Step(number: Int, text: String) {
             Text(
                 "$number",
                 style = MaterialTheme.typography.bodyLarge,
-                color = if (touch) M3.colorScheme.onPrimaryContainer else Color.White,
+                color = if (touch) M3.colorScheme.onPrimaryContainer else Tone.onAccent,
             )
         }
         Spacer(Modifier.width(16.dp))

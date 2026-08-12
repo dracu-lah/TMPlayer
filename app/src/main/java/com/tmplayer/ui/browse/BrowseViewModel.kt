@@ -368,9 +368,25 @@ class MediaListViewModel(
                     if (!session.isCurrent()) return@onSuccess
                     val page = rawPage.copy(items = keep(rawPage.items))
                     cursors = page.cursors
-                    _state.value = if (
-                        page.items.isEmpty() && page.endReached && sponsored == null
-                    ) {
+                    // A first page can come back empty while older pages still hold videos: a chat
+                    // whose newest forty files are all outside the size limits, most often.
+                    //
+                    // Continued here rather than by calling loadMore(), which is what this used to
+                    // do and which never ran: loadMore() refuses to start while pageJob is active,
+                    // and pageJob is this very coroutine, so the recovery was a guaranteed no-op
+                    // and such a chat simply reported itself as having no videos.
+                    //
+                    // Nothing is published before the walk. Publishing an empty Content here, as
+                    // this did, put a blank body on the screen for the whole of it: no skeleton,
+                    // no chip, nothing to point the remote at, and on a television that reads as a
+                    // chat with no videos in it rather than one still being searched. Leaving the
+                    // state alone keeps the skeleton up on a first load and the old listing up on
+                    // a refresh, and pageMore publishes whatever it finds.
+                    if (page.items.isEmpty() && !page.endReached) {
+                        pageMore(session, repository, emptyList(), page.endReached)
+                        return@onSuccess
+                    }
+                    _state.value = if (page.items.isEmpty() && sponsored == null) {
                         UiState.Empty(emptyMessage())
                     } else {
                         UiState.Content(
@@ -380,16 +396,6 @@ class MediaListViewModel(
                                 endReached = page.endReached,
                             ),
                         )
-                    }
-                    // A first page can come back empty while older pages still hold videos: a chat
-                    // whose newest forty files are all outside the size limits, most often.
-                    //
-                    // Continued here rather than by calling loadMore(), which is what this used to
-                    // do and which never ran: loadMore() refuses to start while pageJob is active,
-                    // and pageJob is this very coroutine, so the recovery was a guaranteed no-op
-                    // and such a chat simply reported itself as having no videos.
-                    if (page.items.isEmpty() && !page.endReached) {
-                        pageMore(session, repository, emptyList(), page.endReached)
                     }
                 }
                 .onFailure {
@@ -642,8 +648,11 @@ class MediaListViewModel(
         }
 
         if (!session.isCurrent()) return
-        _state.value = if (items.isEmpty() && reachedEnd && sponsored == null) {
-            UiState.Empty(emptyMessage())
+        // An empty listing has to say something, whether the chat ran out or the walk gave up
+        // after MAX_EMPTY_PAGES. A Content with no items is a blank screen, and a blank screen
+        // asks the viewer to guess which of the two happened.
+        _state.value = if (items.isEmpty() && sponsored == null) {
+            UiState.Empty(if (reachedEnd) emptyMessage() else STILL_MORE_TO_SEARCH)
         } else {
             UiState.Content(
                 MediaListState(
@@ -661,6 +670,16 @@ class MediaListViewModel(
 
     private companion object {
         const val MAX_EMPTY_PAGES = 8
+
+        /**
+         * The walk back through a chat stops after [MAX_EMPTY_PAGES] empty pages rather than
+         * holding the screen for thousands of files the size limits all reject. Saying so is the
+         * point: the chat has not been read to the end, so "no videos in this chat" would be a
+         * guess, and refreshing genuinely picks up from where the cursors were left.
+         */
+        const val STILL_MORE_TO_SEARCH =
+            "No videos yet in the newest part of this chat.\n\n" +
+                "Refresh to keep looking further back."
 
         /** Shorter than this and a word is "the" or "s02": it narrows nothing. */
         const val MIN_FALLBACK_WORD = 3

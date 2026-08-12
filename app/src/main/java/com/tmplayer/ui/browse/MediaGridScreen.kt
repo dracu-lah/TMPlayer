@@ -1140,7 +1140,7 @@ private fun Pill(
         animationSpec = tween(140),
         label = "pill",
     )
-    val foreground = if (focused) Color.White else tintWhenIdle
+    val foreground = if (focused) Tone.onAccent else tintWhenIdle
 
     Row(
         Modifier

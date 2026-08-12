@@ -1005,7 +1005,7 @@ private fun RailItem(
     )
     val foreground by animateColorAsState(
         targetValue = when {
-            focused -> Color.White
+            focused -> Tone.readableOn(accent)
             selected -> accent
             else -> if (accent == Tone.accent) Tone.muted else accent
         },
@@ -1118,7 +1118,7 @@ private fun HeaderAction(
         animationSpec = tween(140),
         label = "headerAction",
     )
-    val foreground = if (focused) Color.White else Tone.text
+    val foreground = if (focused) Tone.onAccent else Tone.text
 
     Row(
         Modifier
@@ -1239,7 +1239,7 @@ private fun PillButton(label: String?, icon: ImageVector?, onClick: () -> Unit) 
         animationSpec = tween(FOCUS_FADE_MS),
         label = "pillBackground",
     )
-    val foreground = if (focused) Color.White else Tone.text
+    val foreground = if (focused) Tone.onAccent else Tone.text
 
     Row(
         Modifier
