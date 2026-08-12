@@ -25,8 +25,9 @@ data class StorageBreakdown(
         val EMPTY = StorageBreakdown()
 
         /**
-         * @param rows one entry per file type TDLib reported, as (type name, bytes). The name is
-         *   the DTO's simple class name, `FileTypeVideo` and its neighbours.
+         * @param rows one entry per file type TDLib reported, as (type name, bytes). The names
+         *   are TDLib's own, `FileTypeVideo` and its neighbours, written out by the caller rather
+         *   than read off the class: R8 renames the DTOs in a release build.
          */
         fun of(rows: List<Pair<String, Long>>): StorageBreakdown {
             var video = 0L
@@ -57,12 +58,19 @@ data class StorageBreakdown(
             "FileTypeVideo",
             "FileTypeDocument",
             "FileTypeAnimation",
+            // A clip sent as a round message or a story is still video on the disk, and a viewer
+            // looking at a full device does not care which of Telegram's boxes it arrived in.
+            "FileTypeVideoNote",
+            "FileTypeVideoStory",
+            "FileTypeAudio",
         )
 
         private val PICTURE_TYPES = setOf(
             "FileTypePhoto",
+            "FileTypePhotoStory",
             "FileTypeThumbnail",
             "FileTypeProfilePhoto",
+            "FileTypeSticker",
         )
     }
 }

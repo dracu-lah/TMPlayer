@@ -11,9 +11,18 @@ import dev.g000sha256.tdl.dto.ConnectionStateReady
 import dev.g000sha256.tdl.dto.CountryInfo
 import dev.g000sha256.tdl.dto.PhoneNumberInfo
 import dev.g000sha256.tdl.dto.ConnectionStateUpdating
+import dev.g000sha256.tdl.dto.FileType
 import dev.g000sha256.tdl.dto.FileTypeAnimation
+import dev.g000sha256.tdl.dto.FileTypeAudio
 import dev.g000sha256.tdl.dto.FileTypeDocument
+import dev.g000sha256.tdl.dto.FileTypePhoto
+import dev.g000sha256.tdl.dto.FileTypePhotoStory
+import dev.g000sha256.tdl.dto.FileTypeProfilePhoto
+import dev.g000sha256.tdl.dto.FileTypeSticker
+import dev.g000sha256.tdl.dto.FileTypeThumbnail
 import dev.g000sha256.tdl.dto.FileTypeVideo
+import dev.g000sha256.tdl.dto.FileTypeVideoNote
+import dev.g000sha256.tdl.dto.FileTypeVideoStory
 import dev.g000sha256.tdl.dto.OptionValueBoolean
 import dev.g000sha256.tdl.dto.OptionValueInteger
 import kotlinx.coroutines.CompletableDeferred
@@ -407,9 +416,37 @@ object Td {
         val td = current ?: return StorageBreakdown.EMPTY
         val stats = td.getStorageStatistics(chatLimit = 0).valueOrNull ?: return StorageBreakdown.EMPTY
         val rows = stats.byChat.flatMap { chat ->
-            chat.byFileType.map { row -> row.fileType::class.java.simpleName to row.size }
+            chat.byFileType.map { row -> nameOf(row.fileType) to row.size }
         }
         return StorageBreakdown.of(rows)
+    }
+
+    /**
+     * The name of a TDLib file type, written out rather than read off the class.
+     *
+     * This was `fileType::class.java.simpleName`, which is correct in a debug build and worthless
+     * in a release one: R8 renames every class it is not told to keep, so on the device the type
+     * names arrived as "a", "b", "c", nothing matched, and every byte the app held was filed under
+     * "everything else". The Settings card therefore read "Video 0 MB, Pictures 0 MB, Everything
+     * else 4.18 GB" on a stick holding four gigabytes of films, and the Delete button, which acts
+     * on the video figure, offered to free nothing at all. Which is precisely the state a viewer
+     * ends up in with a full disk and no way to empty it.
+     *
+     * Matching on the type itself cannot be renamed away.
+     */
+    private fun nameOf(type: FileType): String = when (type) {
+        is FileTypeVideo -> "FileTypeVideo"
+        is FileTypeDocument -> "FileTypeDocument"
+        is FileTypeAnimation -> "FileTypeAnimation"
+        is FileTypeVideoNote -> "FileTypeVideoNote"
+        is FileTypeVideoStory -> "FileTypeVideoStory"
+        is FileTypeAudio -> "FileTypeAudio"
+        is FileTypePhoto -> "FileTypePhoto"
+        is FileTypePhotoStory -> "FileTypePhotoStory"
+        is FileTypeThumbnail -> "FileTypeThumbnail"
+        is FileTypeProfilePhoto -> "FileTypeProfilePhoto"
+        is FileTypeSticker -> "FileTypeSticker"
+        else -> "FileTypeOther"
     }
 
     /**
