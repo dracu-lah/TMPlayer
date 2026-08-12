@@ -67,7 +67,7 @@
     <section>
       <h2>Crash reporting, if you turn it on</h2>
       <p><strong>Off on a fresh install, and off again after signing out.</strong> With the switch off, nothing about crash reporting is started: no library is initialised and no server is contacted. Turning it on is the only thing in TMPlayer that ever sends anything anywhere other than Telegram and GitHub.</p>
-      <p>With it on, a crash sends the stack trace, the TMPlayer version, the Android version and the device model to <a href="https://sentry.io" rel="noopener">Sentry</a>, which stores it on the developer's behalf. That is the whole report.</p>
+      <p>With it on, a crash sends the stack trace, the TMPlayer version, the Android version and the device model to <a href="https://sentry.io" rel="noopener">Sentry</a>, which stores it on the developer's behalf in its European region. That is the whole report.</p>
       <p>What a report deliberately does not carry: no chat names, no filenames, no search terms, no viewing history, no breadcrumb trail of what you were doing, no session or usage measurement, no IP address kept as personal data, and no identifier that ties two reports to the same person or device. The automatic trail Sentry would otherwise collect is switched off in code rather than merely left unused, because that trail is exactly where the name of the film you were watching would otherwise appear.</p>
       <p>Switch it off in Settings and reporting stops immediately. The setting lives on your device, and signing out clears it back to off along with everything else.</p>
     </section>
