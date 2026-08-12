@@ -367,6 +367,73 @@
   load();
 })();
 
+/* Theme control.
+
+   The system theme is the default and stays the default: nothing is written to
+   storage until the reader presses the button, and the stylesheet follows
+   prefers-color-scheme for as long as data-theme is absent. Pressing the
+   button sets the attribute, which flips every custom property at once, and
+   remembers the choice. The head carries a tiny copy of the read so the
+   stored theme is applied before the first paint. */
+(function () {
+  'use strict';
+
+  var KEY = 'tm-theme';
+  var root = document.documentElement;
+  var button = document.getElementById('theme-toggle');
+  if (!button) { return; }
+
+  var media = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
+  function stored() {
+    try {
+      var t = localStorage.getItem(KEY);
+      return (t === 'light' || t === 'dark') ? t : null;
+    } catch (e) { return null; }
+  }
+
+  function showing() {
+    var chosen = root.getAttribute('data-theme');
+    if (chosen === 'light' || chosen === 'dark') { return chosen; }
+    return (media && media.matches) ? 'dark' : 'light';
+  }
+
+  /* The address bar and task switcher follow the page, which they cannot do
+     from the two media-scoped meta tags once a choice overrides the system. */
+  function paintChrome(theme) {
+    var colour = theme === 'dark' ? '#0B0C0E' : '#FFFFFF';
+    var tags = document.querySelectorAll('meta[name="theme-color"]');
+    for (var i = 0; i < tags.length; i++) {
+      tags[i].setAttribute('content', colour);
+      tags[i].removeAttribute('media');
+    }
+  }
+
+  function label() {
+    var next = showing() === 'dark' ? 'light' : 'dark';
+    button.setAttribute('aria-label', 'Switch to ' + next + ' theme');
+    button.setAttribute('title', 'Switch to ' + next + ' theme');
+  }
+
+  button.addEventListener('click', function () {
+    var next = showing() === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem(KEY, next); } catch (e) {}
+    paintChrome(next);
+    label();
+  });
+
+  /* With no explicit choice, follow the system if it changes under us. */
+  if (media && typeof media.addEventListener === 'function') {
+    media.addEventListener('change', function () {
+      if (!stored()) { label(); }
+    });
+  }
+
+  if (stored()) { paintChrome(stored()); }
+  label();
+})();
+
 /* Scroll reveal. Opt-in only: the class that hides the elements is added by
    this script, so with JavaScript off, or with reduced motion asked for,
    everything stays visible and nothing is lost. */
@@ -397,4 +464,55 @@
   Array.prototype.forEach.call(targets, function (node) {
     observer.observe(node);
   });
+})();
+
+/* Top app bar and hero parallax. Both are decoration: the header still works
+   without the class, and the devices sit exactly where the layout puts them
+   when --shift is never written. Reduced motion skips the parallax and keeps
+   the header behaviour, which is a state change rather than an animation. */
+(function () {
+  'use strict';
+
+  var header = document.querySelector('.site-header');
+  var showcase = document.querySelector('.showcase');
+  var reduced = window.matchMedia
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var ticking = false;
+
+  function frame() {
+    ticking = false;
+    var y = window.pageYOffset || document.documentElement.scrollTop || 0;
+
+    if (header) {
+      if (y > 8) {
+        if (header.className.indexOf('is-stuck') === -1) { header.className += ' is-stuck'; }
+      } else {
+        header.className = header.className.replace(/\s*is-stuck/g, '');
+      }
+    }
+
+    if (showcase && !reduced) {
+      var box = showcase.getBoundingClientRect();
+      var height = window.innerHeight || 800;
+      /* Minus one when the showcase is below the fold, plus one when it is
+         above it, so the two devices separate gently as the page moves. */
+      var shift = ((height - box.top) / (height + box.height)) * 2 - 1;
+      shift = Math.max(-1, Math.min(1, shift));
+      showcase.style.setProperty('--shift', shift.toFixed(3));
+    }
+  }
+
+  function onScroll() {
+    if (ticking) { return; }
+    ticking = true;
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(frame);
+    } else {
+      frame();
+    }
+  }
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll, { passive: true });
+  frame();
 })();

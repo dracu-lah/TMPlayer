@@ -7,7 +7,9 @@
 <meta name="description" content="How TMPlayer stores data on your Android TV and which services it contacts.">
 <link rel="canonical" href="https://tmplayer.org/privacy">
 <meta name="robots" content="index, follow">
-<meta name="theme-color" content="#0E0E12">
+<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0B0C0E" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
 <meta property="og:title" content="Privacy - TMPlayer">
 <meta property="og:description" content="How TMPlayer stores data on your Android TV and which services it contacts.">
 <meta property="og:url" content="https://tmplayer.org/privacy">
@@ -16,13 +18,21 @@
 <link rel="preload" href="/fonts/poppins-400.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/poppins-600.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/styles.css">
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem('tm-theme');
+    if (t === 'light' || t === 'dark') { document.documentElement.setAttribute('data-theme', t); }
+  } catch (e) {}
+})();
+</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 <header class="site-header">
   <div class="wrap header-inner">
     <a class="brand" href="/" aria-label="TMPlayer home"><img class="brand-mark" src="/favicon.svg" width="30" height="30" alt=""><span class="brand-name">TMPlayer</span></a>
-    <nav class="nav" aria-label="Primary"><span class="nav-links"><a href="/">Home</a><a href="/legal">Lawful use</a></span><a class="nav-cta" href="https://github.com/dracu-lah/TMPlayer" rel="noopener">GitHub</a></nav>
+    <nav class="nav" aria-label="Primary"><span class="nav-links"><a href="/">Home</a><a href="/legal">Lawful use</a></span><a class="nav-cta" href="https://github.com/dracu-lah/TMPlayer" rel="noopener">GitHub</a><button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark theme"><svg class="icon-sun" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 5a1 1 0 0 1-1-1v-1.5a1 1 0 1 1 2 0V21a1 1 0 0 1-1 1Zm0-17.5a1 1 0 0 1-1-1V3a1 1 0 1 1 2 0v.5a1 1 0 0 1-1 1ZM3 13a1 1 0 1 1 0-2h1.5a1 1 0 1 1 0 2H3Zm16.5 0a1 1 0 1 1 0-2H21a1 1 0 1 1 0 2h-1.5ZM5.6 19.8a1 1 0 0 1 0-1.4l1-1.1a1 1 0 0 1 1.5 1.5l-1.1 1a1 1 0 0 1-1.4 0Zm10.3-10.3a1 1 0 0 1 0-1.4l1.1-1.1a1 1 0 1 1 1.4 1.4l-1 1.1a1 1 0 0 1-1.5 0ZM18.4 19.8l-1.1-1a1 1 0 0 1 1.4-1.5l1.1 1.1a1 1 0 0 1-1.4 1.4ZM8.1 9.5l-1-1.1a1 1 0 0 1 1.4-1.4l1.1 1.1a1 1 0 0 1-1.5 1.4Z"/></svg><svg class="icon-moon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M21 14.2A9 9 0 0 1 9.8 3 9 9 0 1 0 21 14.2Z"/></svg></button></nav>
   </div>
 </header>
 <main id="main" class="policy-page">
@@ -69,5 +79,43 @@
   </div>
 </main>
 <footer class="site-footer"><div class="wrap footer-grid"><div><p class="footer-brand">TMPlayer</p><p class="muted small">An unofficial Telegram media player for Android TV.</p></div><nav class="footer-links" aria-label="Footer"><a href="/">Home</a><a href="/legal">Lawful use</a><a href="https://github.com/dracu-lah/TMPlayer" rel="noopener">Source</a></nav></div></footer>
+<script>
+/* The same control as the home page, on its own here because these pages do not
+   load app.js: they have no release card for it to fill in. */
+(function () {
+  var KEY = 'tm-theme';
+  var root = document.documentElement;
+  var button = document.getElementById('theme-toggle');
+  if (!button) { return; }
+  var media = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  function showing() {
+    var chosen = root.getAttribute('data-theme');
+    if (chosen === 'light' || chosen === 'dark') { return chosen; }
+    return (media && media.matches) ? 'dark' : 'light';
+  }
+  function paintChrome(theme) {
+    var colour = theme === 'dark' ? '#0B0C0E' : '#FFFFFF';
+    var tags = document.querySelectorAll('meta[name="theme-color"]');
+    for (var i = 0; i < tags.length; i++) {
+      tags[i].setAttribute('content', colour);
+      tags[i].removeAttribute('media');
+    }
+  }
+  function label() {
+    var next = showing() === 'dark' ? 'light' : 'dark';
+    button.setAttribute('aria-label', 'Switch to ' + next + ' theme');
+    button.setAttribute('title', 'Switch to ' + next + ' theme');
+  }
+  button.addEventListener('click', function () {
+    var next = showing() === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem(KEY, next); } catch (e) {}
+    paintChrome(next);
+    label();
+  });
+  try { if (localStorage.getItem(KEY)) { paintChrome(showing()); } } catch (e) {}
+  label();
+})();
+</script>
 </body>
 </html>
