@@ -31,7 +31,7 @@ that gets abused is acted on by Telegram, and it traces back to whoever register
 
 ```bash
 ./gradlew test              # unit tests
-./gradlew assembleDebug     # per-ABI debug APKs
+./gradlew assembleDebug     # one debug APK, every architecture, emulator included
 ./gradlew assembleRelease   # signed release, needs keystore.properties
 ```
 

@@ -95,7 +95,11 @@ jobs:
         id: rename
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-universal-release.apk \
+          # One APK now: the ABI splits are gone, so Gradle writes app-release.apk rather than
+          # the per-ABI set and the universal one beside them. The published name is unchanged,
+          # because it is what the site links to and what every install guide tells people to
+          # type, and the file still is the universal build: every architecture the app supports.
+          cp app/build/outputs/apk/release/app-release.apk \
             "dist/TMPlayer-${{ steps.version.outputs.name }}-universal.apk"
           # R8 renames every class, so a crash report from a released APK is unreadable without
           # the mapping for that exact build. It is generated once and then gone; publish it or

@@ -44,15 +44,23 @@ android {
 
     }
 
-    // Keep the smaller ABI builds for local testing, and also produce the single universal APK
-    // published to viewers. One predictable download is worth the larger transfer for sideloading.
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("armeabi-v7a", "arm64-v8a", "x86_64")
-            isUniversalApk = true
+    // One APK, and only one. The per-ABI builds were four extra artifacts on every release for a
+    // sideloaded app whose viewers have to be told which file to take, and the guessing is worth
+    // more than the megabytes: a viewer who picks the wrong one gets an install that fails at the
+    // first video rather than at install time. The size that made them tempting came from the
+    // universal APK carrying architectures nobody asked for, which `ndk.abiFilters` above is the
+    // actual fix for.
+    packaging {
+        jniLibs {
+            // The modern default, written down because it is the answer to "how big is it after
+            // it is installed": the .so files are stored uncompressed and mapped straight out of
+            // the APK, so there is one copy on the device rather than a compressed one in the APK
+            // and an extracted one beside it. It makes the download larger than a zipped-up APK
+            // would be and the installation considerably smaller, which is the right way round
+            // for a 20 MB library that is most of the app.
+            useLegacyPackaging = false
         }
+        resources.excludes += setOf("META-INF/*.version", "kotlin/**", "DebugProbesKt.bin")
     }
 
     signingConfigs {
@@ -68,6 +76,22 @@ android {
 
     buildTypes {
         release {
+            // The architectures the published APK carries, and the whole of why it is the size
+            // it is: TDLib alone is 20 MB per architecture, FFmpeg another 4.
+            //
+            // Until now no such list was applied at all. `splits.abi.include` decides which
+            // per-ABI APKs are produced and has no say over what goes into the universal one,
+            // which takes every architecture the dependencies happen to carry. TDLib ships four,
+            // so every download held a 24 MB x86 copy of it, plus x86 builds of FFmpeg and the
+            // Media3 extension, for a platform the project never offered a build for.
+            //
+            // x86_64 goes with it, being emulators and a handful of Chromebooks rather than any
+            // television or phone, and 29 MB of every viewer's download. Both stay available to
+            // developers, because this filter is on the release build alone: a debug build still
+            // carries every architecture, and the x86_64 emulator that BUILDING.md names as the
+            // reference environment still runs one. Only the file the public downloads is cut.
+            ndk.abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -92,9 +116,6 @@ android {
         viewBinding = false
     }
 
-    packaging {
-        resources.excludes += setOf("META-INF/*.version", "kotlin/**", "DebugProbesKt.bin")
-    }
 
     testOptions {
         unitTests {
