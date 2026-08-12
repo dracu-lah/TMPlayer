@@ -522,7 +522,12 @@ summary {
 }
 
 .nav { display: flex; align-items: center; gap: 6px; }
-.nav a {
+/* The pages, as their own element. It used to be display:contents inside .nav, which meant its
+   width was whatever the controls beside it happened to be: on a phone that is what pushed the
+   strip out from under the brand and off the right edge. */
+.nav-links { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.nav a,
+.nav-links a {
   color: var(--on-surface-variant);
   font-size: 0.95rem;
   font-weight: 500;
@@ -530,7 +535,8 @@ summary {
   border-radius: var(--shape-full);
   transition: background-color 0.2s var(--ease-standard), color 0.2s var(--ease-standard);
 }
-.nav a:hover {
+.nav a:hover,
+.nav-links a:hover {
   color: var(--on-surface);
   background: var(--surface-container);
   text-decoration: none;
@@ -544,10 +550,6 @@ summary {
 }
 .nav a.nav-cta:hover { background: var(--primary); color: var(--on-primary); }
 
-.nav-links { display: contents; }
-@media (max-width: 720px) {
-  .nav-links { display: none; }
-}
 
 /* The theme control. Two icons in one button: whichever theme is showing, the
    button offers the other one. */
@@ -1703,30 +1705,50 @@ summary:hover { color: var(--on-surface); }
    them behind a menu button nobody presses.
    --------------------------------------------------------------------------- */
 
-.nav a[aria-current="page"] {
+.nav-links a[aria-current="page"] {
   color: var(--on-surface);
   background: var(--surface-container);
 }
 
-@media (max-width: 720px) {
-  /* min-width:0 is what makes this work: without it the nav is as wide as its
-     widest row and the scrolling strip below never has an edge to scroll to,
-     so the star and the theme control get pushed off the screen instead. */
-  .nav { flex: 1 1 auto; min-width: 0; flex-wrap: wrap; justify-content: flex-end; row-gap: 0; }
-  /* display:contents on the desktop layout, a real scrolling row here. */
+/* Below 840px the header is two rows: the mark and the two controls on the first, and the pages
+   on the second, in a tray of their own that scrolls sideways. The strip used to sit inside the
+   controls' own box, which gave it their width rather than the header's, so it began under the
+   brand and ran off the right edge with half a word showing. Its own ground is also what stops
+   four page names reading as loose text sitting on the artwork behind them. */
+@media (max-width: 840px) {
+  .header-inner { flex-wrap: wrap; row-gap: 8px; min-height: 0; padding-block: 10px; }
+  .brand { order: 1; }
+  .nav { order: 2; margin-left: auto; }
+
   .nav-links {
-    display: flex;
     order: 3;
     flex: 1 0 100%;
+    margin-left: 0;
     gap: 2px;
+    padding: 5px;
+    border: 1px solid var(--outline-variant);
+    border-radius: var(--shape-full);
+    background: var(--surface-container-low);
+    /* The one row that is allowed to overflow, because four to six page names will not fit on a
+       phone at any size worth reading. Sideways, under a thumb, with no scrollbar drawn. */
     overflow-x: auto;
     scrollbar-width: none;
-    padding-bottom: 8px;
-    margin-top: -2px;
   }
   .nav-links::-webkit-scrollbar { display: none; }
-  .nav-links a { white-space: nowrap; padding: 8px 12px; font-size: 0.9rem; }
-  .is-stuck .nav-links { padding-bottom: 6px; }
+  .nav-links a { white-space: nowrap; padding: 8px 14px; font-size: 0.9rem; }
+
+  /* No pill inside a pill. The strip is already one, so once the bar lifts it goes flat and
+     edge to edge, and keeps only its ground and a hairline along the bottom. */
+  .site-header.is-stuck { padding: 0; }
+  .is-stuck .header-inner {
+    min-height: 0;
+    border-radius: 0;
+    border-width: 0 0 1px;
+    border-color: var(--outline-variant);
+    padding-inline: var(--gutter);
+  }
+  .is-stuck .brand { padding-block: 0; }
+  .is-stuck .nav-links { background: var(--surface-container); }
 }
 
 /* The star control. It is a link to the stargazers page whatever happens; the
@@ -1901,12 +1923,18 @@ a.card:hover .card-go svg { transform: translateX(4px); }
 .support h2 { margin: 0 0 14px; font-size: clamp(1.6rem, 3.6vw, 2.4rem); letter-spacing: -0.028em; }
 .support p { margin: 0 auto; max-width: var(--measure-tight); color: var(--on-surface-variant); }
 .support-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  display: grid;
   gap: 10px;
-  margin: clamp(24px, 3vw, 32px) 0 clamp(20px, 2.6vw, 28px);
+  grid-template-columns: minmax(0, 1fr);
+  margin: clamp(24px, 3vw, 32px) auto clamp(20px, 2.6vw, 28px);
+  max-width: 760px;
 }
+/* Even columns, not content-width ones: the three labels are different lengths and three pills
+   of three widths centred on a line read as three unrelated things rather than as one set. */
+@media (min-width: 640px) {
+  .support-actions { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
+}
+.support-actions .btn { justify-content: center; }
 .support-stats {
   display: flex;
   flex-wrap: wrap;
