@@ -61,6 +61,11 @@ TG_API_ID=1234567
 TG_API_HASH=your_api_hash
 ```
 
+[.env.example](.env.example) lists every optional value the build reads, what each one turns on,
+and how to set the same ones as repository secrets. All of them are optional: with none of them
+present the app builds, runs and carries none of this project's own endpoints, which is what a
+fork and every CI run get.
+
 ```bash
 ./gradlew test
 ./gradlew assembleDebug

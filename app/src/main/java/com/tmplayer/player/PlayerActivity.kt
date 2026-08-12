@@ -12,6 +12,7 @@ import android.os.SystemClock
 import android.util.Rational
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -464,25 +465,47 @@ class PlayerActivity : FragmentActivity() {
      * so raising the controls re-padded the surface and the video visibly jumped and resized under
      * them.
      *
-     * The surface is now laid out once, at the full size of the window, and never moves again. Only
-     * the overlays are inset: Media3's control row, so the play button and the scrub bar are not
-     * drawn under the home gesture, and the corner stack, so the chips clear the notch and the
-     * clock.
+     * The surface is now laid out once, at the full size of the window, and never moves again.
+     *
+     * The controls were then inset by padding Media3's controller, which was a second version of
+     * the same mistake one level down. That controller is not just the buttons: its first child is
+     * the dim wash over the whole picture, and the transport row carries the gradient. Padding the
+     * parent moved both of them inwards, so with the controls up the picture stayed bright in a
+     * strip along the notch and another along the gesture handle, while everything between them
+     * darkened. The controller now keeps every pixel of the window, and the inset is applied inside
+     * it, to the transport row and the scrub bar, which are the only things a finger has to reach.
      */
     private fun insetTheControlsOnly(view: PlayerView) {
         val controller = view.findViewById<View>(androidx.media3.ui.R.id.exo_controller)
+        val bottomBar = view.findViewById<View>(androidx.media3.ui.R.id.exo_bottom_bar)
+        val timeBar = view.findViewById<View>(androidx.media3.ui.R.id.exo_progress)
         val corner = findViewById<View>(R.id.top_right_stack)
         val root = findViewById<View>(R.id.player_root)
+        val barHeight = bottomBar?.layoutParams?.height ?: 0
+        val timeBarMargin = (timeBar?.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin ?: 0
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val safe = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
             )
-            controller?.updatePadding(
-                left = safe.left,
-                right = safe.right,
-                top = safe.top,
-                bottom = safe.bottom,
-            )
+            // The controller itself keeps every edge. Padding it moved the dim and the gradient in
+            // with the buttons, which is the band of undimmed picture the notch and the gesture
+            // handle were sitting on.
+            controller?.updatePadding(left = 0, right = 0, top = 0, bottom = 0)
+            // The row grows by the bottom inset rather than being padded into its fixed height, so
+            // the gradient reaches the bottom of the screen while the buttons stay their own size.
+            bottomBar?.let {
+                it.updatePadding(left = safe.left, right = safe.right, bottom = safe.bottom)
+                if (barHeight > 0) {
+                    it.layoutParams = it.layoutParams.also { lp -> lp.height = barHeight + safe.bottom }
+                }
+            }
+            // The scrub bar is a sibling of that row, pinned to the bottom by a margin of its own.
+            (timeBar?.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
+                lp.bottomMargin = timeBarMargin + safe.bottom
+                lp.leftMargin = safe.left
+                lp.rightMargin = safe.right
+                timeBar.layoutParams = lp
+            }
             corner?.updatePadding(right = safe.right, top = safe.top)
             insets
         }

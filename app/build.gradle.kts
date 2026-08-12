@@ -37,6 +37,16 @@ android {
         buildConfigField("int", "TG_API_ID", localProps.getProperty("TG_API_ID") ?: "0")
         buildConfigField("String", "TG_API_HASH", "\"${localProps.getProperty("TG_API_HASH") ?: ""}\"")
 
+        // Where an opted-in crash report goes. Empty is the normal case and the honest default:
+        // with no DSN the reporting code never initialises, the Settings switch is not offered,
+        // and a fork or a CI build carries no endpoint of mine. Set SENTRY_DSN in local.properties
+        // or in the environment. It is not a secret in the usual sense, since a DSN that ships in
+        // an APK can be read out of it, but it is still nobody's business but the project's.
+        val sentryDsn = localProps.getProperty("SENTRY_DSN")
+            ?: System.getenv("SENTRY_DSN")
+            ?: ""
+        buildConfigField("String", "SENTRY_DSN", "\"$sentryDsn\"")
+
         // English only. Every androidx and Media3 dependency ships translations for ~80
         // locales, and none of this app's own strings are translated, so the rest is dead
         // weight in resources.arsc. Revisit the moment the UI itself is localised.
@@ -164,6 +174,10 @@ dependencies {
     implementation(libs.nextlib.media3ext)
 
     implementation(libs.androidx.datastore.preferences)
+
+    // Crash reporting, off unless the viewer turns it on in Settings. Nothing here runs at
+    // startup: auto-init is switched off in the manifest and CrashReports does the rest.
+    implementation(libs.sentry.android.core)
 
     testImplementation(libs.junit)
     testImplementation(libs.json)

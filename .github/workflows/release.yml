@@ -72,14 +72,22 @@ jobs:
         env:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          # Optional, unlike the two above. Without it the released APK simply has nowhere to send
+          # a crash report to, so the Settings switch is never drawn and the feature does not
+          # exist in that build. That is a smaller release, not a broken one, so it does not fail.
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
           if [ -z "$TG_API_ID" ]; then
             echo "::error::TG_API_ID is not set, so the released APK would not be able to sign in"
             exit 1
           fi
+          if [ -z "$SENTRY_DSN" ]; then
+            echo "::notice::SENTRY_DSN is not set. This build ships without crash reporting."
+          fi
           cat > local.properties <<EOF
           TG_API_ID=$TG_API_ID
           TG_API_HASH=$TG_API_HASH
+          SENTRY_DSN=$SENTRY_DSN
           EOF
 
       - name: Run unit tests

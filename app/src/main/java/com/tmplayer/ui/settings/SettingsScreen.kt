@@ -45,7 +45,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.IconButton as TouchIconButton
@@ -103,6 +102,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.ChatSummary
+import com.tmplayer.data.CrashReports
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.SizeFilter
@@ -127,7 +127,11 @@ import com.tmplayer.ui.theme.Tv
 import kotlinx.coroutines.launch
 
 private sealed interface Prompt {
+    /** The one video watching left behind. */
     data object ClearCache : Prompt
+
+    /** Everything else TMPlayer is holding: previews, thumbnails and the database. */
+    data object ClearOther : Prompt
     data object ClearHistory : Prompt
     data object ClearFavorites : Prompt
     data object SignOut : Prompt
@@ -135,7 +139,6 @@ private sealed interface Prompt {
 
 /**
  * Below this, what a clear would return is scraps and the wording should not promise otherwise.
- * The same figure [CacheShelf] uses for the question it asks before a download.
  */
 private const val CLEARING_WORTH_ASKING = CacheShelf.WORTH_ASKING_BYTES
 
@@ -154,7 +157,10 @@ fun SettingsScreen(
     // Matches the stored default, so the switch does not show as on for the frame before the
     // first value arrives and then visibly flick off.
     val openLastChat by settings.openLastChat.collectAsStateWithLifecycle(initialValue = false)
-    val askBeforeClearing by settings.askBeforeClearing.collectAsStateWithLifecycle(initialValue = true)
+    // The single video watching leaves behind. Null until the first read, which is the same thing
+    // it says when there is none: a row that reads "Nothing cached" for a frame is honest either
+    // way, and the size beside it arrives with the rest of the storage figures.
+    val cached by settings.cachedVideo.collectAsStateWithLifecycle(initialValue = null)
     val downloadFirst by settings.downloadBeforePlaying.collectAsStateWithLifecycle(initialValue = false)
     val autoplayNext by settings.autoplayNext.collectAsStateWithLifecycle(initialValue = true)
     val wifiOnly by settings.wifiOnlyDownloads.collectAsStateWithLifecycle(initialValue = false)
@@ -173,20 +179,16 @@ fun SettingsScreen(
         initialValue = ThemeChoice.Default,
     )
     val dynamicColour by settings.dynamicColour.collectAsStateWithLifecycle(initialValue = false)
-    // The default is the device's own, so it is read rather than assumed: a television starts at
-    // one video and a phone at three, and the placeholder must not say the other one first.
-    val keepVideos by settings.keepVideos.collectAsStateWithLifecycle(
-        initialValue = if (isTouch()) {
-            SettingsStore.TOUCH_KEEP_VIDEOS
-        } else {
-            SettingsStore.TV_KEEP_VIDEOS
-        },
-    )
+    val crashReports by settings.crashReports.collectAsStateWithLifecycle(initialValue = false)
 
     val toast = rememberToast()
     val updateState by Updates.state.collectAsStateWithLifecycle()
     var showUpdate by remember { mutableStateOf(false) }
     var cacheBytes by remember { mutableStateOf(0L) }
+    // What the cached video is costing on disk, which is TDLib's answer rather than the size the
+    // record was written with: a video that was interrupted halfway has half the bytes and should
+    // not offer to free the whole film.
+    var cachedBytes by remember { mutableStateOf(0L) }
     var breakdown by remember { mutableStateOf(StorageBreakdown.EMPTY) }
     var disk by remember { mutableStateOf(DiskSpace.read(context)) }
     var busy by remember { mutableStateOf<String?>(null) }
@@ -201,31 +203,28 @@ fun SettingsScreen(
     suspend fun refresh() {
         cacheBytes = runCatching { Td.storageUsedBytes() }.getOrDefault(0L)
         disk = DiskSpace.read(context)
+        cachedBytes = settings.cachedVideoNow()
+            ?.let { runCatching { Td.localDownloadedBytes(it.fileId) }.getOrDefault(0L) }
+            ?: 0L
         // Last, and separately: it walks the cache directory, so the card paints its total and
         // its bar from the fast figure above and fills the three lines in a moment later.
         breakdown = runCatching { Td.storageBreakdown() }.getOrDefault(StorageBreakdown.EMPTY)
     }
 
-    // What the Delete button would actually free. It takes videos, documents and animations and
-    // leaves the pictures, so quoting the whole cache promised space that never came back. The
-    // total stands in until the breakdown has been read, which is a second at most.
-    //
-    // With one exception, which is the case that sent somebody to Settings in the first place: a
-    // device holding gigabytes with no video among them. The row used to read "Frees up 0 B" and
-    // do nothing, on a stick with no space left, which is the least helpful thing it could
-    // possibly have said. There the button widens to everything TMPlayer is holding.
+    // The case that sends somebody to Settings in the first place: a device holding gigabytes with
+    // no video among them, where deleting the cached film returns nothing and the space is all in
+    // previews, thumbnails and the database. Only then is there a second row worth offering.
     val onlyPicturesLeft = breakdown.totalBytes > 0 &&
         breakdown.videoBytes < CLEARING_WORTH_ASKING &&
         breakdown.totalBytes >= CLEARING_WORTH_ASKING
-    val videoBytes = when {
-        onlyPicturesLeft -> breakdown.totalBytes
-        breakdown.totalBytes > 0 -> breakdown.videoBytes
-        else -> cacheBytes
-    }
 
     val touch = isTouch()
     // These rows describe the machine they are running on, and half of them are about it by name.
     val device = if (touch) "phone" else "TV"
+
+    // The size beside the cached video has to follow the video: watching something else replaces
+    // the record, and a figure left over from the last film is worse than no figure at all.
+    LaunchedEffect(cached?.fileId) { refresh() }
 
     LaunchedEffect(Unit) {
         refresh()
@@ -506,18 +505,23 @@ fun SettingsScreen(
                 },
             )
         }
-        item {
-            ToggleRow(
-                title = "Only download over Wi-Fi",
-                subtitle = if (wifiOnly) {
-                    "Videos you haven't downloaded won't open on mobile data"
-                } else {
-                    "Off: a large video warns you once before it starts on mobile data"
-                },
-                icon = TmIcons.Wifi,
-                checked = wifiOnly,
-                onToggle = { scope.launch { settings.setWifiOnlyDownloads(!wifiOnly) } },
-            )
+        // A phone's row only. A television is on the wall and a stick is behind it, both plugged
+        // into a network that is Wi-Fi or a cable and never a data allowance somebody pays for by
+        // the gigabyte, so on a TV this asks the viewer to rule out something that cannot happen.
+        if (touch) {
+            item {
+                ToggleRow(
+                    title = "Only download over Wi-Fi",
+                    subtitle = if (wifiOnly) {
+                        "Videos you haven't downloaded won't open on mobile data"
+                    } else {
+                        "Off: a large video warns you once before it starts on mobile data"
+                    },
+                    icon = TmIcons.Wifi,
+                    checked = wifiOnly,
+                    onToggle = { scope.launch { settings.setWifiOnlyDownloads(!wifiOnly) } },
+                )
+            }
         }
 
         // ---- storage ------------------------------------------------------------------------
@@ -531,50 +535,45 @@ fun SettingsScreen(
                 totalBytes = disk.totalBytes,
             )
         }
+        // The one video watching leaves behind, named and measured, with the way to be rid of it.
+        // A row rather than a setting: there is nothing to choose here, since the cache is one
+        // film on every device and the next press of Play replaces it. What the viewer might
+        // reasonably want is to see what it is costing them and get the space back now.
         item {
-            // A press used to step to the next choice and wrap round, which meant going one past
-            // the number you wanted cost you a lap of the whole list. Two arrows say which way
-            // they go and cannot pass the ends.
-            StepperRow(
-                title = "Videos to keep when watching",
-                // Says which downloads it governs, because it does not govern all of them any
-                // more. Playing a video may clear the room it needs; a video the viewer ticked and
-                // asked for by name is never deleted to make space for another one they ticked,
-                // and the Downloads screen is where those are removed by hand.
-                subtitle = "Playing a video may delete the oldest to make room. Videos you " +
-                    "download on purpose are kept until you delete them.",
-                value = SettingsStore.keepVideosLabel(keepVideos),
+            val held = cached
+            ActionRow(
+                title = "Cached video",
+                subtitle = when {
+                    held == null -> "Nothing cached. Playing a video keeps one copy here."
+                    cachedBytes <= 0 -> "\"${held.title}\" has not finished downloading"
+                    else -> "\"${held.title}\" · ${StreamStats.formatBytes(cachedBytes)}"
+                },
                 icon = TmIcons.Download,
-                canDecrease = SettingsStore.stepKeepVideos(keepVideos, -1) != keepVideos,
-                canIncrease = SettingsStore.stepKeepVideos(keepVideos, 1) != keepVideos,
-                onStep = { direction ->
-                    scope.launch {
-                        settings.setKeepVideos(SettingsStore.stepKeepVideos(keepVideos, direction))
+                onClick = {
+                    // Nothing to delete is not a dialog. The row stays where it is, focusable and
+                    // in the same place every time, and says so instead.
+                    if (cached == null) {
+                        toast("There is no cached video right now")
+                    } else {
+                        prompt = Prompt.ClearCache
                     }
                 },
             )
         }
-        item {
-            ActionRow(
-                title = when {
-                    onlyPicturesLeft -> "Free up space"
-                    touch -> "Delete downloaded videos"
-                    else -> "Delete the downloaded video"
-                },
-                subtitle = "Frees up ${StreamStats.formatBytes(videoBytes)}",
-                icon = Icons.Filled.Delete,
-                onClick = { prompt = Prompt.ClearCache },
-            )
-        }
-        item {
-            ToggleRow(
-                title = "Ask before deleting a video",
-                subtitle = "Check with you before an older video is deleted to make room. " +
-                    "Off means it happens silently.",
-                icon = Icons.Filled.Notifications,
-                checked = askBeforeClearing,
-                onToggle = { scope.launch { settings.setAskBeforeClearing(!askBeforeClearing) } },
-            )
+        // The escape hatch for a device that is full of everything except a video: thumbnails, the
+        // database, the previews the browse screens keep. Only offered when there is something
+        // substantial to get back, because a row that reads "Frees up 0 B" on a full stick is the
+        // least helpful thing the screen could say.
+        if (onlyPicturesLeft) {
+            item {
+                ActionRow(
+                    title = "Free up space",
+                    subtitle = "Clears ${StreamStats.formatBytes(breakdown.totalBytes)} of " +
+                        "previews and other data TMPlayer is holding",
+                    icon = Icons.Filled.Delete,
+                    onClick = { prompt = Prompt.ClearOther },
+                )
+            }
         }
 
         // ---- startup ------------------------------------------------------------------------
@@ -665,6 +664,29 @@ fun SettingsScreen(
                 },
             )
         }
+        // The one setting that sends anything anywhere except Telegram and GitHub, and it is off
+        // until it is asked for. A build with no DSN compiled in has nowhere to send a report, so
+        // rather than offer a switch that does nothing, it is not drawn at all.
+        if (CrashReports.available) {
+            item {
+                ToggleRow(
+                    title = "Send crash reports",
+                    subtitle = if (crashReports) {
+                        "If TMPlayer crashes, the stack trace is sent to the developer. " +
+                            "No chat names, no filenames, no history"
+                    } else {
+                        "Off: nothing is sent. Turn this on to help fix the crash you just had"
+                    },
+                    icon = Icons.Filled.Info,
+                    checked = crashReports,
+                    onToggle = {
+                        val next = !crashReports
+                        scope.launch { settings.setCrashReports(next) }
+                        if (next) CrashReports.start(context, true) else CrashReports.stop()
+                    },
+                )
+            }
+        }
         item {
             ActionRow(
                 title = "Lawful use",
@@ -739,22 +761,51 @@ fun SettingsScreen(
 
     when (prompt) {
         Prompt.ClearCache -> TvConfirm(
-            title = if (onlyPicturesLeft) "Free up space?" else "Delete the downloaded video?",
-            message = "This frees up ${StreamStats.formatBytes(videoBytes)}. Any video you open " +
-                "again will download again.",
+            title = "Delete the cached video?",
+            message = "This frees up ${StreamStats.formatBytes(cachedBytes)}. Opening it again " +
+                "downloads it again.",
+            // Says what it will not touch, because this row sits where a button that deleted
+            // everything used to sit and the two must not be confused.
+            detail = "Videos you downloaded on purpose stay where they are.",
+            confirmLabel = "Delete",
+            onConfirm = {
+                prompt = null
+                val doomed = cached
+                scope.launch {
+                    busy = "Deleting…"
+                    val freed = cachedBytes
+                    if (doomed != null) {
+                        runCatching { Td.deleteFile(doomed.fileId) }
+                        // Only forgotten once the file has actually gone, or the record stops
+                        // pointing at bytes that are still on the disk.
+                        val left = runCatching { Td.localDownloadedBytes(doomed.fileId) }
+                            .getOrDefault(0L)
+                        if (left <= 0) settings.forgetCachedVideo()
+                    }
+                    refresh()
+                    busy = null
+                    toast("Freed ${StreamStats.formatBytes(freed)}")
+                }
+            },
+            onDismiss = { prompt = null },
+        )
+
+        Prompt.ClearOther -> TvConfirm(
+            title = "Free up space?",
+            message = "This clears ${StreamStats.formatBytes(breakdown.totalBytes)} of previews, " +
+                "thumbnails and other data TMPlayer is holding. They come back as you browse.",
             detail = "Your Telegram account, chats and favourites are untouched.",
-            confirmLabel = if (onlyPicturesLeft) "Free it up" else "Delete",
+            confirmLabel = "Free it up",
             onConfirm = {
                 prompt = null
                 scope.launch {
                     busy = "Deleting…"
-                    val freed = videoBytes
-                    runCatching {
-                        if (onlyPicturesLeft) Td.clearEverythingCached() else Td.clearMediaCache()
-                    }
-                    // The index goes with the files. Left behind, its rows point at videos that
-                    // are no longer on disk and take up the Downloads screen's own budget.
+                    val freed = breakdown.totalBytes
+                    runCatching { Td.clearEverythingCached() }
+                    // The indexes go with the files. Left behind, their rows point at videos that
+                    // are no longer on disk.
                     runCatching { settings.forgetAllDownloads() }
+                    runCatching { settings.forgetCachedVideo() }
                     refresh()
                     busy = null
                     toast("Freed ${StreamStats.formatBytes(freed)}")
@@ -810,6 +861,11 @@ fun SettingsScreen(
                     // goes: the video on disk and every preference. TDLib clears its own database
                     // as it logs out.
                     runCatching { Td.clearMediaCache() }
+                    // Consent to crash reporting goes out with the preferences, and the SDK is
+                    // shut down here rather than left running until the next launch. Somebody
+                    // handing the television on should not leave a reporter switched on behind
+                    // them, and turning it back on is one press.
+                    runCatching { CrashReports.stop() }
                     runCatching { settings.clearEverything() }
                     Td.logOut()
                     onLoggedOut()

@@ -15,6 +15,9 @@ nextlib = "1.8.0-0.9.0"
 leanback = "1.0.0"
 fragment = "1.8.9"
 datastore = "1.2.1"
+# Crash reporting, and only when the viewer switches it on. Core alone: the "sentry-android"
+# umbrella pulls in NDK, fragment, Compose and Room integrations, none of which this needs.
+sentry = "8.16.0"
 junit = "4.13.2"
 # Android ships org.json, but android.jar stubs every method to throw; update-response parsing
 # therefore needs a real implementation on the JVM test classpath only.
@@ -50,6 +53,7 @@ androidx-leanback = { group = "androidx.leanback", name = "leanback", version.re
 androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragment" }
 nextlib-media3ext = { group = "io.github.anilbeesetti", name = "nextlib-media3ext", version.ref = "nextlib" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
+sentry-android-core = { group = "io.sentry", name = "sentry-android-core", version.ref = "sentry" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

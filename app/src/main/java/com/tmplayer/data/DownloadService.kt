@@ -92,6 +92,24 @@ class DownloadService : Service() {
      */
     private var lastStartId = 0
 
+    /**
+     * True from the moment the ongoing notification has been taken down, so nothing puts it back.
+     *
+     * This is the whole of a bug that outlived every download it was about. The last video of a
+     * queue finishing calls [done], which pumps, finds nothing left, takes the notification down
+     * and stops the service, and then calls [refresh], which posts the summary again. What went up
+     * was an ongoing notification with no service behind it: nothing owned it, so nothing took it
+     * away, and swiping does not dismiss an ongoing one. It sat there reading "Finishing up" with
+     * a bar that never moved. Pressing Cancel made it worse rather than better, because that is
+     * another start command, and the same sequence ran again and put it straight back.
+     *
+     * Ordering alone would not fix it: [stopSelf] is a request, not a return, and refreshes can
+     * arrive from the network watcher or a fetch's last breath after the decision to stop. So the
+     * decision is recorded, and every path that would draw the summary checks it first.
+     */
+    @Volatile
+    private var stopping = false
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -144,6 +162,8 @@ class DownloadService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // A start means this service is wanted again, whatever the last one decided.
+        stopping = false
         // Android gives a few seconds from startForegroundService to this call, whatever the
         // intent turns out to be, so the notification goes up before anything else is decided.
         goToForeground(ongoing())
@@ -165,6 +185,9 @@ class DownloadService : Service() {
     }
 
     override fun onDestroy() {
+        // Nothing draws the summary from here on, whichever thread is part way through something.
+        stopping = true
+        runCatching { notifier().cancel(SUMMARY_ID) }
         // Whatever was moving has stopped moving, and the rows have to say so: a service torn down
         // by the system leaving rows reading "downloading" is the one lie this screen can tell.
         val stopped = synchronized(lock) {
@@ -358,8 +381,11 @@ class DownloadService : Service() {
     /** One fetch has ended, whatever the reason. The next one starts and the shade is redrawn. */
     private fun done(fileId: Int) {
         synchronized(lock) { running.remove(fileId) }
-        pump()
+        // Drawn before the queue is pumped, not after. Pumping is what discovers there is nothing
+        // left and takes the notification down, and anything drawn after that would be putting it
+        // back with no service behind it.
         refresh()
+        pump()
     }
 
     private suspend fun fetch(request: DownloadRequest) = coroutineScope {
@@ -372,6 +398,36 @@ class DownloadService : Service() {
                 SettingsStore(applicationContext).noteDownload(request.item(), request.chatTitle)
                 synchronized(lock) { requests.remove(request.fileId) }
                 OfflineDownloads.forget(request.fileId)
+                persistNow()
+            }
+            return@coroutineScope
+        }
+
+        // Room is checked again here, and not only when the video was ticked. A queue outlives the
+        // plan it was made with: the film behind two others no longer fits if the viewer watched
+        // something large while it waited, or ticked a second batch, or filled the phone with
+        // photographs. Asked before the request goes out, because TDLib's own answer to a full
+        // disk is a message written for a developer, and by the time it arrives the download has
+        // spent the viewer's data getting most of the way there.
+        val landedAlready = Td.localDownloadedBytes(request.fileId)
+        val stillToCome = (request.sizeBytes - landedAlready).coerceAtLeast(0)
+        val free = DiskSpace.read(applicationContext).freeBytes
+        if (stillToCome > 0 && free < stillToCome + CacheShelf.HEADROOM_BYTES) {
+            withContext(NonCancellable) {
+                val short = stillToCome + CacheShelf.HEADROOM_BYTES - free
+                Log.w(TAG, "No room for ${request.title}: ${StreamStats.formatBytes(short)} short")
+                val row = OfflineDownloads.active.value[request.fileId]
+                if (row != null) {
+                    OfflineDownloads.note(
+                        row.copy(
+                            downloadedBytes = landedAlready,
+                            stage = OfflineDownloads.Stage.Failed,
+                            failure = "Not enough space: ${StreamStats.formatBytes(short)} short",
+                            bytesPerSecond = 0,
+                        ),
+                    )
+                    notifier().notify(request.fileId.notificationId(), failedNotification(request))
+                }
                 persistNow()
             }
             return@coroutineScope
@@ -513,8 +569,14 @@ class DownloadService : Service() {
             return
         }
         // The terminal notifications stay: "downloaded" and "did not finish" are both things the
-        // viewer wants to find later. Only the ongoing one holding the service up goes.
+        // viewer wants to find later. Only the ongoing one holding the service up goes, and it is
+        // marked as gone before it is taken down so that nothing arriving late puts it back.
+        stopping = true
         stopForeground(STOP_FOREGROUND_REMOVE)
+        // Asked for by hand as well. STOP_FOREGROUND_REMOVE only takes down a notification this
+        // service is actually in the foreground with, and an earlier refresh may have replaced it
+        // with an ordinary one of the same id, which that flag leaves exactly where it is.
+        runCatching { notifier().cancel(SUMMARY_ID) }
         stopSelf(lastStartId)
     }
 
@@ -529,8 +591,11 @@ class DownloadService : Service() {
     }
 
     private fun refresh() {
+        // Nothing draws the summary again once it has been taken down. The per-video notifications
+        // are a different matter: "downloaded" and "did not finish" are posted as the queue empties
+        // and are meant to outlive the service.
         runCatching {
-            notifier().notify(SUMMARY_ID, ongoing())
+            if (!stopping) notifier().notify(SUMMARY_ID, ongoing())
             perVideoNotifications()
         }
     }
@@ -688,14 +753,24 @@ class DownloadService : Service() {
                     .addAction(cancelAction(rows.size))
                     .build()
             }
-            val title = if (paused > 0) {
-                if (paused == 1) "Download paused" else "$paused downloads paused"
-            } else {
-                "Downloading for later"
+            val title = when {
+                paused > 0 && paused == 1 -> "Download paused"
+                paused > 0 -> "$paused downloads paused"
+                queued == 1 -> "Starting a download"
+                queued > 1 -> "Starting $queued downloads"
+                else -> "Downloading for later"
             }
             return builder
                 .setContentTitle(title)
-                .setContentText(if (paused > 0) "Paused" else "Finishing up")
+                // "Finishing up" is the last moment of a queue, not a state anything sits in: with
+                // rows still queued it said the opposite of what was happening.
+                .setContentText(
+                    when {
+                        paused > 0 -> "Paused"
+                        queued > 0 -> "Waiting to start"
+                        else -> "Finishing up"
+                    },
+                )
                 .setProgress(0, 0, paused == 0)
                 .apply { if (paused > 0) addAction(resumeAction(paused)) }
                 .addAction(cancelAction(rows.size))

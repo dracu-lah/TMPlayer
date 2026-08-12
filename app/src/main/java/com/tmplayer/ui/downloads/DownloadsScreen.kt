@@ -120,6 +120,12 @@ fun DownloadsScreen(
     val activeMap by OfflineDownloads.active.collectAsStateWithLifecycle()
     val active = remember(activeMap) { activeMap.values.sortedBy { it.order } }
 
+    // The one video watching left behind. It is not a download and does not belong among them:
+    // nobody asked to keep it and the next press of Play replaces it. It is on this screen because
+    // it takes up room, and anything taking up room should be visible where room is managed.
+    val cached by settings.cachedVideo.collectAsStateWithLifecycle(initialValue = null)
+    var cachedBytes by remember { mutableStateOf(0L) }
+
     var rows by remember { mutableStateOf<List<DownloadRow>>(emptyList()) }
     var disk by remember { mutableStateOf(DiskSpace.read(context)) }
     var cacheBytes by remember { mutableStateOf(0L) }
@@ -128,6 +134,7 @@ fun DownloadsScreen(
     // Held rather than a bare boolean: the dialog names the video, and a video deleted without
     // being named is the one thing this screen must never do by accident.
     var confirmingDelete by remember { mutableStateOf<DownloadRow?>(null) }
+    var confirmingCache by remember { mutableStateOf(false) }
     // Which finished downloads are ticked, by the key their row is drawn with. Ids rather than
     // rows, because the list behind them is rebuilt from TDLib whenever anything finishes and a
     // held row would go stale the moment it mattered.
@@ -165,6 +172,9 @@ fun DownloadsScreen(
     suspend fun refresh(known: List<ResumeRecord>) {
         cacheBytes = runCatching { Td.storageUsedBytes() }.getOrDefault(0L)
         disk = DiskSpace.read(context)
+        cachedBytes = settings.cachedVideoNow()
+            ?.let { runCatching { Td.localDownloadedBytes(it.fileId) }.getOrDefault(0L) }
+            ?: 0L
         rows = known.mapNotNull { record ->
             val bytes = runCatching { Td.localDownloadedBytes(record.fileId) }.getOrDefault(0L)
             if (bytes <= 0) return@mapNotNull null
@@ -177,6 +187,9 @@ fun DownloadsScreen(
     }
 
     LaunchedEffect(history) { refresh(history) }
+    // The cached video changes without the download index moving at all: watching something else
+    // replaces it, and the card has to follow rather than keep quoting the film before it.
+    LaunchedEffect(cached?.fileId) { refresh(history) }
     // A finished download writes its record and disappears from the queue in the same breath, so
     // the sizes on this screen are re-measured whenever the queue changes rather than only when a
     // new record appears: without it a video that completed while the screen was open moved from
@@ -374,10 +387,24 @@ fun DownloadsScreen(
                 item {
                     StorageSummary(
                         downloadBytes = rows.sumOf { it.bytes },
+                        watchCacheBytes = cachedBytes,
                         cacheBytes = cacheBytes,
                         freeBytes = disk.freeBytes,
                         totalBytes = disk.totalBytes,
                     )
+                }
+                // Above the downloads, not among them, and never selectable with them: a bulk
+                // delete aimed at the videos the viewer chose to keep must not quietly take in a
+                // video they never chose at all, or the other way about.
+                cached?.takeIf { cachedBytes > 0 }?.let { record ->
+                    item(key = "watch_cache") {
+                        WatchCacheCard(
+                            record = record,
+                            bytes = cachedBytes,
+                            onPlay = { onPlay(record) },
+                            onDelete = { confirmingCache = true },
+                        )
+                    }
                 }
                 items(rows, key = { "${it.record.chatId}_${it.record.messageId}" }) { row ->
                     DownloadCard(
@@ -441,6 +468,39 @@ fun DownloadsScreen(
         )
     }
 
+    if (confirmingCache) {
+        AlertDialog(
+            onDismissRequest = { confirmingCache = false },
+            title = { Text("Delete the cached video?") },
+            text = {
+                Text(
+                    "This frees ${StreamStats.formatBytes(cachedBytes)}. Opening it again " +
+                        "downloads it again, and your own downloads are untouched.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmingCache = false
+                    val doomed = cached
+                    scope.launch {
+                        if (doomed != null) {
+                            runCatching { Td.deleteFile(doomed.fileId) }
+                            val left = runCatching { Td.localDownloadedBytes(doomed.fileId) }
+                                .getOrDefault(0L)
+                            if (left <= 0) settings.forgetCachedVideo()
+                        }
+                        refresh(history)
+                    }
+                }) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingCache = false }) { Text("Keep it") }
+            },
+        )
+    }
+
     if (confirmingDeleteMany) {
         AlertDialog(
             onDismissRequest = { confirmingDeleteMany = false },
@@ -489,6 +549,7 @@ fun DownloadsScreen(
                     scope.launch {
                         runCatching { Td.clearMediaCache() }
                         settings.forgetAllDownloads()
+                        settings.forgetCachedVideo()
                         refresh(emptyList())
                     }
                 }) {
@@ -547,10 +608,18 @@ private fun SectionHeading(text: String) {
     )
 }
 
-/** What the downloads cost, against what the phone has, above the list they belong to. */
+/**
+ * What is on this device, against what the device has, above the list it belongs to.
+ *
+ * Three figures, because they are three different things and conflating them is what made the old
+ * panel unreadable: what the viewer chose to keep, the one film watching left behind, and
+ * everything TMPlayer is holding altogether, which counts the previews and thumbnails the browse
+ * screens keep as well.
+ */
 @Composable
 private fun StorageSummary(
     downloadBytes: Long,
+    watchCacheBytes: Long,
     cacheBytes: Long,
     freeBytes: Long,
     totalBytes: Long,
@@ -569,6 +638,13 @@ private fun StorageSummary(
                 "${StreamStats.formatBytes(downloadBytes)} in downloads",
                 style = MaterialTheme.typography.titleMedium,
             )
+            if (watchCacheBytes > 0) {
+                Text(
+                    "${StreamStats.formatBytes(watchCacheBytes)} more in the cached video",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(
                 // The cache figure is the wider one: it counts the pictures and thumbnails the
                 // browse screens keep as well, which the list below deliberately does not show.
@@ -684,6 +760,89 @@ private fun androidx.compose.foundation.layout.RowScope.SecondaryAction(
 }
 
 /**
+ * An action with no word on it, sized as a square rather than sharing the row's width.
+ *
+ * Delete is the one button on the card that reads perfectly well as a glyph: everybody knows the
+ * bin, and spelling it out gave a destructive action the same visual weight as Watch, which is the
+ * thing the card is actually for. Dropping to a square also gives Watch and Share the width the
+ * label needs, so neither of them ellipsises on a narrow phone.
+ */
+@Composable
+private fun IconOnlyAction(
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    danger: Boolean = false,
+) {
+    val colour = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.size(48.dp),
+        border = BorderStroke(1.dp, colour.copy(alpha = 0.5f)),
+        contentPadding = PaddingValues(0.dp),
+    ) {
+        Icon(icon, contentDescription = label, modifier = Modifier.size(18.dp), tint = colour)
+    }
+}
+
+/**
+ * The one film watching left behind: what it is, what it costs, and the way to have the space back.
+ *
+ * Deliberately not a [DownloadCard]. It carries a line saying what it is, because a viewer who sees
+ * a video they never downloaded sitting on the Downloads screen is owed an explanation, and it has
+ * no tick box: it is not part of the selection the bulk buttons act on, and it is replaced by the
+ * next thing they watch whether they delete it or not.
+ */
+@Composable
+private fun WatchCacheCard(
+    record: ResumeRecord,
+    bytes: Long,
+    onPlay: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val details = listOfNotNull(
+        StreamStats.formatBytes(bytes).takeIf { bytes > 0 },
+        MediaMapper.formatDuration(record.durationSec).ifBlank { null },
+        record.chatTitle.ifBlank { null },
+    ).joinToString(DOT)
+
+    RowCard {
+        Text(
+            "Cached from watching",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            record.title,
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (details.isNotBlank()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                details,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Kept so you can carry on watching. The next video you play replaces it.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        CardActions {
+            PrimaryAction("Watch", Icons.Filled.PlayArrow, onPlay)
+            SecondaryAction("Delete", Icons.Filled.Delete, onDelete, danger = true)
+        }
+    }
+}
+
+/**
  * A finished video: what it is, what it costs, and the three things worth doing with it.
  *
  * While a selection is on, the whole card is one target that ticks and unticks: the buttons would
@@ -745,7 +904,7 @@ private fun DownloadCard(
             CardActions {
                 PrimaryAction("Watch", Icons.Filled.PlayArrow, onPlay)
                 SecondaryAction("Share", TmIcons.Share, onShare)
-                SecondaryAction("Delete", Icons.Filled.Delete, onDelete, danger = true)
+                IconOnlyAction("Delete", Icons.Filled.Delete, onDelete, danger = true)
             }
         }
     }

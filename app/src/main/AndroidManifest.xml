@@ -42,6 +42,16 @@
         android:enableOnBackInvokedCallback="true"
         android:theme="@style/Theme.TMPlayer">
 
+        <!--
+          Sentry ships a ContentProvider that starts the SDK before Application.onCreate, which is
+          exactly the behaviour this app must not have: nothing may be initialised, and no endpoint
+          may be contacted, until the viewer has turned crash reporting on in Settings. With this
+          off, CrashReports.start is the only thing that can ever bring the SDK up.
+        -->
+        <meta-data
+            android:name="io.sentry.auto-init"
+            android:value="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

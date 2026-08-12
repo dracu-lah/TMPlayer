@@ -6,7 +6,6 @@ import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
-import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -22,13 +21,13 @@ import kotlinx.coroutines.flow.map
 private val Context.prefs by preferencesDataStore("tmplayer")
 
 private val FAVORITES = stringSetPreferencesKey("favorite_chats")
-private val ASK_BEFORE_CLEARING = booleanPreferencesKey("ask_before_clearing")
 private val INTRO_SEEN = booleanPreferencesKey("intro_seen")
 private val OVERVIEW_SEEN = booleanPreferencesKey("overview_seen")
 private val OPEN_LAST_CHAT = booleanPreferencesKey("open_last_chat")
 private val DOWNLOAD_FIRST = booleanPreferencesKey("download_before_playing")
 private val AUTOPLAY_NEXT = booleanPreferencesKey("autoplay_next")
 private val WIFI_ONLY = booleanPreferencesKey("wifi_only_downloads")
+private val CRASH_REPORTS = booleanPreferencesKey("crash_reports")
 private val PLAYBACK_SPEED = floatPreferencesKey("playback_speed")
 private val LAST_CHAT = longPreferencesKey("last_chat")
 private val MIN_SIZE = longPreferencesKey("min_size_bytes")
@@ -38,8 +37,18 @@ private val MEDIA_LAYOUT = stringPreferencesKey("media_layout")
 private val CHAT_SNAPSHOT = stringPreferencesKey("chat_snapshot")
 private val THEME_CHOICE = stringPreferencesKey("theme_choice")
 private val DYNAMIC_COLOUR = booleanPreferencesKey("dynamic_colour")
-private val KEEP_VIDEOS = intPreferencesKey("keep_videos")
 private val VIDEO_SCALE = stringPreferencesKey("video_scale")
+
+/**
+ * The one video the watch cache is holding: which message it came from, and what it is called.
+ *
+ * Two keys rather than one, because the ids belong to the row and the rest belongs to the record,
+ * and [ResumeRecord] already knows how to write the second half. Kept apart from the `dl_` rows on
+ * purpose: those are downloads the viewer asked for and this is the one that arrived because they
+ * pressed Play, and the whole of the storage story rests on the two never being confused.
+ */
+private val CACHED_VIDEO_IDS = stringPreferencesKey("cached_video_ids")
+private val CACHED_VIDEO = stringPreferencesKey("cached_video")
 
 /**
  * The downloads that have not finished, so a killed process comes back to its queue.
@@ -201,7 +210,10 @@ class SettingsStore(private val context: Context) {
      */
     suspend fun autoOpenTarget(): Long? {
         val prefs = context.prefs.data.first()
-        return autoOpenChatId(prefs[LAST_CHAT] ?: 0L, prefs[OPEN_LAST_CHAT] ?: true)
+        // The same default as [openLastChat], which is the switch the viewer is reading. It used to
+        // be true here and false there, so an install nobody had touched showed the setting off and
+        // opened straight into the last chat anyway.
+        return autoOpenChatId(prefs[LAST_CHAT] ?: 0L, prefs[OPEN_LAST_CHAT] ?: false)
     }
 
     // ---- playback ---------------------------------------------------------------------------
@@ -223,27 +235,61 @@ class SettingsStore(private val context: Context) {
     suspend fun downloadBeforePlayingNow(): Boolean =
         context.prefs.data.first()[DOWNLOAD_FIRST] ?: false
 
+    // ---- the watch cache ---------------------------------------------------------------------
+
     /**
-     * How many downloaded videos to keep before the oldest is given up, or
-     * [CacheShelf.UNLIMITED] for as many as the disk will hold.
+     * The one video playback left behind, or null when there is none.
      *
-     * The default is the device's, not a constant: a stick with 8 GB can hold about one video, and
-     * a phone can comfortably hold three. Both are only a starting point, and the number is the
-     * viewer's from the moment they touch it, which is why the stored value is never written on
-     * their behalf.
+     * There is exactly one of these on every device. It is not a list and there is no setting for
+     * how long it may become: playing something else replaces it. What the viewer downloaded on
+     * purpose is elsewhere, under `dl_`, and nothing in here can reach it.
      */
-    val keepVideos: Flow<Int> = read { it[KEEP_VIDEOS] ?: defaultKeepVideos() }
+    val cachedVideo: Flow<ResumeRecord?> = read { prefs -> decodeCached(prefs) }
 
-    /** Read once, at the moment a video is asked for, for the same reason as the one above. */
-    suspend fun keepVideosNow(): Int =
-        context.prefs.data.first()[KEEP_VIDEOS] ?: defaultKeepVideos()
+    /** Read once, at the moment a video is asked for, where a flow yet to emit would lie. */
+    suspend fun cachedVideoNow(): ResumeRecord? = decodeCached(context.prefs.data.first())
 
-    suspend fun setKeepVideos(value: Int) {
-        context.prefs.edit { it[KEEP_VIDEOS] = value }
+    private fun decodeCached(prefs: Preferences): ResumeRecord? {
+        val ids = prefs[CACHED_VIDEO_IDS] ?: return null
+        return ResumeRecord.decode(
+            key = ids,
+            encoded = prefs[CACHED_VIDEO],
+            positionMs = prefs[longPreferencesKey("resume_$ids")] ?: 0L,
+            durationMs = prefs[longPreferencesKey("duration_$ids")] ?: 0L,
+        )
     }
 
-    private fun defaultKeepVideos(): Int =
-        if (FormFactor.isTv(context)) TV_KEEP_VIDEOS else TOUCH_KEEP_VIDEOS
+    /**
+     * Records what the cache is now holding, replacing whatever it held before.
+     *
+     * The file the old record named is deleted by the caller, which is the only place that can:
+     * this store knows preferences and TDLib owns the bytes.
+     */
+    suspend fun rememberCachedVideo(item: MediaItem, chatTitle: String) {
+        context.prefs.edit { prefs ->
+            prefs[CACHED_VIDEO_IDS] = progressKey(item.chatId, item.messageId)
+            prefs[CACHED_VIDEO] = ResumeRecord.encode(
+                fileId = item.fileId,
+                title = item.title,
+                chatTitle = chatTitle,
+                sizeBytes = item.sizeBytes,
+                durationSec = item.durationSec,
+                updatedAt = System.currentTimeMillis(),
+            )
+        }
+    }
+
+    /** Forgets the cached video, once its file has actually gone. */
+    suspend fun forgetCachedVideo() {
+        context.prefs.edit {
+            it.remove(CACHED_VIDEO_IDS)
+            it.remove(CACHED_VIDEO)
+        }
+    }
+
+    /** Whether this video is one the viewer downloaded on purpose, and so is never evicted. */
+    suspend fun isKeptDownload(chatId: Long, messageId: Long): Boolean =
+        context.prefs.data.first()[downloadKey(chatId, messageId)] != null
 
     /**
      * Refuse to fetch video over a connection the viewer pays for by the byte.
@@ -260,6 +306,23 @@ class SettingsStore(private val context: Context) {
 
     /** Read at the start of playback, where the flow's first emission has not arrived yet. */
     suspend fun wifiOnlyDownloadsNow(): Boolean = context.prefs.data.first()[WIFI_ONLY] ?: false
+
+    /**
+     * Whether a crash may be reported to the project, and the one thing in this app that ever
+     * sends anything anywhere except Telegram and GitHub.
+     *
+     * Off, on a fresh install and after signing out. Nothing about it is initialised until this
+     * is true: see [com.tmplayer.data.CrashReports] for what a report does and does not carry.
+     * Off is not a degraded mode, it is the normal one, and the app never asks twice.
+     */
+    val crashReports: Flow<Boolean> = read { it[CRASH_REPORTS] ?: false }
+
+    suspend fun setCrashReports(value: Boolean) {
+        context.prefs.edit { it[CRASH_REPORTS] = value }
+    }
+
+    /** Read once during startup, before anything has had a chance to crash. */
+    suspend fun crashReportsNow(): Boolean = context.prefs.data.first()[CRASH_REPORTS] ?: false
 
     /**
      * The speed the last video was left at, applied to the next one.
@@ -436,26 +499,6 @@ class SettingsStore(private val context: Context) {
     }
 
     // ---- prompts ----------------------------------------------------------------------------
-
-    /**
-     * Whether to confirm before dropping an older video to make room for a new one.
-     *
-     * On by default now, and it was off. The reasoning for off was a television that holds one
-     * video at a time, where the answer is always yes and the question is a press between the
-     * viewer and what they came to watch. That reasoning does not survive a queue: a phone can now
-     * hold a shelf of films the viewer ticked, packed for a journey, and pressing Play on a fourth
-     * video to see what it is would have deleted the oldest of them without a word. Deleting
-     * something somebody spent an evening's data downloading is not a thing to do silently.
-     *
-     * It costs the television nothing it cannot get back: the prompt only appears when there is
-     * genuinely something substantial to delete, and anyone who does not want to be asked can turn
-     * it off in Settings, which is where it was already.
-     */
-    val askBeforeClearing: Flow<Boolean> = read { it[ASK_BEFORE_CLEARING] ?: true }
-
-    suspend fun setAskBeforeClearing(value: Boolean) {
-        context.prefs.edit { it[ASK_BEFORE_CLEARING] = value }
-    }
 
     val introSeen: Flow<Boolean> = read { it[INTRO_SEEN] ?: false }
 
@@ -742,42 +785,6 @@ class SettingsStore(private val context: Context) {
 
         /** How many half-watched videos are kept before the oldest start dropping off. */
         const val MAX_HISTORY = 200
-
-        /** One video at a time, which is about all an 8 GB stick can hold. */
-        const val TV_KEEP_VIDEOS = 1
-
-        /**
-         * One on a phone as well.
-         *
-         * It used to be three, on the reasoning that a phone has the room. But the number is a
-         * ceiling on what is kept without being asked for, and a viewer who wants three videos on
-         * a train now says so by downloading three: a default that quietly holds two films nobody
-         * chose is a default that eats a gigabyte of somebody's phone.
-         */
-        const val TOUCH_KEEP_VIDEOS = 1
-
-        /** What the arrows step through, ending in "as many as fit". */
-        val KEEP_VIDEO_CHOICES = listOf(1, 2, 3, 5, 10, CacheShelf.UNLIMITED)
-
-        /**
-         * The next choice up or down, stopping at the ends.
-         *
-         * Returning the value unchanged at either end is what tells the row to grey the arrow out,
-         * so there is one definition of "there is nothing above this" rather than two.
-         */
-        fun stepKeepVideos(current: Int, direction: Int): Int {
-            val at = KEEP_VIDEO_CHOICES.indexOf(current)
-            // A number nobody offers any more, from an older build: treat it as the first step.
-            if (at < 0) return KEEP_VIDEO_CHOICES.first()
-            return KEEP_VIDEO_CHOICES.getOrElse(at + direction) { current }
-        }
-
-        /** How the count reads in a sentence, where zero means no limit at all. */
-        fun keepVideosLabel(count: Int): String = when {
-            count == CacheShelf.UNLIMITED -> "As many as fit"
-            count == 1 -> "1 video"
-            else -> "$count videos"
-        }
 
         /** Anything within this of the end counts as watched. */
         const val END_MARGIN_MS = 30_000L

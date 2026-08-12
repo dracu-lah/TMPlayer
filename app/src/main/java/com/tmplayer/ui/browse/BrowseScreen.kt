@@ -311,9 +311,12 @@ fun BrowseScreen(
                 ?: chosen.takeIf { folders.isEmpty() }
         }
     } ?: when {
+        // Favourites used to be the landing tab whenever anything was starred, which meant the one
+        // act of starring a channel quietly changed where the app opened. Favourites is a place to
+        // go, not a place to be put: the app opens on what is half watched, and otherwise on the
+        // full listing.
         continueWatching.isNotEmpty() -> BrowseSection.of(BrowseTab.Continue)
-        favorites.isEmpty() -> BrowseSection.of(BrowseTab.Recent)
-        else -> BrowseSection.of(BrowseTab.Favorites)
+        else -> BrowseSection.of(BrowseTab.Recent)
     }
     var query by remember { mutableStateOf("") }
     // What the viewer held OK on. Only ever one at a time, so two nullable slots cover both lists.

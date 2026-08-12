@@ -1,6 +1,7 @@
 package com.tmplayer
 
 import android.app.Application
+import com.tmplayer.data.CrashReports
 import com.tmplayer.data.NetworkMonitor
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
@@ -19,6 +20,18 @@ class App : Application() {
         // The isolated screenshot fixture must never open TDLib or touch a Telegram account.
         // BuildConfig is variant-specific, and the promo package is never part of a release APK.
         if (BuildConfig.APPLICATION_ID.endsWith(".promo")) return
+        // Before anything else that could throw, because a crash reporter that starts after the
+        // crash is worth nothing. It reads one flag off the disk on a background thread and does
+        // absolutely nothing unless that flag is true, so the launch path is unaffected either
+        // way: no SDK is initialised and no endpoint is contacted on a device where the viewer
+        // has not asked for this.
+        if (CrashReports.available) {
+            backgroundScope.launch {
+                runCatching {
+                    CrashReports.start(this@App, SettingsStore(this@App).crashReportsNow())
+                }
+            }
+        }
         // Sized against this device's heap before anything is cached. A stick and a phone are an
         // order of magnitude apart, and one fixed figure is wrong for both.
         val memory = (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).memoryClass

@@ -143,19 +143,21 @@ private const val SCREEN_MEDIA = "media"
 private const val SCREEN_SETTINGS = "settings"
 private const val SCREEN_DOWNLOADS = "downloads"
 
-/** A video waiting on the viewer's answer about clearing space. */
+/**
+ * A video that will not fit, and what the device is holding that the viewer could do something
+ * about.
+ *
+ * The only prompt left on this path. Making room no longer asks: the watch cache is one film
+ * nobody chose to keep, so it goes without a word, and the downloads that are not cache are never
+ * touched. What remains is the case where even emptying the cache is not enough, which is not a
+ * question with a "do it" answer: [reclaimBytes] is what is sitting in downloads, and the way out
+ * is the screen where those are deleted by hand.
+ */
 private data class RoomPrompt(
     val item: MediaItem,
     val reclaimBytes: Long,
     val shortfallBytes: Long,
     val chatTitle: String,
-    /**
-     * Nothing is offered to be cleared: the video does not fit even with the shelf emptied, and
-     * the way out is the Downloads screen rather than a button.
-     */
-    val outOfSpace: Boolean = false,
-    /** How many older videos would be deleted to make room, when that is what is being asked. */
-    val evicting: Int = 0,
 )
 
 class MainActivity : ComponentActivity() {
@@ -327,6 +329,9 @@ private fun Root() {
     // One slot for whatever the current login pane got wrong: only one of them is ever on screen.
     var signInError by rememberSaveable { mutableStateOf<String?>(null) }
     var roomPrompt by remember { mutableStateOf<RoomPrompt?>(null) }
+    // The machine the space message is about, since "this phone is 2 GB short" on a television
+    // reads as the app talking about something else entirely.
+    val device = remember { if (FormFactor.isTv(context)) "TV" else "phone" }
     // Where leaving the Downloads screen goes back to.
     var downloadsCameFrom by remember { mutableStateOf<Screen>(Screen.Chats) }
 
@@ -416,54 +421,59 @@ private fun Root() {
                 0L
             }
 
-            // Everything the shelf is holding, measured before a byte of the new video is asked
-            // for, which is the whole point: the answer to "will this fit" is known while it can
-            // still be acted on rather than two thirds of the way into a download.
-            val keep = runCatching { settings.keepVideosNow() }
-                .getOrDefault(if (FormFactor.isTv(context)) {
-                    SettingsStore.TV_KEEP_VIDEOS
-                } else {
-                    SettingsStore.TOUCH_KEEP_VIDEOS
-                })
-            val held = runCatching {
-                settings.downloadHistory.first().mapNotNull { record ->
-                    val bytes = Td.localDownloadedBytes(record.fileId)
-                    if (bytes <= 0) null else CacheShelf.Held(record.fileId, bytes, record.updatedAt)
-                }
-            }.getOrDefault(emptyList())
+            // What the cache is holding, measured before a byte of the new video is asked for,
+            // which is the whole point: the answer to "will this fit" is known while it can still
+            // be acted on rather than two thirds of the way into a download.
+            //
+            // A record whose file is no longer on disk holds nothing and is dropped here rather
+            // than offered as room that would not come back.
+            val cachedRecord = runCatching { settings.cachedVideoNow() }.getOrNull()
+            val cachedBytes = cachedRecord
+                ?.let { runCatching { Td.localDownloadedBytes(it.fileId) }.getOrDefault(0L) }
+                ?: 0L
+            val cached = if (cachedRecord != null && cachedBytes > 0) {
+                listOf(CacheShelf.Held(cachedRecord.fileId, cachedBytes, cachedRecord.updatedAt))
+            } else {
+                emptyList()
+            }
+            // The viewer's own downloads, which are never given up to make room. Measured only so
+            // a refusal can say where the space went and point at the screen that manages them.
+            val keptBytes = runCatching {
+                settings.downloadHistory.first()
+                    .distinctBy { it.fileId }
+                    .sumOf { Td.localDownloadedBytes(it.fileId).coerceAtLeast(0L) }
+            }.getOrDefault(0L)
+
+            // A video the viewer downloaded on purpose is not cache and must not become it: taking
+            // it over as the cache slot would have the next play delete a film they chose to keep.
+            val kept = runCatching { settings.isKeptDownload(item.chatId, item.messageId) }
+                .getOrDefault(false)
 
             val plan = CacheShelf.plan(
                 targetFileId = item.fileId,
                 targetSizeBytes = item.sizeBytes,
                 targetPartialBytes = partial,
                 alreadyCached = alreadyCached,
-                held = held,
+                cached = cached,
+                keptBytes = keptBytes,
                 freeBytes = free,
-                keepCount = keep,
             )
-            val ask = runCatching { settings.askBeforeClearing.first() }.getOrDefault(false)
 
             // Back on Main from here down. Everything below writes Compose state or starts an
             // activity, and neither is a thing to do from a background thread.
             withContext(Dispatchers.Main) {
                 fun start() {
-                scope.launch { settings.noteDownload(item, chatTitle) }
+                if (!kept) scope.launch { settings.rememberCachedVideo(item, chatTitle) }
                 context.startActivity(PlayerActivity.intent(context, item, chatTitle))
             }
 
-            /** Deletes exactly what the plan named, and forgets the rows that went with it. */
+            /** Deletes what the plan named, and forgets the cache row that went with it. */
             suspend fun evict(fileIds: List<Int>) {
-                val doomed = fileIds.toSet()
-                val records = runCatching { settings.downloadHistory.first() }
-                    .getOrDefault(emptyList())
-                    .filter { it.fileId in doomed }
-                for (record in records) {
-                    runCatching { Td.deleteFile(record.fileId) }
-                    settings.forgetDownload(record.chatId, record.messageId)
-                }
-                // Anything named by the plan that no longer has a row of its own still has to go.
-                for (fileId in doomed - records.map { it.fileId }.toSet()) {
+                for (fileId in fileIds.toSet()) {
                     runCatching { Td.deleteFile(fileId) }
+                }
+                if (cachedRecord != null && cachedRecord.fileId in fileIds) {
+                    settings.forgetCachedVideo()
                 }
             }
 
@@ -476,26 +486,15 @@ private fun Root() {
                         reclaimBytes = plan.reclaimBytes,
                         shortfallBytes = plan.shortfallBytes,
                         chatTitle = chatTitle,
-                        outOfSpace = true,
                     )
                 }
 
+                // No question is asked. What goes is the single film the last press of Play left
+                // behind, which nobody chose to keep; anything the viewer downloaded on purpose is
+                // not a candidate and never was.
                 is CacheShelf.Plan.Evict -> {
-                    // Scraps are not worth a dialog, and neither is a viewer who has said they do
-                    // not want to be asked. Everything else gets the question first.
-                    val worthAsking = plan.reclaimBytes >= CacheShelf.WORTH_ASKING_BYTES
-                    if (ask && worthAsking && !confirmed) {
-                        roomPrompt = RoomPrompt(
-                            item = item,
-                            reclaimBytes = plan.reclaimBytes,
-                            shortfallBytes = 0,
-                            chatTitle = chatTitle,
-                            evicting = plan.fileIds.size,
-                        )
-                    } else {
-                        evict(plan.fileIds)
-                        start()
-                    }
+                    evict(plan.fileIds)
+                    start()
                 }
                 }
             }
@@ -852,52 +851,27 @@ private fun Root() {
         }
 
         roomPrompt?.let { pending ->
-            if (pending.outOfSpace) {
-                // A phone deletes nothing on its own, so this is not a question with a "do it"
-                // answer: it says how much short the phone is and offers the screen where the
-                // viewer can decide what goes.
-                TvConfirm(
-                    title = "Not enough space",
-                    message = "“${pending.item.title}” is " +
-                        "${StreamStats.formatBytes(pending.item.sizeBytes)}, and this phone is " +
-                        "${StreamStats.formatBytes(pending.shortfallBytes)} short. " +
-                        if (pending.reclaimBytes > 0) {
-                            "TMPlayer is holding " +
-                                "${StreamStats.formatBytes(pending.reclaimBytes)} in downloads."
-                        } else {
-                            "Freeing space on the phone will let it play."
-                        },
-                    detail = "Nothing is deleted from Telegram, only this device's copy.",
-                    confirmLabel = "Manage downloads",
-                    onConfirm = {
-                        roomPrompt = null
-                        downloadsCameFrom = screen
-                        screen = Screen.Downloads
-                    },
-                    onDismiss = { roomPrompt = null },
-                )
-                return@let
-            }
-
-            // The only question left: older videos have to go, and this says how many and how
-            // much comes back before anything is deleted.
-            val count = pending.evicting.coerceAtLeast(1)
+            // The cache has already been counted as room by the time this appears, so there is
+            // nothing left for the app to give up on its own. It says how much short the device
+            // is and offers the screen where the viewer can decide what goes.
             TvConfirm(
-                title = "Make room for this video?",
-                message = if (count == 1) {
-                    "Playing this deletes the video you watched longest ago and frees " +
-                        "${StreamStats.formatBytes(pending.reclaimBytes)}."
-                } else {
-                    "Playing this deletes the $count videos you watched longest ago and frees " +
-                        "${StreamStats.formatBytes(pending.reclaimBytes)}."
-                },
+                title = "Not enough space",
+                message = "“${pending.item.title}” is " +
+                    "${StreamStats.formatBytes(pending.item.sizeBytes)}, and this $device is " +
+                    "${StreamStats.formatBytes(pending.shortfallBytes)} short. " +
+                    if (pending.reclaimBytes > 0) {
+                        "TMPlayer is holding " +
+                            "${StreamStats.formatBytes(pending.reclaimBytes)} in downloads you " +
+                            "can delete."
+                    } else {
+                        "Freeing space on the $device will let it play."
+                    },
                 detail = "Nothing is deleted from Telegram, only this device's copy.",
-                confirmLabel = "Make room and play",
+                confirmLabel = "Manage downloads",
                 onConfirm = {
-                    val item = pending.item
-                    val chat = pending.chatTitle
                     roomPrompt = null
-                    play(item, confirmed = true, chatTitle = chat)
+                    downloadsCameFrom = screen
+                    screen = Screen.Downloads
                 },
                 onDismiss = { roomPrompt = null },
             )

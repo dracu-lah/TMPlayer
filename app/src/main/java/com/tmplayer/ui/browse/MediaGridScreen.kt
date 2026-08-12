@@ -364,12 +364,15 @@ fun MediaGridScreen(
             // statvfs() for the free space and a stat() per ticked video, and resumed onto the
             // thread drawing the grid that is the listing frozen for the length of it.
             val (taken, message) = withContext(Dispatchers.Default) {
-                val held = runCatching {
-                    settings.downloadHistory.first().mapNotNull { record ->
-                        val bytes = Td.localDownloadedBytes(record.fileId)
-                        if (bytes <= 0) null else CacheShelf.Held(record.fileId, bytes, record.updatedAt)
-                    }
-                }.getOrDefault(emptyList())
+                // Only the watch cache is on offer here. A film left behind by a press of Play is
+                // nobody's keepsake and should not be the reason a film somebody ticked is
+                // refused; the videos they downloaded on purpose are not touched either way.
+                val cachedRecord = runCatching { settings.cachedVideoNow() }.getOrNull()
+                val cached = cachedRecord?.let { record ->
+                    val bytes = runCatching { Td.localDownloadedBytes(record.fileId) }
+                        .getOrDefault(0L)
+                    if (bytes <= 0) null else CacheShelf.Held(record.fileId, bytes, record.updatedAt)
+                }?.let(::listOf).orEmpty()
                 val coming = OfflineDownloads.active.value
                 val candidates = chosen.map { item ->
                     CacheShelf.Candidate(
@@ -381,18 +384,22 @@ fun MediaGridScreen(
                             runCatching { Td.isFileCached(item.fileId) }.getOrDefault(false),
                     )
                 }
+                // The disk decides here, and nothing else. Ticking three videos is a viewer asking
+                // for three videos, so all three go on the queue and the only thing that can turn
+                // one away is there being no room for it.
                 val batch = CacheShelf.planBatch(
                     candidates = candidates,
-                    held = held,
+                    cached = cached,
                     freeBytes = DiskSpace.read(context).freeBytes,
-                    // The disk decides here, and nothing else. "Keep videos" is a rule about what
-                    // playing a video may evict, and applying it to a tick meant a viewer who
-                    // selected three films was told two of them were refused because the device
-                    // keeps one at a time: not queued, not remembered, gone. Ticking three videos
-                    // is a viewer asking for three videos, so all three go on the queue and the
-                    // only thing that can turn one away is there being no room for it.
-                    keepCount = CacheShelf.UNLIMITED,
                 )
+                // Spent before the first byte is fetched, so the room the plan counted on is
+                // actually there by the time the queue starts.
+                if (batch.reclaimFileIds.isNotEmpty()) {
+                    for (fileId in batch.reclaimFileIds) runCatching { Td.deleteFile(fileId) }
+                    if (cachedRecord != null && cachedRecord.fileId in batch.reclaimFileIds) {
+                        runCatching { settings.forgetCachedVideo() }
+                    }
+                }
                 batch.fits.map { chosen[it] } to batchMessage(batch, chosen.size)
             }
             taken.forEach { OfflineDownloads.start(context, it, chatTitle) }
@@ -2019,15 +2026,16 @@ private fun MediaActionsSheet(
 /**
  * What to say about a selection the device could not take whole.
  *
- * The count is quoted rather than hidden behind "some could not be downloaded", because the limit
- * is the viewer's own setting and saying the number is what tells them where to go and change it.
- * [wanted] is everything ticked, including whatever was on the device already: those are subtracted
- * here, so the sentence counts the videos that actually needed fetching.
+ * The count is quoted rather than hidden behind "some could not be downloaded", because a viewer
+ * who ticked ten and got seven needs to know which number to act on. [wanted] is everything ticked,
+ * including whatever was on the device already: those are subtracted here, so the sentence counts
+ * the videos that actually needed fetching.
  */
 private fun batchMessage(batch: CacheShelf.Batch, wanted: Int): String {
     val taken = batch.fits.size
     val needed = wanted - batch.alreadyHere.size
-    // The count limit no longer refuses a tick, so the only thing left to explain is the disk.
+    // Room is the only thing that can refuse a tick, and by this point the watch cache has already
+    // been handed over, so there is genuinely nothing left to give.
     val noRoom = "There is no more room on this device."
     return when {
         needed == 0 && wanted == 1 -> "That video is on this device already."
