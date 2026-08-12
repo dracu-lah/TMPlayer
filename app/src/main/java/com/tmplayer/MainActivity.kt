@@ -412,8 +412,16 @@ private fun Root() {
      * and that is the question the next launch is asking.
      */
     fun resumeMedia(record: ResumeRecord) {
-        scope.launch { settings.rememberChatOpened(record.chatId) }
-        play(record.toMediaItem(), chatTitle = record.chatTitle)
+        scope.launch {
+            settings.rememberChatOpened(record.chatId)
+            // The stored row carries a file id from whichever TDLib instance wrote it, which is
+            // not a number this one can necessarily use. Asking Telegram for the message again
+            // returns a current id and tells TDLib where the file came from, without which it
+            // will not download it. The stored row is the fallback, and it is enough whenever the
+            // video is already on the device, which is the case that never broke.
+            val fresh = Td.refreshMedia(record.chatId, record.messageId)
+            play(fresh ?: record.toMediaItem(), chatTitle = record.chatTitle)
+        }
     }
 
     Box(Modifier.fillMaxSize().background(Tone.background)) {

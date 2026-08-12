@@ -1,5 +1,11 @@
 package com.tmplayer.ui.browse
 
+import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.PackageManager
+import android.os.Build
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -45,7 +51,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
@@ -66,6 +75,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import kotlinx.coroutines.launch
+import java.io.File
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -76,6 +90,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -113,6 +129,8 @@ import androidx.tv.material3.Text
 import com.tmplayer.data.CardLayout
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaItem
+import com.tmplayer.data.OfflineDownloads
+import com.tmplayer.data.Td
 import com.tmplayer.data.MediaFeedEntry
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.SettingsStore
@@ -469,11 +487,13 @@ fun MediaGridScreen(
                 }
 
                 showingDetailsOf?.let { item ->
-                    MediaDetailsSheet(
+                    MediaActionsSheet(
                         item = item,
+                        chatTitle = chatTitle,
                         watched = watchProgress[
                             SettingsStore.progressKey(item.chatId, item.messageId),
                         ],
+                        onPlay = { onPlay(item) },
                         onDismiss = { showingDetailsOf = null },
                     )
                 }
@@ -1525,29 +1545,180 @@ private fun Modifier.longPressable(onClick: () -> Unit, onLongClick: (() -> Unit
     else combinedClickable(onClick = onClick, onLongClick = onLongClick)
 
 /**
- * The whole name and the numbers, for a tile or a row that had to cut them short.
+ * What can be done with the video being held down.
  *
  * A television has the name strip along the bottom, which follows the remote with no gesture to
- * learn. A phone has nothing equivalent, so the long press opens this.
+ * learn. A phone has nothing equivalent, so the long press opened a sheet, and for a while that
+ * sheet said the name and the numbers and offered nothing at all to do about them.
+ *
+ * Sharing and handing the file to another player are only offered once the whole video is on the
+ * device, because both of them pass a path to somebody else's app: a half-downloaded file opened
+ * in VLC is a video that plays for two minutes and stops, with nothing on screen to say why.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MediaDetailsSheet(item: MediaItem, watched: WatchPoint?, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            M3Text(
-                item.title,
-                style = M3MaterialTheme.typography.titleMedium,
-                color = Tone.text,
+private fun MediaActionsSheet(
+    item: MediaItem,
+    chatTitle: String,
+    watched: WatchPoint?,
+    onPlay: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val downloads by OfflineDownloads.active.collectAsStateWithLifecycle()
+    val downloading = downloads[item.fileId]
+
+    // Asked once, when the sheet opens: whether the file is already here decides half the menu.
+    val onDisk by produceState(initialValue = false, item.fileId, downloading) {
+        value = runCatching { Td.isFileCached(item.fileId) }.getOrDefault(false)
+    }
+
+    val resume = watched
+        ?.takeIf { it.positionMs > 0 }
+        ?.let { "  ·  Stopped at ${com.tmplayer.player.StreamStats.formatClock(it.positionMs)}" }
+        .orEmpty()
+
+    val actions = buildList {
+        add(
+            MenuAction(
+                label = if (watched != null && watched.positionMs > 0) "Resume" else "Play",
+                icon = Icons.Filled.PlayArrow,
+                onSelect = { onDismiss(); onPlay() },
+            ),
+        )
+        when {
+            downloading != null -> add(
+                MenuAction(
+                    label = "Stop the download",
+                    icon = Icons.Filled.Close,
+                    detail = downloading.fraction
+                        ?.let { "${(it * 100).toInt()}% so far. What arrived is kept." },
+                    onSelect = {
+                        OfflineDownloads.cancel(context, item.fileId)
+                        onDismiss()
+                    },
+                ),
             )
-            MetaLine(item, watched)
+            onDisk -> add(
+                MenuAction(
+                    label = "Downloaded",
+                    icon = TmIcons.Download,
+                    detail = "On this phone already. It plays without a connection.",
+                    onSelect = { onDismiss() },
+                ),
+            )
+            else -> add(
+                MenuAction(
+                    label = "Download for later",
+                    icon = TmIcons.Download,
+                    detail = "Keeps going with the app closed, so it is there without a signal",
+                    onSelect = {
+                        // Android 13 counts a download's progress notification as one the viewer
+                        // has to have agreed to. Asked here rather than at first launch, because
+                        // here is the one moment the request explains itself.
+                        askForNotifications(context)
+                        OfflineDownloads.start(context, item, chatTitle)
+                        onDismiss()
+                    },
+                ),
+            )
+        }
+        if (onDisk) {
+            add(
+                MenuAction(
+                    label = "Share",
+                    icon = Icons.Filled.Share,
+                    onSelect = {
+                        scope.launch { shareVideo(context, item, send = true) }
+                        onDismiss()
+                    },
+                ),
+            )
+            add(
+                MenuAction(
+                    label = "Open in another player",
+                    icon = Icons.AutoMirrored.Filled.ExitToApp,
+                    onSelect = {
+                        scope.launch { shareVideo(context, item, send = false) }
+                        onDismiss()
+                    },
+                ),
+            )
         }
     }
+
+    TvMenu(
+        title = item.title,
+        subtitle = MediaMapper.formatDuration(item.durationSec) + "  ·  " +
+            MediaMapper.formatSize(item.sizeBytes) + resume,
+        actions = actions,
+        onDismiss = onDismiss,
+    )
+}
+
+/**
+ * Asks for the notification permission, once, on the versions that have one.
+ *
+ * A refusal is not treated as a failure: the download still runs, it simply runs without a bar to
+ * watch. Nothing here waits on the answer, because the fetch is the thing the viewer pressed.
+ */
+private fun askForNotifications(context: Context) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+    if (
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+        PackageManager.PERMISSION_GRANTED
+    ) {
+        return
+    }
+    val activity = context.findActivity() ?: return
+    ActivityCompat.requestPermissions(
+        activity,
+        arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+        NOTIFICATION_REQUEST,
+    )
+}
+
+private fun Context.findActivity(): Activity? {
+    var current: Context? = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current
+        current = current.baseContext
+    }
+    return null
+}
+
+private const val NOTIFICATION_REQUEST = 7301
+
+/**
+ * Hands the downloaded file to another app, either to send or to play.
+ *
+ * Through a `FileProvider`, because TDLib keeps its files inside this app's own storage and a
+ * `file://` path handed across a process boundary is a `FileUriExposedException` on every Android
+ * this app runs on. The grant is read-only and lasts as long as the other app's task.
+ */
+private suspend fun shareVideo(context: Context, item: MediaItem, send: Boolean) {
+    val path = Td.localFilePath(item.fileId)
+    if (path.isNullOrBlank()) return
+    val uri = runCatching {
+        FileProvider.getUriForFile(context, "${context.packageName}.updates", File(path))
+    }.getOrNull() ?: return
+
+    val mime = item.mimeType.ifBlank { "video/*" }
+    val intent = if (send) {
+        Intent(Intent.ACTION_SEND)
+            .setType(mime)
+            .putExtra(Intent.EXTRA_STREAM, uri)
+            .putExtra(Intent.EXTRA_TITLE, item.title)
+    } else {
+        Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime)
+    }
+    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+    // The chooser is deliberate on both: ACTION_VIEW without one lands in whatever app once won
+    // the default, which for a video on most phones is this one, and that is a loop.
+    val chooser = Intent.createChooser(intent, if (send) "Share" else "Open with")
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(chooser) }
 }
 
 /** Running time, file size, and where playback stopped, on the one line both arrangements use. */

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The promo build installs beside the real one, and on a launcher two identical names is a
+      coin toss over which icon is the app and which is the one that only takes screenshots.
+    -->
+    <string name="app_name">TMPlayer Promo</string>
+</resources>

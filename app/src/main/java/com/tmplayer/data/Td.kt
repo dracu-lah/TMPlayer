@@ -412,6 +412,26 @@ object Td {
         return StorageBreakdown.of(rows)
     }
 
+    /**
+     * The video a stored row points at, asked for again from Telegram.
+     *
+     * Continue watching keeps a TDLib file id, and a TDLib file id is only good for the instance
+     * that issued it: after a restart, a re-login or a database rebuild the number either resolves
+     * to nothing or, worse, to a different file. Worse still, TDLib will not download a file it
+     * cannot trace back to a message it has seen this session, which is why resuming a video that
+     * was still on disk worked and resuming one that had to be fetched did not.
+     *
+     * Fetching the message fixes both: the id comes back current, and TDLib now has the message as
+     * the file's source, so the download it refused a moment ago goes through. Null when the
+     * message is gone or unreachable, which leaves the caller with the stored row: that copy still
+     * plays if the file is already on the device.
+     */
+    suspend fun refreshMedia(chatId: Long, messageId: Long): MediaItem? {
+        val td = current ?: return null
+        val message = td.getMessage(chatId, messageId).valueOrNull ?: return null
+        return MediaMapper.fromMessage(message)
+    }
+
     /** Verifies both TDLib's flag and the actual file before promising offline playback. */
     suspend fun localFileAvailability(fileId: Int): LocalFileAvailability {
         val td = current ?: return LocalFileAvailability.Missing
@@ -444,6 +464,18 @@ object Td {
     suspend fun deleteFile(fileId: Int) {
         val td = current ?: return
         runCatching { td.deleteFile(fileId) }
+    }
+
+    /**
+     * Where a finished file actually is, for the apps this one hands a video to.
+     *
+     * Null unless the whole thing is on disk: a partial path is a path to a video that stops in
+     * the middle, and the Share sheet has no way to say so.
+     */
+    suspend fun localFilePath(fileId: Int): String? {
+        if (localFileAvailability(fileId) != LocalFileAvailability.Complete) return null
+        val td = current ?: return null
+        return td.getFile(fileId).valueOrNull?.local?.path?.takeIf { it.isNotBlank() }
     }
 
     suspend fun isFileCached(fileId: Int): Boolean =

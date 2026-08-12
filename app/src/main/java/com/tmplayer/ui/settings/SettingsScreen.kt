@@ -43,6 +43,8 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -496,17 +498,20 @@ fun SettingsScreen(
             )
         }
         item {
-            // A press steps to the next choice and wraps round, which is one focusable target for
-            // a remote and one tap for a finger. A row of six numbers would be neither.
-            ActionRow(
+            // A press used to step to the next choice and wrap round, which meant going one past
+            // the number you wanted cost you a lap of the whole list. Two arrows say which way
+            // they go and cannot pass the ends.
+            StepperRow(
                 title = "Downloaded videos to keep",
-                subtitle = "${SettingsStore.keepVideosLabel(keepVideos)}. " +
-                    "The oldest is deleted when a new one needs the room.",
+                subtitle = "The oldest is deleted when a new one needs the room.",
+                value = SettingsStore.keepVideosLabel(keepVideos),
                 icon = TmIcons.Download,
-                onClick = {
-                    val choices = SettingsStore.KEEP_VIDEO_CHOICES
-                    val next = choices[(choices.indexOf(keepVideos).coerceAtLeast(0) + 1) % choices.size]
-                    scope.launch { settings.setKeepVideos(next) }
+                canDecrease = SettingsStore.stepKeepVideos(keepVideos, -1) != keepVideos,
+                canIncrease = SettingsStore.stepKeepVideos(keepVideos, 1) != keepVideos,
+                onStep = { direction ->
+                    scope.launch {
+                        settings.setKeepVideos(SettingsStore.stepKeepVideos(keepVideos, direction))
+                    }
                 },
             )
         }
@@ -1337,6 +1342,115 @@ private fun StorageLegend(label: String, bytes: Long, color: Color) {
             StreamStats.formatBytes(bytes),
             style = MaterialTheme.typography.bodyMedium,
             color = Tone.text,
+        )
+    }
+}
+
+/**
+ * A row whose value is a number the viewer walks up and down.
+ *
+ * A phone gets two arrow buttons at the end of the row, which is where Android puts a control that
+ * belongs to a setting rather than being the setting. A television has no second target to aim at,
+ * so the row itself takes focus and Up and Down on the remote move the number: the arrows are still
+ * drawn, greyed at the ends, because they are what says the row can be moved at all.
+ */
+@Composable
+private fun StepperRow(
+    title: String,
+    subtitle: String,
+    value: String,
+    icon: ImageVector,
+    canDecrease: Boolean,
+    canIncrease: Boolean,
+    onStep: (direction: Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val touch = isTouch()
+
+    if (touch) {
+        ListItem(
+            headlineContent = { M3Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            supportingContent = { M3Text("$value. $subtitle", maxLines = 3) },
+            leadingContent = {
+                M3Icon(icon, contentDescription = null, tint = Tone.text, modifier = Modifier.size(24.dp))
+            },
+            trailingContent = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { onStep(-1) }, enabled = canDecrease) {
+                        M3Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Fewer")
+                    }
+                    IconButton(onClick = { onStep(1) }, enabled = canIncrease) {
+                        M3Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "More")
+                    }
+                }
+            },
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            modifier = modifier.fillMaxWidth().heightIn(min = 64.dp),
+        )
+        return
+    }
+
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusedAsState()
+    val background by animateColorAsState(
+        targetValue = if (focused) Accent else SurfaceDark,
+        animationSpec = tween(140),
+        label = "stepperBackground",
+    )
+    val onSurface = if (focused) Color.White else TextPrimary
+    val dim = if (focused) Color.White.copy(alpha = 0.6f) else TextMuted
+
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(66.dp)
+            .clip(RoundedCornerShape(Corner.Large))
+            .background(background)
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                // Up and Down rather than Left and Right: the rows above and below are the other
+                // settings, and a list that moves under Up would strand the viewer on this one.
+                // Left and Right lead nowhere on this screen, so they are the pair to spend.
+                when (event.key) {
+                    Key.DirectionLeft -> { if (canDecrease) onStep(-1); true }
+                    Key.DirectionRight -> { if (canIncrease) onStep(1); true }
+                    else -> false
+                }
+            }
+            .focusable(interactionSource = interactions)
+            .padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = onSurface, modifier = Modifier.size(26.dp))
+        Spacer(Modifier.size(20.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                if (focused) "$value  ·  Left and Right change it" else "$value. $subtitle",
+                style = MaterialTheme.typography.bodyMedium,
+                color = dim,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+            contentDescription = null,
+            tint = if (canDecrease) onSurface else dim,
+            modifier = Modifier.size(26.dp),
+        )
+        Spacer(Modifier.size(12.dp))
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = if (canIncrease) onSurface else dim,
+            modifier = Modifier.size(26.dp),
         )
     }
 }

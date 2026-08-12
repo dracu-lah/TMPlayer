@@ -21,6 +21,14 @@
       confirm, and the TV's "allow apps from this source" switch has to be on first.
     -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!--
+      A video kept for the train has to keep coming down with the app closed, which on Android
+      means a foreground service and the notification that goes with it. Data sync is the type
+      that fits: bytes being fetched at the viewer's request, with an end.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".App"
@@ -98,5 +106,15 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/update_paths" />
         </provider>
-    </application>
+    
+        <!--
+          Downloads asked for by name, as opposed to the cache the player fills as it streams.
+          Not exported: nothing outside this app has any business starting it.
+        -->
+        <service
+            android:name=".data.DownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+</application>
 </manifest>

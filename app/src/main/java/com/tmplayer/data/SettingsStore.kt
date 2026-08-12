@@ -605,11 +605,31 @@ class SettingsStore(private val context: Context) {
         /** One video at a time, which is about all an 8 GB stick can hold. */
         const val TV_KEEP_VIDEOS = 1
 
-        /** A phone has room for a few, and a viewer who expects the last one to still be there. */
-        const val TOUCH_KEEP_VIDEOS = 3
+        /**
+         * One on a phone as well.
+         *
+         * It used to be three, on the reasoning that a phone has the room. But the number is a
+         * ceiling on what is kept without being asked for, and a viewer who wants three videos on
+         * a train now says so by downloading three: a default that quietly holds two films nobody
+         * chose is a default that eats a gigabyte of somebody's phone.
+         */
+        const val TOUCH_KEEP_VIDEOS = 1
 
-        /** What the Settings row steps through, ending in "as many as fit". */
+        /** What the arrows step through, ending in "as many as fit". */
         val KEEP_VIDEO_CHOICES = listOf(1, 2, 3, 5, 10, CacheShelf.UNLIMITED)
+
+        /**
+         * The next choice up or down, stopping at the ends.
+         *
+         * Returning the value unchanged at either end is what tells the row to grey the arrow out,
+         * so there is one definition of "there is nothing above this" rather than two.
+         */
+        fun stepKeepVideos(current: Int, direction: Int): Int {
+            val at = KEEP_VIDEO_CHOICES.indexOf(current)
+            // A number nobody offers any more, from an older build: treat it as the first step.
+            if (at < 0) return KEEP_VIDEO_CHOICES.first()
+            return KEEP_VIDEO_CHOICES.getOrElse(at + direction) { current }
+        }
 
         /** How the count reads in a sentence, where zero means no limit at all. */
         fun keepVideosLabel(count: Int): String = when {

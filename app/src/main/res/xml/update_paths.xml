@@ -4,4 +4,12 @@
     <cache-path
         name="updates"
         path="updates/" />
+    <!--
+      A downloaded video, for the Share sheet and for opening it in another player. Scoped to
+      TDLib's own files directory rather than to all of files/, so a share can only ever hand out
+      media: the TDLib database sits next door and is nobody else's business.
+    -->
+    <files-path
+        name="media"
+        path="tdlib-files/" />
 </paths>

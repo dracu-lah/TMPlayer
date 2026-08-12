@@ -205,6 +205,11 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                         MaterialTheme.typography.bodyLarge
                     },
                     color = TextMuted,
+                    // "Asking GitHub…" is one line and the answer is two or three, so pressing
+                    // Check again shrank the panel and then grew it back. A panel centred on the
+                    // screen moves both its edges when it does that, which reads as the dialog
+                    // jumping away from the button being pressed. The floor holds it still.
+                    minLines = BODY_LINES,
                 )
 
                 (state as? UpdateState.Downloading)?.let { downloading ->
@@ -235,6 +240,14 @@ fun UpdateDialog(onDismiss: () -> Unit) {
 
 /** As wide as this dialog ever gets, on any screen. */
 private val PANEL_MAX = 620.dp
+
+/**
+ * The height the message is held to, in lines.
+ *
+ * Three is what the longest of the ordinary answers wraps to at this width, so checking, being up
+ * to date and having an update to offer all leave the panel exactly where it was.
+ */
+private const val BODY_LINES = 3
 
 /**
  * The phone's version: Material's own dialog, in place of the hand-built panel.
@@ -275,7 +288,12 @@ private fun TouchUpdateDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                M3Text(body(state, allowed, release?.sizeBytes ?: 0L, "phone"))
+                M3Text(
+                    body(state, allowed, release?.sizeBytes ?: 0L, "phone"),
+                    // The same floor the television's panel keeps, and for the same reason: a
+                    // dialog that shrinks under the finger pressing it looks like a mistake.
+                    minLines = BODY_LINES,
+                )
                 if (downloading != null) {
                     // An unknown length becomes the indeterminate bar rather than an empty
                     // trough, which is what the platform's own control is for.

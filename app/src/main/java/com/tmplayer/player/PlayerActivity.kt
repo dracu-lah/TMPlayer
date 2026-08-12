@@ -62,6 +62,7 @@ import com.tmplayer.data.NetworkMonitor
 import com.tmplayer.data.NetworkStatus
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.Td
 import com.tmplayer.data.errorMessage
 import com.tmplayer.data.valueOrNull
@@ -1396,6 +1397,10 @@ class PlayerActivity : FragmentActivity() {
         if (downloadComplete) return
         val id = fileId
         if (id <= 0) return
+        // Not this one: a download the viewer asked to keep is being fetched by the service, and
+        // closing a player that happened to be watching the same file is not a reason to abandon
+        // it. Only the bytes this screen pulled in for itself are the player's to cancel.
+        if (OfflineDownloads.isDownloading(id)) return
         App.backgroundScope.launch {
             runCatching { Td.cancelDownload(id) }
         }
