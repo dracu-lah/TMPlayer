@@ -34,7 +34,7 @@ class StorageBreakdownTest {
     fun `anything unrecognised lands in other rather than being dropped`() {
         // The total has to keep matching the disk, whatever TDLib grows a file type for next.
         val breakdown = StorageBreakdown.of(
-            listOf("FileTypeSticker" to 3 * MB, "FileTypeSomethingNew" to 5 * MB),
+            listOf("FileTypeWallpaper" to 3 * MB, "FileTypeSomethingNew" to 5 * MB),
         )
         assertEquals(8 * MB, breakdown.otherBytes)
         assertEquals(8 * MB, breakdown.totalBytes)
