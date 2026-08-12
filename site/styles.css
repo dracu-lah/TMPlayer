@@ -1923,17 +1923,23 @@ a.card:active,
   margin-left: 4px;
   flex: none;
 }
-.nav-icon {
+.nav .nav-icon {
   display: inline-grid;
   place-items: center;
   border-radius: var(--shape-full);
   background: var(--surface-container);
   color: var(--on-surface-variant);
+  /* Written as .nav .nav-icon so it beats the 10px 16px every other link in the bar carries.
+     Inside a fixed 46px box that padding left 14px of content, and the mark, which is capped at
+     100% of what it is given, obediently shrank to fit it. */
   padding: 0;
   transition: background-color 0.2s var(--ease-standard), color 0.2s var(--ease-standard);
 }
 .nav .nav-icon:hover { background: var(--primary-container); color: var(--on-primary-container); text-decoration: none; }
-.nav-icon svg { flex: none; }
+/* Full size in its button, rather than the 22px the markup asks for. The GitHub mark is a filled
+   silhouette with fine detail in it, so at the nominal size of the sun beside it, which is a solid
+   disc with eight rays reaching the edge of its box, it reads noticeably lighter and smaller. */
+.nav-icon svg { flex: none; width: 26px; height: 26px; }
 
 .nav-star {
   display: inline-flex;
