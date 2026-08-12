@@ -222,9 +222,13 @@ private fun PhoneMediaScreen(onBack: () -> Unit = {}) {
             horizontalArrangement = Arrangement.spacedBy(DENSE_GAP),
             verticalArrangement = Arrangement.spacedBy(DENSE_GAP),
         ) {
-            // Twice through the set, so the grid runs past the bottom of the panel the way a real
-            // chat's does. A shot that ends in empty background reads as an empty chat.
-            val tiles = media + media.map { it.copy(messageId = it.messageId + media.size) }
+            // Three times through the set, so the grid runs past the bottom of the panel the way a
+            // real chat's does. A shot that ends in empty background reads as an empty chat, and
+            // twice was enough only while a tile was a bare picture: the caption under each one
+            // costs two lines and a meta row, which is a whole row of tiles fewer per screen.
+            val tiles = (0 until 3).flatMap { pass ->
+                media.map { it.copy(messageId = it.messageId + pass * media.size) }
+            }
             items(tiles, key = { it.messageId }) { item ->
                 MediaCard(item = item, watched = null, onClick = {}, onFocused = {}, dense = true)
             }

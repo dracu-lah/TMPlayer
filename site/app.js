@@ -424,13 +424,35 @@
      What that markup cannot do is follow the toggle, because the button changes
      an attribute and the media query only knows about the system. Pressing it
      therefore rewrites the media attribute to "all" or "none", which is a
-     picture the browser re-evaluates on the spot. The television shots are not
-     in here: the app's ten-foot layout is dark only, so a light one would be a
-     photograph of something that does not exist. */
+     picture the browser re-evaluates on the spot. The television shots are in
+     here too now: the app's ten-foot layout has a light theme of its own, and
+     a black panel on a white page was a photograph of something the reader had
+     just asked not to see.
+
+     The hero's phone is a video rather than a picture, and a <video> has no
+     media-query switch to lean on: a <source media> inside one is only read
+     once, when the element is first laid out, and never re-evaluated. So that
+     one is swapped by hand, and it is the only shot on the page that needs a
+     script to be right on arrival. */
   function paintShots(theme) {
     var sources = document.querySelectorAll('source[data-theme-src]');
     for (var i = 0; i < sources.length; i++) {
       sources[i].media = theme === 'light' ? 'all' : 'none';
+    }
+    var videos = document.querySelectorAll('video[data-theme-src]');
+    for (var j = 0; j < videos.length; j++) {
+      var video = videos[j];
+      var wanted = theme === 'light'
+        ? video.getAttribute('data-theme-src')
+        : video.getAttribute('data-dark-src');
+      // Compared before assigning: setting src to what it already is restarts
+      // the clip, and the hero would jump every time the toggle is pressed.
+      if (wanted && video.getAttribute('src') !== wanted) {
+        video.setAttribute('src', wanted);
+        video.load();
+        var playing = video.play();
+        if (playing && typeof playing.catch === 'function') { playing.catch(function () {}); }
+      }
     }
   }
 
@@ -483,8 +505,19 @@
     });
   }
 
-  if (stored()) { paintChrome(stored()); paintShots(stored()); }
+  // The pictures follow the markup on their own, but the hero's video cannot,
+  // so the shots are painted on arrival whether or not a theme was stored.
+  if (stored()) { paintChrome(stored()); }
+  paintShots(showing());
   label();
+
+  /* With no stored choice the hero has to follow the system as it changes,
+     which for everything else on the page is the media query's own job. */
+  if (media && typeof media.addEventListener === 'function') {
+    media.addEventListener('change', function () {
+      if (!stored()) { paintShots(showing()); }
+    });
+  }
 })();
 
 /* Scroll reveal. Opt-in only: the class that hides the elements is added by
