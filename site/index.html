@@ -204,7 +204,22 @@
       -->
       <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark theme">
         <svg class="icon-sun" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
-          <path fill="currentColor" d="M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 5a1 1 0 0 1-1-1v-1.5a1 1 0 1 1 2 0V21a1 1 0 0 1-1 1Zm0-17.5a1 1 0 0 1-1-1V3a1 1 0 1 1 2 0v.5a1 1 0 0 1-1 1ZM3 13a1 1 0 1 1 0-2h1.5a1 1 0 1 1 0 2H3Zm16.5 0a1 1 0 1 1 0-2H21a1 1 0 1 1 0 2h-1.5ZM5.6 19.8a1 1 0 0 1 0-1.4l1-1.1a1 1 0 0 1 1.5 1.5l-1.1 1a1 1 0 0 1-1.4 0Zm10.3-10.3a1 1 0 0 1 0-1.4l1.1-1.1a1 1 0 1 1 1.4 1.4l-1 1.1a1 1 0 0 1-1.5 0ZM18.4 19.8l-1.1-1a1 1 0 0 1 1.4-1.5l1.1 1.1a1 1 0 0 1-1.4 1.4ZM8.1 9.5l-1-1.1a1 1 0 0 1 1.4-1.4l1.1 1.1a1 1 0 0 1-1.5 1.4Z"/>
+          <!--
+            The disc and eight rays, drawn as a circle and eight stroked lines rather than as one
+            hand-written path. The path this replaces had rays of three different lengths, two of
+            them off their own axis, which at 22px read as a smudge rather than as a sun.
+          -->
+          <circle cx="12" cy="12" r="4.6" fill="currentColor"/>
+          <g stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+            <line x1="12" y1="1.9" x2="12" y2="4.3"/>
+            <line x1="12" y1="19.7" x2="12" y2="22.1"/>
+            <line x1="1.9" y1="12" x2="4.3" y2="12"/>
+            <line x1="19.7" y1="12" x2="22.1" y2="12"/>
+            <line x1="4.85" y1="4.85" x2="6.55" y2="6.55"/>
+            <line x1="17.45" y1="17.45" x2="19.15" y2="19.15"/>
+            <line x1="4.85" y1="19.15" x2="6.55" y2="17.45"/>
+            <line x1="17.45" y1="6.55" x2="19.15" y2="4.85"/>
+          </g>
         </svg>
         <svg class="icon-moon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
           <path fill="currentColor" d="M21 14.2A9 9 0 0 1 9.8 3 9 9 0 1 0 21 14.2Z"/>

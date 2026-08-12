@@ -1348,3 +1348,35 @@ summary:hover { color: var(--on-surface); }
   .blob-d { display: none; }
   .scroll-cue { display: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   Theme switch
+
+   The new theme is revealed as a circle opening out of the toggle, rather than
+   the whole page flicking over at once. Only the incoming snapshot moves: the
+   outgoing one holds still underneath it, which is what makes the circle read
+   as the new page arriving over the old rather than as two pages cross-fading.
+   The centre and the radius are written onto the root by app.js just before the
+   transition starts; the fallbacks here are what a snapshot without them gets.
+   --------------------------------------------------------------------------- */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) { z-index: 0; }
+
+::view-transition-new(root) {
+  z-index: 1;
+  animation: theme-reveal 0.45s ease-in-out forwards;
+}
+
+@keyframes theme-reveal {
+  from { clip-path: circle(0 at var(--theme-x, 50%) var(--theme-y, 0)); }
+  to { clip-path: circle(var(--theme-r, 150%) at var(--theme-x, 50%) var(--theme-y, 0)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-new(root) { animation: none; }
+}

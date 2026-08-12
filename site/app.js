@@ -415,12 +415,45 @@
     button.setAttribute('title', 'Switch to ' + next + ' theme');
   }
 
-  button.addEventListener('click', function () {
-    var next = showing() === 'dark' ? 'light' : 'dark';
+  function apply(next) {
     root.setAttribute('data-theme', next);
     try { localStorage.setItem(KEY, next); } catch (e) {}
     paintChrome(next);
     label();
+  }
+
+  /* The incoming theme arrives as a circle opening out of the button itself.
+
+     The View Transitions API takes a picture of the page before and after the
+     attribute flips, and the stylesheet then reveals the new picture through a
+     growing clip-path. The radius is the distance to the furthest corner, so
+     the circle has covered the window by the time it stops. Anything that
+     cannot do this, which is a browser without the API or a reader who has
+     asked for less motion, simply gets the swap. */
+  function reveal(next) {
+    var reduced = window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced || typeof document.startViewTransition !== 'function') {
+      apply(next);
+      return;
+    }
+
+    var box = button.getBoundingClientRect();
+    var x = box.left + box.width / 2;
+    var y = box.top + box.height / 2;
+    var radius = Math.hypot(
+      Math.max(x, window.innerWidth - x),
+      Math.max(y, window.innerHeight - y)
+    );
+    root.style.setProperty('--theme-x', x + 'px');
+    root.style.setProperty('--theme-y', y + 'px');
+    root.style.setProperty('--theme-r', radius + 'px');
+
+    document.startViewTransition(function () { apply(next); });
+  }
+
+  button.addEventListener('click', function () {
+    reveal(showing() === 'dark' ? 'light' : 'dark');
   });
 
   /* With no explicit choice, follow the system if it changes under us. */
