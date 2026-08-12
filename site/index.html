@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TMPlayer: play Telegram videos on Android TV and on your phone</title>
-<meta name="description" content="TMPlayer is a free, open source Android app that signs into your own Telegram account and streams the videos already in your chats. One build, two layouts: a ten-foot one for the television and a Material 3 one for the phone.">
+<title>TMPlayer: a free Telegram media player for Android TV and phones</title>
+<meta name="description" content="TMPlayer is a free, open source Telegram media player for Android. It signs into your own Telegram account and streams the videos already in your chats, with a ten-foot layout for the television and a Material 3 one for the phone.">
 <link rel="canonical" href="https://tmplayer.org/">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta name="author" content="dracu-lah">
@@ -14,22 +14,22 @@
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="TMPlayer">
-<meta property="og:title" content="TMPlayer: play Telegram videos on Android TV and on your phone">
-<meta property="og:description" content="A free, open source Android app that signs into your own Telegram account and streams the videos already in your chats. One build for the television and the phone.">
+<meta property="og:title" content="TMPlayer: a free Telegram media player for Android TV and phones">
+<meta property="og:description" content="A free, open source Telegram media player that signs into your own Telegram account and streams the videos already in your chats. One build for the television and the phone.">
 <meta property="og:url" content="https://tmplayer.org/">
 <meta property="og:image" content="https://tmplayer.org/og.png">
 <meta property="og:image:secure_url" content="https://tmplayer.org/og.png">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="TMPlayer, an Android media player for the videos in your own Telegram chats, on a television and on a phone.">
+<meta property="og:image:alt" content="TMPlayer, a Telegram media player for the videos in your own chats, on a television and on a phone.">
 <meta property="og:locale" content="en_GB">
 
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="TMPlayer: play Telegram videos on Android TV and on your phone">
-<meta name="twitter:description" content="A free, open source Android app that signs into your own Telegram account and streams the videos already in your chats, on the television and on the phone.">
+<meta name="twitter:title" content="TMPlayer: a free Telegram media player for Android TV and phones">
+<meta name="twitter:description" content="A free, open source Telegram media player that streams the videos already in your own chats, on the television and on the phone.">
 <meta name="twitter:image" content="https://tmplayer.org/og.png">
-<meta name="twitter:image:alt" content="TMPlayer, an Android media player for the videos in your own Telegram chats, on a television and on a phone.">
+<meta name="twitter:image:alt" content="TMPlayer, a Telegram media player for the videos in your own chats, on a television and on a phone.">
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/icon-512.png" type="image/png" sizes="512x512">
@@ -59,8 +59,8 @@
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "TMPlayer",
-  "alternateName": "TMPlayer for Android TV and Android phones",
-  "description": "An open source Android app that signs into your own Telegram account and streams the videos already in your chats, with one layout for the television and another for the phone.",
+  "alternateName": "TMPlayer, a Telegram media player for Android TV and Android phones",
+  "description": "An open source Telegram media player for Android that signs into your own Telegram account and streams the videos already in your chats, with one layout for the television and another for the phone.",
   "url": "https://tmplayer.org/",
   "image": "https://tmplayer.org/og.png",
   "screenshot": [
@@ -72,9 +72,9 @@
   "applicationCategory": "MultimediaApplication",
   "applicationSubCategory": "Video player",
   "operatingSystem": "Android 8.0 and above, including Android TV",
-  "downloadUrl": "https://github.com/dracu-lah/TMPlayer/releases/latest",
-  "installUrl": "https://github.com/dracu-lah/TMPlayer/releases/latest",
-  "softwareHelp": "https://github.com/dracu-lah/TMPlayer/blob/main/INSTALL.md",
+  "downloadUrl": "https://tmplayer.org/download/",
+  "installUrl": "https://tmplayer.org/install/",
+  "softwareHelp": "https://tmplayer.org/faq/",
   "license": "https://www.gnu.org/licenses/gpl-3.0.html",
   "isAccessibleForFree": true,
   "inLanguage": "en",
@@ -106,47 +106,22 @@
 </script>
 
 <!--
-  The same four questions the page answers in words, in the form search engines read. Every
-  answer below is on the page verbatim; markup that promises more than the page shows is the
-  quickest way to have all of it ignored.
+  The site's own shape, so a search engine can offer the five pages under the home page rather
+  than the home page alone. Every entry here is a real page with its own copy on it.
 -->
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "FAQPage",
-  "mainEntity": [
-    {
-      "@type": "Question",
-      "name": "Do I have to wait for the video to download?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "No. It starts in seconds and downloads while you watch. If your connection cannot keep up, a setting in the app will fetch the whole video first instead."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Is there a server or a bot involved?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Neither. The TV talks to Telegram directly, signed in as you. Nothing passes through anything of mine."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Which file do I download?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Download the universal APK. The same file works on every supported device, television or phone, including 32-bit and 64-bit ones."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Can I read my messages on it?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "No. It only ever shows the videos in your chats. You cannot read, reply or send anything from it."
-      }
-    }
+  "@type": "WebSite",
+  "name": "TMPlayer",
+  "url": "https://tmplayer.org/",
+  "inLanguage": "en",
+  "hasPart": [
+    { "@type": "WebPage", "name": "Features", "url": "https://tmplayer.org/features/" },
+    { "@type": "WebPage", "name": "Download", "url": "https://tmplayer.org/download/" },
+    { "@type": "WebPage", "name": "How to install", "url": "https://tmplayer.org/install/" },
+    { "@type": "WebPage", "name": "Telegram media player for Android TV", "url": "https://tmplayer.org/android-tv/" },
+    { "@type": "WebPage", "name": "Questions", "url": "https://tmplayer.org/faq/" }
   ]
 }
 </script>
@@ -194,10 +169,20 @@
 
     <nav class="nav" aria-label="Primary">
       <span class="nav-links">
-        <a href="#download">Download</a>
-        <a href="#install">Install</a>
+        <a href="/features/">Features</a>
+        <a href="/download/">Download</a>
+        <a href="/install/">Install</a>
+        <a href="/faq/">Questions</a>
       </span>
-      <a class="nav-cta" href="https://github.com/dracu-lah/TMPlayer" rel="noopener">GitHub</a>
+      <!--
+        The star control. A plain link to the stargazers page, so it works with JavaScript off
+        and on a rate-limited network; app.js fills in the figure when GitHub answers.
+      -->
+      <a class="nav-star" href="https://github.com/dracu-lah/TMPlayer" rel="noopener" aria-label="Star TMPlayer on GitHub">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg>
+        <span class="nav-star-label">Star</span>
+        <span class="nav-star-count" data-count="stars" hidden></span>
+      </a>
       <!--
         System theme until the reader says otherwise. The button reports the theme it will switch
         to, which is the thing a screen reader user needs to hear before pressing it.
@@ -248,7 +233,7 @@
            the width of a comma, and at this size that is enough to push a short headline
            visibly left of the middle. -->
       <h1 id="hero-h">Your <svg class="h1-mark" viewBox="0 0 108 108" aria-hidden="true" focusable="false"><rect x="0" y="0" width="108" height="108" rx="26" ry="26" fill="#1E1E28"/><path fill="#3A3A46" d="M36,33 H72 A5,5 0 0 1 77,38 V60 A5,5 0 0 1 72,65 H36 A5,5 0 0 1 31,60 V38 A5,5 0 0 1 36,33 Z"/><path fill="#0E0E12" d="M36,34.5 H72 A3.5,3.5 0 0 1 75.5,38 V60 A3.5,3.5 0 0 1 72,63.5 H36 A3.5,3.5 0 0 1 32.5,60 V38 A3.5,3.5 0 0 1 36,34.5 Z"/><path fill="#EDEDF2" d="M48,40.5 L65,49 L48,57.5 Z"/><path fill="#2AABEE" d="M36.5,70 H55.5 A2.5,2.5 0 0 1 55.5,75 H36.5 A2.5,2.5 0 0 1 36.5,70 Z"/><path fill="#3A3A46" d="M66.5,70 H71.5 A2.5,2.5 0 0 1 71.5,75 H66.5 A2.5,2.5 0 0 1 66.5,70 Z"/><circle cx="62" cy="72.5" r="5.5" fill="#EDEDF2"/></svg> Telegram videos, <em>on the TV</em><span class="stop">.</span></h1>
-      <p class="lede">Press play and it starts in seconds. The rest downloads while you watch.</p>
+      <p class="lede">TMPlayer is a free, open source Telegram media player for Android. Press play and it starts in seconds. The rest downloads while you watch.</p>
 
       <!--
         One primary control, shaped like a command box rather than a plain button: the leading icon
@@ -268,9 +253,9 @@
 
       <p class="hero-quiet">
         One universal APK, one sign-in, both screens.
-        <a href="https://github.com/dracu-lah/TMPlayer" rel="noopener">View the source</a>
+        <a href="/install/">How to install</a>
         <span class="sep" aria-hidden="true">&middot;</span>
-        <a href="#install">How to install</a>
+        <a href="/download/">All releases</a>
       </p>
     </div>
 
@@ -331,324 +316,125 @@
   <!-- A hand drawn wave, in the spirit of Material's shape work, marking the change of tone. -->
   <svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
 
-  <section class="band band-tonal" id="download" aria-labelledby="download-h">
+  <section class="band band-tonal" id="what" aria-labelledby="what-h">
     <div class="wrap">
       <div class="section-head" data-reveal>
         <div class="section-title">
-          <h2 id="download-h">Download</h2>
-          <p class="section-sub">One file for every supported device, television or phone. No chip type to look up.</p>
+          <h2 id="what-h">A player, pointed at an account you already have</h2>
+          <p class="section-sub">Telegram is where a lot of people keep the things they mean to watch later, and then watch on a phone held at arm's length because getting the file onto the television is more trouble than the film is worth. TMPlayer is the missing half of that: a Telegram media player that signs in as you, lists the videos in your chats, and plays them on the big screen without moving a file anywhere.</p>
         </div>
       </div>
 
-      <div class="section-body" data-reveal>
-        <div class="release-card">
-          <div class="release-head">
-            <div>
-              <p class="release-label">Latest release</p>
-              <p class="release-version" id="release-version">Checking GitHub<span class="dots" aria-hidden="true"></span></p>
-            </div>
-            <p class="release-date" id="release-date"></p>
-          </div>
+      <div class="card-grid card-grid-3" data-reveal>
+        <a class="card" href="/features/">
+          <span class="card-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><path fill="currentColor" d="M8 5.1c0-.8.9-1.3 1.5-.9l9 6.9c.6.4.6 1.4 0 1.8l-9 6.9c-.6.5-1.5 0-1.5-.8V5.1Z"/></svg>
+          </span>
+          <h3>What it does</h3>
+          <p>Streams while it downloads, seeks properly, plays MKV, MP4, AVI and TS with subtitles and several audio tracks, and starts the next episode on its own.</p>
+          <span class="card-go">The full list
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><path fill="currentColor" d="M5 12a1 1 0 0 1 1-1h10.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4l3.3-3.3H6a1 1 0 0 1-1-1Z"/></svg>
+          </span>
+        </a>
 
-          <div id="release-status" class="status" role="status">
-            <p>Loading release information from GitHub.</p>
-          </div>
+        <a class="card" href="/android-tv/">
+          <span class="card-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm4 15h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2Z"/></svg>
+          </span>
+          <h3>On Android TV</h3>
+          <p>A ten-foot layout built for a remote: a navigation rail, cards you can read across a room, focus you can always see, and a QR code instead of typing a phone number.</p>
+          <span class="card-go">Made for the television
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><path fill="currentColor" d="M5 12a1 1 0 0 1 1-1h10.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4l3.3-3.3H6a1 1 0 0 1-1-1Z"/></svg>
+          </span>
+        </a>
 
-          <ul class="abi-list" id="abi-list" hidden></ul>
-
-          <div class="callout" id="abi-callout" hidden>
-            <p><strong>One download, no guesswork.</strong> The universal APK includes the native code needed by 32-bit and 64-bit televisions and phones alike.</p>
-          </div>
-
-          <details id="release-notes-wrap" hidden>
-            <summary>Release notes</summary>
-            <pre class="notes" id="release-notes"></pre>
-          </details>
-        </div>
-
-        <section class="previous" id="previous-wrap" aria-labelledby="previous-h" hidden>
-          <h3 id="previous-h">Previous releases</h3>
-          <ul class="previous-list" id="previous-list"></ul>
-          <p class="muted small"><a href="https://github.com/dracu-lah/TMPlayer/releases" rel="noopener">All releases on GitHub</a></p>
-        </section>
+        <a class="card" href="/faq/">
+          <span class="card-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 15.5a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4Zm1.6-6.1c-.6.4-.7.6-.7 1.1a1 1 0 0 1-2 0c0-1.4.6-2.1 1.6-2.8.6-.4.8-.7.8-1.1 0-.7-.6-1.2-1.3-1.2-.6 0-1.1.3-1.3.9a1 1 0 0 1-1.9-.7A3.3 3.3 0 0 1 12 5.4a3.2 3.2 0 0 1 3.3 3.2c0 1.2-.7 2-1.7 2.8Z"/></svg>
+          </span>
+          <h3>What it is not</h3>
+          <p>Not a media service, not a channel directory, not a Telegram client. It hosts nothing, recommends nothing, and cannot read or send a message.</p>
+          <span class="card-go">Questions and limits
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><path fill="currentColor" d="M5 12a1 1 0 0 1 1-1h10.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4l3.3-3.3H6a1 1 0 0 1-1-1Z"/></svg>
+          </span>
+        </a>
       </div>
     </div>
   </section>
 
   <svg class="wave wave-flip" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
 
-  <section class="band" id="screenshots" aria-labelledby="shots-h">
+  <section class="band" id="start" aria-labelledby="start-h">
     <div class="wrap">
       <div class="section-head" data-reveal>
         <div class="section-title">
-          <h2 id="shots-h">What it looks like</h2>
-          <p class="section-sub">Four screens, in the order you meet them. Every picture is the app itself, filled with demo content that belongs to nobody.</p>
-        </div>
-      </div>
-
-      <div class="shots">
-        <figure class="shot" data-reveal>
-          <div class="device device-phone">
-            <div class="screen">
-              <!--
-                The phone shots follow the page. The source carries the light file and the img
-                carries the dark one, so a browser downloads exactly one of the two; app.js
-                rewrites the source's media attribute when the reader presses the toggle, which
-                is the part prefers-color-scheme on its own cannot do.
-              -->
-              <picture>
-                <source data-theme-src srcset="screenshots/phone-chats-light.webp" media="(prefers-color-scheme: light)">
-                <img src="screenshots/phone-chats.webp" alt="TMPlayer on a phone, listing demo chats: Weekend Clips, Home Projects, Recipe Notes, Travel Diary, Design Study and Family Archive." width="1080" height="2400" loading="lazy" decoding="async">
-              </picture>
-            </div>
-          </div>
-          <figcaption><b>Step one: pick a chat</b>Every chat and channel you are already in, as a list, with the ones you were last watching along the top. Text messages never appear anywhere in the app.</figcaption>
-        </figure>
-
-        <figure class="shot" data-reveal>
-          <div class="device device-phone">
-            <div class="screen">
-              <picture>
-                <source data-theme-src srcset="screenshots/phone-grid-light.webp" media="(prefers-color-scheme: light)">
-                <img src="screenshots/phone-grid.webp" alt="A dense grid of demo videos from a Telegram chat on a phone, each tile carrying its resolution and running time." width="1080" height="2400" loading="lazy" decoding="async">
-              </picture>
-            </div>
-          </div>
-          <figcaption><b>Step two: pick a video</b>The chat's videos as tiles, with the running time and the resolution on each. Press one and it starts in seconds. Long file names are one tap away in the row arrangement.</figcaption>
-        </figure>
-
-        <figure class="shot" data-reveal>
-          <div class="device device-tv">
-            <div class="screen">
-              <picture>
-                <source data-theme-src srcset="screenshots/tv-chats-light.webp" media="(prefers-color-scheme: light)">
-                <img src="screenshots/tv-chats.webp" alt="The same chat list on a television, with a navigation rail down the left for Continue, Favourites, Recent, Channels, Groups, People and All chats." width="1920" height="1080" loading="lazy" decoding="async">
-              </picture>
-            </div>
-            <div class="stand"></div>
-            <div class="foot"></div>
-          </div>
-          <figcaption><b>The same account, on the television</b>The remote gets a rail instead of a hamburger, cards big enough to read across a room, and focus you can always see. Nothing needs setting up twice.</figcaption>
-        </figure>
-
-        <figure class="shot" data-reveal>
-          <div class="device device-tv">
-            <div class="screen">
-              <picture>
-                <source data-theme-src srcset="screenshots/tv-settings-light.webp" media="(prefers-color-scheme: light)">
-                <img src="screenshots/tv-settings.webp" alt="TMPlayer settings on a television, showing the video size limits, autoplay of the next episode and how much storage is free." width="1920" height="1080" loading="lazy" decoding="async">
-              </picture>
-            </div>
-            <div class="stand"></div>
-            <div class="foot"></div>
-          </div>
-          <figcaption><b>Settings, if you want them</b>Hide clips below a size, let the next episode start on its own, or fetch the whole video before playing when the connection is poor. Changes save as you make them.</figcaption>
-        </figure>
-      </div>
-    </div>
-  </section>
-
-  <svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
-
-  <section class="band band-tonal" id="features" aria-labelledby="features-h">
-    <div class="wrap">
-      <div class="section-head" data-reveal>
-        <div class="section-title">
-          <h2 id="features-h">What it does</h2>
-          <p class="section-sub">Built for one television and one remote, and for one thumb.</p>
-        </div>
-      </div>
-
-      <div class="two-col" data-reveal>
-        <div class="panel">
-          <h3>
-            <span class="panel-icon icon-play" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><path fill="currentColor" d="M8 5.1c0-.8.9-1.3 1.5-.9l9 6.9c.6.4.6 1.4 0 1.8l-9 6.9c-.6.5-1.5 0-1.5-.8V5.1Z"/></svg>
-            </span>
-            Watching
-          </h3>
-          <ul class="ticks">
-            <li><strong>Starts in seconds and seeks properly.</strong> Skipping ahead re-aims the download instead of waiting for it. A setting fetches the whole video first if your connection would rather.</li>
-            <li><strong>Plays real-world media files.</strong> MKV, MP4, AVI and TS. Embedded subtitles, image-based ones included. Multiple audio tracks you can switch during playback.</li>
-            <li><strong>Remembers where you stopped</strong>, video by video, with a Continue watching row waiting on launch.</li>
-            <li><strong>Keeps one video on the device.</strong> An 8 GB stick cannot hold a library, so the previous one goes and the app tells you how much that freed. Coming back to a video you stopped half way through keeps the half already on disk.</li>
-            <li><strong>Is a phone app on a phone.</strong> The same library, drawn the way Android draws things in the hand.</li>
-          </ul>
-        </div>
-        <div class="panel">
-          <h3>
-            <span class="panel-icon icon-browse" aria-hidden="true">
-              <!--
-                The lens is centred on 10.9,10.9 and the handle runs out to the bottom right, so
-                the whole glyph spans roughly 4.6 to 19.4 on both axes and sits in the middle of
-                its badge. The drawing this replaces had the lens up and to the left with the
-                handle leaving the box, which pulled the visual mass into one corner.
-              -->
-              <svg viewBox="0 0 24 24" width="22" height="22" focusable="false">
-                <path fill="currentColor" d="M10.9 4.6a6.3 6.3 0 1 0 0 12.6 6.3 6.3 0 1 0 0-12.6Zm0 2.2a4.1 4.1 0 1 1 0 8.2 4.1 4.1 0 1 1 0-8.2Z"/>
-                <line x1="15.6" y1="15.6" x2="18.4" y2="18.4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
-              </svg>
-            </span>
-            Browsing
-          </h3>
-          <ul class="ticks">
-            <li><strong>Shows media, not messages.</strong> Open a chat or channel and TMPlayer filters it down to playable videos, including video files sent as documents.</li>
-            <li><strong>Understands episode filenames.</strong> During playback, previous and next controls move between neighbouring episodes already present in the same chat, and when one finishes the next starts on its own after a countdown you can stop.</li>
-            <li><strong>Forgives how you type.</strong> Search is matched word by word, so an accent nobody types, two letters the wrong way round, or one wrong keyword among right ones still finds the thing.</li>
-            <li><strong>Search by voice</strong>, using the microphone already in your remote. Star the chats you watch from and they sit one press away.</li>
-            <li><strong>Updates itself.</strong> It notices a newer release on GitHub and installs it, and signing out clears everything it ever kept.</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <svg class="wave wave-flip" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
-
-  <section class="band" id="install" aria-labelledby="install-h">
-    <div class="wrap">
-      <div class="section-head" data-reveal>
-        <div class="section-title">
-          <h2 id="install-h">How to install</h2>
-          <p class="section-sub">Four steps, on a television or on a phone. You only do them once.</p>
+          <h2 id="start-h">Three things, once</h2>
+          <p class="section-sub">Then it is a television app like any other.</p>
         </div>
       </div>
 
       <div class="section-body" data-reveal>
         <ol class="steps">
           <li>
-            <h3>Allow apps from outside the store</h3>
-            <p>On a television: <em>Settings</em> then <em>Device Preferences</em> then <em>About</em>, and press <em>Build</em> seven times. Now turn on <em>Unknown sources</em> for whichever app you use to copy the file over.</p>
-            <p>On a phone: nothing to do yet. Android asks you the first time you open the file, and you say yes then.</p>
+            <h3>Get the APK</h3>
+            <p>One universal file for every supported device, television or phone, 32-bit and 64-bit alike. There is no chip type to look up and nothing to pay.</p>
+            <p><a href="/download/">Go to the download page</a></p>
           </li>
           <li>
-            <h3>Get the file onto the device</h3>
-            <p>On a phone, tap the download link above and open the file when it lands. On a television it is easiest with a free app from the Play Store, such as Downloader or
-              <a class="inline-link" href="https://play.google.com/store/apps/details?id=com.yablio.sendfilestotv" target="_blank" rel="noopener">
-                <!-- Cast: a screen with the three arcs, drawn here in the same 24 by 24 box and the
-                     same stroke weight as every other glyph on the page. Nothing is fetched, and
-                     another developer's store artwork is not ours to copy. -->
-                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="M3 4h18a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-7v-2h7V6H3v2H1V6a2 2 0 0 1 2-2Zm-2 16a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm0-4a1 1 0 0 1 0-2 3 3 0 0 1 3 3 1 1 0 1 1-2 0 1 1 0 0 0-1-1Zm0-4a1 1 0 0 1 0-2 7 7 0 0 1 7 7 1 1 0 1 1-2 0 5 5 0 0 0-5-5Z"/></svg>Send files to TV</a>,
-              pointed at the same link. With a computer on the same wifi, <code>adb</code> works too:</p>
-            <pre class="code"><code>adb connect &lt;tv-ip&gt;:5555
-adb install TMPlayer-&lt;version&gt;-universal.apk</code></pre>
-            <p>For that one, turn on network debugging in Developer options first.</p>
+            <h3>Sideload it</h3>
+            <p>On a phone you open the file and say yes when Android asks. On a television it is a free helper app from the Play Store, or <code>adb</code> from a computer on the same wifi.</p>
+            <p><a href="/install/">Read the four install steps</a></p>
           </li>
           <li>
-            <h3>Sign in</h3>
-            <p>On a television it shows a QR code: open Telegram on your phone, go to <em>Settings</em>, then <em>Devices</em>, then <em>Link Desktop Device</em>, and point the camera at the screen. Nothing to type with the remote.</p>
-            <p>On a phone it asks for your number instead, with the country picker and the code boxes Telegram itself uses. The QR route is still there, for an account that lives on another handset.</p>
-          </li>
-          <li>
-            <h3>Pick a chat and press play</h3>
-            <p>Your chats open into grids or rows of their playable videos: big cards and a focus ring on a television, dense tiles under your thumb on a phone. Choose one and it starts in a few seconds.</p>
+            <h3>Scan the QR code</h3>
+            <p>Telegram's own Link Desktop Device flow, signed in as you through Telegram's official library. No account of mine, no bot, and nothing in between.</p>
+            <p><a href="/faq/">What that does and does not mean</a></p>
           </li>
         </ol>
-        <p class="muted small section-note"><a href="https://github.com/dracu-lah/TMPlayer/blob/main/INSTALL.md" rel="noopener">INSTALL.md</a> covers the sideloading steps in full, plus the remote-control reference and troubleshooting.</p>
       </div>
     </div>
   </section>
 
   <svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
 
-  <section class="band band-tonal" id="about" aria-labelledby="about-h">
+  <!--
+    The support band. A sideloaded APK asks a stranger for a lot of trust, and the only evidence
+    it can offer is that other people already gave it. So the star goes here, at full size, with
+    the real figure next to it rather than a badge nobody can read.
+  -->
+  <section class="band band-tonal" id="support" aria-labelledby="support-h">
     <div class="wrap">
-      <div class="section-head" data-reveal>
-        <div class="section-title">
-          <h2 id="about-h">Be clear about what this is</h2>
-          <p class="section-sub">A player pointed at an account you already have.</p>
-        </div>
-      </div>
+      <div class="support" data-reveal>
+        <h2 id="support-h">If it earned its place on your telly, star it</h2>
+        <p>A star costs you one click and it is the whole marketing budget. It is what tells the next person, reading a GitHub page cold before sideloading an APK onto a device signed into their Telegram account, that somebody else trusted this first. Forking is just as welcome: the licence is GPL-3.0 and every line is there to read.</p>
 
-      <div class="two-col" data-reveal>
-        <div class="panel">
-          <h3>
-            <span class="panel-icon icon-yes" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><path fill="currentColor" d="M9.8 16.8 5.6 12.6a1 1 0 0 1 1.4-1.4l2.8 2.8 6.8-6.8a1 1 0 0 1 1.4 1.4l-8.2 8.2Z"/></svg>
-            </span>
-            What it is
-          </h3>
-          <ul class="ticks">
-            <li>A player for <strong>your own</strong> Telegram account, signed in through Telegram's own official library.</li>
-            <li>A way to watch videos in the chats and channels <strong>you have already joined</strong>, without waiting for the whole file or moving it off a phone first.</li>
-            <li>Free and open source. You can read every line and build it yourself.</li>
-          </ul>
+        <div class="support-actions">
+          <a class="btn btn-filled" href="https://github.com/dracu-lah/TMPlayer" rel="noopener">
+            <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg>
+            Star on GitHub
+          </a>
+          <a class="btn btn-outline" href="https://github.com/dracu-lah/TMPlayer/fork" rel="noopener">
+            <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M6.5 2a3.5 3.5 0 0 0-1 6.86V10a4 4 0 0 0 4 4H11v1.14a3.5 3.5 0 1 0 2 0V14h1.5a4 4 0 0 0 4-4V8.86A3.5 3.5 0 1 0 16.5 2a3.5 3.5 0 0 0-1 6.86V10a2 2 0 0 1-2 2h-3a2 2 0 0 1-2-2V8.86A3.5 3.5 0 0 0 6.5 2Zm0 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm10 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM12 17a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"/></svg>
+            Fork the repository
+          </a>
+          <a class="btn btn-outline" href="https://github.com/dracu-lah/TMPlayer/issues" rel="noopener">
+            <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 3a1.2 1.2 0 0 1 1.2 1.2v7a1.2 1.2 0 0 1-2.4 0v-7A1.2 1.2 0 0 1 12 5Zm0 12.9a1.4 1.4 0 1 1 0-2.8 1.4 1.4 0 0 1 0 2.8Z"/></svg>
+            Report a problem
+          </a>
         </div>
-        <div class="panel">
-          <h3>
-            <span class="panel-icon icon-no" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><path fill="currentColor" d="M18.3 7.1 13.4 12l4.9 4.9a1 1 0 0 1-1.4 1.4L12 13.4l-4.9 4.9a1 1 0 0 1-1.4-1.4l4.9-4.9-4.9-4.9a1 1 0 0 1 1.4-1.4l4.9 4.9 4.9-4.9a1 1 0 0 1 1.4 1.4Z"/></svg>
-            </span>
-            What it is not
-          </h3>
-          <ul class="crosses">
-            <li>Not a media service or channel directory. It hosts, uploads, sells and recommends nothing. There is no server and no bot.</li>
-            <li>Not a Telegram app. You cannot read messages, reply, or send anything.</li>
-            <li>Not affiliated with, endorsed by, or connected to Telegram FZ-LLC. What you watch, and where it came from, is your responsibility.</li>
-          </ul>
-        </div>
+
+        <p class="support-stats">
+          <span data-count-wrap hidden><b data-count="stars"></b> stars</span>
+          <span data-count-wrap hidden><b data-count="forks"></b> forks</span>
+          <span>GPL-3.0, and free for good</span>
+        </p>
       </div>
     </div>
   </section>
 
   <svg class="wave wave-flip" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
 
-  <section class="band" id="faq" aria-labelledby="faq-h">
-    <div class="wrap">
-      <div class="section-head" data-reveal>
-        <div class="section-title">
-          <h2 id="faq-h">Common questions</h2>
-          <p class="section-sub">The four that get asked most.</p>
-        </div>
-      </div>
-
-      <!--
-        A real accordion, built from native details and summary so it opens with a keyboard, is
-        announced as a disclosure, and works with JavaScript off. Every row starts closed: four
-        questions are short enough to scan as four headings, and opening one on load would only
-        tell the reader which answer I think they wanted. The height animation lives on the
-        inner .faq-body, since details itself cannot be transitioned.
-      -->
-      <div class="faq" data-reveal>
-        <details class="faq-item" name="faq">
-          <summary>
-            <span class="faq-q">Do I have to wait for the video to download?</span>
-            <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
-          </summary>
-          <div class="faq-body"><p>No. It starts in seconds and downloads while you watch. If your connection cannot
-            keep up, a setting in the app will fetch the whole video first instead.</p></div>
-        </details>
-        <details class="faq-item" name="faq">
-          <summary>
-            <span class="faq-q">Is there a server or a bot involved?</span>
-            <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
-          </summary>
-          <div class="faq-body"><p>Neither. The TV talks to Telegram directly, signed in as you. Nothing passes through
-            anything of mine.</p></div>
-        </details>
-        <details class="faq-item" name="faq">
-          <summary>
-            <span class="faq-q">Which file do I download?</span>
-            <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
-          </summary>
-          <div class="faq-body"><p>Download the universal APK. The same file works on every supported device,
-            television or phone, including 32-bit and 64-bit ones.</p></div>
-        </details>
-        <details class="faq-item" name="faq">
-          <summary>
-            <span class="faq-q">Can I read my messages on it?</span>
-            <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
-          </summary>
-          <div class="faq-body"><p>No. It only ever shows the videos in your chats. You cannot read, reply or send
-            anything from it.</p></div>
-        </details>
-      </div>
-    </div>
-  </section>
-
-  <svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
-
-  <section class="band band-tonal" id="feedback" aria-labelledby="feedback-h">
+  <section class="band" id="feedback" aria-labelledby="feedback-h">
     <div class="wrap">
       <div class="section-head" data-reveal>
         <div class="section-title">
@@ -702,12 +488,14 @@ adb install TMPlayer-&lt;version&gt;-universal.apk</code></pre>
   <div class="wrap footer-inner">
     <p class="footer-brand">TMPlayer</p>
     <nav class="footer-links" aria-label="Footer">
+      <a href="/features/">Features</a>
+      <a href="/download/">Download</a>
+      <a href="/install/">Install</a>
+      <a href="/android-tv/">Android TV</a>
+      <a href="/faq/">Questions</a>
       <a href="https://github.com/dracu-lah/TMPlayer" rel="noopener">Source</a>
-      <a href="https://github.com/dracu-lah/TMPlayer/releases" rel="noopener">Releases</a>
-      <a href="https://github.com/dracu-lah/TMPlayer/blob/main/INSTALL.md" rel="noopener">Install guide</a>
       <a href="/privacy">Privacy</a>
       <a href="/legal">Lawful use</a>
-      <a href="https://github.com/dracu-lah/TMPlayer/issues" rel="noopener">Report a problem</a>
       <a href="https://nevil.dev" rel="noopener">nevil.dev</a>
     </nav>
     <p class="footer-legal muted small">GPL-3.0, &copy; 2026 dracu-lah. An unofficial Telegram video player, not affiliated with Telegram FZ-LLC. TMPlayer does not provide media: use it only with content you own or are authorized to access. Player mark via <a href="https://www.svgrepo.com" rel="noopener">SVG Repo</a>, set in Poppins under the SIL Open Font License and served from this domain.</p>

@@ -48,6 +48,21 @@
     heroLabel: document.getElementById('hero-download-label')
   };
 
+  /* The site is several pages now, and only two of them ask GitHub anything:
+     the home page has the hero button and the download page has the card. A
+     page with neither wants no request at all. */
+  if (!el.version && !el.heroBtn) { return; }
+
+  /* On the page that has one but not the other, every node that is missing
+     becomes a detached stand-in. The rendering below then writes to it exactly
+     as it always did, and nothing it writes reaches the document, which is a
+     good deal cheaper than a guard on every line that touches el. */
+  for (var key in el) {
+    if (Object.prototype.hasOwnProperty.call(el, key) && !el[key]) {
+      el[key] = document.createElement('span');
+    }
+  }
+
   /* ---------- small helpers ---------- */
 
   function make(tag, className, text) {
@@ -628,4 +643,50 @@
   window.addEventListener('scroll', onScroll, { passive: true });
   window.addEventListener('resize', onScroll, { passive: true });
   frame();
+})();
+
+/* Repository counts, for the star control in the header and the support band.
+   One more call to the same unauthenticated API as the release card, so a page
+   that shows neither never makes it. Every figure is hidden until a number
+   arrives: a rate-limited reader gets the button and the licence, which is all
+   the page actually needs to work. */
+(function () {
+  'use strict';
+
+  var API = 'https://api.github.com/repos/dracu-lah/TMPlayer';
+  var nodes = document.querySelectorAll('[data-count]');
+  if (!nodes.length || typeof fetch !== 'function') { return; }
+
+  /* Exact up to a thousand, because at this size the exact figure is the more
+     persuasive one, and 1.2k after that. */
+  function compact(n) {
+    if (n < 1000) { return String(n); }
+    var k = n / 1000;
+    return (k >= 10 ? Math.round(k) : Math.round(k * 10) / 10) + 'k';
+  }
+
+  fetch(API, { headers: { 'Accept': 'application/vnd.github+json' } }).then(function (res) {
+    if (!res.ok) { throw new Error('http-' + res.status); }
+    return res.json();
+  }).then(function (data) {
+    var counts = {
+      stars: data.stargazers_count,
+      forks: data.forks_count,
+      watchers: data.subscribers_count
+    };
+    Array.prototype.forEach.call(nodes, function (node) {
+      var value = counts[node.getAttribute('data-count')];
+      if (typeof value !== 'number') { return; }
+      node.textContent = compact(value);
+      node.hidden = false;
+      /* The label around the figure ("stars", "forks") is hidden with it, so a
+         missing number never leaves a bare word behind. */
+      var wrap = node.parentNode;
+      if (wrap && wrap.getAttribute && wrap.getAttribute('data-count-wrap') !== null) {
+        wrap.hidden = false;
+      }
+    });
+  }).catch(function () {
+    /* Nothing to do. The controls are links to GitHub with or without a count. */
+  });
 })();

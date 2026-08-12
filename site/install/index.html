@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How to install TMPlayer on Android TV, a stick, or a phone</title>
+<meta name="description" content="Sideload TMPlayer in four steps: allow apps from outside the store, get the APK onto the device with Downloader, Send files to TV or adb, sign in with a QR code, and press play.">
+<link rel="canonical" href="https://tmplayer.org/install/">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="author" content="dracu-lah">
+<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0B0C0E" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TMPlayer">
+<meta property="og:title" content="How to install TMPlayer on Android TV, a stick, or a phone">
+<meta property="og:description" content="Sideload TMPlayer in four steps: allow apps from outside the store, get the APK onto the device with Downloader, Send files to TV or adb, sign in with a QR code, and press play.">
+<meta property="og:url" content="https://tmplayer.org/install/">
+<meta property="og:image" content="https://tmplayer.org/og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="en_GB">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="How to install TMPlayer on Android TV, a stick, or a phone">
+<meta name="twitter:description" content="Sideload TMPlayer in four steps: allow apps from outside the store, get the APK onto the device with Downloader, Send files to TV or adb, sign in with a QR code, and press play.">
+<meta name="twitter:image" content="https://tmplayer.org/og.png">
+
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-512.png" type="image/png" sizes="512x512">
+<link rel="apple-touch-icon" href="/icon-512.png">
+<link rel="manifest" href="/site.webmanifest">
+
+<link rel="preload" href="/fonts/poppins-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/poppins-600.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css">
+
+<!-- The stored theme, applied before the first paint. With no stored choice nothing is set and
+     the stylesheet follows prefers-color-scheme, which is the system theme. -->
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem('tm-theme');
+    if (t === 'light' || t === 'dark') { document.documentElement.setAttribute('data-theme', t); }
+  } catch (e) {}
+})();
+</script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Home",
+      "item": "https://tmplayer.org/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "How to install",
+      "item": "https://tmplayer.org/install/"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "HowTo",
+  "name": "How to install TMPlayer on Android TV or an Android phone",
+  "description": "Sideload the TMPlayer APK onto an Android TV, a TV stick or a phone, and sign in to your own Telegram account.",
+  "totalTime": "PT10M",
+  "tool": [
+    {
+      "@type": "HowToTool",
+      "name": "An Android TV, TV stick or Android phone running Android 8.0 or above"
+    }
+  ],
+  "supply": [
+    {
+      "@type": "HowToSupply",
+      "name": "The TMPlayer universal APK"
+    }
+  ],
+  "step": [
+    {
+      "@type": "HowToStep",
+      "name": "Allow apps from outside the store",
+      "url": "https://tmplayer.org/install/#step-1",
+      "text": "On a television, open Settings, then Device Preferences, then About, and press Build seven times. Then turn on Unknown sources for whichever app you use to copy the file over. On a phone there is nothing to do yet: Android asks the first time you open the file."
+    },
+    {
+      "@type": "HowToStep",
+      "name": "Get the file onto the device",
+      "url": "https://tmplayer.org/install/#step-2",
+      "text": "On a phone, tap the download link and open the file when it lands. On a television, use a free app such as Downloader or Send files to TV, pointed at the same link, or run adb connect and adb install from a computer on the same wifi."
+    },
+    {
+      "@type": "HowToStep",
+      "name": "Sign in",
+      "url": "https://tmplayer.org/install/#step-3",
+      "text": "A television shows a QR code: open Telegram on your phone, go to Settings, then Devices, then Link Desktop Device, and point the camera at the screen. A phone asks for your number instead."
+    },
+    {
+      "@type": "HowToStep",
+      "name": "Pick a chat and press play",
+      "url": "https://tmplayer.org/install/#step-4",
+      "text": "Your chats open into grids or rows of their playable videos. Choose one and it starts in a few seconds while the rest downloads."
+    }
+  ]
+}
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- Decorative background art, hidden from assistive technology and still under reduced motion. -->
+<div class="bg-art" aria-hidden="true">
+  <svg class="bg-blob blob-a" viewBox="0 0 200 200" fill="none">
+    <path fill="currentColor" d="M154 22c26 18 40 55 34 89-6 34-32 65-63 73-31 8-67-7-89-33S8 85 22 55 71 6 103 8c32 2 25-4 51 14Z"/>
+  </svg>
+  <svg class="bg-blob blob-b" viewBox="0 0 200 200" fill="none">
+    <path fill="currentColor" d="M46 24c30-14 71-9 95 14s31 63 21 96c-10 33-37 59-70 63s-72-14-83-46C-2 119 12 76 24 52c12-24 -8 -14 22 -28Z"/>
+  </svg>
+  <svg class="bg-blob blob-c" viewBox="0 0 200 200" fill="none">
+    <path fill="currentColor" d="M100 4c53 0 96 43 96 96s-43 96-96 96S4 153 4 100 47 4 100 4Zm0 42a54 54 0 1 0 0 108 54 54 0 0 0 0-108Z"/>
+  </svg>
+  <svg class="bg-blob blob-d" viewBox="0 0 200 200" fill="none">
+    <path fill="currentColor" d="M100 0c0 55 45 100 100 100-55 0-100 45-100 100 0-55-45-100-100-100C55 100 100 55 100 0Z"/>
+  </svg>
+</div>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="/" aria-label="TMPlayer home">
+      <img class="brand-mark" src="/favicon.svg" width="32" height="32" alt="" decoding="async">
+      <span class="brand-name">TMPlayer</span>
+    </a>
+
+    <nav class="nav" aria-label="Primary">
+      <span class="nav-links">
+        <a href="/features/">Features</a>
+        <a href="/download/">Download</a>
+        <a href="/install/" aria-current="page">Install</a>
+        <a href="/faq/">Questions</a>
+      </span>
+      <!-- A plain link to the repository, so it works with JavaScript off and on a rate-limited
+           network. app.js fills in the figure when GitHub answers. -->
+      <a class="nav-star" href="https://github.com/dracu-lah/TMPlayer" rel="noopener" aria-label="Star TMPlayer on GitHub">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg>
+        <span class="nav-star-label">Star</span>
+        <span class="nav-star-count" data-count="stars" hidden></span>
+      </a>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark theme">
+        <svg class="icon-sun" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="4.6" fill="currentColor"/>
+          <g stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+            <line x1="12" y1="1.9" x2="12" y2="4.3"/>
+            <line x1="12" y1="19.7" x2="12" y2="22.1"/>
+            <line x1="1.9" y1="12" x2="4.3" y2="12"/>
+            <line x1="19.7" y1="12" x2="22.1" y2="12"/>
+            <line x1="4.85" y1="4.85" x2="6.55" y2="6.55"/>
+            <line x1="17.45" y1="17.45" x2="19.15" y2="19.15"/>
+            <line x1="4.85" y1="19.15" x2="6.55" y2="17.45"/>
+            <line x1="17.45" y1="6.55" x2="19.15" y2="4.85"/>
+          </g>
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+          <path fill="currentColor" d="M21 14.2A9 9 0 0 1 9.8 3 9 9 0 1 0 21 14.2Z"/>
+        </svg>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="page-head">
+    <div class="wrap page-head-wrap">
+      <p class="crumbs"><a href="/">Home</a><span aria-hidden="true">/</span>How to install</p>
+      <h1>How to install it, <em>in four steps</em></h1>
+      <p class="page-lede">On a television or on a phone. You only do them once, and the third one is the only one that needs your phone in your hand.</p>
+      <div class="page-actions">
+        <a class="btn btn-filled" href="/download/">
+          <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.4l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg>
+          Get the APK first
+        </a>
+        <a class="btn btn-outline" href="https://github.com/dracu-lah/TMPlayer/blob/main/INSTALL.md" rel="noopener">The full INSTALL.md <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><path fill="currentColor" d="M5 12a1 1 0 0 1 1-1h10.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4l3.3-3.3H6a1 1 0 0 1-1-1Z"/></svg></a>
+      </div>
+    </div>
+  </section>
+
+<svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
+
+  <section class="band band-tonal" id="install" aria-labelledby="install-h">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <div class="section-title">
+          <h2 id="install-h">The four steps</h2>
+          <p class="section-sub">Nothing here is specific to TMPlayer: it is how any app that is not in the store gets onto an Android device.</p>
+        </div>
+      </div>
+
+      <div class="section-body" data-reveal>
+        <ol class="steps">
+          <li id="step-1">
+            <h3>Allow apps from outside the store</h3>
+            <p>On a television: <em>Settings</em> then <em>Device Preferences</em> then <em>About</em>, and press <em>Build</em> seven times. Now turn on <em>Unknown sources</em> for whichever app you use to copy the file over.</p>
+            <p>On a phone: nothing to do yet. Android asks you the first time you open the file, and you say yes then.</p>
+          </li>
+          <li id="step-2">
+            <h3>Get the file onto the device</h3>
+            <p>On a phone, <a href="/download/">download the APK</a> and open the file when it lands. On a television it is easiest with a free app from the Play Store, such as Downloader or
+              <a class="inline-link" href="https://play.google.com/store/apps/details?id=com.yablio.sendfilestotv" target="_blank" rel="noopener">
+                <!-- Cast: a screen with the three arcs, drawn in the same 24 by 24 box and the same
+                     stroke weight as every other glyph on the site. Nothing is fetched, and another
+                     developer's store artwork is not ours to copy. -->
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="M3 4h18a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-7v-2h7V6H3v2H1V6a2 2 0 0 1 2-2Zm-2 16a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm0-4a1 1 0 0 1 0-2 3 3 0 0 1 3 3 1 1 0 1 1-2 0 1 1 0 0 0-1-1Zm0-4a1 1 0 0 1 0-2 7 7 0 0 1 7 7 1 1 0 1 1-2 0 5 5 0 0 0-5-5Z"/></svg>Send files to TV</a>,
+              pointed at the same link. With a computer on the same wifi, <code>adb</code> works too:</p>
+            <pre class="code"><code>adb connect &lt;tv-ip&gt;:5555
+adb install TMPlayer-&lt;version&gt;-universal.apk</code></pre>
+            <p>For that one, turn on network debugging in Developer options first.</p>
+          </li>
+          <li id="step-3">
+            <h3>Sign in</h3>
+            <p>On a television it shows a QR code: open Telegram on your phone, go to <em>Settings</em>, then <em>Devices</em>, then <em>Link Desktop Device</em>, and point the camera at the screen. Nothing to type with the remote.</p>
+            <p>On a phone it asks for your number instead, with the country picker and the code boxes Telegram itself uses. The QR route is still there, for an account that lives on another handset.</p>
+          </li>
+          <li id="step-4">
+            <h3>Pick a chat and press play</h3>
+            <p>Your chats open into grids or rows of their playable videos: big cards and a focus ring on a television, dense tiles under your thumb on a phone. Choose one and it starts in a few seconds.</p>
+          </li>
+        </ol>
+        <p class="muted small section-note"><a href="https://github.com/dracu-lah/TMPlayer/blob/main/INSTALL.md" rel="noopener">INSTALL.md</a> covers the sideloading steps in full, plus the remote-control reference and troubleshooting.</p>
+      </div>
+    </div>
+  </section>
+
+<svg class="wave wave-flip" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
+
+  <section class="band" aria-labelledby="trouble-h">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <div class="section-title">
+          <h2 id="trouble-h">If it goes wrong</h2>
+          <p class="section-sub">The three that account for nearly every stuck install.</p>
+        </div>
+      </div>
+
+      <div class="faq" data-reveal>
+        <details class="faq-item" name="trouble">
+          <summary>
+            <span class="faq-q">The television says the app is blocked or the install button does nothing</span>
+            <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
+          </summary>
+          <div class="faq-body"><p>Unknown sources is granted per app, not once for the device. Turn it on for the app that is
+            holding the file, which is Downloader or Send files to TV rather than TMPlayer itself, then open the file again.</p></div>
+        </details>
+        <details class="faq-item" name="trouble">
+          <summary>
+            <span class="faq-q">adb connect refuses the connection</span>
+            <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
+          </summary>
+          <div class="faq-body"><p>Network debugging has to be on in Developer options, the two devices have to be on the same
+            network, and the television will show a prompt asking whether to trust the computer. That prompt only appears on the screen,
+            so look up before assuming it failed.</p></div>
+        </details>
+        <details class="faq-item" name="trouble">
+          <summary>
+            <span class="faq-q">The QR code will not scan from across the room</span>
+            <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
+          </summary>
+          <div class="faq-body"><p>Stand closer than feels necessary and hold the phone square to the screen. The code refreshes on
+            its own every so often, so a stale one is never the problem for long. Telegram's scanner lives under Settings, Devices,
+            Link Desktop Device, not in the camera app.</p></div>
+        </details>
+      </div>
+
+      <p class="muted small section-note" data-reveal>Still stuck? <a href="https://github.com/dracu-lah/TMPlayer/issues" rel="noopener">Open an issue</a> with the device, the Android version and what the screen said.</p>
+    </div>
+  </section>
+
+<svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
+
+  <section class="band band-tonal" aria-labelledby="support-h">
+    <div class="wrap">
+      <div class="support" data-reveal>
+        <h2 id="support-h">Star it if it helped</h2>
+        <p>If these steps got a film onto your television tonight, a star is the thanks that actually helps: it is what puts the project in front of the next person looking for the same thing.</p>
+        <div class="support-actions">
+          <a class="btn btn-filled" href="https://github.com/dracu-lah/TMPlayer" rel="noopener">
+            <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg>
+            Star on GitHub
+          </a>
+          <a class="btn btn-outline" href="https://github.com/dracu-lah/TMPlayer/fork" rel="noopener">
+            <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M6.5 2a3.5 3.5 0 0 0-1 6.86V10a4 4 0 0 0 4 4H11v1.14a3.5 3.5 0 1 0 2 0V14h1.5a4 4 0 0 0 4-4V8.86A3.5 3.5 0 1 0 16.5 2a3.5 3.5 0 0 0-1 6.86V10a2 2 0 0 1-2 2h-3a2 2 0 0 1-2-2V8.86A3.5 3.5 0 0 0 6.5 2Zm0 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm10 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM12 17a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"/></svg>
+            Fork the repository
+          </a>
+        </div>
+        <p class="support-stats">
+          <span data-count-wrap hidden><b data-count="stars"></b> stars</span>
+          <span data-count-wrap hidden><b data-count="forks"></b> forks</span>
+          <span>GPL-3.0, and free for good</span>
+        </p>
+      </div>
+    </div>
+  </section>
+
+
+</main>
+
+<button class="to-top" id="to-top" type="button" aria-label="Back to top">
+  <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 4.5a1 1 0 0 1 .71.29l6 6a1 1 0 0 1-1.42 1.42L13 7.91V19a1 1 0 1 1-2 0V7.91l-4.29 4.3a1 1 0 1 1-1.42-1.42l6-6A1 1 0 0 1 12 4.5Z"/></svg>
+</button>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <p class="footer-brand">TMPlayer</p>
+    <nav class="footer-links" aria-label="Footer">
+      <a href="/">Home</a>
+      <a href="/features/">Features</a>
+      <a href="/download/">Download</a>
+      <a href="/install/">Install</a>
+      <a href="/android-tv/">Android TV</a>
+      <a href="/faq/">Questions</a>
+      <a href="https://github.com/dracu-lah/TMPlayer" rel="noopener">Source</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/legal">Lawful use</a>
+      <a href="https://nevil.dev" rel="noopener">nevil.dev</a>
+    </nav>
+    <p class="footer-legal muted small">GPL-3.0, &copy; 2026 dracu-lah. An unofficial Telegram video player, not affiliated with Telegram FZ-LLC. TMPlayer does not provide media: use it only with content you own or are authorized to access. Player mark via <a href="https://www.svgrepo.com" rel="noopener">SVG Repo</a>, set in Poppins under the SIL Open Font License and served from this domain.</p>
+  </div>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

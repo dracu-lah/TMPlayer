@@ -10,13 +10,15 @@
       <image:title>TMPlayer browsing Telegram videos on Android TV</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://tmplayer.org/screenshots/tv-chats.webp</image:loc>
-      <image:title>The TMPlayer chat list on Android TV</image:title>
+      <image:loc>https://tmplayer.org/screenshots/tv-grid-light.webp</image:loc>
+      <image:title>Playable videos in a Telegram chat, on a television, in the light theme</image:title>
     </image:image>
-    <image:image>
-      <image:loc>https://tmplayer.org/screenshots/tv-settings.webp</image:loc>
-      <image:title>TMPlayer settings on Android TV</image:title>
-    </image:image>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/features/</loc>
+    <lastmod>2026-08-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
     <image:image>
       <image:loc>https://tmplayer.org/screenshots/phone-chats.webp</image:loc>
       <image:title>The TMPlayer chat list on an Android phone</image:title>
@@ -24,6 +26,14 @@
     <image:image>
       <image:loc>https://tmplayer.org/screenshots/phone-grid.webp</image:loc>
       <image:title>Playable videos in a Telegram chat, on a phone</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://tmplayer.org/screenshots/tv-chats.webp</image:loc>
+      <image:title>The TMPlayer chat list on Android TV</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://tmplayer.org/screenshots/tv-settings.webp</image:loc>
+      <image:title>TMPlayer settings on Android TV</image:title>
     </image:image>
     <image:image>
       <image:loc>https://tmplayer.org/screenshots/phone-chats-light.webp</image:loc>
@@ -38,13 +48,41 @@
       <image:title>The TMPlayer chat list on a television, in the light theme</image:title>
     </image:image>
     <image:image>
-      <image:loc>https://tmplayer.org/screenshots/tv-grid-light.webp</image:loc>
-      <image:title>Playable videos in a Telegram chat, on a television, in the light theme</image:title>
-    </image:image>
-    <image:image>
       <image:loc>https://tmplayer.org/screenshots/tv-settings-light.webp</image:loc>
       <image:title>TMPlayer settings on a television, in the light theme</image:title>
     </image:image>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/download/</loc>
+    <lastmod>2026-08-12</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/install/</loc>
+    <lastmod>2026-08-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/android-tv/</loc>
+    <lastmod>2026-08-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://tmplayer.org/screenshots/tv-chats.webp</image:loc>
+      <image:title>The TMPlayer chat list on Android TV</image:title>
+    </image:image>
+    <image:image>
+      <image:loc>https://tmplayer.org/screenshots/tv-grid.webp</image:loc>
+      <image:title>Playable videos in a Telegram chat, on Android TV</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/faq/</loc>
+    <lastmod>2026-08-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://tmplayer.org/privacy</loc>

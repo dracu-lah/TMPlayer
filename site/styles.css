@@ -1692,3 +1692,237 @@ summary:hover { color: var(--on-surface); }
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-new(root) { animation: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   Multi-page chrome
+
+   The site is six pages now rather than one long scroll, so the header has to
+   carry navigation that survives a phone. Above 720px the links sit in a row
+   next to the mark. Below it they drop onto a second line inside the pill and
+   scroll sideways, which keeps every page one thumb away instead of hiding
+   them behind a menu button nobody presses.
+   --------------------------------------------------------------------------- */
+
+.nav a[aria-current="page"] {
+  color: var(--on-surface);
+  background: var(--surface-container);
+}
+
+@media (max-width: 720px) {
+  /* min-width:0 is what makes this work: without it the nav is as wide as its
+     widest row and the scrolling strip below never has an edge to scroll to,
+     so the star and the theme control get pushed off the screen instead. */
+  .nav { flex: 1 1 auto; min-width: 0; flex-wrap: wrap; justify-content: flex-end; row-gap: 0; }
+  /* display:contents on the desktop layout, a real scrolling row here. */
+  .nav-links {
+    display: flex;
+    order: 3;
+    flex: 1 0 100%;
+    gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 8px;
+    margin-top: -2px;
+  }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-links a { white-space: nowrap; padding: 8px 12px; font-size: 0.9rem; }
+  .is-stuck .nav-links { padding-bottom: 6px; }
+}
+
+/* The star control. It is a link to the stargazers page whatever happens; the
+   count is written in by app.js and stays hidden if GitHub does not answer, so
+   the button never shows an empty bracket. */
+.nav-star {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: 4px;
+  padding: 10px 14px;
+  border-radius: var(--shape-full);
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 0.2s var(--ease-standard), color 0.2s var(--ease-standard);
+}
+.nav a.nav-star:hover { background: var(--primary); color: var(--on-primary); text-decoration: none; }
+.nav-star svg { flex: none; }
+.nav-star-count {
+  font-variant-numeric: tabular-nums;
+  padding-left: 8px;
+  margin-left: 1px;
+  border-left: 1px solid currentColor;
+  opacity: 0.75;
+}
+@media (max-width: 480px) {
+  .nav-star-label { display: none; }
+  .nav-star-count { border-left: 0; padding-left: 0; }
+}
+
+/* ---------- Page heads ----------
+
+   Every page but the home page opens with the same block: where you are, one
+   heading, one sentence, and at most two controls. It is deliberately shorter
+   than the home hero, because a reader who clicked Download wants the card,
+   not another full screen of pitch. */
+
+.page-head { padding: clamp(104px, 13vw, 168px) 0 clamp(24px, 3.5vw, 44px); }
+.page-head-wrap { max-width: 900px; text-align: center; }
+.page-head h1 {
+  margin: 0 0 clamp(14px, 2vw, 20px);
+  font-size: clamp(2.1rem, 5.2vw, 3.4rem);
+  line-height: 1.06;
+  letter-spacing: -0.032em;
+}
+.page-head h1 em { font-style: normal; color: var(--primary); }
+.page-lede {
+  margin: 0 auto;
+  max-width: var(--measure);
+  color: var(--on-surface-variant);
+  font-size: clamp(1.02rem, 1.9vw, 1.2rem);
+  line-height: 1.6;
+}
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: clamp(22px, 3vw, 32px);
+}
+
+/* The trail back up. Small, quiet, and the same markup search engines read in
+   the BreadcrumbList on each page. */
+.crumbs { font-size: 0.86rem; color: var(--on-surface-variant); margin: 0 0 clamp(16px, 2vw, 22px); }
+.crumbs a { color: var(--on-surface-variant); }
+.crumbs a:hover { color: var(--on-surface); }
+.crumbs span { padding: 0 6px; opacity: 0.6; }
+
+/* ---------- Buttons ----------
+
+   Two shapes: filled for the thing you came for, outlined for the alternative
+   next to it. The home page's .palette is still the one primary control on the
+   site; these are for the sub-pages, where the choice is between two pages
+   rather than between a download and nothing. */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 14px 24px;
+  border-radius: var(--shape-full);
+  border: 1px solid transparent;
+  font-weight: 600;
+  font-size: 0.98rem;
+  transition: background-color 0.2s var(--ease-standard),
+              color 0.2s var(--ease-standard),
+              border-color 0.2s var(--ease-standard),
+              transform 0.2s var(--ease-standard);
+}
+.btn:hover { text-decoration: none; transform: translateY(-1px); }
+.btn svg { flex: none; }
+.btn-filled { background: var(--primary); color: var(--on-primary); }
+.btn-filled:hover { background: var(--primary); color: var(--on-primary); box-shadow: var(--shadow-accent); }
+.btn-outline {
+  background: var(--surface-container-lowest);
+  color: var(--on-surface);
+  border-color: var(--outline-variant);
+}
+.btn-outline:hover { color: var(--on-surface); border-color: var(--outline); background: var(--surface-container); }
+.band-tonal .btn-outline { background: var(--surface-container-lowest); }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn:hover { transform: none; }
+}
+
+/* ---------- Card grid ----------
+
+   The home page's summary of the five pages under it. Each card is a link in
+   its entirety, so the whole rectangle is the target rather than the four
+   words at the bottom of it. */
+
+.card-grid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 700px) { .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1000px) { .card-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: clamp(24px, 3vw, 32px);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-xl);
+  background: var(--surface-container-lowest);
+  color: var(--on-surface);
+  transition: border-color 0.2s var(--ease-standard), background-color 0.2s var(--ease-standard);
+}
+.band-tonal .card { background: var(--surface-container-lowest); }
+a.card:hover { text-decoration: none; color: var(--on-surface); border-color: var(--outline); }
+.card-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--shape-m);
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  flex: none;
+}
+.card h3 { margin: 0; font-size: 1.16rem; letter-spacing: -0.018em; }
+.card p { margin: 0; color: var(--on-surface-variant); font-size: 0.96rem; line-height: 1.6; }
+.card-go {
+  margin-top: auto;
+  padding-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 0.94rem;
+}
+a.card:hover .card-go svg { transform: translateX(4px); }
+.card-go svg { transition: transform 0.2s var(--ease-standard); }
+
+/* ---------- Support ----------
+
+   A star is the only currency a free, sideloaded app has: it is what tells the
+   next person reading a GitHub page cold that somebody else already trusted
+   this. So it gets a band of its own rather than a line in the footer, with the
+   real numbers in it. The counts come from the same public API as the release
+   card and are simply absent when GitHub does not answer. */
+
+.support {
+  padding: clamp(32px, 4.5vw, 56px);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-xxl);
+  background: var(--surface-container-lowest);
+  text-align: center;
+}
+.support h2 { margin: 0 0 14px; font-size: clamp(1.6rem, 3.6vw, 2.4rem); letter-spacing: -0.028em; }
+.support p { margin: 0 auto; max-width: var(--measure-tight); color: var(--on-surface-variant); }
+.support-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin: clamp(24px, 3vw, 32px) 0 clamp(20px, 2.6vw, 28px);
+}
+.support-stats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px 14px;
+  margin: 0;
+  color: var(--on-surface-variant);
+  font-size: 0.92rem;
+}
+.support-stats b {
+  color: var(--on-surface);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.support-stats .sep { opacity: 0.5; }
+/* Each figure is hidden until app.js has a number for it, so a rate-limited
+   reader sees the licence on its own rather than two empty labels. */
+.support-stats [data-count-wrap][hidden] { display: none; }

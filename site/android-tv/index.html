@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A Telegram media player for Android TV, sticks and boxes</title>
+<meta name="description" content="TMPlayer is a free, open source Telegram media player built for Android TV: a ten-foot layout for a remote, QR sign-in, D-pad navigation, and playback that starts in seconds on a stick with 1 GB of RAM.">
+<link rel="canonical" href="https://tmplayer.org/android-tv/">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="author" content="dracu-lah">
+<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0B0C0E" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TMPlayer">
+<meta property="og:title" content="A Telegram media player for Android TV, sticks and boxes">
+<meta property="og:description" content="TMPlayer is a free, open source Telegram media player built for Android TV: a ten-foot layout for a remote, QR sign-in, D-pad navigation, and playback that starts in seconds on a stick with 1 GB of RAM.">
+<meta property="og:url" content="https://tmplayer.org/android-tv/">
+<meta property="og:image" content="https://tmplayer.org/og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="en_GB">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="A Telegram media player for Android TV, sticks and boxes">
+<meta name="twitter:description" content="TMPlayer is a free, open source Telegram media player built for Android TV: a ten-foot layout for a remote, QR sign-in, D-pad navigation, and playback that starts in seconds on a stick with 1 GB of RAM.">
+<meta name="twitter:image" content="https://tmplayer.org/og.png">
+
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/icon-512.png" type="image/png" sizes="512x512">
+<link rel="apple-touch-icon" href="/icon-512.png">
+<link rel="manifest" href="/site.webmanifest">
+
+<link rel="preload" href="/fonts/poppins-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/poppins-600.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css">
+
+<!-- The stored theme, applied before the first paint. With no stored choice nothing is set and
+     the stylesheet follows prefers-color-scheme, which is the system theme. -->
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem('tm-theme');
+    if (t === 'light' || t === 'dark') { document.documentElement.setAttribute('data-theme', t); }
+  } catch (e) {}
+})();
+</script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Home",
+      "item": "https://tmplayer.org/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Android TV",
+      "item": "https://tmplayer.org/android-tv/"
+    }
+  ]
+}
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- Decorative background art, hidden from assistive technology and still under reduced motion. -->
+<div class="bg-art" aria-hidden="true">
+  <svg class="bg-blob blob-a" viewBox="0 0 200 200" fill="none">
+    <path fill="currentColor" d="M154 22c26 18 40 55 34 89-6 34-32 65-63 73-31 8-67-7-89-33S8 85 22 55 71 6 103 8c32 2 25-4 51 14Z"/>
+  </svg>
+  <svg class="bg-blob blob-b" viewBox="0 0 200 200" fill="none">
+    <path fill="currentColor" d="M46 24c30-14 71-9 95 14s31 63 21 96c-10 33-37 59-70 63s-72-14-83-46C-2 119 12 76 24 52c12-24 -8 -14 22 -28Z"/>
+  </svg>
+  <svg class="bg-blob blob-c" viewBox="0 0 200 200" fill="none">
+    <path fill="currentColor" d="M100 4c53 0 96 43 96 96s-43 96-96 96S4 153 4 100 47 4 100 4Zm0 42a54 54 0 1 0 0 108 54 54 0 0 0 0-108Z"/>
+  </svg>
+  <svg class="bg-blob blob-d" viewBox="0 0 200 200" fill="none">
+    <path fill="currentColor" d="M100 0c0 55 45 100 100 100-55 0-100 45-100 100 0-55-45-100-100-100C55 100 100 55 100 0Z"/>
+  </svg>
+</div>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="/" aria-label="TMPlayer home">
+      <img class="brand-mark" src="/favicon.svg" width="32" height="32" alt="" decoding="async">
+      <span class="brand-name">TMPlayer</span>
+    </a>
+
+    <nav class="nav" aria-label="Primary">
+      <span class="nav-links">
+        <a href="/features/">Features</a>
+        <a href="/download/">Download</a>
+        <a href="/install/">Install</a>
+        <a href="/faq/">Questions</a>
+      </span>
+      <!-- A plain link to the repository, so it works with JavaScript off and on a rate-limited
+           network. app.js fills in the figure when GitHub answers. -->
+      <a class="nav-star" href="https://github.com/dracu-lah/TMPlayer" rel="noopener" aria-label="Star TMPlayer on GitHub">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg>
+        <span class="nav-star-label">Star</span>
+        <span class="nav-star-count" data-count="stars" hidden></span>
+      </a>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark theme">
+        <svg class="icon-sun" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="4.6" fill="currentColor"/>
+          <g stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
+            <line x1="12" y1="1.9" x2="12" y2="4.3"/>
+            <line x1="12" y1="19.7" x2="12" y2="22.1"/>
+            <line x1="1.9" y1="12" x2="4.3" y2="12"/>
+            <line x1="19.7" y1="12" x2="22.1" y2="12"/>
+            <line x1="4.85" y1="4.85" x2="6.55" y2="6.55"/>
+            <line x1="17.45" y1="17.45" x2="19.15" y2="19.15"/>
+            <line x1="4.85" y1="19.15" x2="6.55" y2="17.45"/>
+            <line x1="17.45" y1="6.55" x2="19.15" y2="4.85"/>
+          </g>
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+          <path fill="currentColor" d="M21 14.2A9 9 0 0 1 9.8 3 9 9 0 1 0 21 14.2Z"/>
+        </svg>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="page-head">
+    <div class="wrap page-head-wrap">
+      <p class="crumbs"><a href="/">Home</a><span aria-hidden="true">/</span>Android TV</p>
+      <h1>A Telegram media player <em>built for the remote</em></h1>
+      <p class="page-lede">Most Android apps put on a television are phone apps with bigger text. This one was drawn for a D-pad first: a rail you can reach without looking, cards you can read from the sofa, and focus that is never in doubt.</p>
+      <div class="page-actions">
+        <a class="btn btn-filled" href="/download/">
+          <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.4l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg>
+          Download for Android TV
+        </a>
+        <a class="btn btn-outline" href="/install/">Sideload it in four steps <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><path fill="currentColor" d="M5 12a1 1 0 0 1 1-1h10.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4l3.3-3.3H6a1 1 0 0 1-1-1Z"/></svg></a>
+      </div>
+    </div>
+  </section>
+
+<svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
+
+  <section class="band band-tonal" aria-labelledby="tv-h">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <div class="section-title">
+          <h2 id="tv-h">What changes on a television</h2>
+          <p class="section-sub">Same account, same library, same one APK. The interface is what differs, and it differs because a remote is not a thumb.</p>
+        </div>
+      </div>
+
+      <div class="card-grid card-grid-3" data-reveal>
+        <div class="card">
+          <h3>A rail, not a menu</h3>
+          <p>Continue, Favourites, Recent, Channels, Groups, People and All chats sit down the left, one press away. There is no hamburger to hunt for and nothing hidden behind a long press.</p>
+        </div>
+        <div class="card">
+          <h3>Sign in without typing</h3>
+          <p>A QR code on the screen and Telegram's own Link Desktop Device flow on your phone. Nobody should have to enter a phone number on an on-screen keyboard with four arrow keys.</p>
+        </div>
+        <div class="card">
+          <h3>Voice search from the remote</h3>
+          <p>The microphone already in the remote, matched word by word, so a typo, a missing accent or one wrong keyword among right ones still finds the episode.</p>
+        </div>
+        <div class="card">
+          <h3>Runs on a 1 GB stick</h3>
+          <p>Developed against a Mi TV Stick, which is the machine that punishes a careless layout. If it is smooth there it is smooth on a Shield.</p>
+        </div>
+        <div class="card">
+          <h3>One video on disk at a time</h3>
+          <p>An 8 GB stick cannot hold a library, so the previous video is cleared and the app tells you how much that freed. Resuming keeps the half already downloaded.</p>
+        </div>
+        <div class="card">
+          <h3>Next episode on its own</h3>
+          <p>It reads episode numbers out of filenames, so when one finishes the next starts after a countdown you can stop with any key.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+<svg class="wave wave-flip" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
+
+  <section class="band" aria-labelledby="tvshots-h">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <div class="section-title">
+          <h2 id="tvshots-h">The ten-foot layout</h2>
+          <p class="section-sub">Both pictures are the app on a television, filled with demo content that belongs to nobody.</p>
+        </div>
+      </div>
+
+      <div class="shots">
+        <figure class="shot" data-reveal>
+          <div class="device device-tv">
+            <div class="screen">
+              <picture>
+                <source data-theme-src srcset="/screenshots/tv-chats-light.webp" media="(prefers-color-scheme: light)">
+                <img src="/screenshots/tv-chats.webp" alt="The TMPlayer chat list on Android TV, with a navigation rail down the left for Continue, Favourites, Recent, Channels, Groups, People and All chats." width="1920" height="1080" loading="lazy" decoding="async">
+              </picture>
+            </div>
+            <div class="stand"></div>
+            <div class="foot"></div>
+          </div>
+          <figcaption><b>Your chats, as somewhere to start</b>The rail carries the categories, the grid carries the chats, and the ones you were last watching are along the top.</figcaption>
+        </figure>
+
+        <figure class="shot" data-reveal>
+          <div class="device device-tv">
+            <div class="screen">
+              <picture>
+                <source data-theme-src srcset="/screenshots/tv-grid-light.webp" media="(prefers-color-scheme: light)">
+                <img src="/screenshots/tv-grid.webp" alt="Videos from a Telegram chat shown on Android TV as a grid of tiles carrying running times and file sizes." width="1920" height="1080" loading="lazy" decoding="async">
+              </picture>
+            </div>
+            <div class="stand"></div>
+            <div class="foot"></div>
+          </div>
+          <figcaption><b>The videos in one chat</b>Running time and file size on every tile, big enough to read across a room. Press one and it starts while the rest downloads.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+<svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
+
+  <section class="band band-tonal" aria-labelledby="tvfit-h">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <div class="section-title">
+          <h2 id="tvfit-h">Will it run on yours?</h2>
+        </div>
+      </div>
+
+      <div class="two-col" data-reveal>
+        <div class="panel">
+          <h3>
+            <span class="panel-icon icon-yes" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><path fill="currentColor" d="M9.8 16.8 5.6 12.6a1 1 0 0 1 1.4-1.4l2.8 2.8 6.8-6.8a1 1 0 0 1 1.4 1.4l-8.2 8.2Z"/></svg>
+            </span>
+            Yes
+          </h3>
+          <ul class="ticks">
+            <li>Android TV and Google TV, on Android 8.0 or above.</li>
+            <li>Sticks and dongles: Mi TV Stick, Chromecast with Google TV, Fire-adjacent boxes that allow sideloading.</li>
+            <li>Boxes and built-in sets: Nvidia Shield, Sony, Philips, TCL and the rest of the Android TV family.</li>
+            <li>32-bit and 64-bit alike. The universal APK carries the native code for both.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>
+            <span class="panel-icon icon-no" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><path fill="currentColor" d="M18.3 7.1 13.4 12l4.9 4.9a1 1 0 0 1-1.4 1.4L12 13.4l-4.9 4.9a1 1 0 0 1-1.4-1.4l4.9-4.9-4.9-4.9a1 1 0 0 1 1.4-1.4l4.9 4.9 4.9-4.9a1 1 0 0 1 1.4 1.4Z"/></svg>
+            </span>
+            No
+          </h3>
+          <ul class="crosses">
+            <li>Not Samsung Tizen, not LG webOS, not Roku. They are not Android and cannot run an APK.</li>
+            <li>Not Apple TV, and not a Chromecast without Google TV, which has no launcher to install into.</li>
+            <li>Not a device where the manufacturer has locked sideloading off entirely.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+<svg class="wave wave-flip" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
+
+  <section class="band band-tonal" aria-labelledby="support-h">
+    <div class="wrap">
+      <div class="support" data-reveal>
+        <h2 id="support-h">Star it if it helped</h2>
+        <p>A television app that is not in the Play Store lives or dies on word of mouth. Starring it is the cheapest way to be that word of mouth.</p>
+        <div class="support-actions">
+          <a class="btn btn-filled" href="https://github.com/dracu-lah/TMPlayer" rel="noopener">
+            <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg>
+            Star on GitHub
+          </a>
+          <a class="btn btn-outline" href="https://github.com/dracu-lah/TMPlayer/fork" rel="noopener">
+            <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M6.5 2a3.5 3.5 0 0 0-1 6.86V10a4 4 0 0 0 4 4H11v1.14a3.5 3.5 0 1 0 2 0V14h1.5a4 4 0 0 0 4-4V8.86A3.5 3.5 0 1 0 16.5 2a3.5 3.5 0 0 0-1 6.86V10a2 2 0 0 1-2 2h-3a2 2 0 0 1-2-2V8.86A3.5 3.5 0 0 0 6.5 2Zm0 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm10 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM12 17a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"/></svg>
+            Fork the repository
+          </a>
+        </div>
+        <p class="support-stats">
+          <span data-count-wrap hidden><b data-count="stars"></b> stars</span>
+          <span data-count-wrap hidden><b data-count="forks"></b> forks</span>
+          <span>GPL-3.0, and free for good</span>
+        </p>
+      </div>
+    </div>
+  </section>
+
+
+</main>
+
+<button class="to-top" id="to-top" type="button" aria-label="Back to top">
+  <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 4.5a1 1 0 0 1 .71.29l6 6a1 1 0 0 1-1.42 1.42L13 7.91V19a1 1 0 1 1-2 0V7.91l-4.29 4.3a1 1 0 1 1-1.42-1.42l6-6A1 1 0 0 1 12 4.5Z"/></svg>
+</button>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <p class="footer-brand">TMPlayer</p>
+    <nav class="footer-links" aria-label="Footer">
+      <a href="/">Home</a>
+      <a href="/features/">Features</a>
+      <a href="/download/">Download</a>
+      <a href="/install/">Install</a>
+      <a href="/android-tv/">Android TV</a>
+      <a href="/faq/">Questions</a>
+      <a href="https://github.com/dracu-lah/TMPlayer" rel="noopener">Source</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/legal">Lawful use</a>
+      <a href="https://nevil.dev" rel="noopener">nevil.dev</a>
+    </nav>
+    <p class="footer-legal muted small">GPL-3.0, &copy; 2026 dracu-lah. An unofficial Telegram video player, not affiliated with Telegram FZ-LLC. TMPlayer does not provide media: use it only with content you own or are authorized to access. Player mark via <a href="https://www.svgrepo.com" rel="noopener">SVG Repo</a>, set in Poppins under the SIL Open Font License and served from this domain.</p>
+  </div>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>
