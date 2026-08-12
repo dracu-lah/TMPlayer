@@ -33,11 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.ui.components.isTouch
-import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.Corner
-import com.tmplayer.ui.theme.SurfaceDark
-import com.tmplayer.ui.theme.TextMuted
-import com.tmplayer.ui.theme.TextPrimary
 import com.tmplayer.ui.theme.Tone
 
 /**
@@ -93,20 +89,20 @@ fun PaneField(
         modifier
             .height(FIELD_HEIGHT)
             .clip(RoundedCornerShape(Corner.Medium))
-            .background(SurfaceDark)
+            .background(Tone.surface)
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (prefix != null) {
-                Text(prefix, style = MaterialTheme.typography.titleLarge, color = TextPrimary)
+                Text(prefix, style = MaterialTheme.typography.titleLarge, color = Tone.text)
             }
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
                 singleLine = true,
-                textStyle = MaterialTheme.typography.titleLarge.copy(color = TextPrimary),
-                cursorBrush = SolidColor(Accent),
+                textStyle = MaterialTheme.typography.titleLarge.copy(color = Tone.text),
+                cursorBrush = SolidColor(Tone.accent),
                 visualTransformation = visualTransformation,
                 keyboardOptions = keyboardOptions,
                 keyboardActions = keyboardActions,
@@ -119,7 +115,7 @@ fun PaneField(
                             Text(
                                 placeholder,
                                 style = MaterialTheme.typography.titleLarge,
-                                color = TextMuted,
+                                color = Tone.muted,
                             )
                         }
                         inner()
@@ -177,7 +173,7 @@ fun PaneChooser(
             .fillMaxWidth()
             .height(FIELD_HEIGHT)
             .clip(RoundedCornerShape(Corner.Medium))
-            .background(SurfaceDark)
+            .background(Tone.surface)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 16.dp),
         contentAlignment = Alignment.CenterStart,
@@ -189,10 +185,10 @@ fun PaneChooser(
             Text(
                 label,
                 style = MaterialTheme.typography.titleLarge,
-                color = TextPrimary,
+                color = Tone.text,
                 modifier = Modifier.defaultMinSize(minWidth = 0.dp).weight(1f),
             )
-            Text(trailing, style = MaterialTheme.typography.bodyLarge, color = TextMuted)
+            Text(trailing, style = MaterialTheme.typography.bodyLarge, color = Tone.muted)
         }
     }
 }

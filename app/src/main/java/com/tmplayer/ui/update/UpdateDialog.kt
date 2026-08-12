@@ -54,9 +54,6 @@ import com.tmplayer.ui.components.ignoreStrayRelease
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.Corner
-import com.tmplayer.ui.theme.SurfaceDark
-import com.tmplayer.ui.theme.TextMuted
-import com.tmplayer.ui.theme.TextPrimary
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.launch
 import com.tmplayer.ui.components.TmButton
@@ -168,7 +165,7 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                 Modifier
                     .width(panel)
                     .clip(RoundedCornerShape(Corner.ExtraLarge))
-                    .background(SurfaceDark)
+                    .background(Tone.surface)
                     .border(1.dp, Caution.copy(alpha = 0.35f), RoundedCornerShape(Corner.ExtraLarge))
                     .padding(if (touch) 22.dp else 28.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -193,7 +190,7 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                         } else {
                             MaterialTheme.typography.titleLarge
                         },
-                        color = TextPrimary,
+                        color = Tone.text,
                     )
                 }
 
@@ -204,7 +201,7 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                     } else {
                         MaterialTheme.typography.bodyLarge
                     },
-                    color = TextMuted,
+                    color = Tone.muted,
                     // "Asking GitHub…" is one line and the answer is two or three, so pressing
                     // Check again shrank the panel and then grew it back. A panel centred on the
                     // screen moves both its edges when it does that, which reads as the dialog
@@ -342,7 +339,7 @@ private fun ProgressBar(fraction: Float?) {
             .fillMaxWidth()
             .height(6.dp)
             .clip(CircleShape)
-            .background(TextMuted.copy(alpha = 0.25f)),
+            .background(Tone.muted.copy(alpha = 0.25f)),
     ) {
         if (fraction != null) {
             Box(

@@ -28,6 +28,7 @@ import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Typography
 import androidx.tv.material3.darkColorScheme
+import androidx.tv.material3.lightColorScheme as tvLightColorScheme
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.ThemeChoice
@@ -39,6 +40,7 @@ val Accent = Color(0xFF2AABEE)
 val TextPrimary = Color(0xFFEDEDF2)
 val TextMuted = Color(0xFF9A9AA5)
 
+
 /** Amber: worth noticing, nothing has gone wrong. A newer version being out is the whole use. */
 val Caution = Color(0xFFF5A524)
 
@@ -49,6 +51,72 @@ val Caution = Color(0xFFF5A524)
  * literal, and once one of them widened its visibility the rest stopped compiling.
  */
 val Danger = Color(0xFFE5484D)
+
+/**
+ * The six colours a television screen is drawn from, as a set that can be swapped.
+ *
+ * The phone reads its colours out of a Material scheme, which has a light version and a dark one
+ * and thirty roles besides. The television draws with `androidx.tv.material3`, whose components
+ * take their colours from call sites rather than from the theme, so the app hands them literals:
+ * that is why every TV screen named [SurfaceDark] directly, and why the television had exactly one
+ * appearance no matter what the viewer chose.
+ *
+ * Naming the roles and providing them through the tree is the smallest change that gives the
+ * television the same choice the phone has. Every TV composable asks [Tone] for a role, [Tone]
+ * asks this, and the only thing that knows whether the room is dark is [TMPlayerTheme].
+ */
+data class TvPalette(
+    val background: Color,
+    val surface: Color,
+    val surfaceHigh: Color,
+    val text: Color,
+    val muted: Color,
+    val accent: Color,
+    val onAccent: Color,
+    val outline: Color,
+    val danger: Color,
+    val caution: Color,
+)
+
+/** The panel in a dark room: the colours the television has always been drawn in. */
+val TvDarkPalette = TvPalette(
+    background = Background,
+    surface = SurfaceDark,
+    surfaceHigh = SurfaceRaised,
+    text = TextPrimary,
+    muted = TextMuted,
+    accent = Accent,
+    onAccent = Color.White,
+    outline = TextMuted.copy(alpha = 0.25f),
+    danger = Danger,
+    caution = Caution,
+)
+
+/**
+ * The same set in daylight, taken from the phone's light scheme so the two devices agree.
+ *
+ * The accent is several tones down from the panel's bright blue: 0xFF2AABEE is a colour meant to
+ * glow out of a dark screen, and white text on it fails to read at all on a white one. This is the
+ * same blue the phone's light theme uses as its primary, which is that hue at a tone that works.
+ */
+val TvLightPalette = TvPalette(
+    background = Color(0xFFF6FAFD),
+    surface = Color(0xFFFFFFFF),
+    surfaceHigh = Color(0xFFE4E9EC),
+    text = Color(0xFF171C1F),
+    muted = Color(0xFF5A6469),
+    accent = Color(0xFF00677F),
+    onAccent = Color(0xFFFFFFFF),
+    outline = Color(0xFFC0C8CD),
+    danger = Color(0xFFBA1A1A),
+    caution = Color(0xFF8A5300),
+)
+
+/**
+ * Which of the two the television is drawing with. Never read on a phone, where [Tone] answers
+ * from the Material scheme instead.
+ */
+val LocalTvPalette = staticCompositionLocalOf { TvDarkPalette }
 
 private val colors = darkColorScheme(
     primary = Accent,
@@ -63,6 +131,20 @@ private val colors = darkColorScheme(
     // Leaving these at their defaults is what put white text on a white pill.
     inverseSurface = TextPrimary,
     inverseOnSurface = Background,
+)
+
+/** The same scheme for a television in a lit room, from [TvLightPalette]. */
+private val lightColors = tvLightColorScheme(
+    primary = TvLightPalette.accent,
+    onPrimary = TvLightPalette.onAccent,
+    background = TvLightPalette.background,
+    onBackground = TvLightPalette.text,
+    surface = TvLightPalette.surface,
+    onSurface = TvLightPalette.text,
+    surfaceVariant = TvLightPalette.surfaceHigh,
+    onSurfaceVariant = TvLightPalette.text,
+    inverseSurface = TvLightPalette.text,
+    inverseOnSurface = TvLightPalette.background,
 )
 
 /**
@@ -155,14 +237,14 @@ object Corner {
  */
 @Composable
 fun tmButtonColors() = ButtonDefaults.colors(
-    containerColor = SurfaceRaised,
-    contentColor = TextPrimary,
-    focusedContainerColor = Accent,
-    focusedContentColor = Color.White,
-    pressedContainerColor = Accent,
-    pressedContentColor = Color.White,
-    disabledContainerColor = SurfaceDark,
-    disabledContentColor = TextMuted,
+    containerColor = Tone.surfaceHigh,
+    contentColor = Tone.text,
+    focusedContainerColor = Tone.accent,
+    focusedContentColor = Tone.onAccent,
+    pressedContainerColor = Tone.accent,
+    pressedContentColor = Tone.onAccent,
+    disabledContainerColor = Tone.surface,
+    disabledContentColor = Tone.muted,
 )
 
 /**
@@ -353,16 +435,22 @@ fun TMPlayerTheme(content: @Composable () -> Unit) {
     val choice by settings.themeChoice.collectAsState(initial = ThemeChoice.Default)
     val dynamic by settings.dynamicColour.collectAsState(initial = false)
 
-    // A television is dark. There is no system light mode on Android TV to follow, a panel in a
-    // dark room is the whole use case, and the choice is not offered there.
+    // A television has no system light mode to follow, so "System" there means the dark panel it
+    // has always been. Light and Dark are the viewer's own answer, on either device: a television
+    // in a bright room all day is a real television, and the app used to have no answer for it.
     val dark = when {
-        !touch -> true
         choice == ThemeChoice.Light -> false
         choice == ThemeChoice.Dark -> true
+        !touch -> true
         else -> systemDark
     }
 
-    val scheme = if (touch) phoneScheme(dark, dynamic) else m3TvColors
+    val palette = if (dark) TvDarkPalette else TvLightPalette
+    val scheme = when {
+        touch -> phoneScheme(dark, dynamic)
+        dark -> m3TvColors
+        else -> m3TvLightColors
+    }
 
     // Both themes, always, and the form factor decides only the type scale.
     //
@@ -385,15 +473,16 @@ fun TMPlayerTheme(content: @Composable () -> Unit) {
         typography = if (touch) m3PhoneTypography else M3MaterialTheme.typography,
     ) {
         MaterialTheme(
-            colorScheme = colors,
+            colorScheme = if (dark) colors else lightColors,
             typography = if (touch) phoneTypography else typography,
         ) {
             CompositionLocalProvider(
                 // Without this the default content colour is undefined at the root of the tree and
                 // every unstyled Text inherits whatever Compose falls back to. On the phone it is
                 // the scheme's, so a light theme does not draw its text in the dark theme's grey.
-                LocalContentColor provides if (touch) scheme.onSurface else TextPrimary,
+                LocalContentColor provides if (touch) scheme.onSurface else palette.text,
                 LocalDarkTheme provides dark,
+                LocalTvPalette provides palette,
                 content = content,
             )
         }
@@ -401,7 +490,7 @@ fun TMPlayerTheme(content: @Composable () -> Unit) {
 }
 
 /**
- * The television's own Material 3 scheme, unchanged.
+ * The television's own Material 3 scheme.
  *
  * The TV half draws with `androidx.tv.material3`, but a handful of shared components reach for a
  * stock Material control, and those still have to look like this app on a panel.
@@ -418,4 +507,19 @@ private val m3TvColors = M3DarkColorScheme(
     surfaceContainerLow = SurfaceDark,
     surfaceContainerHigh = SurfaceRaised,
     error = Danger,
+)
+
+/** The same, for a television drawing light. */
+private val m3TvLightColors = M3LightColorScheme(
+    primary = TvLightPalette.accent,
+    onPrimary = TvLightPalette.onAccent,
+    background = TvLightPalette.background,
+    onBackground = TvLightPalette.text,
+    surface = TvLightPalette.surface,
+    onSurface = TvLightPalette.text,
+    surfaceVariant = TvLightPalette.surfaceHigh,
+    onSurfaceVariant = TvLightPalette.text,
+    surfaceContainerLow = TvLightPalette.surface,
+    surfaceContainerHigh = TvLightPalette.surfaceHigh,
+    error = TvLightPalette.danger,
 )

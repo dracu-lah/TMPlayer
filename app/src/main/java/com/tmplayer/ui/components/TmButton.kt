@@ -14,8 +14,7 @@ import androidx.tv.material3.ButtonDefaults as TvButtonDefaults
 import com.tmplayer.data.FormFactor
 import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.LocalDarkTheme
-import com.tmplayer.ui.theme.SurfaceDark
-import com.tmplayer.ui.theme.TextMuted
+import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.tmButtonColors
 
 /**
@@ -85,14 +84,14 @@ fun TmButton(
 /** The TV button's red, kept here so the destructive press looks the same on both devices. */
 @Composable
 private fun tvDestructiveColors() = TvButtonDefaults.colors(
-    containerColor = SurfaceDark,
+    containerColor = Tone.surface,
     contentColor = Danger,
     focusedContainerColor = Danger,
     focusedContentColor = Color.White,
     pressedContainerColor = Danger,
     pressedContentColor = Color.White,
-    disabledContainerColor = SurfaceDark,
-    disabledContentColor = TextMuted,
+    disabledContainerColor = Tone.surface,
+    disabledContentColor = Tone.muted,
 )
 
 /** The quieter of the pair: the one beside a primary button that backs out rather than commits. */

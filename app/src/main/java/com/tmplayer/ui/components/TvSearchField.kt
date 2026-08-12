@@ -42,11 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.Canvas
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.tmplayer.ui.theme.Accent
-import com.tmplayer.ui.theme.SurfaceDark
-import com.tmplayer.ui.theme.SurfaceRaised
-import com.tmplayer.ui.theme.TextMuted
-import com.tmplayer.ui.theme.TextPrimary
+import com.tmplayer.ui.theme.Tone
 
 /**
  * A search box sized for a remote and a sofa.
@@ -99,10 +95,10 @@ fun TvSearchField(
             // Focus has to be as loud here as it is everywhere else on this screen, where a
             // focused control either fills with Accent or draws a 3dp border. A 1dp-to-2dp
             // border change with no fill was the one place the viewer had to hunt for it.
-            .background(if (active) SurfaceRaised else SurfaceDark)
+            .background(if (active) Tone.surfaceHigh else Tone.surface)
             .border(
                 width = if (active) 3.dp else 1.dp,
-                color = if (active) Accent else TextMuted.copy(alpha = 0.35f),
+                color = if (active) Tone.accent else Tone.muted.copy(alpha = 0.35f),
                 shape = CircleShape,
             )
             .then(
@@ -118,7 +114,7 @@ fun TvSearchField(
             .padding(horizontal = 22.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MagnifierGlyph(if (active) Accent else TextMuted)
+        MagnifierGlyph(if (active) Tone.accent else Tone.muted)
         Spacer(Modifier.width(14.dp))
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
             if (editing) {
@@ -128,8 +124,8 @@ fun TvSearchField(
                     singleLine = true,
                     // BasicTextField does not read LocalContentColor: without an explicit colour
                     // it paints black, which is invisible on this background.
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = TextPrimary),
-                    cursorBrush = SolidColor(Accent),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = Tone.text),
+                    cursorBrush = SolidColor(Tone.accent),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(
                         onSearch = {
@@ -165,7 +161,7 @@ fun TvSearchField(
                 Text(
                     value.ifEmpty { placeholder },
                     style = MaterialTheme.typography.bodyLarge,
-                    color = if (value.isEmpty()) TextMuted else TextPrimary,
+                    color = if (value.isEmpty()) Tone.muted else Tone.text,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

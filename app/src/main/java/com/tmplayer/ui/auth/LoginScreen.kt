@@ -68,7 +68,6 @@ import com.tmplayer.ui.components.TmSecondaryButton
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.paneAction
 import com.tmplayer.ui.components.rememberToast
-import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
@@ -770,7 +769,7 @@ private fun Step(number: Int, text: String) {
             Modifier
                 .size(28.dp)
                 .clip(CircleShape)
-                .background(if (touch) M3.colorScheme.primaryContainer else Accent),
+                .background(if (touch) M3.colorScheme.primaryContainer else Tone.accent),
             contentAlignment = Alignment.Center,
         ) {
             Text(

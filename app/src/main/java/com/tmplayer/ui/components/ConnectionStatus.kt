@@ -19,8 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.tmplayer.ui.theme.SurfaceRaised
-import com.tmplayer.ui.theme.TextPrimary
+import com.tmplayer.ui.theme.Tone
 
 enum class ConnectionNotice {
     Hidden,
@@ -41,8 +40,8 @@ fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier) {
         // A phone already has a shape for "something happened and you cannot act on it": the
         // snackbar. Taking its inverse surface rather than a panel colour is what keeps this
         // legible when the scheme underneath is a light one, or the wallpaper's.
-        val container = if (touch) SnackbarDefaults.color else SurfaceRaised.copy(alpha = 0.96f)
-        val onContainer = if (touch) SnackbarDefaults.contentColor else TextPrimary
+        val container = if (touch) SnackbarDefaults.color else Tone.surfaceHigh.copy(alpha = 0.96f)
+        val onContainer = if (touch) SnackbarDefaults.contentColor else Tone.text
         Row(
             Modifier
                 .background(container, if (touch) M3.shapes.extraSmall else CircleShape)

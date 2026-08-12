@@ -41,10 +41,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Danger
-import com.tmplayer.ui.theme.Accent
-import com.tmplayer.ui.theme.SurfaceDark
-import com.tmplayer.ui.theme.TextMuted
-import com.tmplayer.ui.theme.TextPrimary
+import com.tmplayer.ui.theme.Tone
 
 /**
  * The one prompt shape used everywhere something is about to be deleted, signed out of, or
@@ -150,8 +147,8 @@ fun TvConfirm(
                 Modifier
                     .width(panel)
                     .clip(RoundedCornerShape(Corner.ExtraLarge))
-                    .background(SurfaceDark)
-                    .border(1.dp, TextMuted.copy(alpha = 0.25f), RoundedCornerShape(Corner.ExtraLarge))
+                    .background(Tone.surface)
+                    .border(1.dp, Tone.muted.copy(alpha = 0.25f), RoundedCornerShape(Corner.ExtraLarge))
                     .padding(horizontal = 32.dp, vertical = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -162,14 +159,14 @@ fun TvConfirm(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = if (destructive) Danger else Accent,
+                        tint = if (destructive) Danger else Tone.accent,
                         modifier = Modifier.size(28.dp),
                     )
-                    Text(title, style = MaterialTheme.typography.titleLarge, color = TextPrimary)
+                    Text(title, style = MaterialTheme.typography.titleLarge, color = Tone.text)
                 }
-                Text(message, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                Text(message, style = MaterialTheme.typography.bodyMedium, color = Tone.text)
                 if (detail != null) {
-                    Text(detail, style = MaterialTheme.typography.bodySmall, color = TextMuted)
+                    Text(detail, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
                 }
 
                 // Cancel is the quiet one and confirm is the loud one, which is the same ranking

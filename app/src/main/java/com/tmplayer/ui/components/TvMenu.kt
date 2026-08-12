@@ -48,11 +48,6 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Danger
-import com.tmplayer.ui.theme.Accent
-import com.tmplayer.ui.theme.SurfaceDark
-import com.tmplayer.ui.theme.SurfaceRaised
-import com.tmplayer.ui.theme.TextMuted
-import com.tmplayer.ui.theme.TextPrimary
 import com.tmplayer.ui.theme.Tone
 
 /** One line of a [TvMenu]. [detail] says what the action will do when the label cannot. */
@@ -111,8 +106,8 @@ fun TvMenu(
                 Modifier
                     .width(panel)
                     .clip(RoundedCornerShape(Corner.ExtraLarge))
-                    .background(SurfaceDark)
-                    .border(1.dp, TextMuted.copy(alpha = 0.25f), RoundedCornerShape(Corner.ExtraLarge))
+                    .background(Tone.surface)
+                    .border(1.dp, Tone.muted.copy(alpha = 0.25f), RoundedCornerShape(Corner.ExtraLarge))
                     .padding(horizontal = 24.dp, vertical = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -127,7 +122,7 @@ fun TvMenu(
                     Text(
                         title,
                         style = MaterialTheme.typography.titleLarge,
-                        color = TextPrimary,
+                        color = Tone.text,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -135,7 +130,7 @@ fun TvMenu(
                         Text(
                             subtitle,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextMuted,
+                            color = Tone.muted,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -147,7 +142,7 @@ fun TvMenu(
                 Text(
                     "Press Down to choose, or Back to close this.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextMuted,
+                    color = Tone.muted,
                     modifier = Modifier.padding(start = 4.dp, top = 8.dp),
                 )
             }
@@ -242,8 +237,8 @@ private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Mod
     val background by animateColorAsState(
         targetValue = when {
             focused && action.destructive -> Danger
-            focused -> Accent
-            else -> SurfaceRaised
+            focused -> Tone.accent
+            else -> Tone.surfaceHigh
         },
         animationSpec = tween(140),
         label = "menuRow",
@@ -251,7 +246,7 @@ private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Mod
     val foreground = when {
         focused -> Color.White
         action.destructive -> Danger
-        else -> TextPrimary
+        else -> Tone.text
     }
 
     Row(
@@ -288,7 +283,7 @@ private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Mod
                 Text(
                     action.detail,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (focused) Color.White.copy(alpha = 0.85f) else TextMuted,
+                    color = if (focused) Color.White.copy(alpha = 0.85f) else Tone.muted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

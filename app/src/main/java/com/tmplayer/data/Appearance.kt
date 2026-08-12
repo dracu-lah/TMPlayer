@@ -18,6 +18,20 @@ enum class ThemeChoice(val label: String, val description: String) {
     Dark("Dark", "Always dark"),
     ;
 
+    /**
+     * The same sentence for a television, which has no system setting to match.
+     *
+     * Android TV has no light mode of its own, so "System" cannot mean "follow the device" there.
+     * It means the dark panel the app has always drawn, which is still the right default for a
+     * screen watched in the evening; Light is for the ones that are not.
+     */
+    val tvDescription: String
+        get() = when (this) {
+            System -> "The usual dark panel"
+            Light -> "Always light"
+            Dark -> "Always dark"
+        }
+
     companion object {
         val Default = System
 

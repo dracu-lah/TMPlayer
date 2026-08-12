@@ -100,14 +100,9 @@ import com.tmplayer.ui.components.TvMenu
 import com.tmplayer.ui.components.TvSearchField
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.components.rememberVoiceSearch
-import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.Avatar
 import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.Corner
-import com.tmplayer.ui.theme.SurfaceDark
-import com.tmplayer.ui.theme.SurfaceRaised
-import com.tmplayer.ui.theme.TextMuted
-import com.tmplayer.ui.theme.TextPrimary
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 
@@ -585,7 +580,7 @@ private fun ContinueTile(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val border by animateColorAsState(
-        targetValue = if (focused) Accent else Color.Transparent,
+        targetValue = if (focused) Tone.accent else Color.Transparent,
         animationSpec = tween(FOCUS_FADE_MS),
         label = "continueTileBorder",
     )
@@ -649,7 +644,7 @@ private fun ContinueTile(
             modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(Corner.Medium))
-                .background(if (focused) SurfaceRaised else SurfaceDark)
+                .background(if (focused) Tone.surfaceHigh else Tone.surface)
                 .border(3.dp, border, RoundedCornerShape(Corner.Medium))
                 .holdable(
                     interactionSource = interactions,
@@ -694,14 +689,14 @@ private fun ResumeProgress(
             .height(if (overArt) 6.dp else 4.dp)
             .then(if (overArt) Modifier else Modifier.clip(CircleShape))
             .background(
-                if (overArt) Color.Black.copy(alpha = 0.55f) else TextMuted.copy(alpha = 0.25f),
+                if (overArt) Color.Black.copy(alpha = 0.55f) else Tone.muted.copy(alpha = 0.25f),
             ),
     ) {
         Box(
             Modifier
                 .fillMaxWidth(progress)
                 .fillMaxHeight()
-                .background(Accent),
+                .background(Tone.accent),
         )
     }
 }
@@ -717,7 +712,7 @@ private fun ContinueCard(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val border by animateColorAsState(
-        targetValue = if (focused) Accent else Color.Transparent,
+        targetValue = if (focused) Tone.accent else Color.Transparent,
         animationSpec = tween(140),
         label = "continueBorder",
     )
@@ -797,7 +792,7 @@ private fun ContinueCard(
             modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(Corner.Large))
-                .background(SurfaceDark)
+                .background(Tone.surface)
                 .border(2.dp, border, RoundedCornerShape(Corner.Large))
                 .holdable(
                     interactionSource = interactions,
@@ -881,7 +876,7 @@ private fun NavRail(
         Modifier
             .width(196.dp)
             .fillMaxHeight()
-            .background(SurfaceDark)
+            .background(Tone.surface)
             // The rail is the leftmost thing on the screen, so it alone decides whether the app
             // clears the TV's overscan crop. Its children each add [RAIL_INSET] of their own, so
             // the column only has to make up the difference and nothing starts before Tv.SafeH.
@@ -943,7 +938,7 @@ private fun AccountBadge(account: Account?) {
         Modifier.padding(start = RAIL_INSET),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(Avatar.Compact).clip(CircleShape).background(SurfaceRaised)) {
+        Box(Modifier.size(Avatar.Compact).clip(CircleShape).background(Tone.surfaceHigh)) {
             if (account != null) {
                 MediaPreview(
                     miniThumbnail = account.miniThumbnail,
@@ -960,7 +955,7 @@ private fun AccountBadge(account: Account?) {
                 // only the name and picture are still on their way.
                 account?.name ?: "Your account",
                 style = MaterialTheme.typography.titleMedium,
-                color = TextPrimary,
+                color = Tone.text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -968,7 +963,7 @@ private fun AccountBadge(account: Account?) {
                 Text(
                     "@${account.username}",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextMuted,
+                    color = Tone.muted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -992,7 +987,7 @@ private fun RailItem(
     onClick: () -> Unit,
     // Amber for the update item, so it is the one thing on the rail that is not the app's own
     // blue and reads as "look at this" without a second glance.
-    accent: Color = Accent,
+    accent: Color = Tone.accent,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
@@ -1012,7 +1007,7 @@ private fun RailItem(
         targetValue = when {
             focused -> Color.White
             selected -> accent
-            else -> if (accent == Accent) TextMuted else accent
+            else -> if (accent == Tone.accent) Tone.muted else accent
         },
         animationSpec = tween(FOCUS_FADE_MS),
         label = "railForeground",
@@ -1119,11 +1114,11 @@ private fun HeaderAction(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
-        targetValue = if (focused) Accent else SurfaceDark,
+        targetValue = if (focused) Tone.accent else Tone.surface,
         animationSpec = tween(140),
         label = "headerAction",
     )
-    val foreground = if (focused) Color.White else TextPrimary
+    val foreground = if (focused) Color.White else Tone.text
 
     Row(
         Modifier
@@ -1180,12 +1175,12 @@ private fun TabHeading(
             Text(
                 tab.heading,
                 style = MaterialTheme.typography.headlineLarge,
-                color = TextPrimary,
+                color = Tone.text,
             )
             Text(
                 if (count > 0) "${tab.blurb}  ·  $count $unit" else tab.blurb,
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextMuted,
+                color = Tone.muted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1240,11 +1235,11 @@ private fun PillButton(label: String?, icon: ImageVector?, onClick: () -> Unit) 
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
-        targetValue = if (focused) Accent else SurfaceRaised,
+        targetValue = if (focused) Tone.accent else Tone.surfaceHigh,
         animationSpec = tween(FOCUS_FADE_MS),
         label = "pillBackground",
     )
-    val foreground = if (focused) Color.White else TextPrimary
+    val foreground = if (focused) Color.White else Tone.text
 
     Row(
         Modifier
@@ -1482,10 +1477,10 @@ private fun ChatTile(
             modifier
                 .height(RECENT_TILE_HEIGHT)
                 .clip(RoundedCornerShape(Corner.Large))
-                .background(if (focused) SurfaceRaised else SurfaceDark)
+                .background(if (focused) Tone.surfaceHigh else Tone.surface)
                 .border(
                     width = 3.dp,
-                    color = if (focused) Accent else Color.Transparent,
+                    color = if (focused) Tone.accent else Color.Transparent,
                     shape = RoundedCornerShape(Corner.Large),
                 )
                 .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold)
@@ -1531,10 +1526,10 @@ private fun ChatRow(
             .fillMaxWidth()
             .height(84.dp)
             .clip(RoundedCornerShape(Corner.Large))
-            .background(if (focused) SurfaceRaised else SurfaceDark)
+            .background(if (focused) Tone.surfaceHigh else Tone.surface)
             .border(
                 width = 3.dp,
-                color = if (focused) Accent else Color.Transparent,
+                color = if (focused) Tone.accent else Color.Transparent,
                 shape = RoundedCornerShape(Corner.Large),
             )
             .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold)
@@ -1552,7 +1547,7 @@ private fun ChatRow(
             Text(
                 chat.title,
                 style = MaterialTheme.typography.titleLarge,
-                color = TextPrimary,
+                color = Tone.text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.marqueeWhen(focused),
@@ -1567,7 +1562,7 @@ private fun ChatRow(
                     else -> chat.kind.label
                 },
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextMuted,
+                color = Tone.muted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1576,7 +1571,7 @@ private fun ChatRow(
             Icon(
                 Icons.Filled.Star,
                 contentDescription = "Favourite",
-                tint = Accent,
+                tint = Tone.accent,
                 modifier = Modifier.size(28.dp),
             )
         }

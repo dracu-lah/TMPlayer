@@ -12,9 +12,10 @@ import com.tmplayer.data.FormFactor
  *
  * The phone now has a light theme and, on Android 12 and later, a palette taken from the viewer's
  * wallpaper, so a screen that names `SurfaceDark` is a screen that will be dark grey on a white
- * background. The television has neither and never will, so it keeps the six literals it was
- * designed around. Every colour a shared screen draws with therefore has to be asked for by role
- * and answered per device, which is what this is.
+ * background. The television now has a light mode of its own as well, drawn from [TvPalette]
+ * rather than from a Material scheme, because TV Material takes its colours from call sites. Every
+ * colour a screen draws with therefore has to be asked for by role and answered per device, which
+ * is what this is.
  *
  * Read at the point of use. These are cheap: one composition-local lookup and a branch.
  */
@@ -23,56 +24,56 @@ object Tone {
     /** Behind everything. */
     val background: Color
         @Composable @ReadOnlyComposable get() =
-            if (touch()) M3.colorScheme.background else Background
+            if (touch()) M3.colorScheme.background else tv().background
 
     /** A card, a sheet, a row that is meant to read as sitting on the background. */
     val surface: Color
         @Composable @ReadOnlyComposable get() =
-            if (touch()) M3.colorScheme.surfaceContainerLow else SurfaceDark
+            if (touch()) M3.colorScheme.surfaceContainerLow else tv().surface
 
     /** The step above [surface]: a control inside a card, a track, a chip at rest. */
     val surfaceHigh: Color
         @Composable @ReadOnlyComposable get() =
-            if (touch()) M3.colorScheme.surfaceContainerHigh else SurfaceRaised
+            if (touch()) M3.colorScheme.surfaceContainerHigh else tv().surfaceHigh
 
     /** Text and icons that carry the meaning. */
     val text: Color
         @Composable @ReadOnlyComposable get() =
-            if (touch()) M3.colorScheme.onSurface else TextPrimary
+            if (touch()) M3.colorScheme.onSurface else tv().text
 
     /** Second-line text: still readable, never competing. */
     val muted: Color
         @Composable @ReadOnlyComposable get() =
-            if (touch()) M3.colorScheme.onSurfaceVariant else TextMuted
+            if (touch()) M3.colorScheme.onSurfaceVariant else tv().muted
 
     /** The app's own colour, or the wallpaper's, wherever something is selected or live. */
     val accent: Color
         @Composable @ReadOnlyComposable get() =
-            if (touch()) M3.colorScheme.primary else Accent
+            if (touch()) M3.colorScheme.primary else tv().accent
 
     /** What to write on top of [accent]. */
     val onAccent: Color
         @Composable @ReadOnlyComposable get() =
-            if (touch()) M3.colorScheme.onPrimary else Color.White
+            if (touch()) M3.colorScheme.onPrimary else tv().onAccent
 
     /** A quieter [accent]: a selected row, a filled chip, a badge. */
     val accentContainer: Color
         @Composable @ReadOnlyComposable get() =
-            if (touch()) M3.colorScheme.secondaryContainer else SurfaceRaised
+            if (touch()) M3.colorScheme.secondaryContainer else tv().surfaceHigh
 
     val onAccentContainer: Color
         @Composable @ReadOnlyComposable get() =
-            if (touch()) M3.colorScheme.onSecondaryContainer else TextPrimary
+            if (touch()) M3.colorScheme.onSecondaryContainer else tv().text
 
     /** Hairlines and borders. */
     val outline: Color
         @Composable @ReadOnlyComposable get() =
-            if (touch()) M3.colorScheme.outlineVariant else TextMuted.copy(alpha = 0.25f)
+            if (touch()) M3.colorScheme.outlineVariant else tv().outline
 
     /** Something failed, or the press about to happen cannot be taken back. */
     val danger: Color
         @Composable @ReadOnlyComposable get() =
-            if (touch()) M3.colorScheme.error else Danger
+            if (touch()) M3.colorScheme.error else tv().danger
 
     /**
      * Worth noticing, nothing has gone wrong.
@@ -82,7 +83,7 @@ object Tone {
      */
     val caution: Color
         @Composable @ReadOnlyComposable get() = when {
-            !touch() -> Caution
+            !touch() -> tv().caution
             LocalDarkTheme.current -> Caution
             else -> Color(0xFF8A5300)
         }
@@ -91,3 +92,8 @@ object Tone {
 @Composable
 @ReadOnlyComposable
 private fun touch(): Boolean = !FormFactor.isTv(LocalContext.current)
+
+/** The television's colours as they currently stand, light or dark. */
+@Composable
+@ReadOnlyComposable
+private fun tv(): TvPalette = LocalTvPalette.current

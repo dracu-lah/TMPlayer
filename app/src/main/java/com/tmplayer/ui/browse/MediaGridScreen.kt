@@ -154,13 +154,8 @@ import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvSearchField
 import com.tmplayer.ui.components.TvMenu
 import com.tmplayer.ui.components.rememberVoiceSearch
-import com.tmplayer.ui.theme.Accent
 import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.Corner
-import com.tmplayer.ui.theme.SurfaceDark
-import com.tmplayer.ui.theme.SurfaceRaised
-import com.tmplayer.ui.theme.TextMuted
-import com.tmplayer.ui.theme.TextPrimary
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 import kotlinx.coroutines.delay
@@ -886,14 +881,14 @@ internal fun Header(
                 Text(
                     chatTitle,
                     style = MaterialTheme.typography.headlineLarge,
-                    color = TextPrimary,
+                    color = Tone.text,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     "Videos from this chat",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextMuted,
+                    color = Tone.muted,
                 )
             }
         }
@@ -929,7 +924,7 @@ internal fun Header(
             Pill(
                 label = if (isFavorite) "Remove favourite" else "Add favourite",
                 icon = if (isFavorite) Icons.Filled.Star else TmIcons.StarOutline,
-                tintWhenIdle = if (isFavorite) Accent else TextPrimary,
+                tintWhenIdle = if (isFavorite) Tone.accent else Tone.text,
                 onClick = onToggleFavorite,
             )
             // Which arrangement suits a chat depends on the chat: tiles for visual browsing,
@@ -989,7 +984,7 @@ private fun SponsoredCard(
                     } else {
                         Modifier
                             .clip(RoundedCornerShape(Corner.Medium))
-                            .background(SurfaceRaised)
+                            .background(Tone.surfaceHigh)
                             .border(2.dp, Caution.copy(alpha = 0.8f), RoundedCornerShape(Corner.Medium))
                     },
                 )
@@ -1011,7 +1006,7 @@ private fun SponsoredCard(
                         .clip(RoundedCornerShape(Corner.Small))
                         .border(
                             3.dp,
-                            if (mediaFocused) Accent else Color.Transparent,
+                            if (mediaFocused) Tone.accent else Color.Transparent,
                             RoundedCornerShape(Corner.Small),
                         )
                         .pressable(mediaInteractions, onOpenMedia),
@@ -1110,14 +1105,14 @@ private fun SponsoredButton(label: String, primary: Boolean, onClick: () -> Unit
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
-        targetValue = if (focused) Color.White else if (primary) Accent else SurfaceDark,
+        targetValue = if (focused) Color.White else if (primary) Tone.accent else Tone.surface,
         animationSpec = tween(140),
         label = "sponsoredButton",
     )
     Text(
         label,
         style = MaterialTheme.typography.bodyLarge,
-        color = if (focused) Color.Black else TextPrimary,
+        color = if (focused) Color.Black else Tone.text,
         modifier = Modifier
             .clip(CircleShape)
             .background(background)
@@ -1134,14 +1129,14 @@ private fun SponsoredButton(label: String, primary: Boolean, onClick: () -> Unit
 private fun Pill(
     label: String,
     icon: ImageVector,
-    tintWhenIdle: Color = TextPrimary,
+    tintWhenIdle: Color = Tone.text,
     showLabel: Boolean = true,
     onClick: () -> Unit,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
-        targetValue = if (focused) Accent else SurfaceRaised,
+        targetValue = if (focused) Tone.accent else Tone.surfaceHigh,
         animationSpec = tween(140),
         label = "pill",
     )
@@ -1186,7 +1181,7 @@ private fun FullName(name: String, modifier: Modifier = Modifier) {
         Text(
             name,
             style = MaterialTheme.typography.bodyLarge,
-            color = TextPrimary,
+            color = Tone.text,
             maxLines = 1,
             softWrap = false,
             // Long enough to read a whole line before it starts moving, and again each time it
@@ -1222,7 +1217,7 @@ internal fun MediaCard(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val border by animateColorAsState(
-        targetValue = if (focused) Accent else Color.Transparent,
+        targetValue = if (focused) Tone.accent else Color.Transparent,
         animationSpec = tween(140),
         label = "cardBorder",
     )
@@ -1279,7 +1274,7 @@ internal fun MediaCard(
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(Corner.Medium))
-            .background(if (focused) SurfaceRaised else SurfaceDark)
+            .background(if (focused) Tone.surfaceHigh else Tone.surface)
             .border(3.dp, border, RoundedCornerShape(Corner.Medium))
             .pressable(interactions, onClick),
     ) {
@@ -1325,7 +1320,7 @@ private fun MediaRow(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val border by animateColorAsState(
-        targetValue = if (focused) Accent else Color.Transparent,
+        targetValue = if (focused) Tone.accent else Color.Transparent,
         animationSpec = tween(140),
         label = "rowBorder",
     )
@@ -1342,7 +1337,7 @@ private fun MediaRow(
                     } else {
                         Modifier
                             .clip(RoundedCornerShape(Corner.Medium))
-                            .background(if (focused) SurfaceRaised else SurfaceDark)
+                            .background(if (focused) Tone.surfaceHigh else Tone.surface)
                             .border(3.dp, border, RoundedCornerShape(Corner.Medium))
                             .pressable(interactions, onClick)
                     },
@@ -1526,7 +1521,7 @@ private fun MediaArt(
                         Modifier
                             .fillMaxWidth(watched.fraction)
                             .fillMaxHeight()
-                            .background(Accent),
+                            .background(Tone.accent),
                     )
                 }
             }

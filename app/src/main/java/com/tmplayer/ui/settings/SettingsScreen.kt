@@ -118,14 +118,8 @@ import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.update.UpdateDialog
 import com.tmplayer.ui.components.Spinner
-import com.tmplayer.ui.theme.Accent
-import com.tmplayer.ui.theme.Background
 import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.Corner
-import com.tmplayer.ui.theme.SurfaceDark
-import com.tmplayer.ui.theme.SurfaceRaised
-import com.tmplayer.ui.theme.TextMuted
-import com.tmplayer.ui.theme.TextPrimary
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 import kotlinx.coroutines.launch
@@ -265,12 +259,12 @@ fun SettingsScreen(
                     Text(
                         "Settings",
                         style = MaterialTheme.typography.headlineLarge,
-                        color = TextPrimary,
+                        color = Tone.text,
                     )
                     Text(
                         "Changes save as you make them.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextMuted,
+                        color = Tone.muted,
                     )
                 }
             }
@@ -294,16 +288,36 @@ fun SettingsScreen(
 
         // ---- appearance ----------------------------------------------------------------------
 
-        // First, and phone only. A television has one theme and no wallpaper to take a palette
-        // from, so there is nothing here it could offer.
-        if (touch) {
-            item { SectionTitle("Appearance") }
-            item {
+        // First, on both devices. The television used to be left out of this section entirely, on
+        // the reasoning that a panel in a dark room is dark: true of the evening, and no answer at
+        // all for a screen in a bright kitchen, which is where a good many of these sticks live.
+        item { SectionTitle("Appearance") }
+        item {
+            if (touch) {
                 ThemePicker(
                     current = themeChoice,
                     onPick = { scope.launch { settings.setThemeChoice(it) } },
                 )
+            } else {
+                // Segments are a thumb control: they cannot be reached with a D-pad, which is why
+                // the picker was never offered here. The stepper is the same one the size limits
+                // and the video count use, so Left and Right already mean "change this".
+                StepperRow(
+                    title = "Theme",
+                    subtitle = themeChoice.tvDescription,
+                    value = themeChoice.label,
+                    icon = TmIcons.CircleOutline,
+                    canDecrease = themeChoice.ordinal > 0,
+                    canIncrease = themeChoice.ordinal < ThemeChoice.entries.lastIndex,
+                    onStep = { direction ->
+                        val next = ThemeChoice.entries.getOrNull(themeChoice.ordinal + direction)
+                        if (next != null) scope.launch { settings.setThemeChoice(next) }
+                    },
+                )
             }
+        }
+
+        if (touch) {
             // Android 11 and earlier has no wallpaper palette to read, so the row would be a
             // switch that changes nothing.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -342,7 +356,7 @@ fun SettingsScreen(
                 Text(
                     "Video size limits",
                     style = sectionStyle(),
-                    color = if (touch) Tone.accent else TextPrimary,
+                    color = if (touch) Tone.accent else Tone.text,
                     modifier = Modifier.weight(1f),
                 )
                 ResetChip(
@@ -813,12 +827,12 @@ private fun RangeRow(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
-        targetValue = if (focused) Accent else SurfaceDark,
+        targetValue = if (focused) Tone.accent else Tone.surface,
         animationSpec = tween(140),
         label = "rangeBackground",
     )
-    val onSurface = if (focused) Color.White else TextPrimary
-    val dim = if (focused) Color.White.copy(alpha = 0.6f) else TextMuted
+    val onSurface = if (focused) Color.White else Tone.text
+    val dim = if (focused) Color.White.copy(alpha = 0.6f) else Tone.muted
 
     Column(
         modifier
@@ -998,7 +1012,7 @@ private fun End(
                 .height(3.dp)
                 .width(if (active) 56.dp else 0.dp)
                 .clip(CircleShape)
-                .background(if (focused) Color.White else Accent),
+                .background(if (focused) Color.White else Tone.accent),
         )
     }
 }
@@ -1010,7 +1024,7 @@ private fun RangeTrack(minValue: Long, maxValue: Long, editingUpper: Boolean, fo
             .fillMaxWidth()
             .height(18.dp)
             .clip(CircleShape)
-            .background(if (focused) Color.White.copy(alpha = 0.22f) else SurfaceRaised),
+            .background(if (focused) Color.White.copy(alpha = 0.22f) else Tone.surfaceHigh),
     ) {
         val width = maxWidth
         val start = width * SizeFilter.fraction(minValue)
@@ -1022,7 +1036,7 @@ private fun RangeTrack(minValue: Long, maxValue: Long, editingUpper: Boolean, fo
                 .padding(start = start)
                 .width(span)
                 .fillMaxHeight()
-                .background(if (focused) Color.White.copy(alpha = 0.55f) else Accent.copy(alpha = 0.5f)),
+                .background(if (focused) Color.White.copy(alpha = 0.55f) else Tone.accent.copy(alpha = 0.5f)),
         )
 
         Thumb(width, minValue, live = !editingUpper, focused = focused)
@@ -1043,8 +1057,8 @@ private fun BoxWithConstraintsScope.Thumb(width: Dp, value: Long, live: Boolean,
                 when {
                     focused && live -> Color.White
                     focused -> Color.White.copy(alpha = 0.7f)
-                    live -> Accent
-                    else -> Accent.copy(alpha = 0.6f)
+                    live -> Tone.accent
+                    else -> Tone.accent.copy(alpha = 0.6f)
                 },
             ),
     )
@@ -1075,14 +1089,14 @@ private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
-        targetValue = if (focused) Accent else SurfaceRaised,
+        targetValue = if (focused) Tone.accent else Tone.surfaceHigh,
         animationSpec = tween(140),
         label = "resetChip",
     )
     Row(
         Modifier
             .clip(CircleShape)
-            .background(if (enabled) background else SurfaceDark)
+            .background(if (enabled) background else Tone.surface)
             // Always clickable, never `enabled = false`: pressing this chip is what greys it out,
             // and a disabled clickable installs no focus target, so the node the viewer was
             // standing on would vanish underneath them and the next press would go nowhere.
@@ -1100,9 +1114,9 @@ private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
             Icons.Filled.Refresh,
             contentDescription = null,
             tint = when {
-                !enabled -> TextMuted
+                !enabled -> Tone.muted
                 focused -> Color.White
-                else -> TextPrimary
+                else -> Tone.text
             },
             modifier = Modifier.size(20.dp),
         )
@@ -1111,9 +1125,9 @@ private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
             "Reset",
             style = MaterialTheme.typography.bodyLarge,
             color = when {
-                !enabled -> TextMuted
+                !enabled -> Tone.muted
                 focused -> Color.White
-                else -> TextPrimary
+                else -> Tone.text
             },
             maxLines = 1,
         )
@@ -1129,7 +1143,7 @@ private fun SectionTitle(text: String) {
         // Accent on a phone, which is what every Android preference screen does: with the rows
         // un-carded there is no longer a shape separating one group from the next, so the colour
         // is what does the separating.
-        color = if (touch) Tone.accent else TextPrimary,
+        color = if (touch) Tone.accent else Tone.text,
         modifier = if (touch) {
             // The 16dp start is the same inset a ListItem gives its headline, so the heading and
             // the rows under it begin on one line.
@@ -1215,10 +1229,10 @@ private fun StorageCard(
     // The bands are three roles of one palette on a phone, so they still read as three parts of
     // the same thing when the wallpaper decides what that palette is. A television has no scheme
     // to draw from and keeps the three alphas of the app's own green it was designed with.
-    val videoBand = if (touch) M3Theme.colorScheme.primary else Accent
-    val pictureBand = if (touch) M3Theme.colorScheme.secondary else Accent.copy(alpha = 0.6f)
-    val otherBand = if (touch) M3Theme.colorScheme.tertiary else Accent.copy(alpha = 0.3f)
-    val deviceBand = if (touch) Tone.outline else TextMuted.copy(alpha = 0.6f)
+    val videoBand = if (touch) M3Theme.colorScheme.primary else Tone.accent
+    val pictureBand = if (touch) M3Theme.colorScheme.secondary else Tone.accent.copy(alpha = 0.6f)
+    val otherBand = if (touch) M3Theme.colorScheme.tertiary else Tone.accent.copy(alpha = 0.3f)
+    val deviceBand = if (touch) Tone.outline else Tone.muted.copy(alpha = 0.6f)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1393,12 +1407,12 @@ private fun StepperRow(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
-        targetValue = if (focused) Accent else SurfaceDark,
+        targetValue = if (focused) Tone.accent else Tone.surface,
         animationSpec = tween(140),
         label = "stepperBackground",
     )
-    val onSurface = if (focused) Color.White else TextPrimary
-    val dim = if (focused) Color.White.copy(alpha = 0.6f) else TextMuted
+    val onSurface = if (focused) Color.White else Tone.text
+    val dim = if (focused) Color.White.copy(alpha = 0.6f) else Tone.muted
 
     Row(
         modifier
@@ -1495,14 +1509,14 @@ private fun ActionRow(
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium,
-                color = if (focused) Color.White else TextPrimary,
+                color = if (focused) Color.White else Tone.text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (focused) Color.White.copy(alpha = 0.85f) else TextMuted,
+                color = if (focused) Color.White.copy(alpha = 0.85f) else Tone.muted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1542,7 +1556,7 @@ private fun ToggleRow(
         Icon(
             icon,
             contentDescription = null,
-            tint = if (focused) Color.White else TextPrimary,
+            tint = if (focused) Color.White else Tone.text,
             modifier = Modifier.size(26.dp),
         )
         Spacer(Modifier.size(20.dp))
@@ -1550,14 +1564,14 @@ private fun ToggleRow(
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium,
-                color = if (focused) Color.White else TextPrimary,
+                color = if (focused) Color.White else Tone.text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (focused) Color.White.copy(alpha = 0.85f) else TextMuted,
+                color = if (focused) Color.White.copy(alpha = 0.85f) else Tone.muted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1578,9 +1592,9 @@ private fun Switch(checked: Boolean, focused: Boolean, touch: Boolean = false) {
     val track by animateColorAsState(
         targetValue = when {
             checked && focused -> Color.White
-            checked -> Accent
+            checked -> Tone.accent
             focused -> Color.White.copy(alpha = 0.4f)
-            else -> SurfaceRaised
+            else -> Tone.surfaceHigh
         },
         animationSpec = tween(140),
         label = "switchTrack",
@@ -1599,7 +1613,7 @@ private fun Switch(checked: Boolean, focused: Boolean, touch: Boolean = false) {
                 .padding(horizontal = 4.dp)
                 .size(knob)
                 .clip(CircleShape)
-                .background(if (checked && !focused) Color.White else SurfaceDark),
+                .background(if (checked && !focused) Color.White else Tone.surface),
         )
     }
 }
@@ -1626,7 +1640,7 @@ private fun FocusRow(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
-        targetValue = if (focused) Accent else SurfaceDark,
+        targetValue = if (focused) Tone.accent else Tone.surface,
         animationSpec = tween(140),
         label = "rowBackground",
     )
