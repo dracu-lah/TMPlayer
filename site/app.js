@@ -86,6 +86,20 @@
     return mb.toFixed(1) + ' MB';
   }
 
+  /* GitHub counts every fetch of a release asset. For a sideloaded app that is
+     the only install figure that exists, so it goes on the page rather than in
+     a dashboard: it is public data either way. */
+  function formatCount(n) {
+    if (typeof n !== 'number' || !isFinite(n) || n < 0) { return ''; }
+    return n.toLocaleString('en-GB') + (n === 1 ? ' download' : ' downloads');
+  }
+
+  function releaseDownloads(release) {
+    return apkAssets(release).reduce(function (total, asset) {
+      return total + (asset.download_count || 0);
+    }, 0);
+  }
+
   function formatDate(iso) {
     if (!iso) { return ''; }
     var d = new Date(iso);
@@ -164,7 +178,9 @@
   function renderLatest(release) {
     var tag = release.tag_name || release.name || 'Latest';
     el.version.textContent = tag;
-    el.date.textContent = formatDate(release.published_at || release.created_at);
+    var when = formatDate(release.published_at || release.created_at);
+    var total = releaseDownloads(release);
+    el.date.textContent = total ? when + ', ' + formatCount(total) : when;
 
     var found = apkAssets(release);
     if (found.length === 0) {
@@ -201,6 +217,9 @@
 
       var get = make('div', 'abi-get');
       get.appendChild(make('span', 'abi-size', formatSize(asset.size)));
+      if (asset.download_count) {
+        get.appendChild(make('span', 'abi-size', formatCount(asset.download_count)));
+      }
       var a = link(asset.browser_download_url, 'dl');
       a.appendChild(downloadIcon());
       a.appendChild(make('span', null, 'Download'));
@@ -262,7 +281,9 @@
       var head = make('div', 'prev-head');
       var tagLink = link(release.html_url || RELEASES_PAGE, 'prev-tag', release.tag_name || release.name || 'Release');
       head.appendChild(tagLink);
-      head.appendChild(make('span', 'prev-date', formatDate(release.published_at || release.created_at)));
+      var when = formatDate(release.published_at || release.created_at);
+      var total = releaseDownloads(release);
+      head.appendChild(make('span', 'prev-date', total ? when + ', ' + formatCount(total) : when));
       li.appendChild(head);
 
       var assets = apkAssets(release);

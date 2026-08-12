@@ -37,7 +37,7 @@
 </header>
 <main id="main" class="policy-page">
   <div class="wrap policy-wrap">
-    <p class="eyebrow">Effective 9 August 2026</p>
+    <p class="eyebrow">Effective 13 August 2026</p>
     <h1>Privacy</h1>
     <p class="policy-lede">TMPlayer runs on your Android TV and talks directly to the services needed to play media from your own Telegram account. There is no TMPlayer account or developer-operated backend.</p>
 
@@ -53,13 +53,23 @@
         <li><strong>Telegram</strong> handles sign-in, chat and channel lists, file metadata, media downloads, and Telegram-provided sponsored messages where applicable.</li>
         <li><strong>GitHub</strong> is checked for a newer TMPlayer release. An APK is downloaded only after you choose to update.</li>
         <li><strong>Your TV's speech-recognition provider</strong> receives audio only when you deliberately start voice search.</li>
+        <li><strong>Sentry</strong> receives a crash report, and only if you have switched crash reporting on in Settings. It is off until then and nothing is contacted. See below for what a report contains.</li>
       </ul>
       <p>TMPlayer does not send filenames, viewing history, or media to a developer-operated service.</p>
     </section>
 
     <section>
       <h2>What TMPlayer does not include</h2>
-      <p>TMPlayer has no developer-operated server, analytics SDK, advertising SDK, crash-reporting service, or cross-app tracking. The developer does not receive your Telegram credentials, chat list, filenames, viewing history, or media.</p>
+      <p>TMPlayer has no developer-operated server, no analytics SDK, no advertising SDK and no cross-app tracking. Nothing measures how you use the app, and the developer does not receive your Telegram credentials, chat list, filenames, viewing history, or media.</p>
+      <p>There is one exception, and it is off until you switch it on: crash reporting. See below.</p>
+    </section>
+
+    <section>
+      <h2>Crash reporting, if you turn it on</h2>
+      <p><strong>Off on a fresh install, and off again after signing out.</strong> With the switch off, nothing about crash reporting is started: no library is initialised and no server is contacted. Turning it on is the only thing in TMPlayer that ever sends anything anywhere other than Telegram and GitHub.</p>
+      <p>With it on, a crash sends the stack trace, the TMPlayer version, the Android version and the device model to <a href="https://sentry.io" rel="noopener">Sentry</a>, which stores it on the developer's behalf. That is the whole report.</p>
+      <p>What a report deliberately does not carry: no chat names, no filenames, no search terms, no viewing history, no breadcrumb trail of what you were doing, no session or usage measurement, no IP address kept as personal data, and no identifier that ties two reports to the same person or device. The automatic trail Sentry would otherwise collect is switched off in code rather than merely left unused, because that trail is exactly where the name of the film you were watching would otherwise appear.</p>
+      <p>Switch it off in Settings and reporting stops immediately. The setting lives on your device, and signing out clears it back to off along with everything else.</p>
     </section>
 
     <section>
@@ -69,7 +79,8 @@
 
     <section>
       <h2>This website</h2>
-      <p>The static website sets no application cookies and includes no analytics script. Hosting and network providers may keep ordinary connection logs under their own policies.</p>
+      <p>The static website sets no cookies. It counts page views using Vercel Web Analytics, which is served from this domain rather than from a third party, stores no cookie and no identifier that follows you between visits, and records only the page, the referrer and coarse device and country information. There is no advertising script, no tag manager and nothing that can recognise you on another website.</p>
+      <p>The pages that show release information ask the public GitHub API for it when you open them, which means GitHub sees that request. Hosting and network providers may keep ordinary connection logs under their own policies.</p>
     </section>
 
     <section>
@@ -117,5 +128,12 @@
   label();
 })();
 </script>
+<!--
+  Vercel Web Analytics. Served from this domain rather than from anybody else, sets no cookie and
+  records no identifier that follows a reader between visits: it counts page views and where they
+  came from, and nothing more. Enabled per project in the Vercel dashboard; with it switched off
+  this path simply 404s and the page carries on. The privacy page names it.
+-->
+<script defer src="/_vercel/insights/script.js"></script>
 </body>
 </html>
