@@ -43,6 +43,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -89,6 +93,8 @@ internal fun TouchBrowseShell(
     favoriteCount: Int,
     onSelect: (BrowseTab) -> Unit,
     onOpenSettings: () -> Unit,
+    /** The phone's Downloads screen. A television keeps one video and has nothing to list. */
+    onOpenDownloads: () -> Unit,
     updateVersion: String?,
     onUpdate: () -> Unit,
     /** What the bar says when it is not being searched in. */
@@ -168,6 +174,13 @@ internal fun TouchBrowseShell(
                     )
                 }
                 DrawerDestination(
+                    label = "Downloads",
+                    selected = false,
+                    badge = null,
+                    icon = { Icon(TmIcons.Download, contentDescription = null) },
+                    onClick = { close(); onOpenDownloads() },
+                )
+                DrawerDestination(
                     label = "Settings",
                     selected = false,
                     badge = null,
@@ -197,6 +210,21 @@ internal fun TouchBrowseShell(
         val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
         LaunchedEffect(searching) {
             if (searching) scrollBehavior.state.heightOffset = 0f
+        }
+        // The bar comes back whenever the screen underneath it changes. Without this it stayed
+        // hidden across a change of tab and across coming back from the player, and on a tab too
+        // short to scroll there was then no pull-down that could bring it back: the title, the
+        // hamburger and every way out of the screen were simply gone.
+        LaunchedEffect(selected, title) { scrollBehavior.state.heightOffset = 0f }
+        // And again on the way back from the player, which is an activity coming forward rather
+        // than a recomposition, so nothing above would have noticed it.
+        val lifecycleOwner = LocalLifecycleOwner.current
+        DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) scrollBehavior.state.heightOffset = 0f
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
         }
 
         Scaffold(

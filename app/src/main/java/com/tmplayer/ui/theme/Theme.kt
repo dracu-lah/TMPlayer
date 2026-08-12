@@ -351,7 +351,7 @@ fun TMPlayerTheme(content: @Composable () -> Unit) {
     // mode and then corrected a frame later once DataStore answers.
     val systemDark = isSystemInDarkTheme()
     val choice by settings.themeChoice.collectAsState(initial = ThemeChoice.Default)
-    val dynamic by settings.dynamicColour.collectAsState(initial = true)
+    val dynamic by settings.dynamicColour.collectAsState(initial = false)
 
     // A television is dark. There is no system light mode on Android TV to follow, a panel in a
     // dark room is the whole use case, and the choice is not offered there.

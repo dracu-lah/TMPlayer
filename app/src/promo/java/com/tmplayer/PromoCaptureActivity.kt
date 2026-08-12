@@ -165,7 +165,11 @@ private fun PhoneMediaScreen(onBack: () -> Unit = {}) {
         onRefresh = {},
     ) {
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            // Three, which is what the real grid computes for a 393dp phone from its minimum
+            // tile width. The fixture has to draw what the app draws or the screenshots are of a
+            // layout nobody has.
+            columns = GridCells.Fixed(3),
+            contentPadding = PaddingValues(start = DENSE_GAP, end = DENSE_GAP),
             horizontalArrangement = Arrangement.spacedBy(DENSE_GAP),
             verticalArrangement = Arrangement.spacedBy(DENSE_GAP),
         ) {

@@ -8,7 +8,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -54,6 +56,7 @@ import androidx.compose.material3.Icon as M3Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MaterialTheme as M3MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
@@ -297,6 +300,9 @@ fun MediaGridScreen(
     // whole way through. What does change is the instance, once the new page lands, so that is what
     // the gesture waits on. The timeout is there because a request against a dead connection never
     // emits anything at all, and a spinner left turning for ever is worse than one that gives up.
+    // Whichever video a long press is asking about, and nothing while none is.
+    var showingDetailsOf by remember(chatId) { mutableStateOf<MediaItem?>(null) }
+
     var refreshing by remember(chatId) { mutableStateOf(false) }
     LaunchedEffect(refreshing) {
         if (!refreshing) return@LaunchedEffect
@@ -330,15 +336,15 @@ fun MediaGridScreen(
             fun focusOf(item: MediaItem): Modifier =
                 if (item === list.items.firstOrNull()) Modifier.focusRequester(firstItem) else Modifier
 
-            // Telegram's own media grid is dense: tiles butted almost together, edge to edge,
-            // square, with the running time in a corner and no caption. It reads as a sheet of
-            // pictures rather than as a list of cards, and it fits half again as many on a
-            // screen. Row mode keeps the file names, so nothing is actually lost by it.
+            // The phone's grid is compact but not captionless: smaller art than a television's
+            // card, two lines of the file name under it in small type, and a hairline of a gap.
+            // A sheet of unlabelled pictures reads well for a camera roll and badly for a chat
+            // full of releases, where the name is the only thing telling two of them apart.
             val dense = touch && layout == CardLayout.Grid
             val gap = if (dense) DENSE_GAP else 16.dp
             val padding = PaddingValues(
-                start = if (dense) 0.dp else edge,
-                end = if (dense) 0.dp else edge,
+                start = if (dense) DENSE_GAP else edge,
+                end = if (dense) DENSE_GAP else edge,
                 // A television crops its outermost few percent, so the last row needs
                 // clearance or its titles are cut off the bottom of the panel. A phone crops
                 // nothing but does put a gesture bar over the last row.
@@ -393,6 +399,11 @@ fun MediaGridScreen(
                                         ],
                                         dense = dense,
                                         onClick = { onPlay(item) },
+                                        onLongClick = if (touch) {
+                                            { showingDetailsOf = item }
+                                        } else {
+                                            null
+                                        },
                                         onFocused = { standingOn = item },
                                         modifier = focusOf(item),
                                     )
@@ -434,6 +445,11 @@ fun MediaGridScreen(
                                             SettingsStore.progressKey(item.chatId, item.messageId),
                                         ],
                                         onClick = { onPlay(item) },
+                                        onLongClick = if (touch) {
+                                            { showingDetailsOf = item }
+                                        } else {
+                                            null
+                                        },
                                         onFocused = { standingOn = item },
                                         modifier = focusOf(item),
                                     )
@@ -450,6 +466,16 @@ fun MediaGridScreen(
                             }
                         }
                     }
+                }
+
+                showingDetailsOf?.let { item ->
+                    MediaDetailsSheet(
+                        item = item,
+                        watched = watchProgress[
+                            SettingsStore.progressKey(item.chatId, item.messageId),
+                        ],
+                        onDismiss = { showingDetailsOf = null },
+                    )
                 }
 
                 // Floated over the grid; a reserved band cost a whole row on a 540dp panel.
@@ -1166,8 +1192,10 @@ internal fun MediaCard(
     onClick: () -> Unit,
     onFocused: () -> Unit,
     modifier: Modifier = Modifier,
-    /** The phone's grid: square corners, no caption, running time over the picture. */
+    /** The phone's grid: smaller art, small type, running time over the picture. */
     dense: Boolean = false,
+    /** A long press on a phone, which shows the whole name a tile had to cut. */
+    onLongClick: (() -> Unit)? = null,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
@@ -1179,15 +1207,37 @@ internal fun MediaCard(
     LaunchedEffect(focused) { if (focused) onFocused() }
 
     if (dense) {
-        MediaArt(
-            item = item,
-            watched = watched,
-            durationOverlay = true,
-            modifier = modifier
+        Column(
+            modifier
                 .fillMaxWidth()
-                .aspectRatio(16f / 9f)
-                .pressable(interactions, onClick),
-        )
+                .clip(RoundedCornerShape(Corner.Small))
+                .longPressable(onClick, onLongClick)
+                .padding(DENSE_GAP),
+        ) {
+            MediaArt(
+                item = item,
+                watched = watched,
+                durationOverlay = true,
+                compact = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(Corner.Small)),
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                item.title,
+                style = M3MaterialTheme.typography.bodySmall,
+                color = Tone.text,
+                // Two lines, and always two: a tile that reserves the height whether or not the
+                // name needs it keeps the row of pictures beneath it in a straight line.
+                maxLines = 2,
+                minLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(2.dp))
+            MetaLine(item, watched, compact = true)
+        }
         return
     }
 
@@ -1195,9 +1245,8 @@ internal fun MediaCard(
     // it wants is the surface, the elevation and the ripple every other card in the system has.
     if (isTouch()) {
         Card(
-            onClick = onClick,
             shape = RoundedCornerShape(Corner.Medium),
-            modifier = modifier.fillMaxWidth(),
+            modifier = modifier.fillMaxWidth().longPressable(onClick, onLongClick),
         ) {
             MediaCardBody(item, watched)
         }
@@ -1225,10 +1274,9 @@ private fun MediaCardBody(item: MediaItem, watched: WatchPoint?) {
             item.title,
             style = MaterialTheme.typography.titleMedium,
             color = Tone.text,
-            // One line, not two. A release file name is long enough to fill both, and the
-            // second line cost a row of the grid on a 540dp panel; the full title is one
-            // press away during playback now.
-            maxLines = 1,
+            // Two lines. A release file name fills both and then some, and one line cut a title
+            // so early that two videos in the same chat were often the same four words.
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(6.dp))
@@ -1250,6 +1298,7 @@ private fun MediaRow(
     onClick: () -> Unit,
     onFocused: () -> Unit,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
@@ -1313,9 +1362,8 @@ private fun MediaRow(
     // ripple, and the border only ever meant anything to a remote.
     if (touch) {
         Card(
-            onClick = onClick,
             shape = RoundedCornerShape(Corner.Medium),
-            modifier = modifier.fillMaxWidth(),
+            modifier = modifier.fillMaxWidth().longPressable(onClick, onLongClick),
         ) {
             row()
         }
@@ -1349,7 +1397,21 @@ private fun MediaArt(
      * already carries the duration, and saying it twice a centimetre apart reads as a mistake.
      */
     durationOverlay: Boolean = false,
+    /**
+     * A tile a third of a phone wide, where the badges have to come down with it. At the
+     * television's size they are a label in the corner of a picture; at this size, drawn to the
+     * same figures, two of them cover most of the artwork they are annotating.
+     */
+    compact: Boolean = false,
 ) {
+    val tagStyle = if (compact) {
+        M3MaterialTheme.typography.labelSmall
+    } else {
+        MaterialTheme.typography.bodyMedium
+    }
+    val plateH = if (compact) 4.dp else 6.dp
+    val plateV = if (compact) 1.dp else 2.dp
+    val inset = if (compact) 4.dp else 6.dp
     Box(modifier) {
         MediaPreview(
             miniThumbnail = item.miniThumbnail,
@@ -1363,34 +1425,34 @@ private fun MediaArt(
                 // Not "On this TV": the same badge is drawn on a phone, where it was telling the
                 // viewer about a television they are not holding.
                 "Saved",
-                style = MaterialTheme.typography.bodyMedium,
+                style = tagStyle,
                 // The one badge here that is the app speaking rather than a fact about the picture,
                 // so it takes the theme's own colour instead of the plain black plate the tags use.
                 color = Tone.onAccent,
                 maxLines = 1,
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(6.dp)
+                    .padding(inset)
                     .clip(RoundedCornerShape(Corner.ExtraSmall))
                     .background(Tone.accent.copy(alpha = 0.92f))
-                    .padding(horizontal = 7.dp, vertical = 2.dp),
+                    .padding(horizontal = plateH + 1.dp, vertical = plateV),
             )
         }
         if (tags.isNotEmpty()) {
             Row(
-                Modifier.align(Alignment.TopEnd).padding(6.dp),
+                Modifier.align(Alignment.TopEnd).padding(inset),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 tags.forEach { tag ->
                     Text(
                         tag,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = tagStyle,
                         color = Color.White,
                         maxLines = 1,
                         modifier = Modifier
                             .clip(RoundedCornerShape(Corner.ExtraSmall))
                             .background(Color.Black.copy(alpha = 0.72f))
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                            .padding(horizontal = plateH, vertical = plateV),
                     )
                 }
             }
@@ -1399,15 +1461,15 @@ private fun MediaArt(
         if (durationOverlay && duration.isNotEmpty()) {
             Text(
                 duration,
-                style = MaterialTheme.typography.labelMedium,
+                style = if (compact) M3MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium,
                 color = Color.White,
                 maxLines = 1,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(6.dp)
+                    .padding(inset)
                     .clip(RoundedCornerShape(Corner.ExtraSmall))
                     .background(Color.Black.copy(alpha = 0.72f))
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                    .padding(horizontal = plateH, vertical = plateV),
             )
         }
         if (watched != null && watched.fraction > 0f) {
@@ -1450,9 +1512,47 @@ private fun MediaArt(
     }
 }
 
+/**
+ * Click, and on a phone long press, on whatever this is applied to.
+ *
+ * [combinedClickable] rather than `Card(onClick =)` because a card's own click has nowhere to hang
+ * a long press. Where there is no long press to hang, this is a plain clickable and the ripple is
+ * the same one either way.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+private fun Modifier.longPressable(onClick: () -> Unit, onLongClick: (() -> Unit)?): Modifier =
+    if (onLongClick == null) clickable(onClick = onClick)
+    else combinedClickable(onClick = onClick, onLongClick = onLongClick)
+
+/**
+ * The whole name and the numbers, for a tile or a row that had to cut them short.
+ *
+ * A television has the name strip along the bottom, which follows the remote with no gesture to
+ * learn. A phone has nothing equivalent, so the long press opens this.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MediaDetailsSheet(item: MediaItem, watched: WatchPoint?, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            M3Text(
+                item.title,
+                style = M3MaterialTheme.typography.titleMedium,
+                color = Tone.text,
+            )
+            MetaLine(item, watched)
+        }
+    }
+}
+
 /** Running time, file size, and where playback stopped, on the one line both arrangements use. */
 @Composable
-private fun MetaLine(item: MediaItem, watched: WatchPoint?) {
+private fun MetaLine(item: MediaItem, watched: WatchPoint?, compact: Boolean = false) {
     val duration = MediaMapper.formatDuration(item.durationSec)
     val size = MediaMapper.formatSize(item.sizeBytes)
     val resume = watched
@@ -1461,16 +1561,26 @@ private fun MetaLine(item: MediaItem, watched: WatchPoint?) {
     Text(
         listOfNotNull(duration.ifEmpty { null }, size.ifEmpty { null }, resume)
             .joinToString("  ·  "),
-        style = MaterialTheme.typography.bodyMedium,
+        style = if (compact) {
+            M3MaterialTheme.typography.labelSmall
+        } else {
+            MaterialTheme.typography.bodyMedium
+        },
         color = if (resume != null) Tone.accent else Tone.muted,
         maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
     )
 }
 
 private const val COLUMNS = 4
 
-/** The narrowest a video tile may be on a phone before the grid drops a column. */
-private val TOUCH_TILE_MIN = 168.dp
+/**
+ * The narrowest a video tile may be on a phone before the grid drops a column.
+ *
+ * Smaller than it was: the art only has to be recognisable, and taking 36dp off it is what buys
+ * the extra column and the room for the name underneath.
+ */
+private val TOUCH_TILE_MIN = 120.dp
 
 /** No overscan to clear on a phone, so the margin is only what keeps art off the bezel. */
 private val TOUCH_EDGE = 16.dp
@@ -1490,8 +1600,8 @@ private const val TOUCH_ART_SHARE = 0.4f
 /** The chat's picture in the app bar, at Material's own app-bar avatar size. */
 private val BAR_AVATAR = 40.dp
 
-/** Telegram's own media grid: barely a hairline between tiles, so it reads as one sheet. */
-private val DENSE_GAP = 2.dp
+/** Barely a hairline between tiles, so the grid still reads as one sheet of pictures. */
+private val DENSE_GAP = 4.dp
 
 /** Half the panel, so the strip never reaches back across the listing it belongs to. */
 private val STRIP_MAX_WIDTH = 480.dp

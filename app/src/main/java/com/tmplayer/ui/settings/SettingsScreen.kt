@@ -168,7 +168,16 @@ fun SettingsScreen(
     val themeChoice by settings.themeChoice.collectAsStateWithLifecycle(
         initialValue = ThemeChoice.Default,
     )
-    val dynamicColour by settings.dynamicColour.collectAsStateWithLifecycle(initialValue = true)
+    val dynamicColour by settings.dynamicColour.collectAsStateWithLifecycle(initialValue = false)
+    // The default is the device's own, so it is read rather than assumed: a television starts at
+    // one video and a phone at three, and the placeholder must not say the other one first.
+    val keepVideos by settings.keepVideos.collectAsStateWithLifecycle(
+        initialValue = if (isTouch()) {
+            SettingsStore.TOUCH_KEEP_VIDEOS
+        } else {
+            SettingsStore.TV_KEEP_VIDEOS
+        },
+    )
 
     val toast = rememberToast()
     val updateState by Updates.state.collectAsStateWithLifecycle()
@@ -487,8 +496,23 @@ fun SettingsScreen(
             )
         }
         item {
+            // A press steps to the next choice and wraps round, which is one focusable target for
+            // a remote and one tap for a finger. A row of six numbers would be neither.
             ActionRow(
-                title = "Delete the downloaded video",
+                title = "Downloaded videos to keep",
+                subtitle = "${SettingsStore.keepVideosLabel(keepVideos)}. " +
+                    "The oldest is deleted when a new one needs the room.",
+                icon = TmIcons.Download,
+                onClick = {
+                    val choices = SettingsStore.KEEP_VIDEO_CHOICES
+                    val next = choices[(choices.indexOf(keepVideos).coerceAtLeast(0) + 1) % choices.size]
+                    scope.launch { settings.setKeepVideos(next) }
+                },
+            )
+        }
+        item {
+            ActionRow(
+                title = if (touch) "Delete downloaded videos" else "Delete the downloaded video",
                 subtitle = "Frees up ${StreamStats.formatBytes(videoBytes)}",
                 icon = Icons.Filled.Delete,
                 onClick = { prompt = Prompt.ClearCache },
@@ -497,7 +521,7 @@ fun SettingsScreen(
         item {
             ToggleRow(
                 title = "Ask before deleting a video",
-                subtitle = "Check with you before a new video replaces the last one",
+                subtitle = "Check with you before an older video is deleted to make room",
                 icon = Icons.Filled.Notifications,
                 checked = askBeforeClearing,
                 onToggle = { scope.launch { settings.setAskBeforeClearing(!askBeforeClearing) } },
@@ -677,6 +701,9 @@ fun SettingsScreen(
                     busy = "Deleting…"
                     val freed = videoBytes
                     runCatching { Td.clearMediaCache() }
+                    // The index goes with the files. Left behind, its rows point at videos that
+                    // are no longer on disk and take up the Downloads screen's own budget.
+                    runCatching { settings.forgetAllDownloads() }
                     refresh()
                     busy = null
                     toast("Freed ${StreamStats.formatBytes(freed)}")
@@ -1129,24 +1156,37 @@ private fun sectionStyle() = if (isTouch()) {
  * The three options are mutually exclusive and short enough to read at a glance, which is exactly
  * the case a segmented button exists for: a stack of radio rows would take three times the height
  * to say the same thing, and hide two thirds of the answer behind the one that is chosen.
+ *
+ * A segment carries a check mark as well as its word once it is chosen, so a third of a phone's
+ * width is not much room. The segments therefore say only "System", "Light" and "Dark", and the
+ * sentence that explains the chosen one sits under the row where it has the whole width to itself
+ * rather than being cut off inside a button.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ThemePicker(current: ThemeChoice, onPick: (ThemeChoice) -> Unit) {
     val options = ThemeChoice.entries
-    SingleChoiceSegmentedButtonRow(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-    ) {
-        options.forEachIndexed { index, choice ->
-            SegmentedButton(
-                selected = choice == current,
-                onClick = { onPick(choice) },
-                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                label = {
-                    M3Text(choice.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                },
-            )
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            options.forEachIndexed { index, choice ->
+                SegmentedButton(
+                    selected = choice == current,
+                    onClick = { onPick(choice) },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                    // The word alone is ambiguous read aloud, so the spoken label is the sentence.
+                    modifier = Modifier.semantics { contentDescription = choice.description },
+                    label = {
+                        M3Text(choice.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    },
+                )
+            }
         }
+        M3Text(
+            current.description,
+            style = M3Theme.typography.bodyMedium,
+            color = M3Theme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
     }
 }
 
@@ -1252,8 +1292,17 @@ private fun StorageCard(
             Spacer(Modifier.height(8.dp))
         }
         Text(
-            "One video is kept at a time; starting another replaces it. Deleting takes the " +
-                "video and leaves the pictures.",
+            // The two devices keep different bargains, and the card has to say which one it is
+            // looking at: a phone that claimed to replace the last video would be lying about
+            // where its space went.
+            if (touch) {
+                "The oldest download is deleted when a new one needs the room, and you can " +
+                    "delete any of them from Downloads. This takes the videos and leaves the " +
+                    "pictures."
+            } else {
+                "One video is kept at a time; starting another replaces it. Deleting takes the " +
+                    "video and leaves the pictures."
+            },
             style = MaterialTheme.typography.bodyMedium,
             color = Tone.muted,
         )

@@ -111,6 +111,20 @@ import com.tmplayer.ui.theme.TextPrimary
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 
+/**
+ * What the line under the app bar's title counts.
+ *
+ * Every tab but one is a list of chats. Continue watching is a list of videos, and saying "chats"
+ * over it was not a wording slip: it was the chat list's count, which had nothing to do with what
+ * was on the screen.
+ */
+private fun countLabel(tab: BrowseTab, count: Int): String = when {
+    tab == BrowseTab.Continue && count == 1 -> "1 video"
+    tab == BrowseTab.Continue -> "$count videos"
+    count == 1 -> "1 chat"
+    else -> "$count chats"
+}
+
 /** The rail's sections, in the order they appear. */
 enum class BrowseTab(
     val label: String,
@@ -143,6 +157,8 @@ fun BrowseScreen(
     onOpenChat: (ChatSummary) -> Unit,
     onResumeMedia: (ResumeRecord) -> Unit,
     onOpenSettings: () -> Unit,
+    /** The phone's Downloads screen, from the drawer. Never reached on a television. */
+    onOpenDownloads: () -> Unit = {},
     onToggleFavorite: (ChatSummary) -> Unit = {},
     onRestartMedia: (ResumeRecord) -> Unit = {},
     onForgetMedia: (ResumeRecord) -> Unit = {},
@@ -287,15 +303,22 @@ fun BrowseScreen(
 
     if (touch) {
         val voiceSearch = rememberVoiceSearch("Say a chat name") { query = it }
-        val count = (state as? UiState.Content)?.value?.chats?.let {
-            filterChats(it, tab, favorites, query).size
-        } ?: 0
+        // Continue watching lists videos held on this device, not chats, and counting the chat
+        // list there put "78 chats" over three videos.
+        val count = if (tab == BrowseTab.Continue) {
+            continueWatching.size
+        } else {
+            (state as? UiState.Content)?.value?.chats?.let {
+                filterChats(it, tab, favorites, query).size
+            } ?: 0
+        }
         TouchBrowseShell(
             account = (state as? UiState.Content)?.value?.account,
             selected = tab,
             favoriteCount = favorites.size,
             onSelect = { onPickTab(it); query = "" },
             onOpenSettings = onOpenSettings,
+            onOpenDownloads = onOpenDownloads,
             updateVersion = updateVersion,
             onUpdate = onUpdate,
             title = tab.heading,
@@ -340,7 +363,7 @@ fun BrowseScreen(
                 Column(Modifier.fillMaxSize()) {
                     if (count > 0 && query.isBlank()) {
                         M3Text(
-                            "$count ${if (count == 1) "chat" else "chats"}",
+                            countLabel(tab, count),
                             style = M3MaterialTheme.typography.bodySmall,
                             color = Tone.muted,
                             modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp),
@@ -584,7 +607,9 @@ private fun ContinueTile(
                 record.title,
                 style = MaterialTheme.typography.titleMedium,
                 color = Tone.text,
-                maxLines = 1,
+                // Two lines here as everywhere else a release name is shown: one line cut these
+                // titles before the resolution, which is the part that tells two of them apart.
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.marqueeWhen(focused),
             )
@@ -707,7 +732,9 @@ private fun ContinueCard(
                 record.title,
                 style = MaterialTheme.typography.titleMedium,
                 color = Tone.text,
-                maxLines = 1,
+                // Two lines here as everywhere else a release name is shown: one line cut these
+                // titles before the resolution, which is the part that tells two of them apart.
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.marqueeWhen(focused),
             )
@@ -901,7 +928,9 @@ private fun NavRail(
             // Which build this is, riding along with Settings rather than on a line of its own:
             // the rail is already as tall as the screen with the tabs it has to hold, and a
             // tenth row was simply cut off at the bottom edge.
-            badge = "v${Updates.installedVersion}",
+            // The number only. A build with a suffix on it, which the screenshot fixture has,
+            // is still a version the rail has to say without eating the word beside it.
+            badge = "v${Updates.installedVersion.substringBefore('-')}",
             selected = false,
             onClick = onOpenSettings,
         )
@@ -1575,11 +1604,15 @@ private fun TouchChatRow(
 ) {
     ListItem(
         headlineContent = {
-            M3Text(chat.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Two lines, because a channel name is regularly longer than a phone is wide and one
+            // line cut several of them at the same word.
+            M3Text(chat.title, maxLines = 2, overflow = TextOverflow.Ellipsis)
         },
         modifier = modifier
             .fillMaxWidth()
-            .height(TOUCH_ROW_HEIGHT)
+            // A floor rather than a fixed height: a one-line name keeps Material's 72dp row, and
+            // only a name that needs the second line makes its row taller.
+            .heightIn(min = TOUCH_ROW_HEIGHT)
             // No clip and no background: the row sits on the window, so a press ripples across
             // the whole width of the screen the way a phone's list rows do.
             .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold),
@@ -1649,7 +1682,7 @@ private const val HOLD_HINT = "Hold OK for options"
 private val RAIL_INSET = 16.dp
 
 /** Enough for a version name, and never enough to eat the item's own label. */
-private val RAIL_BADGE_MAX = 84.dp
+private val RAIL_BADGE_MAX = 64.dp
 private val RECENT_TILE_WIDTH = 224.dp
 private val RECENT_TILE_HEIGHT = 154.dp
 

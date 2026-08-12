@@ -434,6 +434,18 @@ object Td {
         return td.getFile(fileId).valueOrNull?.local?.downloadedSize ?: 0L
     }
 
+    /**
+     * Deletes one downloaded file and leaves the rest of the cache alone.
+     *
+     * This is what the Downloads screen removes a row with. `deleteFile` only touches the copy on
+     * disk: the message it came from is untouched, so the video can be downloaded again by playing
+     * it, which is exactly what a viewer clearing space expects.
+     */
+    suspend fun deleteFile(fileId: Int) {
+        val td = current ?: return
+        runCatching { td.deleteFile(fileId) }
+    }
+
     suspend fun isFileCached(fileId: Int): Boolean =
         localFileAvailability(fileId) == LocalFileAvailability.Complete
 

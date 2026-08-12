@@ -263,13 +263,13 @@ fun MediaGridSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLa
         val inner = maxWidth - edge * 2
         val height = maxHeight
 
-        // The phone's grid is dense and captionless: tiles two dp apart, edge to edge, no words
-        // underneath. The placeholder has to be the same, or the shimmer resolves into a listing
+        // The phone's grid is compact: small tiles a hairline apart, with two lines of the name
+        // under each. The placeholder has to be the same, or the shimmer resolves into a listing
         // that has moved.
         val dense = touch && layout == CardLayout.Grid
         val gridGap = if (dense) DENSE_GAP else 16.dp
-        val gridEdge = if (dense) 0.dp else edge
-        val gridInner = if (dense) maxWidth else inner
+        val gridEdge = if (dense) DENSE_GAP else edge
+        val gridInner = if (dense) maxWidth - DENSE_GAP * 2 else inner
 
         Column(
             Modifier.padding(horizontal = gridEdge),
@@ -283,7 +283,7 @@ fun MediaGridSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLa
                     // The art is 16:9 of whatever a column came out as, and the caption beneath it
                     // is a fixed block, so the tile's height is only known once the width is.
                     val tile = (gridInner - gridGap * (columns - 1)) / columns * 9f / 16f +
-                        (if (dense) 0.dp else CAPTION_HEIGHT)
+                        (if (dense) DENSE_CAPTION_HEIGHT else CAPTION_HEIGHT)
                     repeat(rowsToFill(height, tile + gridGap)) {
                         Row(
                             Modifier.fillMaxWidth(),
@@ -291,11 +291,7 @@ fun MediaGridSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLa
                         ) {
                             repeat(columns) {
                                 if (dense) {
-                                    SkeletonBox(
-                                        shimmer,
-                                        Modifier.weight(1f).aspectRatio(16f / 9f),
-                                        RoundedCornerShape(0.dp),
-                                    )
+                                    DenseTileSkeleton(shimmer, Modifier.weight(1f))
                                 } else {
                                     MediaTileSkeleton(shimmer, Modifier.weight(1f))
                                 }
@@ -342,6 +338,24 @@ fun MediaGridSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLa
                 }
             }
         }
+    }
+}
+
+/** The phone's compact tile: art, then the two lines of name it always reserves room for. */
+@Composable
+private fun DenseTileSkeleton(shimmer: Shimmer, modifier: Modifier = Modifier) {
+    Column(modifier.padding(DENSE_GAP)) {
+        SkeletonBox(
+            shimmer,
+            Modifier.fillMaxWidth().aspectRatio(16f / 9f),
+            RoundedCornerShape(Corner.Small),
+        )
+        Spacer(Modifier.height(6.dp))
+        SkeletonBox(shimmer, Modifier.fillMaxWidth().height(10.dp))
+        Spacer(Modifier.height(4.dp))
+        SkeletonBox(shimmer, Modifier.fillMaxWidth(0.6f).height(10.dp))
+        Spacer(Modifier.height(6.dp))
+        SkeletonBox(shimmer, Modifier.fillMaxWidth(0.45f).height(8.dp))
     }
 }
 
@@ -398,11 +412,14 @@ private const val GRID_COLUMNS = 4
 private const val MAX_ROWS = 12
 
 /** The smallest tile the phone grids accept, matching `TOUCH_TILE_MIN` on both browse screens. */
-private val TOUCH_TILE_MIN = 168.dp
+private val TOUCH_TILE_MIN = 120.dp
 
 /** The phone insets, matching `TouchInsets` on the browse screen and `TOUCH_EDGE` on the grid. */
-/** Telegram's own media grid: barely a hairline between tiles. Mirrors the listing's own figure. */
-private val DENSE_GAP = 2.dp
+/** Barely a hairline between tiles. Mirrors the listing's own figure. */
+private val DENSE_GAP = 4.dp
+
+/** Two small lines of caption under a dense tile, matching the two the real tile reserves. */
+private val DENSE_CAPTION_HEIGHT = 44.dp
 
 private val TOUCH_INSET = 16.dp
 private val TOUCH_TOP = 8.dp

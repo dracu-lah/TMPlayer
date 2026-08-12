@@ -78,7 +78,7 @@ list screen. Worth doing on an 8 GB stick if you keep other apps installed.
 ## Troubleshooting
 
 **"No Telegram API credentials in this build"**: the APK was built without `TG_API_ID` /
-`TG_API_HASH`. See [README](README.md#build-it).
+`TG_API_HASH`. See [docs/BUILDING.md](docs/BUILDING.md).
 
 **Video stutters or the picture is black but audio plays.** The file's video codec has no
 hardware decoder on this device (common with 4K HEVC 10-bit on the 1080p Mi TV Stick). Nothing

@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -33,6 +34,7 @@ private val MEDIA_LAYOUT = stringPreferencesKey("media_layout")
 private val CHAT_SNAPSHOT = stringPreferencesKey("chat_snapshot")
 private val THEME_CHOICE = stringPreferencesKey("theme_choice")
 private val DYNAMIC_COLOUR = booleanPreferencesKey("dynamic_colour")
+private val KEEP_VIDEOS = intPreferencesKey("keep_videos")
 
 /** Where playback stopped, so the next launch can offer to continue. */
 private fun resumeKey(chatId: Long, messageId: Long) =
@@ -44,6 +46,16 @@ private fun durationKey(chatId: Long, messageId: Long) =
 /** Title, chat and file id, so a half-watched video can be reopened without its chat loaded. */
 private fun metaKey(chatId: Long, messageId: Long) =
     stringPreferencesKey("meta_${chatId}_$messageId")
+
+/**
+ * The same line again, for the Downloads screen.
+ *
+ * It cannot read the resume history instead: a video is written there only once a minute of it has
+ * been watched, and a download the viewer started and walked away from is precisely the one taking
+ * up the space they are looking for. This is written the moment playback is allowed to begin.
+ */
+private fun downloadKey(chatId: Long, messageId: Long) =
+    stringPreferencesKey("dl_${chatId}_$messageId")
 
 class SettingsStore(private val context: Context) {
 
@@ -162,6 +174,28 @@ class SettingsStore(private val context: Context) {
     /** Read once at the start of playback, where a flow that has not emitted yet would lie. */
     suspend fun downloadBeforePlayingNow(): Boolean =
         context.prefs.data.first()[DOWNLOAD_FIRST] ?: false
+
+    /**
+     * How many downloaded videos to keep before the oldest is given up, or
+     * [CacheShelf.UNLIMITED] for as many as the disk will hold.
+     *
+     * The default is the device's, not a constant: a stick with 8 GB can hold about one video, and
+     * a phone can comfortably hold three. Both are only a starting point, and the number is the
+     * viewer's from the moment they touch it, which is why the stored value is never written on
+     * their behalf.
+     */
+    val keepVideos: Flow<Int> = context.prefs.data.map { it[KEEP_VIDEOS] ?: defaultKeepVideos() }
+
+    /** Read once, at the moment a video is asked for, for the same reason as the one above. */
+    suspend fun keepVideosNow(): Int =
+        context.prefs.data.first()[KEEP_VIDEOS] ?: defaultKeepVideos()
+
+    suspend fun setKeepVideos(value: Int) {
+        context.prefs.edit { it[KEEP_VIDEOS] = value }
+    }
+
+    private fun defaultKeepVideos(): Int =
+        if (FormFactor.isTv(context)) TV_KEEP_VIDEOS else TOUCH_KEEP_VIDEOS
 
     /**
      * Refuse to fetch video over a connection the viewer pays for by the byte.
@@ -284,11 +318,11 @@ class SettingsStore(private val context: Context) {
     /**
      * Whether to take the palette from the phone's wallpaper, where Android offers one.
      *
-     * On by default, which is the Android 12 and later convention: an app that ignores the colours
-     * the viewer picked for their phone is the one that looks out of place. Off falls back to the
-     * app's own blue, and on a phone older than Android 12 there is nothing to fall back from.
+     * Off by default. TMPlayer has a palette of its own and should look like itself on first run;
+     * a wallpaper can take the app somewhere it was never designed for. Turning it on hands the
+     * colours over to the phone, and on a phone older than Android 12 there is no palette to take.
      */
-    val dynamicColour: Flow<Boolean> = context.prefs.data.map { it[DYNAMIC_COLOUR] ?: true }
+    val dynamicColour: Flow<Boolean> = context.prefs.data.map { it[DYNAMIC_COLOUR] ?: false }
 
     suspend fun setDynamicColour(value: Boolean) {
         context.prefs.edit { it[DYNAMIC_COLOUR] = value }
@@ -375,6 +409,71 @@ class SettingsStore(private val context: Context) {
                 add(record)
             }
         }.sortedByDescending { it.updatedAt }
+    }
+
+    /**
+     * Every video this install has ever asked TDLib for, newest first.
+     *
+     * Whether the file is still on disk is TDLib's answer, not this one: the screen asks it per
+     * row. This is only the names, so that a row can say what it is rather than quoting a file id.
+     */
+    val downloadHistory: Flow<List<ResumeRecord>> = context.prefs.data.map { prefs ->
+        buildList {
+            for ((key, value) in prefs.asMap()) {
+                val name = key.name
+                if (!name.startsWith("dl_")) continue
+                val ids = name.removePrefix("dl_")
+                val record = ResumeRecord.decode(
+                    key = ids,
+                    encoded = value as? String,
+                    positionMs = prefs[longPreferencesKey("resume_$ids")] ?: 0L,
+                    durationMs = prefs[longPreferencesKey("duration_$ids")] ?: 0L,
+                ) ?: continue
+                add(record)
+            }
+        }.sortedByDescending { it.updatedAt }
+    }
+
+    /** Remembers a video as one that has been fetched, so Downloads can name it later. */
+    suspend fun noteDownload(item: MediaItem, chatTitle: String) {
+        context.prefs.edit { prefs ->
+            prefs[downloadKey(item.chatId, item.messageId)] = ResumeRecord.encode(
+                fileId = item.fileId,
+                title = item.title,
+                chatTitle = chatTitle,
+                sizeBytes = item.sizeBytes,
+                durationSec = item.durationSec,
+                updatedAt = System.currentTimeMillis(),
+            )
+            evictOldestDownloads(prefs)
+        }
+    }
+
+    /** Drops one row from Downloads, once its file has actually been deleted. */
+    suspend fun forgetDownload(chatId: Long, messageId: Long) {
+        context.prefs.edit { it.remove(downloadKey(chatId, messageId)) }
+    }
+
+    /** Empties the Downloads list, for the button that deletes every file behind it. */
+    suspend fun forgetAllDownloads() {
+        context.prefs.edit { prefs ->
+            val doomed = prefs.asMap().keys.filter { it.name.startsWith("dl_") }
+            for (key in doomed) prefs.remove(key)
+        }
+    }
+
+    /** The same cap the resume history has, for the same reason: this list is not a log. */
+    private fun evictOldestDownloads(prefs: MutablePreferences) {
+        val stamps = prefs.asMap().keys
+            .mapNotNull { it.name.removePrefixOrNull("dl_") }
+            .mapNotNull { ids ->
+                val meta = prefs[stringPreferencesKey("dl_$ids")] ?: return@mapNotNull null
+                ids to (ResumeRecord.updatedAtOf(meta) ?: 0L)
+            }
+        if (stamps.size <= MAX_HISTORY) return
+        stamps.sortedBy { it.second }
+            .take(stamps.size - MAX_HISTORY)
+            .forEach { (ids, _) -> prefs.remove(stringPreferencesKey("dl_$ids")) }
     }
 
     suspend fun saveResumePosition(
@@ -502,6 +601,22 @@ class SettingsStore(private val context: Context) {
 
         /** How many half-watched videos are kept before the oldest start dropping off. */
         const val MAX_HISTORY = 200
+
+        /** One video at a time, which is about all an 8 GB stick can hold. */
+        const val TV_KEEP_VIDEOS = 1
+
+        /** A phone has room for a few, and a viewer who expects the last one to still be there. */
+        const val TOUCH_KEEP_VIDEOS = 3
+
+        /** What the Settings row steps through, ending in "as many as fit". */
+        val KEEP_VIDEO_CHOICES = listOf(1, 2, 3, 5, 10, CacheShelf.UNLIMITED)
+
+        /** How the count reads in a sentence, where zero means no limit at all. */
+        fun keepVideosLabel(count: Int): String = when {
+            count == CacheShelf.UNLIMITED -> "As many as fit"
+            count == 1 -> "1 video"
+            else -> "$count videos"
+        }
 
         /** Anything within this of the end counts as watched. */
         const val END_MARGIN_MS = 30_000L

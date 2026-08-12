@@ -30,11 +30,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.MaterialTheme
 import com.tmplayer.data.AuthState
-import com.tmplayer.data.CachePolicy
+import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.CardLayout
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DiskSpace
+import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.LocalFileAvailability
 import com.tmplayer.data.NetworkMonitor
@@ -56,6 +57,7 @@ import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.browse.ChatListViewModel
 import com.tmplayer.ui.browse.MediaGridScreen
 import com.tmplayer.ui.components.TvConfirm
+import com.tmplayer.ui.downloads.DownloadsScreen
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.components.ConnectionNotice
 import com.tmplayer.ui.components.ConnectionStatus
@@ -76,6 +78,7 @@ private sealed interface Screen {
     data object Chats : Screen
     data class Media(val chat: ChatSummary) : Screen
     data object Settings : Screen
+    data object Downloads : Screen
 }
 
 /**
@@ -92,6 +95,7 @@ private val ScreenSaver = listSaver<Screen, Any>(
         when (screen) {
             is Screen.Chats -> listOf(SCREEN_CHATS)
             is Screen.Settings -> listOf(SCREEN_SETTINGS)
+            is Screen.Downloads -> listOf(SCREEN_DOWNLOADS)
             is Screen.Media -> listOf(
                 SCREEN_MEDIA,
                 screen.chat.id,
@@ -113,6 +117,7 @@ private val ScreenSaver = listSaver<Screen, Any>(
                 ),
             )
             SCREEN_SETTINGS -> Screen.Settings
+            SCREEN_DOWNLOADS -> Screen.Downloads
             else -> Screen.Chats
         }
     },
@@ -121,6 +126,7 @@ private val ScreenSaver = listSaver<Screen, Any>(
 private const val SCREEN_CHATS = "chats"
 private const val SCREEN_MEDIA = "media"
 private const val SCREEN_SETTINGS = "settings"
+private const val SCREEN_DOWNLOADS = "downloads"
 
 /** A video waiting on the viewer's answer about clearing space. */
 private data class RoomPrompt(
@@ -128,6 +134,13 @@ private data class RoomPrompt(
     val reclaimBytes: Long,
     val shortfallBytes: Long,
     val chatTitle: String,
+    /**
+     * Nothing is offered to be cleared: the video does not fit even with the shelf emptied, and
+     * the way out is the Downloads screen rather than a button.
+     */
+    val outOfSpace: Boolean = false,
+    /** How many older videos would be deleted to make room, when that is what is being asked. */
+    val evicting: Int = 0,
 )
 
 class MainActivity : ComponentActivity() {
@@ -256,6 +269,8 @@ private fun Root() {
     // One slot for whatever the current login pane got wrong: only one of them is ever on screen.
     var signInError by rememberSaveable { mutableStateOf<String?>(null) }
     var roomPrompt by remember { mutableStateOf<RoomPrompt?>(null) }
+    // Where leaving the Downloads screen goes back to.
+    var downloadsCameFrom by remember { mutableStateOf<Screen>(Screen.Chats) }
     // Saveable, not just remembered. Playing a video puts a second activity in front of this one,
     // and a 1 GB stick will happily kill what is behind it, so this composable is routinely
     // rebuilt on the way back. Remembered state would come back false, the jump would re-arm, and
@@ -292,38 +307,92 @@ private fun Root() {
                 return@launch
             }
             val alreadyCached = local == LocalFileAvailability.Complete
-            val cacheBytes = runCatching { Td.storageUsedBytes() }.getOrDefault(0L)
             val free = DiskSpace.read(context).freeBytes
             // What this same video already has on disk from an interrupted watch. Without it the
-            // policy sees a cache full of "old" media, clears it, and the thing it deletes is the
-            // half of the video the viewer came back to carry on from.
+            // shelf sees a disk full of "old" media, gives some of it up, and the thing it deletes
+            // is the half of the video the viewer came back to carry on from.
             val partial = if (local == LocalFileAvailability.Partial) {
                 runCatching { Td.localDownloadedBytes(item.fileId) }.getOrDefault(0L)
             } else {
                 0L
             }
-            val decision = CachePolicy.decide(item.sizeBytes, alreadyCached, cacheBytes, free, partial)
+
+            // Everything the shelf is holding, measured before a byte of the new video is asked
+            // for, which is the whole point: the answer to "will this fit" is known while it can
+            // still be acted on rather than two thirds of the way into a download.
+            val keep = runCatching { settings.keepVideosNow() }
+                .getOrDefault(if (FormFactor.isTv(context)) {
+                    SettingsStore.TV_KEEP_VIDEOS
+                } else {
+                    SettingsStore.TOUCH_KEEP_VIDEOS
+                })
+            val held = runCatching {
+                settings.downloadHistory.first().mapNotNull { record ->
+                    val bytes = Td.localDownloadedBytes(record.fileId)
+                    if (bytes <= 0) null else CacheShelf.Held(record.fileId, bytes, record.updatedAt)
+                }
+            }.getOrDefault(emptyList())
+
+            val plan = CacheShelf.plan(
+                targetFileId = item.fileId,
+                targetSizeBytes = item.sizeBytes,
+                targetPartialBytes = partial,
+                alreadyCached = alreadyCached,
+                held = held,
+                freeBytes = free,
+                keepCount = keep,
+            )
             val ask = runCatching { settings.askBeforeClearing.first() }.getOrDefault(false)
 
-            when (decision) {
-                is CachePolicy.Decision.Proceed ->
-                    context.startActivity(PlayerActivity.intent(context, item, chatTitle))
+            fun start() {
+                scope.launch { settings.noteDownload(item, chatTitle) }
+                context.startActivity(PlayerActivity.intent(context, item, chatTitle))
+            }
 
-                is CachePolicy.Decision.FreeUp -> {
-                    if (ask && !confirmed) {
-                        roomPrompt = RoomPrompt(item, decision.reclaimBytes, 0, chatTitle)
-                    } else {
-                        runCatching { Td.clearMediaCache() }
-                        context.startActivity(PlayerActivity.intent(context, item, chatTitle))
-                    }
+            /** Deletes exactly what the plan named, and forgets the rows that went with it. */
+            suspend fun evict(fileIds: List<Int>) {
+                val doomed = fileIds.toSet()
+                val records = runCatching { settings.downloadHistory.first() }
+                    .getOrDefault(emptyList())
+                    .filter { it.fileId in doomed }
+                for (record in records) {
+                    runCatching { Td.deleteFile(record.fileId) }
+                    settings.forgetDownload(record.chatId, record.messageId)
+                }
+                // Anything named by the plan that no longer has a row of its own still has to go.
+                for (fileId in doomed - records.map { it.fileId }.toSet()) {
+                    runCatching { Td.deleteFile(fileId) }
+                }
+            }
+
+            when (plan) {
+                is CacheShelf.Plan.Proceed -> start()
+
+                is CacheShelf.Plan.NotEnoughSpace -> {
+                    roomPrompt = RoomPrompt(
+                        item = item,
+                        reclaimBytes = plan.reclaimBytes,
+                        shortfallBytes = plan.shortfallBytes,
+                        chatTitle = chatTitle,
+                        outOfSpace = true,
+                    )
                 }
 
-                is CachePolicy.Decision.TooLarge -> {
-                    if (!confirmed) {
-                        roomPrompt = RoomPrompt(item, decision.reclaimBytes, decision.shortfallBytes, chatTitle)
+                is CacheShelf.Plan.Evict -> {
+                    // Scraps are not worth a dialog, and neither is a viewer who has said they do
+                    // not want to be asked. Everything else gets the question first.
+                    val worthAsking = plan.reclaimBytes >= CacheShelf.WORTH_ASKING_BYTES
+                    if (ask && worthAsking && !confirmed) {
+                        roomPrompt = RoomPrompt(
+                            item = item,
+                            reclaimBytes = plan.reclaimBytes,
+                            shortfallBytes = 0,
+                            chatTitle = chatTitle,
+                            evicting = plan.fileIds.size,
+                        )
                     } else {
-                        runCatching { Td.clearMediaCache() }
-                        context.startActivity(PlayerActivity.intent(context, item, chatTitle))
+                        evict(plan.fileIds)
+                        start()
                     }
                 }
             }
@@ -481,6 +550,10 @@ private fun Root() {
                     onOpenChat = { openChat(it) },
                     onResumeMedia = { resumeMedia(it) },
                     onOpenSettings = { screen = Screen.Settings },
+                    onOpenDownloads = {
+                        downloadsCameFrom = Screen.Chats
+                        screen = Screen.Downloads
+                    },
                     updateVersion = (updateState as? UpdateState.Available)?.release?.version,
                     onUpdate = { showUpdate = true },
                     onToggleFavorite = { chat ->
@@ -577,6 +650,18 @@ private fun Root() {
                 )
             }
 
+            is Screen.Downloads -> {
+                // Back to whatever raised it. Reached from the drawer that is the chat list, and
+                // reached from "Not enough space" it is the chat the video was in, which is where
+                // somebody who has just freed space wants to be.
+                val leaveDownloads = { screen = downloadsCameFrom }
+                BackHandler(onBack = leaveDownloads)
+                DownloadsScreen(
+                    onPlay = { record -> resumeMedia(record) },
+                    onBack = leaveDownloads,
+                )
+            }
+
             is Screen.Settings -> {
                 val leaveSettings = {
                     // Only if it has had time to go stale. Settings cannot change the chat list,
@@ -594,21 +679,47 @@ private fun Root() {
         }
 
         roomPrompt?.let { pending ->
-            val tooLarge = pending.shortfallBytes > 0
+            if (pending.outOfSpace) {
+                // A phone deletes nothing on its own, so this is not a question with a "do it"
+                // answer: it says how much short the phone is and offers the screen where the
+                // viewer can decide what goes.
+                TvConfirm(
+                    title = "Not enough space",
+                    message = "“${pending.item.title}” is " +
+                        "${StreamStats.formatBytes(pending.item.sizeBytes)}, and this phone is " +
+                        "${StreamStats.formatBytes(pending.shortfallBytes)} short. " +
+                        if (pending.reclaimBytes > 0) {
+                            "TMPlayer is holding " +
+                                "${StreamStats.formatBytes(pending.reclaimBytes)} in downloads."
+                        } else {
+                            "Freeing space on the phone will let it play."
+                        },
+                    detail = "Nothing is deleted from Telegram, only this device's copy.",
+                    confirmLabel = "Manage downloads",
+                    onConfirm = {
+                        roomPrompt = null
+                        downloadsCameFrom = screen
+                        screen = Screen.Downloads
+                    },
+                    onDismiss = { roomPrompt = null },
+                )
+                return@let
+            }
+
+            // The only question left: older videos have to go, and this says how many and how
+            // much comes back before anything is deleted.
+            val count = pending.evicting.coerceAtLeast(1)
             TvConfirm(
-                title = if (tooLarge) "This video may not fit" else "Make room for this video?",
-                message = if (tooLarge) {
-                    // State what it can free, not the shortfall.
-                    val canFree = (pending.item.sizeBytes - pending.shortfallBytes).coerceAtLeast(0)
-                    "“${pending.item.title}” is ${StreamStats.formatBytes(pending.item.sizeBytes)}. " +
-                        "This device can only free up ${StreamStats.formatBytes(canFree)}, so the video " +
-                        "may stop partway through."
+                title = "Make room for this video?",
+                message = if (count == 1) {
+                    "Playing this deletes the video you watched longest ago and frees " +
+                        "${StreamStats.formatBytes(pending.reclaimBytes)}."
                 } else {
-                    "TMPlayer keeps one video on this device at a time. Playing this deletes the last " +
-                        "one and frees ${StreamStats.formatBytes(pending.reclaimBytes)}."
+                    "Playing this deletes the $count videos you watched longest ago and frees " +
+                        "${StreamStats.formatBytes(pending.reclaimBytes)}."
                 },
                 detail = "Nothing is deleted from Telegram, only this device's copy.",
-                confirmLabel = if (tooLarge) "Play anyway" else "Make room and play",
+                confirmLabel = "Make room and play",
                 onConfirm = {
                     val item = pending.item
                     val chat = pending.chatTitle

@@ -291,6 +291,29 @@ object TmIcons {
         }
     }
 
+    /** An arrow into a tray: what is held on this device, for the Downloads destination. */
+    val Download: ImageVector by lazy {
+        icon("Download") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(11f, 3f)
+                horizontalLineTo(13f)
+                verticalLineTo(11f)
+                horizontalLineTo(17f)
+                lineTo(12f, 16f)
+                lineTo(7f, 11f)
+                horizontalLineTo(11f)
+                close()
+            }
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(5f, 18f)
+                horizontalLineTo(19f)
+                verticalLineTo(20f)
+                horizontalLineTo(5f)
+                close()
+            }
+        }
+    }
+
     /** Microphone, for voice search. */
     val Mic: ImageVector by lazy {
         icon("Mic") {
