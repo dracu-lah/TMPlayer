@@ -1,0 +1,14 @@
+<!--
+  The track the indeterminate bar runs along.
+
+  Android's stock indeterminate horizontal bar draws a moving segment and nothing else, which on a
+  dark sheet is a hairline that comes and goes: on the device it read as a rendering fault rather
+  than as progress. Giving it the same rounded track the determinate bar has means the two are
+  visibly the same control, and the handover from "working" to "62 per cent" is a fill appearing
+  in a bar that was already there.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#26FFFFFF" />
+    <corners android:radius="4dp" />
+</shape>

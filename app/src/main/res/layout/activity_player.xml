@@ -118,6 +118,23 @@
                 android:textSize="@dimen/player_title_size"
                 android:textStyle="bold" />
 
+            <!--
+              The running time, the size and the chat it came from: what the tile said, carried
+              through to the screen the viewer is now looking at for the next minute or two.
+            -->
+            <TextView
+                android:id="@+id/status_meta"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:gravity="center"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:maxWidth="720dp"
+                android:textColor="#9A9AA5"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
             <TextView
                 android:id="@+id/status_text"
                 android:accessibilityLiveRegion="polite"
@@ -160,6 +177,7 @@
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="@dimen/player_progress_width"
                 android:layout_height="6dp"
+                android:background="@drawable/bg_status_track"
                 android:indeterminate="true"
                 android:indeterminateTint="@color/accent" />
 

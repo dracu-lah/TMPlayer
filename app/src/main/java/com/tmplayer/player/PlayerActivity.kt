@@ -123,6 +123,7 @@ class PlayerActivity : FragmentActivity() {
     private var statusArt: ImageView? = null
     private var statusScrim: View? = null
     private var statusPoster: ImageView? = null
+    private var statusMeta: TextView? = null
     private var artDrift: android.animation.ObjectAnimator? = null
     private var statusRetry: android.widget.Button? = null
 
@@ -262,6 +263,7 @@ class PlayerActivity : FragmentActivity() {
         statusArt = findViewById(R.id.status_art)
         statusScrim = findViewById(R.id.status_scrim)
         statusPoster = findViewById(R.id.status_poster)
+        statusMeta = findViewById(R.id.status_meta)
         statusRetry = findViewById<android.widget.Button>(R.id.status_retry).apply {
             setOnClickListener { retryPlayback() }
         }
@@ -293,6 +295,9 @@ class PlayerActivity : FragmentActivity() {
         showStatus("Connecting to Telegram…")
 
         showArtwork()
+        statusMeta?.text = mediaSubtitle.ifBlank { chatTitle }
+        statusMeta?.visibility =
+            if (statusMeta?.text.isNullOrBlank()) View.GONE else View.VISIBLE
         if (!FormFactor.isTv(this)) wireEpisodeButtons()
         observeDownload()
         observeConnectivity()
@@ -1460,8 +1465,11 @@ class PlayerActivity : FragmentActivity() {
         lifecycleScope.launch {
             val full = runCatching { Thumbnails.full(thumbnailId) }.getOrNull() ?: return@launch
             statusPoster?.setImageBitmap(full)
-            // The backdrop stays on the small one on purpose. Stretching a real thumbnail across
-            // 1080p is a soft, ugly photograph; stretching a forty-pixel one is a blur.
+            // Where there was a minithumbnail the backdrop keeps it, on purpose: stretching a real
+            // thumbnail across 1080p is a soft, ugly photograph, while stretching a forty-pixel
+            // one is a blur. Where there was not, this is the only picture there is, and a soft
+            // backdrop beats the flat sheet it would otherwise be.
+            if (mini == null) statusArt?.setImageBitmap(full)
             revealArtwork()
         }
     }
@@ -1480,7 +1488,7 @@ class PlayerActivity : FragmentActivity() {
             art.alpha = 0f
             art.visibility = View.VISIBLE
             statusScrim?.visibility = View.VISIBLE
-            art.animate().alpha(1f).setDuration(ART_FADE_MS).start()
+            art.animate().alpha(ART_ALPHA).setDuration(ART_FADE_MS).start()
         }
         if (poster != null && poster.visibility != View.VISIBLE) {
             poster.alpha = 0f
@@ -1770,6 +1778,17 @@ class PlayerActivity : FragmentActivity() {
 
         /** The artwork's way in: long enough to read as a fade, short enough not to be a wait. */
         private const val ART_FADE_MS = 320L
+
+        /**
+         * How strongly the backdrop is drawn.
+         *
+         * A gradient alone was not enough, and could not be: half of what these channels use as a
+         * thumbnail is a white logo on white, which came through the scrim as a pale grey wall
+         * with the title fighting it. Dimming the picture itself is the part that works on every
+         * thumbnail rather than on the dark ones, and it leaves a photograph perfectly legible as
+         * a backdrop while it is at it.
+         */
+        private const val ART_ALPHA = 0.3f
 
         /** How far the poster rises as it arrives, in dp. */
         private const val POSTER_RISE_PX = 14f
