@@ -769,13 +769,13 @@ private fun Step(number: Int, text: String) {
             Modifier
                 .size(28.dp)
                 .clip(CircleShape)
-                .background(if (touch) M3.colorScheme.primaryContainer else Tone.accent),
+                .background(if (touch) M3.colorScheme.primaryContainer else Tone.focusFill),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 "$number",
                 style = MaterialTheme.typography.bodyLarge,
-                color = if (touch) M3.colorScheme.onPrimaryContainer else Tone.onAccent,
+                color = if (touch) M3.colorScheme.onPrimaryContainer else Tone.onFocusFill,
             )
         }
         Spacer(Modifier.width(16.dp))

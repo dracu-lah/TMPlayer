@@ -122,6 +122,7 @@ import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.focusRing
 import com.tmplayer.ui.theme.Tv
 import kotlinx.coroutines.launch
 
@@ -852,20 +853,21 @@ private fun RangeRow(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
-        targetValue = if (focused) Tone.accent else Tone.surface,
+        targetValue = if (focused) Tone.focusFill else Tone.surface,
         animationSpec = tween(140),
         label = "rangeBackground",
     )
-    val onSurface = if (focused) Tone.onAccent else Tone.text
+    val onSurface = if (focused) Tone.onFocusFill else Tone.text
     // 0.8 rather than the 0.6 this was: the second line has to stay legible against the
     // accent, and anything lighter drops under the 4.5:1 a small caption needs.
-    val dim = if (focused) Tone.onAccent.copy(alpha = 0.8f) else Tone.muted
+    val dim = if (focused) Tone.onFocusFill.copy(alpha = 0.8f) else Tone.muted
 
     Column(
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(Corner.Large))
             .background(background)
+            .focusRing(focused, RoundedCornerShape(Corner.Large))
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (event.key) {
@@ -908,13 +910,13 @@ private fun RangeRow(
                     Icon(
                         Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                         contentDescription = null,
-                        tint = Tone.onAccent,
+                        tint = Tone.onFocusFill,
                         modifier = Modifier.size(18.dp),
                     )
                     Icon(
                         Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = null,
-                        tint = Tone.onAccent,
+                        tint = Tone.onFocusFill,
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(Modifier.width(8.dp))
@@ -924,7 +926,7 @@ private fun RangeRow(
                         "change ${if (editingUpper) "Up to" else "From"}   \u00B7   " +
                             "OK switches to ${if (editingUpper) "From" else "Up to"}",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Tone.onAccent,
+                        color = Tone.onFocusFill,
                         textAlign = TextAlign.Center,
                     )
                 }
@@ -1039,7 +1041,7 @@ private fun End(
                 .height(3.dp)
                 .width(if (active) 56.dp else 0.dp)
                 .clip(CircleShape)
-                .background(if (focused) Tone.onAccent else Tone.accent),
+                .background(if (focused) Tone.onFocusFill else Tone.accent),
         )
     }
 }
@@ -1051,7 +1053,7 @@ private fun RangeTrack(minValue: Long, maxValue: Long, editingUpper: Boolean, fo
             .fillMaxWidth()
             .height(18.dp)
             .clip(CircleShape)
-            .background(if (focused) Tone.onAccent.copy(alpha = 0.22f) else Tone.surfaceHigh),
+            .background(if (focused) Tone.onFocusFill.copy(alpha = 0.22f) else Tone.surfaceHigh),
     ) {
         val width = maxWidth
         val start = width * SizeFilter.fraction(minValue)
@@ -1063,7 +1065,7 @@ private fun RangeTrack(minValue: Long, maxValue: Long, editingUpper: Boolean, fo
                 .padding(start = start)
                 .width(span)
                 .fillMaxHeight()
-                .background(if (focused) Tone.onAccent.copy(alpha = 0.55f) else Tone.accent.copy(alpha = 0.5f)),
+                .background(if (focused) Tone.onFocusFill.copy(alpha = 0.55f) else Tone.accent.copy(alpha = 0.5f)),
         )
 
         Thumb(width, minValue, live = !editingUpper, focused = focused)
@@ -1082,8 +1084,8 @@ private fun BoxWithConstraintsScope.Thumb(width: Dp, value: Long, live: Boolean,
             .clip(CircleShape)
             .background(
                 when {
-                    focused && live -> Tone.onAccent
-                    focused -> Tone.onAccent.copy(alpha = 0.7f)
+                    focused && live -> Tone.onFocusFill
+                    focused -> Tone.onFocusFill.copy(alpha = 0.7f)
                     live -> Tone.accent
                     else -> Tone.accent.copy(alpha = 0.6f)
                 },
@@ -1116,7 +1118,7 @@ private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
-        targetValue = if (focused) Tone.accent else Tone.surfaceHigh,
+        targetValue = if (focused) Tone.focusFill else Tone.surfaceHigh,
         animationSpec = tween(140),
         label = "resetChip",
     )
@@ -1142,7 +1144,7 @@ private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
             contentDescription = null,
             tint = when {
                 !enabled -> Tone.muted
-                focused -> Tone.onAccent
+                focused -> Tone.onFocusFill
                 else -> Tone.text
             },
             modifier = Modifier.size(20.dp),
@@ -1153,7 +1155,7 @@ private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
             style = MaterialTheme.typography.bodyLarge,
             color = when {
                 !enabled -> Tone.muted
-                focused -> Tone.onAccent
+                focused -> Tone.onFocusFill
                 else -> Tone.text
             },
             maxLines = 1,
@@ -1434,14 +1436,14 @@ private fun StepperRow(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
-        targetValue = if (focused) Tone.accent else Tone.surface,
+        targetValue = if (focused) Tone.focusFill else Tone.surface,
         animationSpec = tween(140),
         label = "stepperBackground",
     )
-    val onSurface = if (focused) Tone.onAccent else Tone.text
+    val onSurface = if (focused) Tone.onFocusFill else Tone.text
     // 0.8 rather than the 0.6 this was: the second line has to stay legible against the
     // accent, and anything lighter drops under the 4.5:1 a small caption needs.
-    val dim = if (focused) Tone.onAccent.copy(alpha = 0.8f) else Tone.muted
+    val dim = if (focused) Tone.onFocusFill.copy(alpha = 0.8f) else Tone.muted
 
     Row(
         modifier
@@ -1449,6 +1451,7 @@ private fun StepperRow(
             .height(66.dp)
             .clip(RoundedCornerShape(Corner.Large))
             .background(background)
+            .focusRing(focused, RoundedCornerShape(Corner.Large))
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 // Up and Down rather than Left and Right: the rows above and below are the other
@@ -1530,7 +1533,7 @@ private fun ActionRow(
         Icon(
             icon,
             contentDescription = null,
-            tint = if (focused) Tone.onAccent else iconTint,
+            tint = if (focused) Tone.onFocusFill else iconTint,
             modifier = Modifier.size(26.dp),
         )
         Spacer(Modifier.size(20.dp))
@@ -1538,14 +1541,14 @@ private fun ActionRow(
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium,
-                color = if (focused) Tone.onAccent else Tone.text,
+                color = if (focused) Tone.onFocusFill else Tone.text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (focused) Tone.onAccent.copy(alpha = 0.85f) else Tone.muted,
+                color = if (focused) Tone.onFocusFill.copy(alpha = 0.85f) else Tone.muted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1585,7 +1588,7 @@ private fun ToggleRow(
         Icon(
             icon,
             contentDescription = null,
-            tint = if (focused) Tone.onAccent else Tone.text,
+            tint = if (focused) Tone.onFocusFill else Tone.text,
             modifier = Modifier.size(26.dp),
         )
         Spacer(Modifier.size(20.dp))
@@ -1593,14 +1596,14 @@ private fun ToggleRow(
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium,
-                color = if (focused) Tone.onAccent else Tone.text,
+                color = if (focused) Tone.onFocusFill else Tone.text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (focused) Tone.onAccent.copy(alpha = 0.85f) else Tone.muted,
+                color = if (focused) Tone.onFocusFill.copy(alpha = 0.85f) else Tone.muted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -1619,13 +1622,13 @@ private fun ToggleRow(
 @Composable
 private fun Switch(checked: Boolean, focused: Boolean, touch: Boolean = false) {
     // The pill swaps which way round it is drawn depending on what is behind it. A focused row is
-    // filled with the accent, so on it the live track has to be the accent's own contrast colour;
-    // off the row the accent itself is the live one. Drawing it white either way was readable only
-    // while the television had a dark accent of its own, and the accent is the phone's now.
+    // filled in, so on it the live track has to be that fill's own contrast colour; off the row the
+    // accent itself is the live one. Drawing it white either way was readable only while the
+    // television had a dark accent of its own, and the accent is the phone's now.
     val track by animateColorAsState(
         targetValue = when {
-            checked -> if (focused) Tone.onAccent else Tone.accent
-            focused -> Tone.onAccent.copy(alpha = 0.35f)
+            checked -> if (focused) Tone.onFocusFill else Tone.accent
+            focused -> Tone.onFocusFill.copy(alpha = 0.35f)
             else -> Tone.surfaceHigh
         },
         animationSpec = tween(140),
@@ -1647,8 +1650,10 @@ private fun Switch(checked: Boolean, focused: Boolean, touch: Boolean = false) {
                 .clip(CircleShape)
                 .background(
                     when {
-                        focused -> Tone.accent
-                        checked -> Tone.onAccent
+                        // The row's own fill, which is the one colour guaranteed to read against
+                        // the track: the track on a focused row is that fill's contrast colour.
+                        focused -> Tone.focusFill
+                        checked -> Tone.onFocusFill
                         else -> Tone.surface
                     },
                 ),
@@ -1678,7 +1683,7 @@ private fun FocusRow(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
-        targetValue = if (focused) Tone.accent else Tone.surface,
+        targetValue = if (focused) Tone.focusFill else Tone.surface,
         animationSpec = tween(140),
         label = "rowBackground",
     )
@@ -1717,6 +1722,7 @@ private fun FocusRow(
             // The filled card is how the focused row is found from a sofa.
             .clip(RoundedCornerShape(Corner.Large))
             .background(background)
+            .focusRing(focused, RoundedCornerShape(Corner.Large))
             .clickable(
                 interactionSource = interactions,
                 indication = null,

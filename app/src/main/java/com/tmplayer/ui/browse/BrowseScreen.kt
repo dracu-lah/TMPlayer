@@ -104,6 +104,7 @@ import com.tmplayer.ui.theme.Avatar
 import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.focusRing
 import com.tmplayer.ui.theme.Tv
 
 /**
@@ -992,11 +993,17 @@ private fun RailItem(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
 
+    // The app's own blue fills a focused row with the role Material means for a filled area, which
+    // is a pale blue in daylight rather than the near-black tone 40 that primary has to be. The
+    // amber item carries its own colour and has no such pair, so it fills with what it was given.
+    val own = accent == Tone.accent
+    val fill = if (own) Tone.focusFill else accent
+
     // Cross-faded rather than switched: an instant colour flip as focus sweeps down the rail
     // reads as flicker on a large screen.
     val background by animateColorAsState(
         targetValue = when {
-            focused -> accent
+            focused -> fill
             selected -> accent.copy(alpha = 0.16f)
             else -> Color.Transparent
         },
@@ -1005,9 +1012,9 @@ private fun RailItem(
     )
     val foreground by animateColorAsState(
         targetValue = when {
-            focused -> Tone.readableOn(accent)
+            focused -> if (own) Tone.onFocusFill else Tone.readableOn(accent)
             selected -> accent
-            else -> if (accent == Tone.accent) Tone.muted else accent
+            else -> if (own) Tone.muted else accent
         },
         animationSpec = tween(FOCUS_FADE_MS),
         label = "railForeground",
@@ -1019,6 +1026,7 @@ private fun RailItem(
             .height(44.dp)
             .clip(RoundedCornerShape(Corner.Small))
             .background(background)
+            .focusRing(focused, RoundedCornerShape(Corner.Small))
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
             .padding(horizontal = RAIL_INSET),
         verticalAlignment = Alignment.CenterVertically,
@@ -1114,16 +1122,17 @@ private fun HeaderAction(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
-        targetValue = if (focused) Tone.accent else Tone.surface,
+        targetValue = if (focused) Tone.focusFill else Tone.surface,
         animationSpec = tween(140),
         label = "headerAction",
     )
-    val foreground = if (focused) Tone.onAccent else Tone.text
+    val foreground = if (focused) Tone.onFocusFill else Tone.text
 
     Row(
         Modifier
             .clip(CircleShape)
             .background(background)
+            .focusRing(focused, CircleShape)
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
             // Even padding with no words, so the chip comes out round rather than as a wide one
             // with a gap where the label used to be.
@@ -1235,17 +1244,18 @@ private fun PillButton(label: String?, icon: ImageVector?, onClick: () -> Unit) 
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
-        targetValue = if (focused) Tone.accent else Tone.surfaceHigh,
+        targetValue = if (focused) Tone.focusFill else Tone.surfaceHigh,
         animationSpec = tween(FOCUS_FADE_MS),
         label = "pillBackground",
     )
-    val foreground = if (focused) Tone.onAccent else Tone.text
+    val foreground = if (focused) Tone.onFocusFill else Tone.text
 
     Row(
         Modifier
             .height(48.dp)
             .clip(CircleShape)
             .background(background)
+            .focusRing(focused, CircleShape)
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
             // An icon on its own gets even padding, so the pill comes out round rather than as a
             // wide one with a gap where the words used to be.

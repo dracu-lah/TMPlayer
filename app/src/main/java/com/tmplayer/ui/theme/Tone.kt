@@ -53,6 +53,32 @@ object Tone {
         @Composable @ReadOnlyComposable get() =
             M3.colorScheme.onPrimary
 
+    /**
+     * A whole row, card or pill filled in to say "this is where the remote is".
+     *
+     * Not [accent], which is the wrong end of the scale in daylight. Material puts the light
+     * theme's primary at tone 40 because it has to carry white text at 4.5:1, and a colour that
+     * can do that is by definition dark: fill a settings row the width of a television with it
+     * and the light theme grows a black bar across it. The dark theme has the opposite luck, its
+     * primary being tone 80, so the same code drew a bright block there and a heavy one here.
+     *
+     * The container roles are the pair Material means for a large area, and they sit on the near
+     * side of the background in both themes: pale blue on white, deep blue on black. So focus is
+     * a block of colour either way, and a light screen stays a light screen.
+     */
+    val focusFill: Color
+        @Composable @ReadOnlyComposable get() =
+            if (LocalDarkTheme.current) M3.colorScheme.primary else M3.colorScheme.primaryContainer
+
+    /** What to write on [focusFill]. */
+    val onFocusFill: Color
+        @Composable @ReadOnlyComposable get() =
+            if (LocalDarkTheme.current) {
+                M3.colorScheme.onPrimary
+            } else {
+                M3.colorScheme.onPrimaryContainer
+            }
+
     /** A quieter [accent]: a selected row, a filled chip, a badge. */
     val accentContainer: Color
         @Composable @ReadOnlyComposable get() =

@@ -1,6 +1,7 @@
 package com.tmplayer.ui.theme
 
 import android.os.Build
+import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
@@ -17,7 +18,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -191,13 +194,31 @@ object Corner {
 fun tmButtonColors() = ButtonDefaults.colors(
     containerColor = Tone.surfaceHigh,
     contentColor = Tone.text,
-    focusedContainerColor = Tone.accent,
-    focusedContentColor = Tone.onAccent,
-    pressedContainerColor = Tone.accent,
-    pressedContentColor = Tone.onAccent,
+    focusedContainerColor = Tone.focusFill,
+    focusedContentColor = Tone.onFocusFill,
+    pressedContainerColor = Tone.focusFill,
+    pressedContentColor = Tone.onFocusFill,
     disabledContainerColor = Tone.surface,
     disabledContentColor = Tone.muted,
 )
+
+/**
+ * A ring around whatever the remote is on, for the theme where the fill alone is not enough.
+ *
+ * [Tone.focusFill] is a pale blue in daylight, which is the point: a television's settings list
+ * should not grow a black bar across it. But pale blue on near-white is a 1.24:1 step, well under
+ * the 3:1 that a control is meant to stand out by, and across a room a quiet fill is no answer at
+ * all. The accent is the dark end of the scale there, so an outline in it carries the signal the
+ * fill cannot. In the dark theme the fill is already a bright block against a near-black screen,
+ * and a ring in the same colour would be a ring nobody can see, so there is none.
+ */
+@Composable
+fun Modifier.focusRing(focused: Boolean, shape: Shape): Modifier =
+    if (focused && !LocalDarkTheme.current) {
+        border(width = 2.dp, color = Tone.accent, shape = shape)
+    } else {
+        this
+    }
 
 /**
  * The same roles at the sizes Material 3 ships for a device held in the hand.

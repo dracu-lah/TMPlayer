@@ -49,6 +49,7 @@ import androidx.tv.material3.Text
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.focusRing
 
 /** One line of a [TvMenu]. [detail] says what the action will do when the label cannot. */
 data class MenuAction(
@@ -237,14 +238,14 @@ private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Mod
     val background by animateColorAsState(
         targetValue = when {
             focused && action.destructive -> Danger
-            focused -> Tone.accent
+            focused -> Tone.focusFill
             else -> Tone.surfaceHigh
         },
         animationSpec = tween(140),
         label = "menuRow",
     )
     val foreground = when {
-        focused -> Tone.onAccent
+        focused -> Tone.onFocusFill
         action.destructive -> Danger
         else -> Tone.text
     }
@@ -254,6 +255,7 @@ private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Mod
             .fillMaxWidth()
             .clip(RoundedCornerShape(Corner.Medium))
             .background(background)
+            .focusRing(focused, RoundedCornerShape(Corner.Medium))
             .clickable(
                 interactionSource = interactions,
                 // Nothing on a TV reacts to a press with a ripple, and the focus colour is the
@@ -283,7 +285,7 @@ private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Mod
                 Text(
                     action.detail,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (focused) Tone.onAccent.copy(alpha = 0.85f) else Tone.muted,
+                    color = if (focused) Tone.onFocusFill.copy(alpha = 0.85f) else Tone.muted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

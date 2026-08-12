@@ -157,6 +157,7 @@ import com.tmplayer.ui.components.rememberVoiceSearch
 import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.focusRing
 import com.tmplayer.ui.theme.Tv
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -1136,17 +1137,18 @@ private fun Pill(
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
-        targetValue = if (focused) Tone.accent else Tone.surfaceHigh,
+        targetValue = if (focused) Tone.focusFill else Tone.surfaceHigh,
         animationSpec = tween(140),
         label = "pill",
     )
-    val foreground = if (focused) Tone.onAccent else tintWhenIdle
+    val foreground = if (focused) Tone.onFocusFill else tintWhenIdle
 
     Row(
         Modifier
             .height(48.dp)
             .clip(CircleShape)
             .background(background)
+            .focusRing(focused, CircleShape)
             .pressable(interactions, onClick)
             // Even padding when there are no words, so the pill comes out round rather than as a
             // wide one with a gap in it.
@@ -1263,6 +1265,10 @@ internal fun MediaCard(
     if (isTouch()) {
         Card(
             shape = RoundedCornerShape(Corner.Medium),
+            // The same hairline the television's panel carries, for the same reason: in daylight a
+            // card's fill is a shade off the page it sits on, and the caption under it is one line
+            // on some tiles and two on others.
+            border = BorderStroke(1.dp, Tone.outline),
             modifier = modifier.fillMaxWidth().longPressable(onClick, onLongClick),
         ) {
             MediaCardBody(item, watched)
@@ -1275,6 +1281,12 @@ internal fun MediaCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(Corner.Medium))
             .background(if (focused) Tone.surfaceHigh else Tone.surface)
+            // A hairline under the focus border, so a tile has an edge even when the remote is
+            // somewhere else. Without it a card is only as visible as its own fill, which in
+            // daylight is a near-white panel on a near-white page: the pictures line up, but the
+            // captions below them do not, because a one-line title sits its running time and size
+            // a line higher than a two-line title does. The edge is what says where one tile ends.
+            .border(1.dp, Tone.outline, RoundedCornerShape(Corner.Medium))
             .border(3.dp, border, RoundedCornerShape(Corner.Medium))
             .pressable(interactions, onClick),
     ) {
@@ -1293,7 +1305,13 @@ private fun MediaCardBody(item: MediaItem, watched: WatchPoint?) {
             color = Tone.text,
             // Two lines. A release file name fills both and then some, and one line cut a title
             // so early that two videos in the same chat were often the same four words.
+            //
+            // Always two, whether or not the name needs them, which is what the phone's dense
+            // tile already does: the running time and the size hang off the bottom of the title,
+            // so a short name floated them a line above its neighbours and the row of captions
+            // came out ragged.
             maxLines = 2,
+            minLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(6.dp))
