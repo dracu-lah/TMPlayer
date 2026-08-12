@@ -7,6 +7,8 @@ import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.os.Build
 import android.content.Intent
+import android.util.Log
+import android.widget.Toast
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
@@ -1698,10 +1700,21 @@ private const val NOTIFICATION_REQUEST = 7301
  */
 private suspend fun shareVideo(context: Context, item: MediaItem, send: Boolean) {
     val path = Td.localFilePath(item.fileId)
-    if (path.isNullOrBlank()) return
+    if (path.isNullOrBlank()) {
+        // Not a state the menu should be able to reach, since these two entries only appear for a
+        // file already on the phone. Said out loud anyway: silence here is indistinguishable from
+        // a press that missed.
+        Log.w(SHARE_TAG, "No local file for ${item.fileId}")
+        Toast.makeText(context, "That video is not on this phone yet.", Toast.LENGTH_SHORT).show()
+        return
+    }
     val uri = runCatching {
         FileProvider.getUriForFile(context, "${context.packageName}.updates", File(path))
-    }.getOrNull() ?: return
+    }.onFailure { Log.w(SHARE_TAG, "Cannot share $path", it) }.getOrNull() ?: run {
+        Toast.makeText(context, "That video cannot be handed to another app.", Toast.LENGTH_SHORT)
+            .show()
+        return
+    }
 
     val mime = item.mimeType.ifBlank { "video/*" }
     val intent = if (send) {
@@ -1718,8 +1731,13 @@ private suspend fun shareVideo(context: Context, item: MediaItem, send: Boolean)
     // the default, which for a video on most phones is this one, and that is a loop.
     val chooser = Intent.createChooser(intent, if (send) "Share" else "Open with")
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    runCatching { context.startActivity(chooser) }
+    runCatching { context.startActivity(chooser) }.onFailure {
+        Log.w(SHARE_TAG, "No app took the video", it)
+        Toast.makeText(context, "Nothing on this phone opens that.", Toast.LENGTH_SHORT).show()
+    }
 }
+
+private const val SHARE_TAG = "ShareVideo"
 
 /** Running time, file size, and where playback stopped, on the one line both arrangements use. */
 @Composable

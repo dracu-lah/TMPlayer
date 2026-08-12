@@ -1,0 +1,20 @@
+<!--
+  A pressable version of the chip, for the buttons that float over the picture.
+
+  Same shape and the same translucency as [bg_player_chip], with a pressed state, because a
+  control that looks exactly like a label is one people do not think to press.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#E62B5EA8" />
+            <corners android:radius="22dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#CC101014" />
+            <corners android:radius="22dp" />
+        </shape>
+    </item>
+</selector>

@@ -70,8 +70,17 @@ class TvPlayerGlue(
      * actions are inserted around what is there: previous before the rewind, next after the
      * fast-forward, the order every transport row on a television uses.
      */
-    fun setEpisodes(hasPrevious: Boolean, hasNext: Boolean) {
+    fun setEpisodes(
+        hasPrevious: Boolean,
+        hasNext: Boolean,
+        previousLabel: String = "Previous",
+        nextLabel: String = "Next",
+    ) {
         val adapter = primary ?: return
+        // Leanback reads label1 out and shows it on focus, so this is where the episode the button
+        // leads to gets named on a television.
+        skipPrevious.label1 = previousLabel
+        skipNext.label1 = nextLabel
         setPresent(adapter, skipPrevious, hasPrevious, index = 0)
         setPresent(adapter, skipNext, hasNext, index = adapter.size())
     }
@@ -133,8 +142,8 @@ class TvPlayerGlue(
 
     override fun onActionClicked(action: Action) {
         when (action.id) {
-            rewind.id -> onSkip(-SKIP_MS)
-            fastForward.id -> onSkip(SKIP_MS)
+            rewind.id -> onSkip(-Skip.BACK_MS)
+            fastForward.id -> onSkip(Skip.FORWARD_MS)
             skipPrevious.id -> onPreviousEpisode()
             skipNext.id -> onNextEpisode()
             ID_SUBTITLES -> onPickSubtitles()
@@ -150,6 +159,5 @@ class TvPlayerGlue(
         private const val ID_AUDIO = 1002L
         private const val ID_SPEED = 1003L
         private const val ID_SCALE = 1004L
-        const val SKIP_MS = 30_000L
     }
 }

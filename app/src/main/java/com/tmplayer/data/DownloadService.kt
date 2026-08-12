@@ -112,19 +112,35 @@ class DownloadService : Service() {
             }
         }
 
-        val result = runCatching {
-            session.client.downloadFile(
-                fileId = request.fileId,
-                priority = DOWNLOAD_PRIORITY,
-                offset = 0,
-                // Zero means the whole file, which is the entire point of this service.
-                limit = 0,
-                synchronous = true,
-            )
+        var error: String? = null
+        // TDLib allows one synchronous request per file: the player asking for the same video from
+        // a seek position replaces this one and answers it with "Canceled by another downloadFile
+        // request". That is somebody else's request arriving, not this download failing, and it
+        // happened for real on the phone the moment the viewer opened the video they had just put
+        // on to download. So the request is simply made again, and the fetch survives being watched.
+        for (attempt in 1..MAX_TAKEOVERS) {
+            val result = runCatching {
+                session.client.downloadFile(
+                    fileId = request.fileId,
+                    priority = DOWNLOAD_PRIORITY,
+                    offset = 0,
+                    // Zero means the whole file, which is the entire point of this service.
+                    limit = 0,
+                    synchronous = true,
+                )
+            }
+            error = result.exceptionOrNull()?.message ?: result.getOrNull()?.errorMessage
+            if (error == null || !error.contains(TAKEN_OVER, ignoreCase = true)) break
+            if (Td.localFileAvailability(request.fileId) == LocalFileAvailability.Complete) {
+                error = null
+                break
+            }
+            Log.i(TAG, "Another request took over ${request.title}; asking again ($attempt)")
+            // A pause, so a viewer scrubbing through the video is not raced press for press.
+            delay(TAKEOVER_BACKOFF_MS)
         }
         ticker.cancel()
 
-        val error = result.exceptionOrNull()?.message ?: result.getOrNull()?.errorMessage
         val complete = Td.localFileAvailability(request.fileId) == LocalFileAvailability.Complete
 
         if (error != null || !complete) {
@@ -309,6 +325,13 @@ class DownloadService : Service() {
         private const val DOWNLOAD_PRIORITY = 32
 
         private const val PROGRESS_INTERVAL_MS = 1_000L
+
+        /** What TDLib says when a newer request for the same file replaced this one. */
+        private const val TAKEN_OVER = "Canceled by another downloadFile"
+
+        /** Enough to sit through a viewer seeking around the video they are also keeping. */
+        private const val MAX_TAKEOVERS = 60
+        private const val TAKEOVER_BACKOFF_MS = 2_000L
 
         private const val FAILED_TEXT = "The download did not finish. Try again."
     }

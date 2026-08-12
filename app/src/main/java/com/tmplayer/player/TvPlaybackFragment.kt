@@ -59,7 +59,12 @@ class TvPlaybackFragment : VideoSupportFragment() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 owner.episodes.collect {
-                    created.setEpisodes(it.previous != null, it.next != null)
+                    created.setEpisodes(
+                        hasPrevious = it.previous != null,
+                        hasNext = it.next != null,
+                        previousLabel = owner.episodeLabel("Previous", it.previous),
+                        nextLabel = owner.episodeLabel("Next", it.next),
+                    )
                 }
             }
         }

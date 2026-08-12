@@ -125,59 +125,165 @@
     </LinearLayout>
 
     <!--
-      How much of the video has arrived, shown only while the transport controls are up. That is
-      when the question gets asked, and it keeps a permanent figure off the picture the rest of
-      the time. Declared before the rebuffer chip so that one draws over it in the rare frame
-      where both are up.
-    -->
-    <TextView
-        android:id="@+id/download_chip"
-        android:accessibilityLiveRegion="polite"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|end"
-        android:layout_margin="@dimen/player_chip_margin"
-        android:background="#17171E"
-        android:paddingLeft="18dp"
-        android:paddingTop="10dp"
-        android:paddingRight="18dp"
-        android:paddingBottom="10dp"
-        android:textColor="@color/text_primary"
-        android:textSize="14sp"
-        android:visibility="gone" />
+      Everything that floats in the top right corner, in one column.
 
-    <!--
-      Mid-video rebuffering gets a corner chip instead. Covering the picture with a full sheet
-      every time the connection hiccups would be far more intrusive than the pause itself.
+      The download figure, the rebuffer chip and the episode buttons were three separate views all
+      pinned to the same corner, which was survivable only because they were rarely up at the same
+      moment: put the episode buttons on the right, where they belong, and two of them land on top
+      of each other. Stacking them means the corner can hold all three at once and they simply move
+      down the screen instead of over one another.
+
+      The left of the top edge belongs to Media3's own controls, the back arrow and the title.
     -->
     <LinearLayout
-        android:id="@+id/rebuffer_chip"
+        android:id="@+id/top_right_stack"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
         android:layout_margin="@dimen/player_chip_margin"
-        android:background="#17171E"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingLeft="18dp"
-        android:paddingTop="10dp"
-        android:paddingRight="18dp"
-        android:paddingBottom="10dp"
-        android:visibility="gone">
+        android:gravity="end"
+        android:orientation="vertical">
 
-        <ProgressBar
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:indeterminateTint="@color/accent" />
-
+        <!--
+          How much of the video has arrived, shown only while the transport controls are up. That
+          is when the question gets asked, and it keeps a permanent figure off the picture the rest
+          of the time.
+        -->
         <TextView
-            android:id="@+id/rebuffer_text"
+            android:id="@+id/download_chip"
             android:accessibilityLiveRegion="polite"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
+            android:background="@drawable/bg_player_chip"
+            android:paddingLeft="18dp"
+            android:paddingTop="10dp"
+            android:paddingRight="18dp"
+            android:paddingBottom="10dp"
             android:textColor="@color/text_primary"
-            android:textSize="14sp" />
+            android:textSize="14sp"
+            android:visibility="gone" />
+
+        <!--
+          Mid-video rebuffering gets a corner chip instead. Covering the picture with a full sheet
+          every time the connection hiccups would be far more intrusive than the pause itself.
+        -->
+        <LinearLayout
+            android:id="@+id/rebuffer_chip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_player_chip"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingLeft="18dp"
+            android:paddingTop="10dp"
+            android:paddingRight="18dp"
+            android:paddingBottom="10dp"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:indeterminateTint="@color/accent" />
+
+            <TextView
+                android:id="@+id/rebuffer_text"
+                android:accessibilityLiveRegion="polite"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!--
+          The phone's own controls: the episodes either side of this one, the picture shape and the
+          playback speed.
+
+          The episode search already ran on every device; on a phone its result was simply thrown
+          away, because the only thing consuming it was leanback's transport row and a phone has
+          none. Shape and speed were reachable only by pinching and by digging through Media3's
+          gear menu, which is to say most viewers never found either.
+
+          All of it rides with Media3's controller: it appears when the controller does and goes
+          with it, so none of it is ever over the picture on its own. The labels are written at
+          runtime, so the text here is only what a preview renders.
+        -->
+        <LinearLayout
+            android:id="@+id/episode_row"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="end"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/previous_episode"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_player_button"
+                android:minWidth="0dp"
+                android:paddingLeft="18dp"
+                android:paddingRight="18dp"
+                android:text="Prev"
+                android:textAllCaps="false"
+                android:textColor="@color/text_primary"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/next_episode"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_player_button"
+                android:minWidth="0dp"
+                android:paddingLeft="18dp"
+                android:paddingRight="18dp"
+                android:text="Next"
+                android:textAllCaps="false"
+                android:textColor="@color/text_primary"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/picture_row"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="end"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/scale_button"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_player_button"
+                android:minWidth="0dp"
+                android:paddingLeft="18dp"
+                android:paddingRight="18dp"
+                android:text="Fit"
+                android:textAllCaps="false"
+                android:textColor="@color/text_primary" />
+
+            <Button
+                android:id="@+id/speed_button"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_player_button"
+                android:minWidth="0dp"
+                android:paddingLeft="18dp"
+                android:paddingRight="18dp"
+                android:text="1x"
+                android:textAllCaps="false"
+                android:textColor="@color/text_primary" />
+        </LinearLayout>
     </LinearLayout>
 
     <!--
@@ -191,7 +297,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:background="#17171E"
+        android:background="@drawable/bg_player_chip"
         android:paddingLeft="20dp"
         android:paddingTop="12dp"
         android:paddingRight="20dp"
@@ -200,46 +306,6 @@
         android:textSize="16sp"
         android:visibility="gone" />
 
-    <!--
-      Previous and next episode, on a phone.
-
-      The search that finds them already ran on every device; on a phone its result was simply
-      thrown away, because the only thing consuming it was leanback's transport row and a phone has
-      none. These ride with Media3's controller: they appear when it does and go with it, so they
-      are never over the picture on their own.
-    -->
-    <LinearLayout
-        android:id="@+id/episode_row"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|start"
-        android:layout_margin="@dimen/player_chip_margin"
-        android:orientation="horizontal"
-        android:visibility="gone">
-
-        <Button
-            android:id="@+id/previous_episode"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:paddingLeft="18dp"
-            android:paddingRight="18dp"
-            android:text="Previous"
-            android:textColor="@color/text_primary"
-            android:visibility="gone" />
-
-        <Button
-            android:id="@+id/next_episode"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:minWidth="0dp"
-            android:paddingLeft="18dp"
-            android:paddingRight="18dp"
-            android:text="Next"
-            android:textColor="@color/text_primary"
-            android:visibility="gone" />
-    </LinearLayout>
 
     <!-- Track pickers are added here so they cover the video, not the other way round. -->
     <FrameLayout

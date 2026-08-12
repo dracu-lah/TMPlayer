@@ -19,6 +19,20 @@ data class ParsedName(
 
     /** What to send to a search box: the year disambiguates remakes, so keep it attached. */
     val query: String get() = if (year != null) "$title $year" else title
+
+    /**
+     * "S01E02", or "E02" where the uploader never wrote a season down.
+     *
+     * A button that says only "Next" leaves the viewer to guess whether it is the next episode,
+     * the next file in the chat, or the next thing the app happens to have found. Naming the
+     * episode it will actually play answers that before it is pressed.
+     */
+    val episodeCode: String?
+        get() {
+            val number = episode ?: return null
+            val tail = "E%02d".format(Locale.ROOT, number)
+            return season?.let { "S%02d".format(Locale.ROOT, it) + tail } ?: tail
+        }
 }
 
 /**

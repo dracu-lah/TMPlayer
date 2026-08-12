@@ -18,6 +18,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -41,6 +42,7 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.session.MediaSession
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.ui.CaptionStyleCompat
+import androidx.media3.ui.DefaultTimeBar
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import androidx.lifecycle.Lifecycle
@@ -119,6 +121,11 @@ class PlayerActivity : FragmentActivity() {
     private var episodeRow: View? = null
     private var previousEpisodeButton: android.widget.Button? = null
     private var nextEpisodeButton: android.widget.Button? = null
+
+    /** The phone's picture shape and speed buttons, and the row holding them. Null on a TV. */
+    private var pictureRow: View? = null
+    private var scaleButton: android.widget.Button? = null
+    private var speedButton: android.widget.Button? = null
 
     /** The touch transport row, on a phone. Null on a TV, where leanback's fragment has it. */
     private var touchSurface: PlayerView? = null
@@ -370,6 +377,7 @@ class PlayerActivity : FragmentActivity() {
         touchSurface = view
 
         view.resizeMode = videoScale.resizeMode
+        modernise(view)
 
         // Fed from dispatchTouchEvent rather than attached here: see [PlayerGestures].
         gestures = PlayerGestures(
@@ -378,6 +386,10 @@ class PlayerActivity : FragmentActivity() {
             onSkip = ::skipBy,
             onFeedback = ::showGestureFeedback,
             onPinch = ::pinchScale,
+            positionMs = { player?.currentPosition ?: 0L },
+            durationMs = { player?.duration?.takeIf { it > 0 } ?: 0L },
+            onSeekTo = { at -> player?.seekTo(at) },
+            onHold = ::holdFastForward,
         )
 
         // The controller sits above the gesture bar rather than under it. The window draws behind
@@ -394,6 +406,32 @@ class PlayerActivity : FragmentActivity() {
                 top = bars.top,
             )
             insets
+        }
+    }
+
+    /**
+     * The app's own colours on Media3's controller, and a scrim under it.
+     *
+     * Media3's stock row is a grey scrub bar and white glyphs on nothing, which is fine over a
+     * dark scene and close to invisible over a bright one. The played portion and the scrubber
+     * take the app's accent, the rest goes to a translucent white so the bar reads against any
+     * frame, and a gradient behind the row does what every streaming app does: darkens the bottom
+     * of the picture only while there is something down there to read.
+     *
+     * All of it is looked up rather than declared, because the alternative is forking Media3's
+     * controller layout wholesale and inheriting the maintenance of every button in it.
+     */
+    private fun modernise(view: PlayerView) {
+        runCatching {
+            val accent = ContextCompat.getColor(this, R.color.accent)
+            view.findViewById<DefaultTimeBar>(androidx.media3.ui.R.id.exo_progress)?.apply {
+                setPlayedColor(accent)
+                setScrubberColor(accent)
+                setBufferedColor(BUFFERED_COLOR)
+                setUnplayedColor(UNPLAYED_COLOR)
+            }
+            view.findViewById<View>(androidx.media3.ui.R.id.exo_bottom_bar)
+                ?.setBackgroundResource(R.drawable.bg_player_scrim)
         }
     }
 
@@ -424,6 +462,7 @@ class PlayerActivity : FragmentActivity() {
      * of a series, so nothing appears that would do nothing when pressed.
      */
     private fun wireEpisodeButtons() {
+        wirePictureButtons()
         episodeRow = findViewById(R.id.episode_row)
         previousEpisodeButton = findViewById(R.id.previous_episode)
         nextEpisodeButton = findViewById(R.id.next_episode)
@@ -432,10 +471,12 @@ class PlayerActivity : FragmentActivity() {
                 episodes.collect { found ->
                     previousEpisodeButton?.apply {
                         visibility = if (found.previous != null) View.VISIBLE else View.GONE
+                        text = episodeLabel("Prev", found.previous)
                         setOnClickListener { found.previous?.let(::playEpisode) }
                     }
                     nextEpisodeButton?.apply {
                         visibility = if (found.next != null) View.VISIBLE else View.GONE
+                        text = episodeLabel("Next", found.next)
                         setOnClickListener { found.next?.let(::playEpisode) }
                     }
                     updateEpisodeRow()
@@ -444,13 +485,49 @@ class PlayerActivity : FragmentActivity() {
         }
     }
 
+    /**
+     * The picture shape and the playback speed, as two buttons a thumb can reach.
+     *
+     * Both already existed on the television, where they are buttons on the transport row, and
+     * both were technically reachable on a phone: the shape by pinching the picture, the speed by
+     * finding Media3's gear menu. Neither is something a viewer discovers, and the shape in
+     * particular is the control people go looking for the moment a film turns up with black bars
+     * down the sides. Each button carries its current value, so it says what the last press did.
+     */
+    private fun wirePictureButtons() {
+        pictureRow = findViewById(R.id.picture_row)
+        scaleButton = findViewById<android.widget.Button>(R.id.scale_button)?.apply {
+            text = videoScale.label
+            setOnClickListener { cycleScale() }
+        }
+        speedButton = findViewById<android.widget.Button>(R.id.speed_button)?.apply {
+            text = PlaybackSpeed.label(playbackSpeed)
+            setOnClickListener { cycleSpeed() }
+        }
+    }
+
+    /**
+     * "Next S01E02", falling back to a bare "Next" when the name carries no episode code.
+     *
+     * The fallback is not dead wood: a series can be numbered in a way the parser reads well enough
+     * to order but not well enough to name, and a button labelled "Next" is still better than one
+     * labelled with a guess.
+     */
+    fun episodeLabel(direction: String, item: MediaItem?): String {
+        val name = item?.fileName?.ifBlank { item.title } ?: return direction
+        val code = MediaName.parse(name).episodeCode ?: return direction
+        return "$direction $code"
+    }
+
     /** The buttons ride with the transport row, so they are never over the picture on their own. */
     private fun updateEpisodeRow() {
         val found = _episodes.value
-        val show = controlsUp &&
-            statusOverlay.visibility != View.VISIBLE &&
-            (found.previous != null || found.next != null)
-        episodeRow?.visibility = if (show) View.VISIBLE else View.GONE
+        val room = controlsUp && statusOverlay.visibility != View.VISIBLE
+        episodeRow?.visibility =
+            if (room && (found.previous != null || found.next != null)) View.VISIBLE else View.GONE
+        // The shape and speed buttons are offered on every video, series or not, and ride with the
+        // controller for the same reason the episode buttons do.
+        pictureRow?.visibility = if (room) View.VISIBLE else View.GONE
     }
 
     /**
@@ -481,6 +558,23 @@ class PlayerActivity : FragmentActivity() {
         applyScale(stops[target])
     }
 
+    /**
+     * Runs the film fast for as long as a finger is held on it, then puts it back.
+     *
+     * The speed the viewer chose is what it returns to, not 1x: somebody watching a lecture at
+     * 1.5x who holds to skip an aside expects to be back at 1.5x when they let go, and handing
+     * them normal speed instead means fixing it by hand every time.
+     */
+    private fun holdFastForward(holding: Boolean) {
+        val exo = player ?: return
+        if (holding) {
+            exo.setPlaybackSpeed(HOLD_SPEED)
+            showGestureFeedback("${HOLD_SPEED.toInt()}x  ▶▶")
+        } else {
+            exo.setPlaybackSpeed(playbackSpeed)
+        }
+    }
+
     /** The next picture shape along, from the television's own button. */
     fun cycleScale() = applyScale(videoScale.next())
 
@@ -496,6 +590,7 @@ class PlayerActivity : FragmentActivity() {
             C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
         }
         tvFragment()?.showVideoScale(scale)
+        scaleButton?.text = scale.label
         showGestureFeedback(scale.label)
     }
 
@@ -505,6 +600,7 @@ class PlayerActivity : FragmentActivity() {
         playbackSpeed = next
         player?.setPlaybackSpeed(next)
         tvFragment()?.showPlaybackSpeed(next)
+        speedButton?.text = PlaybackSpeed.label(next)
         showGestureFeedback(PlaybackSpeed.label(next))
         lifecycleScope.launch { runCatching { settings.setPlaybackSpeed(next) } }
     }
@@ -668,8 +764,8 @@ class PlayerActivity : FragmentActivity() {
             .setLoadControl(loadControl)
             .setTrackSelector(trackSelector)
             .setMediaSourceFactory(DefaultMediaSourceFactory(TdDataSource.Factory(client), extractors))
-            .setSeekBackIncrementMs(TvPlayerGlue.SKIP_MS)
-            .setSeekForwardIncrementMs(TvPlayerGlue.SKIP_MS)
+            .setSeekBackIncrementMs(Skip.BACK_MS)
+            .setSeekForwardIncrementMs(Skip.FORWARD_MS)
             .build()
             .apply {
                 // Movie, not the default "unknown". It is what tells the system this is long-form
@@ -1000,11 +1096,11 @@ class PlayerActivity : FragmentActivity() {
 
         when (event.keyCode) {
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
-                skipBy(TvPlayerGlue.SKIP_MS)
+                skipBy(Skip.FORWARD_MS)
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_REWIND -> {
-                skipBy(-TvPlayerGlue.SKIP_MS)
+                skipBy(-Skip.BACK_MS)
                 return true
             }
             KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_LEFT -> {
@@ -1014,7 +1110,7 @@ class PlayerActivity : FragmentActivity() {
                 val fragment = supportFragmentManager
                     .findFragmentById(R.id.playback_container) as? TvPlaybackFragment
                 if (fragment != null && !fragment.controlsVisible()) {
-                    val step = if (event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) NUDGE_MS else -NUDGE_MS
+                    val step = if (event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) Skip.FORWARD_MS else -Skip.BACK_MS
                     skipBy(step)
                     // Fall through so leanback also raises the controls: the user needs to see
                     // where the seek landed.
@@ -1210,6 +1306,7 @@ class PlayerActivity : FragmentActivity() {
         if (isInPictureInPictureMode) touchSurface?.hideController()
         subtitleView.visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
         episodeRow?.visibility = View.GONE
+        pictureRow?.visibility = View.GONE
         downloadChip.visibility = View.GONE
         gestures?.controlsVisible = false
     }
@@ -1458,7 +1555,12 @@ class PlayerActivity : FragmentActivity() {
         /** Enough for the back-seek a thumb makes when it missed a line of dialogue. */
         private const val BACK_BUFFER_MS = 10_000
         private const val END_GUARD_MS = 1_000L
-        private const val NUDGE_MS = 10_000L
+        /** What a held finger runs the picture at, the same figure every player uses for it. */
+        private const val HOLD_SPEED = 2f
+
+        /** The buffered and unbuffered halves of the scrub bar, over any frame. */
+        private const val BUFFERED_COLOR = 0x66FFFFFF.toInt()
+        private const val UNPLAYED_COLOR = 0x33FFFFFF.toInt()
         private const val RESUME_TICK_MS = 10_000L
 
         /** Twice a second: faster than the eye needs and slower than TDLib talks. */

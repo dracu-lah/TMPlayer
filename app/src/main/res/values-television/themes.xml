@@ -8,5 +8,25 @@
     -->
     <style name="Theme.TMPlayer.Player" parent="Theme.Leanback">
         <item name="android:windowBackground">@android:color/black</item>
+
+        <!--
+          Leanback's own row, in this app's colours rather than in the stock red-brown Google
+          shipped it with. The played portion of the bar, the ring around the focused button and
+          the wash behind the row are the three things a viewer actually sees from a sofa, and
+          leanback exposes all three as theme attributes, so the row is restyled without forking
+          any of its layouts.
+        -->
+        <item name="playbackProgressPrimaryColor">@color/accent</item>
+        <item name="playbackControlsIconHighlightColor">@color/accent</item>
+        <item name="playbackControlsActionIcons">@style/TMPlayer.Leanback.ActionIcons</item>
+        <item name="playbackPaddingStart">@dimen/player_chip_margin</item>
+        <item name="playbackPaddingEnd">@dimen/player_chip_margin</item>
     </style>
+
+    <!--
+      The stock glyphs, kept as they are. Declared so the theme has something to point at: every
+      television player uses these shapes, and a set drawn specially for this app would only make
+      the buttons harder to recognise from across a room.
+    -->
+    <style name="TMPlayer.Leanback.ActionIcons" parent="Widget.Leanback.PlaybackControlsActionIconsStyle" />
 </resources>
