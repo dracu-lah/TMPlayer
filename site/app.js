@@ -44,6 +44,8 @@
     notes: document.getElementById('release-notes'),
     prevWrap: document.getElementById('previous-wrap'),
     prevList: document.getElementById('previous-list'),
+    card: document.getElementById('release-card'),
+    skeleton: document.getElementById('abi-skeleton'),
     heroBtn: document.getElementById('hero-download'),
     heroLabel: document.getElementById('hero-download-label')
   };
@@ -160,7 +162,15 @@
 
   /* ---------- rendering ---------- */
 
+  /* The card stops pretending. Called on every path out of the fetch, including the ones that
+     fail, because a skeleton left behind after an error is a page that never finished loading. */
+  function settled() {
+    el.skeleton.hidden = true;
+    if (el.card && el.card.removeAttribute) { el.card.removeAttribute('aria-busy'); }
+  }
+
   function showStatus(kind, lines) {
+    settled();
     el.status.hidden = false;
     el.status.className = 'status' + (kind === 'error' ? ' error' : '');
     clear(el.status);
@@ -176,6 +186,7 @@
   }
 
   function renderLatest(release) {
+    settled();
     var tag = release.tag_name || release.name || 'Latest';
     el.version.textContent = tag;
     var when = formatDate(release.published_at || release.created_at);
@@ -307,6 +318,7 @@
   }
 
   function fail(reason) {
+    settled();
     el.version.textContent = 'Unavailable';
     el.date.textContent = '';
     el.abiList.hidden = true;
@@ -328,6 +340,7 @@
   }
 
   function noReleases() {
+    settled();
     el.version.textContent = 'Not released yet';
     el.date.textContent = '';
     el.abiList.hidden = true;
@@ -710,4 +723,64 @@
   }).catch(function () {
     /* Nothing to do. The controls are links to GitHub with or without a count. */
   });
+})();
+
+/* The menu, on a phone.
+
+   Below 840px the pages do not fit beside the mark and the two controls, so they
+   move into a card the button opens. The button is drawn only when this script
+   has run, which the js class on the root says: without it the stylesheet leaves
+   the links on a second row, where they still work. */
+(function () {
+  'use strict';
+
+  var button = document.getElementById('menu-btn');
+  var panel = document.getElementById('site-nav');
+  if (!button || !panel) { return; }
+
+  function open() { return button.getAttribute('aria-expanded') === 'true'; }
+
+  function set(next) {
+    button.setAttribute('aria-expanded', next ? 'true' : 'false');
+    button.setAttribute('aria-label', next ? 'Close menu' : 'Menu');
+    if (next) {
+      if (panel.className.indexOf('is-open') === -1) { panel.className += ' is-open'; }
+    } else {
+      panel.className = panel.className.replace(/\s*is-open/g, '');
+    }
+  }
+
+  button.addEventListener('click', function (event) {
+    event.preventDefault();
+    set(!open());
+  });
+
+  /* A tap anywhere else closes it, which is what a card hanging off a bar should
+     do. The header itself is excluded, or the press that opened it would close
+     it again on the way back up. */
+  document.addEventListener('click', function (event) {
+    if (!open()) { return; }
+    var node = event.target;
+    while (node) {
+      if (node === button || node === panel) { return; }
+      node = node.parentNode;
+    }
+    set(false);
+  });
+
+  document.addEventListener('keydown', function (event) {
+    if (open() && (event.key === 'Escape' || event.key === 'Esc')) {
+      set(false);
+      button.focus();
+    }
+  });
+
+  /* Turning a phone on its side can put the layout back over 840px, where the
+     links belong in the bar again and a card left open would be a card floating
+     under a row that already lists them. */
+  window.addEventListener('resize', function () {
+    if (open() && window.innerWidth > 840) { set(false); }
+  });
+
+  set(false);
 })();

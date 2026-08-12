@@ -512,9 +512,9 @@ summary {
   padding: 8px 0;
 }
 .brand:hover { text-decoration: none; color: var(--on-surface); }
-.brand-mark { border-radius: var(--shape-s); flex: none; }
+.brand-mark { border-radius: var(--shape-full); flex: none; }
 .brand-name {
-  font-size: 1.22rem;
+  font-size: 1.34rem;
   font-weight: 600;
   line-height: 1;
   letter-spacing: -0.022em;
@@ -529,7 +529,7 @@ summary {
 .nav a,
 .nav-links a {
   color: var(--on-surface-variant);
-  font-size: 0.95rem;
+  font-size: 1.02rem;
   font-weight: 500;
   padding: 10px 16px;
   border-radius: var(--shape-full);
@@ -1603,6 +1603,56 @@ summary:hover { color: var(--on-surface); }
 .footer-grid p { margin: 0 0 8px; max-width: 48ch; }
 .footer-grid .footer-links { justify-content: flex-start; }
 
+/* Two links the bar does not have room for on a desktop, and the menu does. Hiding a page
+   behind a button is worse than four names being the sensible limit of a header row. */
+.only-menu { display: none; }
+@media (max-width: 840px) { .only-menu { display: block; } }
+
+/* ---------- Skeletons ----------
+
+   Only the release card needs one. Everything else on the site is in the HTML and is there when
+   the page is; this one block waits on GitHub, and the wait is a second on a good connection and
+   nine on a bad one. Drawn in the shape of the answer, so nothing shifts when it arrives.
+
+   Under prefers-reduced-motion the sweep stops and the blocks sit still, which is the whole of
+   what that setting should cost anybody here. */
+
+.skeleton {
+  display: inline-block;
+  position: relative;
+  overflow: hidden;
+  vertical-align: middle;
+  border-radius: var(--shape-s);
+  background: var(--surface-container-high);
+  color: transparent;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--on-surface) 7%, transparent),
+    transparent
+  );
+  animation: shimmer 1.5s var(--ease-standard) infinite;
+}
+@keyframes shimmer {
+  from { transform: translate3d(-100%, 0, 0); }
+  to { transform: translate3d(100%, 0, 0); }
+}
+
+.sk-version { width: 6.5ch; height: 1em; }
+.sk-date { width: 15ch; height: 0.9em; }
+.sk-name { width: 11ch; height: 1em; }
+.sk-note { width: min(46ch, 100%); height: 0.9em; }
+.sk-size { width: 6ch; height: 0.9em; }
+.sk-button { width: 116px; height: 40px; border-radius: var(--shape-full); }
+
+/* The row underneath is the real one's twin, minus anything that would read as pressable. */
+#abi-skeleton .abi { pointer-events: none; }
+
 /* ---------- Motion ---------- */
 
 .reveal-ready [data-reveal] {
@@ -1628,6 +1678,52 @@ summary:hover { color: var(--on-surface); }
 .hero-inner > *:nth-child(4) { animation-delay: 0.28s; }
 .hero-inner > *:nth-child(5) { animation-delay: 0.36s; }
 .showcase { animation-delay: 0.2s; }
+
+/* Every other page opens the same way, so arriving at one from the home page is the same
+   movement rather than a cut. Four children: the trail, the heading, the sentence, the controls. */
+.page-head-wrap > * { animation: rise 0.9s var(--ease-emphasised) both; }
+.page-head-wrap > *:nth-child(1) { animation-delay: 0.04s; }
+.page-head-wrap > *:nth-child(2) { animation-delay: 0.12s; }
+.page-head-wrap > *:nth-child(3) { animation-delay: 0.2s; }
+.page-head-wrap > *:nth-child(4) { animation-delay: 0.28s; }
+
+/* The menu arrives from under the bar it hangs off, quickly, because it is a response to a press
+   rather than an entrance. The rows follow it in, one frame apart, which is the difference
+   between a card appearing and a card opening. */
+@keyframes menu-in {
+  from { opacity: 0; transform: translate3d(0, -10px, 0) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes menu-row {
+  from { opacity: 0; transform: translate3d(0, -6px, 0); }
+  to { opacity: 1; transform: none; }
+}
+.js .nav-links.is-open { animation: menu-in 0.24s var(--ease-emphasised) both; transform-origin: 100% 0; }
+.js .nav-links.is-open > a { animation: menu-row 0.26s var(--ease-emphasised) both; }
+.js .nav-links.is-open > a:nth-child(1) { animation-delay: 0.05s; }
+.js .nav-links.is-open > a:nth-child(2) { animation-delay: 0.08s; }
+.js .nav-links.is-open > a:nth-child(3) { animation-delay: 0.11s; }
+.js .nav-links.is-open > a:nth-child(4) { animation-delay: 0.14s; }
+.js .nav-links.is-open > a:nth-child(5) { animation-delay: 0.17s; }
+.js .nav-links.is-open > a:nth-child(6) { animation-delay: 0.2s; }
+
+/* Press, rather than hover. A finger gets no hover state and now draws none, so this is the only
+   feedback a tap has: everything you can press gives a little under it and comes back. */
+.btn:active,
+.palette:active,
+a.card:active,
+.action:active,
+.nav-icon:active,
+.theme-toggle:active,
+.menu-btn:active,
+.to-top:active,
+.dl:active { transform: scale(0.97); }
+.btn, .palette, a.card, .action, .nav-icon, .theme-toggle, .menu-btn, .to-top, .dl {
+  transition-property: background-color, color, border-color, box-shadow, transform;
+  transition-duration: 0.2s;
+  transition-timing-function: var(--ease-standard);
+}
+.btn:active { transform: scale(0.97); }
 
 /* A very small parallax on the showcase devices. app.js writes --shift. */
 .showcase .device-tv { transform: translate3d(0, calc(var(--shift, 0) * -14px), 0); }
@@ -1710,13 +1806,47 @@ summary:hover { color: var(--on-surface); }
   background: var(--surface-container);
 }
 
-/* Below 840px the header is two rows: the mark and the two controls on the first, and the pages
-   on the second, in a tray of their own that scrolls sideways. The strip used to sit inside the
-   controls' own box, which gave it their width rather than the header's, so it began under the
-   brand and ran off the right edge with half a word showing. Its own ground is also what stops
-   four page names reading as loose text sitting on the artwork behind them. */
+/* ---------- The menu ----------
+
+   Below 840px the four page names do not fit beside the mark, the star and the theme control,
+   and a strip that scrolls sideways only tells you the rest exists if you happen to push it. So
+   a phone gets what a phone expects: a button, and the pages as a list under it.
+
+   The button is drawn only when there is script to work it. Without script the links stay where
+   they are, on a second row in a tray of their own, which is a working header rather than a
+   button that does nothing. That is what the js class on the root is for, and it is set in the
+   same head script that applies the stored theme, so it lands before the first paint. */
+
+.menu-btn { display: none; }
+
+.js .menu-btn {
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  margin-left: 4px;
+  flex: none;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-full);
+  background: var(--surface-container-low);
+  color: var(--on-surface-variant);
+  cursor: pointer;
+  transition: background-color 0.2s var(--ease-standard), color 0.2s var(--ease-standard);
+}
+.js .menu-btn:hover { background: var(--surface-container); color: var(--on-surface); }
+.menu-btn .icon-close { display: none; }
+.menu-btn[aria-expanded="true"] .icon-menu { display: none; }
+.menu-btn[aria-expanded="true"] .icon-close { display: block; }
+.menu-btn[aria-expanded="true"] {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  border-color: transparent;
+}
+
 @media (max-width: 840px) {
-  .header-inner { flex-wrap: wrap; row-gap: 8px; min-height: 0; padding-block: 10px; }
+  /* No script: the pages take a second row, in a tray of their own that scrolls sideways. Four
+     names loose on top of the background art read as spare text rather than as navigation. */
+  .header-inner { flex-wrap: wrap; row-gap: 8px; min-height: 0; padding-block: 10px; position: relative; }
   .brand { order: 1; }
   .nav { order: 2; margin-left: auto; }
 
@@ -1729,16 +1859,48 @@ summary:hover { color: var(--on-surface); }
     border: 1px solid var(--outline-variant);
     border-radius: var(--shape-full);
     background: var(--surface-container-low);
-    /* The one row that is allowed to overflow, because four to six page names will not fit on a
-       phone at any size worth reading. Sideways, under a thumb, with no scrollbar drawn. */
     overflow-x: auto;
     scrollbar-width: none;
   }
   .nav-links::-webkit-scrollbar { display: none; }
-  .nav-links a { white-space: nowrap; padding: 8px 14px; font-size: 0.9rem; }
+  .nav-links a { white-space: nowrap; padding: 8px 14px; font-size: 0.95rem; }
 
-  /* No pill inside a pill. The strip is already one, so once the bar lifts it goes flat and
-     edge to edge, and keeps only its ground and a hairline along the bottom. */
+  /* With script: one row, a button at the end of it, and the pages as a card underneath. It is
+     positioned against the header rather than the page so it lines up with the bar in both of
+     the bar's states, and it is only ever as tall as the site is deep. */
+  .js .header-inner { flex-wrap: nowrap; row-gap: 0; }
+  .js .menu-btn { display: inline-flex; }
+
+  .js .nav-links {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: var(--gutter);
+    right: var(--gutter);
+    z-index: 40;
+    flex: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    margin-top: 8px;
+    padding: 8px;
+    overflow: visible;
+    border-radius: var(--shape-xl);
+    background: var(--surface-container-low);
+    border: 1px solid var(--outline-variant);
+    box-shadow: var(--shadow-2);
+  }
+  .js .nav-links.is-open { display: flex; }
+  .js .nav-links a {
+    padding: 14px 16px;
+    font-size: 1.06rem;
+    border-radius: var(--shape-m);
+    white-space: normal;
+  }
+  .js .is-stuck .nav-links { left: var(--gutter); right: var(--gutter); }
+
+  /* No pill inside a pill, and no rounded bar with a card hanging off it: once the bar lifts it
+     goes flat and edge to edge on a phone, keeping only its ground and a hairline. */
   .site-header.is-stuck { padding: 0; }
   .is-stuck .header-inner {
     min-height: 0;
@@ -1751,9 +1913,28 @@ summary:hover { color: var(--on-surface); }
   .is-stuck .nav-links { background: var(--surface-container); }
 }
 
-/* The star control. It is a link to the stargazers page whatever happens; the
-   count is written in by app.js and stays hidden if GitHub does not answer, so
-   the button never shows an empty bracket. */
+/* The repository, as an icon. It was a pill reading "Star 3", which put a figure in the corner
+   of every page that mostly said the project is small. The count still has a home in the support
+   band, where there is room to ask for the star rather than merely report it. */
+.nav-icon,
+.theme-toggle {
+  width: 46px;
+  height: 46px;
+  margin-left: 4px;
+  flex: none;
+}
+.nav-icon {
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--shape-full);
+  background: var(--surface-container);
+  color: var(--on-surface-variant);
+  padding: 0;
+  transition: background-color 0.2s var(--ease-standard), color 0.2s var(--ease-standard);
+}
+.nav .nav-icon:hover { background: var(--primary-container); color: var(--on-primary-container); text-decoration: none; }
+.nav-icon svg { flex: none; }
+
 .nav-star {
   display: inline-flex;
   align-items: center;
@@ -1954,3 +2135,39 @@ a.card:hover .card-go svg { transform: translateX(4px); }
 /* Each figure is hidden until app.js has a number for it, so a rate-limited
    reader sees the licence on its own rather than two empty labels. */
 .support-stats [data-count-wrap][hidden] { display: none; }
+
+
+/* ---------------------------------------------------------------------------
+   Hover, where there is something to hover with
+
+   A phone has no pointer, so every :hover above is either dead or, worse, stuck:
+   tapping a card leaves it in its hover state until something else is tapped,
+   which reads as a selection nobody made. The lift, the border change and the
+   arrow nudge are all decoration for a mouse, so on a touch screen they are
+   simply not drawn. Nothing here changes what anything does.
+   --------------------------------------------------------------------------- */
+
+@media (hover: none) {
+  .btn:hover { transform: none; box-shadow: none; }
+  .btn-outline:hover {
+    background: var(--surface-container-lowest);
+    color: var(--on-surface);
+    border-color: var(--outline-variant);
+  }
+  a.card:hover { border-color: var(--outline-variant); }
+  a.card:hover .card-go svg { transform: none; }
+  .action:hover { background: var(--surface-container-lowest); border-color: var(--outline-variant); }
+  .action:hover .action-icon { background: var(--surface-container); }
+  .action:hover .action-kind { color: var(--on-surface-variant); }
+  .action:hover .action-arrow { transform: none; color: var(--on-surface-variant); }
+  .faq-item:hover { border-color: var(--outline-variant); }
+  .faq-item > summary:hover { color: var(--on-surface-variant); }
+  .nav a:hover,
+  .nav-links a:hover { background: transparent; color: var(--on-surface-variant); }
+  .nav .nav-icon:hover { background: var(--surface-container); color: var(--on-surface-variant); }
+  .theme-toggle:hover { background: var(--surface-container); color: var(--on-surface-variant); }
+  .footer-links a:hover { background: transparent; color: var(--on-surface-variant); }
+  .to-top:hover { background: var(--surface-container); border-color: var(--outline-variant); }
+  .prev-tag:hover { color: var(--primary); }
+  .brand:hover { color: var(--on-surface); }
+}
