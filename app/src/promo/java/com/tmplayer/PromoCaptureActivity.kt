@@ -257,6 +257,9 @@ private fun TvMediaScreen() {
             edge = Tv.SafeH,
             onToggleLayout = {},
             onRefresh = {},
+            // The fixture has nowhere to go back to. The pill is drawn, which is the point,
+            // since the screenshots have to show the same header the app shows.
+            onBack = {},
         )
         LazyVerticalGrid(
             columns = GridCells.Fixed(4),
