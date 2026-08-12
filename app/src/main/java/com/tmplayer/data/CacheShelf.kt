@@ -23,6 +23,39 @@ object CacheShelf {
     /** [keepCount] of this means no limit on the count; only the disk decides. */
     const val UNLIMITED = 0
 
+    /**
+     * What the app is allowed to keep on disk, given the size of the disk.
+     *
+     * This was a flat four gigabytes, written for "a device whose whole disk is eight". The stick
+     * this app was built for reports 4.85 GB of usable data partition, not eight, so the ceiling
+     * was very nearly the whole volume: the app was behaving exactly as designed while filling the
+     * device to the last megabyte, and the trim that is supposed to stop that had no work to do
+     * until the disk was already gone. Anything expressed in absolute bytes has this failure in
+     * it somewhere, so the ceiling is a share of the volume with a floor and a cap.
+     *
+     * Two limits, whichever binds first: a share of the volume, and enough left over that the
+     * device still works. [MIN_CEILING_BYTES] stops the arithmetic from arriving at a number too
+     * small to hold one film on a device that is already nearly full, where the honest answer is
+     * that the video will not fit and [plan] is what says so.
+     */
+    fun ceiling(totalBytes: Long): Long {
+        if (totalBytes <= 0) return MAX_CEILING_BYTES
+        val share = (totalBytes * VOLUME_SHARE).toLong()
+        val leavingRoom = totalBytes - RESERVED_FOR_THE_DEVICE
+        return minOf(MAX_CEILING_BYTES, share, leavingRoom).coerceAtLeast(MIN_CEILING_BYTES)
+    }
+
+    /** What the app keeps at most, on a device with room to spare: a couple of films. */
+    const val MAX_CEILING_BYTES = 4L * 1024 * 1024 * 1024
+
+    /** Never less than this, or a stick could not hold a single video. */
+    const val MIN_CEILING_BYTES = 1024L * 1024 * 1024
+
+    /** The rest of the volume belongs to the system, the launcher and everything else installed. */
+    private const val RESERVED_FOR_THE_DEVICE = 2L * 1024 * 1024 * 1024
+
+    private const val VOLUME_SHARE = 0.4
+
     /** One video already on this device: what it is, what it takes, and when it was last played. */
     data class Held(val fileId: Int, val bytes: Long, val updatedAt: Long)
 

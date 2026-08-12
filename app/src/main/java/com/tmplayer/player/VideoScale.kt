@@ -23,4 +23,10 @@ enum class VideoScale(val resizeMode: Int, val label: String) {
     ;
 
     fun next(): VideoScale = entries[(ordinal + 1) % entries.size]
+
+    companion object {
+        /** By name, so a stop added or reordered later cannot move everybody's saved choice. */
+        fun from(stored: String?): VideoScale =
+            entries.firstOrNull { it.name == stored } ?: Fit
+    }
 }

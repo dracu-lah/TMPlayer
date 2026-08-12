@@ -11,6 +11,12 @@
 <resources>
     <dimen name="player_sheet_side">24dp</dimen>
     <dimen name="player_progress_width">260dp</dimen>
+    <!--
+      The poster on the loading screen, at 16:9. Sized so it and the title together sit inside the
+      short side of a phone held sideways, which is 411dp at its narrowest in landscape.
+    -->
+    <dimen name="player_poster_width">208dp</dimen>
+    <dimen name="player_poster_height">117dp</dimen>
     <dimen name="player_title_size">20sp</dimen>
     <dimen name="player_chip_margin">16dp</dimen>
     <!-- Clear of the transport row, which on a phone is Media3's and about 70dp tall. -->

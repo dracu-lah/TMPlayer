@@ -506,6 +506,33 @@ object Td {
     }
 
     /**
+     * Everything TMPlayer is holding, of every kind, gone.
+     *
+     * [clearMediaCache] spares photos and thumbnails, which is right for the button that means
+     * "delete the films". It is wrong for the button that means "I need this space back": on a
+     * stick where the video had already been trimmed away, that button reported nothing to free
+     * and then freed nothing, while the disk sat full of a year of chat pictures and whatever
+     * TDLib had filed under its own types. This is the answer to that: no immunity, no type
+     * filter, no ceiling. The browse grid goes grey for a moment afterwards and refetches.
+     */
+    suspend fun clearEverythingCached() {
+        val td = current ?: return
+        runCatching {
+            td.optimizeStorage(
+                size = 0,
+                ttl = Int.MAX_VALUE,
+                count = Int.MAX_VALUE,
+                immunityDelay = 0,
+                fileTypes = emptyArray(),
+                chatIds = longArrayOf(),
+                excludeChatIds = longArrayOf(),
+                returnDeletedFileStatistics = false,
+                chatLimit = 0,
+            )
+        }
+    }
+
+    /**
      * Keeps the cache under a ceiling, quietly, instead of waiting to be emptied by hand.
      *
      * [clearMediaCache] is the only thing that ever removed anything, it is a button, and it takes
@@ -515,7 +542,7 @@ object Td {
      * and stops at the ceiling, and it leaves anything touched in the last few minutes alone so it
      * cannot delete the video currently being streamed out from under the player.
      */
-    suspend fun trimStorage(maxBytes: Long = CACHE_CEILING_BYTES) {
+    suspend fun trimStorage(maxBytes: Long = cacheCeilingBytes()) {
         val td = current ?: return
         runCatching {
             td.optimizeStorage(
@@ -576,12 +603,14 @@ object Td {
     private const val CONNECT_TIMEOUT_MS = 30_000L
 
     /**
-     * What TMPlayer is allowed to keep on disk before the oldest of it starts going.
-     *
-     * Four gigabytes: room for a couple of films and every thumbnail the browser has ever drawn,
-     * on a device whose whole disk is eight.
+     * What TMPlayer is allowed to keep on disk before the oldest of it starts going, measured
+     * against the disk it is actually installed on. See [CacheShelf.ceiling].
      */
-    const val CACHE_CEILING_BYTES = 4L * 1024 * 1024 * 1024
+    fun cacheCeilingBytes(): Long = if (::appContext.isInitialized) {
+        CacheShelf.ceiling(DiskSpace.read(appContext).totalBytes)
+    } else {
+        CacheShelf.MAX_CEILING_BYTES
+    }
 
     /** A month. Anything untouched for longer is not a cache, it is a leak. */
     private const val CACHE_TTL_SECONDS = 30 * 24 * 60 * 60

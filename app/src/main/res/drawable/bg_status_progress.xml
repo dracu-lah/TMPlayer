@@ -1,0 +1,24 @@
+<!--
+  The loading bar: a rounded track with a rounded fill, in the app's accent.
+
+  Android's stock horizontal progress bar is a square-ended sliver with a grey track, which is the
+  one detail that dated this screen more than anything else on it. Everything drawn on top of a
+  film in 2026 is a rounded pill, and a bar that is not reads as a system dialog rather than as
+  part of the app.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <shape android:shape="rectangle">
+            <solid android:color="#26FFFFFF" />
+            <corners android:radius="4dp" />
+        </shape>
+    </item>
+    <item android:id="@android:id/progress">
+        <clip>
+            <shape android:shape="rectangle">
+                <solid android:color="@color/accent" />
+                <corners android:radius="4dp" />
+            </shape>
+        </clip>
+    </item>
+</layer-list>

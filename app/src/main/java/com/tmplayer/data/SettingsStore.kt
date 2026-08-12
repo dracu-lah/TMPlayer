@@ -35,6 +35,21 @@ private val CHAT_SNAPSHOT = stringPreferencesKey("chat_snapshot")
 private val THEME_CHOICE = stringPreferencesKey("theme_choice")
 private val DYNAMIC_COLOUR = booleanPreferencesKey("dynamic_colour")
 private val KEEP_VIDEOS = intPreferencesKey("keep_videos")
+private val VIDEO_SCALE = stringPreferencesKey("video_scale")
+
+/**
+ * One series, as a key.
+ *
+ * Lower-cased and stripped of everything that is not a letter or a digit, so "Kerala Crime Files"
+ * and "Kerala_Crime_Files" are the same show. Two shows would have to differ only in punctuation
+ * to collide, and the cost of that is subtitles coming on a video early.
+ */
+private fun seriesKey(series: String): String =
+    series.lowercase(java.util.Locale.ROOT).filter { it.isLetterOrDigit() }.take(48)
+
+private fun audioKey(series: String) = stringPreferencesKey("audio_$series")
+private fun textKey(series: String) = stringPreferencesKey("text_$series")
+private fun subtitlesKey(series: String) = booleanPreferencesKey("subs_$series")
 
 /** Where playback stopped, so the next launch can offer to continue. */
 private fun resumeKey(chatId: Long, messageId: Long) =
@@ -229,6 +244,51 @@ class SettingsStore(private val context: Context) {
 
     suspend fun playbackSpeedNow(): Float =
         PlaybackSpeed.sanitise(context.prefs.data.first()[PLAYBACK_SPEED] ?: PlaybackSpeed.DEFAULT)
+
+    /**
+     * How the picture was last fitted to the screen.
+     *
+     * Remembered for the same reason the speed is: a viewer whose television overscans, or who
+     * cannot stand black bars, was choosing Crop again at the start of every single episode.
+     */
+    suspend fun videoScaleNow(): String? = context.prefs.data.first()[VIDEO_SCALE]
+
+    suspend fun setVideoScale(name: String) {
+        context.prefs.edit { it[VIDEO_SCALE] = name }
+    }
+
+    // ---- tracks, per series -----------------------------------------------------------------
+
+    /**
+     * The audio track and the subtitles this series was last watched with.
+     *
+     * Kept per series rather than per file, because the choice belongs to the show: a viewer who
+     * turned English subtitles on for episode one wants them on for episode two, and the file id
+     * changes with every episode. Kept per series rather than once for the whole app, because the
+     * answer genuinely differs between one show and the next: subtitles on for the Malayalam
+     * series, off for the English one, and neither preference should overwrite the other.
+     *
+     * A video that is not part of a series is keyed by its own name, which makes this a no-op for
+     * it: nothing else will ever look that key up.
+     */
+    suspend fun trackChoice(series: String): TrackChoice {
+        val prefs = context.prefs.data.first()
+        val key = seriesKey(series)
+        return TrackChoice(
+            audioLanguage = prefs[audioKey(key)]?.takeIf { it.isNotBlank() },
+            textLanguage = prefs[textKey(key)]?.takeIf { it.isNotBlank() },
+            subtitlesOn = prefs[subtitlesKey(key)] ?: false,
+        )
+    }
+
+    suspend fun setTrackChoice(series: String, choice: TrackChoice) {
+        val key = seriesKey(series)
+        context.prefs.edit { prefs ->
+            choice.audioLanguage?.let { prefs[audioKey(key)] = it } ?: prefs.remove(audioKey(key))
+            choice.textLanguage?.let { prefs[textKey(key)] = it } ?: prefs.remove(textKey(key))
+            prefs[subtitlesKey(key)] = choice.subtitlesOn
+        }
+    }
 
     // ---- size filter ------------------------------------------------------------------------
 
@@ -643,6 +703,22 @@ class SettingsStore(private val context: Context) {
 
         fun progressKey(chatId: Long, messageId: Long) = "${chatId}_$messageId"
     }
+}
+
+/**
+ * The soundtrack and the subtitles a series is watched with.
+ *
+ * [subtitlesOn] is separate from [textLanguage] having a value, because "off" is a real choice and
+ * has to survive: without it, a viewer who turned subtitles off would get them back the moment the
+ * next episode's default selection picked a track.
+ */
+data class TrackChoice(
+    val audioLanguage: String? = null,
+    val textLanguage: String? = null,
+    val subtitlesOn: Boolean = false,
+) {
+    /** Nothing has been chosen yet, so the player's own defaults are the honest answer. */
+    val empty: Boolean get() = audioLanguage == null && textLanguage == null && !subtitlesOn
 }
 
 /** How far into a video the viewer got, and how long it runs. */

@@ -31,6 +31,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem as Media3Item
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
@@ -64,8 +65,10 @@ import com.tmplayer.data.NetworkMonitor
 import com.tmplayer.data.NetworkStatus
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.TrackChoice
 import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.Td
+import com.tmplayer.data.Thumbnails
 import com.tmplayer.data.errorMessage
 import com.tmplayer.data.valueOrNull
 import dev.g000sha256.tdl.TdlClient
@@ -115,6 +118,12 @@ class PlayerActivity : FragmentActivity() {
     private lateinit var rebufferText: TextView
     private lateinit var downloadChip: TextView
     private var statusSpinner: View? = null
+
+    /** The loading screen's artwork: the blurred backdrop, its scrim, and the sharp poster. */
+    private var statusArt: ImageView? = null
+    private var statusScrim: View? = null
+    private var statusPoster: ImageView? = null
+    private var artDrift: android.animation.ObjectAnimator? = null
     private var statusRetry: android.widget.Button? = null
 
     /** The phone's episode buttons; null on a TV, where the transport row grows its own. */
@@ -165,6 +174,16 @@ class PlayerActivity : FragmentActivity() {
     /** How the picture is fitted to the screen, and the speed it plays at. Both are remembered. */
     private var videoScale = VideoScale.Fit
     private var playbackSpeed = PlaybackSpeed.DEFAULT
+
+    /**
+     * The soundtrack and subtitles this series was last watched with, read before the player is
+     * built and written back whenever the viewer changes either.
+     */
+    private var tracks = TrackChoice()
+
+    /** What the track choice is filed under: the series name, or this video's own. */
+    private val seriesKey: String
+        get() = MediaName.parse(mediaTitle).title.ifBlank { mediaTitle }
 
     /** The picture's own shape, once the decoder has reported it. Zero until then. */
     private var videoWidth = 0
@@ -240,6 +259,9 @@ class PlayerActivity : FragmentActivity() {
         statusDetail = findViewById(R.id.status_detail)
         statusProgress = findViewById(R.id.status_progress)
         statusSpinner = findViewById(R.id.status_spinner)
+        statusArt = findViewById(R.id.status_art)
+        statusScrim = findViewById(R.id.status_scrim)
+        statusPoster = findViewById(R.id.status_poster)
         statusRetry = findViewById<android.widget.Button>(R.id.status_retry).apply {
             setOnClickListener { retryPlayback() }
         }
@@ -270,6 +292,7 @@ class PlayerActivity : FragmentActivity() {
         statusTitle.text = mediaTitle.ifBlank { "Opening…" }
         showStatus("Connecting to Telegram…")
 
+        showArtwork()
         if (!FormFactor.isTv(this)) wireEpisodeButtons()
         observeDownload()
         observeConnectivity()
@@ -306,6 +329,16 @@ class PlayerActivity : FragmentActivity() {
             if (downloadFirst && !fetchWholeFilm()) return@launch
             playbackSpeed = runCatching { settings.playbackSpeedNow() }
                 .getOrDefault(PlaybackSpeed.DEFAULT)
+            videoScale = runCatching { VideoScale.from(settings.videoScaleNow()) }
+                .getOrDefault(VideoScale.Fit)
+            // Read before the player is built, because the track selector is configured once and
+            // a preference applied after the first frame means the first line of dialogue is in
+            // the wrong language.
+            tracks = runCatching { settings.trackChoice(seriesKey) }
+                .getOrDefault(TrackChoice())
+            // The buttons were drawn with the defaults before any of this had been read off disk.
+            scaleButton?.text = videoScale.label
+            speedButton?.text = PlaybackSpeed.label(playbackSpeed)
             if (!session.isCurrent()) return@launch
             startPlayback(session.client)
         }
@@ -592,6 +625,7 @@ class PlayerActivity : FragmentActivity() {
         tvFragment()?.showVideoScale(scale)
         scaleButton?.text = scale.label
         showGestureFeedback(scale.label)
+        lifecycleScope.launch { runCatching { settings.setVideoScale(scale.name) } }
     }
 
     /** The next speed along, applied now and remembered for the next video. */
@@ -745,10 +779,16 @@ class PlayerActivity : FragmentActivity() {
                 // the only picker in the app is leanback's, which does not exist on a phone.
                 // Selecting none by default keeps captions off until asked for, which is the
                 // behaviour that was wanted, while leaving the track there to be chosen.
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                .setPreferredTextLanguage(null)
+                // Off stays off. Without this, a series watched without captions gets them back on
+                // the next episode whenever that file marks a subtitle track default or forced.
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !tracks.empty && !tracks.subtitlesOn)
+                // What this series was last watched with. Episode two opens in the language and
+                // with the captions episode one ended in, which is the whole point of choosing
+                // them: before this, every episode arrived on the file's own default track and
+                // the choice had to be made again from the sofa.
+                .setPreferredTextLanguage(tracks.textLanguage.takeIf { tracks.subtitlesOn })
                 .setSelectUndeterminedTextLanguage(false)
-                .setPreferredAudioLanguage(null)
+                .setPreferredAudioLanguage(tracks.audioLanguage)
                 .build()
         }
 
@@ -781,6 +821,13 @@ class PlayerActivity : FragmentActivity() {
                 setHandleAudioBecomingNoisy(true)
                 setWakeMode(C.WAKE_MODE_LOCAL)
                 setPlaybackSpeed(playbackSpeed)
+                // The television draws onto leanback's bare surface, where this is the only lever
+                // the picture shape has; the phone's PlayerView takes its resize mode instead.
+                videoScalingMode = if (videoScale == VideoScale.Fit) {
+                    C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+                } else {
+                    C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+                }
             }
     }
 
@@ -821,6 +868,17 @@ class PlayerActivity : FragmentActivity() {
             subtitleView.setCues(cueGroup.cues)
         }
 
+        /**
+         * Files the soundtrack and subtitles now playing under this series.
+         *
+         * Written from what is actually selected rather than from what the picker was told, so it
+         * covers every route to a track: the television's picker, Media3's own subtitle button on
+         * a phone, and the file's defaults on a series being watched for the first time.
+         */
+        override fun onTracksChanged(tracks: Tracks) {
+            rememberTracks(tracks)
+        }
+
         override fun onVideoSizeChanged(size: VideoSize) {
             videoWidth = size.width
             videoHeight = size.height
@@ -855,6 +913,37 @@ class PlayerActivity : FragmentActivity() {
                 showError(friendlyError(error), retryable = isRecoverable(error))
             }
         }
+    }
+
+    /**
+     * Keeps the stored choice in step with what is playing, and writes it when it moves.
+     *
+     * The language is what identifies a track between two files: the group indices and the track
+     * order are the container's, and the next episode was remuxed by the same person on a
+     * different evening. A track with no language declared at all is remembered only as "captions
+     * were on", which the next episode honours by leaving its own default alone.
+     */
+    private fun rememberTracks(current: Tracks) {
+        fun language(type: Int): String? = current.groups
+            .firstOrNull { it.type == type && it.isSelected }
+            ?.let { group ->
+                (0 until group.length)
+                    .firstOrNull { group.isTrackSelected(it) }
+                    ?.let { group.getTrackFormat(it).language }
+            }
+            ?.takeIf { it.isNotBlank() && it != C.LANGUAGE_UNDETERMINED }
+
+        val subtitlesOn = current.groups.any { it.type == C.TRACK_TYPE_TEXT && it.isSelected }
+        val updated = TrackChoice(
+            audioLanguage = language(C.TRACK_TYPE_AUDIO) ?: tracks.audioLanguage,
+            textLanguage = language(C.TRACK_TYPE_TEXT) ?: tracks.textLanguage.takeIf { subtitlesOn },
+            subtitlesOn = subtitlesOn,
+        )
+        if (updated == tracks) return
+        tracks = updated
+        val key = seriesKey
+        val store = settings
+        App.backgroundScope.launch { runCatching { store.setTrackChoice(key, updated) } }
     }
 
     /**
@@ -1032,8 +1121,9 @@ class PlayerActivity : FragmentActivity() {
             for (second in AUTOPLAY_COUNTDOWN_SEC downTo 1) {
                 showStatus("Next: ${next.title}")
                 statusDetail.text = "Starting in $second…  Press Back to stop."
-                statusProgress.progress =
-                    (1000 * (AUTOPLAY_COUNTDOWN_SEC - second) / AUTOPLAY_COUNTDOWN_SEC)
+                showLoadingProgress(
+                    (AUTOPLAY_COUNTDOWN_SEC - second).toFloat() / AUTOPLAY_COUNTDOWN_SEC,
+                )
                 delay(1_000)
             }
             playEpisode(next)
@@ -1212,7 +1302,7 @@ class PlayerActivity : FragmentActivity() {
             val left = StreamStats.formatEta(
                 StreamStats.secondsForBytes(remaining, speed.bytesPerSec),
             )
-            statusProgress.progress = (downloadedFraction * 1000).toInt()
+            showLoadingProgress(downloadedFraction)
             statusDetail.text = listOf(
                 "${StreamStats.formatPercent(downloadedFraction)} downloaded",
                 rate,
@@ -1235,7 +1325,7 @@ class PlayerActivity : FragmentActivity() {
         val left = StreamStats.formatEta(eta)
 
         if (openingFilm) {
-            statusProgress.progress = (fraction * 1000).toInt()
+            showLoadingProgress(fraction)
             statusDetail.text = listOf(rate, left).filter { it.isNotBlank() }.joinToString("  ·  ")
         } else {
             rebufferText.text = "Loading  ·  $rate"
@@ -1345,15 +1435,108 @@ class PlayerActivity : FragmentActivity() {
         }
     }
 
+    /**
+     * Puts the video's own artwork behind the wait.
+     *
+     * Two pictures from two places, because they arrive at two different times. The minithumbnail
+     * travels inside the message and is already in memory, so it is on screen in the first frame,
+     * blown up across the whole panel where its forty-odd pixels read as a blur rather than as a
+     * bad photograph. The real thumbnail is a file Telegram has to be asked for, so it lands a
+     * moment later, sharp, in the poster at the centre.
+     *
+     * A video with no thumbnail at all, which is most of what a re-upload channel posts, simply
+     * gets the sheet as it was: everything here is hidden until there is something to draw.
+     */
+    private fun showArtwork() {
+        val mini = Thumbnails.mini(intent.getByteArrayExtra(EXTRA_MINI_THUMBNAIL))
+        if (mini != null) {
+            statusArt?.setImageBitmap(mini)
+            statusPoster?.setImageBitmap(mini)
+            revealArtwork()
+        }
+
+        val thumbnailId = intent.getIntExtra(EXTRA_THUMBNAIL_ID, 0)
+        if (thumbnailId <= 0) return
+        lifecycleScope.launch {
+            val full = runCatching { Thumbnails.full(thumbnailId) }.getOrNull() ?: return@launch
+            statusPoster?.setImageBitmap(full)
+            // The backdrop stays on the small one on purpose. Stretching a real thumbnail across
+            // 1080p is a soft, ugly photograph; stretching a forty-pixel one is a blur.
+            revealArtwork()
+        }
+    }
+
+    /**
+     * Brings the artwork up, and keeps the backdrop moving while the viewer waits.
+     *
+     * The drift is slow enough to be felt rather than watched: a still frame under a progress bar
+     * reads as a screen that has stopped, and this is precisely the moment a viewer is deciding
+     * whether the app has hung. Two scale properties on one view, which is a compositor job.
+     */
+    private fun revealArtwork() {
+        val art = statusArt ?: return
+        val poster = statusPoster
+        if (art.visibility != View.VISIBLE) {
+            art.alpha = 0f
+            art.visibility = View.VISIBLE
+            statusScrim?.visibility = View.VISIBLE
+            art.animate().alpha(1f).setDuration(ART_FADE_MS).start()
+        }
+        if (poster != null && poster.visibility != View.VISIBLE) {
+            poster.alpha = 0f
+            poster.translationY = POSTER_RISE_PX * resources.displayMetrics.density
+            poster.visibility = View.VISIBLE
+            poster.clipToOutline = true
+            poster.animate().alpha(1f).translationY(0f).setDuration(ART_FADE_MS).start()
+        }
+        if (artDrift == null) {
+            artDrift = android.animation.ObjectAnimator.ofPropertyValuesHolder(
+                art,
+                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, ART_DRIFT_SCALE),
+                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, ART_DRIFT_SCALE),
+            ).apply {
+                duration = ART_DRIFT_MS
+                repeatCount = android.animation.ValueAnimator.INFINITE
+                repeatMode = android.animation.ValueAnimator.REVERSE
+                start()
+            }
+        }
+    }
+
+    /**
+     * Which of the two bars is up: the one with a figure on it, or the one without.
+     *
+     * Nothing knows how long a Telegram download will take until some of it has arrived, so the
+     * first seconds have no honest percentage to show. An indeterminate bar says "working" without
+     * claiming a number, and it is replaced the moment there is one.
+     */
+    private fun showLoadingProgress(fraction: Float) {
+        val known = fraction > 0f
+        statusProgress.visibility = if (known) View.VISIBLE else View.GONE
+        statusSpinner?.visibility = if (known) View.GONE else View.VISIBLE
+        if (known) statusProgress.progress = (fraction * 1000).toInt()
+    }
+
+    /** The backdrop stops moving as soon as nobody is looking at it. */
+    private fun stopArtDrift() {
+        artDrift?.cancel()
+        artDrift = null
+        statusArt?.scaleX = 1f
+        statusArt?.scaleY = 1f
+    }
+
     private fun showStatus(message: String) {
         openingFilm = true
         statusOverlay.visibility = View.VISIBLE
         statusIcon.visibility = View.GONE
         rebufferChip.visibility = View.GONE
-        statusSpinner?.visibility = View.VISIBLE
-        statusProgress.visibility = View.VISIBLE
         statusDetail.visibility = View.VISIBLE
         statusRetry?.visibility = View.GONE
+        showLoadingProgress(if (statusProgress.visibility == View.VISIBLE) {
+            statusProgress.progress / 1000f
+        } else {
+            0f
+        })
         statusMessage = message
         renderStatusText()
         updateDownloadChip()
@@ -1434,6 +1617,7 @@ class PlayerActivity : FragmentActivity() {
     private fun hideStatus() {
         openingFilm = false
         statusOverlay.visibility = View.GONE
+        stopArtDrift()
         rebufferChip.visibility = View.GONE
         updateEpisodeRow()
         updateDownloadChip()
@@ -1466,8 +1650,10 @@ class PlayerActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
+        stopArtDrift()
         saveResumePosition()
         stopDownload()
+        trimCache()
         gestureHud?.removeCallbacks(hideGestureHud)
         // Released before the player it wraps, or it is left holding a released instance.
         mediaSession?.release()
@@ -1501,6 +1687,20 @@ class PlayerActivity : FragmentActivity() {
         App.backgroundScope.launch {
             runCatching { Td.cancelDownload(id) }
         }
+    }
+
+    /**
+     * Puts the cache back under its ceiling on the way out of a video.
+     *
+     * It ran once, at launch, which is the one moment nothing has been downloaded yet. An evening
+     * of four episodes on a stick therefore ended four episodes over the ceiling, and the trim
+     * that was meant to prevent it did not run again until the app was next started, by which
+     * time the disk was full and the viewer was in Settings looking for something to delete.
+     * Leaving a video is the natural moment: something has just been fetched, and nothing is
+     * playing that a deletion could interrupt.
+     */
+    private fun trimCache() {
+        App.backgroundScope.launch { runCatching { Td.trimStorage() } }
     }
 
     /**
@@ -1545,6 +1745,8 @@ class PlayerActivity : FragmentActivity() {
         private const val EXTRA_SIZE = "size"
         private const val EXTRA_DURATION = "duration"
         private const val EXTRA_CHAT_TITLE = "chat_title"
+        private const val EXTRA_THUMBNAIL_ID = "thumbnail_id"
+        private const val EXTRA_MINI_THUMBNAIL = "mini_thumbnail"
 
         private const val BUFFER_MIN_MS = 15_000
         private const val BUFFER_MAX_MS = 50_000
@@ -1565,6 +1767,22 @@ class PlayerActivity : FragmentActivity() {
 
         /** Twice a second: faster than the eye needs and slower than TDLib talks. */
         private const val PROGRESS_RENDER_MS = 500L
+
+        /** The artwork's way in: long enough to read as a fade, short enough not to be a wait. */
+        private const val ART_FADE_MS = 320L
+
+        /** How far the poster rises as it arrives, in dp. */
+        private const val POSTER_RISE_PX = 14f
+
+        /**
+         * The backdrop's slow drift, out and back.
+         *
+         * Twelve per cent over twenty seconds is about a pixel a second on a 1080p panel: felt
+         * rather than watched, which is the whole intent. Anything faster reads as an effect and
+         * competes with the picture that is about to start.
+         */
+        private const val ART_DRIFT_SCALE = 1.12f
+        private const val ART_DRIFT_MS = 20_000L
 
         /** Long enough to read the figure a drag left behind, short enough to stay out of the way. */
         private const val GESTURE_HUD_MS = 900L
@@ -1615,6 +1833,11 @@ class PlayerActivity : FragmentActivity() {
                 putExtra(EXTRA_MESSAGE_ID, item.messageId)
                 putExtra(EXTRA_TITLE, item.title)
                 putExtra(EXTRA_CHAT_TITLE, chatTitle)
+                // The picture the grid was already showing, carried across rather than fetched
+                // again: the loading screen is drawn from it, and it is the one thing that can be
+                // on screen in the first frame, before Telegram has been asked anything at all.
+                putExtra(EXTRA_THUMBNAIL_ID, item.thumbnailFileId)
+                putExtra(EXTRA_MINI_THUMBNAIL, item.miniThumbnail)
                 putExtra(
                     EXTRA_SUBTITLE,
                     listOf(

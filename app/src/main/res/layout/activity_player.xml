@@ -24,105 +24,164 @@
         android:layout_marginBottom="@dimen/player_subtitle_bottom" />
 
     <!--
-      Full-screen while the video opens: an opaque sheet, not a spinner floating over a black
-      surface, so there is never a moment that reads as "nothing is happening".
+      Full-screen while the video opens.
 
-      Fully opaque, with no alpha at all. At 94 per cent the first frames of the video showed
-      through behind the text, which does not read as a deliberate scrim, only as a sheet that
-      has not finished drawing.
+      It used to be a title, a sentence and a spinner on a flat sheet of #0E0E12, centred in a
+      1920 by 1080 screen with nothing else on it: correct, and indistinguishable from every other
+      "please wait" on the platform. The wait is the app's first impression and often its longest
+      single moment, so it is now the video's own artwork, at the size the screen actually has.
+
+      Still fully opaque behind the artwork, with no alpha on the sheet itself. At 94 per cent the
+      first frames of the video showed through behind the text, which does not read as a deliberate
+      scrim, only as a sheet that has not finished drawing.
     -->
-    <LinearLayout
+    <FrameLayout
         android:id="@+id/status_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#0E0E12"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:paddingLeft="@dimen/player_sheet_side"
-        android:paddingRight="@dimen/player_sheet_side">
+        android:background="#0E0E12">
 
         <!--
-          Shown only when the overlay is carrying an error, so the loading screen and the failure
-          screen are told apart at a glance from across a room.
+          The backdrop: Telegram's own preview, blown up to fill the screen.
+
+          No blur filter is involved and none is needed. The bytes are the minithumbnail Telegram
+          ships inside every message, which is a few hundred bytes and around forty pixels across,
+          so scaling it to a 1080p panel is a blur by arithmetic: free, instant, and available on
+          every device this runs on rather than on Android 12 and later.
         -->
         <ImageView
-            android:id="@+id/status_icon"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginBottom="16dp"
+            android:id="@+id/status_art"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
             android:contentDescription="@null"
-            android:src="@drawable/ic_warning"
-            android:tint="#E5484D"
+            android:scaleType="centerCrop"
             android:visibility="gone" />
 
-        <TextView
-            android:id="@+id/status_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="6dp"
-            android:gravity="center"
-            android:maxWidth="820dp"
-            android:textColor="@color/text_primary"
-            android:textSize="@dimen/player_title_size"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/status_text"
-            android:accessibilityLiveRegion="polite"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="20dp"
-            android:gravity="center"
-            android:maxWidth="720dp"
-            android:textColor="#9A9AA5"
-            android:textSize="15sp" />
-
-        <ProgressBar
-            android:id="@+id/status_progress"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="@dimen/player_progress_width"
-            android:layout_height="8dp"
-            android:max="1000"
-            android:progressTint="@color/accent"
-            android:progressBackgroundTint="#33FFFFFF" />
-
-        <TextView
-            android:id="@+id/status_detail"
-            android:accessibilityLiveRegion="polite"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:gravity="center"
-            android:maxWidth="720dp"
-            android:textColor="@color/text_primary"
-            android:textSize="15sp" />
-
-        <ProgressBar
-            android:id="@+id/status_spinner"
-            style="?android:attr/progressBarStyleLarge"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:layout_marginTop="20dp"
-            android:indeterminateTint="@color/accent" />
-
-        <!--
-          The error sheet's way out. Before this it said "Press Back to pick something else" and
-          offered nothing focusable at all, so on a remote the whole screen took no input: a video
-          that failed on a moved download window, which the next attempt would have played, was
-          simply the end of the session.
-        -->
-        <Button
-            android:id="@+id/status_retry"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:minWidth="160dp"
-            android:paddingLeft="28dp"
-            android:paddingRight="28dp"
-            android:text="Try again"
-            android:textColor="@color/text_primary"
+        <View
+            android:id="@+id/status_scrim"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_status_scrim"
             android:visibility="gone" />
-    </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingLeft="@dimen/player_sheet_side"
+            android:paddingRight="@dimen/player_sheet_side">
+
+            <!--
+              The poster, sharp, at the centre of the screen.
+
+              This is the real thumbnail rather than the blurred one behind it, and it is the one
+              thing on the screen that says which video is opening without anybody reading a word:
+              a viewer who pressed the wrong tile in a grid of near-identical file names knows it
+              here, before the two minutes of waiting rather than after them.
+            -->
+            <ImageView
+                android:id="@+id/status_poster"
+                android:layout_width="@dimen/player_poster_width"
+                android:layout_height="@dimen/player_poster_height"
+                android:layout_marginBottom="22dp"
+                android:background="@drawable/bg_poster"
+                android:contentDescription="@null"
+                android:scaleType="centerCrop"
+                android:visibility="gone" />
+
+            <!--
+              Shown only when the overlay is carrying an error, so the loading screen and the
+              failure screen are told apart at a glance from across a room.
+            -->
+            <ImageView
+                android:id="@+id/status_icon"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginBottom="16dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_warning"
+                android:tint="#E5484D"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/status_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="6dp"
+                android:gravity="center"
+                android:maxLines="2"
+                android:ellipsize="end"
+                android:maxWidth="820dp"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/player_title_size"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/status_text"
+                android:accessibilityLiveRegion="polite"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="20dp"
+                android:gravity="center"
+                android:maxWidth="720dp"
+                android:textColor="#9A9AA5"
+                android:textSize="15sp" />
+
+            <ProgressBar
+                android:id="@+id/status_progress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="@dimen/player_progress_width"
+                android:layout_height="6dp"
+                android:max="1000"
+                android:progressDrawable="@drawable/bg_status_progress" />
+
+            <TextView
+                android:id="@+id/status_detail"
+                android:accessibilityLiveRegion="polite"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:gravity="center"
+                android:maxWidth="720dp"
+                android:textColor="@color/text_primary"
+                android:textSize="15sp" />
+
+            <!--
+              The indeterminate half of the same bar, in the same place.
+
+              A large spinner underneath a progress bar was two answers to one question, and the
+              spinner was the louder of them. This is up only while there is no figure to draw yet,
+              and it hands over to the bar above the moment there is.
+            -->
+            <ProgressBar
+                android:id="@+id/status_spinner"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="@dimen/player_progress_width"
+                android:layout_height="6dp"
+                android:indeterminate="true"
+                android:indeterminateTint="@color/accent" />
+
+            <!--
+              The error sheet's way out. Before this it said "Press Back to pick something else"
+              and offered nothing focusable at all, so on a remote the whole screen took no input:
+              a video that failed on a moved download window, which the next attempt would have
+              played, was simply the end of the session.
+            -->
+            <Button
+                android:id="@+id/status_retry"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:minWidth="160dp"
+                android:paddingLeft="28dp"
+                android:paddingRight="28dp"
+                android:text="Try again"
+                android:textColor="@color/text_primary"
+                android:visibility="gone" />
+        </LinearLayout>
+    </FrameLayout>
 
     <!--
       Everything that floats in the top right corner, in one column.

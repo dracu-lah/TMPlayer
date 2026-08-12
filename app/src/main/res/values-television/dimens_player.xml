@@ -6,6 +6,9 @@
 <resources>
     <dimen name="player_sheet_side">72dp</dimen>
     <dimen name="player_progress_width">520dp</dimen>
+    <!-- Big enough to recognise a poster across a room, small enough to leave the title room. -->
+    <dimen name="player_poster_width">320dp</dimen>
+    <dimen name="player_poster_height">180dp</dimen>
     <dimen name="player_title_size">26sp</dimen>
     <dimen name="player_chip_margin">32dp</dimen>
     <dimen name="player_subtitle_bottom">48dp</dimen>

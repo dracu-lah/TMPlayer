@@ -101,6 +101,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.SettingsStore
@@ -130,6 +131,12 @@ private sealed interface Prompt {
     data object ClearFavorites : Prompt
     data object SignOut : Prompt
 }
+
+/**
+ * Below this, what a clear would return is scraps and the wording should not promise otherwise.
+ * The same figure [CacheShelf] uses for the question it asks before a download.
+ */
+private const val CLEARING_WORTH_ASKING = CacheShelf.WORTH_ASKING_BYTES
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -201,7 +208,19 @@ fun SettingsScreen(
     // What the Delete button would actually free. It takes videos, documents and animations and
     // leaves the pictures, so quoting the whole cache promised space that never came back. The
     // total stands in until the breakdown has been read, which is a second at most.
-    val videoBytes = if (breakdown.totalBytes > 0) breakdown.videoBytes else cacheBytes
+    //
+    // With one exception, which is the case that sent somebody to Settings in the first place: a
+    // device holding gigabytes with no video among them. The row used to read "Frees up 0 B" and
+    // do nothing, on a stick with no space left, which is the least helpful thing it could
+    // possibly have said. There the button widens to everything TMPlayer is holding.
+    val onlyPicturesLeft = breakdown.totalBytes > 0 &&
+        breakdown.videoBytes < CLEARING_WORTH_ASKING &&
+        breakdown.totalBytes >= CLEARING_WORTH_ASKING
+    val videoBytes = when {
+        onlyPicturesLeft -> breakdown.totalBytes
+        breakdown.totalBytes > 0 -> breakdown.videoBytes
+        else -> cacheBytes
+    }
 
     val touch = isTouch()
     // These rows describe the machine they are running on, and half of them are about it by name.
@@ -531,7 +550,11 @@ fun SettingsScreen(
         }
         item {
             ActionRow(
-                title = if (touch) "Delete downloaded videos" else "Delete the downloaded video",
+                title = when {
+                    onlyPicturesLeft -> "Free up space"
+                    touch -> "Delete downloaded videos"
+                    else -> "Delete the downloaded video"
+                },
                 subtitle = "Frees up ${StreamStats.formatBytes(videoBytes)}",
                 icon = Icons.Filled.Delete,
                 onClick = { prompt = Prompt.ClearCache },
@@ -709,17 +732,19 @@ fun SettingsScreen(
 
     when (prompt) {
         Prompt.ClearCache -> TvConfirm(
-            title = "Delete the downloaded video?",
+            title = if (onlyPicturesLeft) "Free up space?" else "Delete the downloaded video?",
             message = "This frees up ${StreamStats.formatBytes(videoBytes)}. Any video you open " +
                 "again will download again.",
             detail = "Your Telegram account, chats and favourites are untouched.",
-            confirmLabel = "Delete",
+            confirmLabel = if (onlyPicturesLeft) "Free it up" else "Delete",
             onConfirm = {
                 prompt = null
                 scope.launch {
                     busy = "Deleting…"
                     val freed = videoBytes
-                    runCatching { Td.clearMediaCache() }
+                    runCatching {
+                        if (onlyPicturesLeft) Td.clearEverythingCached() else Td.clearMediaCache()
+                    }
                     // The index goes with the files. Left behind, its rows point at videos that
                     // are no longer on disk and take up the Downloads screen's own budget.
                     runCatching { settings.forgetAllDownloads() }

@@ -1,0 +1,13 @@
+<!--
+  The plate the poster is drawn on.
+
+  It is visible for the moment before the artwork arrives and, on a video Telegram never made a
+  thumbnail for, for the whole of the wait: without it the loading screen has a hole in the middle
+  where the picture should be. The corner radius is the one the outline provider clips the artwork
+  to, so the two agree.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#1C1C24" />
+    <corners android:radius="18dp" />
+</shape>

@@ -249,3 +249,36 @@ class CacheShelfTest {
         assertEquals(2 * GB, short!!.reclaimBytes)
     }
 }
+
+/**
+ * The ceiling, which used to be a constant four gigabytes and is now a share of the volume.
+ *
+ * The case that mattered is the first one: the stick this app was written for reports 4.85 GB of
+ * data partition, so the old constant let the app fill the device and call it correct.
+ */
+class CacheCeilingTest {
+
+    @Test
+    fun `a stick keeps well under its own disk`() {
+        val stick = 4_849L * MB
+        val ceiling = CacheShelf.ceiling(stick)
+        assertTrue("$ceiling should leave the device room", ceiling <= stick - 2 * GB)
+        assertTrue("$ceiling should still hold a film", ceiling >= CacheShelf.MIN_CEILING_BYTES)
+    }
+
+    @Test
+    fun `a phone with room to spare stops at the cap`() {
+        assertEquals(CacheShelf.MAX_CEILING_BYTES, CacheShelf.ceiling(128 * GB))
+    }
+
+    @Test
+    fun `a small phone takes its share rather than the cap`() {
+        // 40 per cent of eight gigabytes, which is under the cap, so the share is what binds.
+        assertEquals((8 * GB * 4 / 10), CacheShelf.ceiling(8 * GB))
+    }
+
+    @Test
+    fun `an unreadable volume falls back to the cap rather than to nothing`() {
+        assertEquals(CacheShelf.MAX_CEILING_BYTES, CacheShelf.ceiling(0))
+    }
+}

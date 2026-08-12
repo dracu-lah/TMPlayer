@@ -1,0 +1,17 @@
+<!--
+  What makes the backdrop readable.
+
+  The artwork behind the loading screen is a photograph, and a photograph has bright patches
+  wherever it likes. Three stops rather than two: near-black at the top and the bottom where the
+  title and the figures sit, and only partly dimmed across the middle, which is the band the poster
+  itself occupies and the one place the picture is worth seeing.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:centerColor="#B00E0E12"
+        android:endColor="#F20E0E12"
+        android:startColor="#F20E0E12"
+        android:type="linear" />
+</shape>
