@@ -42,6 +42,7 @@ import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaItem
 import com.tmplayer.ui.browse.BrowseData
 import com.tmplayer.ui.browse.BrowseScreen
+import com.tmplayer.ui.browse.BrowseSection
 import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.browse.Header
 import com.tmplayer.ui.browse.MediaCard
@@ -184,7 +185,7 @@ private fun PromoChatsScreen(onOpenChat: () -> Unit = {}, onOpenSettings: () -> 
         onResumeMedia = {},
         onOpenSettings = onOpenSettings,
         onToggleFavorite = {},
-        picked = BrowseTab.Recent,
+        picked = BrowseSection.of(BrowseTab.Recent),
         onPickTab = {},
         layout = CardLayout.List,
     )

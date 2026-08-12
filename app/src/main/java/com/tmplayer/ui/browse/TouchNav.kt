@@ -89,9 +89,12 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun TouchBrowseShell(
     account: Account?,
-    selected: BrowseTab,
+    selected: BrowseSection,
+    /** Every destination the rail offers, with this account's folders already slotted in. */
+    sections: List<BrowseSection>,
     favoriteCount: Int,
-    onSelect: (BrowseTab) -> Unit,
+    unreadCount: Int,
+    onSelect: (BrowseSection) -> Unit,
     onOpenSettings: () -> Unit,
     /** The phone's Downloads screen. A television keeps one video and has nothing to list. */
     onOpenDownloads: () -> Unit,
@@ -142,8 +145,23 @@ internal fun TouchBrowseShell(
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                     // The three tabs about this viewer's own watching, first because they are
                     // what somebody opening the app in the evening is reaching for.
-                    DrawerDestinations(LIBRARY_TABS, selected, favoriteCount) {
+                    DrawerDestinations(
+                        sections.filter { it in LIBRARY_TABS },
+                        selected,
+                        favoriteCount,
+                        unreadCount,
+                    ) {
                         close(); onSelect(it)
+                    }
+
+                    // Folders only earn a heading of their own when there are any. An account
+                    // with none would otherwise get a rule and the word "Folders" over nothing.
+                    val folders = sections.filterIsInstance<BrowseSection.Folder>()
+                    if (folders.isNotEmpty()) {
+                        DrawerSeparator("Folders")
+                        DrawerDestinations(folders, selected, favoriteCount, unreadCount) {
+                            close(); onSelect(it)
+                        }
                     }
 
                     DrawerSeparator("Chats")
@@ -152,7 +170,12 @@ internal fun TouchBrowseShell(
                     // what turns seven flat destinations into two short lists: the seven read as
                     // one undifferentiated pile, and the eye had to check every one of them to
                     // find out that four of them were the same kind of thing.
-                    DrawerDestinations(CHAT_TABS, selected, favoriteCount) {
+                    DrawerDestinations(
+                        sections.filter { it !in LIBRARY_TABS && it !is BrowseSection.Folder },
+                        selected,
+                        favoriteCount,
+                        unreadCount,
+                    ) {
                         close(); onSelect(it)
                     }
                 }
@@ -365,22 +388,25 @@ private fun DrawerDestination(
  */
 @Composable
 private fun DrawerDestinations(
-    tabs: List<BrowseTab>,
-    selected: BrowseTab,
+    tabs: List<BrowseSection>,
+    selected: BrowseSection,
     favoriteCount: Int,
-    onPick: (BrowseTab) -> Unit,
+    unreadCount: Int,
+    onPick: (BrowseSection) -> Unit,
 ) {
     tabs.forEach { entry ->
         DrawerDestination(
             label = entry.label,
             selected = entry == selected,
-            // The only badge left in the list. A count is a thing that changes and is worth
+            // The only badges left in the list. A count is a thing that changes and is worth
             // noticing; everything else that used to wear one was static text in a shape that
             // promised otherwise.
-            badge = if (entry == BrowseTab.Favorites && favoriteCount > 0) {
-                favoriteCount.toString()
-            } else {
-                null
+            badge = when {
+                entry == BrowseSection.of(BrowseTab.Favorites) && favoriteCount > 0 ->
+                    favoriteCount.toString()
+                entry == BrowseSection.of(BrowseTab.Unread) && unreadCount > 0 ->
+                    unreadCount.toString()
+                else -> null
             },
             icon = { Icon(entry.icon, contentDescription = null) },
             onClick = { onPick(entry) },
@@ -479,17 +505,15 @@ private fun DrawerFooter(account: Account?) {
     )
 }
 
-/** What this viewer has been watching. First, because it is what the app is opened for. */
-private val LIBRARY_TABS = listOf(BrowseTab.Continue, BrowseTab.Favorites, BrowseTab.Recent)
-
 /**
- * The same chat list, sliced four ways.
+ * What this viewer has been watching. First, because it is what the app is opened for.
  *
- * Everything the first group does not claim, rather than a second hand-written list: a tab added
- * later belongs in the drawer whether or not anybody remembers to put it there, and a hand-written
- * list is how one quietly stops appearing at all.
+ * Everything else the rail offers falls into the group below the rule without being named here: a
+ * destination added later belongs in the drawer whether or not anybody remembers to list it, and a
+ * second hand-written list is how one quietly stops appearing at all.
  */
-private val CHAT_TABS = BrowseTab.entries - LIBRARY_TABS.toSet()
+private val LIBRARY_TABS = listOf(BrowseTab.Continue, BrowseTab.Favorites, BrowseTab.Recent)
+    .map(BrowseSection::of)
 
 /**
  * How wide the drawer is on a phone that has room for it.

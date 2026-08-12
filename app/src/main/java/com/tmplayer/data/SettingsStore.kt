@@ -3,6 +3,7 @@ package com.tmplayer.data
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.MutablePreferences
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -13,6 +14,9 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.tmplayer.player.PlaybackSpeed
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 
 private val Context.prefs by preferencesDataStore("tmplayer")
@@ -36,6 +40,7 @@ private val THEME_CHOICE = stringPreferencesKey("theme_choice")
 private val DYNAMIC_COLOUR = booleanPreferencesKey("dynamic_colour")
 private val KEEP_VIDEOS = intPreferencesKey("keep_videos")
 private val VIDEO_SCALE = stringPreferencesKey("video_scale")
+private val SCREEN_ORIENTATION = stringPreferencesKey("screen_orientation")
 
 /**
  * One series, as a key.
@@ -74,9 +79,28 @@ private fun downloadKey(chatId: Long, messageId: Long) =
 
 class SettingsStore(private val context: Context) {
 
+    /**
+     * One preference, read the way every preference here is read.
+     *
+     * Two things happen on the way out and both matter. DataStore re-emits the entire preference
+     * map to every collector on every write, so a favourite being starred used to wake all twelve
+     * of these flows and hand each of them a value identical to the one it had already published:
+     * with Compose's strong skipping on, a freshly built Set or Map compares by identity and never
+     * matches, so each of those no-op emissions forced a full recomposition of the chat list and
+     * the video grid. [distinctUntilChanged] is what stops a write about one thing from redrawing
+     * everything else.
+     *
+     * The mapping then happens off the main thread. Two of these walk every key in the store and
+     * decode as they go, and they were doing it on the thread drawing the screen, once per write.
+     */
+    private fun <T> read(transform: (Preferences) -> T): Flow<T> = context.prefs.data
+        .map(transform)
+        .distinctUntilChanged()
+        .flowOn(Dispatchers.Default)
+
     // ---- favourites -------------------------------------------------------------------------
 
-    val favorites: Flow<Set<Long>> = context.prefs.data.map { prefs ->
+    val favorites: Flow<Set<Long>> = read { prefs ->
         prefs[FAVORITES].orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
     }
 
@@ -128,7 +152,7 @@ class SettingsStore(private val context: Context) {
      * they did not ask to be, and the way back to the listing has to be discovered before the app
      * can be used at all. A shortcut is worth having, but not before its owner has said so.
      */
-    val openLastChat: Flow<Boolean> = context.prefs.data.map { it[OPEN_LAST_CHAT] ?: false }
+    val openLastChat: Flow<Boolean> = read { it[OPEN_LAST_CHAT] ?: false }
 
     suspend fun setOpenLastChat(value: Boolean) {
         context.prefs.edit { it[OPEN_LAST_CHAT] = value }
@@ -140,7 +164,7 @@ class SettingsStore(private val context: Context) {
      * On by default, because it is what a series is for and what every other player does. The
      * countdown before it starts is the way out for anybody who meant to stop.
      */
-    val autoplayNext: Flow<Boolean> = context.prefs.data.map { it[AUTOPLAY_NEXT] ?: true }
+    val autoplayNext: Flow<Boolean> = read { it[AUTOPLAY_NEXT] ?: true }
 
     suspend fun setAutoplayNext(value: Boolean) {
         context.prefs.edit { it[AUTOPLAY_NEXT] = value }
@@ -150,7 +174,7 @@ class SettingsStore(private val context: Context) {
     suspend fun autoplayNextNow(): Boolean = context.prefs.data.first()[AUTOPLAY_NEXT] ?: true
 
     /** The chat opened most recently, or zero when there has not been one yet. */
-    val lastChatId: Flow<Long> = context.prefs.data.map { it[LAST_CHAT] ?: 0L }
+    val lastChatId: Flow<Long> = read { it[LAST_CHAT] ?: 0L }
 
     suspend fun rememberChatOpened(chatId: Long) {
         context.prefs.edit { it[LAST_CHAT] = chatId }
@@ -180,7 +204,7 @@ class SettingsStore(private val context: Context) {
      * a connection too slow or too unsteady to keep up with playback, where waiting once beats
      * being stopped every few minutes.
      */
-    val downloadBeforePlaying: Flow<Boolean> = context.prefs.data.map { it[DOWNLOAD_FIRST] ?: false }
+    val downloadBeforePlaying: Flow<Boolean> = read { it[DOWNLOAD_FIRST] ?: false }
 
     suspend fun setDownloadBeforePlaying(value: Boolean) {
         context.prefs.edit { it[DOWNLOAD_FIRST] = value }
@@ -199,7 +223,7 @@ class SettingsStore(private val context: Context) {
      * viewer's from the moment they touch it, which is why the stored value is never written on
      * their behalf.
      */
-    val keepVideos: Flow<Int> = context.prefs.data.map { it[KEEP_VIDEOS] ?: defaultKeepVideos() }
+    val keepVideos: Flow<Int> = read { it[KEEP_VIDEOS] ?: defaultKeepVideos() }
 
     /** Read once, at the moment a video is asked for, for the same reason as the one above. */
     suspend fun keepVideosNow(): Int =
@@ -219,7 +243,7 @@ class SettingsStore(private val context: Context) {
      * silently refuses to play is worse than one that asks. On, it is absolute: a video that is
      * not already downloaded will not open until there is Wi-Fi.
      */
-    val wifiOnlyDownloads: Flow<Boolean> = context.prefs.data.map { it[WIFI_ONLY] ?: false }
+    val wifiOnlyDownloads: Flow<Boolean> = read { it[WIFI_ONLY] ?: false }
 
     suspend fun setWifiOnlyDownloads(value: Boolean) {
         context.prefs.edit { it[WIFI_ONLY] = value }
@@ -234,7 +258,7 @@ class SettingsStore(private val context: Context) {
      * Somebody who watches everything at 1.25x should say so once rather than every episode, and
      * on a television there is no gear menu to say it in twice.
      */
-    val playbackSpeed: Flow<Float> = context.prefs.data.map {
+    val playbackSpeed: Flow<Float> = read {
         PlaybackSpeed.sanitise(it[PLAYBACK_SPEED] ?: PlaybackSpeed.DEFAULT)
     }
 
@@ -255,6 +279,20 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setVideoScale(name: String) {
         context.prefs.edit { it[VIDEO_SCALE] = name }
+    }
+
+    /**
+     * Which way up the player opens, on a phone.
+     *
+     * Kept beside the scale for the same reason it is kept at all: both are answers about how this
+     * viewer likes to watch, not about the video in front of them, and a preference that has to be
+     * set again after every cold start is one the viewer stops trusting and starts working around.
+     * Read as a plain name so the player owns the meaning of it and this file stays a store.
+     */
+    suspend fun screenOrientationNow(): String? = context.prefs.data.first()[SCREEN_ORIENTATION]
+
+    suspend fun setScreenOrientation(name: String) {
+        context.prefs.edit { it[SCREEN_ORIENTATION] = name }
     }
 
     // ---- tracks, per series -----------------------------------------------------------------
@@ -293,10 +331,10 @@ class SettingsStore(private val context: Context) {
     // ---- size filter ------------------------------------------------------------------------
 
     val minSizeBytes: Flow<Long> =
-        context.prefs.data.map { it[MIN_SIZE] ?: SizeFilter.DEFAULT_MIN }
+        read { it[MIN_SIZE] ?: SizeFilter.DEFAULT_MIN }
 
     val maxSizeBytes: Flow<Long> =
-        context.prefs.data.map { it[MAX_SIZE] ?: SizeFilter.DEFAULT_MAX }
+        read { it[MAX_SIZE] ?: SizeFilter.DEFAULT_MAX }
 
     suspend fun setMinSizeBytes(value: Long) {
         context.prefs.edit { prefs ->
@@ -342,7 +380,7 @@ class SettingsStore(private val context: Context) {
      * Rows by default: a chat is a name and a picture, and a name is what the viewer is reading.
      */
     val chatLayout: Flow<CardLayout> =
-        context.prefs.data.map { CardLayout.decode(it[CHAT_LAYOUT], CardLayout.List) }
+        read { CardLayout.decode(it[CHAT_LAYOUT], CardLayout.List) }
 
     suspend fun setChatLayout(value: CardLayout) {
         context.prefs.edit { it[CHAT_LAYOUT] = value.name }
@@ -354,7 +392,7 @@ class SettingsStore(private val context: Context) {
      * Tiles by default: previews make individual uploads easy to identify from across the room.
      */
     val mediaLayout: Flow<CardLayout> =
-        context.prefs.data.map { CardLayout.decode(it[MEDIA_LAYOUT], CardLayout.Grid) }
+        read { CardLayout.decode(it[MEDIA_LAYOUT], CardLayout.Grid) }
 
     suspend fun setMediaLayout(value: CardLayout) {
         context.prefs.edit { it[MEDIA_LAYOUT] = value.name }
@@ -369,7 +407,7 @@ class SettingsStore(private val context: Context) {
      * Android TV has no system-wide light mode to follow.
      */
     val themeChoice: Flow<ThemeChoice> =
-        context.prefs.data.map { ThemeChoice.from(it[THEME_CHOICE]) }
+        read { ThemeChoice.from(it[THEME_CHOICE]) }
 
     suspend fun setThemeChoice(value: ThemeChoice) {
         context.prefs.edit { it[THEME_CHOICE] = value.name }
@@ -382,7 +420,7 @@ class SettingsStore(private val context: Context) {
      * a wallpaper can take the app somewhere it was never designed for. Turning it on hands the
      * colours over to the phone, and on a phone older than Android 12 there is no palette to take.
      */
-    val dynamicColour: Flow<Boolean> = context.prefs.data.map { it[DYNAMIC_COLOUR] ?: false }
+    val dynamicColour: Flow<Boolean> = read { it[DYNAMIC_COLOUR] ?: false }
 
     suspend fun setDynamicColour(value: Boolean) {
         context.prefs.edit { it[DYNAMIC_COLOUR] = value }
@@ -397,13 +435,13 @@ class SettingsStore(private val context: Context) {
      * asked it every time is a press between the viewer and what they came to watch. Anyone who
      * wants the question back can turn it on.
      */
-    val askBeforeClearing: Flow<Boolean> = context.prefs.data.map { it[ASK_BEFORE_CLEARING] ?: false }
+    val askBeforeClearing: Flow<Boolean> = read { it[ASK_BEFORE_CLEARING] ?: false }
 
     suspend fun setAskBeforeClearing(value: Boolean) {
         context.prefs.edit { it[ASK_BEFORE_CLEARING] = value }
     }
 
-    val introSeen: Flow<Boolean> = context.prefs.data.map { it[INTRO_SEEN] ?: false }
+    val introSeen: Flow<Boolean> = read { it[INTRO_SEEN] ?: false }
 
     suspend fun markIntroSeen() {
         context.prefs.edit { it[INTRO_SEEN] = true }
@@ -413,7 +451,7 @@ class SettingsStore(private val context: Context) {
      * Whether the walkthrough has been shown. Separate from [introSeen]: one is what the app is
      * allowed to do, the other is how to use it, and Settings can ask for the second one back.
      */
-    val overviewSeen: Flow<Boolean> = context.prefs.data.map { it[OVERVIEW_SEEN] ?: false }
+    val overviewSeen: Flow<Boolean> = read { it[OVERVIEW_SEEN] ?: false }
 
     suspend fun markOverviewSeen() {
         context.prefs.edit { it[OVERVIEW_SEEN] = true }
@@ -434,7 +472,7 @@ class SettingsStore(private val context: Context) {
      * The grid needs a progress bar on every preview at once; asking DataStore per card would be
      * one disk read per item on a device with very little to spare.
      */
-    val watchProgress: Flow<Map<String, WatchPoint>> = context.prefs.data.map { prefs ->
+    val watchProgress: Flow<Map<String, WatchPoint>> = read { prefs ->
         buildMap {
             for ((key, value) in prefs.asMap()) {
                 val name = key.name
@@ -453,7 +491,7 @@ class SettingsStore(private val context: Context) {
      * Entries without a stored description are skipped rather than guessed at: they were written
      * by a build before the description existed, so there is no title to put on the card.
      */
-    val continueWatching: Flow<List<ResumeRecord>> = context.prefs.data.map { prefs ->
+    val continueWatching: Flow<List<ResumeRecord>> = read { prefs ->
         buildList {
             for ((key, value) in prefs.asMap()) {
                 val name = key.name
@@ -477,7 +515,7 @@ class SettingsStore(private val context: Context) {
      * Whether the file is still on disk is TDLib's answer, not this one: the screen asks it per
      * row. This is only the names, so that a row can say what it is rather than quoting a file id.
      */
-    val downloadHistory: Flow<List<ResumeRecord>> = context.prefs.data.map { prefs ->
+    val downloadHistory: Flow<List<ResumeRecord>> = read { prefs ->
         buildList {
             for ((key, value) in prefs.asMap()) {
                 val name = key.name

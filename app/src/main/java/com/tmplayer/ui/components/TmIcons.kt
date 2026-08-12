@@ -1,6 +1,7 @@
 package com.tmplayer.ui.components
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
@@ -338,6 +339,102 @@ object TmIcons {
                 verticalLineTo(17.92f)
                 curveTo(16.39f, 17.43f, 19f, 14.53f, 19f, 11f)
                 horizontalLineTo(17f)
+                close()
+            }
+        }
+    }
+
+    /** A tabbed folder, for each of the viewer's own Telegram chat folders. */
+    val Folder: ImageVector by lazy {
+        icon("Folder") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(10f, 4f)
+                horizontalLineTo(4f)
+                curveTo(2.9f, 4f, 2f, 4.9f, 2f, 6f)
+                verticalLineTo(18f)
+                curveTo(2f, 19.1f, 2.9f, 20f, 4f, 20f)
+                horizontalLineTo(20f)
+                curveTo(21.1f, 20f, 22f, 19.1f, 22f, 18f)
+                verticalLineTo(8f)
+                curveTo(22f, 6.9f, 21.1f, 6f, 20f, 6f)
+                horizontalLineTo(12f)
+                lineTo(10f, 4f)
+                close()
+            }
+        }
+    }
+
+    /**
+     * A lidded box, which is the picture every mail and chat app uses for an archive.
+     *
+     * The body is hollow by even-odd fill rather than by drawing a lighter shape over a darker one.
+     * `Icon` paints the whole vector through one tint, so a knockout in a second colour would come
+     * out the same colour as the thing it was supposed to knock out of, and the box would be a
+     * solid slab.
+     */
+    val Archive: ImageVector by lazy {
+        icon("Archive") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(3f, 4f)
+                horizontalLineTo(21f)
+                verticalLineTo(8f)
+                horizontalLineTo(3f)
+                close()
+            }
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
+                moveTo(4.5f, 9.5f)
+                horizontalLineTo(19.5f)
+                verticalLineTo(20.5f)
+                horizontalLineTo(4.5f)
+                close()
+                moveTo(6.5f, 11.5f)
+                horizontalLineTo(17.5f)
+                verticalLineTo(18.5f)
+                horizontalLineTo(6.5f)
+                close()
+            }
+            // The slot in the front, which is what stops the box reading as an empty rectangle.
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(9f, 13f)
+                horizontalLineTo(15f)
+                verticalLineTo(15f)
+                horizontalLineTo(9f)
+                close()
+            }
+        }
+    }
+
+    /** A ribbon bookmark, for Saved Messages. */
+    val Bookmark: ImageVector by lazy {
+        icon("Bookmark") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(17f, 3f)
+                horizontalLineTo(7f)
+                curveTo(5.9f, 3f, 5f, 3.9f, 5f, 5f)
+                verticalLineTo(21f)
+                lineTo(12f, 18f)
+                lineTo(19f, 21f)
+                verticalLineTo(5f)
+                curveTo(19f, 3.9f, 18.1f, 3f, 17f, 3f)
+                close()
+            }
+        }
+    }
+
+    /**
+     * A plain filled disc.
+     *
+     * It is the unread dot Telegram puts on a chat, drawn at icon size for the tab that collects
+     * them. Nothing more elaborate survives being 24 dp across on a television seen from a sofa.
+     */
+    val Dot: ImageVector by lazy {
+        icon("Dot") {
+            path(fill = SolidColor(Color.Black)) {
+                moveTo(12f, 4f)
+                curveTo(7.58f, 4f, 4f, 7.58f, 4f, 12f)
+                curveTo(4f, 16.42f, 7.58f, 20f, 12f, 20f)
+                curveTo(16.42f, 20f, 20f, 16.42f, 20f, 12f)
+                curveTo(20f, 7.58f, 16.42f, 4f, 12f, 4f)
                 close()
             }
         }

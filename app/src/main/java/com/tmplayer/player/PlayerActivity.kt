@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Color
@@ -136,6 +135,17 @@ class PlayerActivity : FragmentActivity() {
     private var pictureRow: View? = null
     private var scaleButton: android.widget.Button? = null
     private var speedButton: android.widget.Button? = null
+    private var rotationButton: ImageView? = null
+
+    /**
+     * Which way up the picture is held, and whether the viewer has said so themselves.
+     *
+     * The flag is what keeps the two orientation rules from fighting: a portrait video is allowed
+     * to turn the window on its own, but only until somebody presses the button, after which the
+     * choice is theirs and the decoder does not get a vote.
+     */
+    private var orientation = lastOrientation
+    private var orientationChosen = false
 
     /** The touch transport row, on a phone. Null on a TV, where leanback's fragment has it. */
     private var touchSurface: PlayerView? = null
@@ -234,12 +244,19 @@ class PlayerActivity : FragmentActivity() {
         // built against a live player, and nothing here is worth restoring anyway: the resume
         // position lives on disk.
         super.onCreate(null)
+        // Before the first layout pass, on purpose. The activity used to open in whatever the phone
+        // was holding, draw the whole loading screen in portrait, and turn only once the decoder
+        // reported a wide picture: every single play began with a lurch. Almost every video is
+        // landscape, so landscape is what the loader opens in, and a portrait clip turns once at
+        // the point that is genuinely a surprise rather than at the point that never is.
+        applyOrientation()
         setContentView(R.layout.activity_player)
 
         keepScreenOn(true)
         // Edge to edge, so the picture reaches the corners of the screen rather than sitting in a
         // letterbox of system chrome, and so the insets read below are real.
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        allowDrawingUnderTheCutout()
         setSystemBarsHidden(true)
 
         settings = SettingsStore(this)
@@ -415,6 +432,7 @@ class PlayerActivity : FragmentActivity() {
         touchSurface = view
 
         view.resizeMode = videoScale.resizeMode
+        view.setControllerShowTimeoutMs(CONTROLLER_TIMEOUT_MS)
         modernise(view)
 
         // Fed from dispatchTouchEvent rather than attached here: see [PlayerGestures].
@@ -428,22 +446,66 @@ class PlayerActivity : FragmentActivity() {
             durationMs = { player?.duration?.takeIf { it > 0 } ?: 0L },
             onSeekTo = { at -> player?.seekTo(at) },
             onHold = ::holdFastForward,
+            onTapControls = ::toggleControls,
+            onTogglePlay = ::togglePlayback,
         )
 
-        // The controller sits above the gesture bar rather than under it. The window draws behind
-        // the system bars now, and without this the play button and the scrub bar were the two
-        // things the home gesture happened to be drawn on top of.
-        ViewCompat.setOnApplyWindowInsetsListener(view) { _, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            val cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
-            view.setControllerShowTimeoutMs(CONTROLLER_TIMEOUT_MS)
-            view.updatePadding(
-                left = maxOf(bars.left, cutout.left),
-                right = maxOf(bars.right, cutout.right),
-                bottom = bars.bottom,
-                top = bars.top,
+        insetTheControlsOnly(view)
+    }
+
+    /**
+     * Keeps the safe area off the video and on the things a finger has to reach.
+     *
+     * This was the whole of both complaints about the picture. The insets were being applied as
+     * padding to the PlayerView itself, and the video surface is that view's own child: every pixel
+     * of status bar, gesture handle and notch was therefore taken out of the picture, so a phone
+     * with a cutout played the film inside a black margin rather than edge to edge. Worse, the
+     * inset changes whenever the system bars come and go, and the bars ride with the transport row,
+     * so raising the controls re-padded the surface and the video visibly jumped and resized under
+     * them.
+     *
+     * The surface is now laid out once, at the full size of the window, and never moves again. Only
+     * the overlays are inset: Media3's control row, so the play button and the scrub bar are not
+     * drawn under the home gesture, and the corner stack, so the chips clear the notch and the
+     * clock.
+     */
+    private fun insetTheControlsOnly(view: PlayerView) {
+        val controller = view.findViewById<View>(androidx.media3.ui.R.id.exo_controller)
+        val corner = findViewById<View>(R.id.top_right_stack)
+        val root = findViewById<View>(R.id.player_root)
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val safe = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
             )
+            controller?.updatePadding(
+                left = safe.left,
+                right = safe.right,
+                top = safe.top,
+                bottom = safe.bottom,
+            )
+            corner?.updatePadding(right = safe.right, top = safe.top)
             insets
+        }
+        // The video surface arrives long after the window's first inset pass, so without this the
+        // controls keep the padding of whatever the insets were before there was a player at all.
+        ViewCompat.requestApplyInsets(root)
+    }
+
+    /** The single tap: the one gesture that raises the transport row, and drops it again. */
+    private fun toggleControls() {
+        val view = touchSurface ?: return
+        if (controlsUp) view.hideController() else view.showController()
+    }
+
+    /** The double tap in the middle of the picture, and the play or pause key on a phone. */
+    private fun togglePlayback() {
+        val exo = player ?: return
+        if (exo.isPlaying) {
+            exo.pause()
+            showGestureFeedback("❙❙")
+        } else {
+            exo.play()
+            showGestureFeedback("▶")
         }
     }
 
@@ -471,6 +533,29 @@ class PlayerActivity : FragmentActivity() {
             view.findViewById<View>(androidx.media3.ui.R.id.exo_bottom_bar)
                 ?.setBackgroundResource(R.drawable.bg_player_scrim)
         }
+    }
+
+    /**
+     * Lets the window own the strip of screen the cutout sits in.
+     *
+     * The theme asks for shortEdges, which covers a phone held sideways with the notch on a short
+     * edge, and stops at the one case people notice: a hole punch or a waterfall edge on the long
+     * side, where the system still parks the window clear of it and the video plays inside a black
+     * margin down one side. From Android 11 the window can simply claim the whole display and let
+     * the insets say where the obstruction is, which is what the controls are then padded by.
+     *
+     * Only on a phone. A television has no cutout, and asking for one is a window flag change on a
+     * screen where leanback has already decided the geometry.
+     */
+    private fun allowDrawingUnderTheCutout() {
+        if (FormFactor.isTv(this)) return
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.P) return
+        val mode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+        } else {
+            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+        window.attributes = window.attributes.also { it.layoutInDisplayCutoutMode = mode }
     }
 
     /**
@@ -534,6 +619,10 @@ class PlayerActivity : FragmentActivity() {
      */
     private fun wirePictureButtons() {
         pictureRow = findViewById(R.id.picture_row)
+        rotationButton = findViewById<ImageView>(R.id.rotation_button)?.apply {
+            setOnClickListener { cycleOrientation() }
+        }
+        renderOrientationButton()
         scaleButton = findViewById<android.widget.Button>(R.id.scale_button)?.apply {
             text = videoScale.label
             setOnClickListener { cycleScale() }
@@ -571,17 +660,29 @@ class PlayerActivity : FragmentActivity() {
     /**
      * Every touch in the window is offered to the gestures before any view sees it.
      *
-     * The gestures never consume, so this changes nothing about who handles the tap; it only
-     * means the transport row being on screen no longer hides the whole picture from them. The
-     * row's own buttons and scrub bar sit in front of the video, and while it was up, every
-     * double-tap seek and every drag went to those views instead and did nothing at all.
+     * Two arrangements, because the picture has two states. While the transport row is up, its
+     * buttons and its scrub bar are what the finger came for, so the event is offered here and then
+     * passed straight on to them; that is what keeps double-tap seek working over a raised row,
+     * which it did not when this was hung off the video view instead.
+     *
+     * While the row is down there is nothing on screen but the picture, and the event stops here.
+     * That is the fix for the third complaint: Media3's own view treats a great many touches as a
+     * reason to throw the whole transport row over the video, so a brightness drag, a scrub, a hold
+     * and even the first half of a double tap each ended with the controls in the way of the thing
+     * the gesture had just done. Now only [toggleControls] raises them, from a single tap, and
+     * every other gesture leaves the picture alone.
+     *
+     * The loading and error sheets are the exception in both directions: they carry a Try again
+     * button, and a button nobody can press is worse than no gesture at all.
      */
     override fun dispatchTouchEvent(event: android.view.MotionEvent): Boolean {
         val surface = touchSurface
-        if (surface != null && !inPictureInPicture) {
-            gestures?.onTouchEvent(event, surface.width, surface.height)
+        if (surface == null || inPictureInPicture || statusOverlay.visibility == View.VISIBLE) {
+            return super.dispatchTouchEvent(event)
         }
-        return super.dispatchTouchEvent(event)
+        gestures?.onTouchEvent(event, surface.width, surface.height)
+        if (controlsUp) return super.dispatchTouchEvent(event)
+        return true
     }
 
     /**
@@ -611,6 +712,44 @@ class PlayerActivity : FragmentActivity() {
         } else {
             exo.setPlaybackSpeed(playbackSpeed)
         }
+    }
+
+    /**
+     * Asks the system for the orientation this player is set to, and remembers it for the session.
+     *
+     * Called before the content view on the way in, which is the whole point: a window that turns
+     * after it has drawn is a lurch the viewer sees, and a window that is asked before it has
+     * drawn anything simply opens the right way up.
+     */
+    private fun applyOrientation() {
+        if (FormFactor.isTv(this)) return
+        requestedOrientation = orientation.requested
+    }
+
+    /** The button: the next state along, applied and said out loud. */
+    private fun cycleOrientation() {
+        orientation = orientation.next()
+        orientationChosen = true
+        // Only an explicit press is worth carrying to the next episode, and to the next launch.
+        // A tall clip turning the window on its own is about that one video, not about how this
+        // viewer watches things.
+        lastOrientation = orientation
+        lifecycleScope.launch { runCatching { settings.setScreenOrientation(orientation.name) } }
+        applyOrientation()
+        renderOrientationButton()
+        showGestureFeedback(orientation.label)
+    }
+
+    private fun renderOrientationButton() {
+        val button = rotationButton ?: return
+        button.setImageResource(
+            when (orientation) {
+                ScreenOrientation.Follow -> R.drawable.ic_rotate_auto
+                ScreenOrientation.Landscape -> R.drawable.ic_rotate_landscape
+                ScreenOrientation.Portrait -> R.drawable.ic_rotate_portrait
+            },
+        )
+        button.contentDescription = orientation.label
     }
 
     /** The next picture shape along, from the television's own button. */
@@ -647,10 +786,28 @@ class PlayerActivity : FragmentActivity() {
     private fun tvFragment(): TvPlaybackFragment? =
         supportFragmentManager.findFragmentById(R.id.playback_container) as? TvPlaybackFragment
 
-    /** A figure for whatever a gesture is changing, gone again shortly after the finger lifts. */
-    private fun showGestureFeedback(text: String) {
+    /**
+     * A figure for whatever a gesture is changing, gone again shortly after the finger lifts.
+     *
+     * It moves to the side the gesture is on, because a brightness reading that appears on the
+     * right of the picture while the finger is on the left reads as a coincidence rather than as
+     * an answer. This is the only thing a drag or a key press puts on screen: the transport row
+     * stays where it was.
+     */
+    private fun showGestureFeedback(text: String, side: Int = PlayerGestures.SIDE_CENTRE) {
         val hud = gestureHud ?: return
         hud.text = text
+        (hud.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+            val gravity = android.view.Gravity.CENTER_VERTICAL or when (side) {
+                PlayerGestures.SIDE_LEFT -> android.view.Gravity.START
+                PlayerGestures.SIDE_RIGHT -> android.view.Gravity.END
+                else -> android.view.Gravity.CENTER_HORIZONTAL
+            }
+            if (params.gravity != gravity) {
+                params.gravity = gravity
+                hud.layoutParams = params
+            }
+        }
         hud.visibility = View.VISIBLE
         hud.removeCallbacks(hideGestureHud)
         hud.postDelayed(hideGestureHud, GESTURE_HUD_MS)
@@ -1189,6 +1346,8 @@ class PlayerActivity : FragmentActivity() {
         val pickerOpen = GuidedStepSupportFragment.getCurrentGuidedStepSupportFragment(supportFragmentManager) != null
         if (pickerOpen) return super.dispatchKeyEvent(event)
 
+        if (!FormFactor.isTv(this) && handleTouchDeviceKey(event)) return true
+
         when (event.keyCode) {
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
                 skipBy(Skip.FORWARD_MS)
@@ -1213,6 +1372,38 @@ class PlayerActivity : FragmentActivity() {
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    /**
+     * A key on a phone: a paired remote, a headset, a Bluetooth keyboard, a game controller.
+     *
+     * Answered here and consumed, rather than left to Media3's view, which raises the whole
+     * transport row on any key it recognises. Pressing play on a headset and being handed a control
+     * overlay across the picture was the third complaint's other half: the press already did the
+     * thing, and the small figure this leaves behind is all the confirmation it needs.
+     *
+     * Only while the row is down. Once it is up those same keys are how anything on it is reached,
+     * and stealing them would leave the row unusable to everything except a thumb.
+     */
+    private fun handleTouchDeviceKey(event: KeyEvent): Boolean {
+        if (controlsUp || statusOverlay.visibility == View.VISIBLE) return false
+        when (event.keyCode) {
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                skipBy(Skip.FORWARD_MS)
+                showGestureFeedback("${Skip.FORWARD_MS / 1000} s   ▶▶", PlayerGestures.SIDE_RIGHT)
+            }
+            KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_DPAD_LEFT -> {
+                skipBy(-Skip.BACK_MS)
+                showGestureFeedback("◀◀   ${Skip.BACK_MS / 1000} s", PlayerGestures.SIDE_LEFT)
+            }
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+            KeyEvent.KEYCODE_DPAD_CENTER,
+            KeyEvent.KEYCODE_ENTER,
+            KeyEvent.KEYCODE_SPACE,
+            -> togglePlayback()
+            else -> return false
+        }
+        return true
     }
 
     /**
@@ -1345,17 +1536,21 @@ class PlayerActivity : FragmentActivity() {
      * and wrong for the one case where it is most obviously wrong: a clip shot on a phone played
      * as a narrow strip between two black fields, with the phone held sideways. A television
      * reports a single orientation and ignores every request made here, so this is touch only.
+     *
+     * It has one vote and the viewer has the other, and the viewer's wins: once the rotation button
+     * has been pressed, a tall video arriving later does not get to undo that. A wide video is left
+     * entirely alone, since the player already opened sideways for it.
      */
     private fun followVideoOrientation() {
         if (FormFactor.isTv(this)) return
+        if (orientationChosen) return
         if (videoWidth <= 0 || videoHeight <= 0) return
-        requestedOrientation = if (videoWidth >= videoHeight) {
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        } else {
-            // Not locked to portrait: a tall video is still watchable sideways, and somebody
-            // lying down should be allowed to decide that for themselves.
-            ActivityInfo.SCREEN_ORIENTATION_FULL_USER
-        }
+        if (videoWidth >= videoHeight) return
+        // Not locked to portrait: a tall video is still watchable sideways, and somebody
+        // lying down should be allowed to decide that for themselves.
+        orientation = ScreenOrientation.Follow
+        applyOrientation()
+        renderOrientationButton()
     }
 
     /**
@@ -1842,6 +2037,29 @@ class PlayerActivity : FragmentActivity() {
          * problem it was added to solve.
          */
         private var meteredWarningAccepted = false
+
+        /**
+         * The rotation lock the viewer last chose, for the length of the process.
+         *
+         * Process-wide for the same reason the metered warning is: stepping through a series builds
+         * a new activity per episode, and a lock that had to be set again at every one is a button
+         * that has stopped being useful. Not written to disk, because the only settings store in the
+         * app belongs to another part of the codebase and this needs a key added to it.
+         */
+        private var lastOrientation = ScreenOrientation.DEFAULT
+
+        /**
+         * The lock read back off disk at startup, so it survives more than one process.
+         *
+         * Set from the application rather than read here, because the orientation has to be
+         * applied before the activity lays anything out and there is no room in front of that for
+         * a disk read. Anything unrecognised leaves the default alone: this is a remembered
+         * preference, not a source of truth, and the wrong way up is not worth a crash.
+         */
+        fun primeOrientation(name: String?) {
+            val remembered = ScreenOrientation.entries.firstOrNull { it.name == name } ?: return
+            lastOrientation = remembered
+        }
 
         fun intent(context: Context, item: MediaItem, chatTitle: String = ""): Intent =
             Intent(context, PlayerActivity::class.java).apply {

@@ -53,6 +53,7 @@ import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.auth.IntroScreen
 import com.tmplayer.ui.auth.LoginScreen
 import com.tmplayer.ui.browse.BrowseScreen
+import com.tmplayer.ui.browse.BrowseSection
 import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.browse.ChatListViewModel
 import com.tmplayer.ui.browse.MediaGridScreen
@@ -66,12 +67,23 @@ import com.tmplayer.ui.onboarding.OverviewScreen
 import com.tmplayer.ui.update.UpdateDialog
 import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.theme.TMPlayerTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** How long a first press of Back stays armed before it is forgotten. */
 private const val EXIT_WINDOW_MS = 2_000L
+
+/**
+ * How long getting a video ready may take before the app says so.
+ *
+ * Long enough that the usual case, where everything asked for is already in TDLib's database and
+ * the player is up almost at once, passes in silence. Short enough that a slow one is explained
+ * before the viewer has decided their press was missed.
+ */
+private const val PREPARE_CHIP_AFTER_MS = 400L
 
 /** Where the user is. Deliberately three screens deep and no more. */
 private sealed interface Screen {
@@ -285,14 +297,37 @@ private fun Root() {
     var exitArmed by remember { mutableStateOf(false) }
     // Hoisted out of BrowseScreen: opening a chat replaces that screen entirely, so a tab held
     // down there would be forgotten every time the viewer backed out of a video.
-    var pickedTab by rememberSaveable { mutableStateOf<BrowseTab?>(null) }
+    //
+    // Saved as a string rather than as the value itself: a folder is not an enum constant, it is
+    // whatever this account happens to have, so there is nothing for the default saver to write.
+    var pickedTabKey by rememberSaveable { mutableStateOf("") }
+    val pickedTab = remember(pickedTabKey) { BrowseSection.decode(pickedTabKey) }
+
+    // The account's Telegram folders, which become destinations of their own. Collected here
+    // rather than inside the chat list's own state because they arrive on TDLib's schedule, not
+    // with the chat list, and the rail has to be able to draw before either has turned up.
+    val folders by Td.folders.collectAsStateWithLifecycle()
+
+    // Whether a video is currently being got ready to play. Not saveable: a process death in the
+    // middle of it means nothing is being prepared any more, and restoring true would leave every
+    // video on the screen refusing to open.
+    var preparing by remember { mutableStateOf(false) }
 
     /**
-     * Starts playback, first clearing the previous video when there is no room for both.
-     * [confirmed] is true once the viewer has answered the prompt.
+     * The preparation itself, split out only so [play] can wrap the whole of it in one pending
+     * state without every early return having to remember to clear it.
      */
-    fun play(item: MediaItem, confirmed: Boolean = false, chatTitle: String = "") {
-        scope.launch {
+    suspend fun playNow(item: MediaItem, confirmed: Boolean, chatTitle: String) {
+        // Off the main thread for the whole of the decision, and this is the reason the pending
+        // state above is not enough on its own. Everything between here and the plan is blocking
+        // work: two stat() calls to see whether the file is on disk, a statvfs() for the free
+        // space, a walk of every download record, and a TDLib round trip per record to measure it.
+        // Launched from a composition, every one of those resumed onto the thread drawing the
+        // grid, so the list froze for the whole of the gap between pressing OK and the player
+        // opening: exactly the moment the app is meant to feel quickest. Only the decision is
+        // moved. Everything that follows it touches Compose state or starts an activity and has
+        // to be back on Main to do it.
+        withContext(Dispatchers.Default) {
             val local = runCatching { Td.localFileAvailability(item.fileId) }
                 .getOrDefault(LocalFileAvailability.Missing)
             val canReachTelegram = telegramConnected || networkStatus != NetworkStatus.Offline
@@ -304,7 +339,7 @@ private fun Root() {
                         "Connect to the internet to play this video."
                     },
                 )
-                return@launch
+                return@withContext
             }
             val alreadyCached = local == LocalFileAvailability.Complete
             val free = DiskSpace.read(context).freeBytes
@@ -344,7 +379,10 @@ private fun Root() {
             )
             val ask = runCatching { settings.askBeforeClearing.first() }.getOrDefault(false)
 
-            fun start() {
+            // Back on Main from here down. Everything below writes Compose state or starts an
+            // activity, and neither is a thing to do from a background thread.
+            withContext(Dispatchers.Main) {
+                fun start() {
                 scope.launch { settings.noteDownload(item, chatTitle) }
                 context.startActivity(PlayerActivity.intent(context, item, chatTitle))
             }
@@ -395,6 +433,34 @@ private fun Root() {
                         start()
                     }
                 }
+                }
+            }
+        }
+    }
+
+    /**
+     * Starts playback, first clearing the previous video when there is no room for both.
+     * [confirmed] is true once the viewer has answered the prompt.
+     */
+    fun play(item: MediaItem, confirmed: Boolean = false, chatTitle: String = "") {
+        // A press on a video is not the instant thing it looks like. Before the player can open,
+        // this asks TDLib whether the file is on disk, measures the disk, and reads the download
+        // history back through TDLib one record at a time. On a stick that is long enough for the
+        // viewer to conclude the press missed, press again, and get two of whatever happens next.
+        if (preparing && !confirmed) return
+        preparing = true
+        scope.launch {
+            // Only said out loud when it is actually slow. On the common path the player is up
+            // before this fires, and a chip that flashes on every press is worse than no chip.
+            val chip = launch {
+                delay(PREPARE_CHIP_AFTER_MS)
+                toast("Starting ${item.title}…")
+            }
+            try {
+                playNow(item, confirmed, chatTitle)
+            } finally {
+                chip.cancel()
+                preparing = false
             }
         }
     }
@@ -564,6 +630,33 @@ private fun Root() {
                     },
                     updateVersion = (updateState as? UpdateState.Available)?.release?.version,
                     onUpdate = { showUpdate = true },
+                    // Each of these three changes the chat in Telegram, so each says out loud
+                    // what it did: the row itself has already moved by the time the menu closes,
+                    // and a row moving on its own is not an account of anything.
+                    onTogglePinned = { chat ->
+                        chatsViewModel.setPinned(chat, !chat.isPinned) { toast(it) }
+                        toast(
+                            if (chat.isPinned) {
+                                "${chat.title} unpinned"
+                            } else {
+                                "${chat.title} pinned to the top"
+                            },
+                        )
+                    },
+                    onToggleArchived = { chat ->
+                        chatsViewModel.setArchived(chat, !chat.isArchived) { toast(it) }
+                        toast(
+                            if (chat.isArchived) {
+                                "${chat.title} moved out of the archive"
+                            } else {
+                                "${chat.title} archived"
+                            },
+                        )
+                    },
+                    onMarkRead = { chat ->
+                        chatsViewModel.markRead(chat) { toast(it) }
+                        toast("${chat.title} marked as read")
+                    },
                     onToggleFavorite = { chat ->
                         scope.launch {
                             // The star lands on a row the menu was covering, and in the Favourites
@@ -612,7 +705,8 @@ private fun Root() {
                     },
                     launchChatId = lastChatId,
                     picked = pickedTab,
-                    onPickTab = { pickedTab = it },
+                    onPickTab = { pickedTabKey = BrowseSection.encode(it) },
+                    folders = folders,
                     onToggleLayout = { scope.launch { settings.setChatLayout(chatLayout.toggled()) } },
                     layout = chatLayout,
                 )

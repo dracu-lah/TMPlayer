@@ -1,16 +1,30 @@
 package com.tmplayer.ui.components
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button as TouchButton
 import androidx.compose.material3.ButtonDefaults as TouchButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton as TouchTonalButton
+import androidx.compose.material3.LocalContentColor as TouchContentColor
 import androidx.compose.material3.MaterialTheme as TouchMaterialTheme
+import androidx.compose.material3.Text as TouchText
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button as TvButton
 import androidx.tv.material3.ButtonDefaults as TvButtonDefaults
+import androidx.tv.material3.LocalContentColor as TvContentColor
+import androidx.tv.material3.Text as TvText
 import com.tmplayer.data.FormFactor
 import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.LocalDarkTheme
@@ -36,15 +50,18 @@ fun TmButton(
     enabled: Boolean = true,
     /** Clearing a history, unstarring everything: the press that cannot simply be pressed again. */
     destructive: Boolean = false,
+    loading: Boolean = false,
+    /** What the button says while [loading]: "Sending code…" in place of "Send me a code". */
+    busyLabel: String? = null,
     content: @Composable RowScope.() -> Unit,
 ) {
     if (FormFactor.isTv(LocalContext.current)) {
         TvButton(
             onClick = onClick,
             modifier = modifier,
-            enabled = enabled,
+            enabled = enabled && !loading,
             colors = if (destructive) tvDestructiveColors() else tmButtonColors(),
-            content = content,
+            content = { TvFace(loading, busyLabel, content) },
         )
         return
     }
@@ -58,7 +75,7 @@ fun TmButton(
     TouchButton(
         onClick = onClick,
         modifier = modifier,
-        enabled = enabled,
+        enabled = enabled && !loading,
         colors = when {
             // Nothing in the scheme is "the destructive button", so this is the one place a phone
             // still states a colour: error, taken from the scheme rather than from a hex.
@@ -77,7 +94,7 @@ fun TmButton(
             )
             else -> TouchButtonDefaults.buttonColors()
         },
-        content = content,
+        content = { TouchFace(loading, busyLabel, content) },
     )
 }
 
@@ -100,15 +117,17 @@ fun TmSecondaryButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    loading: Boolean = false,
+    busyLabel: String? = null,
     content: @Composable RowScope.() -> Unit,
 ) {
     if (FormFactor.isTv(LocalContext.current)) {
         TvButton(
             onClick = onClick,
             modifier = modifier,
-            enabled = enabled,
+            enabled = enabled && !loading,
             colors = tmButtonColors(),
-            content = content,
+            content = { TvFace(loading, busyLabel, content) },
         )
         return
     }
@@ -119,7 +138,89 @@ fun TmSecondaryButton(
     TouchTonalButton(
         onClick = onClick,
         modifier = modifier,
-        enabled = enabled,
+        enabled = enabled && !loading,
+        content = { TouchFace(loading, busyLabel, content) },
+    )
+}
+
+/**
+ * The two things a button can say, stacked, with only one of them visible.
+ *
+ * A press that starts a network call has to say so, and the honest way to say it is to change the
+ * words on the button. Swapping the words outright would resize it, and on a remote a button that
+ * narrows under the focus ring drags the ring with it, which reads as the focus having jumped
+ * somewhere on its own. Drawing both faces in the same box means the button is always as wide as
+ * the longer of the two and never moves between them. The hidden face is taken out of the
+ * semantics as well as out of the picture, so a screen reader reads one label rather than both.
+ */
+@Composable
+private fun ButtonFace(
+    loading: Boolean,
+    busy: @Composable RowScope.() -> Unit,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Box(contentAlignment = Alignment.Center) {
+        Face(hidden = loading, content = content)
+        Face(hidden = !loading, content = busy)
+    }
+}
+
+@Composable
+private fun Face(hidden: Boolean, content: @Composable RowScope.() -> Unit) {
+    Row(
+        modifier = Modifier
+            .alpha(if (hidden) 0f else 1f)
+            .then(if (hidden) Modifier.clearAndSetSemantics {} else Modifier),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
         content = content,
     )
 }
+
+/**
+ * The busy face, in the television's Material.
+ *
+ * Its content colour and its text style are read from inside the button rather than passed in,
+ * because that is the only place either of them exists: the two Materials each provide their own,
+ * and a spinner drawn in the other library's default is black on a dark button.
+ */
+@Composable
+private fun TvFace(loading: Boolean, busyLabel: String?, content: @Composable RowScope.() -> Unit) {
+    ButtonFace(
+        loading = loading,
+        busy = {
+            Spinner(TvContentColor.current)
+            if (busyLabel != null) TvText(busyLabel)
+        },
+        content = content,
+    )
+}
+
+@Composable
+private fun TouchFace(
+    loading: Boolean,
+    busyLabel: String?,
+    content: @Composable RowScope.() -> Unit,
+) {
+    ButtonFace(
+        loading = loading,
+        busy = {
+            Spinner(TouchContentColor.current)
+            if (busyLabel != null) TouchText(busyLabel)
+        },
+        content = content,
+    )
+}
+
+/** Small enough to sit on the text's own line, and in the label's colour rather than the accent. */
+@Composable
+private fun Spinner(color: Color) {
+    CircularProgressIndicator(
+        modifier = Modifier.size(SPINNER),
+        color = color,
+        strokeWidth = 2.dp,
+    )
+    Spacer(Modifier.size(8.dp))
+}
+
+private val SPINNER = 16.dp

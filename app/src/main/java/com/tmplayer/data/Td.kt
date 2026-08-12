@@ -93,6 +93,18 @@ object Td {
     private val _connected = MutableStateFlow(false)
     val connected: StateFlow<Boolean> = _connected.asStateFlow()
 
+    /**
+     * The viewer's Telegram folders, in the order they were set up in.
+     *
+     * Collected here rather than where they are drawn because there is no request that asks for
+     * them. TDLib announces the whole set once, shortly after the client starts, and again only
+     * when it changes; a screen that subscribes when it opens has already missed the announcement
+     * and would show no folders until one was edited on another device. Started with the client
+     * and emptied with it, so the folders belong to whoever is signed in and go with them.
+     */
+    private val _folders = MutableStateFlow<List<ChatFolderSummary>>(emptyList())
+    val folders: StateFlow<List<ChatFolderSummary>> = _folders.asStateFlow()
+
     private lateinit var appContext: Context
 
     fun start(context: Context) {
@@ -114,6 +126,20 @@ object Td {
             val updates = launch {
                 td.authorizationStateUpdates.collect { apply(td, it.authorizationState) }
             }
+            val folders = launch {
+                td.chatFoldersUpdates.collect { update ->
+                    _folders.value = update.chatFolders.map { folder ->
+                        // The name is formatted text because Telegram lets a folder carry custom
+                        // emoji in it. Only the plain characters are kept: the rail draws a folder
+                        // beside an icon of its own, and a client that cannot render a custom emoji
+                        // would otherwise print the placeholder character it stands in as.
+                        ChatFolderSummary(
+                            id = folder.id,
+                            title = folder.name.text.text.trim().ifBlank { "Folder ${folder.id}" },
+                        )
+                    }
+                }
+            }
             val connection = launch {
                 td.connectionStateUpdates.collect { update ->
                     // "Updating" means the socket is up and TDLib is pulling in what it missed.
@@ -134,6 +160,9 @@ object Td {
             closed.await()
             updates.cancel()
             connection.cancel()
+            folders.cancel()
+            _folders.value = emptyList()
+            cachedMyId = 0L
             // Cancelled with the rest of the generation. It usually finishes long before this,
             // but a client closed while it is still waiting on TDLib would otherwise leave a
             // coroutine holding a dead client, once per sign-in, for the life of the process.
@@ -618,6 +647,23 @@ object Td {
      */
     fun cancelDownloadInBackground(fileId: Int) {
         scope.launch { cancelDownload(fileId) }
+    }
+
+    /**
+     * The signed-in account's own id, which is also the id of its Saved Messages chat.
+     *
+     * Cached, because it is asked for on the chat-list path and that path runs several times on a
+     * cold start. It cannot change without the client being torn down and rebuilt, which is what
+     * clears it, so a cached answer is not a stale one.
+     */
+    @Volatile
+    private var cachedMyId = 0L
+
+    suspend fun myId(): Long {
+        cachedMyId.takeIf { it != 0L }?.let { return it }
+        val id = client.getMe().valueOrNull?.id ?: return 0L
+        cachedMyId = id
+        return id
     }
 
     /** The signed-in account, for the avatar and name in the navigation rail. */

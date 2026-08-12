@@ -147,8 +147,13 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                         modifier = Modifier.focusRequester(confirm).paneAction(),
                     ) { Text("Download and install") }
 
+                    // The panel says "Asking GitHub…" in its body while this runs, but the body is
+                    // not what the remote is pointed at: the button is, and until it said so too
+                    // a slow answer read as a press that had not registered.
                     else -> TmButton(
                         onClick = { scope.launch { Updates.check() } },
+                        loading = state is UpdateState.Checking,
+                        busyLabel = "Checking…",
                         modifier = Modifier.focusRequester(confirm).paneAction(),
                     ) { Text("Check again") }
                 }
@@ -309,9 +314,14 @@ private fun TouchUpdateDialog(
         // Close beside it can abandon, so it gets to be the filled one.
         confirmButton = {
             if (downloading != null) return@AlertDialog
-            Button(onClick = onPrimary) {
+            // A dialog's button row is too narrow for a spinner beside the words, so on a phone
+            // the words are the whole of it: the check is named while it runs and cannot be
+            // pressed a second time on the way.
+            val checking = state is UpdateState.Checking
+            Button(onClick = onPrimary, enabled = !checking) {
                 M3Text(
                     when {
+                        checking -> "Checking…"
                         release != null && !allowed -> "Open that setting"
                         release != null -> "Download and install"
                         else -> "Check again"

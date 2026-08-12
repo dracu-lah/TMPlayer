@@ -347,6 +347,24 @@
                 android:textAllCaps="false"
                 android:textColor="@color/text_primary" />
 
+            <!--
+              Which way up the picture is held, on the VLC model: a button that locks the
+              orientation rather than a setting buried somewhere. Icon rather than a word because
+              the three states are shapes people already read at a glance, and because this row is
+              over the picture. Phone only: it is added at runtime and never on a television, where
+              the screen has exactly one orientation and always has.
+            -->
+            <ImageButton
+                android:id="@+id/rotation_button"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="center_vertical"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_player_button"
+                android:padding="9dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_rotate_landscape" />
+
             <Button
                 android:id="@+id/speed_button"
                 style="?android:attr/borderlessButtonStyle"
@@ -367,6 +385,10 @@
       What a touch gesture is doing, while it is doing it: the jump, the brightness, the volume.
       A drag on a phone changes something the picture itself cannot show, so without a figure on
       screen the viewer is adjusting blind. Never raised on a TV, which has buttons for all three.
+
+      This is the whole of what a gesture puts on screen. It moves to the side the finger is on,
+      which is what the margins are for, and it is the only overlay a swipe or a key press is
+      allowed to raise: the transport row belongs to the single tap and to nothing else.
     -->
     <TextView
         android:id="@+id/gesture_hud"
@@ -374,6 +396,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
+        android:layout_marginStart="@dimen/player_gesture_hud_side"
+        android:layout_marginEnd="@dimen/player_gesture_hud_side"
         android:background="@drawable/bg_player_chip"
         android:paddingLeft="20dp"
         android:paddingTop="12dp"

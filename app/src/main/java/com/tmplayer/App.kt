@@ -2,8 +2,10 @@ package com.tmplayer
 
 import android.app.Application
 import com.tmplayer.data.NetworkMonitor
+import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import com.tmplayer.data.Thumbnails
+import com.tmplayer.player.PlayerActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,6 +30,16 @@ class App : Application() {
         // Kept off the launch path: the ceiling is about tomorrow's disk, not this frame, and
         // TDLib has a database to open first. It waits for an authorized session, so on a device
         // nobody has signed into yet it simply never runs.
+        // Which way up the player opens, fetched now so it is in hand before anybody reaches a
+        // video. The player has to set its orientation before it lays anything out, which leaves
+        // no room for a disk read there, and blocking the launch of a video on one is exactly the
+        // sort of thing that makes an app feel slow. Anyone quick enough to beat this gets the
+        // default, which is what they would have got anyway.
+        backgroundScope.launch {
+            runCatching {
+                PlayerActivity.primeOrientation(SettingsStore(this@App).screenOrientationNow())
+            }
+        }
         backgroundScope.launch {
             Td.awaitAuthorizedSession()
             delay(CACHE_TRIM_DELAY_MS)

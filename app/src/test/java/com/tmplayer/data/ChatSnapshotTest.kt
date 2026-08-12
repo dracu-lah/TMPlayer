@@ -41,6 +41,55 @@ class ChatSnapshotTest {
     }
 
     @Test
+    fun `pins, folders and unread counts survive a round trip`() {
+        val chats = listOf(
+            chat(1, "Films").copy(
+                isPinned = true,
+                unreadCount = 12,
+                isMuted = true,
+                folderIds = listOf(2, 5),
+            ),
+            chat(2, "Archive fodder").copy(isArchived = true),
+        )
+        assertEquals(chats, ChatSnapshot.decode(ChatSnapshot.encode(chats)))
+    }
+
+    @Test
+    fun `a snapshot written by an older build is still readable`() {
+        // The four-field form, which is what is sitting on every device that has the previous
+        // release on it. Read as a chat with no pin, no archive and no folders, so the first
+        // launch after an update still opens on a list rather than on an empty screen.
+        val decoded = ChatSnapshot.decode("1|Channel|7|Films")
+        assertEquals(listOf(chat(1, "Films")), decoded)
+    }
+
+    @Test
+    fun `an older title carrying the separator survives too`() {
+        assertEquals(
+            listOf(chat(1, "Films | 4K | remuxes")),
+            ChatSnapshot.decode("1|Channel|7|Films | 4K | remuxes"),
+        )
+    }
+
+    @Test
+    fun `Saved Messages goes first, then the pins, then everything else`() {
+        val saved = chat(9, "Saved Messages", ChatKind.Saved)
+        val pinned = chat(2, "Pinned").copy(isPinned = true)
+        val ordinary = chat(3, "Ordinary")
+        val alsoPinned = chat(4, "Also pinned").copy(isPinned = true)
+        assertEquals(
+            listOf(saved, pinned, alsoPinned, ordinary),
+            arrangeChats(listOf(ordinary, pinned, saved, alsoPinned)),
+        )
+    }
+
+    @Test
+    fun `arranging leaves the order Telegram gave within each group alone`() {
+        val chats = (1..5).map { chat(it.toLong(), "Chat $it") }
+        assertEquals(chats, arrangeChats(chats))
+    }
+
+    @Test
     fun `the snapshot is capped so a sync is not a large write`() {
         val many = (1..ChatSnapshot.MAX_ENTRIES * 2).map { chat(it.toLong(), "Chat $it") }
         val decoded = ChatSnapshot.decode(ChatSnapshot.encode(many))

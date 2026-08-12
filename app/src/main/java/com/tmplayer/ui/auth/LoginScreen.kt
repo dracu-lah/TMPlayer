@@ -32,6 +32,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.Stable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
@@ -97,6 +98,7 @@ fun LoginScreen(
         is AuthState.ChooseMethod -> MethodPane(onChooseMethod)
         is AuthState.Qr -> QrPane(state.link, onBack = onStartOver)
         is AuthState.Phone -> PhonePane(
+            state = state,
             error = submitError,
             onSubmit = onSubmitPhoneNumber,
             onBack = onCancelPhoneEntry,
@@ -105,6 +107,7 @@ fun LoginScreen(
         is AuthState.Code ->
             if (changingNumber) {
                 PhonePane(
+                    state = state,
                     error = submitError,
                     onSubmit = onSubmitPhoneNumber,
                     onBack = { changingNumber = false },
@@ -121,10 +124,60 @@ fun LoginScreen(
                 )
             }
         is AuthState.Password ->
-            PasswordPane(state.hint, submitError, onSubmitPassword, onStartOver)
+            PasswordPane(state, submitError, onSubmitPassword, onStartOver)
         is AuthState.Ready -> BigLoader("Signing in…")
         is AuthState.Failed -> BigError(state.message, onRetry = null)
     }
+}
+
+/**
+ * One answer on its way to Telegram, and whether it has arrived.
+ *
+ * Every submission on this screen is a suspend call somebody else runs: the pane hands over a
+ * number or a code and is told nothing more about it. What it does see is the answer, either as a
+ * new [AuthState] or as an error under the field, and that is what releases the button here.
+ *
+ * The guard lives in [start] rather than only in the button's `enabled`, because a remote can send
+ * two centre presses inside one frame and a second phone number sent while the first is in flight
+ * is a second code sent to the user.
+ */
+@Stable
+private class Submission {
+    var busy by mutableStateOf(false)
+        private set
+
+    fun start(send: () -> Unit) {
+        if (busy) return
+        busy = true
+        send()
+    }
+
+    fun finish() {
+        busy = false
+    }
+}
+
+/**
+ * A [Submission] that releases itself when the answer lands.
+ *
+ * A rejection is an error, and a success is a different [AuthState], so those two are the release.
+ * The ceiling is for the one call that can succeed silently: asking for the code again leaves both
+ * the state and the error exactly as they were, and a button waiting on a change that will never
+ * come would sit there busy for the rest of the sign-in.
+ */
+@Composable
+private fun rememberSubmission(state: AuthState, error: String?): Submission {
+    val submission = remember { Submission() }
+    LaunchedEffect(state) { submission.finish() }
+    // Only a real message counts. Clearing the error is the first thing a fresh attempt does, so
+    // treating that as an answer would release the button in the same breath as pressing it.
+    LaunchedEffect(error) { if (error != null) submission.finish() }
+    LaunchedEffect(submission.busy) {
+        if (!submission.busy) return@LaunchedEffect
+        delay(PENDING_CEILING_MS)
+        submission.finish()
+    }
+    return submission
 }
 
 /**
@@ -222,6 +275,7 @@ private fun MethodPane(onChoose: (SignInMethod) -> Unit) {
 
 @Composable
 private fun PhonePane(
+    state: AuthState,
     error: String?,
     onSubmit: (String) -> Unit,
     onBack: () -> Unit,
@@ -231,11 +285,12 @@ private fun PhonePane(
     BackHandler(onBack = onBack)
 
     if (isTouch()) {
-        TouchPhonePane(error, onSubmit, onBack, onUseQr)
+        TouchPhonePane(state, error, onSubmit, onBack, onUseQr)
         return
     }
 
     var number by rememberSaveable { mutableStateOf("+") }
+    val submission = rememberSubmission(state, error)
 
     LoginForm(
         title = "Your phone number",
@@ -251,8 +306,10 @@ private fun PhonePane(
         masked = false,
         error = error,
         submitLabel = "Send me a code",
+        busyLabel = "Sending code…",
+        busy = submission.busy,
         canSubmit = number.count { it.isDigit() } >= MIN_PHONE_DIGITS,
-        onSubmit = { onSubmit(number) },
+        onSubmit = { submission.start { onSubmit(number) } },
         backLabel = "Back",
         onBack = onBack,
     )
@@ -268,6 +325,7 @@ private fun PhonePane(
  */
 @Composable
 private fun TouchPhonePane(
+    state: AuthState,
     error: String?,
     onSubmit: (String) -> Unit,
     onBack: () -> Unit,
@@ -285,6 +343,7 @@ private fun TouchPhonePane(
     var picking by rememberSaveable { mutableStateOf(false) }
     val country = remember(countries, dial) { PhoneCountries.byDialCode(countries, dial) }
     val field = remember { FocusRequester() }
+    val submission = rememberSubmission(state, error)
 
     LaunchedEffect(Unit) {
         // Off the main thread's critical path by construction: the pane draws with an empty list
@@ -307,7 +366,7 @@ private fun TouchPhonePane(
         return
     }
 
-    val submit = { onSubmit("+$dial$national") }
+    val submit = { submission.start { onSubmit("+$dial$national") } }
 
     Pane {
         PaneHeader(onBack = onBack)
@@ -367,6 +426,8 @@ private fun TouchPhonePane(
         TmButton(
             onClick = submit,
             enabled = (dial + national).length >= MIN_PHONE_DIGITS,
+            loading = submission.busy,
+            busyLabel = "Sending code…",
             modifier = Modifier.paneAction(),
         ) {
             Text("Send me a code")
@@ -401,6 +462,7 @@ private fun CodePane(
     // Most deliveries are a run of digits, but a couple are a word or a phrase, and those have to
     // keep their letters. The phone's version of this pane already asks the same question.
     val digits = state.delivery.isDigits()
+    val submission = rememberSubmission(state, error)
 
     LoginForm(
         title = "Enter your code",
@@ -417,8 +479,10 @@ private fun CodePane(
         masked = false,
         error = error,
         submitLabel = "Sign in",
+        busyLabel = "Signing in…",
+        busy = submission.busy,
         canSubmit = code.isNotEmpty(),
-        onSubmit = { onSubmit(code) },
+        onSubmit = { submission.start { onSubmit(code) } },
         // Not "Back": the code has been sent, so the way out is a fresh start, which is what
         // restarting the sign-in actually does.
         backLabel = "Start over",
@@ -451,6 +515,11 @@ private fun TouchCodePane(
     var submitted by rememberSaveable { mutableStateOf<String?>(null) }
     var remaining by rememberSaveable(state.timeout, state.phoneNumber) { mutableStateOf(state.timeout) }
     val field = remember { FocusRequester() }
+    // Two answers can be on their way at once, and they are not the same answer: the code being
+    // checked and a fresh code being asked for. One flag between them would leave the button that
+    // was not pressed looking busy.
+    val signIn = rememberSubmission(state, error)
+    val resend = rememberSubmission(state, error)
 
     LaunchedEffect(remaining) {
         if (remaining <= 0) return@LaunchedEffect
@@ -459,8 +528,10 @@ private fun TouchCodePane(
     }
 
     val submit = {
-        submitted = code
-        onSubmit(code)
+        signIn.start {
+            submitted = code
+            onSubmit(code)
+        }
     }
 
     // Typing the last digit is the whole answer, so asking for a button press afterwards is asking
@@ -503,6 +574,8 @@ private fun TouchCodePane(
         TmButton(
             onClick = submit,
             enabled = code.isNotEmpty() && code != submitted,
+            loading = signIn.busy,
+            busyLabel = "Signing in…",
             modifier = Modifier.paneAction(),
         ) {
             Text("Sign in")
@@ -510,11 +583,15 @@ private fun TouchCodePane(
 
         TmSecondaryButton(
             onClick = {
-                remaining = state.timeout
-                submitted = null
-                onResend()
+                resend.start {
+                    remaining = state.timeout
+                    submitted = null
+                    onResend()
+                }
             },
             enabled = remaining <= 0,
+            loading = resend.busy,
+            busyLabel = "Sending code…",
             modifier = Modifier.paneAction(),
         ) {
             Text(if (remaining > 0) "Resend in ${clock(remaining)}" else resendLabel(state.next))
@@ -785,12 +862,13 @@ private fun Step(number: Int, text: String) {
 
 @Composable
 private fun PasswordPane(
-    hint: String,
+    state: AuthState.Password,
     error: String?,
     onSubmit: (String) -> Unit,
     onStartOver: () -> Unit,
 ) {
     var password by remember { mutableStateOf("") }
+    val submission = rememberSubmission(state, error)
 
     // The remote's Back is what anybody stuck here reaches for first, and it did nothing.
     BackHandler(onBack = onStartOver)
@@ -798,7 +876,7 @@ private fun PasswordPane(
     LoginForm(
         title = "Two-step verification",
         blurb = "Your Telegram account has a password. Enter it to finish signing in.",
-        note = hint.takeIf { it.isNotBlank() }?.let { "Hint: $it" },
+        note = state.hint.takeIf { it.isNotBlank() }?.let { "Hint: $it" },
         value = password,
         onValueChange = { password = it },
         placeholder = "Password",
@@ -806,8 +884,10 @@ private fun PasswordPane(
         masked = true,
         error = error,
         submitLabel = "Sign in",
+        busyLabel = "Signing in…",
+        busy = submission.busy,
         canSubmit = password.isNotEmpty(),
-        onSubmit = { onSubmit(password) },
+        onSubmit = { submission.start { onSubmit(password) } },
         // The way out: scanned with the wrong account, or the password is not to hand. Nothing is
         // lost, because nobody is signed in yet.
         backLabel = "Start over",
@@ -834,6 +914,9 @@ private fun LoginForm(
     masked: Boolean,
     error: String?,
     submitLabel: String,
+    /** What the submit button says while the answer is with Telegram. */
+    busyLabel: String,
+    busy: Boolean,
     canSubmit: Boolean,
     onSubmit: () -> Unit,
     backLabel: String,
@@ -874,7 +957,13 @@ private fun LoginForm(
         }
 
         if (touch) {
-            TmButton(onClick = onSubmit, enabled = canSubmit, modifier = Modifier.paneAction()) {
+            TmButton(
+                onClick = onSubmit,
+                enabled = canSubmit,
+                loading = busy,
+                busyLabel = busyLabel,
+                modifier = Modifier.paneAction(),
+            ) {
                 Text(submitLabel)
             }
             TmSecondaryButton(onClick = onBack, modifier = Modifier.paneAction()) {
@@ -884,7 +973,7 @@ private fun LoginForm(
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TmButton(onClick = onSubmit, enabled = canSubmit) {
+            TmButton(onClick = onSubmit, enabled = canSubmit, loading = busy, busyLabel = busyLabel) {
                 Text(submitLabel)
             }
             TmSecondaryButton(onClick = onBack) {
@@ -895,6 +984,15 @@ private fun LoginForm(
 
     LaunchedEffect(Unit) { focus.requestFocus() }
 }
+
+/**
+ * How long a button may sit busy with nothing having come back.
+ *
+ * Only reached by a call whose success is silent, and the one of those is asking for the code
+ * again, which the countdown beside it has already disabled for a minute or more. Everything else
+ * answers with a state or with an error long before this.
+ */
+private const val PENDING_CEILING_MS = 8_000L
 
 /** How long a first press of Back stays armed before it is forgotten, as on the chat list. */
 private const val EXIT_WINDOW_MS = 2_000L

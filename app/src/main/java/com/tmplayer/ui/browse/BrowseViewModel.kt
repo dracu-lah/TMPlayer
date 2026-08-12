@@ -7,6 +7,7 @@ import com.tmplayer.data.Account
 import com.tmplayer.data.AuthState
 import com.tmplayer.data.ChatRepository
 import com.tmplayer.data.ChatSummary
+import com.tmplayer.data.arrangeChats
 import com.tmplayer.data.Failures
 import com.tmplayer.data.Fuzzy
 import com.tmplayer.data.MediaCursors
@@ -22,6 +23,8 @@ import com.tmplayer.data.SponsoredReportOutcome
 import com.tmplayer.data.Td
 import com.tmplayer.data.TdSession
 import com.tmplayer.ui.components.UiState
+import dev.g000sha256.tdl.TdlResult
+import dev.g000sha256.tdl.dto.ChatListArchive
 import dev.g000sha256.tdl.dto.ChatListMain
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
@@ -33,6 +36,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
 /** The chat list plus who is signed in; both are needed before the browser can draw. */
@@ -111,13 +115,53 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
                             // A busy account moves several chats at once, and every message in
                             // any of them is a position update. Coalesced, so one read follows a
                             // burst instead of one read following each of it.
+                            //
+                            // The archive is watched as well as the main list, because moving a
+                            // chat between the two is reported as a position in each and the app
+                            // now has a tab that has to notice.
                             client.chatPositionUpdates
-                                .filter { it.position.list is ChatListMain }
+                                .filter {
+                                    it.position.list is ChatListMain ||
+                                        it.position.list is ChatListArchive
+                                }
+                                .onEach { update ->
+                                    // The pin travels with the position, so it is read straight
+                                    // off the update. Re-reading the order alone would put a
+                                    // freshly pinned chat in the right place while its row still
+                                    // said it was not pinned.
+                                    val archived = update.position.list is ChatListArchive
+                                    if (update.position.order != 0L) {
+                                        edit(update.chatId) {
+                                            it.copy(
+                                                isPinned = update.position.isPinned,
+                                                isArchived = archived,
+                                            )
+                                        }
+                                    }
+                                }
                                 .conflate()
                                 .collect {
                                     delay(REORDER_SETTLE_MS)
                                     reorder(ChatRepository(client))
                                 }
+                        }
+                        launch {
+                            // Reading a chat somewhere else empties its badge here, which is the
+                            // difference between an Unread tab that is a live list and one that
+                            // is a list of what was unread when the app happened to be opened.
+                            client.chatReadInboxUpdates.collect { update ->
+                                edit(update.chatId) { it.copy(unreadCount = update.unreadCount) }
+                            }
+                        }
+                        launch {
+                            client.chatNotificationSettingsUpdates.collect { update ->
+                                edit(update.chatId) {
+                                    it.copy(
+                                        isMuted = !update.notificationSettings.useDefaultMuteFor &&
+                                            update.notificationSettings.muteFor > 0,
+                                    )
+                                }
+                            }
                         }
                     }
                 } catch (cancelled: CancellationException) {
@@ -144,7 +188,10 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
         val order = runCatching { repository.chatOrder() }.getOrNull() ?: return
         if (order.isEmpty()) return
         val byId = current.associateBy { it.id }
-        val sorted = order.mapNotNull(byId::get)
+        // Arranged, not merely reordered. TDLib's order takes no view on pinning, so applying it
+        // raw would quietly undo the pinned-first arrangement the list was built with the moment
+        // any message arrived anywhere.
+        val sorted = arrangeChats(order.mapNotNull(byId::get))
         // Only when every row survived the move. A short answer means TDLib is holding fewer
         // chats than the screen is, and quietly dropping the difference would look like the
         // library shrinking on its own.
@@ -247,7 +294,9 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
                 }
                 if (connected.generation != session.generation) return@launch
                 if (account == null) account = runCatching { Td.me(session) }.getOrNull()
-                val sync = repository.syncChats()
+                // Handed what the local read already produced, so the sync fetches only chats it
+                // has not seen rather than the whole list a second time.
+                val sync = repository.syncChats(known = chats.orEmpty())
                 // A failed sync is not an empty library. The pages that did arrive are still
                 // worth showing, and the flood wait inside the message is what stops Refresh
                 // from making the next attempt worse.
@@ -263,6 +312,68 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
                     _state.value = UiState.Error(Failures.humanise(error))
                 }
             }
+        }
+    }
+
+    /**
+     * Pins, archives and marks read: the three actions that change Telegram rather than this app.
+     *
+     * Each one draws its result immediately and then lets TDLib correct it. The alternative is
+     * waiting on a round trip before the row moves, which on a stick is a menu that closes onto a
+     * list that has not changed, and the honest reading of that is that the press did nothing.
+     * TDLib sends the real position and read state back within a moment, and the collectors above
+     * apply it, so a request that actually fails is undone rather than left as a false row.
+     */
+    fun setPinned(chat: ChatSummary, pinned: Boolean, onFailure: (String) -> Unit) {
+        edit(chat.id) { it.copy(isPinned = pinned) }
+        arrange()
+        act(onFailure) { it.setPinned(chat, pinned) }
+    }
+
+    fun setArchived(chat: ChatSummary, archived: Boolean, onFailure: (String) -> Unit) {
+        edit(chat.id) { it.copy(isArchived = archived, isPinned = false) }
+        arrange()
+        act(onFailure) { it.setArchived(chat.id, archived) }
+    }
+
+    fun markRead(chat: ChatSummary, onFailure: (String) -> Unit) {
+        edit(chat.id) { it.copy(unreadCount = 0) }
+        act(onFailure) { it.markRead(chat.id) }
+    }
+
+    /** Re-sorts the rows in hand, for a change that moves one of them rather than renaming it. */
+    private fun arrange() {
+        val current = chats ?: return
+        val sorted = arrangeChats(current)
+        if (sorted == current) return
+        chats = sorted
+        publish()
+    }
+
+    private fun act(
+        onFailure: (String) -> Unit,
+        request: suspend (ChatRepository) -> TdlResult<*>,
+    ) {
+        viewModelScope.launch {
+            val session = Td.awaitAuthorizedSession()
+            // Two ways for this to fail and both have to be caught. TDLib reports a refused
+            // request as a Failure value rather than by throwing, so a runCatching on its own
+            // would call every rejection a success and leave the optimistic row standing.
+            val outcome = runCatching { request(ChatRepository(session.client)) }
+            if (!session.isCurrent()) return@launch
+            val error = outcome.exceptionOrNull()
+            if (error is CancellationException) throw error
+            val message = when {
+                error != null -> Failures.humanise(error)
+                else -> (outcome.getOrNull() as? TdlResult.Failure)?.let {
+                    Failures.humanise(it.message)
+                }
+            } ?: return@launch
+
+            onFailure(message)
+            // Whatever was drawn on trust is now wrong, and the only honest way back is to ask
+            // TDLib what is actually true.
+            load()
         }
     }
 

@@ -12,25 +12,30 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * The three gestures a phone viewer expects from a video player, and nothing else.
+ * The gestures a phone viewer expects from a video player, and nothing else.
  *
  * A remote has buttons for all of this, so none of it exists on the TV. A phone has a bare picture
  * and a thumb, and the conventions are old enough by now that a player without them reads as
- * broken: double tap the sides to jump, drag the left half for brightness, drag the right half for
- * volume. Everything is worked out from the view it is attached to, so nothing is carried between
- * one drag and the next beyond the drag in progress.
+ * broken: tap to raise the controls, double tap the sides to jump, drag the left half for
+ * brightness, drag the right half for volume. Everything is worked out from the view it is
+ * attached to, so nothing is carried between one drag and the next beyond the drag in progress.
  *
  * Fed from the activity's own [android.app.Activity.dispatchTouchEvent] rather than attached to
- * the video view, and it never consumes an event, so Media3's controller still gets the tap that
- * raises and hides it. Hanging this off the view was the bug: the moment the controller came up,
- * its buttons and its scrub bar were the views under the finger, the video view saw nothing, and
- * double-tap seek and both drags silently stopped working for as long as the row was on screen.
+ * the video view. Hanging this off the view was the original bug: the moment the controller came
+ * up, its buttons and its scrub bar were the views under the finger, the video view saw nothing,
+ * and double-tap seek and both drags silently stopped working for as long as the row was on
+ * screen.
+ *
+ * While the controls are down the activity hands every touch here and to nowhere else, which is
+ * what stops Media3's own view treating a brightness drag or a hold as a reason to throw the whole
+ * transport row over the picture. Raising the row is [onTapControls]'s job and nothing else's.
  */
 class PlayerGestures(
     context: Context,
     private val window: Window,
     private val onSkip: (Long) -> Unit,
-    private val onFeedback: (String) -> Unit,
+    /** The transient figure a gesture leaves behind, and which side of the picture it belongs on. */
+    private val onFeedback: (String, Int) -> Unit,
     private val onPinch: (expanding: Boolean) -> Unit = {},
     /** Where the video is now and how long it is, for the drag that scrubs. */
     private val positionMs: () -> Long = { 0L },
@@ -38,6 +43,10 @@ class PlayerGestures(
     private val onSeekTo: (Long) -> Unit = {},
     /** Held down for a fast-forward that lasts as long as the finger does. */
     private val onHold: (holding: Boolean) -> Unit = {},
+    /** A single tap on the picture, which is the only thing that raises or drops the controls. */
+    private val onTapControls: () -> Unit = {},
+    /** A double tap on the middle of the picture. */
+    private val onTogglePlay: () -> Unit = {},
 ) {
 
     /**
@@ -86,21 +95,34 @@ class PlayerGestures(
                 onHold(true)
             }
 
+            /**
+             * The one gesture that raises the controls, and the only one.
+             *
+             * Confirmed rather than immediate, because the sides of the picture belong to the
+             * double tap: acting on the first of the two would flash the transport row over every
+             * seek.
+             */
+            override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
+                if (scaling || holding || dragKind != DRAG_NONE) return false
+                onTapControls()
+                return true
+            }
+
             override fun onDoubleTap(event: MotionEvent): Boolean {
                 val third = viewWidth / 3f
                 if (third <= 0f) return false
                 when {
                     event.x < third -> {
                         onSkip(-Skip.BACK_MS)
-                        onFeedback("- ${Skip.BACK_MS / 1000} s")
+                        onFeedback("◀◀   ${Skip.BACK_MS / 1000} s", SIDE_LEFT)
                     }
                     event.x > viewWidth - third -> {
                         onSkip(Skip.FORWARD_MS)
-                        onFeedback("+ ${Skip.FORWARD_MS / 1000} s")
+                        onFeedback("${Skip.FORWARD_MS / 1000} s   ▶▶", SIDE_RIGHT)
                     }
-                    // The middle third belongs to the controller: a double tap there is two
-                    // ordinary taps, which raise the transport row and hide it again.
-                    else -> return false
+                    // The middle third plays and pauses, which is what a thumb landing in the
+                    // centre of a picture twice has meant since the first phone player.
+                    else -> onTogglePlay()
                 }
                 return true
             }
@@ -114,7 +136,7 @@ class PlayerGestures(
                 val from = start ?: return false
                 if (viewHeight <= 0) return false
                 if (controlsVisible || scaling) return false
-                if (dragKind == DRAG_NONE && !begin(from, distanceX, distanceY)) return false
+                if (dragKind == DRAG_NONE && !begin(from, event)) return false
 
                 // Measured from where the finger went down rather than summed step by step, so a
                 // drag that wanders and comes back lands where it started.
@@ -168,7 +190,8 @@ class PlayerGestures(
     )
 
     /**
-     * Offers one touch event to the gestures. Always returns false: nothing here consumes.
+     * Offers one touch event to the gestures. Whether the event goes on to the views underneath is
+     * the activity's decision, not this class's.
      *
      * [width] and [height] are the video surface's, which is the frame the left half, right half
      * and drag range are all measured against.
@@ -195,13 +218,24 @@ class PlayerGestures(
     }
 
     /**
-     * Decides what a drag is for, once, from its first few pixels.
+     * Decides what a drag is for, once, and then stops asking.
      *
-     * A gesture that starts out mostly sideways is not a volume drag that went wrong, it is
-     * someone reaching for something else, so it is left alone for the rest of its life.
+     * Measured from where the finger went down rather than from the last few pixels of travel,
+     * because a thumb moving across glass wobbles and one noisy sample was enough to file a volume
+     * drag as a scrub. There is a dead angle between the two: a drag has to be twice as tall as it
+     * is wide to count as vertical, and anything shallower is read as sideways. VLC uses the same
+     * two-to-one split, and the reason is the same, that a diagonal is a gesture whose owner has
+     * not decided yet and guessing at it is worse than waiting a frame.
+     *
+     * Returns false while the travel is still inside the dead angle or too short to read, in which
+     * case the next move event asks again.
      */
-    private fun begin(start: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
-        if (abs(distanceY) <= abs(distanceX)) {
+    private fun begin(start: MotionEvent, event: MotionEvent): Boolean {
+        val travelX = event.x - start.x
+        val travelY = event.y - start.y
+        val arm = viewHeight * ARM_FRACTION
+        if (abs(travelY) < arm && abs(travelX) < arm) return false
+        if (abs(travelY) <= abs(travelX) * VERTICAL_RATIO) {
             // Sideways: scrubbing. The double tap moves in fixed jumps and the scrub bar needs the
             // controls up first, so without this there was no way to travel a few minutes through
             // a film with the picture still fully visible.
@@ -212,12 +246,19 @@ class PlayerGestures(
             seekTarget = dragFromMs
             return true
         }
-        if (start.x < viewWidth / 2f) {
-            dragKind = DRAG_BRIGHTNESS
-            dragFrom = currentBrightness()
-        } else {
-            dragKind = DRAG_VOLUME
-            dragFrom = currentVolume()
+        // A band down the middle belongs to neither, which is what stops a drag started in the
+        // centre of the picture from changing whichever of the two it happened to land a pixel
+        // nearer. VLC leaves the same gap, at the same three sevenths of the width.
+        when {
+            start.x < viewWidth * LEFT_EDGE -> {
+                dragKind = DRAG_BRIGHTNESS
+                dragFrom = currentBrightness()
+            }
+            start.x > viewWidth * RIGHT_EDGE -> {
+                dragKind = DRAG_VOLUME
+                dragFrom = currentVolume()
+            }
+            else -> return false
         }
         return true
     }
@@ -237,7 +278,7 @@ class PlayerGestures(
         seekTarget = target
         val sign = if (target >= dragFromMs) "+" else "-"
         val moved = abs(target - dragFromMs) / 1000
-        onFeedback("${clock(target)}   $sign${moved}s")
+        onFeedback("${clock(target)}   $sign${moved}s", SIDE_CENTRE)
     }
 
     /** Milliseconds as a clock, with the hour only where there is one. */
@@ -270,7 +311,7 @@ class PlayerGestures(
         // made it black is a phone that looks broken.
         val level = value.coerceIn(MIN_BRIGHTNESS, 1f)
         window.attributes = window.attributes.also { it.screenBrightness = level }
-        onFeedback("Brightness ${(level * 100).roundToInt()}%")
+        onFeedback("☀  ${(level * 100).roundToInt()}%", SIDE_LEFT)
     }
 
     private fun currentVolume(): Float {
@@ -284,25 +325,50 @@ class PlayerGestures(
         if (max <= 0) return
         val steps = (value.coerceIn(0f, 1f) * max).roundToInt()
         audio.setStreamVolume(AudioManager.STREAM_MUSIC, steps, 0)
-        onFeedback("Volume ${(steps * 100) / max}%")
+        onFeedback("♪  ${(steps * 100) / max}%", SIDE_RIGHT)
     }
 
-    private companion object {
-        const val DRAG_NONE = 0
-        const val DRAG_BRIGHTNESS = 1
-        const val DRAG_VOLUME = 2
-        const val DRAG_SEEK = 3
+    companion object {
+        private const val DRAG_NONE = 0
+        private const val DRAG_BRIGHTNESS = 1
+        private const val DRAG_VOLUME = 2
+        private const val DRAG_SEEK = 3
+
+        /**
+         * Which side of the picture a figure belongs on.
+         *
+         * A brightness reading that appears on the right of the screen while the finger is on the
+         * left reads as a coincidence rather than as an answer, so each gesture's own indicator
+         * comes up where the gesture is.
+         */
+        const val SIDE_LEFT = -1
+        const val SIDE_CENTRE = 0
+        const val SIDE_RIGHT = 1
+
+        /**
+         * How far a finger travels before the drag is classified, as a fraction of the picture's
+         * height. Short enough not to be felt as a delay, long enough that the first noisy sample
+         * off the digitiser is not what decides between volume and a seek.
+         */
+        private const val ARM_FRACTION = 0.04f
+
+        /** How much taller than it is wide a drag has to be to count as vertical. */
+        private const val VERTICAL_RATIO = 2f
+
+        /** The two sides a vertical drag belongs to, with a dead band between them. */
+        private const val LEFT_EDGE = 3f / 7f
+        private const val RIGHT_EDGE = 4f / 7f
 
         /** A drag from one edge of the picture to the other covers three minutes of film. */
-        const val SEEK_RANGE_MS = 180_000f
+        private const val SEEK_RANGE_MS = 180_000f
 
 
         /** A drag of 70 per cent of the screen's height covers the whole range. */
-        const val DRAG_RANGE = 0.7f
+        private const val DRAG_RANGE = 0.7f
 
-        const val MIN_BRIGHTNESS = 0.02f
+        private const val MIN_BRIGHTNESS = 0.02f
 
         /** How far apart the fingers have to travel before it counts as a deliberate pinch. */
-        const val PINCH_THRESHOLD = 0.15f
+        private const val PINCH_THRESHOLD = 0.15f
     }
 }
