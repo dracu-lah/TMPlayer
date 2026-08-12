@@ -727,7 +727,7 @@
 
 /* The menu, on a phone.
 
-   Below 840px the pages do not fit beside the mark and the two controls, so they
+   Below 900px the pages do not fit beside the mark and the two controls, so they
    move into a card the button opens. The button is drawn only when this script
    has run, which the js class on the root says: without it the stylesheet leaves
    the links on a second row, where they still work. */
@@ -775,11 +775,11 @@
     }
   });
 
-  /* Turning a phone on its side can put the layout back over 840px, where the
+  /* Turning a phone on its side can put the layout back over 900px, where the
      links belong in the bar again and a card left open would be a card floating
      under a row that already lists them. */
   window.addEventListener('resize', function () {
-    if (open() && window.innerWidth > 840) { set(false); }
+    if (open() && window.innerWidth > 900) { set(false); }
   });
 
   set(false);

@@ -1606,7 +1606,7 @@ summary:hover { color: var(--on-surface); }
 /* Two links the bar does not have room for on a desktop, and the menu does. Hiding a page
    behind a button is worse than four names being the sensible limit of a header row. */
 .only-menu { display: none; }
-@media (max-width: 840px) { .only-menu { display: block; } }
+@media (max-width: 900px) { .only-menu { display: block; } }
 
 /* ---------- Skeletons ----------
 
@@ -1808,7 +1808,7 @@ a.card:active,
 
 /* ---------- The menu ----------
 
-   Below 840px the four page names do not fit beside the mark, the star and the theme control,
+   Below 900px the five page names do not fit beside the mark, the star and the theme control,
    and a strip that scrolls sideways only tells you the rest exists if you happen to push it. So
    a phone gets what a phone expects: a button, and the pages as a list under it.
 
@@ -1843,7 +1843,7 @@ a.card:active,
   border-color: transparent;
 }
 
-@media (max-width: 840px) {
+@media (max-width: 900px) {
   /* No script: the pages take a second row, in a tray of their own that scrolls sideways. Four
      names loose on top of the background art read as spare text rather than as navigation. */
   .header-inner { flex-wrap: wrap; row-gap: 8px; min-height: 0; padding-block: 10px; position: relative; }
