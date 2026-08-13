@@ -37,7 +37,8 @@ with a gigabyte of RAM, so a cheap device is the target rather than an afterthou
 ## Install
 
 Grab the universal APK from [Releases](../../releases). The same file works on every supported
-architecture, so there is no CPU variant to identify.
+architecture, so there is no CPU variant to identify. Per-architecture APKs are published beside
+it and are roughly 40 per cent smaller, if you already know what your device is.
 
 On the TV, turn on Developer options (Settings, About, press *Build* seven times), enable network
 debugging, then:

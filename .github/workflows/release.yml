@@ -93,27 +93,43 @@ jobs:
       - name: Run unit tests
         run: ./gradlew :app:test
 
-      - name: Build signed universal APK
+      - name: Build signed APKs
         run: |
           ./gradlew :app:assembleRelease \
             -PtmVersionName=${{ steps.version.outputs.name }} \
             -PtmVersionCode=${{ steps.version.outputs.code }}
 
-      - name: Name the universal APK after the version
+      - name: Name the APKs after the version
         id: rename
         run: |
           mkdir -p dist
-          # One APK now: the ABI splits are gone, so Gradle writes app-release.apk rather than
-          # the per-ABI set and the universal one beside them. The published name is unchanged,
-          # because it is what the site links to and what every install guide tells people to
-          # type, and the file still is the universal build: every architecture the app supports.
-          cp app/build/outputs/apk/release/app-release.apk \
-            "dist/TMPlayer-${{ steps.version.outputs.name }}-universal.apk"
+          VERSION="${{ steps.version.outputs.name }}"
+          OUT=app/build/outputs/apk/release
+
+          # The universal APK keeps the name it has always had: it is what the site links to and
+          # what every install guide tells people to type. The per-ABI files sit beside it for
+          # anyone who knows their device and would rather not pull the other architecture down
+          # as well. Copied by an explicit list rather than a glob, so that a build which quietly
+          # stops producing one of them fails here instead of publishing a short release.
+          for ABI in universal arm64-v8a armeabi-v7a; do
+            SRC="$OUT/app-$ABI-release.apk"
+            if [ ! -f "$SRC" ]; then
+              echo "::error::$SRC was not built. Check the splits block in app/build.gradle.kts"
+              exit 1
+            fi
+            cp "$SRC" "dist/TMPlayer-$VERSION-$ABI.apk"
+          done
+
           # R8 renames every class, so a crash report from a released APK is unreadable without
           # the mapping for that exact build. It is generated once and then gone; publish it or
-          # the next stack trace from a user is undecodable.
+          # the next stack trace from a user is undecodable. One mapping covers every APK here:
+          # the splits differ only in which .so files they carry, not in any compiled Kotlin.
           cp app/build/outputs/mapping/release/mapping.txt \
-            "dist/mapping-${{ steps.version.outputs.name }}.txt"
+            "dist/mapping-$VERSION.txt"
+
+          # Sideloading is a copy-and-paste business and a truncated download looks like a broken
+          # app, so publish something people can check the file against.
+          ( cd dist && sha256sum ./*.apk > "SHA256SUMS-$VERSION.txt" )
           ls -la dist
 
       - name: Package GPL source and notices
@@ -166,12 +182,26 @@ jobs:
           body: |
             ## Install
 
-            Android TV only. The universal APK works on every supported TV architecture, so there
-            is no CPU variant to choose.
+            Take the universal APK unless you have a reason not to. It runs on every television,
+            stick and phone the app supports, and choosing wrongly below costs you the download
+            again.
 
             ```
             adb install TMPlayer-${{ steps.version.outputs.name }}-universal.apk
             ```
+
+            | File | For |
+            | --- | --- |
+            | `TMPlayer-${{ steps.version.outputs.name }}-universal.apk` | Everything. The one to take if you are unsure. |
+            | `TMPlayer-${{ steps.version.outputs.name }}-arm64-v8a.apk` | 64-bit ARM: Chromecast with Google TV, Shield, Fire TV Stick 4K, and any phone made since about 2017. Around 40 per cent smaller. |
+            | `TMPlayer-${{ steps.version.outputs.name }}-armeabi-v7a.apk` | The older 32-bit sticks. Around half the size. |
+
+            `adb shell getprop ro.product.cpu.abi` says which one a device wants. The 64-bit file
+            on a 32-bit stick is refused at install time with `INSTALL_FAILED_NO_MATCHING_ABIS`; the
+            32-bit file on a 64-bit device installs and works, just as a 32-bit process. Neither
+            mistake leaves you with an app that breaks later.
+
+            Check a download against `SHA256SUMS-${{ steps.version.outputs.name }}.txt`.
 
             See [INSTALL.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/INSTALL.md)
             for sideloading steps and the remote-control reference.

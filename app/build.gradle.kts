@@ -18,6 +18,22 @@ val keystoreProps = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+// The architectures a release build carries, and so both what the universal APK weighs and which
+// per-ABI APKs exist beside it. Overridable from the command line for a one-off build for hardware
+// this project does not otherwise ship for:
+//
+//     ./gradlew :app:assembleRelease -PtmAbis=x86_64
+//
+// It is a property rather than a longer default list on purpose. Adding an architecture here adds
+// it to the universal APK as well, and that file is what nearly everyone downloads: x86_64 alone
+// put 29 MB onto every transfer for emulators and a handful of Chromebooks, which is what made it
+// worth removing in the first place.
+val releaseAbis: List<String> = (findProperty("tmAbis") as String?)
+    ?.split(",")
+    ?.map { it.trim() }
+    ?.filter { it.isNotEmpty() }
+    ?: listOf("armeabi-v7a", "arm64-v8a")
+
 android {
     namespace = "com.tmplayer"
     compileSdk = 36
@@ -30,6 +46,11 @@ android {
         // Gradle properties. The literals below are what a local build gets, and they track the
         // most recent tag: leaving them behind means a local build cannot be installed over the
         // release it is meant to be debugging, since Android refuses the downgrade.
+        // Every APK in a release carries this same code, the universal one and the per-ABI ones
+        // alike. A store would want them to differ, so that it can offer the right file as an
+        // upgrade of the wrong one; nothing here goes to a store. For sideloading, equal codes are
+        // what lets somebody who took the universal file swap to the arm64 one without Android
+        // refusing it as a downgrade, which an offset scheme would cause in one direction.
         versionCode = (findProperty("tmVersionCode") as String?)?.toInt() ?: 11101
         versionName = (findProperty("tmVersionName") as String?) ?: "1.11.1"
 
@@ -54,12 +75,36 @@ android {
 
     }
 
-    // One APK, and only one. The per-ABI builds were four extra artifacts on every release for a
-    // sideloaded app whose viewers have to be told which file to take, and the guessing is worth
-    // more than the megabytes: a viewer who picks the wrong one gets an install that fails at the
-    // first video rather than at install time. The size that made them tempting came from the
-    // universal APK carrying architectures nobody asked for, which `ndk.abiFilters` above is the
-    // actual fix for.
+    // Per-ABI APKs beside the universal one. This was tried and dropped once, on the grounds that
+    // a viewer who takes the wrong file gets an install that fails at the first video rather than
+    // at install time. That is not what happens: an APK whose native libraries match no ABI on the
+    // device is refused by the package installer itself, with INSTALL_FAILED_NO_MATCHING_ABIS,
+    // before anything is unpacked. The wrong choice costs a download and a clear error, not a
+    // broken app, so the megabytes are worth having after all.
+    //
+    // Measured on 1.11.1, where 92 per cent of the download is native code:
+    //
+    //     universal     47.8 MB   both architectures, still the default download
+    //     arm64-v8a     29.2 MB   nearly every television, stick and phone made since 2017
+    //     armeabi-v7a   22.8 MB   the older 32-bit sticks
+    //
+    // The universal APK is unchanged and stays the file the site links to, because "works
+    // everywhere" is the right default for something people sideload onto a television with a
+    // remote control. The split files are for anyone who knows what their device is.
+    splits {
+        abi {
+            // Release only. Enabled unconditionally this would package five APKs on every debug
+            // build too, which for a 48 MB app is a slow way to change one line of Kotlin.
+            // Reading the task names at configuration time is what makes that possible; it is
+            // also the one thing here that would need rethinking if the configuration cache is
+            // ever switched on in gradle.properties.
+            isEnable = gradle.startParameter.taskNames.any { it.contains("Release") }
+            reset()
+            include(*releaseAbis.toTypedArray())
+            isUniversalApk = true
+        }
+    }
+
     packaging {
         jniLibs {
             // The modern default, written down because it is the answer to "how big is it after
@@ -100,7 +145,9 @@ android {
             // developers, because this filter is on the release build alone: a debug build still
             // carries every architecture, and the x86_64 emulator that BUILDING.md names as the
             // reference environment still runs one. Only the file the public downloads is cut.
-            ndk.abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+            //
+            // See releaseAbis above for the list itself and how to override it for a one-off.
+            ndk.abiFilters += releaseAbis
 
             isMinifyEnabled = true
             isShrinkResources = true

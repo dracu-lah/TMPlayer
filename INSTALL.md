@@ -7,7 +7,24 @@ Telegram API credentials to exist at all).
 
 Download `TMPlayer-<version>-universal.apk` from the Releases page. It contains the native code
 for every supported Android TV architecture, so the same file works on older sticks, newer 64-bit
-boxes and the Android TV emulator.
+boxes and the Android TV emulator. If you are not sure, this is the file to take.
+
+Two smaller APKs sit beside it, carrying one architecture each. Most of the download is native
+code, so dropping the architecture you do not have takes roughly 40 per cent off:
+
+| File | For |
+| --- | --- |
+| `-arm64-v8a.apk` | 64-bit ARM: Chromecast with Google TV, Shield, Fire TV Stick 4K, and any phone from about 2017 on |
+| `-armeabi-v7a.apk` | The older 32-bit sticks, including the original Mi TV Stick |
+
+`adb shell getprop ro.product.cpu.abi` reports which one a device wants. Guessing wrongly is safe
+in both directions, though they fail differently. The 64-bit file on a 32-bit stick is refused
+outright, at install time, with `INSTALL_FAILED_NO_MATCHING_ABIS`. The 32-bit file on a 64-bit
+device does install and does work, because a 64-bit Android runs 32-bit code, but it runs the app
+as a 32-bit process for no reason: take `arm64-v8a` if the device reports it.
+
+Each release also carries `SHA256SUMS-<version>.txt`. Check a download against it with
+`sha256sum -c` if you care to; a truncated transfer otherwise looks like a broken app.
 
 ## 2. Turn on debugging (once)
 
