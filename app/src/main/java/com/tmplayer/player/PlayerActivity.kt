@@ -10,12 +10,14 @@ import android.graphics.Color
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Rational
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.content.ContextCompat
@@ -23,6 +25,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
 import androidx.fragment.app.FragmentActivity
 import androidx.leanback.app.GuidedStepSupportFragment
@@ -139,6 +142,10 @@ class PlayerActivity : FragmentActivity() {
     private var statusReload: android.widget.Button? = null
     private var statusOpenWith: android.widget.Button? = null
 
+    /** The failure sheet's way out, and the video's own name on it. */
+    private var statusBack: android.widget.Button? = null
+    private var statusName: TextView? = null
+
     /** Set while [reloadFromScratch] is clearing the file, so a second press cannot race it. */
     private var reloading = false
 
@@ -244,6 +251,9 @@ class PlayerActivity : FragmentActivity() {
     private var recoveryAttempts = 0
     private var recoveryJob: Job? = null
 
+    /** Set once [resourceAgain] has asked Telegram for this video again, so it is tried only once. */
+    private var reSourced = false
+
     /**
      * "Resuming from 1:12:40", once the saved position has been read off disk.
      *
@@ -306,6 +316,10 @@ class PlayerActivity : FragmentActivity() {
         statusOpenWith = findViewById<android.widget.Button>(R.id.status_open_with).apply {
             setOnClickListener { openInAnotherApp() }
         }
+        statusBack = findViewById<android.widget.Button>(R.id.status_back).apply {
+            setOnClickListener { finish() }
+        }
+        statusName = findViewById(R.id.status_name)
         rebufferChip = findViewById(R.id.rebuffer_chip)
         rebufferText = findViewById(R.id.rebuffer_text)
         downloadChip = findViewById(R.id.download_chip)
@@ -1001,14 +1015,29 @@ class PlayerActivity : FragmentActivity() {
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean,
             ): AudioSink {
-                val matrices = AudioDownmix.matrices(FormFactor.isTv(context))
-                val processors = if (matrices.isEmpty()) {
+                val folds = AudioDownmix.folds(FormFactor.isTv(context))
+                val processors = if (folds.isEmpty()) {
                     emptyArray()
                 } else {
                     val mixer = ChannelMixingAudioProcessor()
-                    matrices.forEach { (input, output) ->
+                    folds.forEach { fold ->
                         mixer.putChannelMixingMatrix(
-                            ChannelMixingMatrix.createForConstantPower(input, output),
+                            when (fold) {
+                                is AudioDownmix.Fold.Untouched ->
+                                    ChannelMixingMatrix.create(fold.channels, fold.channels)
+
+                                is AudioDownmix.Fold.ConstantPower ->
+                                    ChannelMixingMatrix.createForConstantPower(
+                                        fold.channels,
+                                        AudioDownmix.STEREO,
+                                    )
+
+                                is AudioDownmix.Fold.Wide -> ChannelMixingMatrix(
+                                    fold.channels,
+                                    AudioDownmix.STEREO,
+                                    fold.coefficients,
+                                )
+                            },
                         )
                     }
                     arrayOf<AudioProcessor>(mixer)
@@ -1158,9 +1187,9 @@ class PlayerActivity : FragmentActivity() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            if (!recoverFrom(error)) {
-                showError(friendlyError(error), retryable = isRecoverable(error))
-            }
+            if (recoverFrom(error)) return
+            if (resourceAgain(error)) return
+            showError(friendlyError(error), retryable = !isHopeless(error))
         }
     }
 
@@ -1229,6 +1258,84 @@ class PlayerActivity : FragmentActivity() {
             live.playWhenReady = true
         }
         return true
+    }
+
+    /**
+     * Asks Telegram for this video again, for the failure that looks like a broken file and is not.
+     *
+     * A TDLib file id belongs to the session that issued it. Continue watching, the downloads list
+     * and the episode row all carry ids that were written down earlier, so a video opened after a
+     * restart, or after TDLib rebuilt its database, can be pointed at a file the current session
+     * knows nothing about. Every read then fails at once, nothing downloads, and the sheet says
+     * "This video wouldn't play" over a file that is perfectly fine: the id is what is stale, not
+     * the video. The same is true of an expired file reference, which is Telegram asking to be
+     * given the message again rather than the file.
+     *
+     * So before the sheet goes up, the message is fetched again and the id it carries now is used.
+     * Once per activity, and only when there is a message to fetch: a second attempt would be the
+     * same fetch with the same answer, and the sheet is then the honest one.
+     *
+     * Returns true when it has taken over, in which case the retry, or the sheet, comes later.
+     */
+    private fun resourceAgain(error: PlaybackException): Boolean {
+        if (reSourced || chatId == 0L || messageId == 0L) return false
+        reSourced = true
+        lifecycleScope.launch {
+            showStatus("Asking Telegram for this video again…")
+            val fresh = runCatching { Td.refreshMedia(chatId, messageId) }.getOrNull()
+            if (fresh == null || fresh.fileId == fileId) {
+                // Nothing new to try: the id in hand is the id Telegram gives, so the failure is
+                // about the video rather than about the name this app was calling it by.
+                showError(friendlyError(error), retryable = !isHopeless(error))
+                return@launch
+            }
+            fileId = fresh.fileId
+            fileSizeBytes = fresh.sizeBytes
+            // The old id is baked into the media source, so the player goes rather than re-prepares.
+            releasePlayerAndSurface()
+            retryPlayback()
+        }
+        return true
+    }
+
+    /**
+     * Takes down the player, its session and its surface, for the two callers that cannot re-prepare.
+     *
+     * Both [reloadFromScratch] and [resourceAgain] change the bytes underneath a media source that
+     * has already been built over them, and preparing over that reads the file the press was meant
+     * to get away from. The order matters: the view lets go of the player before the player is
+     * released, so nothing is ever holding a released one.
+     */
+    private fun releasePlayerAndSurface() {
+        mediaSession?.release()
+        mediaSession = null
+        touchSurface?.player = null
+        touchSurface?.let { findViewById<FrameLayout>(R.id.playback_container).removeView(it) }
+        touchSurface = null
+        player?.removeListener(playerListener)
+        player?.release()
+        player = null
+    }
+
+    /**
+     * Whether this failure is one no amount of trying can get past.
+     *
+     * Narrower than [isRecoverable] on purpose, and asked of a different thing. That one decides
+     * whether the app should quietly try again by itself, where being wrong costs a wasted attempt
+     * on every stall. This one decides whether to put a Reload button in front of the viewer, where
+     * being wrong costs them the only thing on the screen that could have worked: an unclassified
+     * error is very often a bad cache or a stale file id, which is exactly what Reload is for. Only
+     * a codec or a container this device genuinely cannot handle is hopeless, and there the sheet
+     * offers the app that can handle it instead.
+     */
+    private fun isHopeless(error: PlaybackException): Boolean = when (error.errorCode) {
+        PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+        PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+        PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+        PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
+        -> true
+
+        else -> false
     }
 
     /**
@@ -1843,8 +1950,109 @@ class PlayerActivity : FragmentActivity() {
         statusArt?.scaleY = 1f
     }
 
+    /**
+     * Stacks the loading and failure sheet, or lays it out in two columns where stacking will not
+     * fit.
+     *
+     * A phone held sideways has around 390dp of height, and the sheet is a poster, a title, a
+     * message and up to three buttons: stacked, that overflows, and the buttons that are the whole
+     * point of the failure screen end up below the bottom of the display. Turned on its side it is
+     * a picture on the left and everything readable on the right, which is both the shape that
+     * fits and the better looking of the two. A television, and a phone held upright, have the
+     * height and keep the stack.
+     *
+     * Applied every time the sheet is put up rather than once at startup, and it reads both ways.
+     * This activity chooses its own orientation and does not get recreated when it changes, so the
+     * screen it was built against is regularly not the screen it ends up on: measured at [onCreate]
+     * a video that opens upright and then turns sideways is measured while it is still upright.
+     */
+    private fun layOutSheetForThisScreen() {
+        val sheet = findViewById<LinearLayout>(R.id.status_sheet) ?: return
+        val column = findViewById<LinearLayout>(R.id.status_column) ?: return
+        val side = findViewById<LinearLayout>(R.id.status_side) ?: return
+        val sideBySide = sheetGoesSideways()
+        val wanted = if (sideBySide) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+        if (sheet.orientation == wanted) return
+        sheet.orientation = wanted
+
+        val density = resources.displayMetrics.density
+        fun px(dp: Float) = (dp * density).toInt()
+
+        // The picture side takes a narrow, fixed slice: it is there to be recognised, not read, and
+        // every point it does not use is a point the message and the buttons do.
+        side.updateLayoutParams<LinearLayout.LayoutParams> {
+            marginEnd = if (sideBySide) px(POSTER_GAP_DP) else 0
+        }
+        statusPoster?.updateLayoutParams<LinearLayout.LayoutParams> {
+            width = if (sideBySide) {
+                px(SIDE_POSTER_WIDTH_DP)
+            } else {
+                resources.getDimensionPixelSize(R.dimen.player_poster_width)
+            }
+            height = if (sideBySide) {
+                px(SIDE_POSTER_HEIGHT_DP)
+            } else {
+                resources.getDimensionPixelSize(R.dimen.player_poster_height)
+            }
+            // The gap between the two moves with them: what was space underneath the poster is now
+            // space to the right of the pair.
+            bottomMargin = if (sideBySide) px(NAME_GAP_DP) else px(POSTER_STACK_GAP_DP)
+        }
+        // The name wraps to the width of the picture it belongs to rather than running the width of
+        // the screen, which is what keeps the two of them reading as one thing on the left.
+        statusName?.apply {
+            maxWidth = if (sideBySide) px(SIDE_POSTER_WIDTH_DP) else px(NAME_STACK_MAX_WIDTH_DP)
+            maxLines = if (sideBySide) SIDE_NAME_LINES else STACK_NAME_LINES
+        }
+        // Weighted rather than wrapped, so a long message takes the width that is left over
+        // instead of pushing the picture off the side of the screen.
+        column.updateLayoutParams<LinearLayout.LayoutParams> {
+            width = if (sideBySide) 0 else LinearLayout.LayoutParams.WRAP_CONTENT
+            weight = if (sideBySide) 1f else 0f
+        }
+        // The bars run the width of the column they are in rather than a width chosen for a screen
+        // with nothing beside them, so a download's progress reads at a glance rather than as a
+        // short bar floating in the middle of the space it was given.
+        listOfNotNull(statusProgress, statusSpinner).forEach { bar ->
+            bar.updateLayoutParams<LinearLayout.LayoutParams> {
+                width = if (sideBySide) {
+                    LinearLayout.LayoutParams.MATCH_PARENT
+                } else {
+                    resources.getDimensionPixelSize(R.dimen.player_progress_width)
+                }
+            }
+        }
+        // Both columns read from the same left edge, and the words run into the width they have
+        // been given rather than sitting in a centred block with the middle of the screen empty on
+        // either side of them. Centred is right for a stacked sheet, where the column is the whole
+        // screen; beside a picture it is two things centred against nothing in particular.
+        val flow = if (sideBySide) Gravity.START or Gravity.CENTER_VERTICAL else Gravity.CENTER
+        sheet.gravity = flow
+        column.gravity = flow
+        side.gravity = flow
+        listOfNotNull(statusName, statusTitle, statusMeta, statusText, statusDetail).forEach {
+            it.gravity = if (sideBySide) Gravity.START else Gravity.CENTER
+        }
+    }
+
+    /**
+     * Whether the poster goes beside the words rather than above them.
+     *
+     * Asked of the device and nothing else. The obvious question, "is this window landscape?",
+     * cannot be asked here: the phone this was found on presents a portrait window rotated onto a
+     * landscape panel, so the activity's own window bounds, display metrics, rotation and
+     * Configuration.orientation all four answer "portrait" while the sheet is plainly being drawn
+     * sideways. Anything measured from inside the app is measuring the lie.
+     *
+     * A handset gets the compact shape either way round, and it is the better of the two upright as
+     * well: a small picture with the name beside it, and the whole of the failure and its buttons in
+     * one glance. A television has the room for the poster it was designed around and keeps it.
+     */
+    private fun sheetGoesSideways(): Boolean = !FormFactor.isTv(this)
+
     private fun showStatus(message: String) {
         openingFilm = true
+        layOutSheetForThisScreen()
         statusOverlay.visibility = View.VISIBLE
         statusIcon.visibility = View.GONE
         rebufferChip.visibility = View.GONE
@@ -1899,14 +2107,18 @@ class PlayerActivity : FragmentActivity() {
         statusSpinner?.visibility = View.GONE
         statusProgress.visibility = View.GONE
         statusDetail.visibility = View.GONE
-        statusTitle.text = "Can't play this"
-        statusText.text = if (retryable) {
-            message
-        } else {
-            "$message\n\nPress Back to pick something else."
+        layOutSheetForThisScreen()
+        statusName?.apply {
+            text = mediaTitle
+            visibility = if (mediaTitle.isBlank()) View.GONE else View.VISIBLE
         }
-        statusRetry?.visibility = if (retryable) View.VISIBLE else View.GONE
-        if (retryable) statusRetry?.requestFocus()
+        statusTitle.text = "Can't play this"
+        statusText.text = message
+
+        // Try again and Reload were two buttons for one intention, and the difference between them
+        // was a paragraph about caches. There is one button now, and the app works out which of the
+        // two things it means: see [reloadFromScratch].
+        statusRetry?.visibility = View.GONE
         showFailureActions(retryable)
         updateDownloadChip()
     }
@@ -1915,30 +2127,43 @@ class PlayerActivity : FragmentActivity() {
     private fun hideFailureActions() {
         statusReload?.visibility = View.GONE
         statusOpenWith?.visibility = View.GONE
+        statusBack?.visibility = View.GONE
+        statusName?.visibility = View.GONE
     }
 
     /**
-     * The two extra ways out of a failure, and the honesty each of them needs.
+     * Two buttons on a failure: the one that tries, and the one that leaves.
      *
-     * Reload is offered wherever Try again is, with the label saying which of the two things it is
-     * about to do, because a press that deletes a gigabyte and a press that does not should not
-     * read the same. The handover is offered even where Try again is not: a codec this device has
-     * not got is precisely the failure another app fixes, and it is the only useful button on that
-     * screen.
+     * This screen used to offer three, and the viewer was asked to tell Try again from Reload from
+     * scratch by reading a paragraph about caches. That is this app's problem to solve, not
+     * theirs. Reload is now the only attempt on offer, and what it does underneath depends on what
+     * is actually wrong: a fresh prepare where that is all it takes, and a delete and a fresh fetch
+     * where the bytes on disk are the thing that is broken. [Reload.plan] picks, exactly as before,
+     * and a video the viewer downloaded on purpose is still never deleted by it.
      *
-     * Both are settled from disk, so both arrive a moment after the sheet does. That is the right
-     * way round: the sheet is up and readable immediately, and a button that appears is better than
-     * one that is up and then changes its mind about what it will do.
+     * Go back is the other one, because "Press Back to pick something else" was an instruction
+     * about a key on a device that has no keys.
+     *
+     * A failure no attempt can fix, a codec this device has not got, is where Reload steps aside:
+     * pressing it would be honest work with a certain outcome. There the button is the handover to
+     * an app that does have the codec, which is settled from disk and so arrives a moment after
+     * the sheet does. The sheet is readable immediately either way.
      */
     private fun showFailureActions(retryable: Boolean) {
         statusReload?.visibility = View.GONE
         statusOpenWith?.visibility = View.GONE
+        statusBack?.apply {
+            visibility = View.VISIBLE
+            if (!retryable) requestFocus()
+        }
         if (fileId <= 0) return
         lifecycleScope.launch {
-            val plan = reloadPlan()
-            statusReload?.apply {
-                text = Reload.label(plan)
-                visibility = if (retryable) View.VISIBLE else View.GONE
+            if (retryable) {
+                statusReload?.apply {
+                    text = "Reload"
+                    visibility = View.VISIBLE
+                    requestFocus()
+                }
             }
 
             val availability = runCatching { Td.localFileAvailability(fileId) }
@@ -1946,6 +2171,9 @@ class PlayerActivity : FragmentActivity() {
             val downloaded = runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
             val state = ExternalPlayer.readiness(availability, downloaded)
             if (state == ExternalPlayer.Readiness.Nothing) return@launch
+            // Offered on the failure another app fixes, and left off the one it does not: a stream
+            // that would not start has nothing on disk worth handing anywhere.
+            if (retryable) return@launch
             statusOpenWith?.apply {
                 text = if (state == ExternalPlayer.Readiness.Complete) {
                     "Open in another app"
@@ -1953,6 +2181,7 @@ class PlayerActivity : FragmentActivity() {
                     "Open what's downloaded"
                 }
                 visibility = View.VISIBLE
+                requestFocus()
             }
             // Said on the sheet rather than in a dialog on the way out: the viewer is being asked
             // to choose between two buttons, and the difference between them is this sentence.
@@ -1961,9 +2190,6 @@ class PlayerActivity : FragmentActivity() {
                 statusDetail.text = caution
                 statusDetail.visibility = View.VISIBLE
             }
-            // Nothing else on this sheet can take focus when the failure is final, so the remote
-            // would otherwise land on a screen with no way in.
-            if (!retryable) statusOpenWith?.requestFocus()
         }
     }
 
@@ -2012,18 +2238,9 @@ class PlayerActivity : FragmentActivity() {
             // The player is thrown away rather than re-prepared: its media source is still holding
             // the descriptor of a file that has just been deleted, and preparing over that reads
             // the bytes this press was here to get rid of.
-            if (plan == Reload.Plan.StartOver) {
-                mediaSession?.release()
-                mediaSession = null
-                // The surface goes with it, in this order, so the view never holds a released
-                // player and [startPlayback] does not stack a second one over the first.
-                touchSurface?.player = null
-                touchSurface?.let { findViewById<FrameLayout>(R.id.playback_container).removeView(it) }
-                touchSurface = null
-                player?.removeListener(playerListener)
-                player?.release()
-                player = null
-            }
+            // The surface goes with it, so [startPlayback] does not stack a second one over the
+            // first: see [releasePlayerAndSurface].
+            if (plan == Reload.Plan.StartOver) releasePlayerAndSurface()
             retryPlayback()
         }
     }
@@ -2278,6 +2495,18 @@ class PlayerActivity : FragmentActivity() {
         private const val MAX_CAUSE_HOPS = 6
 
         private const val SUBTITLE_TEXT_FRACTION = 0.065f
+
+        /** The gap between the poster and the words, beside them and above them. */
+        private const val POSTER_GAP_DP = 24f
+        private const val POSTER_STACK_GAP_DP = 22f
+
+        /** The picture's slice of a sideways sheet, and the name that sits under it. */
+        private const val SIDE_POSTER_WIDTH_DP = 176f
+        private const val SIDE_POSTER_HEIGHT_DP = 99f
+        private const val NAME_GAP_DP = 10f
+        private const val SIDE_NAME_LINES = 3
+        private const val STACK_NAME_LINES = 2
+        private const val NAME_STACK_MAX_WIDTH_DP = 720f
 
         /** Anything at or above this is 4K territory, where a stick's decoder gives up. */
         private const val UHD_HEIGHT = 1600

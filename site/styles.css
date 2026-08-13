@@ -1147,11 +1147,22 @@ summary:hover { color: var(--on-surface); }
   min-width: 108px;
 }
 
-/* On a phone the showcase drops to one device. The reader is already holding
-   the second one. */
+/* On a phone the pairing stays, smaller. Dropping the handset here was the
+   tidy answer and the wrong one: "both screens" is the whole claim of the
+   page, and it was being made to every reader except the ones holding the
+   second screen. It leans on the same corner, at a size that reads as a phone
+   beside a television rather than as a second picture competing with it. */
 @media (max-width: 700px) {
-  .showcase { padding-bottom: 0; }
-  .showcase .device-phone { display: none; }
+  .showcase .device-phone {
+    right: 2%;
+    width: 21%;
+    min-width: 68px;
+  }
+  .device-phone { padding: 4px; border-radius: 22px; }
+  .device-phone .screen { border-radius: 18px; }
+  /* The camera dot is drawn at a fixed size, which at this scale is a blob
+     across the top of the screen rather than a detail on the bezel. */
+  .device-phone::after { display: none; }
 }
 
 .shot .device-phone { max-width: 280px; width: 100%; margin: 0 auto; }
@@ -1749,8 +1760,8 @@ a.card:active,
 @media (max-width: 560px) {
   body { font-size: 16.5px; }
   .frame { padding: 6px; border-radius: var(--shape-l); }
-  .device-phone { padding: 5px; border-radius: 30px; }
-  .device-phone .screen { border-radius: 25px; }
+  .shot .device-phone { padding: 5px; border-radius: 30px; }
+  .shot .device-phone .screen { border-radius: 25px; }
   .device-tv .screen { border-width: 5px; border-radius: 13px; }
   .abi { padding: 18px; }
   .abi-get { width: 100%; justify-content: space-between; }

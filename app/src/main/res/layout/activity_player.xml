@@ -64,14 +64,50 @@
             android:background="@drawable/bg_status_scrim"
             android:visibility="gone" />
 
+        <!--
+          The sheet scrolls, for the case where it does not fit.
+
+          It is centred and it is short, right up until a failure adds a message of two lines and
+          three buttons under it, on a phone held sideways, where there is around 390dp of height
+          to work with. That overflowed, and a FrameLayout clips rather than scrolls, so Reload and
+          Open in another app were on the screen in every sense except the one that matters. With
+          fillViewport the short case is unchanged: the child fills the viewport and centres itself
+          exactly as before.
+        -->
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:scrollbars="none">
+
+        <!--
+          The sheet itself: a poster and a column of words, stacked or side by side.
+
+          Stacked is the shape it was drawn for and the shape a television keeps. On a screen with
+          no room to stack, which is any phone held sideways, the same two parts are laid out as
+          two columns instead: picture on the left, everything that can be read or pressed on the
+          right. Which of the two is decided in code rather than by a layout-land folder, because
+          the rest of this file is four hundred lines that would then exist twice.
+        -->
         <LinearLayout
+            android:id="@+id/status_sheet"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:gravity="center"
             android:orientation="vertical"
             android:paddingLeft="@dimen/player_sheet_side"
-            android:paddingRight="@dimen/player_sheet_side">
+            android:paddingTop="16dp"
+            android:paddingRight="@dimen/player_sheet_side"
+            android:paddingBottom="16dp">
+
+            <!-- The picture side: the poster and, under it, the name of what it is. -->
+            <LinearLayout
+                android:id="@+id/status_side"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="vertical">
 
             <!--
               The poster, sharp, at the centre of the screen.
@@ -90,6 +126,37 @@
                 android:contentDescription="@null"
                 android:scaleType="centerCrop"
                 android:visibility="gone" />
+
+            <!--
+              The video's own name, under its poster, on the failure sheet only.
+
+              Everywhere else the name is the heading; a failure takes that heading for "Can't play
+              this", and the name went with it, leaving a screen that said something had gone wrong
+              without saying what it had gone wrong for. It sits above the warning rather than below
+              it because it is what the viewer chose, and the failure is what happened to it.
+            -->
+            <TextView
+                android:id="@+id/status_name"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="14dp"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:maxLines="2"
+                android:maxWidth="720dp"
+                android:textColor="@color/text_primary"
+                android:textSize="15sp"
+                android:visibility="gone" />
+
+            </LinearLayout>
+
+            <!-- Everything that is not the picture, so the two can be put beside each other. -->
+            <LinearLayout
+                android:id="@+id/status_column"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="vertical">
 
             <!--
               Shown only when the overlay is carrying an error, so the loading screen and the
@@ -220,6 +287,25 @@
                 android:textColor="@color/text_primary"
                 android:visibility="gone" />
 
+            <!--
+              The way out that is not another attempt.
+
+              "Press Back to pick something else" is a sentence about a key, and on a phone there
+              is no key: the gesture exists, but a viewer looking at a failure should not have to
+              know it. One button, doing what the sentence described.
+            -->
+            <Button
+                android:id="@+id/status_back"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:minWidth="160dp"
+                android:paddingLeft="28dp"
+                android:paddingRight="28dp"
+                android:text="Go back"
+                android:textColor="@color/text_primary"
+                android:visibility="gone" />
+
             <!-- The way out that does not involve this app's decoders at all. -->
             <Button
                 android:id="@+id/status_open_with"
@@ -232,7 +318,9 @@
                 android:text="Open in another app"
                 android:textColor="@color/text_primary"
                 android:visibility="gone" />
+            </LinearLayout>
         </LinearLayout>
+        </ScrollView>
     </FrameLayout>
 
     <!--
