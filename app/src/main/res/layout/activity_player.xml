@@ -198,6 +198,40 @@
                 android:text="Try again"
                 android:textColor="@color/text_primary"
                 android:visibility="gone" />
+
+            <!--
+              The second attempt, for when the first one is never going to work.
+
+              Try again re-prepares the same player over the same bytes. When the reason the video
+              will not play is the bytes themselves, that is the same failure a second time, and
+              the viewer has no way to tell those two cases apart. This one throws the local copy
+              away first. Stacked under Try again rather than beside it so a remote reaches all
+              three with one axis of the D-pad, in the order they should be tried.
+            -->
+            <Button
+                android:id="@+id/status_reload"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:minWidth="160dp"
+                android:paddingLeft="28dp"
+                android:paddingRight="28dp"
+                android:text="Reload from scratch"
+                android:textColor="@color/text_primary"
+                android:visibility="gone" />
+
+            <!-- The way out that does not involve this app's decoders at all. -->
+            <Button
+                android:id="@+id/status_open_with"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:minWidth="160dp"
+                android:paddingLeft="28dp"
+                android:paddingRight="28dp"
+                android:text="Open in another app"
+                android:textColor="@color/text_primary"
+                android:visibility="gone" />
         </LinearLayout>
     </FrameLayout>
 
