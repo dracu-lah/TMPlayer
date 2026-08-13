@@ -147,6 +147,10 @@
   --device-shell: #202429;
   --device-edge: rgba(15, 23, 42, 0.24);
   --device-inner: rgba(255, 255, 255, 0.16);
+  /* The app's own window colour, sampled from the screenshots themselves. It is
+     what sits behind the picture in a device frame, so the seam the browser
+     leaves at a rounded corner is the same colour as the picture it borders. */
+  --screen-fill: #f6fafd;
 
   --doodle-a: rgba(27, 100, 218, 0.13);
   --doodle-b: rgba(5, 107, 88, 0.12);
@@ -200,6 +204,7 @@
     --device-shell: #2c3138;
     --device-edge: #596069;
     --device-inner: rgba(255, 255, 255, 0.14);
+    --screen-fill: #0f1317;
 
     --doodle-a: rgba(157, 196, 255, 0.14);
     --doodle-b: rgba(134, 224, 200, 0.12);
@@ -254,6 +259,7 @@
   --device-shell: #2c3138;
   --device-edge: #596069;
   --device-inner: rgba(255, 255, 255, 0.14);
+  --screen-fill: #0f1317;
 
   --doodle-a: rgba(157, 196, 255, 0.14);
   --doodle-b: rgba(134, 224, 200, 0.12);
@@ -1068,26 +1074,49 @@ summary:hover { color: var(--on-surface); }
    contrasting tone, an elevation shadow, and an inner hairline between bezel
    and panel. */
 
+/* --screen-radius is the radius of the panel itself, the inside of the bezel.
+   Everything that has to sit on that curve reads it from here: the picture, and
+   the hairline drawn between bezel and panel. The hairline used to inherit the
+   radius instead, which on the television is the radius of the *outer* edge:
+   six pixels of bezel further out and so a wider arc than the panel it was
+   supposed to trace. The two curves crossed at each corner, and zooming in was
+   all it took to see the hairline run off the panel and stop dead. */
 .device { margin: 0; }
 .device .screen {
+  --screen-radius: 0px;
   position: relative;
   overflow: hidden;
-  background: var(--surface-container-lowest);
+  /* Not the page's lowest surface: that is #070809 in dark and pure white in
+     light, and the screenshots are neither. Wherever the browser's rounding
+     leaves the picture a fraction short of the box that clips it, that gap was
+     painted in a colour the screenshot does not contain, so a device frame had
+     a rim of the wrong dark inside its border. On a desktop the gap falls on a
+     whole pixel and closes; a phone renders at 2.625 or 2.75 device pixels per
+     CSS pixel, where it does not, which is why this only ever looked wrong on a
+     phone. Filling with the app's own window colour means the seam has nothing
+     to show. */
+  background: var(--screen-fill);
 }
 .device .screen::after {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: inherit;
+  border-radius: var(--screen-radius);
   box-shadow: inset 0 0 0 1px var(--device-inner);
   pointer-events: none;
 }
+/* The picture carries the corner as well as the box that clips it. A clip alone
+   is a hairline of it and the browser's own rounding: at some zoom levels, and
+   on a phone more than a desktop, the last row of image pixels lands outside the
+   rounded clip and the corner comes back square for a frame. Rounding the image
+   too means there is nothing square left to leak. */
 .device .screen img,
 .device .screen video {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: var(--screen-radius);
 }
 
 .device-tv .screen {
@@ -1095,8 +1124,13 @@ summary:hover { color: var(--on-surface); }
   /* A hint of a device, not a picture frame. The bezel was 12px, which at the
      size these sit on the page was thicker than the panel's own black border
      and turned every screenshot into a mounted print. */
-  border: 6px solid var(--device-shell);
-  border-radius: 16px;
+  --bezel: 6px;
+  --screen-radius: 10px;
+  border: var(--bezel) solid var(--device-shell);
+  /* Concentric with the panel: outer radius is the inner one plus the bezel it
+     sits behind, which is the only pair of numbers that keeps the two curves
+     parallel all the way round. */
+  border-radius: calc(var(--screen-radius) + var(--bezel));
   box-shadow: 0 0 0 1px var(--device-edge), var(--shadow-3);
 }
 .device-tv .stand {
@@ -1123,7 +1157,9 @@ summary:hover { color: var(--on-surface); }
   border-radius: 34px;
   box-shadow: 0 0 0 1px var(--device-edge), var(--shadow-3);
 }
-.device-phone .screen { aspect-ratio: 9 / 20; border-radius: 28px; }
+/* Same concentric pair as the television, with the 6px of padding standing in
+   for the bezel: a 34px shell around a 28px panel. */
+.device-phone .screen { aspect-ratio: 9 / 20; --screen-radius: 28px; border-radius: var(--screen-radius); }
 .device-phone::after {
   content: "";
   position: absolute;
@@ -1159,7 +1195,7 @@ summary:hover { color: var(--on-surface); }
     min-width: 68px;
   }
   .device-phone { padding: 4px; border-radius: 22px; }
-  .device-phone .screen { border-radius: 18px; }
+  .device-phone .screen { --screen-radius: 18px; }
   /* The camera dot is drawn at a fixed size, which at this scale is a blob
      across the top of the screen rather than a detail on the bezel. */
   .device-phone::after { display: none; }
@@ -1761,8 +1797,8 @@ a.card:active,
   body { font-size: 16.5px; }
   .frame { padding: 6px; border-radius: var(--shape-l); }
   .shot .device-phone { padding: 5px; border-radius: 30px; }
-  .shot .device-phone .screen { border-radius: 25px; }
-  .device-tv .screen { border-width: 5px; border-radius: 13px; }
+  .shot .device-phone .screen { --screen-radius: 25px; }
+  .device-tv .screen { --bezel: 5px; --screen-radius: 8px; }
   .abi { padding: 18px; }
   .abi-get { width: 100%; justify-content: space-between; }
   .faq > div { padding: 22px; }

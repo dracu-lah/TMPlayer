@@ -615,6 +615,24 @@
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var ticking = false;
 
+  /* The height the parallax measures against, held still on purpose. A phone
+     browser hides its address bar as you scroll down and brings it back as you
+     scroll up, and innerHeight changes by fifty-odd pixels each time it does.
+     Read live, that height put a step into the middle of a smooth scroll: the
+     devices jumped, settled, and jumped back on the way up. It is refreshed
+     when the width changes, which is a rotation or a real resize, and left
+     alone otherwise. */
+  var viewportW = window.innerWidth || 0;
+  var viewportH = window.innerHeight || 800;
+
+  function measure() {
+    var w = window.innerWidth || 0;
+    if (w !== viewportW) {
+      viewportW = w;
+      viewportH = window.innerHeight || 800;
+    }
+  }
+
   function frame() {
     ticking = false;
     var y = window.pageYOffset || document.documentElement.scrollTop || 0;
@@ -641,9 +659,19 @@
       }
     }
 
-    if (showcase && !reduced) {
+    /* Not while the reader is pinched in. A pinch moves the visual viewport
+       without moving the layout viewport, but the browser still reports scroll,
+       so every finger movement rewrote --shift and the two devices slid about
+       under a magnifying glass. Firefox on a phone was the worst of it: the
+       handset is the one with the larger travel, and it wandered across the
+       television while being looked at closely. Zoomed in, the parallax holds
+       whatever value it had when the pinch started. */
+    var zoomed = window.visualViewport && window.visualViewport.scale > 1.01;
+
+    if (showcase && !reduced && !zoomed) {
+      measure();
       var box = showcase.getBoundingClientRect();
-      var height = window.innerHeight || 800;
+      var height = viewportH;
       /* Minus one when the showcase is below the fold, plus one when it is
          above it, so the two devices separate gently as the page moves. */
       var shift = ((height - box.top) / (height + box.height)) * 2 - 1;
@@ -676,6 +704,11 @@
 
   window.addEventListener('scroll', onScroll, { passive: true });
   window.addEventListener('resize', onScroll, { passive: true });
+  /* And one more when the pinch ends, so the devices take up their place again
+     rather than waiting for the next scroll to notice. */
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', onScroll, { passive: true });
+  }
   frame();
 })();
 
