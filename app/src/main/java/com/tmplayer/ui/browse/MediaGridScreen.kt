@@ -1944,13 +1944,11 @@ private fun MediaActionsSheet(
                     },
                     icon = Icons.Filled.Close,
                     detail = when (downloading.stage) {
-                        OfflineDownloads.Stage.Queued -> "Waiting its turn. Nothing has been fetched yet."
-                        OfflineDownloads.Stage.Offline ->
-                            "It carries on by itself when the signal is back."
-                        OfflineDownloads.Stage.NoWifi ->
-                            "It starts by itself on Wi-Fi."
+                        OfflineDownloads.Stage.Queued -> "Waiting its turn"
+                        OfflineDownloads.Stage.Offline -> "Resumes with a signal"
+                        OfflineDownloads.Stage.NoWifi -> "Resumes on Wi-Fi"
                         else -> downloading.fraction
-                            ?.let { "${(it * 100).toInt()}% so far. What arrived is kept." }
+                            ?.let { "${(it * 100).toInt()}% so far, and kept" }
                     },
                     onSelect = {
                         OfflineDownloads.cancel(context, item.fileId)
@@ -1962,7 +1960,7 @@ private fun MediaActionsSheet(
                 MenuAction(
                     label = "Downloaded",
                     icon = TmIcons.Download,
-                    detail = "On this phone already. It plays without a connection.",
+                    detail = "Here already, no signal needed",
                     onSelect = { onDismiss() },
                 ),
             )
@@ -1970,7 +1968,7 @@ private fun MediaActionsSheet(
                 MenuAction(
                     label = "Download for later",
                     icon = TmIcons.Download,
-                    detail = "Keeps going with the app closed, so it is there without a signal",
+                    detail = "Kept here, no signal needed",
                     onSelect = {
                         // Android 13 counts a download's progress notification as one the viewer
                         // has to have agreed to. Asked here rather than at first launch, because
@@ -1986,7 +1984,7 @@ private fun MediaActionsSheet(
             MenuAction(
                 label = "Select videos",
                 icon = Icons.Filled.Check,
-                detail = "Tick several and download them in one go",
+                detail = "Download several at once",
                 onSelect = { onDismiss(); onSelectVideos() },
             ),
         )

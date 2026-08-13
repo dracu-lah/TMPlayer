@@ -124,7 +124,10 @@ fun TvMenu(
                         title,
                         style = MaterialTheme.typography.titleLarge,
                         color = Tone.text,
-                        maxLines = 1,
+                        // A file name is what a video is called here, and one line of it is a
+                        // prefix and three dots. The panel is bounded, so three lines is where it
+                        // stops.
+                        maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                     )
                     if (subtitle != null) {
@@ -179,11 +182,19 @@ private fun TouchMenuSheet(
         Column(Modifier.padding(bottom = 24.dp)) {
             // The heading is what the sheet is about rather than something that can be chosen, so
             // it sits in the padding a list section header sits in, not in a row.
-            Column(Modifier.padding(horizontal = 24.dp, vertical = 4.dp)) {
+            // The name is the whole reason the sheet knows what it is acting on, so it is given
+            // the size of a heading, the scheme's own text colour rather than whatever content
+            // colour the sheet inherits, and as many lines as it needs. A video's name is a file
+            // name, and a file name cut to one line is a row of dots that names nothing.
+            Column(
+                Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
                 M3Text(
                     title,
-                    style = M3MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
+                    style = M3MaterialTheme.typography.titleLarge,
+                    color = Tone.text,
+                    maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (subtitle != null) {
@@ -191,7 +202,7 @@ private fun TouchMenuSheet(
                         subtitle,
                         style = M3MaterialTheme.typography.bodyMedium,
                         color = Tone.muted,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
@@ -213,10 +224,12 @@ private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Mod
         ListItem(
             modifier = modifier.clickable(onClick = action.onSelect),
             headlineContent = {
-                M3Text(action.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                M3Text(action.label, maxLines = 2, overflow = TextOverflow.Ellipsis)
             },
+            // Two lines, because a phone's list is narrow enough that a sentence which fits on a
+            // television lands here as half a sentence and three dots.
             supportingContent = action.detail?.let {
-                { M3Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                { M3Text(it, maxLines = 2, overflow = TextOverflow.Ellipsis) }
             },
             leadingContent = {
                 M3Icon(action.icon, contentDescription = null, modifier = Modifier.size(24.dp))
