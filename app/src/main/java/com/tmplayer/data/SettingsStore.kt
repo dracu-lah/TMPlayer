@@ -95,6 +95,12 @@ private fun metaKey(chatId: Long, messageId: Long) =
 private fun downloadKey(chatId: Long, messageId: Long) =
     stringPreferencesKey("dl_${chatId}_$messageId")
 
+/** The same line again for a video nobody asked to keep, which playing one leaves behind. */
+private const val CACHED_PREFIX = "wc_"
+
+private fun cachedKey(chatId: Long, messageId: Long) =
+    stringPreferencesKey("$CACHED_PREFIX${chatId}_$messageId")
+
 class SettingsStore(private val context: Context) {
 
     /**
@@ -238,37 +244,68 @@ class SettingsStore(private val context: Context) {
     // ---- the watch cache ---------------------------------------------------------------------
 
     /**
-     * The one video playback left behind, or null when there is none.
+     * Every video playback has left behind, newest first.
      *
-     * There is exactly one of these on every device. It is not a list and there is no setting for
-     * how long it may become: playing something else replaces it. What the viewer downloaded on
-     * purpose is elsewhere, under `dl_`, and nothing in here can reach it.
+     * This used to be one record, on the theory that there is only ever one cached video: playing
+     * something else replaces it. The theory was right about what the disk should hold and wrong
+     * about what actually happens. Stepping from one episode to the next inside the player never
+     * went past the screen that does the replacing, so a series watched end to end left every
+     * episode on the device while this key still named the first of them. The Settings row quoted
+     * one film, the Downloads screen showed one film, and the other nine were two and a half
+     * gigabytes that nothing in the app could see, name or delete.
+     *
+     * So it is a list, written the same way downloads are, under `wc_`. [WatchCache] is what keeps
+     * it honest: it claims the video being played and gives up everything else at the same moment,
+     * so the list is normally one entry long and is never a lie when it is not.
      */
-    val cachedVideo: Flow<ResumeRecord?> = read { prefs -> decodeCached(prefs) }
+    val cachedVideos: Flow<List<ResumeRecord>> = read { prefs -> decodeCachedList(prefs) }
 
     /** Read once, at the moment a video is asked for, where a flow yet to emit would lie. */
-    suspend fun cachedVideoNow(): ResumeRecord? = decodeCached(context.prefs.data.first())
+    suspend fun cachedVideosNow(): List<ResumeRecord> = decodeCachedList(context.prefs.data.first())
 
-    private fun decodeCached(prefs: Preferences): ResumeRecord? {
-        val ids = prefs[CACHED_VIDEO_IDS] ?: return null
-        return ResumeRecord.decode(
-            key = ids,
-            encoded = prefs[CACHED_VIDEO],
-            positionMs = prefs[longPreferencesKey("resume_$ids")] ?: 0L,
-            durationMs = prefs[longPreferencesKey("duration_$ids")] ?: 0L,
-        )
-    }
+    /** The most recent of them, which is what the one-line places still want. */
+    val cachedVideo: Flow<ResumeRecord?> = read { prefs -> decodeCachedList(prefs).firstOrNull() }
+
+    suspend fun cachedVideoNow(): ResumeRecord? = cachedVideosNow().firstOrNull()
+
+    private fun decodeCachedList(prefs: Preferences): List<ResumeRecord> = buildList {
+        for ((key, value) in prefs.asMap()) {
+            val name = key.name
+            if (!name.startsWith(CACHED_PREFIX)) continue
+            val ids = name.removePrefix(CACHED_PREFIX)
+            val record = ResumeRecord.decode(
+                key = ids,
+                encoded = value as? String,
+                positionMs = prefs[longPreferencesKey("resume_$ids")] ?: 0L,
+                durationMs = prefs[longPreferencesKey("duration_$ids")] ?: 0L,
+            ) ?: continue
+            add(record)
+        }
+        // The single record older installs wrote, carried across so the first launch after an
+        // update still knows what it was holding rather than starting from an empty list beside
+        // a full disk.
+        val legacy = prefs[CACHED_VIDEO_IDS]
+        if (legacy != null && none { progressKey(it.chatId, it.messageId) == legacy }) {
+            ResumeRecord.decode(
+                key = legacy,
+                encoded = prefs[CACHED_VIDEO],
+                positionMs = prefs[longPreferencesKey("resume_$legacy")] ?: 0L,
+                durationMs = prefs[longPreferencesKey("duration_$legacy")] ?: 0L,
+            )?.let(::add)
+        }
+    }.sortedByDescending { it.updatedAt }
 
     /**
-     * Records what the cache is now holding, replacing whatever it held before.
+     * Records another video as one playback put on the disk.
      *
-     * The file the old record named is deleted by the caller, which is the only place that can:
-     * this store knows preferences and TDLib owns the bytes.
+     * Adding rather than replacing. The file the cache used to hold is deleted by [WatchCache],
+     * which is the only place that can: this store knows preferences and TDLib owns the bytes, and
+     * a record dropped before its file has actually gone is how the untrackable gigabytes happened
+     * in the first place.
      */
     suspend fun rememberCachedVideo(item: MediaItem, chatTitle: String) {
         context.prefs.edit { prefs ->
-            prefs[CACHED_VIDEO_IDS] = progressKey(item.chatId, item.messageId)
-            prefs[CACHED_VIDEO] = ResumeRecord.encode(
+            prefs[cachedKey(item.chatId, item.messageId)] = ResumeRecord.encode(
                 fileId = item.fileId,
                 title = item.title,
                 chatTitle = chatTitle,
@@ -279,11 +316,24 @@ class SettingsStore(private val context: Context) {
         }
     }
 
-    /** Forgets the cached video, once its file has actually gone. */
+    /** Forgets one cached video, once its file has actually gone. */
+    suspend fun forgetCachedVideo(chatId: Long, messageId: Long) {
+        context.prefs.edit { prefs ->
+            prefs.remove(cachedKey(chatId, messageId))
+            if (prefs[CACHED_VIDEO_IDS] == progressKey(chatId, messageId)) {
+                prefs.remove(CACHED_VIDEO_IDS)
+                prefs.remove(CACHED_VIDEO)
+            }
+        }
+    }
+
+    /** Forgets the lot, for the button that deletes every file behind them. */
     suspend fun forgetCachedVideo() {
-        context.prefs.edit {
-            it.remove(CACHED_VIDEO_IDS)
-            it.remove(CACHED_VIDEO)
+        context.prefs.edit { prefs ->
+            val doomed = prefs.asMap().keys.filter { it.name.startsWith(CACHED_PREFIX) }
+            for (key in doomed) prefs.remove(key)
+            prefs.remove(CACHED_VIDEO_IDS)
+            prefs.remove(CACHED_VIDEO)
         }
     }
 

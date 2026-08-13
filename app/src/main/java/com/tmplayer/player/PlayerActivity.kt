@@ -77,6 +77,7 @@ import com.tmplayer.data.TrackChoice
 import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.Td
 import com.tmplayer.data.Thumbnails
+import com.tmplayer.data.WatchCache
 import com.tmplayer.data.errorMessage
 import com.tmplayer.data.valueOrNull
 import dev.g000sha256.tdl.TdlClient
@@ -352,6 +353,7 @@ class PlayerActivity : FragmentActivity() {
         statusMeta?.visibility =
             if (statusMeta?.text.isNullOrBlank()) View.GONE else View.VISIBLE
         if (!FormFactor.isTv(this)) wireEpisodeButtons()
+        claimTheWatchCache()
         observeDownload()
         observeConnectivity()
         startResumeHeartbeat()
@@ -1439,6 +1441,38 @@ class PlayerActivity : FragmentActivity() {
                 previous = MediaName.previousEpisode(mediaTitle, candidates, ::nameOf),
                 next = MediaName.nextEpisode(mediaTitle, candidates, ::nameOf),
             )
+        }
+    }
+
+    /**
+     * Says that this video is what the cache is now holding, and gives up whatever it held before.
+     *
+     * Here rather than on the screen the video was started from, which is the whole point. The
+     * screens do this too, ahead of time, because they have to know whether the video will fit
+     * before they open the player at all. What they cannot do is see [playEpisode]: stepping from
+     * one episode to the next starts this activity directly, so on a series every episode after
+     * the first arrived without anything having decided what to give up for it, and they all
+     * stayed. Ten episodes, ten copies, and one record naming the first of them.
+     *
+     * Done off the main thread and without waiting: it is two preference writes and a delete of a
+     * file nothing is reading, and the video being opened must not wait behind any of it.
+     */
+    private fun claimTheWatchCache() {
+        val item = MediaItem(
+            chatId = chatId,
+            messageId = messageId,
+            fileId = fileId,
+            title = mediaTitle,
+            sizeBytes = fileSizeBytes,
+            durationSec = durationSec,
+            mimeType = "",
+            thumbnailFileId = 0,
+            miniThumbnail = null,
+            date = 0,
+            fileName = mediaTitle,
+        )
+        App.backgroundScope.launch {
+            runCatching { WatchCache.claim(this@PlayerActivity, item, chatTitle) }
         }
     }
 

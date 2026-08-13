@@ -32,6 +32,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -68,7 +69,9 @@ import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.ShareMedia
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.StorageSplit
 import com.tmplayer.data.Td
+import com.tmplayer.data.WatchCache
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.BigEmpty
 import com.tmplayer.ui.components.rememberToast
@@ -78,16 +81,41 @@ import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.launch
 
 /**
- * One downloaded video, as the screen knows it: the record that names it and what it holds on disk.
+ * Where a video on this device came from, which is the one thing a row has to be honest about.
  *
- * [bytes] is TDLib's figure rather than the size the message advertised, so a download that was
- * interrupted half way says how much of the disk it is actually using and not how much it wanted.
+ * They cost the same disk and they are deleted the same way, so they belong on the same screen. But
+ * one of them the viewer chose and the other one merely happened, and a viewer looking at two
+ * gigabytes they do not remember asking for is owed the difference in writing.
+ */
+private enum class Source { Kept, Cache }
+
+/**
+ * One video on this device, as the screen knows it: what names it, and what it holds on disk.
+ *
+ * [bytes] is what is actually on the disk rather than the size the message advertised, so a video
+ * that stopped half way says how much room it is really taking and not how much it wanted.
+ * [totalBytes] is what it wanted, kept beside it so a part-loaded row can say "710 MB of 1.4 GB"
+ * instead of leaving the viewer to wonder why the figures on this screen do not add up.
+ *
+ * [record] is absent for a video found on the disk with nothing in the app naming it. Those can be
+ * measured and deleted but not played or shared: without a record there is no message to ask
+ * Telegram about, and a Watch button that cannot watch is worse than no button.
  */
 private data class DownloadRow(
-    val record: ResumeRecord,
+    val key: String,
+    val title: String,
     val bytes: Long,
+    val totalBytes: Long,
     val complete: Boolean,
-)
+    val source: Source,
+    val record: ResumeRecord? = null,
+    val strayPath: String? = null,
+    val chatTitle: String = "",
+    val durationSec: Int = 0,
+) {
+    /** Part loaded and not being fetched by anything: bytes sitting there for no one. */
+    val partial: Boolean get() = !complete && bytes > 0
+}
 
 /**
  * Everything this phone has downloaded or is waiting for, what it costs, and the way to be rid of it.
@@ -120,25 +148,27 @@ fun DownloadsScreen(
     val activeMap by OfflineDownloads.active.collectAsStateWithLifecycle()
     val active = remember(activeMap) { activeMap.values.sortedBy { it.order } }
 
-    // The one video watching left behind. It is not a download and does not belong among them:
-    // nobody asked to keep it and the next press of Play replaces it. It is on this screen because
-    // it takes up room, and anything taking up room should be visible where room is managed.
-    val cached by settings.cachedVideo.collectAsStateWithLifecycle(initialValue = null)
-    var cachedBytes by remember { mutableStateOf(0L) }
+    // What watching left behind. None of it is a download and none of it was asked for, but every
+    // byte of it is on the disk, and anything taking up room belongs where room is managed.
+    val cached by settings.cachedVideos.collectAsStateWithLifecycle(initialValue = emptyList())
 
     var rows by remember { mutableStateOf<List<DownloadRow>>(emptyList()) }
+    // Which kinds of row are showing. Both, normally: the filter is for the viewer who came here
+    // because the app is two gigabytes and wants to see only the part they did not ask for.
+    var filter by rememberSaveable { mutableStateOf(ALL) }
     var disk by remember { mutableStateOf(DiskSpace.read(context)) }
-    var cacheBytes by remember { mutableStateOf(0L) }
+    // The same measurement the Settings card draws, so the two panels cannot disagree about a
+    // disk they are both looking at.
+    var split by remember { mutableStateOf(StorageSplit.EMPTY) }
     var confirmingClearAll by remember { mutableStateOf(false) }
     // Which row the viewer pressed Delete on, and therefore what the dialog is about to remove.
     // Held rather than a bare boolean: the dialog names the video, and a video deleted without
     // being named is the one thing this screen must never do by accident.
     var confirmingDelete by remember { mutableStateOf<DownloadRow?>(null) }
-    var confirmingCache by remember { mutableStateOf(false) }
-    // Which finished downloads are ticked, by the key their row is drawn with. Ids rather than
+    // Which finished downloads are ticked, by the key their row is drawn with. Keys rather than
     // rows, because the list behind them is rebuilt from TDLib whenever anything finishes and a
     // held row would go stale the moment it mattered.
-    var picked by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var picked by remember { mutableStateOf<Set<String>>(emptySet()) }
     var picking by remember { mutableStateOf(false) }
     // Which tab is up. Opens on whichever has something in it: somebody who just queued three
     // films wants the queue, and somebody opening this on a quiet phone wants what they have.
@@ -158,7 +188,18 @@ fun DownloadsScreen(
 
     // Only the rows that are still on the list. A selection that outlived its videos would offer
     // to delete or share things that are no longer there.
-    val chosen = remember(picked, rows) { rows.filter { it.record.fileId in picked } }
+    val chosen = remember(picked, rows) { rows.filter { it.key in picked } }
+
+    // What the viewer is actually looking at, and what the counts beside the filters say.
+    val shown = remember(rows, filter) {
+        when (filter) {
+            KEPT_ONLY -> rows.filter { it.source == Source.Kept }
+            CACHE_ONLY -> rows.filter { it.source == Source.Cache }
+            else -> rows
+        }
+    }
+    val keptCount = remember(rows) { rows.count { it.source == Source.Kept } }
+    val cacheCount = remember(rows) { rows.count { it.source == Source.Cache } }
 
     // A selection belongs to the tab it was made on. Carried across, its bar would sit under a
     // list of downloads it says nothing about.
@@ -169,27 +210,89 @@ fun DownloadsScreen(
     // the meantime reads as "you have downloaded nothing" rather than as "still counting".
     var counted by remember { mutableStateOf(false) }
 
+    /**
+     * Measures a record against the disk, or drops it when there is nothing there any more.
+     *
+     * A row is kept as soon as it holds a byte, finished or not. Half a film is half a gigabyte,
+     * and a part-loaded video that the screen hid was exactly the space a viewer came here looking
+     * for and could not find.
+     */
+    suspend fun measure(record: ResumeRecord, source: Source): DownloadRow? {
+        val bytes = runCatching { Td.localDownloadedBytes(record.fileId) }.getOrDefault(0L)
+        if (bytes <= 0) return null
+        val availability = runCatching { Td.localFileAvailability(record.fileId) }
+            .getOrDefault(LocalFileAvailability.Missing)
+        if (availability == LocalFileAvailability.Missing) return null
+        return DownloadRow(
+            key = "${source.name}_${record.chatId}_${record.messageId}",
+            title = record.title,
+            bytes = bytes,
+            totalBytes = record.sizeBytes,
+            complete = availability == LocalFileAvailability.Complete,
+            source = source,
+            record = record,
+            chatTitle = record.chatTitle,
+            durationSec = record.durationSec,
+        )
+    }
+
     suspend fun refresh(known: List<ResumeRecord>) {
-        cacheBytes = runCatching { Td.storageUsedBytes() }.getOrDefault(0L)
         disk = DiskSpace.read(context)
-        cachedBytes = settings.cachedVideoNow()
-            ?.let { runCatching { Td.localDownloadedBytes(it.fileId) }.getOrDefault(0L) }
-            ?: 0L
-        rows = known.mapNotNull { record ->
-            val bytes = runCatching { Td.localDownloadedBytes(record.fileId) }.getOrDefault(0L)
-            if (bytes <= 0) return@mapNotNull null
-            val availability = runCatching { Td.localFileAvailability(record.fileId) }
-                .getOrDefault(LocalFileAvailability.Missing)
-            if (availability == LocalFileAvailability.Missing) return@mapNotNull null
-            DownloadRow(record, bytes, availability == LocalFileAvailability.Complete)
-        }
+        split = runCatching { StorageSplit.measure(context) }.getOrDefault(StorageSplit.EMPTY)
+        val keptRows = known.mapNotNull { measure(it, Source.Kept) }
+        // A video can be both: watched first, downloaded afterwards. It is the viewer's then, and
+        // showing it twice would have them delete it from one row and find it still in the other.
+        val keptIds = known.map { it.fileId }.toSet()
+        val cachedRows = settings.cachedVideosNow()
+            .filter { it.fileId !in keptIds }
+            .mapNotNull { measure(it, Source.Cache) }
+
+        // Everything else on the disk. Older versions of this app kept one record for the whole
+        // watch cache and overwrote it on every play, so a series watched through left a copy of
+        // every episode with only the last of them named. Those files are still here, they are the
+        // bulk of what the app is reported to weigh, and until now nothing on this screen could
+        // point at a single one of them.
+        // Both the rows above and anything the queue is fetching this moment: a download in flight
+        // has bytes on the disk under a name of TDLib's choosing, and listing those as orphans
+        // would offer the viewer a Delete button on the video they are waiting for.
+        val accounted = ((keptRows + cachedRows).mapNotNull { it.record?.fileId } + activeMap.keys)
+            .distinct()
+            .mapNotNull { runCatching { Td.localPathAnyway(it) }.getOrNull() }
+            .toSet()
+        val strays = runCatching { WatchCache.strays(context, accounted) }.getOrDefault(emptyList())
+            .map { stray ->
+                DownloadRow(
+                    key = "stray_${stray.path}",
+                    title = stray.title,
+                    bytes = stray.bytes,
+                    totalBytes = 0,
+                    // Nothing here knows whether it finished, and claiming either way would be a
+                    // guess. The row says what it is instead: bytes, and where they came from.
+                    complete = true,
+                    source = Source.Cache,
+                    strayPath = stray.path,
+                    // The file's own name, but only where the title is not already it: two rows
+                    // both headed "Cached video" need something to tell them apart, and a row
+                    // that already carries the real name does not need it printed twice.
+                    chatTitle = if (stray.title == stray.fileName.substringBeforeLast('.')
+                            .replace('_', ' ').trim()
+                    ) {
+                        ""
+                    } else {
+                        stray.fileName
+                    },
+                )
+            }
+
+        rows = keptRows + cachedRows + strays
         counted = true
     }
 
     LaunchedEffect(history) { refresh(history) }
-    // The cached video changes without the download index moving at all: watching something else
-    // replaces it, and the card has to follow rather than keep quoting the film before it.
-    LaunchedEffect(cached?.fileId) { refresh(history) }
+    // The cache changes without the download index moving at all: watching something else adds to
+    // it and evicts the last of it, and the list has to follow rather than keep quoting the film
+    // before it.
+    LaunchedEffect(cached.map { it.fileId }) { refresh(history) }
     // A finished download writes its record and disappears from the queue in the same breath, so
     // the sizes on this screen are re-measured whenever the queue changes rather than only when a
     // new record appears: without it a video that completed while the screen was open moved from
@@ -199,8 +302,9 @@ fun DownloadsScreen(
     fun share(these: List<DownloadRow>) {
         scope.launch {
             val files = these.mapNotNull { row ->
-                val path = runCatching { Td.localFilePath(row.record.fileId) }.getOrNull()
-                path?.let { it to row.record.title }
+                val record = row.record ?: return@mapNotNull null
+                val path = runCatching { Td.localFilePath(record.fileId) }.getOrNull()
+                path?.let { it to record.title }
             }
             val intent = ShareMedia.intentFor(context, files)
             if (intent == null) {
@@ -215,26 +319,58 @@ fun DownloadsScreen(
         }
     }
 
+    /**
+     * Removes one video, whichever of the three kinds it is.
+     *
+     * The record is only forgotten once the file has actually gone. Forgetting it regardless would
+     * leave bytes on the disk with nothing on this screen pointing at them, which is the one state
+     * this screen exists to prevent, and is precisely how the app came to be holding gigabytes it
+     * could not name.
+     */
+    suspend fun removeOne(row: DownloadRow) {
+        val path = row.strayPath
+        if (path != null) {
+            WatchCache.forget(WatchCache.Stray(path, row.bytes, 0))
+            return
+        }
+        val record = row.record ?: return
+        runCatching { Td.deleteFile(record.fileId) }
+        val left = runCatching { Td.localDownloadedBytes(record.fileId) }.getOrDefault(0L)
+        if (left > 0) return
+        when (row.source) {
+            Source.Kept -> settings.forgetDownload(record.chatId, record.messageId)
+            Source.Cache -> settings.forgetCachedVideo(record.chatId, record.messageId)
+        }
+    }
+
     fun delete(row: DownloadRow) {
         scope.launch {
-            runCatching { Td.deleteFile(row.record.fileId) }
-            // Only forget the row once the file has actually gone. Forgetting it regardless would
-            // leave bytes on the disk with nothing on this screen pointing at them, which is the
-            // one state this screen exists to prevent.
-            val left = runCatching { Td.localDownloadedBytes(row.record.fileId) }.getOrDefault(0L)
-            if (left <= 0) settings.forgetDownload(row.record.chatId, row.record.messageId)
+            removeOne(row)
             refresh(history)
         }
     }
 
     fun deleteMany(these: List<DownloadRow>) {
         scope.launch {
-            for (row in these) {
-                runCatching { Td.deleteFile(row.record.fileId) }
-                val left = runCatching { Td.localDownloadedBytes(row.record.fileId) }.getOrDefault(0L)
-                if (left <= 0) settings.forgetDownload(row.record.chatId, row.record.messageId)
-            }
+            for (row in these) removeOne(row)
             leavePicking()
+            refresh(history)
+        }
+    }
+
+    /**
+     * Promotes a cached video into a download, so the next thing watched cannot take it away.
+     *
+     * The bytes are already here; this only changes whose they are. Offered because a viewer who
+     * finds last night's film on this screen and wants to keep it should not have to download it a
+     * second time to say so.
+     */
+    fun keep(row: DownloadRow) {
+        val record = row.record ?: return
+        scope.launch {
+            settings.noteDownload(record.toMediaItem(), record.chatTitle)
+            settings.forgetCachedVideo(record.chatId, record.messageId)
+            toast("\"${record.title}\" is yours now. Watching something else will not remove it.")
             refresh(history)
         }
     }
@@ -264,9 +400,12 @@ fun DownloadsScreen(
                 },
                 actions = {
                     if (picking) {
+                        // Everything the filter is showing, which is what "all" means with a
+                        // filter on: ticking Cached and pressing this must not quietly take in
+                        // the downloads the viewer has just asked not to see.
                         TextButton(
-                            onClick = { picked = rows.map { it.record.fileId }.toSet() },
-                            enabled = chosen.size < rows.size,
+                            onClick = { picked = shown.map { it.key }.toSet() },
+                            enabled = chosen.size < shown.size,
                         ) {
                             Text("Select all")
                         }
@@ -278,7 +417,7 @@ fun DownloadsScreen(
                     // Offered on what TDLib is holding rather than on what this list shows. An
                     // install that downloaded videos before the index existed has bytes and no
                     // rows, and hiding the button there left the space unreachable.
-                    if ((rows.isNotEmpty() || cacheBytes >= UNLISTED_FLOOR) && tab == COMPLETED) {
+                    if ((rows.isNotEmpty() || split.totalBytes >= UNLISTED_FLOOR) && tab == COMPLETED) {
                         TextButton(onClick = { confirmingClearAll = true }) {
                             Text("Delete all")
                         }
@@ -386,55 +525,55 @@ fun DownloadsScreen(
 
                 item {
                     StorageSummary(
-                        downloadBytes = rows.sumOf { it.bytes },
-                        watchCacheBytes = cachedBytes,
-                        cacheBytes = cacheBytes,
+                        split = split,
                         freeBytes = disk.freeBytes,
                         totalBytes = disk.totalBytes,
                     )
                 }
-                // Above the downloads, not among them, and never selectable with them: a bulk
-                // delete aimed at the videos the viewer chose to keep must not quietly take in a
-                // video they never chose at all, or the other way about.
-                cached?.takeIf { cachedBytes > 0 }?.let { record ->
-                    item(key = "watch_cache") {
-                        WatchCacheCard(
-                            record = record,
-                            bytes = cachedBytes,
-                            onPlay = { onPlay(record) },
-                            onDelete = { confirmingCache = true },
+                // Only once there is a mixture worth separating. With downloads alone, or cache
+                // alone, three chips are three things to read that all say the same thing.
+                if (keptCount > 0 && cacheCount > 0 && !picking) {
+                    item(key = "filters") {
+                        Filters(
+                            filter = filter,
+                            keptCount = keptCount,
+                            cacheCount = cacheCount,
+                            onPick = { filter = it },
                         )
                     }
                 }
-                items(rows, key = { "${it.record.chatId}_${it.record.messageId}" }) { row ->
+                items(shown, key = { it.key }) { row ->
                     DownloadCard(
                         row = row,
                         picking = picking,
-                        checked = row.record.fileId in picked,
-                        onPlay = { onPlay(row.record) },
+                        checked = row.key in picked,
+                        onPlay = { row.record?.let(onPlay) },
                         onShare = { share(listOf(row)) },
+                        onKeep = { keep(row) },
                         onDelete = { confirmingDelete = row },
                         onToggle = {
-                            picked = if (row.record.fileId in picked) {
-                                picked - row.record.fileId
-                            } else {
-                                picked + row.record.fileId
-                            }
+                            picked = if (row.key in picked) picked - row.key else picked + row.key
                         },
                         // A hold is how a list of anything on a phone starts a selection, and it
                         // saves walking to the top bar for the first tick.
                         onHold = {
                             picking = true
-                            picked = picked + row.record.fileId
+                            picked = picked + row.key
                         },
                     )
                 }
-                if (counted && rows.isEmpty()) {
+                if (counted && shown.isEmpty()) {
                     item {
                         Box(Modifier.fillParentMaxHeight(0.6f)) {
                             BigEmpty(
-                                "Nothing downloaded yet. Videos you keep are held here until you " +
-                                    "delete them.",
+                                when (filter) {
+                                    KEPT_ONLY -> "Nothing downloaded yet. Videos you keep are " +
+                                        "held here until you delete them."
+                                    CACHE_ONLY -> "Nothing cached. Playing a video leaves a copy " +
+                                        "here so you can carry on watching it."
+                                    else -> "Nothing downloaded yet. Videos you keep are held " +
+                                        "here until you delete them."
+                                },
                                 icon = TmIcons.Download,
                             )
                         }
@@ -447,10 +586,15 @@ fun DownloadsScreen(
     confirmingDelete?.let { row ->
         AlertDialog(
             onDismissRequest = { confirmingDelete = null },
-            title = { Text("Delete this download?") },
+            title = {
+                Text(
+                    if (row.source == Source.Cache) "Delete this cached video?" else
+                        "Delete this download?",
+                )
+            },
             text = {
                 Text(
-                    "\"${row.record.title}\" frees ${StreamStats.formatBytes(row.bytes)}. Nothing " +
+                    "\"${row.title}\" frees ${StreamStats.formatBytes(row.bytes)}. Nothing " +
                         "is removed from Telegram, so you can download it again.",
                 )
             },
@@ -464,39 +608,6 @@ fun DownloadsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { confirmingDelete = null }) { Text("Keep it") }
-            },
-        )
-    }
-
-    if (confirmingCache) {
-        AlertDialog(
-            onDismissRequest = { confirmingCache = false },
-            title = { Text("Delete the cached video?") },
-            text = {
-                Text(
-                    "This frees ${StreamStats.formatBytes(cachedBytes)}. Opening it again " +
-                        "downloads it again, and your own downloads are untouched.",
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmingCache = false
-                    val doomed = cached
-                    scope.launch {
-                        if (doomed != null) {
-                            runCatching { Td.deleteFile(doomed.fileId) }
-                            val left = runCatching { Td.localDownloadedBytes(doomed.fileId) }
-                                .getOrDefault(0L)
-                            if (left <= 0) settings.forgetCachedVideo()
-                        }
-                        refresh(history)
-                    }
-                }) {
-                    Text("Delete")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmingCache = false }) { Text("Keep it") }
             },
         )
     }
@@ -536,11 +647,19 @@ fun DownloadsScreen(
     if (confirmingClearAll) {
         AlertDialog(
             onDismissRequest = { confirmingClearAll = false },
-            title = { Text("Delete every download?") },
+            title = { Text("Delete everything on this device?") },
             text = {
+                // The figure TDLib reports, which is every byte the app is holding rather than the
+                // sum of the rows. The button empties the lot, so quoting the rows would promise
+                // less than it takes: it was doing exactly that on a device where most of the
+                // space was cached episodes that never made it onto the list.
+                val freed = maxOf(rows.sumOf { it.bytes }, split.totalBytes)
                 Text(
-                    "This frees ${StreamStats.formatBytes(maxOf(rows.sumOf { it.bytes }, cacheBytes))}. " +
-                        "Nothing is removed from Telegram, so you can download any of them again.",
+                    "This frees ${StreamStats.formatBytes(freed)}: " +
+                        "${keptCount.videos("download")} and " +
+                        "${cacheCount.videos("cached video")}, along with the previews TMPlayer " +
+                        "is holding. Nothing is removed from Telegram, so you can download any " +
+                        "of them again.",
                 )
             },
             confirmButton = {
@@ -548,6 +667,13 @@ fun DownloadsScreen(
                     confirmingClearAll = false
                     scope.launch {
                         runCatching { Td.clearMediaCache() }
+                        // Anything TDLib would not part with, taken off the disk directly. It is
+                        // the difference between a button that says 2.30 GB and frees 2.30 GB and
+                        // one that says it and frees a third of it.
+                        for (row in rows) {
+                            val path = row.strayPath ?: continue
+                            WatchCache.forget(WatchCache.Stray(path, row.bytes, 0))
+                        }
                         settings.forgetAllDownloads()
                         settings.forgetCachedVideo()
                         refresh(emptyList())
@@ -618,9 +744,7 @@ private fun SectionHeading(text: String) {
  */
 @Composable
 private fun StorageSummary(
-    downloadBytes: Long,
-    watchCacheBytes: Long,
-    cacheBytes: Long,
+    split: StorageSplit,
     freeBytes: Long,
     totalBytes: Long,
 ) {
@@ -635,22 +759,30 @@ private fun StorageSummary(
     ) {
         Column(Modifier.padding(16.dp)) {
             Text(
-                "${StreamStats.formatBytes(downloadBytes)} in downloads",
+                "TMPlayer has ${StreamStats.formatBytes(split.totalBytes)} on this phone",
                 style = MaterialTheme.typography.titleMedium,
             )
-            if (watchCacheBytes > 0) {
-                Text(
-                    "${StreamStats.formatBytes(watchCacheBytes)} more in the cached video",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Spacer(Modifier.height(6.dp))
+            // The three parts, named the same and in the same order as the Settings card, so a
+            // viewer reading both is reading one story about their disk rather than two.
             Text(
-                // The cache figure is the wider one: it counts the pictures and thumbnails the
-                // browse screens keep as well, which the list below deliberately does not show.
+                // A line for each part that has anything in it. "0 MB in pictures and previews"
+                // is a line the viewer has to read before they can ignore it.
+                listOfNotNull(
+                    "${StreamStats.formatBytes(split.downloadBytes)} in downloads"
+                        .takeIf { split.downloadBytes > 0 },
+                    "${StreamStats.formatBytes(split.cachedBytes)} cached from playback"
+                        .takeIf { split.cachedBytes > 0 },
+                    "${StreamStats.formatBytes(split.otherBytes)} in pictures and previews"
+                        .takeIf { split.otherBytes > 0 },
+                ).joinToString("\n"),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
                 "${StreamStats.formatBytes(freeBytes)} free of " +
-                    "${StreamStats.formatBytes(totalBytes)}  ·  " +
-                    "${StreamStats.formatBytes(cacheBytes)} of storage used by TMPlayer",
+                    StreamStats.formatBytes(totalBytes),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -786,59 +918,39 @@ private fun IconOnlyAction(
 }
 
 /**
- * The one film watching left behind: what it is, what it costs, and the way to have the space back.
+ * Which kinds of video the list is showing, with what each kind costs written on the chip.
  *
- * Deliberately not a [DownloadCard]. It carries a line saying what it is, because a viewer who sees
- * a video they never downloaded sitting on the Downloads screen is owed an explanation, and it has
- * no tick box: it is not part of the selection the bulk buttons act on, and it is replaced by the
- * next thing they watch whether they delete it or not.
+ * Shown only where there is a mixture. The counts are the point: a viewer opening this screen
+ * because the app weighs two gigabytes wants to know, in one glance, how much of that they chose.
  */
 @Composable
-private fun WatchCacheCard(
-    record: ResumeRecord,
-    bytes: Long,
-    onPlay: () -> Unit,
-    onDelete: () -> Unit,
+private fun Filters(
+    filter: Int,
+    keptCount: Int,
+    cacheCount: Int,
+    onPick: (Int) -> Unit,
 ) {
-    val details = listOfNotNull(
-        StreamStats.formatBytes(bytes).takeIf { bytes > 0 },
-        MediaMapper.formatDuration(record.durationSec).ifBlank { null },
-        record.chatTitle.ifBlank { null },
-    ).joinToString(DOT)
-
-    RowCard {
-        Text(
-            "Cached from watching",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        FilterChip(
+            selected = filter == ALL,
+            onClick = { onPick(ALL) },
+            label = { Text("All ${keptCount + cacheCount}") },
         )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            record.title,
-            style = MaterialTheme.typography.titleMedium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
+        FilterChip(
+            selected = filter == KEPT_ONLY,
+            onClick = { onPick(KEPT_ONLY) },
+            label = { Text("Downloads $keptCount") },
         )
-        if (details.isNotBlank()) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                details,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Kept so you can carry on watching. The next video you play replaces it.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        FilterChip(
+            selected = filter == CACHE_ONLY,
+            onClick = { onPick(CACHE_ONLY) },
+            label = { Text("Cached $cacheCount") },
         )
-        CardActions {
-            PrimaryAction("Watch", Icons.Filled.PlayArrow, onPlay)
-            SecondaryAction("Delete", Icons.Filled.Delete, onDelete, danger = true)
-        }
     }
 }
 
@@ -856,17 +968,25 @@ private fun DownloadCard(
     checked: Boolean,
     onPlay: () -> Unit,
     onShare: () -> Unit,
+    onKeep: () -> Unit,
     onDelete: () -> Unit,
     onToggle: () -> Unit,
     onHold: () -> Unit,
 ) {
     val details = listOfNotNull(
-        StreamStats.formatBytes(row.bytes).takeIf { row.bytes > 0 },
-        MediaMapper.formatDuration(row.record.durationSec).ifBlank { null },
-        row.record.chatTitle.ifBlank { null },
-        // A part-downloaded file still occupies its bytes, and that is the row a viewer looking
-        // for space is most likely to want gone.
-        if (row.complete) null else "Part downloaded",
+        // A part-loaded video says both figures. "710 MB" on its own reads as the size of the
+        // video, and the viewer is left wondering why it will not play; "710 MB of 1.4 GB" says
+        // what is on the disk and what it would take to finish, in the same breath.
+        if (row.partial && row.totalBytes > row.bytes) {
+            "${StreamStats.formatBytes(row.bytes)} of ${StreamStats.formatBytes(row.totalBytes)}"
+        } else {
+            StreamStats.formatBytes(row.bytes).takeIf { row.bytes > 0 }
+        },
+        MediaMapper.formatDuration(row.durationSec).ifBlank { null },
+        row.chatTitle.ifBlank { null },
+        // A part-loaded file still occupies its bytes, and that is the row a viewer looking for
+        // space is most likely to want gone.
+        if (row.partial) "Part downloaded" else null,
     ).joinToString(DOT)
 
     RowCard(
@@ -880,8 +1000,19 @@ private fun DownloadCard(
                 Spacer(Modifier.width(8.dp))
             }
             Column(Modifier.weight(1f)) {
+                // Said before the title, not after it. A viewer scanning this list for the two
+                // gigabytes they did not ask for reads down the left edge, and a video they never
+                // downloaded sitting on the Downloads screen is owed the explanation first.
+                if (row.source == Source.Cache) {
+                    Text(
+                        "Cached from playback",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
                 Text(
-                    row.record.title,
+                    row.title,
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -896,14 +1027,41 @@ private fun DownloadCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                if (row.source == Source.Cache) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        if (row.record == null) {
+                            "Left behind by a video you watched. Safe to delete."
+                        } else {
+                            "Kept so you can carry on watching. Watching something else " +
+                                "replaces it."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
         // Hidden while picking: the card is a tick target then, and a Delete button inside
         // something the viewer is tapping to select is a mistake waiting to be made.
         if (!picking) {
             CardActions {
+                // Nothing in the app knows which video this file is, so there is nothing to open
+                // and nothing to hand another app. Delete is the whole of what it can offer, and
+                // it fills the row rather than sitting beside two buttons that do not work.
+                if (row.record == null) {
+                    SecondaryAction("Delete", Icons.Filled.Delete, onDelete, danger = true)
+                    return@CardActions
+                }
                 PrimaryAction("Watch", Icons.Filled.PlayArrow, onPlay)
-                SecondaryAction("Share", TmIcons.Share, onShare)
+                // The cache is the one thing on this screen that goes away by itself, so what it
+                // needs is the button that stops that. A download already belongs to the viewer,
+                // and Share is the useful third thing to do with one.
+                if (row.source == Source.Cache) {
+                    SecondaryAction("Keep", TmIcons.Download, onKeep)
+                } else {
+                    SecondaryAction("Share", TmIcons.Share, onShare)
+                }
                 IconOnlyAction("Delete", Icons.Filled.Delete, onDelete, danger = true)
             }
         }
@@ -1036,6 +1194,15 @@ private fun ActiveDownloadCard(
 /** The two tabs, as indices, because that is what [TabRow] counts in. */
 private const val ONGOING = 0
 private const val COMPLETED = 1
+
+/** The three filters, in the order their chips are drawn. */
+private const val ALL = 0
+private const val KEPT_ONLY = 1
+private const val CACHE_ONLY = 2
+
+/** "1 download", "3 downloads": counted, so a dialog does not have to say "download(s)". */
+private fun Int.videos(noun: String): String =
+    if (this == 1) "1 $noun" else "$this ${noun}s"
 
 /** The separator these rows join their figures with, spaced as the rest of the app spaces it. */
 private const val DOT = "  ·  "

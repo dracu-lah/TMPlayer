@@ -435,50 +435,6 @@ object Td {
         current?.getStorageStatisticsFast()?.valueOrNull?.filesSize ?: 0L
 
     /**
-     * The same total, split into what the card can name.
-     *
-     * `getStorageStatistics` walks the cache directory, so it is the slower of the two calls and
-     * is only made for the Settings screen. `chatLimit = 0` asks for no per-chat detail: the rows
-     * are still returned grouped by chat, but with none of them named, which is all this needs.
-     */
-    suspend fun storageBreakdown(): StorageBreakdown {
-        val td = current ?: return StorageBreakdown.EMPTY
-        val stats = td.getStorageStatistics(chatLimit = 0).valueOrNull ?: return StorageBreakdown.EMPTY
-        val rows = stats.byChat.flatMap { chat ->
-            chat.byFileType.map { row -> nameOf(row.fileType) to row.size }
-        }
-        return StorageBreakdown.of(rows)
-    }
-
-    /**
-     * The name of a TDLib file type, written out rather than read off the class.
-     *
-     * This was `fileType::class.java.simpleName`, which is correct in a debug build and worthless
-     * in a release one: R8 renames every class it is not told to keep, so on the device the type
-     * names arrived as "a", "b", "c", nothing matched, and every byte the app held was filed under
-     * "everything else". The Settings card therefore read "Video 0 MB, Pictures 0 MB, Everything
-     * else 4.18 GB" on a stick holding four gigabytes of films, and the Delete button, which acts
-     * on the video figure, offered to free nothing at all. Which is precisely the state a viewer
-     * ends up in with a full disk and no way to empty it.
-     *
-     * Matching on the type itself cannot be renamed away.
-     */
-    private fun nameOf(type: FileType): String = when (type) {
-        is FileTypeVideo -> "FileTypeVideo"
-        is FileTypeDocument -> "FileTypeDocument"
-        is FileTypeAnimation -> "FileTypeAnimation"
-        is FileTypeVideoNote -> "FileTypeVideoNote"
-        is FileTypeVideoStory -> "FileTypeVideoStory"
-        is FileTypeAudio -> "FileTypeAudio"
-        is FileTypePhoto -> "FileTypePhoto"
-        is FileTypePhotoStory -> "FileTypePhotoStory"
-        is FileTypeThumbnail -> "FileTypeThumbnail"
-        is FileTypeProfilePhoto -> "FileTypeProfilePhoto"
-        is FileTypeSticker -> "FileTypeSticker"
-        else -> "FileTypeOther"
-    }
-
-    /**
      * The video a stored row points at, asked for again from Telegram.
      *
      * Continue watching keeps a TDLib file id, and a TDLib file id is only good for the instance
@@ -540,6 +496,20 @@ object Td {
      */
     suspend fun localFilePath(fileId: Int): String? {
         if (localFileAvailability(fileId) != LocalFileAvailability.Complete) return null
+        val td = current ?: return null
+        return td.getFile(fileId).valueOrNull?.local?.path?.takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * Where a file is on disk, finished or not.
+     *
+     * [localFilePath] deliberately refuses a partial file, because the apps it hands a video to
+     * have no way to say "this one stops in the middle". This one answers anyway, for the Downloads
+     * screen, which walks the disk looking for videos nothing in the app can name: a half-loaded
+     * download whose path was not known would be counted there as an orphan and offered for
+     * deletion twice.
+     */
+    suspend fun localPathAnyway(fileId: Int): String? {
         val td = current ?: return null
         return td.getFile(fileId).valueOrNull?.local?.path?.takeIf { it.isNotBlank() }
     }

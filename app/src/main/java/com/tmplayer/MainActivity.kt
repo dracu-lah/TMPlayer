@@ -427,14 +427,14 @@ private fun Root() {
             //
             // A record whose file is no longer on disk holds nothing and is dropped here rather
             // than offered as room that would not come back.
-            val cachedRecord = runCatching { settings.cachedVideoNow() }.getOrNull()
-            val cachedBytes = cachedRecord
-                ?.let { runCatching { Td.localDownloadedBytes(it.fileId) }.getOrDefault(0L) }
-                ?: 0L
-            val cached = if (cachedRecord != null && cachedBytes > 0) {
-                listOf(CacheShelf.Held(cachedRecord.fileId, cachedBytes, cachedRecord.updatedAt))
-            } else {
-                emptyList()
+            // Every one of them, not just the last. A series watched through the player's own
+            // next-episode button used to leave a copy of each episode on the disk with only the
+            // first of them recorded, so the room this arithmetic thought it could reclaim was a
+            // fraction of what was actually sitting there.
+            val cachedRecords = runCatching { settings.cachedVideosNow() }.getOrDefault(emptyList())
+            val cached = cachedRecords.mapNotNull { record ->
+                val bytes = runCatching { Td.localDownloadedBytes(record.fileId) }.getOrDefault(0L)
+                if (bytes <= 0) null else CacheShelf.Held(record.fileId, bytes, record.updatedAt)
             }
             // The viewer's own downloads, which are never given up to make room. Measured only so
             // a refusal can say where the space went and point at the screen that manages them.
@@ -463,17 +463,19 @@ private fun Root() {
             // activity, and neither is a thing to do from a background thread.
             withContext(Dispatchers.Main) {
                 fun start() {
+                // The player claims the cache for itself the moment it opens, which is what keeps
+                // a series honest. This only has to leave the record alone for a kept download.
                 if (!kept) scope.launch { settings.rememberCachedVideo(item, chatTitle) }
                 context.startActivity(PlayerActivity.intent(context, item, chatTitle))
             }
 
-            /** Deletes what the plan named, and forgets the cache row that went with it. */
+            /** Deletes what the plan named, and forgets the cache rows that went with it. */
             suspend fun evict(fileIds: List<Int>) {
                 for (fileId in fileIds.toSet()) {
                     runCatching { Td.deleteFile(fileId) }
-                }
-                if (cachedRecord != null && cachedRecord.fileId in fileIds) {
-                    settings.forgetCachedVideo()
+                    val record = cachedRecords.firstOrNull { it.fileId == fileId } ?: continue
+                    val left = runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
+                    if (left <= 0) settings.forgetCachedVideo(record.chatId, record.messageId)
                 }
             }
 

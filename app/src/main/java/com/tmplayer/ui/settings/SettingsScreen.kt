@@ -106,7 +106,8 @@ import com.tmplayer.data.CrashReports
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.SizeFilter
-import com.tmplayer.data.StorageBreakdown
+import com.tmplayer.data.StorageSplit
+import com.tmplayer.data.WatchCache
 import com.tmplayer.data.Td
 import com.tmplayer.data.ThemeChoice
 import com.tmplayer.data.UpdateState
@@ -124,7 +125,10 @@ import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.focusRing
 import com.tmplayer.ui.theme.Tv
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private sealed interface Prompt {
     /** The one video watching left behind. */
@@ -160,7 +164,7 @@ fun SettingsScreen(
     // The single video watching leaves behind. Null until the first read, which is the same thing
     // it says when there is none: a row that reads "Nothing cached" for a frame is honest either
     // way, and the size beside it arrives with the rest of the storage figures.
-    val cached by settings.cachedVideo.collectAsStateWithLifecycle(initialValue = null)
+    val cached by settings.cachedVideos.collectAsStateWithLifecycle(initialValue = emptyList())
     val downloadFirst by settings.downloadBeforePlaying.collectAsStateWithLifecycle(initialValue = false)
     val autoplayNext by settings.autoplayNext.collectAsStateWithLifecycle(initialValue = true)
     val wifiOnly by settings.wifiOnlyDownloads.collectAsStateWithLifecycle(initialValue = false)
@@ -184,12 +188,10 @@ fun SettingsScreen(
     val toast = rememberToast()
     val updateState by Updates.state.collectAsStateWithLifecycle()
     var showUpdate by remember { mutableStateOf(false) }
-    var cacheBytes by remember { mutableStateOf(0L) }
-    // What the cached video is costing on disk, which is TDLib's answer rather than the size the
-    // record was written with: a video that was interrupted halfway has half the bytes and should
-    // not offer to free the whole film.
-    var cachedBytes by remember { mutableStateOf(0L) }
-    var breakdown by remember { mutableStateOf(StorageBreakdown.EMPTY) }
+    // What TMPlayer is holding, split into downloads, cache and everything else. Worked out by
+    // [StorageSplit], which is also what the Downloads screen reads: the two panels were doing
+    // their own arithmetic and quoting different numbers for the same disk.
+    var split by remember { mutableStateOf(StorageSplit.EMPTY) }
     var disk by remember { mutableStateOf(DiskSpace.read(context)) }
     var busy by remember { mutableStateOf<String?>(null) }
     var prompt by remember { mutableStateOf<Prompt?>(null) }
@@ -201,22 +203,18 @@ fun SettingsScreen(
     val rangeRow = remember { FocusRequester() }
 
     suspend fun refresh() {
-        cacheBytes = runCatching { Td.storageUsedBytes() }.getOrDefault(0L)
         disk = DiskSpace.read(context)
-        cachedBytes = settings.cachedVideoNow()
-            ?.let { runCatching { Td.localDownloadedBytes(it.fileId) }.getOrDefault(0L) }
-            ?: 0L
-        // Last, and separately: it walks the cache directory, so the card paints its total and
-        // its bar from the fast figure above and fills the three lines in a moment later.
-        breakdown = runCatching { Td.storageBreakdown() }.getOrDefault(StorageBreakdown.EMPTY)
+        // A TDLib round trip per record and a walk of the files directory, so it is kept off the
+        // thread drawing the list: this screen scrolls while it is counting.
+        split = withContext(Dispatchers.Default) {
+            runCatching { StorageSplit.measure(context) }.getOrDefault(StorageSplit.EMPTY)
+        }
     }
 
     // The case that sends somebody to Settings in the first place: a device holding gigabytes with
     // no video among them, where deleting the cached film returns nothing and the space is all in
     // previews, thumbnails and the database. Only then is there a second row worth offering.
-    val onlyPicturesLeft = breakdown.totalBytes > 0 &&
-        breakdown.videoBytes < CLEARING_WORTH_ASKING &&
-        breakdown.totalBytes >= CLEARING_WORTH_ASKING
+    val onlyPicturesLeft = split.otherBytes >= CLEARING_WORTH_ASKING
 
     val touch = isTouch()
     // These rows describe the machine they are running on, and half of them are about it by name.
@@ -224,7 +222,7 @@ fun SettingsScreen(
 
     // The size beside the cached video has to follow the video: watching something else replaces
     // the record, and a figure left over from the last film is worse than no figure at all.
-    LaunchedEffect(cached?.fileId) { refresh() }
+    LaunchedEffect(cached.map { it.fileId }) { refresh() }
 
     LaunchedEffect(Unit) {
         refresh()
@@ -529,8 +527,7 @@ fun SettingsScreen(
         item { SectionTitle("Storage") }
         item {
             StorageCard(
-                cacheBytes = cacheBytes,
-                breakdown = breakdown,
+                split = split,
                 freeBytes = disk.freeBytes,
                 totalBytes = disk.totalBytes,
             )
@@ -540,20 +537,26 @@ fun SettingsScreen(
         // film on every device and the next press of Play replaces it. What the viewer might
         // reasonably want is to see what it is costing them and get the space back now.
         item {
-            val held = cached
+            val held = cached.firstOrNull()
             ActionRow(
-                title = "Cached video",
+                // "Cached video" named the thing; this names the action, which is what the row
+                // actually does and what somebody hunting for space is looking for.
+                title = "Clear cache",
                 subtitle = when {
-                    held == null -> "Nothing cached. Playing a video keeps one copy here."
-                    cachedBytes <= 0 -> "\"${held.title}\" has not finished downloading"
-                    else -> "\"${held.title}\" · ${StreamStats.formatBytes(cachedBytes)}"
+                    split.cachedBytes <= 0 -> "Nothing cached. Playing a video keeps a copy here."
+                    // More than one means episodes an older version of the app left behind. Saying
+                    // "1 video" and quoting two gigabytes is the confusing part, so it counts.
+                    split.cachedCount > 1 ->
+                        "${split.cachedCount} videos · ${StreamStats.formatBytes(split.cachedBytes)}"
+                    held != null -> "\"${held.title}\" · ${StreamStats.formatBytes(split.cachedBytes)}"
+                    else -> StreamStats.formatBytes(split.cachedBytes)
                 },
                 icon = TmIcons.Download,
                 onClick = {
                     // Nothing to delete is not a dialog. The row stays where it is, focusable and
                     // in the same place every time, and says so instead.
-                    if (cached == null) {
-                        toast("There is no cached video right now")
+                    if (split.cachedBytes <= 0) {
+                        toast("There is nothing cached right now")
                     } else {
                         prompt = Prompt.ClearCache
                     }
@@ -567,9 +570,13 @@ fun SettingsScreen(
         if (onlyPicturesLeft) {
             item {
                 ActionRow(
-                    title = "Free up space",
-                    subtitle = "Clears ${StreamStats.formatBytes(breakdown.totalBytes)} of " +
-                        "previews and other data TMPlayer is holding",
+                    // Named for what it clears, beside the row above it that clears videos. "Free
+                    // up space" said neither, and two rows that both sound like the general answer
+                    // to a full disk are two rows nobody can choose between.
+                    title = "Clear pictures and previews",
+                    subtitle = "Frees ${StreamStats.formatBytes(split.otherBytes)} of " +
+                        "thumbnails and other data TMPlayer is holding. They come back as you " +
+                        "browse.",
                     icon = Icons.Filled.Delete,
                     onClick = { prompt = Prompt.ClearOther },
                 )
@@ -761,27 +768,40 @@ fun SettingsScreen(
 
     when (prompt) {
         Prompt.ClearCache -> TvConfirm(
-            title = "Delete the cached video?",
-            message = "This frees up ${StreamStats.formatBytes(cachedBytes)}. Opening it again " +
-                "downloads it again.",
+            title = if (split.cachedCount > 1) "Clear ${split.cachedCount} cached videos?" else
+                "Clear the cached video?",
+            message = "This frees up ${StreamStats.formatBytes(split.cachedBytes)}. Opening them again " +
+                "downloads them again.",
             // Says what it will not touch, because this row sits where a button that deleted
             // everything used to sit and the two must not be confused.
             detail = "Videos you downloaded on purpose stay where they are.",
-            confirmLabel = "Delete",
+            confirmLabel = "Clear",
             onConfirm = {
                 prompt = null
                 val doomed = cached
                 scope.launch {
-                    busy = "Deleting…"
-                    val freed = cachedBytes
-                    if (doomed != null) {
-                        runCatching { Td.deleteFile(doomed.fileId) }
+                    busy = "Clearing…"
+                    val freed = split.cachedBytes
+                    val keptIds = runCatching { settings.downloadHistory.first() }
+                        .getOrDefault(emptyList())
+                        .map { it.fileId }
+                        .toSet()
+                    for (record in doomed) {
+                        if (record.fileId in keptIds) continue
+                        runCatching { Td.deleteFile(record.fileId) }
                         // Only forgotten once the file has actually gone, or the record stops
                         // pointing at bytes that are still on the disk.
-                        val left = runCatching { Td.localDownloadedBytes(doomed.fileId) }
+                        val left = runCatching { Td.localDownloadedBytes(record.fileId) }
                             .getOrDefault(0L)
-                        if (left <= 0) settings.forgetCachedVideo()
+                        if (left <= 0) settings.forgetCachedVideo(record.chatId, record.messageId)
                     }
+                    // And the episodes left behind by the versions of this app that kept one
+                    // record for the whole cache. They have no record to delete, only bytes.
+                    val accounted = (doomed.map { it.fileId } + keptIds)
+                        .distinct()
+                        .mapNotNull { runCatching { Td.localPathAnyway(it) }.getOrNull() }
+                        .toSet()
+                    for (stray in WatchCache.strays(context, accounted)) WatchCache.forget(stray)
                     refresh()
                     busy = null
                     toast("Freed ${StreamStats.formatBytes(freed)}")
@@ -792,7 +812,7 @@ fun SettingsScreen(
 
         Prompt.ClearOther -> TvConfirm(
             title = "Free up space?",
-            message = "This clears ${StreamStats.formatBytes(breakdown.totalBytes)} of previews, " +
+            message = "This clears ${StreamStats.formatBytes(split.otherBytes)} of previews, " +
                 "thumbnails and other data TMPlayer is holding. They come back as you browse.",
             detail = "Your Telegram account, chats and favourites are untouched.",
             confirmLabel = "Free it up",
@@ -800,7 +820,7 @@ fun SettingsScreen(
                 prompt = null
                 scope.launch {
                     busy = "Deleting…"
-                    val freed = breakdown.totalBytes
+                    val freed = split.otherBytes
                     runCatching { Td.clearEverythingCached() }
                     // The indexes go with the files. Left behind, their rows point at videos that
                     // are no longer on disk.
@@ -1302,17 +1322,17 @@ private fun ThemePicker(current: ThemeChoice, onPick: (ThemeChoice) -> Unit) {
 
 @Composable
 private fun StorageCard(
-    cacheBytes: Long,
-    breakdown: StorageBreakdown,
+    split: StorageSplit,
     freeBytes: Long,
     totalBytes: Long,
 ) {
+    val cacheBytes = split.totalBytes
     val used = (totalBytes - freeBytes).coerceAtLeast(0)
     val usedFraction = if (totalBytes > 0) used.toFloat() / totalBytes else 0f
     val cacheFraction = if (totalBytes > 0) cacheBytes.toFloat() / totalBytes else 0f
-    // Until the walk finishes there is one figure and nothing to split it into, so the bar keeps
-    // its single band and the lines below stay away rather than showing three zeroes.
-    val split = breakdown.totalBytes > 0
+    // Until the first measurement lands there is nothing to divide, so the bar keeps its single
+    // band and the lines below stay away rather than showing three zeroes.
+    val measured = cacheBytes > 0
 
     val touch = isTouch()
     val bar = if (touch) 10.dp else 14.dp
@@ -1355,10 +1375,10 @@ private fun StorageCard(
                         "${StreamStats.formatBytes(used)} used of " +
                         "${StreamStats.formatBytes(totalBytes)}, " +
                         "${StreamStats.formatBytes(cacheBytes)} of it TMPlayer's, " +
-                        if (split) {
-                            "${StreamStats.formatBytes(breakdown.videoBytes)} video, " +
-                                "${StreamStats.formatBytes(breakdown.pictureBytes)} pictures, " +
-                                "${StreamStats.formatBytes(breakdown.otherBytes)} other"
+                        if (measured) {
+                            "${StreamStats.formatBytes(split.downloadBytes)} downloads, " +
+                                "${StreamStats.formatBytes(split.cachedBytes)} cached, " +
+                                "${StreamStats.formatBytes(split.otherBytes)} pictures and previews"
                         } else {
                             "still being measured"
                         }
@@ -1373,12 +1393,12 @@ private fun StorageCard(
                     .background(deviceBand),
             )
             Row(Modifier.fillMaxWidth(cacheFraction).fillMaxHeight()) {
-                if (split) {
+                if (measured) {
                     // Weights, not fractions: these three divide TMPlayer's own band between
                     // them, and a band of zero width simply draws nothing.
-                    StorageSlice(breakdown.videoBytes, videoBand)
-                    StorageSlice(breakdown.pictureBytes, pictureBand)
-                    StorageSlice(breakdown.otherBytes, otherBand)
+                    StorageSlice(split.downloadBytes, videoBand)
+                    StorageSlice(split.cachedBytes, pictureBand)
+                    StorageSlice(split.otherBytes, otherBand)
                 } else {
                     Box(Modifier.fillMaxSize().background(videoBand))
                 }
@@ -1394,11 +1414,20 @@ private fun StorageCard(
             },
             color = Tone.text,
         )
-        if (split) {
+        if (measured) {
             Spacer(Modifier.height(8.dp))
-            StorageLegend("Video", breakdown.videoBytes, videoBand)
-            StorageLegend("Pictures", breakdown.pictureBytes, pictureBand)
-            StorageLegend("Everything else", breakdown.otherBytes, otherBand)
+            // The same three names, in the same order, as the panel at the top of the Downloads
+            // screen. They are one measurement drawn twice, and a viewer who reads both should
+            // not have to work out whether they disagree.
+            if (split.downloadBytes > 0) {
+                StorageLegend("Downloads", split.downloadBytes, videoBand)
+            }
+            if (split.cachedBytes > 0) {
+                StorageLegend("Cached from playback", split.cachedBytes, pictureBand)
+            }
+            if (split.otherBytes > 0) {
+                StorageLegend("Pictures and previews", split.otherBytes, otherBand)
+            }
             Spacer(Modifier.height(8.dp))
         }
         Text(
@@ -1406,9 +1435,9 @@ private fun StorageCard(
             // looking at: a phone that claimed to replace the last video would be lying about
             // where its space went.
             if (touch) {
-                "The oldest download is deleted when a new one needs the room, and you can " +
-                    "delete any of them from Downloads. This takes the videos and leaves the " +
-                    "pictures."
+                "Playing a video leaves a copy behind, and the next one you play replaces it. " +
+                    "Downloads are yours and stay until you delete them, which you can do from " +
+                    "the Downloads screen."
             } else {
                 "One video is kept at a time; starting another replaces it. Deleting takes the " +
                     "video and leaves the pictures."

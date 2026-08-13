@@ -367,12 +367,13 @@ fun MediaGridScreen(
                 // Only the watch cache is on offer here. A film left behind by a press of Play is
                 // nobody's keepsake and should not be the reason a film somebody ticked is
                 // refused; the videos they downloaded on purpose are not touched either way.
-                val cachedRecord = runCatching { settings.cachedVideoNow() }.getOrNull()
-                val cached = cachedRecord?.let { record ->
+                val cachedRecords = runCatching { settings.cachedVideosNow() }
+                    .getOrDefault(emptyList())
+                val cached = cachedRecords.mapNotNull { record ->
                     val bytes = runCatching { Td.localDownloadedBytes(record.fileId) }
                         .getOrDefault(0L)
                     if (bytes <= 0) null else CacheShelf.Held(record.fileId, bytes, record.updatedAt)
-                }?.let(::listOf).orEmpty()
+                }
                 val coming = OfflineDownloads.active.value
                 val candidates = chosen.map { item ->
                     CacheShelf.Candidate(
@@ -395,9 +396,13 @@ fun MediaGridScreen(
                 // Spent before the first byte is fetched, so the room the plan counted on is
                 // actually there by the time the queue starts.
                 if (batch.reclaimFileIds.isNotEmpty()) {
-                    for (fileId in batch.reclaimFileIds) runCatching { Td.deleteFile(fileId) }
-                    if (cachedRecord != null && cachedRecord.fileId in batch.reclaimFileIds) {
-                        runCatching { settings.forgetCachedVideo() }
+                    for (fileId in batch.reclaimFileIds) {
+                        runCatching { Td.deleteFile(fileId) }
+                        val record = cachedRecords.firstOrNull { it.fileId == fileId } ?: continue
+                        val left = runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
+                        if (left <= 0) {
+                            runCatching { settings.forgetCachedVideo(record.chatId, record.messageId) }
+                        }
                     }
                 }
                 batch.fits.map { chosen[it] } to batchMessage(batch, chosen.size)
