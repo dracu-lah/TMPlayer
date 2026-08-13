@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="background">#0E0E12</color>
 
     <!--
       What the window is painted before the first frame. Light here and dark in values-night,

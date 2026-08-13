@@ -75,7 +75,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -117,9 +116,7 @@ import com.tmplayer.ui.theme.Tv
 /**
  * What the line under the app bar's title counts.
  *
- * Every tab but one is a list of chats. Continue watching is a list of videos, and saying "chats"
- * over it was not a wording slip: it was the chat list's count, which had nothing to do with what
- * was on the screen.
+ * Every tab but one is a list of chats; Continue watching is a list of videos, so it counts videos.
  */
 private fun countLabel(section: BrowseSection, count: Int): String = when {
     section.isContinue && count == 1 -> "1 video"
@@ -137,8 +134,8 @@ enum class BrowseTab(
 ) {
     Continue("Continue", "Continue watching", "Pick up where you left off", Icons.Filled.PlayArrow),
     Favorites("Favourites", "Favourites", "Chats you've starred", Icons.Filled.Star),
-    // A clock, not the circular-arrow reload glyph: that one is the video grid's genuine refresh
-    // action, so the same picture stood for two unrelated things.
+    // A clock, not the circular-arrow reload glyph: that one belongs to the video grid's refresh
+    // action, and one picture must not stand for two unrelated things.
     Recent("Recent", "Recent", "Chats with something new", TmIcons.Clock),
     Unread("Unread", "Unread", "Chats with messages you haven't read", TmIcons.Dot),
     Saved("Saved", "Saved Messages", "The chat you send things to yourself in", TmIcons.Bookmark),
@@ -152,10 +149,10 @@ enum class BrowseTab(
 /**
  * A place in the rail, which is either one of the app's own tabs or one of the viewer's folders.
  *
- * Folders cannot be an enum: they are whatever this account happens to have, they are renamed on a
- * phone while this app is looking at them, and there may be none at all. They still navigate
- * exactly like a tab does, so both wear the same four properties and everything downstream, the
- * rail, the drawer, the heading, the empty state, is written once against this rather than twice.
+ * Folders cannot be an enum: they are whatever this account happens to have, they may be renamed
+ * while this app is looking at them, and there may be none at all. They navigate exactly like a
+ * tab does, so both wear the same four properties and everything downstream, the rail, the drawer,
+ * the heading, the empty state, is written once against this.
  */
 @androidx.compose.runtime.Immutable
 sealed interface BrowseSection {
@@ -190,9 +187,9 @@ sealed interface BrowseSection {
          * Written down as a string so a rotation, or the process being killed behind a video,
          * comes back to the section the viewer was in rather than to the default one.
          *
-         * A folder is stored by id and name together. The id alone would be enough to find it
-         * again, but the name is what the heading says while the folder list is still on its way
-         * from TDLib, and without it the screen comes back titled after a number.
+         * A folder is stored by id and name together: the name is what the heading shows while the
+         * folder list is still on its way from TDLib, otherwise the screen comes back titled after
+         * a number.
          */
         fun encode(section: BrowseSection?): String = when (section) {
             null -> ""
@@ -219,11 +216,9 @@ sealed interface BrowseSection {
 /**
  * Every place the rail offers, with the viewer's folders after the chat tabs.
  *
- * Folders come last of the three groups because they are the only part of this list that is not
- * the same on every device: the tabs above are the app's own way of slicing a chat list and are
- * where somebody looks when they do not know where a thing is, while a folder is something this
- * viewer built and knows the name of. Putting the fixed, learnable set first and the personal set
- * after it also keeps the rail from changing shape halfway down when a folder is added or renamed.
+ * Folders come last because they are the only part of this list that differs per account. Keeping
+ * the fixed, learnable tabs first also stops the rail changing shape halfway down when a folder is
+ * added or renamed.
  */
 internal fun browseSections(folders: List<ChatFolderSummary>): List<BrowseSection> = buildList {
     add(BrowseSection.of(BrowseTab.Continue))
@@ -259,8 +254,8 @@ fun BrowseScreen(
     downloadCount: Int = 0,
     onToggleFavorite: (ChatSummary) -> Unit = {},
     /**
-     * The three that write to Telegram rather than to this device. Defaulted to nothing so a
-     * preview, or the screenshot fixture, can draw this screen without a TDLib client behind it.
+     * These write to Telegram rather than to this device. Defaulted to nothing so a preview, or
+     * the screenshot fixture, can draw this screen without a TDLib client behind it.
      */
     onTogglePinned: (ChatSummary) -> Unit = {},
     onToggleArchived: (ChatSummary) -> Unit = {},
@@ -288,21 +283,19 @@ fun BrowseScreen(
     updateVersion: String? = null,
     onUpdate: () -> Unit = {},
 ) {
-    // An unfinished video wins the landing tab, then Favourites, then Recent, so the first screen
-    // is never empty. Both are read from disk after the first frame, so the tab has to settle
-    // once they arrive; an explicit pick always wins over them. [picked] is hoisted rather than
-    // remembered here because opening a chat swaps this screen out of the composition.
+    // An unfinished video wins the landing tab, otherwise Recent, so the first screen is never
+    // empty. Those are read from disk after the first frame, so the tab settles once they arrive;
+    // an explicit pick always wins. [picked] is hoisted rather than remembered here because
+    // opening a chat swaps this screen out of the composition.
     val sections = remember(folders) { browseSections(folders) }
-    // How many chats have something unread in them, not how many messages are unread across them.
-    // The rail badge sits beside the word "Unread", which names a list of chats, so a count of
-    // messages there would be a number that matches nothing the viewer can go and look at.
+    // How many chats have something unread in them, not how many messages are unread across them:
+    // the rail badge sits beside "Unread", which names a list of chats.
     val allChats = (state as? UiState.Content)?.value?.chats
     val unreadChats = remember(allChats) {
         allChats.orEmpty().count { it.unreadCount > 0 && !it.isArchived }
     }
-    // A folder that has been deleted, or renamed, on another device: the saved section is matched
-    // back against the live list so the rail never highlights something that is no longer there
-    // and the heading never keeps yesterday's name for a folder that has since been renamed.
+    // The saved section is matched back against the live folder list, so the rail never highlights
+    // a folder deleted elsewhere and the heading never keeps a stale name.
     val tab = picked?.let { chosen ->
         when (chosen) {
             is BrowseSection.Tab -> chosen
@@ -311,10 +304,8 @@ fun BrowseScreen(
                 ?: chosen.takeIf { folders.isEmpty() }
         }
     } ?: when {
-        // Favourites used to be the landing tab whenever anything was starred, which meant the one
-        // act of starring a channel quietly changed where the app opened. Favourites is a place to
-        // go, not a place to be put: the app opens on what is half watched, and otherwise on the
-        // full listing.
+        // Favourites is a place to go, not a place to be put: the app opens on what is half
+        // watched, and otherwise on the full listing.
         continueWatching.isNotEmpty() -> BrowseSection.of(BrowseTab.Continue)
         else -> BrowseSection.of(BrowseTab.Recent)
     }
@@ -325,10 +316,9 @@ fun BrowseScreen(
     var confirmClearHistory by remember { mutableStateOf(false) }
     var confirmClearFavorites by remember { mutableStateOf(false) }
 
-    // One question, answered by the shared detector, decides the whole shape of this screen: a
-    // permanent rail beside the listing on a television, a drawer behind a hamburger on a phone.
-    // Everything below the chrome is the same composition either way, told only how much room it
-    // has and how far in from the edge it may start.
+    // One question decides the whole shape of this screen: a permanent rail beside the listing on
+    // a television, a drawer behind a hamburger on a phone. Everything below the chrome is the
+    // same composition either way, told only how much room it has and how far in it may start.
     val touch = !FormFactor.isTv(LocalContext.current)
     val insets = if (touch) TouchInsets else TvInsets
     // Fixed columns suit a screen whose size is known in advance; a phone's is not, and it turns
@@ -347,8 +337,8 @@ fun BrowseScreen(
 
             Column(Modifier.fillMaxSize()) {
                     if (tab.isContinue) {
-                        // On a phone the heading, the count and the chips all live in the app bar
-                        // now, so the content area starts with the content.
+                        // On a phone the heading, the count and the actions live in the app bar, so
+                        // the content area starts with the content.
                         if (!touch) {
                             TabHeading(tab, continueWatching.size, insets) {
                                 LayoutAction(layout, onToggleLayout)
@@ -403,10 +393,9 @@ fun BrowseScreen(
                                 chats = visible,
                                 favorites = favorites,
                                 // Recency order comes straight from Telegram, so the top of the
-                                // unfiltered list already is "recent", with no sorting to go stale.
-                                // Tiles are dropped from the strip in grid view: the grid's own
-                                // first row is those same chats, and the two together read as the
-                                // list having repeated itself rather than as a shortcut.
+                                // unfiltered list already is "recent". The strip is dropped in
+                                // grid view: the grid's own first row is those same chats, and the
+                                // two together read as the list repeating itself.
                                 recent = if (
                                     tab == BrowseSection.of(BrowseTab.Recent) &&
                                     query.isBlank() &&
@@ -432,13 +421,9 @@ fun BrowseScreen(
 
     if (touch) {
         val voiceSearch = rememberVoiceSearch("Say a chat name") { query = it }
-        // Continue watching lists videos held on this device, not chats, and counting the chat
-        // list there put "78 chats" over three videos.
-        // Remembered, unlike the pass this replaces. The same filter and the same fuzzy ranking
-        // already run inside the pane below, so an unremembered second copy here meant two full
-        // passes over every chat on every keystroke, and this one is thrown away the moment the
-        // box is not empty: the count is only shown on a blank query, which is precisely when the
-        // ranking it just paid for does nothing.
+        // Continue watching lists videos held on this device, so it counts those instead. Keep the
+        // chat count remembered: the same filter and fuzzy ranking already run inside the pane
+        // below, and an unremembered copy here costs a second full pass on every keystroke.
         val chats = (state as? UiState.Content)?.value?.chats
         val count = if (tab.isContinue) {
             continueWatching.size
@@ -496,8 +481,8 @@ fun BrowseScreen(
                 }
             },
             content = {
-                // The count the heading used to carry, now under the title where a phone's app bar
-                // puts a subtitle. Nowhere else on the screen says how much is in the tab.
+                // The tab's count under the title, where a phone's app bar puts a subtitle.
+                // Nowhere else on the screen says how much is in the tab.
                 Column(Modifier.fillMaxSize()) {
                     if (count > 0 && query.isBlank()) {
                         M3Text(
@@ -673,8 +658,7 @@ fun BrowseScreen(
 /**
  * One button in the phone's app bar.
  *
- * Icon-only and stock: [IconButton] brings the 48 dp target and the ripple, both of which the
- * hand-built chips this replaced had to be told about and one of which they never got.
+ * Icon-only and stock: [IconButton] brings the 48 dp touch target and the ripple for free.
  */
 @Composable
 private fun RowScope.BarIcon(label: String, icon: ImageVector, onClick: () -> Unit) {
@@ -768,8 +752,8 @@ private fun ContinueSection(
 }
 
 /**
- * A Continue watching card as a tile: the preview carries the progress bar, the way the grid
- * does, because there is no longer a row of text alongside it to put the bar under.
+ * A Continue watching card as a tile: the preview carries the progress bar, because there is no
+ * row of text alongside it to put the bar under.
  */
 @Composable
 private fun ContinueTile(
@@ -804,8 +788,8 @@ private fun ContinueTile(
                 record.title,
                 style = MaterialTheme.typography.titleMedium,
                 color = Tone.text,
-                // Two lines here as everywhere else a release name is shown: one line cut these
-                // titles before the resolution, which is the part that tells two of them apart.
+                // Two lines, as everywhere else a release name is shown: one line cuts the title
+                // before the resolution, which is the part that tells two of them apart.
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.marqueeWhen(focused),
@@ -862,11 +846,9 @@ private fun ContinueTile(
  * How far through a video is.
  *
  * A phone gets the platform's own indicator, so the bar picks up the scheme, the stop mark and the
- * rounded cap every other progress bar on the device has. A television keeps the two painted boxes
- * it was drawn with: the bar there sits under a focus border that is doing the same job of saying
- * "this row", and swapping it would change a screen this pass is not touching. [overArt] is the
- * difference between a bar lying on a thumbnail, which needs a dark track to stay visible, and one
- * on a card, which does not.
+ * rounded cap every other progress bar on the device has. A television gets two painted boxes, to
+ * sit quietly under the focus border. [overArt] is the difference between a bar lying on a
+ * thumbnail, which needs a dark track to stay visible, and one on a card, which does not.
  */
 @Composable
 private fun ResumeProgress(
@@ -929,8 +911,8 @@ private fun ContinueCard(
                 record.title,
                 style = MaterialTheme.typography.titleMedium,
                 color = Tone.text,
-                // Two lines here as everywhere else a release name is shown: one line cut these
-                // titles before the resolution, which is the part that tells two of them apart.
+                // Two lines, as everywhere else a release name is shown: one line cuts the title
+                // before the resolution, which is the part that tells two of them apart.
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.marqueeWhen(focused),
@@ -943,8 +925,8 @@ private fun ContinueCard(
                         append(StreamStats.formatClock(record.remainingMs))
                         append(" left")
                     }
-                    // The chat name gives way to the hint while focused. Both are tail information
-                    // on a single line, and only one of them is worth saying to the row the
+                    // The chat name gives way to the hold hint while focused: both are tail
+                    // information on one line, and only the hint is worth saying to the row the
                     // viewer is standing on.
                     if (focused) {
                         append("  ·  ")
@@ -959,8 +941,8 @@ private fun ContinueCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            // The bar is the whole point of the row: it is what tells the viewer, at a glance,
-            // that this is a video they are part way through rather than one they have not started.
+            // The bar is the point of the row: it says at a glance that this is a video part way
+            // through rather than one not started.
             ResumeProgress(
                 fraction = record.fraction,
                 touch = touch,
@@ -1047,10 +1029,9 @@ private fun filterChats(
     favorites: Set<Long>,
     query: String,
 ): List<ChatSummary> {
-    // Archived chats are hidden everywhere except in the tab that exists to hold them, which is
-    // the whole meaning of archiving one. Favourites is the exception: starring a chat here is
-    // this app's own act, and a chat somebody deliberately starred should not vanish because it
-    // was tidied away in Telegram months ago.
+    // Archived chats are hidden everywhere except the tab that exists to hold them. Favourites is
+    // the exception: starring is this app's own act, and a deliberately starred chat should not
+    // vanish because it was archived in Telegram.
     val listed = when {
         section == BrowseSection.of(BrowseTab.Archived) -> chats.filter { it.isArchived }
         section == BrowseSection.of(BrowseTab.Favorites) -> chats
@@ -1064,9 +1045,8 @@ private fun filterChats(
             BrowseTab.Saved -> listed.filter { it.kind == ChatKind.Saved }
             BrowseTab.Channels -> listed.filter { it.kind == ChatKind.Channel }
             BrowseTab.Groups -> listed.filter { it.kind == ChatKind.Group }
-            // Saved Messages is a private chat, and belongs among the people even though it also
-            // has a tab of its own: leaving it out would make People a list that is missing the
-            // one entry somebody scrolling it is most likely to want.
+            // Saved Messages is a private chat and belongs among the people even though it also
+            // has a tab of its own.
             BrowseTab.People -> listed.filter {
                 it.kind == ChatKind.Direct || it.kind == ChatKind.Saved
             }
@@ -1075,8 +1055,7 @@ private fun filterChats(
         }
     }
     // Ranked rather than filtered: a chat whose title is exactly what was typed belongs at the
-    // top, and a plain `contains` had no opinion about order at all. It is also what forgives the
-    // accent nobody types and the letter the remote's keyboard put in the wrong place.
+    // top, and ranking forgives the accent nobody types and the mistyped letter from a remote.
     return Fuzzy.rank(byTab, query) { it.title }
 }
 
@@ -1113,14 +1092,12 @@ private fun NavRail(
         AccountBadge(account)
         Spacer(Modifier.height(18.dp))
 
-        // Scrolls, and takes whatever height is left after Settings and the update item have had
-        // theirs. Ten fixed items already filled a 1080p rail to the last pixel, and an account
-        // with folders adds one row per folder: without this the folders below the fold simply
-        // could not be reached, since a Column clips what it cannot fit rather than scrolling.
+        // Scrolls, and takes whatever height is left after Settings and the update item. Ten fixed
+        // items fill a 1080p rail, and each folder adds a row: a plain Column clips what it cannot
+        // fit, so anything past the fold would be unreachable.
         //
-        // The remote never has to think about it. Focus moving down a list inside a scrolling
-        // column brings the focused item into view by itself, so the rail scrolls as a side
-        // effect of pressing down, which is the only way anyone navigates this on a television.
+        // The remote never has to think about it: focus moving down inside a scrolling column
+        // brings the focused item into view, so the rail scrolls as a side effect of pressing down.
         Column(
             Modifier
                 .weight(1f)
@@ -1143,15 +1120,10 @@ private fun NavRail(
                 Spacer(Modifier.height(4.dp))
             }
 
-            // The same three groups the phone's drawer is divided into, and for the same reason:
-            // a dozen flat rows read as one undifferentiated pile, and the eye has to check every
-            // one of them to discover that several are the same kind of thing. The rail carried
-            // the whole list flat while the drawer beside it did not, which is one app answering
-            // the same question two ways.
-            //
-            // The viewer's own watching leads, because it is what somebody sitting down in the
-            // evening is reaching for. It needs no heading: it is at the top, under the account,
-            // and a label on the first group is a word before anything it could be dividing.
+            // The same three groups the phone's drawer uses: a dozen flat rows read as one
+            // undifferentiated pile. The viewer's own watching leads, because it is what somebody
+            // sitting down in the evening is reaching for, and it needs no heading: a label on the
+            // first group is a word before anything it could be dividing.
             sections.filter { it in LIBRARY_TABS }.forEach { item(it) }
 
             val chatTabs = sections.filter { it !in LIBRARY_TABS && it !is BrowseSection.Folder }
@@ -1160,10 +1132,8 @@ private fun NavRail(
                 chatTabs.forEach { item(it) }
             }
 
-            // Folders last, and only with a heading when there are any: an account with none would
-            // otherwise get a rule and the word "Folders" over nothing. They follow the fixed tabs
-            // because they are the personal part of this list, and a group that changes size does
-            // less damage at the bottom than in the middle.
+            // Folders last, and only with a heading when there are any, otherwise an account with
+            // none gets a rule and the word "Folders" over nothing.
             val folders = sections.filterIsInstance<BrowseSection.Folder>()
             if (folders.isNotEmpty()) {
                 RailHeading("Folders")
@@ -1185,11 +1155,9 @@ private fun NavRail(
         RailItem(
             label = "Settings",
             icon = Icons.Filled.Settings,
-            // Which build this is, riding along with Settings rather than on a line of its own:
-            // the rail is already as tall as the screen with the tabs it has to hold, and a
-            // tenth row was simply cut off at the bottom edge.
-            // The number only. A build with a suffix on it, which the screenshot fixture has,
-            // is still a version the rail has to say without eating the word beside it.
+            // Which build this is, riding along with Settings rather than on a row of its own: the
+            // rail is already as tall as the screen. The number only, since a suffixed build would
+            // otherwise crowd out the word beside it.
             badge = "v${Updates.installedVersion.substringBefore('-')}",
             selected = false,
             onClick = onOpenSettings,
@@ -1330,8 +1298,8 @@ private fun RailItem(
             modifier = Modifier.weight(1f),
         )
         if (badge != null) {
-            // Clamped, because the badge measures before the label and an unusually long one
-            // (a version name with a suffix on it) shortened "Settings" to "S...".
+            // Clamped, because the badge measures before the label: an unusually long badge, such
+            // as a suffixed version name, would shorten "Settings" to "S...".
             Text(
                 badge,
                 style = MaterialTheme.typography.bodyMedium,
@@ -1357,7 +1325,7 @@ private fun RailItem(
 private fun LayoutAction(layout: CardLayout, onToggle: () -> Unit) {
     HeaderAction(
         // A grid of squares and a stack of lines are the two pictures every phone and television
-        // uses for this, so the words beside them were only saying it twice.
+        // uses for this, so the icon alone carries it.
         label = if (layout == CardLayout.Grid) "As rows" else "As tiles",
         icon = if (layout == CardLayout.Grid) Icons.AutoMirrored.Filled.List else TmIcons.Grid,
         showLabel = false,
@@ -1369,18 +1337,15 @@ private fun LayoutAction(layout: CardLayout, onToggle: () -> Unit) {
  * Fetches the chat list again.
  *
  * The list is built once when the screen opens, so a chat that moves, is joined, or is renamed
- * while it is up does not appear until something else rebuilds it. This keeps its word, unlike
- * the arrangement toggle: a circular arrow on its own could be a retry, a replay or an update,
- * and this app already draws that same glyph for two of those.
+ * while it is up does not appear until something rebuilds it.
  */
 @Composable
 private fun RefreshAction(onRefresh: () -> Unit) {
     HeaderAction(
         label = "Refresh",
-        // Icon-only, here as everywhere. The word was kept on the television on the grounds that
-        // the same glyph means three things there and the screen is wide, but a heading whose
-        // chips are two pictures and one picture-with-a-word reads as three unrelated controls,
-        // and the name is still what a screen reader announces.
+        // Icon-only, here as everywhere: a heading whose chips are two pictures and one
+        // picture-with-a-word reads as three unrelated controls. The name still reaches a screen
+        // reader through [label].
         icon = Icons.Filled.Refresh,
         showLabel = false,
         onClick = onRefresh,
@@ -1395,9 +1360,6 @@ private fun RefreshAction(onRefresh: () -> Unit) {
  *
  * [label] is always given, even where [showLabel] hides it: it is what a screen reader announces,
  * and an icon with no name is a button nobody can identify.
- *
- * [touch] only sets a floor under the height. The chip is sized by its padding for a remote, which
- * lands it a few dp short of the 48 dp a fingertip needs, and nothing else about it has to change.
  */
 @Composable
 private fun HeaderAction(
@@ -1421,8 +1383,7 @@ private fun HeaderAction(
             .background(background)
             .focusRing(focused, CircleShape)
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
-            // Even padding with no words, so the chip comes out round rather than as a wide one
-            // with a gap where the label used to be.
+            // Even padding with no words, so a wordless chip comes out round rather than wide.
             .padding(horizontal = if (showLabel) 18.dp else 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
@@ -1438,10 +1399,8 @@ private fun HeaderAction(
 /**
  * The heading over a tab's listing.
  *
- * Not called `Header`, which is what the media grid's own heading is called one file away. Both
- * live in this package, and an explicit import of the name from outside the package resolved to
- * this private one instead of the internal one it meant, which fails to compile somewhere that
- * has nothing to do with either.
+ * Deliberately not called `Header`: the media grid one file away has a composable of that name in
+ * this same package, and the clash resolves to whichever is private, breaking an unrelated import.
  */
 @Composable
 private fun TabHeading(
@@ -1450,8 +1409,7 @@ private fun TabHeading(
     insets: BrowseInsets,
     action: @Composable () -> Unit = {},
 ) {
-    // A bare number after the blurb leaves the viewer to guess what was counted, so it always
-    // carries its unit, and this one tab counts videos rather than chats.
+    // The number always carries its unit, and this one tab counts videos rather than chats.
     val unit = when {
         tab.isContinue && count == 1 -> "video"
         tab.isContinue -> "videos"
@@ -1500,13 +1458,9 @@ private fun TabHeading(
 /**
  * The clock, the date and the app's mark, in the top right corner of the television.
  *
- * A phone has a status bar and always has: the time is four millimetres above whatever is on
- * screen, and an app that drew its own would be drawing it twice. A television has nothing of the
- * kind. The app fills the panel edge to edge with the system bars hidden, so somebody halfway
- * through deciding what to watch has no way to know what time it is without reaching for a phone,
- * which is the thing a television is meant to save them doing. Every launcher on the platform puts
- * a clock in this corner for that reason, and Leanback puts the app's badge in it for the other:
- * on a shared screen it is worth saying which app is talking.
+ * A phone has a status bar, so an app that drew its own would draw the time twice. A television
+ * has none, and this app fills the panel with the system bars hidden, so the clock has to come
+ * from here. The app mark beside it says which app is talking on a shared screen.
  *
  * The tick is aligned to the wall clock rather than run every minute from whenever the screen
  * happened to open, so the minute changes when the minute changes.
@@ -1567,15 +1521,13 @@ private fun SearchRow(query: String, insets: BrowseInsets, onQuery: (String) -> 
             modifier = Modifier.weight(1f).focusRequester(searchField),
         )
         if (startVoice != null) {
-            // A microphone on its own says it: the word beside it was only taking up room the
-            // search field could use.
+            // A microphone on its own says it, and leaves the room to the search field.
             PillButton(label = null, icon = TmIcons.Mic, onClick = startVoice)
         }
         if (query.isNotBlank()) {
-            // Clearing the query is what removes this pill from the screen, and a control that
-            // deletes itself while focused takes the focus with it. The next press of the D-pad
-            // then goes nowhere. Focus moves to the search field first, which is where the
-            // viewer wants to be next anyway.
+            // Clearing the query removes this pill, and a control that deletes itself while
+            // focused takes the focus with it, leaving the D-pad nowhere to go. Move focus to the
+            // search field first, which is where the viewer wants to be next anyway.
             PillButton("Clear", Icons.Filled.Close) {
                 runCatching { searchField.requestFocus() }
                 onQuery("")
@@ -1602,8 +1554,7 @@ private fun PillButton(label: String?, icon: ImageVector?, onClick: () -> Unit) 
             .background(background)
             .focusRing(focused, CircleShape)
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
-            // An icon on its own gets even padding, so the pill comes out round rather than as a
-            // wide one with a gap where the words used to be.
+            // An icon on its own gets even padding, so the pill comes out round rather than wide.
             .padding(horizontal = if (label == null) 13.dp else 18.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -1611,8 +1562,7 @@ private fun PillButton(label: String?, icon: ImageVector?, onClick: () -> Unit) 
         if (icon != null) {
             Icon(
                 icon,
-                // The label is the only description there was, so a wordless pill hands it to the
-                // screen reader instead of dropping it.
+                // A wordless pill still hands its label to the screen reader.
                 contentDescription = label,
                 tint = foreground,
                 modifier = Modifier.size(22.dp),
@@ -1670,8 +1620,8 @@ private fun ChatSection(
             if (recent.isNotEmpty()) {
                 item(key = "recent-strip") {
                     // The rows below are full bleed on a phone, but a heading is not a row: with
-                    // the list's side padding dropped for their sake, "Jump back in" was printed
-                    // hard against the panel edge with nothing between it and the glass.
+                    // the list's side padding dropped for their sake, this heading has to put it
+                    // back or it prints hard against the panel edge.
                     Column(
                         if (rowsAreFullBleed) {
                             Modifier.padding(start = insets.start, end = insets.end)
@@ -1726,7 +1676,7 @@ private fun ChatSection(
             columns = tiles,
             modifier = Modifier.fillMaxSize(),
             // The end inset keeps a focused tile in the last column from having its border
-            // clipped by the panel edge, which the rows never had to worry about.
+            // clipped by the panel edge.
             contentPadding = PaddingValues(
                 start = insets.start,
                 end = insets.end,
@@ -1749,7 +1699,7 @@ private fun ChatSection(
     }
 
     // The remote has nowhere to go until something holds focus. Switching arrangement is included:
-    // it rebuilds the list, and the card that was holding focus goes with the old one.
+    // it rebuilds the list, and the card that was holding focus leaves the composition with it.
     LaunchedEffect(chats.firstOrNull()?.id, recent.firstOrNull()?.id, layout, autoFocus) {
         if (autoFocus) runCatching { first.requestFocus() }
     }
@@ -1799,9 +1749,8 @@ private fun ChatTile(
             color = Tone.text,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            // Ellipsis is enough to keep the row tidy, but it also hides the end of a long
-            // channel name. Scrolling it while focused means the whole name is still readable,
-            // and only for the one tile the viewer is actually looking at.
+            // Ellipsis keeps the row tidy but hides the end of a long channel name. Scrolling it
+            // while focused keeps the whole name readable, for that one tile only.
             modifier = Modifier.weight(1f).marqueeWhen(focused),
         )
         Text(
@@ -1855,12 +1804,10 @@ private fun Modifier.marqueeWhen(active: Boolean): Modifier =
 /**
  * A chat as a full-bleed row, the way a phone's list of conversations is drawn.
  *
- * The card this replaces was 84 dp tall with a 16 dp radius, a border, and a 14 dp gap to the next
- * one: eight chats to a screen, each announcing itself as a separate object. Telegram, and every
- * other phone app whose main screen is a list of chats, draws the list as rows on the window
- * background with a divider's worth of nothing between them, and fits half again as many in. The
- * television keeps its cards, where focus has to be visible from a sofa and a border is how that
- * is said.
+ * On a phone the list is rows on the window background with nothing between them, which is how
+ * every phone app whose main screen is a chat list draws it, and it fits far more on a screen. The
+ * television keeps cards, where focus has to be visible from a sofa and a border is how that is
+ * said.
  */
 @Composable
 private fun ChatRow(
@@ -1911,8 +1858,7 @@ private fun ChatRow(
             )
             Text(
                 // The row says what it is, then what can be done to it once focus arrives. The
-                // launch marker is what explains the jump straight into a chat on the previous
-                // start, which is otherwise the app appearing to skip a screen on its own.
+                // launch marker explains why this chat opens straight away on the next start.
                 when {
                     focused -> "${chatCaption(chat)}  ·  $HOLD_HINT"
                     opensOnLaunch -> "${chatCaption(chat)}  ·  Opens on launch"
@@ -1945,21 +1891,17 @@ private fun ChatRow(
 /**
  * What the second line of a chat row says about the chat, beyond what kind of thing it is.
  *
- * Pinned and muted used to be spelled out here. They are glyphs now, drawn by [ChatMarkers] where
- * Telegram draws them, for the reason every messaging app on the phone reached the same conclusion:
- * a pin and a struck-through bell are read without being read, and the words were spending a third
- * of a one-line caption on something a 16 dp shape says on its own. The line is then free to say
- * what the chat actually is.
+ * Pinned and muted are not spelled out here: [ChatMarkers] draws them as glyphs, where Telegram
+ * draws them, which leaves this one line free to say what the chat is.
  */
 private fun chatCaption(chat: ChatSummary): String = chat.kind.label
 
 /**
  * The pin and the silent bell, at the end of the row where a chat list puts them.
  *
- * Both are drawn muted rather than in the accent colour: they are facts about the row, not calls
- * to look at it, and the one thing on a chat row allowed to ask for attention is the unread count.
- * They sit to the right of that count for the same reason: the number is what the eye goes down the
- * list looking for, so it keeps the position nearest the text and the markers trail after it.
+ * Both are drawn muted rather than in the accent colour: they are facts about the row, and the one
+ * thing on a chat row allowed to ask for attention is the unread count. They trail after that
+ * count, which keeps the position nearest the text.
  */
 @Composable
 private fun ChatMarkers(chat: ChatSummary, size: Dp) {
@@ -1984,10 +1926,8 @@ private fun ChatMarkers(chat: ChatSummary, size: Dp) {
 /**
  * The count of unread messages, drawn the way Telegram draws it.
  *
- * A muted chat keeps its count and loses its colour, which is the whole difference muting makes:
- * the chat is still saying something arrived, it is just no longer asking to be looked at. Nothing
- * is drawn at all below one, rather than a zero, since a chat with nothing unread has nothing to
- * report and an empty pill on every row is furniture.
+ * A muted chat keeps its count and loses its colour: it still says something arrived, without
+ * asking to be looked at. Below one, nothing is drawn at all rather than a zero.
  */
 @Composable
 private fun UnreadBadge(chat: ChatSummary, small: Boolean = false) {
@@ -2017,11 +1957,10 @@ private const val UNREAD_CAP = 999
 /**
  * The phone's chat row, which is Material's two-line list item and nothing more.
  *
- * Everything this used to lay out by hand, the avatar's gap to the text, the two type styles, the
- * colour each of them takes from the scheme, is what [ListItem] is for, and it gets them right in
- * a light theme and a dark one without being told which is up. The container is transparent so the
- * rows sit on the window the way a phone's list of conversations does, and the height is pinned so
- * the shimmer that stands in for this row lands on the same metric.
+ * [ListItem] handles the avatar gap, the two type styles and the scheme colours, in a light theme
+ * and a dark one alike. The container is transparent so the rows sit on the window the way a
+ * phone's list of conversations does, and the height is pinned so the shimmer that stands in for
+ * this row lands on the same metric.
  */
 @Composable
 private fun TouchChatRow(
@@ -2035,8 +1974,7 @@ private fun TouchChatRow(
 ) {
     ListItem(
         headlineContent = {
-            // Two lines, because a channel name is regularly longer than a phone is wide and one
-            // line cut several of them at the same word.
+            // Two lines, because a channel name is regularly longer than a phone is wide.
             M3Text(chat.title, maxLines = 2, overflow = TextOverflow.Ellipsis)
         },
         modifier = modifier
@@ -2049,8 +1987,7 @@ private fun TouchChatRow(
             .holdable(interactionSource = interactions, onClick = onClick, onHold = onHold),
         supportingContent = {
             M3Text(
-                // No hold hint on a phone: there is no focused row for it to attach to, and a
-                // line of instructions on every row is furniture within one screenful.
+                // No hold hint on a phone: there is no focused row for it to attach to.
                 if (opensOnLaunch) {
                     "${chatCaption(chat)}  ·  Opens on launch"
                 } else {
@@ -2112,10 +2049,8 @@ private fun EmptyTab(tab: BrowseSection, query: String) {
             "Saved Messages is empty. Forward a video to yourself in Telegram and it appears here."
         else -> "Nothing here yet."
     }
-    // The app's one empty state, which this used to be a second copy of. A search that came back
-    // empty is a different situation from a tab with nothing in it yet, so the glyph follows
-    // whichever one the viewer is actually looking at; everything else about the two is the same
-    // and is now said in one place.
+    // A search that came back empty is a different situation from a tab with nothing in it yet, so
+    // the glyph follows whichever one the viewer is looking at.
     BigEmpty(message, icon = if (query.isNotBlank()) Icons.Filled.Search else tab.icon)
 }
 
@@ -2125,10 +2060,8 @@ private const val FOCUS_FADE_MS = 140
 /**
  * Shown on the focused row only.
  *
- * A hold is invisible until someone tries it, and a line of standing instructions above the list
- * would be read once and then become furniture. Attached to the focused row it arrives exactly
- * when it is actionable, and it costs no layout because it takes the place of a label that row
- * was already carrying.
+ * A hold is invisible until someone tries it. Attached to the focused row the hint arrives exactly
+ * when it is actionable, and costs no layout: it takes the place of a label the row already had.
  */
 private const val HOLD_HINT = "Hold OK for options"
 /** Horizontal padding every rail child carries, which is what keeps them out of the overscan. */
@@ -2160,8 +2093,7 @@ private val TOUCH_TILE_MIN = 168.dp
  * A phone chat row, at Material's list-item metrics.
  *
  * 72 dp with a 56 dp avatar is the two-line list item, and it is what Telegram, Gmail and the
- * dialler all draw. The card it replaced was 84 dp plus a 14 dp gap, so this fits three more
- * chats on a screen while looking less busy.
+ * dialler all draw. The chat list skeleton has to match this figure.
  */
 private val TOUCH_ROW_HEIGHT = 72.dp
 private val TOUCH_AVATAR = Avatar.List
@@ -2170,8 +2102,7 @@ private val TOUCH_AVATAR = Avatar.List
  * How far the listing keeps from each edge.
  *
  * A television crops its outermost few percent, so the TV figures are overscan clearance and have
- * nothing to do with taste. A phone crops nothing, and spending 32 dp a side of a 400 dp screen on
- * a margin that exists to defeat a cathode ray tube is a third of a tile thrown away.
+ * nothing to do with taste. A phone crops nothing, so it spends far less of its width on margins.
  */
 private class BrowseInsets(val start: Dp, val end: Dp, val top: Dp, val bottom: Dp)
 

@@ -57,13 +57,11 @@ fun IntroScreen(onContinue: () -> Unit) {
     if (touch) {
         Pane { Intro(touch = true, focus = focus, onContinue = onContinue) }
     } else {
-        // Not [Pane] on the television: this pane runs to a 760dp column rather than the 640dp the
-        // shared one uses, and widening it back would reflow the three points on the primary
-        // device for the sake of sharing four lines of layout.
+        // Not [Pane] on the television: this pane runs to a 760dp column rather than the shared
+        // 640dp, which is what the three points are laid out for.
         //
-        // Scrollable because the only focusable thing on this screen is the button at the bottom,
-        // and raising the system font scale adds a wrapped line to several of these paragraphs,
-        // which is enough to push it off the bottom.
+        // Scrollable because the only focusable thing here is the button at the bottom, and a
+        // raised system font scale wraps enough of these paragraphs to push it off the screen.
         Box(
             Modifier
                 .fillMaxSize()

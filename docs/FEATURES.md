@@ -42,7 +42,7 @@ that off.
 watching to forget one, or clear the whole list at once from its heading or from Settings.
 Starring a chat keeps it in Favourites, and the chat you last watched from reopens on launch.
 
-**Keeps one video on the device.** An 8 GB stick cannot hold a library. TMPlayer caches the video you
+**Keeps one video on the device.** An 8 GB stick has no room to keep everything. TMPlayer caches the video you
 are watching and clears the previous one, telling you exactly how much space that freed. A setting
 turns that into a question first, for anyone who would rather be asked. Coming back to a video you
 stopped half way through keeps the half already on disk instead of starting the download again, and

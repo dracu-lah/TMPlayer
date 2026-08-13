@@ -6,6 +6,7 @@ import com.tmplayer.data.NetworkMonitor
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import com.tmplayer.data.Thumbnails
+import com.tmplayer.data.WatchCache
 import com.tmplayer.player.PlayerActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,11 +21,10 @@ class App : Application() {
         // The isolated screenshot fixture must never open TDLib or touch a Telegram account.
         // BuildConfig is variant-specific, and the promo package is never part of a release APK.
         if (BuildConfig.APPLICATION_ID.endsWith(".promo")) return
-        // Before anything else that could throw, because a crash reporter that starts after the
-        // crash is worth nothing. It reads one flag off the disk on a background thread and does
-        // absolutely nothing unless that flag is true, so the launch path is unaffected either
-        // way: no SDK is initialised and no endpoint is contacted on a device where the viewer
-        // has not asked for this.
+        // Before anything else that could throw: a crash reporter that starts after the crash is
+        // worth nothing. It reads one flag off the disk on a background thread and stays inert
+        // unless that flag is true, so no SDK is initialised and no endpoint is contacted on a
+        // device where the viewer has not asked for this.
         if (CrashReports.available) {
             backgroundScope.launch {
                 runCatching {
@@ -40,23 +40,24 @@ class App : Application() {
         // TDLib takes a moment to open its database; starting here means the login screen is
         // already showing a QR code by the time the user has finished reading the first line.
         Td.start(this)
-        // Kept off the launch path: the ceiling is about tomorrow's disk, not this frame, and
-        // TDLib has a database to open first. It waits for an authorized session, so on a device
-        // nobody has signed into yet it simply never runs.
         // Which way up the player opens, fetched now so it is in hand before anybody reaches a
         // video. The player has to set its orientation before it lays anything out, which leaves
-        // no room for a disk read there, and blocking the launch of a video on one is exactly the
-        // sort of thing that makes an app feel slow. Anyone quick enough to beat this gets the
-        // default, which is what they would have got anyway.
+        // no room for a disk read there. Anyone quick enough to beat this gets the default.
         backgroundScope.launch {
             runCatching {
                 PlayerActivity.primeOrientation(SettingsStore(this@App).screenOrientationNow())
             }
         }
+        // Kept off the launch path: the storage ceiling is about tomorrow's disk, not this frame,
+        // and TDLib has a database to open first. Waits for an authorized session, so on a device
+        // nobody has signed into yet it never runs.
         backgroundScope.launch {
             Td.awaitAuthorizedSession()
             delay(CACHE_TRIM_DELAY_MS)
             Td.trimStorage()
+            // The videos, which the trim above cannot touch because it cannot tell a download
+            // from a cache. This can. See [WatchCache.sweep].
+            runCatching { WatchCache.sweep(this@App) }
         }
     }
 

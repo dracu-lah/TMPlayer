@@ -33,9 +33,8 @@ class TvPlayerGlue(
     private val rewind = PlaybackControlsRow.RewindAction(context)
     private val fastForward = PlaybackControlsRow.FastForwardAction(context)
 
-    // The standard skip glyphs, so a series watcher recognises them from every other player.
-    // They are built here but only put on the row once the chat has been asked whether the
-    // episodes either side of this one exist: a button that does nothing is worse than no button.
+    // Built here, but only put on the row once the chat has been asked whether the episodes either
+    // side of this one exist: a button that does nothing is worse than no button.
     private val skipPrevious = PlaybackControlsRow.SkipPreviousAction(context)
     private val skipNext = PlaybackControlsRow.SkipNextAction(context)
     private var primary: ArrayObjectAdapter? = null
@@ -101,8 +100,7 @@ class TvPlayerGlue(
     /**
      * Playback speed and picture shape, which on a phone live inside Media3's own gear menu.
      *
-     * A remote has no gear menu and leanback ships neither control, so a television had no way to
-     * slow a mumbled scene down or to crop the bars off a 2.39:1 film. One button each, stepping
+     * A remote has no gear menu and leanback ships neither control. One button each, stepping
      * through a short list, is what a D-pad can drive; the label carries the current value so the
      * button says what pressing it just did.
      */

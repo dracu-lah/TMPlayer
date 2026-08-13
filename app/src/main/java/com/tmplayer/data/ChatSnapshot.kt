@@ -3,11 +3,11 @@ package com.tmplayer.data
 /**
  * The chat list, reduced to what it takes to paint one, so the first frame does not wait on TDLib.
  *
- * Cold start went: open TDLib, wait for its database, then ask it about three hundred chats before
- * anything at all could be drawn. On a 1 GB stick that is seconds of an empty screen every single
- * launch, for a list that is very nearly the same list it was yesterday. This is that list written
- * down at the end of a sync and read back at the start of the next one, so the app opens on
- * something and corrects itself a moment later.
+ * Without it a cold start has to open TDLib, wait for its database and ask about three hundred
+ * chats before anything can be drawn, which on a 1 GB stick is seconds of empty screen for a list
+ * that is very nearly yesterday's. This is that list written down at the end of a sync and read
+ * back at the start of the next one, so the app opens on something and corrects itself a moment
+ * later.
  *
  * The blurred previews are deliberately not in it. They are a couple of hundred bytes each and
  * would turn a small preference write into a sixty kilobyte one on every sync; the art arrives
@@ -16,10 +16,9 @@ package com.tmplayer.data
  * One chat per line, `id|kind|photoFileId|flags|unread|folders|title`, with the title last because
  * it is the only field that can itself contain the separator.
  *
- * A line written by an older build has four fields rather than seven, and is read as one: the extra
- * fields default to what a chat with no pin, no archive and no folders would have. This matters
- * once, on the first launch after an update, and the alternative is that exact launch opening on
- * the empty screen this file exists to prevent.
+ * A line with four fields rather than seven is read as an older record, the extra fields defaulting
+ * to no pin, no archive and no folders. Dropping those lines instead would make the first launch
+ * after an update open on the empty screen this file exists to prevent.
  */
 object ChatSnapshot {
 
@@ -51,8 +50,8 @@ object ChatSnapshot {
             val wide = line.split("|", limit = FIELDS)
             // A title may itself contain the separator, so the shape of the line is decided by
             // whether the two numeric fields a current record has are actually numbers, not by
-            // counting separators. Splitting an old record seven ways would otherwise tear a
-            // title with a pipe in it into fields and throw the whole row away.
+            // counting separators. Counting separators would tear an old title containing a pipe
+            // into fields and throw the whole row away.
             val legacy = wide.size != FIELDS ||
                 wide[3].toIntOrNull() == null ||
                 wide[4].toIntOrNull() == null

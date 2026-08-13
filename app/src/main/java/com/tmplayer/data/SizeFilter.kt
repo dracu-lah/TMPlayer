@@ -4,7 +4,7 @@ package com.tmplayer.data
  * Which files are large enough to be a video and small enough to be worth streaming.
  *
  * A video chat is full of things that are not videos (trailers, clips, a two-minute sample), and
- * at the other end, a 6 GB remux on an 8 GB stick is more trouble than it is worth. Bounding the
+ * at the other end a 6 GB remux on an 8 GB stick is more trouble than it is worth. Bounding the
  * list by size removes both without the viewer having to read every entry.
  */
 object SizeFilter {
@@ -47,8 +47,7 @@ object SizeFilter {
             // Already on the grid: a plain step.
             value % STEP == 0L -> value + direction * STEP
             // Off the grid: round towards travel, so the first press always moves and lands
-            // somewhere tidy. Rounding to nearest instead would leave a downward press from
-            // 2560 sitting on 2560 forever.
+            // somewhere tidy. Rounding to nearest would leave a downward press from 2560 stuck.
             direction > 0 -> (value / STEP + 1) * STEP
             else -> value / STEP * STEP
         }
@@ -58,10 +57,9 @@ object SizeFilter {
     /**
      * Rounds a dragged value onto the step grid.
      *
-     * A slider under a thumb reports whatever fraction of the track it is at, which for this range
-     * is a value to the byte; showing "2.43 GB" and storing it would make the readout unrepeatable
-     * and the label arithmetic ugly for no gain. Both ends of the range are snapped to themselves,
-     * since "No minimum" and "No limit" are the two values a viewer is most likely to want exactly.
+     * A dragged slider reports a value to the byte, which would make the readout unrepeatable.
+     * Both ends snap to themselves, since "No minimum" and "No limit" are the two values a viewer
+     * is most likely to want exactly.
      */
     fun snap(value: Long): Long {
         if (value <= FLOOR + STEP / 2) return FLOOR
@@ -93,10 +91,9 @@ object SizeFilter {
     /**
      * The current bounds as a sentence, for the line under the slider.
      *
-     * Written as four cases rather than one template because the ends are not values a viewer
-     * can be shown: "between No minimum and 2.5 GB" is not English, and with both ends open
-     * there is no filter left to describe at all. [label] is still the right thing for the track
-     * ends and the thumbs, where a bare phrase is what is wanted.
+     * Four cases rather than one template, because the open ends are not values a viewer can be
+     * shown: "between No minimum and 2.5 GB" is not English. [label] is still the right thing for
+     * the track ends and the thumbs, where a bare phrase is what is wanted.
      */
     fun describe(minBytes: Long, maxBytes: Long): String {
         val hasMin = minBytes > FLOOR

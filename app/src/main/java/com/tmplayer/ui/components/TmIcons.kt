@@ -15,11 +15,9 @@ import androidx.compose.ui.unit.dp
  * thousand unused icons to an app that needs exactly these.
  *
  * Every path is filled black, which is what Material fills its own icons with. `Icon` paints a
- * vector through a tint filter, so the colour asked for at the call site is the colour that lands
- * and the fill written here never shows; the one moment it does show is an `Icon` given
- * `Color.Unspecified`, which skips the filter. These used to be filled white for a television that
- * had no other background, and the phone's light theme turned that into an icon drawn in white on
- * white. Black is the fill that fails visibly rather than invisibly.
+ * vector through a tint filter, so the colour asked for at the call site is the one that lands and
+ * this fill never shows, except under an `Icon` given `Color.Unspecified`, which skips the filter.
+ * Black is the fill that fails visibly there rather than invisibly on a light theme.
  */
 object TmIcons {
 
@@ -368,10 +366,8 @@ object TmIcons {
     /**
      * A lidded box, which is the picture every mail and chat app uses for an archive.
      *
-     * The body is hollow by even-odd fill rather than by drawing a lighter shape over a darker one.
-     * `Icon` paints the whole vector through one tint, so a knockout in a second colour would come
-     * out the same colour as the thing it was supposed to knock out of, and the box would be a
-     * solid slab.
+     * The body is hollow by even-odd fill: `Icon` paints the whole vector through one tint, so a
+     * knockout in a second colour would come out the same colour and leave a solid slab.
      */
     val Archive: ImageVector by lazy {
         icon("Archive") {
@@ -460,12 +456,8 @@ object TmIcons {
     }
 
     /**
-     * The pushpin Telegram marks a pinned chat with.
-     *
-     * A row used to say the word "Pinned" in its second line. Telegram itself does not, and neither
-     * does any other list of conversations on the phone: the pin is a shape people already read at
-     * a glance, and the words were spending a third of a narrow line saying something the glyph
-     * says in 16 dp.
+     * The pushpin Telegram marks a pinned chat with. A shape people read at a glance, in the
+     * space a word would spend a third of a narrow line on.
      */
     val Pin: ImageVector by lazy {
         icon(
@@ -479,8 +471,8 @@ object TmIcons {
     /**
      * Three nodes joined by two lines: the share glyph Android has used since Holo.
      *
-     * Material's core set carries `Share`, which is the other one, the arrow leaving a box, and
-     * that is what an iPhone shares with. On Android the three dots are what people press.
+     * Material's core `Share` is the other one, the arrow leaving a box, which is the iPhone's.
+     * On Android the three dots are what people press.
      */
     val Share: ImageVector by lazy {
         icon(
@@ -520,9 +512,7 @@ object TmIcons {
     /**
      * The same builder again, given SVG path data rather than the drawing DSL.
      *
-     * The glyphs above it are written out call by call, which is readable for a circle and absurd
-     * for a bell with a slash through it: those arrive as path data, and hand-translating forty
-     * curves into `curveTo` calls is forty chances to put a video's mute marker slightly wrong.
+     * For glyphs whose forty curves would be forty chances to mistype a `curveTo` call.
      * [PathParser] is the same parser an XML vector drawable goes through, so what is drawn is what
      * the icon set drew.
      */

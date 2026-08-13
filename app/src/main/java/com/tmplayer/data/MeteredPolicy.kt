@@ -15,10 +15,8 @@ enum class MeteredDecision {
 /**
  * Whether a video may be fetched over the connection this device currently has.
  *
- * Nothing in the app distinguished Wi-Fi from mobile data before, so opening a twelve gigabyte
- * remux on a train started pulling all twelve of them without a word. The rules are deliberately
- * quiet: a file already on disk asks nothing of the network, and a small one is not worth a
- * dialog, so only the case that actually costs money interrupts anybody.
+ * The rules are deliberately quiet: a file already on disk asks nothing of the network, and a
+ * small one is not worth a dialog, so only the case that actually costs money interrupts anybody.
  *
  * Pure so the decision can be tested rather than reasoned about from a phone with a SIM in it.
  */

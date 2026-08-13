@@ -3,10 +3,9 @@ package com.tmplayer.player
 /**
  * How the picture is fitted to the screen, and the order the control steps through.
  *
- * A 2.39:1 film on a 16:9 panel is mostly black bars, and every player worth using lets the
- * viewer trade some of the sides away to fill the glass. Three stops is the whole useful range:
- * the true shape, cropped to fill, and stretched to fill. More stops than that is a menu nobody
- * reads.
+ * A 2.39:1 video on a 16:9 panel is mostly black bars, so the viewer can trade some of the sides
+ * away to fill the glass. Three stops is the whole useful range: the true shape, cropped to fill,
+ * and stretched to fill.
  *
  * The integers are Media3's own `AspectRatioFrameLayout.RESIZE_MODE_*` values, kept here as
  * literals so this stays pure and testable rather than dragging a view class into a unit test.

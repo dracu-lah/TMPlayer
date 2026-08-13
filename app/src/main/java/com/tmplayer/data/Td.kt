@@ -9,7 +9,6 @@ import dev.g000sha256.tdl.TdlResult
 import dev.g000sha256.tdl.dto.AuthorizationState
 import dev.g000sha256.tdl.dto.ConnectionStateReady
 import dev.g000sha256.tdl.dto.CountryInfo
-import dev.g000sha256.tdl.dto.PhoneNumberInfo
 import dev.g000sha256.tdl.dto.ConnectionStateUpdating
 import dev.g000sha256.tdl.dto.FileType
 import dev.g000sha256.tdl.dto.FileTypeAnimation
@@ -48,9 +47,9 @@ private const val TAG = "Td"
 /**
  * The single TDLib connection for the whole process.
  *
- * TDLib owns the session on disk, so there is exactly one client and it lives as long as the
- * app does. Logging out closes the client for good, which is why [clientLoop] can build a
- * replacement; that is the only supported way to log back in.
+ * TDLib owns the session on disk, so there is exactly one client and it lives as long as the app
+ * does. Logging out closes the client for good, so [clientLoop] builds a replacement: that is the
+ * only supported way to log back in.
  */
 object Td {
 
@@ -71,8 +70,8 @@ object Td {
     /**
      * The way the user chose to sign in, and the deferred that ends the current client's life.
      *
-     * Both belong to the login flow rather than to a single update, because the choice has to
-     * survive being asked the same TDLib question twice and [replay] has no `closed` of its own.
+     * Both belong to the login flow rather than to a single update: the choice has to survive
+     * being asked the same TDLib question twice, and [replay] has no `closed` of its own.
      */
     private var method = SignInMethod.Undecided
 
@@ -85,10 +84,9 @@ object Td {
     /**
      * Whether TDLib currently has a line to Telegram.
      *
-     * Signing in is not the same thing as being connected. Coming back to the app after the TV has
-     * been asleep, the session is read off disk and the account is ready long before the socket
-     * is, and a search sent in that gap comes back empty: not an error, just nothing, which the
-     * screens then report as an empty chat.
+     * Signing in is not the same thing as being connected: the session is read off disk and the
+     * account is ready long before the socket is, and a search sent in that gap comes back empty
+     * rather than failing. Wait on this before treating an empty answer as the truth.
      */
     private val _connected = MutableStateFlow(false)
     val connected: StateFlow<Boolean> = _connected.asStateFlow()
@@ -97,10 +95,9 @@ object Td {
      * The viewer's Telegram folders, in the order they were set up in.
      *
      * Collected here rather than where they are drawn because there is no request that asks for
-     * them. TDLib announces the whole set once, shortly after the client starts, and again only
-     * when it changes; a screen that subscribes when it opens has already missed the announcement
-     * and would show no folders until one was edited on another device. Started with the client
-     * and emptied with it, so the folders belong to whoever is signed in and go with them.
+     * them: TDLib announces the whole set once, shortly after the client starts, and again only
+     * when it changes, so a screen that subscribes when it opens would miss the announcement.
+     * Started with the client and emptied with it, so the folders go with whoever is signed in.
      */
     private val _folders = MutableStateFlow<List<ChatFolderSummary>>(emptyList())
     val folders: StateFlow<List<ChatFolderSummary>> = _folders.asStateFlow()
@@ -130,9 +127,9 @@ object Td {
                 td.chatFoldersUpdates.collect { update ->
                     _folders.value = update.chatFolders.map { folder ->
                         // The name is formatted text because Telegram lets a folder carry custom
-                        // emoji in it. Only the plain characters are kept: the rail draws a folder
-                        // beside an icon of its own, and a client that cannot render a custom emoji
-                        // would otherwise print the placeholder character it stands in as.
+                        // emoji. Only the plain characters are kept: the rail draws its own icon,
+                        // and a custom emoji this client cannot render would print as its
+                        // placeholder character.
                         ChatFolderSummary(
                             id = folder.id,
                             title = folder.name.text.text.trim().ifBlank { "Folder ${folder.id}" },
@@ -163,9 +160,8 @@ object Td {
             folders.cancel()
             _folders.value = emptyList()
             cachedMyId = 0L
-            // Cancelled with the rest of the generation. It usually finishes long before this,
-            // but a client closed while it is still waiting on TDLib would otherwise leave a
-            // coroutine holding a dead client, once per sign-in, for the life of the process.
+            // Cancelled with the rest of the generation: a client closed while the primer is
+            // still waiting on TDLib would otherwise leak a coroutine holding a dead client.
             primer.cancel()
             _connected.value = false
             current = null
@@ -175,10 +171,10 @@ object Td {
 
     private suspend fun apply(td: TdlClient, state: AuthorizationState) = gate.withLock {
         // The update flow and the one-off getAuthorizationState() often deliver the same state
-        // back to back at startup. Acting twice would send TDLib its parameters twice and
-        // surface the second attempt's error as a login failure. Comparing against only the
-        // immediately previous state still lets a genuine repeat through: a QR link that
-        // expires and sends us back to WaitPhoneNumber has a different state in between.
+        // back to back at startup. Acting twice would send TDLib its parameters twice and surface
+        // the second attempt's error as a login failure. Comparing against only the immediately
+        // previous state still lets a genuine repeat through: a QR link that expires and sends us
+        // back to WaitPhoneNumber has a different state in between.
         if (state == lastHandled) return@withLock
         lastHandled = state
 
@@ -205,8 +201,8 @@ object Td {
      * Runs the last TDLib state through the reducer again after [method] has moved.
      *
      * TDLib is not told anything here and sends nothing new: the state it is sitting in has simply
-     * come to mean something different, because the user has now said which way they are signing
-     * in. Clearing [lastHandled] is what lets the same state through the duplicate guard once more.
+     * come to mean something different now the user has said which way they are signing in.
+     * Clearing [lastHandled] is what lets the same state through the duplicate guard once more.
      */
     private suspend fun replay() {
         val td = current ?: return
@@ -245,7 +241,7 @@ object Td {
     suspend fun submitCode(code: String): String? {
         val td = current ?: return "Not connected"
         // Copied rather than rebuilt: the screen's delivery route, digit count and resend timer all
-        // live in this state, and a fresh Code() would blank them the moment a digit was mistyped.
+        // live in this state, and a fresh Code() would blank them the moment a digit is mistyped.
         val current = _auth.value as? AuthState.Code ?: AuthState.Code("")
         return when (val result = td.checkAuthenticationCode(code)) {
             is TdlResult.Success -> null
@@ -277,16 +273,6 @@ object Td {
         val td = current ?: return ""
         return td.getCountryCode().valueOrNull?.text.orEmpty()
     }
-
-    /**
-     * Telegram's own reading of a half-typed number: which country it belongs to, and how that
-     * country groups its digits.
-     *
-     * Worth the round trip rather than a local formatter, because this is the same table the
-     * Telegram apps format against, so a number looks here exactly as it looks there.
-     */
-    suspend fun phoneNumberInfo(phoneNumber: String): PhoneNumberInfo? =
-        current?.getPhoneNumberInfo(phoneNumber)?.valueOrNull
 
     /**
      * Asks Telegram to send the code again, by whatever route it has decided is next.
@@ -362,9 +348,8 @@ object Td {
      * Abandons a half-finished sign-in and goes back to the choice of method.
      *
      * The password and code steps are dead ends otherwise: somebody who scanned with the wrong
-     * account, who cannot remember the password, or who typed the wrong number, has nothing to
-     * press. Logging out here throws away an attempt rather than an account, since nobody is
-     * signed in yet.
+     * account or cannot remember the password has nothing to press. Logging out here throws away
+     * an attempt rather than an account, since nobody is signed in yet.
      */
     suspend fun restartSignIn() {
         method = SignInMethod.Undecided
@@ -401,10 +386,9 @@ object Td {
     /**
      * The same wait, given up on after [timeoutMs].
      *
-     * The unbounded version is right for work that has nothing else to do, and wrong for anything
-     * a viewer is watching a spinner for: on a device that never gets a socket it waits forever,
-     * and the screen in front of them says "connecting" until they close the app. Null means the
-     * time ran out, which callers turn into an offline state with a Retry rather than a hang.
+     * The unbounded version is right for background work and wrong for anything a viewer is
+     * watching a spinner for: on a device that never gets a socket it waits forever. Null means
+     * the time ran out, which callers turn into an offline state with a Retry rather than a hang.
      */
     suspend fun awaitConnectedSessionOrNull(timeoutMs: Long = CONNECT_TIMEOUT_MS): TdSession? =
         withTimeoutOrNull(timeoutMs) { awaitConnectedSession() }
@@ -437,16 +421,14 @@ object Td {
     /**
      * The video a stored row points at, asked for again from Telegram.
      *
-     * Continue watching keeps a TDLib file id, and a TDLib file id is only good for the instance
-     * that issued it: after a restart, a re-login or a database rebuild the number either resolves
-     * to nothing or, worse, to a different file. Worse still, TDLib will not download a file it
-     * cannot trace back to a message it has seen this session, which is why resuming a video that
-     * was still on disk worked and resuming one that had to be fetched did not.
+     * Continue watching keeps a TDLib file id, and a file id is only good for the instance that
+     * issued it: after a restart, a re-login or a database rebuild it resolves to nothing or to a
+     * different file. TDLib also refuses to download a file it cannot trace back to a message it
+     * has seen this session.
      *
-     * Fetching the message fixes both: the id comes back current, and TDLib now has the message as
-     * the file's source, so the download it refused a moment ago goes through. Null when the
-     * message is gone or unreachable, which leaves the caller with the stored row: that copy still
-     * plays if the file is already on the device.
+     * Fetching the message fixes both: the id comes back current, and TDLib has the message as the
+     * file's source, so the download goes through. Null when the message is gone or unreachable,
+     * which leaves the caller with the stored row: that copy still plays if it is already on disk.
      */
     suspend fun refreshMedia(chatId: Long, messageId: Long): MediaItem? {
         val td = current ?: return null
@@ -470,6 +452,24 @@ object Td {
         )
     }
 
+    /**
+     * The file id a stored row points at, as this session knows it.
+     *
+     * A TDLib file id belongs to the instance that issued it. After a restart, a re-login or a
+     * database rebuild the id in a saved row resolves to nothing, and everything measured from it
+     * reads as zero: rows vanish from Downloads, and the bytes still on the disk are attributed to
+     * whatever bucket owns the leftovers. The message is the stable identity, so a stale id is
+     * re-resolved from it.
+     *
+     * The stored id is tried first, because it is right for the whole of the session that wrote it
+     * and costs one call to find out. Falls back to the stored id when the message cannot be
+     * reached, which leaves the caller no worse off than before.
+     */
+    suspend fun currentFileId(chatId: Long, messageId: Long, storedFileId: Int): Int {
+        if (localDownloadedBytes(storedFileId) > 0) return storedFileId
+        return refreshMedia(chatId, messageId)?.fileId ?: storedFileId
+    }
+
     /** How much of a file is already on disk, whether or not the download ever finished. */
     suspend fun localDownloadedBytes(fileId: Int): Long {
         val td = current ?: return 0L
@@ -481,7 +481,7 @@ object Td {
      *
      * This is what the Downloads screen removes a row with. `deleteFile` only touches the copy on
      * disk: the message it came from is untouched, so the video can be downloaded again by playing
-     * it, which is exactly what a viewer clearing space expects.
+     * it.
      */
     suspend fun deleteFile(fileId: Int) {
         val td = current ?: return
@@ -503,11 +503,9 @@ object Td {
     /**
      * Where a file is on disk, finished or not.
      *
-     * [localFilePath] deliberately refuses a partial file, because the apps it hands a video to
-     * have no way to say "this one stops in the middle". This one answers anyway, for the Downloads
-     * screen, which walks the disk looking for videos nothing in the app can name: a half-loaded
-     * download whose path was not known would be counted there as an orphan and offered for
-     * deletion twice.
+     * [localFilePath] deliberately refuses a partial file. This one answers anyway, for the
+     * Downloads screen, which walks the disk looking for videos nothing in the app can name: a
+     * half-loaded download whose path was unknown would be counted there as an orphan.
      */
     suspend fun localPathAnyway(fileId: Int): String? {
         val td = current ?: return null
@@ -542,14 +540,34 @@ object Td {
     }
 
     /**
+     * Pictures, thumbnails and the rest of what is not a video, gone.
+     *
+     * Nothing here may touch a video: the type filter is the same one the automatic trim uses, and
+     * videos are governed by ownership in [WatchCache], not by any button on the Settings screen.
+     */
+    suspend fun clearPicturesAndPreviews() {
+        val td = current ?: return
+        runCatching {
+            td.optimizeStorage(
+                size = 0,
+                ttl = Int.MAX_VALUE,
+                count = Int.MAX_VALUE,
+                immunityDelay = 0,
+                fileTypes = NON_VIDEO_TYPES,
+                chatIds = longArrayOf(),
+                excludeChatIds = longArrayOf(),
+                returnDeletedFileStatistics = false,
+                chatLimit = 0,
+            )
+        }
+    }
+
+    /**
      * Everything TMPlayer is holding, of every kind, gone.
      *
      * [clearMediaCache] spares photos and thumbnails, which is right for the button that means
-     * "delete the films". It is wrong for the button that means "I need this space back": on a
-     * stick where the video had already been trimmed away, that button reported nothing to free
-     * and then freed nothing, while the disk sat full of a year of chat pictures and whatever
-     * TDLib had filed under its own types. This is the answer to that: no immunity, no type
-     * filter, no ceiling. The browse grid goes grey for a moment afterwards and refetches.
+     * "delete the videos" and wrong for the one that means "I need this space back". So: no
+     * immunity, no type filter, no ceiling. The browse grid goes grey for a moment and refetches.
      */
     suspend fun clearEverythingCached() {
         val td = current ?: return
@@ -571,12 +589,14 @@ object Td {
     /**
      * Keeps the cache under a ceiling, quietly, instead of waiting to be emptied by hand.
      *
-     * [clearMediaCache] is the only thing that ever removed anything, it is a button, and it takes
-     * everything at once. Photos and thumbnails were exempt from even that, so they grew for the
-     * life of the install: on a stick with eight gigabytes that is the disk filling up with
-     * pictures of chats nobody has opened in a year. This runs on launch, takes the oldest first
-     * and stops at the ceiling, and it leaves anything touched in the last few minutes alone so it
-     * cannot delete the video currently being streamed out from under the player.
+     * Runs on launch, takes the oldest first and stops at the ceiling. Anything touched in the
+     * last few minutes is left alone, so this cannot delete the video the player is streaming.
+     *
+     * It must not touch videos. TDLib evicts oldest first and has never heard of a download: asked
+     * to get under a ceiling it would take a video the viewer ticked as readily as last night's
+     * cache, leaving the Downloads row pointing at a file of zero bytes. So the ceiling here is
+     * enforced only over files that have no owner: pictures, thumbnails, stickers, stories. Videos
+     * are governed by ownership instead, in [WatchCache], which knows which the viewer asked for.
      */
     suspend fun trimStorage(maxBytes: Long = cacheCeilingBytes()) {
         val td = current ?: return
@@ -586,9 +606,7 @@ object Td {
                 ttl = CACHE_TTL_SECONDS,
                 count = Int.MAX_VALUE,
                 immunityDelay = CACHE_IMMUNITY_SECONDS,
-                // Every type, photos and thumbnails included, which is the whole difference
-                // between this and the button.
-                fileTypes = emptyArray(),
+                fileTypes = NON_VIDEO_TYPES,
                 chatIds = longArrayOf(),
                 excludeChatIds = longArrayOf(),
                 returnDeletedFileStatistics = false,
@@ -670,6 +688,24 @@ object Td {
 
     /** Recently touched files are left alone, so this cannot delete what is playing. */
     private const val CACHE_IMMUNITY_SECONDS = 10 * 60
+
+    /**
+     * Everything the automatic trim is allowed to take: the files nobody ticked and nobody misses.
+     *
+     * The three that are missing are the three a video can be filed under, [FileTypeVideo],
+     * [FileTypeDocument] and [FileTypeAnimation]. A video is either the cache's or the viewer's,
+     * and [WatchCache] is the only thing in this app that knows which. See [trimStorage].
+     */
+    private val NON_VIDEO_TYPES: Array<FileType> = arrayOf(
+        FileTypePhoto(),
+        FileTypeThumbnail(),
+        FileTypeProfilePhoto(),
+        FileTypeSticker(),
+        FileTypeAudio(),
+        FileTypePhotoStory(),
+        FileTypeVideoStory(),
+        FileTypeVideoNote(),
+    )
 
     internal fun isCurrent(session: TdSession): Boolean =
         current === session.client && generation.get() == session.generation && _auth.value is AuthState.Ready

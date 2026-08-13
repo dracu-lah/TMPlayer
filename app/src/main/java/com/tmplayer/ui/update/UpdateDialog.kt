@@ -64,8 +64,8 @@ import com.tmplayer.ui.components.paneAction
  * What happens after the viewer presses Update: confirm, download, then Android takes over.
  *
  * Both the rail and Settings show this same dialog, because [Updates] holds the state and this is
- * only a window onto it. It closes itself once the installer is on screen: what happens next is
- * the system's business, and coming back to a spent dialog would be confusing.
+ * only a window onto it. It closes itself once the installer is on screen, since what happens next
+ * is the system's business.
  */
 @Composable
 fun UpdateDialog(onDismiss: () -> Unit) {
@@ -147,9 +147,8 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                         modifier = Modifier.focusRequester(confirm).paneAction(),
                     ) { Text("Download and install") }
 
-                    // The panel says "Asking GitHub…" in its body while this runs, but the body is
-                    // not what the remote is pointed at: the button is, and until it said so too
-                    // a slow answer read as a press that had not registered.
+                    // The button names the check while it runs, not just the body: the button is
+                    // what the remote is pointed at, so a slow answer must show there.
                     else -> TmButton(
                         onClick = { scope.launch { Updates.check() } },
                         loading = state is UpdateState.Checking,
@@ -207,10 +206,8 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                         MaterialTheme.typography.bodyLarge
                     },
                     color = Tone.muted,
-                    // "Asking GitHub…" is one line and the answer is two or three, so pressing
-                    // Check again shrank the panel and then grew it back. A panel centred on the
-                    // screen moves both its edges when it does that, which reads as the dialog
-                    // jumping away from the button being pressed. The floor holds it still.
+                    // A floor on the height: the messages run one to three lines, and a centred
+                    // panel that resizes reads as the dialog jumping away from the button.
                     minLines = BODY_LINES,
                 )
 
@@ -233,8 +230,8 @@ fun UpdateDialog(onDismiss: () -> Unit) {
     LaunchedEffect(state) {
         if (state is UpdateState.Ready) onDismiss()
     }
-    // Only a remote needs a starting point. A finger picks its own, and focus parked on the
-    // primary button is a ring a phone viewer has no way to explain.
+    // Only a remote needs a starting point. On a phone a parked focus ring has nothing to explain
+    // it.
     if (!touch) {
         LaunchedEffect(Unit) { runCatching { confirm.requestFocus() } }
     }
@@ -252,13 +249,9 @@ private val PANEL_MAX = 620.dp
 private const val BODY_LINES = 3
 
 /**
- * The phone's version: Material's own dialog, in place of the hand-built panel.
- *
- * The panel was drawn for a television, where a dialog is a lit card in the middle of a dark room
- * and every control has to be reachable by D-pad. On a phone all of that is already decided by the
- * platform: the scrim, the width, the corner radius, the button order, tap-outside to dismiss and
- * the announcement a screen reader makes on the way in. Writing them again by hand only meant
- * getting them slightly wrong, and the sizes were the sofa's.
+ * The phone's version: Material's own dialog rather than the hand-built panel above, which is drawn
+ * for a television and its D-pad. On a phone the platform already decides the scrim, the width, the
+ * corner radius, the button order, tap-outside to dismiss and the screen reader announcement.
  */
 @Composable
 private fun TouchUpdateDialog(
@@ -273,9 +266,8 @@ private fun TouchUpdateDialog(
         // A download in progress is the one state that must not be dismissed by a stray tap
         // outside it: the dialog is what is holding the download's own progress on screen.
         onDismissRequest = { if (downloading == null) onDismiss() },
-        // Caution is the television's amber, and amber on a white card is barely a colour at all,
-        // so Tone hands the phone a darker one and the dialog's own container, title and body are
-        // left to the scheme entirely.
+        // Amber on a white card is barely a colour, so Tone hands the phone a darker one. The
+        // container, title and body are left to the scheme.
         icon = {
             M3Icon(Icons.Filled.Refresh, contentDescription = null, tint = Tone.caution)
         },
@@ -292,8 +284,8 @@ private fun TouchUpdateDialog(
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 M3Text(
                     body(state, allowed, release?.sizeBytes ?: 0L, "phone"),
-                    // The same floor the television's panel keeps, and for the same reason: a
-                    // dialog that shrinks under the finger pressing it looks like a mistake.
+                    // The same floor the television's panel keeps: a dialog that shrinks under the
+                    // finger pressing it looks like a mistake.
                     minLines = BODY_LINES,
                 )
                 if (downloading != null) {
@@ -314,9 +306,8 @@ private fun TouchUpdateDialog(
         // Close beside it can abandon, so it gets to be the filled one.
         confirmButton = {
             if (downloading != null) return@AlertDialog
-            // A dialog's button row is too narrow for a spinner beside the words, so on a phone
-            // the words are the whole of it: the check is named while it runs and cannot be
-            // pressed a second time on the way.
+            // A dialog's button row is too narrow for a spinner beside the words, so the label
+            // names the check while it runs, and the button is disabled against a second press.
             val checking = state is UpdateState.Checking
             Button(onClick = onPrimary, enabled = !checking) {
                 M3Text(

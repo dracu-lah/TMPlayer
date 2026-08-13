@@ -29,10 +29,8 @@ object NetworkMonitor {
     /**
      * Whether the connection currently in use is one the viewer pays for by the byte.
      *
-     * Nothing in the app distinguished the two before, so a multi-gigabyte remux would start
-     * pulling over cellular as readily as over the house Wi-Fi, with no warning and no way to say
-     * no. Defaults to false: an unknown network is treated as unmetered, because a guess that
-     * blocks playback is worse than a guess that allows it.
+     * Defaults to false: an unknown network is treated as unmetered, because a guess that blocks
+     * playback is worse than a guess that allows it.
      */
     private val _metered = MutableStateFlow(false)
     val metered: StateFlow<Boolean> = _metered.asStateFlow()

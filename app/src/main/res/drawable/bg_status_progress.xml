@@ -3,7 +3,7 @@
 
   Android's stock horizontal progress bar is a square-ended sliver with a grey track, which is the
   one detail that dated this screen more than anything else on it. Everything drawn on top of a
-  film in 2026 is a rounded pill, and a bar that is not reads as a system dialog rather than as
+  video in 2026 is a rounded pill, and a bar that is not reads as a system dialog rather than as
   part of the app.
 -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">

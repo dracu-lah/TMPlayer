@@ -75,6 +75,8 @@ import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.TrackChoice
 import com.tmplayer.data.OfflineDownloads
+import com.tmplayer.data.CacheShelf
+import com.tmplayer.data.RoomOnDisk
 import com.tmplayer.data.Td
 import com.tmplayer.data.Thumbnails
 import com.tmplayer.data.WatchCache
@@ -164,9 +166,8 @@ class PlayerActivity : FragmentActivity() {
     /**
      * Which way up the picture is held, and whether the viewer has said so themselves.
      *
-     * The flag is what keeps the two orientation rules from fighting: a portrait video is allowed
-     * to turn the window on its own, but only until somebody presses the button, after which the
-     * choice is theirs and the decoder does not get a vote.
+     * The flag keeps the two orientation rules from fighting: a portrait video may turn the window
+     * on its own, but only until somebody presses the button, after which the choice is theirs.
      */
     private var orientation = lastOrientation
     private var orientationChosen = false
@@ -187,7 +188,7 @@ class PlayerActivity : FragmentActivity() {
     /**
      * The episodes either side of this one, once the chat has been asked about them.
      *
-     * Empty for a video, and empty for an episode whose neighbours are not in the chat. The
+     * Empty for a standalone video, and for an episode whose neighbours are not in the chat. The
      * transport row watches this and grows its two extra buttons when they arrive.
      */
     private val _episodes = MutableStateFlow(Episodes())
@@ -201,8 +202,8 @@ class PlayerActivity : FragmentActivity() {
      * The transport controls the system draws: notification, lock screen, headset and Assistant.
      *
      * Held for the life of the activity because it is the activity that owns the player. There is
-     * no service behind it on purpose: playback cannot outlive this screen anyway, and a service
-     * would only be a second lifetime to keep in step with this one.
+     * no service behind it on purpose: playback cannot outlive this screen, and a service would
+     * only be a second lifetime to keep in step with this one.
      */
     private var mediaSession: MediaSession? = null
 
@@ -258,24 +259,20 @@ class PlayerActivity : FragmentActivity() {
     /**
      * "Resuming from 1:12:40", once the saved position has been read off disk.
      *
-     * It arrives from a coroutine part-way through the load, and it is the one thing on the
-     * loading screen the viewer cannot work out from anywhere else, so it is carried alongside
-     * every later stage message instead of being replaced by one.
+     * It arrives from a coroutine part-way through the load, and is carried alongside every later
+     * stage message rather than replaced by one.
      */
     private var resumeNotice: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Fragments are not restored. A restored playback fragment comes back before
-        // the player is rebuilt, so it would attach with nothing behind it and no transport
-        // controls. Starting from a clean fragment manager means the fragment below is always
-        // built against a live player, and nothing here is worth restoring anyway: the resume
-        // position lives on disk.
+        // Fragments are not restored. A restored playback fragment comes back before the player is
+        // rebuilt, so it would attach with nothing behind it and no transport controls. A clean
+        // fragment manager means the fragment below is always built against a live player, and
+        // nothing here is worth restoring: the resume position lives on disk.
         super.onCreate(null)
-        // Before the first layout pass, on purpose. The activity used to open in whatever the phone
-        // was holding, draw the whole loading screen in portrait, and turn only once the decoder
-        // reported a wide picture: every single play began with a lurch. Almost every video is
-        // landscape, so landscape is what the loader opens in, and a portrait clip turns once at
-        // the point that is genuinely a surprise rather than at the point that never is.
+        // Before the first layout pass, on purpose: a window that turns after it has drawn is a
+        // lurch the viewer sees. Almost every video is landscape, so landscape is what the loader
+        // opens in, and a portrait clip turns once, later.
         applyOrientation()
         setContentView(R.layout.activity_player)
 
@@ -353,16 +350,14 @@ class PlayerActivity : FragmentActivity() {
         statusMeta?.visibility =
             if (statusMeta?.text.isNullOrBlank()) View.GONE else View.VISIBLE
         if (!FormFactor.isTv(this)) wireEpisodeButtons()
-        claimTheWatchCache()
         observeDownload()
         observeConnectivity()
         startResumeHeartbeat()
         findEpisodes()
 
-        // Reading the saved position is a disk hit; do it off the main thread and seek once
-        // it lands. Opening the stream takes longer than this ever will. Under "download the
-        // whole video first" there is no player to seek yet, so [startPlayback] applies the same
-        // position as well; whichever of the two arrives second simply sets it again.
+        // Reading the saved position is a disk hit; do it off the main thread and seek once it
+        // lands. Under "download the whole video first" there is no player to seek yet, so
+        // [startPlayback] applies the same position as well; whichever arrives second sets it again.
         lifecycleScope.launch {
             resumeMs = runCatching { settings.resumePosition(chatId, messageId) }.getOrDefault(0L)
             if (resumeMs > 0) {
@@ -384,6 +379,8 @@ class PlayerActivity : FragmentActivity() {
                 return@launch
             }
             if (!allowedOnThisConnection(availability)) return@launch
+            if (!makeRoomForThisVideo(availability)) return@launch
+            claimTheWatchCache()
             val downloadFirst = runCatching { settings.downloadBeforePlayingNow() }
                 .getOrDefault(false)
             if (downloadFirst && !fetchWholeFilm()) return@launch
@@ -396,7 +393,7 @@ class PlayerActivity : FragmentActivity() {
             // the wrong language.
             tracks = runCatching { settings.trackChoice(seriesKey) }
                 .getOrDefault(TrackChoice())
-            // The buttons were drawn with the defaults before any of this had been read off disk.
+            // The buttons were drawn with the defaults before any of this was read off disk.
             scaleButton?.text = videoScale.label
             speedButton?.text = PlaybackSpeed.label(playbackSpeed)
             if (!session.isCurrent()) return@launch
@@ -419,10 +416,10 @@ class PlayerActivity : FragmentActivity() {
         // Which surface depends only on the hardware. A remote drives leanback's transport row and
         // nothing else, a thumb drives Media3's and nothing else, and neither works on the other.
         if (FormFactor.isTv(this)) {
-            // Replace unconditionally: after process death the restored fragment came up before
-            // the player existed, so it has no glue and has to be rebuilt. State loss is allowed
-            // because nothing here is restored anyway, and under "download the whole video first"
-            // this can land after the activity has been stopped.
+            // Replace unconditionally: a fragment that came up before the player existed has no
+            // glue and has to be rebuilt. State loss is allowed because nothing here is restored,
+            // and under "download the whole video first" this can land after the activity has
+            // been stopped.
             supportFragmentManager.beginTransaction()
                 .replace(R.id.playback_container, TvPlaybackFragment())
                 .commitAllowingStateLoss()
@@ -434,31 +431,27 @@ class PlayerActivity : FragmentActivity() {
     /**
      * The phone's video surface and transport row, in place of leanback's.
      *
-     * Leanback's playback fragment is built around a D-pad: its transport row is raised by a key
-     * press and scrubbed by a key press, and there is no touch anywhere in it. On a phone that
-     * leaves a picture nobody can pause, which is the whole of why playback on a phone read as
-     * nothing happening at all. Media3's own view is the same player behind a control row made for
-     * a thumb, so the surface is the only thing being swapped: the activity still owns the
-     * ExoPlayer, and the loading sheet, the chips, the resume writes and the retry logic sit over
-     * this exactly as they sit over the TV.
+     * Leanback's playback fragment is built around a D-pad and has no touch handling at all, which
+     * on a phone leaves a picture nobody can pause. Media3's own view is the same player behind a
+     * control row made for a thumb, so the surface is the only thing swapped: the activity still
+     * owns the ExoPlayer, and the loading sheet, the chips, the resume writes and the retry logic
+     * sit over this exactly as they sit over the TV.
      */
     private fun attachTouchSurface(exo: ExoPlayer) {
         val view = PlayerView(this)
-        // D2's other half: with the text renderer live there is finally something for these to
-        // choose, so the phone gets Media3's own subtitle and settings buttons. Both were dead
-        // weight before, which is why they were off.
+        // The text renderer is live, so there is something for this button to choose.
         view.setShowSubtitleButton(true)
         view.layoutParams = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT,
         )
         view.useController = true
-        // Two spinners for one wait. TMPlayer's own loading sheet and rebuffer chip already say
-        // what is happening, and they say it with a speed and a percentage.
+        // TMPlayer's own loading sheet and rebuffer chip already say what is happening, with a
+        // speed and a percentage. A second spinner for the same wait is noise.
         view.setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
-        // The activity draws subtitles itself, into a view sized and styled for this app, and it
-        // is fed straight off onCues. Leaving Media3's own subtitle view up renders every line
-        // twice, slightly offset.
+        // The activity draws subtitles itself, into a view sized and styled for this app, fed
+        // straight off onCues. Leaving Media3's own subtitle view up renders every line twice,
+        // slightly offset.
         view.subtitleView?.visibility = View.GONE
         view.setControllerVisibilityListener(
             PlayerView.ControllerVisibilityListener { visibility ->
@@ -494,23 +487,16 @@ class PlayerActivity : FragmentActivity() {
     /**
      * Keeps the safe area off the video and on the things a finger has to reach.
      *
-     * This was the whole of both complaints about the picture. The insets were being applied as
-     * padding to the PlayerView itself, and the video surface is that view's own child: every pixel
-     * of status bar, gesture handle and notch was therefore taken out of the picture, so a phone
-     * with a cutout played the film inside a black margin rather than edge to edge. Worse, the
-     * inset changes whenever the system bars come and go, and the bars ride with the transport row,
-     * so raising the controls re-padded the surface and the video visibly jumped and resized under
-     * them.
+     * The video surface is laid out once at the full size of the window and never moves again.
+     * Padding the PlayerView would take every pixel of status bar, gesture handle and notch out of
+     * the picture, and would re-pad the surface each time the system bars ride in with the
+     * transport row, so the video would jump and resize under the controls.
      *
-     * The surface is now laid out once, at the full size of the window, and never moves again.
-     *
-     * The controls were then inset by padding Media3's controller, which was a second version of
-     * the same mistake one level down. That controller is not just the buttons: its first child is
-     * the dim wash over the whole picture, and the transport row carries the gradient. Padding the
-     * parent moved both of them inwards, so with the controls up the picture stayed bright in a
-     * strip along the notch and another along the gesture handle, while everything between them
-     * darkened. The controller now keeps every pixel of the window, and the inset is applied inside
-     * it, to the transport row and the scrub bar, which are the only things a finger has to reach.
+     * The controller keeps every pixel of the window too: it is not just the buttons, its first
+     * child is the dim wash over the whole picture and the transport row carries the gradient, so
+     * padding it leaves undimmed strips along the notch and the gesture handle. The inset is
+     * applied inside it, to the transport row and the scrub bar, which are the only things a
+     * finger has to reach.
      */
     private fun insetTheControlsOnly(view: PlayerView) {
         val controller = view.findViewById<View>(androidx.media3.ui.R.id.exo_controller)
@@ -524,9 +510,8 @@ class PlayerActivity : FragmentActivity() {
             val safe = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
             )
-            // The controller itself keeps every edge. Padding it moved the dim and the gradient in
-            // with the buttons, which is the band of undimmed picture the notch and the gesture
-            // handle were sitting on.
+            // The controller itself keeps every edge: padding it would move the dim and the
+            // gradient inwards along with the buttons.
             controller?.updatePadding(left = 0, right = 0, top = 0, bottom = 0)
             // The row grows by the bottom inset rather than being padded into its fixed height, so
             // the gradient reaches the bottom of the screen while the buttons stay their own size.
@@ -572,11 +557,9 @@ class PlayerActivity : FragmentActivity() {
     /**
      * The app's own colours on Media3's controller, and a scrim under it.
      *
-     * Media3's stock row is a grey scrub bar and white glyphs on nothing, which is fine over a
-     * dark scene and close to invisible over a bright one. The played portion and the scrubber
-     * take the app's accent, the rest goes to a translucent white so the bar reads against any
-     * frame, and a gradient behind the row does what every streaming app does: darkens the bottom
-     * of the picture only while there is something down there to read.
+     * Media3's stock row is close to invisible over a bright frame. The played portion and the
+     * scrubber take the app's accent, the rest a translucent white, and a gradient behind the row
+     * darkens the bottom of the picture only while there is something down there to read.
      *
      * All of it is looked up rather than declared, because the alternative is forking Media3's
      * controller layout wholesale and inheriting the maintenance of every button in it.
@@ -598,11 +581,10 @@ class PlayerActivity : FragmentActivity() {
     /**
      * Lets the window own the strip of screen the cutout sits in.
      *
-     * The theme asks for shortEdges, which covers a phone held sideways with the notch on a short
-     * edge, and stops at the one case people notice: a hole punch or a waterfall edge on the long
-     * side, where the system still parks the window clear of it and the video plays inside a black
-     * margin down one side. From Android 11 the window can simply claim the whole display and let
-     * the insets say where the obstruction is, which is what the controls are then padded by.
+     * The theme's shortEdges covers a notch on a short edge but not a hole punch or waterfall edge
+     * on the long side, where the system parks the window clear of it and the video plays inside a
+     * black margin. From Android 11 the window can claim the whole display and let the insets say
+     * where the obstruction is, which is what the controls are then padded by.
      *
      * Only on a phone. A television has no cutout, and asking for one is a window flag change on a
      * screen where leanback has already decided the geometry.
@@ -622,10 +604,8 @@ class PlayerActivity : FragmentActivity() {
      * Hides the status and navigation bars while the picture is up, and puts them back with the
      * transport row.
      *
-     * Nothing did this before, so on a phone the two system bars sat permanently over a
-     * full-screen video: the top of the picture wore a clock and the bottom wore a gesture
-     * handle, for the whole film. Swiping from either edge still brings them back, because the
-     * behaviour is the transient one rather than the sticky one that ignores the swipe.
+     * Swiping from either edge still brings them back, because the behaviour is the transient one
+     * rather than the sticky one that ignores the swipe.
      */
     private fun setSystemBarsHidden(hidden: Boolean) {
         val controller = WindowInsetsControllerCompat(window, window.decorView)
@@ -671,11 +651,10 @@ class PlayerActivity : FragmentActivity() {
     /**
      * The picture shape and the playback speed, as two buttons a thumb can reach.
      *
-     * Both already existed on the television, where they are buttons on the transport row, and
-     * both were technically reachable on a phone: the shape by pinching the picture, the speed by
-     * finding Media3's gear menu. Neither is something a viewer discovers, and the shape in
-     * particular is the control people go looking for the moment a film turns up with black bars
-     * down the sides. Each button carries its current value, so it says what the last press did.
+     * The shape can also be pinched and the speed found in Media3's gear menu, but neither is
+     * something a viewer discovers, and the shape is the control people go looking for the moment
+     * a video turns up with black bars down the sides. Each button carries its current value, so
+     * it says what the last press did.
      */
     private fun wirePictureButtons() {
         pictureRow = findViewById(R.id.picture_row)
@@ -697,8 +676,7 @@ class PlayerActivity : FragmentActivity() {
      * "Next S01E02", falling back to a bare "Next" when the name carries no episode code.
      *
      * The fallback is not dead wood: a series can be numbered in a way the parser reads well enough
-     * to order but not well enough to name, and a button labelled "Next" is still better than one
-     * labelled with a guess.
+     * to order but not well enough to name, and a bare "Next" beats a label made of a guess.
      */
     fun episodeLabel(direction: String, item: MediaItem?): String {
         val name = item?.fileName?.ifBlank { item.title } ?: return direction
@@ -722,18 +700,15 @@ class PlayerActivity : FragmentActivity() {
      *
      * Two arrangements, because the picture has two states. While the transport row is up, its
      * buttons and its scrub bar are what the finger came for, so the event is offered here and then
-     * passed straight on to them; that is what keeps double-tap seek working over a raised row,
-     * which it did not when this was hung off the video view instead.
+     * passed straight on to them, which is what keeps double-tap seek working over a raised row.
      *
      * While the row is down there is nothing on screen but the picture, and the event stops here.
-     * That is the fix for the third complaint: Media3's own view treats a great many touches as a
-     * reason to throw the whole transport row over the video, so a brightness drag, a scrub, a hold
-     * and even the first half of a double tap each ended with the controls in the way of the thing
-     * the gesture had just done. Now only [toggleControls] raises them, from a single tap, and
-     * every other gesture leaves the picture alone.
+     * Media3's own view treats a great many touches as a reason to throw the transport row over the
+     * video, so a brightness drag, a scrub or a hold would each end with the controls in the way of
+     * what the gesture just did. Only [toggleControls] raises them, from a single tap.
      *
-     * The loading and error sheets are the exception in both directions: they carry a Try again
-     * button, and a button nobody can press is worse than no gesture at all.
+     * The loading and error sheets are the exception in both directions: they carry buttons, and a
+     * button nobody can press is worse than no gesture at all.
      */
     override fun dispatchTouchEvent(event: android.view.MotionEvent): Boolean {
         val surface = touchSurface
@@ -758,11 +733,10 @@ class PlayerActivity : FragmentActivity() {
     }
 
     /**
-     * Runs the film fast for as long as a finger is held on it, then puts it back.
+     * Runs the video fast for as long as a finger is held on it, then puts it back.
      *
-     * The speed the viewer chose is what it returns to, not 1x: somebody watching a lecture at
-     * 1.5x who holds to skip an aside expects to be back at 1.5x when they let go, and handing
-     * them normal speed instead means fixing it by hand every time.
+     * It returns to the speed the viewer chose, not 1x: somebody watching at 1.5x who holds to skip
+     * an aside expects to be back at 1.5x when they let go.
      */
     private fun holdFastForward(holding: Boolean) {
         val exo = player ?: return
@@ -777,9 +751,8 @@ class PlayerActivity : FragmentActivity() {
     /**
      * Asks the system for the orientation this player is set to, and remembers it for the session.
      *
-     * Called before the content view on the way in, which is the whole point: a window that turns
-     * after it has drawn is a lurch the viewer sees, and a window that is asked before it has
-     * drawn anything simply opens the right way up.
+     * Called before the content view on the way in, so the window opens the right way up rather
+     * than turning after it has drawn.
      */
     private fun applyOrientation() {
         if (FormFactor.isTv(this)) return
@@ -818,18 +791,13 @@ class PlayerActivity : FragmentActivity() {
     /**
      * Which lever shapes the picture, and why only one of them may move at a time.
      *
-     * There are two, and on a phone they were both being pulled. The PlayerView sizes its own
-     * surface to the chosen shape, and the codec's scaling mode then scaled the frames again
-     * inside that surface: Crop asked the view to grow past the screen and asked the decoder to
-     * crop within it at the same time, so the two transforms cancelled and Crop landed on the same
-     * letterboxed picture as Fit, while Stretch came out narrower than the video's own shape. Two
-     * of the three stops did nothing a viewer could see, on a screen with 217px of black down each
-     * side of a 1920x1056 film.
-     *
+     * There are two. The PlayerView sizes its own surface to the chosen shape, and the codec's
+     * scaling mode scales the frames again inside that surface, so pulling both cancels them out.
      * The phone therefore leaves the codec on plain scale-to-fit and lets the view own the shape.
+     *
      * The television has no PlayerView to set a resize mode on: it draws onto leanback's bare
-     * surface, where the scaling mode is the only lever there is, and it has two positions, which
-     * is why Stretch is not offered there and Crop is what a second press reaches.
+     * surface, where the scaling mode is the only lever, and it has two positions, which is why
+     * Stretch is not offered there and Crop is what a second press reaches.
      */
     private fun scalingModeFor(scale: VideoScale): Int = when {
         !FormFactor.isTv(this) -> C.VIDEO_SCALING_MODE_SCALE_TO_FIT
@@ -864,10 +832,8 @@ class PlayerActivity : FragmentActivity() {
     /**
      * A figure for whatever a gesture is changing, gone again shortly after the finger lifts.
      *
-     * It moves to the side the gesture is on, because a brightness reading that appears on the
-     * right of the picture while the finger is on the left reads as a coincidence rather than as
-     * an answer. This is the only thing a drag or a key press puts on screen: the transport row
-     * stays where it was.
+     * It moves to the side the gesture is on, so the figure reads as an answer to the finger. This
+     * is the only thing a drag or a key press puts on screen: the transport row stays where it was.
      */
     private fun showGestureFeedback(text: String, side: Int = PlayerGestures.SIDE_CENTRE) {
         val hud = gestureHud ?: return
@@ -927,11 +893,9 @@ class PlayerActivity : FragmentActivity() {
     /**
      * Checks the video against the connection before a byte of it is fetched.
      *
-     * Nothing distinguished Wi-Fi from mobile data anywhere in the app before this, so opening a
-     * large video on a train quietly started pulling all of it. A file already on disk is never
-     * questioned, and neither is a small one; only a large pull over a metered connection stops to
-     * ask, and only the first time in a session, because being asked before every episode is its
-     * own kind of broken.
+     * A file already on disk is never questioned, and neither is a small one. Only a large pull
+     * over a metered connection stops to ask, and only the first time in a session, because being
+     * asked before every episode is its own kind of broken.
      *
      * Returns false when there is nothing to start: the sheet on screen is the answer.
      */
@@ -1002,8 +966,8 @@ class PlayerActivity : FragmentActivity() {
         .build()
 
     private fun buildPlayer(client: TdlClient): ExoPlayer {
-        // Hardware decoders first; NextLib's FFmpeg renderers pick up the audio codecs a TV
-        // stick has no silicon for: DTS and TrueHD tracks are common in video remuxes.
+        // Hardware decoders first; NextLib's FFmpeg renderers pick up the audio codecs a TV stick
+        // has no silicon for: DTS and TrueHD tracks are common in video remuxes.
         val renderers = object : NextRenderersFactory(this@PlayerActivity) {
             /**
              * The stock sink, plus the stereo fold described in [AudioDownmix].
@@ -1060,38 +1024,31 @@ class PlayerActivity : FragmentActivity() {
             .setTargetBufferBytes(TARGET_BUFFER_BYTES)
             .setPrioritizeTimeOverSizeThresholds(false)
             // A few seconds of what has already played, kept behind the position. Without it a
-            // back-seek of two seconds fell outside the buffer, which put the read outside TDLib's
-            // download window, which restarted the download from there: the commonest small
-            // gesture in the player was also the most expensive thing it could do. Deliberately
-            // short, and from the last keyframe, because this is memory on a 1 GB stick.
+            // short back-seek falls outside the buffer, which puts the read outside TDLib's
+            // download window and restarts the download from there. Deliberately short, and from
+            // the last keyframe, because this is memory on a 1 GB stick.
             .setBackBuffer(BACK_BUFFER_MS, /* retainBackBufferFromKeyframe = */ true)
             .build()
 
         val trackSelector = DefaultTrackSelector(this).apply {
             parameters = buildUponParameters()
-                // Not disabled outright any more. Turning the whole text renderer off meant a
-                // phone viewer could not enable an embedded subtitle track by any route at all:
-                // the only picker in the app is leanback's, which does not exist on a phone.
-                // Selecting none by default keeps captions off until asked for, which is the
-                // behaviour that was wanted, while leaving the track there to be chosen.
-                // Off stays off. Without this, a series watched without captions gets them back on
-                // the next episode whenever that file marks a subtitle track default or forced.
+                // Not disabled outright: turning the whole text renderer off leaves a phone viewer
+                // no route to an embedded subtitle track, since the only picker in the app is
+                // leanback's. Selecting none by default keeps captions off until asked for while
+                // leaving the track there to be chosen, and off stays off, so a series watched
+                // without captions does not get them back on an episode that marks one default.
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !tracks.empty && !tracks.subtitlesOn)
-                // What this series was last watched with. Episode two opens in the language and
-                // with the captions episode one ended in, which is the whole point of choosing
-                // them: before this, every episode arrived on the file's own default track and
-                // the choice had to be made again from the sofa.
+                // What this series was last watched with, so episode two opens in the language and
+                // with the captions episode one ended in.
                 .setPreferredTextLanguage(tracks.textLanguage.takeIf { tracks.subtitlesOn })
                 .setSelectUndeterminedTextLanguage(false)
                 .setPreferredAudioLanguage(tracks.audioLanguage)
                 .build()
         }
 
-        // Constant-bitrate seeking rescues formats that ship without a seek index.
-        // Constant-bitrate seeking rescues formats that ship without a seek index. "Always" also
-        // applies it to files that do have one, where the estimate is worse than the index and a
-        // seek lands somewhere other than where it was asked to; it is only worth it for a file
-        // with no other way to seek at all.
+        // Constant-bitrate seeking rescues formats that ship without a seek index. Not "always":
+        // on a file that has an index the estimate is worse than the index, and the seek lands
+        // somewhere other than where it was asked to.
         val extractors = DefaultExtractorsFactory()
             .setConstantBitrateSeekingEnabled(true)
 
@@ -1132,8 +1089,8 @@ class PlayerActivity : FragmentActivity() {
 
     /**
      * Two hours of a video is two hours with no button presses, so the screen is held awake while
-     * something is actually on it. Held only while playing: a video left paused overnight, or an
-     * error sheet nobody came back to, used to keep a stick's display lit until the power went off.
+     * something is actually on it. Held only while playing, so a video left paused overnight, or
+     * an error sheet nobody came back to, does not keep the display lit.
      */
     private fun keepScreenOn(on: Boolean) {
         if (on) {
@@ -1231,8 +1188,7 @@ class PlayerActivity : FragmentActivity() {
      *
      * A streamed file fails in ways a local one does not: the connection drops for a moment, or a
      * read lands on bytes Telegram has since moved away from. None of that means the video is
-     * unplayable, but the player has no way to know that, so before this the first such error was
-     * the end of the film and the only way out was Back. Returns false when the error is one no
+     * unplayable, but the player has no way to know it. Returns false when the error is one no
      * amount of retrying will fix, and the error sheet is the honest answer.
      */
     private fun recoverFrom(error: PlaybackException): Boolean {
@@ -1266,16 +1222,14 @@ class PlayerActivity : FragmentActivity() {
      * Asks Telegram for this video again, for the failure that looks like a broken file and is not.
      *
      * A TDLib file id belongs to the session that issued it. Continue watching, the downloads list
-     * and the episode row all carry ids that were written down earlier, so a video opened after a
-     * restart, or after TDLib rebuilt its database, can be pointed at a file the current session
-     * knows nothing about. Every read then fails at once, nothing downloads, and the sheet says
-     * "This video wouldn't play" over a file that is perfectly fine: the id is what is stale, not
-     * the video. The same is true of an expired file reference, which is Telegram asking to be
-     * given the message again rather than the file.
+     * and the episode row all carry ids written down earlier, so a video opened after a restart, or
+     * after TDLib rebuilt its database, can be pointed at a file the current session knows nothing
+     * about: every read fails at once over a video that is perfectly fine. An expired file
+     * reference is the same thing, Telegram asking to be given the message again.
      *
      * So before the sheet goes up, the message is fetched again and the id it carries now is used.
      * Once per activity, and only when there is a message to fetch: a second attempt would be the
-     * same fetch with the same answer, and the sheet is then the honest one.
+     * same fetch with the same answer.
      *
      * Returns true when it has taken over, in which case the retry, or the sheet, comes later.
      */
@@ -1323,12 +1277,12 @@ class PlayerActivity : FragmentActivity() {
      * Whether this failure is one no amount of trying can get past.
      *
      * Narrower than [isRecoverable] on purpose, and asked of a different thing. That one decides
-     * whether the app should quietly try again by itself, where being wrong costs a wasted attempt
-     * on every stall. This one decides whether to put a Reload button in front of the viewer, where
-     * being wrong costs them the only thing on the screen that could have worked: an unclassified
-     * error is very often a bad cache or a stale file id, which is exactly what Reload is for. Only
-     * a codec or a container this device genuinely cannot handle is hopeless, and there the sheet
-     * offers the app that can handle it instead.
+     * whether the app should quietly try again by itself, where being wrong costs a wasted attempt.
+     * This one decides whether to put a Reload button in front of the viewer, where being wrong
+     * costs them the only thing on screen that could have worked: an unclassified error is very
+     * often a bad cache or a stale file id, which is what Reload is for. Only a codec or a
+     * container this device genuinely cannot handle is hopeless, and there the sheet offers the
+     * app that can handle it instead.
      */
     private fun isHopeless(error: PlaybackException): Boolean = when (error.errorCode) {
         PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
@@ -1365,8 +1319,7 @@ class PlayerActivity : FragmentActivity() {
      *
      * The cause chain comes first. [TdDataSource] already turns a flood wait, an expired file
      * reference or a full disk into a sentence naming the actual problem, and Media3 wraps that
-     * exception rather than replacing it; reading only the error code threw all of that away and
-     * told every viewer to try a different copy of a file that was perfectly fine.
+     * exception rather than replacing it, so the error code alone would throw all of it away.
      */
     private fun friendlyError(error: PlaybackException): String =
         specificCause(error) ?: byErrorCode(error)
@@ -1395,10 +1348,9 @@ class PlayerActivity : FragmentActivity() {
         PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
         PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
         ->
-            // A remux with a single video track bypasses the selector's viewport constraints, so
-            // a 4K stream reaches a decoder built for 1080p and dies with a class name in it. The
-            // resolution is the whole of what went wrong and it is worth saying so: "a different
-            // copy may work" sends somebody looking for a bad file rather than a smaller one.
+            // A remux with a single video track bypasses the selector's viewport constraints, so a
+            // 4K stream reaches a decoder built for 1080p. Naming the resolution matters: "a
+            // different copy may work" sends somebody looking for a bad file, not a smaller one.
             if (videoHeight >= UHD_HEIGHT) {
                 "This video is ${videoHeight}p, which this device's decoder can't manage. " +
                     "A 1080p copy will play."
@@ -1445,45 +1397,89 @@ class PlayerActivity : FragmentActivity() {
     }
 
     /**
-     * Says that this video is what the cache is now holding, and gives up whatever it held before.
+     * Whether this video fits, and gives up the cache if that is what it takes.
      *
-     * Here rather than on the screen the video was started from, which is the whole point. The
-     * screens do this too, ahead of time, because they have to know whether the video will fit
-     * before they open the player at all. What they cannot do is see [playEpisode]: stepping from
-     * one episode to the next starts this activity directly, so on a series every episode after
-     * the first arrived without anything having decided what to give up for it, and they all
-     * stayed. Ten episodes, ten copies, and one record naming the first of them.
+     * Asked here rather than on the screen the player was started from, because [playEpisode]
+     * starts this activity directly and so bypasses the grid entirely. This is the one place every
+     * playback passes, and [claimTheWatchCache] runs only once the answer is yes.
      *
-     * Done off the main thread and without waiting: it is two preference writes and a delete of a
-     * file nothing is reading, and the video being opened must not wait behind any of it.
+     * @return false when the video will not fit, in which case the error screen is already up.
+     */
+    private suspend fun makeRoomForThisVideo(availability: LocalFileAvailability): Boolean {
+        val item = mediaItemForCache()
+        val partial = if (availability == LocalFileAvailability.Partial) {
+            runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
+        } else {
+            0L
+        }
+        val decision = runCatching {
+            RoomOnDisk.decide(
+                context = applicationContext,
+                item = item,
+                alreadyCached = availability == LocalFileAvailability.Complete,
+                partialBytes = partial,
+            )
+        }.getOrNull() ?: return true // Could not measure. Refusing on a guess is worse than trying.
+
+        return when (val plan = decision.plan) {
+            is CacheShelf.Plan.NotEnoughSpace -> {
+                showError(
+                    "Not enough space for this video. It needs " +
+                        "${StreamStats.formatBytes(plan.shortfallBytes)} more. " +
+                        "Clear some downloads and try again.",
+                    retryable = false,
+                )
+                false
+            }
+
+            // What goes is the video the last press of Play left behind, which nobody chose to
+            // keep. Nothing the viewer downloaded is ever a candidate.
+            is CacheShelf.Plan.Evict -> {
+                decision.evict(applicationContext)
+                true
+            }
+
+            CacheShelf.Plan.Proceed -> true
+        }
+    }
+
+    /** This video, as the cache and the shelf want to see it. */
+    private fun mediaItemForCache(): MediaItem = MediaItem(
+        chatId = chatId,
+        messageId = messageId,
+        fileId = fileId,
+        title = mediaTitle,
+        sizeBytes = fileSizeBytes,
+        durationSec = durationSec,
+        mimeType = "",
+        thumbnailFileId = 0,
+        miniThumbnail = null,
+        date = 0,
+        fileName = mediaTitle,
+    )
+
+    /**
+     * Says that this video is what the cache now holds, and gives up whatever it held before.
+     *
+     * Off the main thread and without waiting: it is two preference writes and a delete of a file
+     * nothing is reading, and the video being opened must not wait behind any of it.
      */
     private fun claimTheWatchCache() {
-        val item = MediaItem(
-            chatId = chatId,
-            messageId = messageId,
-            fileId = fileId,
-            title = mediaTitle,
-            sizeBytes = fileSizeBytes,
-            durationSec = durationSec,
-            mimeType = "",
-            thumbnailFileId = 0,
-            miniThumbnail = null,
-            date = 0,
-            fileName = mediaTitle,
-        )
+        val item = mediaItemForCache()
+        // The application context, not the activity: this work outlives the activity by design,
+        // and holding a whole player for the length of two preference writes buys nothing.
         App.backgroundScope.launch {
-            runCatching { WatchCache.claim(this@PlayerActivity, item, chatTitle) }
+            runCatching { WatchCache.claim(applicationContext, item, chatTitle) }
         }
     }
 
     /**
      * Switches to another episode of the same series.
      *
-     * Done by starting the activity again rather than by swapping the file under the player:
-     * every one of opening the stream, the resume position, the download meter and the title is
-     * set up in [onCreate] against one file, and a second path through all of that is a second
-     * place for it to go wrong. The position in the episode being left is saved on the way out,
-     * so backing up to it later carries on where it stopped.
+     * Done by starting the activity again rather than swapping the file under the player: opening
+     * the stream, the resume position, the download meter and the title are all set up in
+     * [onCreate] against one file, and a second path through that is a second place to go wrong.
+     * The position in the episode being left is saved on the way out.
      */
     fun playEpisode(item: MediaItem) {
         startActivity(intent(this, item, chatTitle))
@@ -1493,11 +1489,8 @@ class PlayerActivity : FragmentActivity() {
     /**
      * What happens when the credits run out.
      *
-     * The activity used to close the instant the video ended, which for one video of a series
-     * meant being thrown back to the grid to find the next one by hand, and for anything else
-     * meant the screen going away before the viewer had registered that it was over. Now the next
-     * episode starts on its own after a countdown that can be stopped, and where there is no next
-     * episode the last frame stays up with a way to watch it again.
+     * The next episode starts on its own after a countdown that can be stopped, and where there is
+     * no next episode the last frame stays up with a way to watch it again.
      */
     private fun onVideoEnded() {
         lifecycleScope.launch {
@@ -1575,9 +1568,9 @@ class PlayerActivity : FragmentActivity() {
         val pickerOpen = GuidedStepSupportFragment.getCurrentGuidedStepSupportFragment(supportFragmentManager) != null
         if (pickerOpen) return super.dispatchKeyEvent(event)
 
-        // Before anything else claims the same key. A held select on a remote, or the menu key,
-        // is the long press on a video that the browse grid already answers with a menu; here the
-        // one entry that menu would carry which the player has no other route to is the handover.
+        // Before anything else claims the same key. A held select on a remote, or the menu key, is
+        // the long press the browse grid answers with a menu; here the only entry that menu would
+        // carry which the player has no other route to is the handover.
         if (isLongPressOnTheVideo(event)) {
             openInAnotherApp()
             return true
@@ -1616,9 +1609,7 @@ class PlayerActivity : FragmentActivity() {
      *
      * Only while the failure sheet is down and the controls are up: a held select over a bare
      * picture is how leanback and Media3 both start a scrub, and a held select over the failure
-     * sheet is a press on whichever button has focus. Neither is a spare gesture, and taking one
-     * of them would break something that works to make room for something that has a button of
-     * its own two lines below.
+     * sheet is a press on whichever button has focus. Neither is a spare gesture to take.
      */
     private fun isLongPressOnTheVideo(event: KeyEvent): Boolean {
         if (!event.isLongPress) return false
@@ -1634,9 +1625,8 @@ class PlayerActivity : FragmentActivity() {
      * A key on a phone: a paired remote, a headset, a Bluetooth keyboard, a game controller.
      *
      * Answered here and consumed, rather than left to Media3's view, which raises the whole
-     * transport row on any key it recognises. Pressing play on a headset and being handed a control
-     * overlay across the picture was the third complaint's other half: the press already did the
-     * thing, and the small figure this leaves behind is all the confirmation it needs.
+     * transport row on any key it recognises. The press already did the thing, and the small figure
+     * this leaves behind is all the confirmation it needs.
      *
      * Only while the row is down. Once it is up those same keys are how anything on it is reached,
      * and stealing them would leave the row unusable to everything except a thumb.
@@ -1698,14 +1688,14 @@ class PlayerActivity : FragmentActivity() {
             size = fileSizeBytes,
             completed = downloadComplete,
         )
-        // Sampled on the prefix rather than the window's far end: a seek restarts the
-        // prefix at zero, and the meter reads that drop as the reset it is, where a
-        // window that jumped forwards would look like a burst of speed.
+        // Sampled on the prefix rather than the window's far end: a seek restarts the prefix at
+        // zero and the meter reads that drop as the reset it is, where a window that jumped
+        // forwards would look like a burst of speed.
         speed.sample(local.downloadedPrefixSize, SystemClock.elapsedRealtime())
-        // Sampled rather than rendered per update. TDLib emits one of these every few hundred
-        // kilobytes, which at a few MB/s is a dozen a second, and each one re-laid-out the whole
-        // loading sheet on the main thread at exactly the moment the decoder was starting up. No
-        // figure on that sheet changes usefully faster than twice a second.
+        // Throttled rather than rendered per update. TDLib emits one of these every few hundred
+        // kilobytes, which at a few MB/s is a dozen a second, and each one re-lays-out the whole
+        // loading sheet on the main thread while the decoder is starting up. No figure on that
+        // sheet changes usefully faster than twice a second.
         val now = SystemClock.elapsedRealtime()
         if (now - lastProgressRender >= PROGRESS_RENDER_MS || downloadComplete) {
             lastProgressRender = now
@@ -1788,10 +1778,9 @@ class PlayerActivity : FragmentActivity() {
     /**
      * Turns the window to suit the video, once the decoder has said what shape it is.
      *
-     * The manifest used to nail this activity to landscape, which is right for almost every film
-     * and wrong for the one case where it is most obviously wrong: a clip shot on a phone played
-     * as a narrow strip between two black fields, with the phone held sideways. A television
-     * reports a single orientation and ignores every request made here, so this is touch only.
+     * A clip shot on a phone would otherwise play as a narrow strip between two black fields with
+     * the phone held sideways. A television reports a single orientation and ignores every request
+     * made here, so this is touch only.
      *
      * It has one vote and the viewer has the other, and the viewer's wins: once the rotation button
      * has been pressed, a tall video arriving later does not get to undo that. A wide video is left
@@ -1812,10 +1801,8 @@ class PlayerActivity : FragmentActivity() {
     /**
      * Leaving the app puts the video in the corner of whatever comes next, rather than stopping it.
      *
-     * Before this, pressing Home during a film ended the film: [onStop] paused it and coming back
-     * meant finding the resume point again. Only on a phone, only while something is actually
-     * playing, and never over an error sheet or a countdown, none of which are worth a floating
-     * window.
+     * Only on a phone, only while something is actually playing, and never over an error sheet or
+     * a countdown, none of which are worth a floating window.
      */
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
@@ -1861,8 +1848,8 @@ class PlayerActivity : FragmentActivity() {
     fun onControlsVisibilityChanged(visible: Boolean) {
         controlsUp = visible
         gestures?.controlsVisible = visible
-        // The system bars ride with the transport row: raising one to reach for a control and
-        // being handed the other is what every video app on the platform does.
+        // The system bars ride with the transport row, as they do in every video app on the
+        // platform.
         setSystemBarsHidden(!visible)
         updateEpisodeRow()
         updateDownloadChip()
@@ -1896,12 +1883,11 @@ class PlayerActivity : FragmentActivity() {
      *
      * Two pictures from two places, because they arrive at two different times. The minithumbnail
      * travels inside the message and is already in memory, so it is on screen in the first frame,
-     * blown up across the whole panel where its forty-odd pixels read as a blur rather than as a
-     * bad photograph. The real thumbnail is a file Telegram has to be asked for, so it lands a
-     * moment later, sharp, in the poster at the centre.
+     * blown up across the whole panel where its forty-odd pixels read as a blur. The real thumbnail
+     * is a file Telegram has to be asked for, so it lands a moment later, sharp, in the poster.
      *
-     * A video with no thumbnail at all, which is most of what a re-upload channel posts, simply
-     * gets the sheet as it was: everything here is hidden until there is something to draw.
+     * A video with no thumbnail at all gets the plain sheet: everything here stays hidden until
+     * there is something to draw.
      */
     private fun showArtwork() {
         val mini = Thumbnails.mini(intent.getByteArrayExtra(EXTRA_MINI_THUMBNAIL))
@@ -1916,10 +1902,9 @@ class PlayerActivity : FragmentActivity() {
         lifecycleScope.launch {
             val full = runCatching { Thumbnails.full(thumbnailId) }.getOrNull() ?: return@launch
             statusPoster?.setImageBitmap(full)
-            // Where there was a minithumbnail the backdrop keeps it, on purpose: stretching a real
-            // thumbnail across 1080p is a soft, ugly photograph, while stretching a forty-pixel
-            // one is a blur. Where there was not, this is the only picture there is, and a soft
-            // backdrop beats the flat sheet it would otherwise be.
+            // Where there was a minithumbnail the backdrop keeps it: stretching a real thumbnail
+            // across 1080p is a soft, ugly photograph, while stretching a forty-pixel one is a
+            // blur. Where there was not, a soft backdrop still beats a flat sheet.
             if (mini == null) statusArt?.setImageBitmap(full)
             revealArtwork()
         }
@@ -1929,8 +1914,7 @@ class PlayerActivity : FragmentActivity() {
      * Brings the artwork up, and keeps the backdrop moving while the viewer waits.
      *
      * The drift is slow enough to be felt rather than watched: a still frame under a progress bar
-     * reads as a screen that has stopped, and this is precisely the moment a viewer is deciding
-     * whether the app has hung. Two scale properties on one view, which is a compositor job.
+     * reads as a screen that has hung. Two scale properties on one view, so the compositor does it.
      */
     private fun revealArtwork() {
         val art = statusArt ?: return
@@ -1989,16 +1973,13 @@ class PlayerActivity : FragmentActivity() {
      * fit.
      *
      * A phone held sideways has around 390dp of height, and the sheet is a poster, a title, a
-     * message and up to three buttons: stacked, that overflows, and the buttons that are the whole
-     * point of the failure screen end up below the bottom of the display. Turned on its side it is
-     * a picture on the left and everything readable on the right, which is both the shape that
-     * fits and the better looking of the two. A television, and a phone held upright, have the
-     * height and keep the stack.
+     * message and up to three buttons: stacked, that overflows and the buttons fall off the bottom
+     * of the display. Side by side it is a picture on the left and everything readable on the
+     * right. A television, and a phone held upright, have the height and keep the stack.
      *
-     * Applied every time the sheet is put up rather than once at startup, and it reads both ways.
-     * This activity chooses its own orientation and does not get recreated when it changes, so the
-     * screen it was built against is regularly not the screen it ends up on: measured at [onCreate]
-     * a video that opens upright and then turns sideways is measured while it is still upright.
+     * Applied every time the sheet is put up rather than once at startup: this activity chooses its
+     * own orientation and is not recreated when it changes, so the screen it was built against is
+     * regularly not the screen it ends up on.
      */
     private fun layOutSheetForThisScreen() {
         val sheet = findViewById<LinearLayout>(R.id.status_sheet) ?: return
@@ -2012,8 +1993,8 @@ class PlayerActivity : FragmentActivity() {
         val density = resources.displayMetrics.density
         fun px(dp: Float) = (dp * density).toInt()
 
-        // The picture side takes a narrow, fixed slice: it is there to be recognised, not read, and
-        // every point it does not use is a point the message and the buttons do.
+        // The picture side takes a narrow, fixed slice: it is there to be recognised, not read, so
+        // every point it does not use goes to the message and the buttons.
         side.updateLayoutParams<LinearLayout.LayoutParams> {
             marginEnd = if (sideBySide) px(POSTER_GAP_DP) else 0
         }
@@ -2045,8 +2026,7 @@ class PlayerActivity : FragmentActivity() {
             weight = if (sideBySide) 1f else 0f
         }
         // The bars run the width of the column they are in rather than a width chosen for a screen
-        // with nothing beside them, so a download's progress reads at a glance rather than as a
-        // short bar floating in the middle of the space it was given.
+        // with nothing beside them.
         listOfNotNull(statusProgress, statusSpinner).forEach { bar ->
             bar.updateLayoutParams<LinearLayout.LayoutParams> {
                 width = if (sideBySide) {
@@ -2057,9 +2037,8 @@ class PlayerActivity : FragmentActivity() {
             }
         }
         // Both columns read from the same left edge, and the words run into the width they have
-        // been given rather than sitting in a centred block with the middle of the screen empty on
-        // either side of them. Centred is right for a stacked sheet, where the column is the whole
-        // screen; beside a picture it is two things centred against nothing in particular.
+        // been given. Centred is right for a stacked sheet, where the column is the whole screen,
+        // and wrong beside a picture.
         val flow = if (sideBySide) Gravity.START or Gravity.CENTER_VERTICAL else Gravity.CENTER
         sheet.gravity = flow
         column.gravity = flow
@@ -2072,15 +2051,14 @@ class PlayerActivity : FragmentActivity() {
     /**
      * Whether the poster goes beside the words rather than above them.
      *
-     * Asked of the device and nothing else. The obvious question, "is this window landscape?",
-     * cannot be asked here: the phone this was found on presents a portrait window rotated onto a
-     * landscape panel, so the activity's own window bounds, display metrics, rotation and
-     * Configuration.orientation all four answer "portrait" while the sheet is plainly being drawn
-     * sideways. Anything measured from inside the app is measuring the lie.
+     * Asked of the device and nothing else. "Is this window landscape?" cannot be asked here: some
+     * phones present a portrait window rotated onto a landscape panel, so window bounds, display
+     * metrics, rotation and Configuration.orientation all answer "portrait" while the sheet is
+     * plainly drawn sideways.
      *
-     * A handset gets the compact shape either way round, and it is the better of the two upright as
-     * well: a small picture with the name beside it, and the whole of the failure and its buttons in
-     * one glance. A television has the room for the poster it was designed around and keeps it.
+     * A handset gets the compact shape either way round, which is also the better of the two
+     * upright: a small picture with the name beside it, and the failure and its buttons in one
+     * glance. A television has the room for the poster it was designed around and keeps it.
      */
     private fun sheetGoesSideways(): Boolean = !FormFactor.isTv(this)
 
@@ -2149,9 +2127,8 @@ class PlayerActivity : FragmentActivity() {
         statusTitle.text = "Can't play this"
         statusText.text = message
 
-        // Try again and Reload were two buttons for one intention, and the difference between them
-        // was a paragraph about caches. There is one button now, and the app works out which of the
-        // two things it means: see [reloadFromScratch].
+        // One attempt button, not two: the app works out whether it means a plain retry or a
+        // delete and a fresh fetch. See [reloadFromScratch].
         statusRetry?.visibility = View.GONE
         showFailureActions(retryable)
         updateDownloadChip()
@@ -2168,20 +2145,15 @@ class PlayerActivity : FragmentActivity() {
     /**
      * Two buttons on a failure: the one that tries, and the one that leaves.
      *
-     * This screen used to offer three, and the viewer was asked to tell Try again from Reload from
-     * scratch by reading a paragraph about caches. That is this app's problem to solve, not
-     * theirs. Reload is now the only attempt on offer, and what it does underneath depends on what
-     * is actually wrong: a fresh prepare where that is all it takes, and a delete and a fresh fetch
-     * where the bytes on disk are the thing that is broken. [Reload.plan] picks, exactly as before,
-     * and a video the viewer downloaded on purpose is still never deleted by it.
+     * Reload is the only attempt on offer, and what it does underneath depends on what is wrong: a
+     * fresh prepare where that is all it takes, a delete and a fresh fetch where the bytes on disk
+     * are broken. [Reload.plan] picks, and a video the viewer downloaded on purpose is never
+     * deleted by it. Go back is the other button, since a device with no keys cannot be told to
+     * press Back.
      *
-     * Go back is the other one, because "Press Back to pick something else" was an instruction
-     * about a key on a device that has no keys.
-     *
-     * A failure no attempt can fix, a codec this device has not got, is where Reload steps aside:
-     * pressing it would be honest work with a certain outcome. There the button is the handover to
-     * an app that does have the codec, which is settled from disk and so arrives a moment after
-     * the sheet does. The sheet is readable immediately either way.
+     * On a failure no attempt can fix, a codec this device has not got, Reload steps aside and the
+     * button becomes the handover to an app that does have it. That is settled from disk and so
+     * arrives a moment after the sheet, which is readable immediately either way.
      */
     private fun showFailureActions(retryable: Boolean) {
         statusReload?.visibility = View.GONE
@@ -2238,16 +2210,15 @@ class PlayerActivity : FragmentActivity() {
     /**
      * Reload: throw away what is on disk for this video, then open the stream again from nothing.
      *
-     * The failure this exists for is a partial file that is wrong rather than merely short, and
-     * every plain retry over it fails identically, which is what makes "Can't play this" look like
-     * a broken app rather than a broken cache. Deleting is safe here because the copy is a cache:
+     * The failure this exists for is a partial file that is wrong rather than merely short, over
+     * which every plain retry fails identically. Deleting is safe because the copy is a cache:
      * TDLib fetches it again from the message it came from, which is untouched.
      *
-     * Safe in the other direction too. A video the viewer downloaded on purpose, or one the
-     * download service is working on, falls back to a plain retry, because those bytes are not
-     * this screen's to delete: see [Reload.plan]. The player's own fetch is cancelled first, so
-     * TDLib is not writing into the file as it is being removed, and the entry comes out of the
-     * downloads list as well as off the disk, so nothing resumes into the hole that was left.
+     * A video the viewer downloaded on purpose, or one the download service is working on, falls
+     * back to a plain retry, because those bytes are not this screen's to delete: see
+     * [Reload.plan]. The player's own fetch is cancelled first, so TDLib is not writing into the
+     * file as it is removed, and the entry comes off the downloads list as well as off the disk so
+     * nothing resumes into the hole.
      */
     private fun reloadFromScratch() {
         if (reloading) return
@@ -2261,19 +2232,18 @@ class PlayerActivity : FragmentActivity() {
                 val session = Td.awaitAuthorizedSession()
                 runCatching {
                     Td.cancelDownload(fileId)
-                    // Off the downloads list as well as off the disk. Leaving the entry behind
-                    // leaves TDLib with a record of a file it no longer has, which the Downloads
-                    // screen would draw as a row with nothing under it.
+                    // Off the downloads list as well as off the disk: an entry left behind is a
+                    // TDLib record of a file it no longer has, which Downloads draws as an empty
+                    // row.
                     session.client.removeFileFromDownloads(fileId, deleteFromCache = true)
                     Td.deleteFile(fileId)
                 }
             }
             reloading = false
-            // The player is thrown away rather than re-prepared: its media source is still holding
-            // the descriptor of a file that has just been deleted, and preparing over that reads
-            // the bytes this press was here to get rid of.
-            // The surface goes with it, so [startPlayback] does not stack a second one over the
-            // first: see [releasePlayerAndSurface].
+            // The player is thrown away rather than re-prepared: its media source still holds the
+            // descriptor of the file just deleted, and preparing over that reads the bytes this
+            // press was here to get rid of. The surface goes with it, so [startPlayback] does not
+            // stack a second one over the first: see [releasePlayerAndSurface].
             if (plan == Reload.Plan.StartOver) releasePlayerAndSurface()
             retryPlayback()
         }
@@ -2283,9 +2253,9 @@ class PlayerActivity : FragmentActivity() {
      * Hands this video to VLC, MX Player, or whatever else the device has.
      *
      * The resume position is written first, so a viewer who leaves for another player and comes
-     * back lands where they left rather than at the start. The background download is deliberately
-     * not cancelled: the other app is reading the same file, and pulling the rest of it out from
-     * under it would be the one thing worse than not offering this at all.
+     * back lands where they left. The background download is deliberately not cancelled: the other
+     * app is reading the same file, and pulling the rest of it out from under it would be worse
+     * than not offering this at all.
      */
     fun openInAnotherApp() {
         saveResumePosition()
@@ -2305,9 +2275,8 @@ class PlayerActivity : FragmentActivity() {
     /**
      * Starts the whole load again from where it stopped.
      *
-     * A fresh prepare rather than a fresh activity: the position, the title, the download meter
-     * and the episode search are all already set up against this file, and the failures that reach
-     * this button are the ones a second attempt fixes, so there is nothing to rebuild.
+     * A fresh prepare rather than a fresh activity: the position, the title, the download meter and
+     * the episode search are already set up against this file, so there is nothing to rebuild.
      */
     private fun retryPlayback() {
         statusRetry?.visibility = View.GONE
@@ -2338,8 +2307,7 @@ class PlayerActivity : FragmentActivity() {
      * Writes the position every [RESUME_TICK_MS] while a video is on screen.
      *
      * onStop covers Back and Home, but it never runs when the power goes off at the wall or the
-     * system kills the process to reclaim memory, and on a 1 GB stick the second of those is
-     * routine. Without a heartbeat those are precisely the cases where an hour of a video is lost.
+     * system kills the process to reclaim memory, and on a 1 GB stick the second is routine.
      */
     private fun startResumeHeartbeat() {
         lifecycleScope.launch {
@@ -2381,11 +2349,10 @@ class PlayerActivity : FragmentActivity() {
     /**
      * Tells TDLib to stop fetching this video once nobody is watching it.
      *
-     * Streaming asks for everything from the current byte to the end of the file, and TDLib
-     * honours that long after the activity has gone: backing out of a 12 GB remux left the stick
-     * pulling all 12 GB down in the background, filling the disk it had just been asked to make
-     * room in. A finished file is left alone, since there is nothing left to cancel and the
-     * bytes already on disk are what makes offline playback work.
+     * Streaming asks for everything from the current byte to the end of the file, and TDLib honours
+     * that long after the activity has gone, filling the disk with a remux nobody is watching. A
+     * finished file is left alone: there is nothing to cancel, and the bytes on disk are what makes
+     * offline playback work.
      */
     private fun stopDownload() {
         if (downloadComplete) return
@@ -2403,20 +2370,21 @@ class PlayerActivity : FragmentActivity() {
     /**
      * Puts the cache back under its ceiling on the way out of a video.
      *
-     * It ran once, at launch, which is the one moment nothing has been downloaded yet. An evening
-     * of four episodes on a stick therefore ended four episodes over the ceiling, and the trim
-     * that was meant to prevent it did not run again until the app was next started, by which
-     * time the disk was full and the viewer was in Settings looking for something to delete.
      * Leaving a video is the natural moment: something has just been fetched, and nothing is
-     * playing that a deletion could interrupt.
+     * playing that a deletion could interrupt. Trimming only at launch would let an evening of
+     * episodes end well over the ceiling.
      */
     private fun trimCache() {
-        App.backgroundScope.launch { runCatching { Td.trimStorage() } }
+        App.backgroundScope.launch {
+            runCatching { Td.trimStorage() }
+            // And the videos with no owner, which the ceiling trim deliberately leaves alone.
+            runCatching { WatchCache.sweep(applicationContext) }
+        }
     }
 
     /**
-     * Runs on a scope that outlives the activity, because the write has to survive the user
-     * Back, which is exactly when it matters.
+     * Runs on a scope that outlives the activity, because the write has to survive the Back press
+     * that triggered it.
      */
     private fun saveResumePosition() {
         val exo = player ?: return
@@ -2485,11 +2453,9 @@ class PlayerActivity : FragmentActivity() {
         /**
          * How strongly the backdrop is drawn.
          *
-         * A gradient alone was not enough, and could not be: half of what these channels use as a
-         * thumbnail is a white logo on white, which came through the scrim as a pale grey wall
-         * with the title fighting it. Dimming the picture itself is the part that works on every
-         * thumbnail rather than on the dark ones, and it leaves a photograph perfectly legible as
-         * a backdrop while it is at it.
+         * A gradient alone cannot do it: half of what these channels use as a thumbnail is a white
+         * logo on white, which comes through the scrim as a pale grey wall the title has to fight.
+         * Dimming the picture itself works on every thumbnail rather than only the dark ones.
          */
         private const val ART_ALPHA = 0.3f
 
@@ -2500,8 +2466,8 @@ class PlayerActivity : FragmentActivity() {
          * The backdrop's slow drift, out and back.
          *
          * Twelve per cent over twenty seconds is about a pixel a second on a 1080p panel: felt
-         * rather than watched, which is the whole intent. Anything faster reads as an effect and
-         * competes with the picture that is about to start.
+         * rather than watched. Anything faster reads as an effect and competes with the picture
+         * that is about to start.
          */
         private const val ART_DRIFT_SCALE = 1.12f
         private const val ART_DRIFT_MS = 20_000L
@@ -2553,8 +2519,7 @@ class PlayerActivity : FragmentActivity() {
          * Whether the viewer has already said yes to mobile data this session.
          *
          * Process-wide rather than per activity, because stepping through a series builds a new
-         * activity per episode and being asked again at every one is the prompt becoming the
-         * problem it was added to solve.
+         * activity per episode and being asked at every one is worse than not asking at all.
          */
         private var meteredWarningAccepted = false
 
@@ -2562,19 +2527,18 @@ class PlayerActivity : FragmentActivity() {
          * The rotation lock the viewer last chose, for the length of the process.
          *
          * Process-wide for the same reason the metered warning is: stepping through a series builds
-         * a new activity per episode, and a lock that had to be set again at every one is a button
-         * that has stopped being useful. Not written to disk, because the only settings store in the
-         * app belongs to another part of the codebase and this needs a key added to it.
+         * a new activity per episode, and a lock that had to be set again at every one is useless.
+         * Disk persistence comes in through [primeOrientation].
          */
         private var lastOrientation = ScreenOrientation.DEFAULT
 
         /**
          * The lock read back off disk at startup, so it survives more than one process.
          *
-         * Set from the application rather than read here, because the orientation has to be
-         * applied before the activity lays anything out and there is no room in front of that for
-         * a disk read. Anything unrecognised leaves the default alone: this is a remembered
-         * preference, not a source of truth, and the wrong way up is not worth a crash.
+         * Set from the application rather than read here, because the orientation has to be applied
+         * before the activity lays anything out and there is no room in front of that for a disk
+         * read. Anything unrecognised leaves the default alone: this is a remembered preference,
+         * not a source of truth.
          */
         fun primeOrientation(name: String?) {
             val remembered = ScreenOrientation.entries.firstOrNull { it.name == name } ?: return
@@ -2591,8 +2555,8 @@ class PlayerActivity : FragmentActivity() {
                 putExtra(EXTRA_TITLE, item.title)
                 putExtra(EXTRA_CHAT_TITLE, chatTitle)
                 // The picture the grid was already showing, carried across rather than fetched
-                // again: the loading screen is drawn from it, and it is the one thing that can be
-                // on screen in the first frame, before Telegram has been asked anything at all.
+                // again: it is the one thing that can be on screen in the first frame, before
+                // Telegram has been asked anything at all.
                 putExtra(EXTRA_THUMBNAIL_ID, item.thumbnailFileId)
                 putExtra(EXTRA_MINI_THUMBNAIL, item.miniThumbnail)
                 putExtra(

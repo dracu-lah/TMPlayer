@@ -63,13 +63,11 @@ object Failures {
      *
      * A TDLib file id belongs to the run of the client that issued it, and TDLib will not fetch a
      * file it cannot trace back to a message it has seen this session. A download queued before the
-     * process was killed comes back holding an id in exactly that state: the request fails the
-     * instant it is made, the row says "Telegram didn't answer", and every press of Try again fails
-     * the same way, because nothing in that loop ever asks for the message again. Re-fetching it
-     * hands back a current id and gives TDLib the source it was missing.
+     * process was killed holds an id in exactly that state, and retrying it fails identically every
+     * time. Re-fetching the message hands back a current id.
      *
-     * Pure, and separate from [humanise], because this decides an action and that decides a
-     * sentence. The same string can want both.
+     * Separate from [humanise], because this decides an action and that decides a sentence. The
+     * same string can want both.
      */
     fun needsFreshFileReference(message: String?): Boolean {
         val raw = message?.trim().orEmpty()
@@ -98,9 +96,7 @@ object Failures {
      * `FLOOD_WAIT_42` / `Too Many Requests: retry after 42` both carry the same number.
      *
      * Public because the number is worth more than the sentence built out of it: Telegram is
-     * saying exactly how long to wait, and everything above this used to read that, turn it into
-     * "try again in about a minute" and throw the figure away, leaving the app to guess at a
-     * retry delay it had already been told.
+     * saying exactly how long to wait, so callers can time a retry rather than guess at one.
      */
     fun floodWaitSeconds(raw: String?): Int? =
         raw?.let { FLOOD.find(it)?.groupValues?.get(1)?.toIntOrNull() }

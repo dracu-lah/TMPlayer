@@ -21,13 +21,11 @@ import kotlinx.coroutines.withContext
 /** How a chat is grouped in the navigation rail. */
 enum class ChatKind(val label: String) {
     /**
-     * The chat with yourself, which Telegram gives every account and which every Telegram client
-     * names rather than showing the account's own name on it.
+     * The chat with yourself, which Telegram gives every account and every client names rather
+     * than showing the account's own name on it.
      *
-     * It is worth a kind of its own because it is the one chat people actually use as a video
-     * library: a file forwarded to Saved Messages from a phone is the usual way something arrives
-     * on this app in the first place. Left as [Direct] it sat somewhere in the middle of People
-     * under the viewer's own name, which reads as a stranger who happens to share it.
+     * It gets a kind of its own because it is the one chat people use as a video library: a file
+     * forwarded to Saved Messages from a phone is the usual way something arrives on this app.
      */
     Saved("Saved Messages"),
     Channel("Channels"),
@@ -38,11 +36,10 @@ enum class ChatKind(val label: String) {
 /**
  * One row of the chat list.
  *
- * Equality covers every field, including the bytes of the blurred preview. Identity-only equality
- * looked harmless (a chat is its id) but it made a refreshed list compare equal to the old one, so
- * the StateFlow conflated it away and a renamed chat, or one with a new picture, kept its old row
- * until the app was restarted. The array is compared by content rather than by reference for the
- * same reason: TDLib hands back a fresh array every read.
+ * Equality must cover every field, including the bytes of the blurred preview, or a refreshed list
+ * compares equal to the old one and the StateFlow conflates it away, leaving a renamed chat on its
+ * stale row. The array is compared by content, not reference: TDLib hands back a fresh array on
+ * every read.
  *
  * [Immutable] is the promise Compose needs to skip a row whose chat has not changed; it is honest
  * here because nothing ever writes into that array after construction.
@@ -71,7 +68,7 @@ data class ChatSummary(
      * Membership is Telegram's answer rather than this app's: a folder is a set of rules about
      * chat types, inclusions and exclusions, and evaluating those here would be a second, worse
      * implementation of something TDLib already keeps up to date. Filled in by asking about each
-     * folder in turn, not read off the chat, for the reason [folderMembership] gives.
+     * folder in turn rather than reading it off the chat, for the reason [folderMembership] gives.
      */
     val folderIds: List<Int> = emptyList(),
 ) {
@@ -117,10 +114,9 @@ data class ChatFolderSummary(val id: Int, val title: String)
 /**
  * Puts a chat list in the order Telegram itself would draw it.
  *
- * TDLib's own ordering is by position within a list and takes no view on pinning, so a pinned chat
- * that has been quiet for a month sorted below whatever arrived this morning: the exact opposite of
- * what pinning it was for. Saved Messages goes above even the pins, because it is the one chat that
- * is always wanted and never has anything to do with recency.
+ * TDLib's own ordering is by position within a list and takes no view on pinning, so pins have to
+ * be lifted here or a quiet pinned chat sorts below whatever arrived this morning. Saved Messages
+ * goes above even the pins: it is always wanted and has nothing to do with recency.
  *
  * [sortedWith] is stable, so within each of the three groups the order TDLib handed over survives
  * untouched, and nothing here has to know how that order was arrived at.
@@ -169,11 +165,10 @@ class ChatRepository(private val td: TdlClient) {
      * documented "no more" answer, not a failure.
      *
      * @param known rows the caller already has, so this does not fetch them a second time. A cold
-     *   start reads the local list and then syncs, and without this the second pass re-fetched
-     *   every chat it had just been handed: eight hundred round trips and eight hundred whole
-     *   TDLib chat objects on a device with 96 MB of heap, for a list that had not changed in the
-     *   second it took. Anything genuinely new is still fetched, and every row on screen is kept
-     *   current by the update collectors rather than by re-reading it.
+     *   start reads the local list and then syncs, and re-fetching what it was just handed costs
+     *   hundreds of round trips and hundreds of whole TDLib chat objects on a device with 96 MB of
+     *   heap. Anything genuinely new is still fetched, and rows on screen are kept current by the
+     *   update collectors rather than by re-reading them.
      */
     suspend fun syncChats(
         limit: Int = CHAT_LIMIT,
@@ -185,9 +180,8 @@ class ChatRepository(private val td: TdlClient) {
             val result = td.loadChats(ChatListMain(), CHAT_PAGE)
             if (result is TdlResult.Failure) {
                 // 404 is TDLib's documented "everything is already local". Everything else is a
-                // real failure, and the two were indistinguishable here before: a dropped
-                // connection produced a short list that the screen then presented as the whole
-                // library, with nothing anywhere saying the sync had not worked.
+                // real failure and must be reported, or a dropped connection produces a short list
+                // that the screen presents as the whole library.
                 if (!result.message.contains("404")) failure = result.message
                 break
             }
@@ -204,7 +198,7 @@ class ChatRepository(private val td: TdlClient) {
         }
 
         // Every folder at once rather than one after another. These are server round trips, not
-        // database reads, so ten folders in a row put ten latencies between the viewer and a
+        // database reads, so sequentially they put one latency per folder between the viewer and a
         // refreshed list, and this runs again every couple of minutes.
         coroutineScope {
             Td.folders.value
@@ -218,28 +212,27 @@ class ChatRepository(private val td: TdlClient) {
     /**
      * Reads the chat list already in TDLib's database without requiring a network connection.
      *
-     * The three hundred `getChat` calls run together rather than one after another. Sequentially
-     * they are three hundred round trips on the first-frame path, which on a stick is most of the
-     * wait before anything appears; TDLib answers them out of its own database and is perfectly
-     * happy to be asked in parallel.
+     * The `getChat` calls run together rather than one after another: sequentially they are three
+     * hundred round trips on the first-frame path, which on a stick is most of the wait before
+     * anything appears. TDLib answers them out of its own database and is happy to be asked in
+     * parallel.
      */
     suspend fun cachedChats(
         limit: Int = CHAT_LIMIT,
         known: List<ChatSummary> = emptyList(),
     ): List<ChatSummary> = withContext(Dispatchers.IO) {
         val main = td.getChats(ChatListMain(), limit).value().chatIds.toList()
-        // Archived chats are read as well, and a failure here is not allowed to take the main list
-        // down with it: an account with nothing archived, or a TDLib that has not got round to the
-        // archive yet, should still see every chat it has.
+        // A failure here is not allowed to take the main list down with it: an account with nothing
+        // archived, or a TDLib that has not got round to the archive yet, should still see every
+        // chat it has.
         val archived = td.getChats(ChatListArchive(), ARCHIVE_LIMIT).valueOrNull?.chatIds?.toList()
             .orEmpty()
         // Main first, so the archive can only ever add to the end. A chat cannot be in both lists,
         // but distinct() costs nothing and makes that TDLib's problem rather than a duplicate row.
         val ids = (main + archived).distinct()
-        // The chat with yourself, which has no flag of its own: Telegram simply gives it the id of
-        // the account, so the only way to recognise it is to know who is signed in. Cached by Td,
-        // because this used to be a round trip on every pass of a path that runs several times a
-        // launch, for an answer that cannot change while the client is alive.
+        // The chat with yourself has no flag of its own: Telegram gives it the id of the account,
+        // so the only way to recognise it is to know who is signed in. Cached by Td, since the
+        // answer cannot change while the client is alive and this path runs several times a launch.
         val myId = Td.myId()
 
         val summaries = coroutineScope {
@@ -247,12 +240,12 @@ class ChatRepository(private val td: TdlClient) {
             val byId = known.associateBy { it.id }
             val fresh = ids.filterNot { it in byId }
 
-            // Bounded, and reduced to a summary inside each chunk. Four hundred `getChat` calls in
-            // flight at once meant four hundred whole TDLib chat objects held live until the last
-            // of them landed, each carrying a last message with its own text and thumbnails, on a
-            // stick with a 96 MB heap. In chunks the peak is [CHAT_CHUNK] of them and the rest is
-            // the small row this screen actually draws. It is no slower: the limit is the stick,
-            // not TDLib, which answers all of these out of its own database.
+            // Bounded, and reduced to a summary inside each chunk. All of them in flight at once
+            // holds hundreds of whole TDLib chat objects live until the last lands, each carrying
+            // a last message with its own text and thumbnails, on a stick with a 96 MB heap. In
+            // chunks the peak is [CHAT_CHUNK] of them and the rest is the small row this screen
+            // draws. It is no slower: the limit is the stick, not TDLib, which answers all of
+            // these out of its own database.
             val fetched = fresh.chunked(CHAT_CHUNK).flatMap { chunk ->
                 chunk.map { id -> async { td.getChat(id).valueOrNull } }
                     .awaitAll()
@@ -278,12 +271,11 @@ class ChatRepository(private val td: TdlClient) {
     /**
      * Which chats are in which folder, asked of Telegram one folder at a time and in parallel.
      *
-     * Read this way rather than off each chat's own list of the lists it belongs to, which is what
-     * this did first. That field is only filled in once TDLib has been asked to load the folder in
-     * question, so on a cold start, where the chats are read before the folders have arrived, every
-     * folder came out empty and stayed empty until something else triggered a sync. These are local
-     * database reads and there are as many of them as the viewer has folders, which is single
-     * figures.
+     * Read this way rather than off each chat's own list of the lists it belongs to. That field is
+     * only filled in once TDLib has been asked to load the folder in question, so on a cold start,
+     * where the chats are read before the folders have arrived, every folder would come out empty
+     * and stay empty until something else triggered a sync. These are local database reads and
+     * there are as many of them as the viewer has folders, which is single figures.
      */
     private suspend fun folderMembership(): Map<Long, List<Int>> = coroutineScope {
         val folders = Td.folders.value
@@ -357,10 +349,10 @@ class ChatRepository(private val td: TdlClient) {
         cursors: MediaCursors = MediaCursors(),
         query: String = "",
     ): MediaPage =
-        // Off Main for the whole page. The mapper below asks the filesystem twice per message to
-        // decide whether the file is already on disk, and this runs three searches of forty
-        // messages each inside a loop that will do it up to eight times: nearly two thousand
-        // syscalls, and every one of them was landing on the thread drawing the grid.
+        // Off Main for the whole page. The mapper asks the filesystem twice per message to decide
+        // whether the file is already on disk, and this runs three searches of forty messages each
+        // inside a loop that may do it eight times: nearly two thousand syscalls, none of which
+        // belong on the thread drawing the grid.
         withContext(Dispatchers.IO) {
         coroutineScope {
             val videos = async {
@@ -401,12 +393,10 @@ class ChatRepository(private val td: TdlClient) {
     /**
      * Pins or unpins a chat, in whichever of the two lists it currently lives in.
      *
-     * These next three write to the viewer's actual Telegram account, and every one of them shows
-     * up on their phone a second later. They are here because the tabs invite them: a screen with
-     * an Archived tab and pins at the top of every list is one somebody will immediately try to
-     * pin something into, and having to reach for a phone to do it is the app admitting it is only
-     * half a client. All three are reversible from the same menu, which is why these and not, say,
-     * leaving a chat.
+     * These next three write to the viewer's actual Telegram account and show up on their phone a
+     * second later. They are here because the tabs invite them: a screen with an Archived tab and
+     * pins at the top of every list is one somebody will try to pin something into. All three are
+     * reversible from the same menu, which is why these and not, say, leaving a chat.
      */
     suspend fun setPinned(chat: ChatSummary, pinned: Boolean): TdlResult<dev.g000sha256.tdl.dto.Ok> =
         withContext(Dispatchers.IO) {
@@ -417,9 +407,8 @@ class ChatRepository(private val td: TdlClient) {
     /**
      * Silences a chat, or gives it its voice back.
      *
-     * The row could already say a chat was muted and the app had no way to mute one, which is a
-     * state the viewer can see and not reach. Telegram has no mute flag: muting is a number of
-     * seconds to stay quiet for, and "forever" is that number at its largest.
+     * Telegram has no mute flag: muting is a number of seconds to stay quiet for, and "forever" is
+     * that number at its largest.
      *
      * The chat's existing settings are read first and only the two mute fields are changed. The
      * alternative, sending a freshly built settings object, would quietly reset the sound, the

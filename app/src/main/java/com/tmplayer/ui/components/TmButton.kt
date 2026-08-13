@@ -34,14 +34,11 @@ import com.tmplayer.ui.theme.tmButtonColors
 /**
  * One button, drawn by whichever Material the device can actually operate.
  *
- * TV Material's button is built entirely around D-pad focus and never dispatches a tap: verified
- * on a touch-only phone, where the sign-in button looked pressable, did nothing to a finger, and
- * worked the instant a D-pad centre was injected. So the touch branch is an ordinary
- * `androidx.compose.material3` button and the TV branch keeps the one it has always had, with its
- * focus colours untouched.
+ * TV Material's button is built entirely around D-pad focus and never dispatches a tap, so touch
+ * gets an ordinary `androidx.compose.material3` button and the remote gets the TV one.
  *
- * The two libraries are never mixed inside one control. They share nothing here but the palette
- * and the [content] the caller passes, which is text and glyphs rather than behaviour.
+ * The two libraries are never mixed inside one control. They share nothing here but the palette and
+ * the [content] the caller passes, which is text and glyphs rather than behaviour.
  */
 @Composable
 fun TmButton(
@@ -66,11 +63,9 @@ fun TmButton(
         return
     }
 
-    // Material 3's own filled button, at Material's own height and in the scheme's own colours.
-    // The colour table that used to be here named the television's six literals, which on a phone
-    // with a light theme or a wallpaper palette meant a button that agreed with nothing around it,
-    // and the 48 dp floor it was given has been Material's minimum touch target for a while now
-    // without anyone having to ask for it.
+    // Material 3's own filled button, at Material's own height and in the scheme's own colours, so
+    // it agrees with a light theme or a wallpaper palette and already meets the minimum touch
+    // target.
     val scheme = TouchMaterialTheme.colorScheme
     TouchButton(
         onClick = onClick,
@@ -83,11 +78,9 @@ fun TmButton(
                 containerColor = scheme.error,
                 contentColor = scheme.onError,
             )
-            // A dark theme's primary is a pale tint, so the filled button came out as a slab of
-            // near-white blue on a black screen: the brightest thing in the room, and a page with
-            // two of them read as a warning rather than as a next step. The container pair is the
-            // same blue at the tone a dark theme is actually built for, so the button is dark, the
-            // label on it is light, and the contrast is better than what it replaces.
+            // A dark theme's primary is a pale tint, and a filled button in it is a slab of
+            // near-white on a black screen. The container pair is the same hue at the tone a dark
+            // theme is built for: dark button, light label.
             LocalDarkTheme.current -> TouchButtonDefaults.buttonColors(
                 containerColor = scheme.primaryContainer,
                 contentColor = scheme.onPrimaryContainer,
@@ -146,12 +139,11 @@ fun TmSecondaryButton(
 /**
  * The two things a button can say, stacked, with only one of them visible.
  *
- * A press that starts a network call has to say so, and the honest way to say it is to change the
- * words on the button. Swapping the words outright would resize it, and on a remote a button that
- * narrows under the focus ring drags the ring with it, which reads as the focus having jumped
- * somewhere on its own. Drawing both faces in the same box means the button is always as wide as
- * the longer of the two and never moves between them. The hidden face is taken out of the
- * semantics as well as out of the picture, so a screen reader reads one label rather than both.
+ * A press that starts a network call says so by changing the words on the button. Swapping them
+ * outright would resize it, and on a remote a button that narrows under the focus ring drags the
+ * ring with it, which reads as focus having jumped on its own. Drawing both faces in one box keeps
+ * the button as wide as the longer of the two. The hidden face is cleared from the semantics too,
+ * so a screen reader reads one label rather than both.
  */
 @Composable
 private fun ButtonFace(

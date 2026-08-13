@@ -5,10 +5,9 @@ import java.text.Normalizer
 /**
  * Forgiving text matching for the two search boxes.
  *
- * Both of them are typed into badly, and for different reasons. A remote's on-screen keyboard makes
- * every letter a small journey, so people type three of the five words and get one of them wrong.
- * A phone's keyboard autocorrects a series name into an English word. A plain `contains` answers
- * "nothing found" to both, which is a lie: the thing being looked for is right there.
+ * Both are typed into badly: a remote's on-screen keyboard makes every letter a journey, and a
+ * phone's keyboard autocorrects a series name into an English word. A plain `contains` answers
+ * "nothing found" to both.
  *
  * So: accents are folded away, punctuation stops counting, a query is a set of words rather than a
  * string, and a candidate is a match when enough of those words land. One wrong word among right
@@ -21,8 +20,7 @@ object Fuzzy {
     /**
      * Lower case, no accents, and nothing but letters, digits and single spaces.
      *
-     * The accent folding is what lets "Pokemon" find "Pokémon", which is how the file is named
-     * roughly half the time and never how anybody types it.
+     * The accent folding is what lets "Pokemon" find "Pokémon".
      */
     fun normalize(text: String): String {
         val decomposed = Normalizer.normalize(text, Normalizer.Form.NFD)
@@ -98,11 +96,9 @@ object Fuzzy {
     /**
      * Whether [a] and [b] are one typo apart.
      *
-     * Two shapes count. One insertion, deletion or substitution is the obvious one. A swapped pair
-     * of neighbouring letters is the other, and it has to be named separately because it is two
-     * edits by the usual arithmetic and the single commonest typing mistake there is: "freinds"
-     * for "friends" is a transposition, and treating it as a different word entirely would miss
-     * the case this whole file exists for.
+     * Two shapes count: one insertion, deletion or substitution, or a swapped pair of neighbouring
+     * letters. The swap needs naming separately because it is two edits by the usual arithmetic
+     * while being the commonest typing mistake there is ("freinds" for "friends").
      */
     internal fun nearlyEqual(a: String, b: String): Boolean =
         withinOneEdit(a, b) || oneTransposition(a, b)
@@ -119,8 +115,8 @@ object Fuzzy {
     /**
      * Whether one insertion, deletion or substitution turns [a] into [b].
      *
-     * A full edit-distance matrix would answer a question nothing here asks. Anything two or more
-     * edits away is a different word, so the walk stops at the first mismatch it cannot absorb.
+     * Anything two or more edits away is a different word, so the walk stops at the first mismatch
+     * it cannot absorb rather than building a full edit-distance matrix.
      */
     internal fun withinOneEdit(a: String, b: String): Boolean {
         if (a == b) return true

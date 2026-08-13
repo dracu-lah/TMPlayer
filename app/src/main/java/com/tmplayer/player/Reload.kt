@@ -3,17 +3,16 @@ package com.tmplayer.player
 /**
  * What "Reload" should actually do to a video that would not play.
  *
- * Try again re-prepares the same stream over the same bytes, which fixes a moved download window
- * and a connection that came back and nothing else. The failure it cannot touch is the common one:
- * a half written partial file on disk, from a download killed mid-write or a hole where TDLib freed
- * a range the extractor then read as zeroes. Every attempt over those bytes fails the same way, so
- * the honest fix is to throw the local copy away and stream it again from nothing.
+ * A plain retry re-prepares the same stream over the same bytes, which fixes a moved download
+ * window or a connection that came back. It cannot fix a half written partial file on disk, where
+ * every attempt over those bytes fails the same way, so the fix there is to throw the local copy
+ * away and stream it again from nothing.
  *
- * That is destructive, which is why the choice is a pure function with a name rather than an `if`
- * buried in a click listener. A video the viewer downloaded on purpose is never thrown away: they
- * asked for it, it may be the only copy they will have on a train, and re-fetching it may be a
- * gigabyte they are paying for. The same goes for one a download is working on right now, whose
- * bytes belong to the service rather than to this screen.
+ * That is destructive, which is why the choice is a pure named function rather than an `if` buried
+ * in a click listener. A video the viewer downloaded on purpose is never thrown away: it may be
+ * the only copy they have offline, and re-fetching it may be a gigabyte they are paying for. The
+ * same goes for one a download is working on right now, whose bytes belong to the service rather
+ * than to this screen.
  */
 object Reload {
 

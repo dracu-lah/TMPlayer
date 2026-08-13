@@ -92,9 +92,8 @@ fun TvSearchField(
             .focusRequester(box)
             .height(56.dp)
             .clip(CircleShape)
-            // Focus has to be as loud here as it is everywhere else on this screen, where a
-            // focused control either fills with Accent or draws a 3dp border. A 1dp-to-2dp
-            // border change with no fill was the one place the viewer had to hunt for it.
+            // Focus has to be as loud here as everywhere else on this screen, where a focused
+            // control either fills with Accent or draws a 3dp border.
             .background(if (active) Tone.surfaceHigh else Tone.surface)
             .border(
                 width = if (active) 3.dp else 1.dp,
@@ -140,7 +139,7 @@ fun TvSearchField(
                         .onFocusChanged { state ->
                             // onFocusChanged fires once with isFocused = false as the field is
                             // first composed, before the focus request lands. Acting on that
-                            // closed editing again immediately and the keyboard never appeared.
+                            // would close editing again and the keyboard would never appear.
                             if (state.isFocused) {
                                 everFocused = true
                             } else if (everFocused) {

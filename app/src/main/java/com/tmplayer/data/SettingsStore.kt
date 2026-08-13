@@ -44,8 +44,8 @@ private val VIDEO_SCALE = stringPreferencesKey("video_scale")
  *
  * Two keys rather than one, because the ids belong to the row and the rest belongs to the record,
  * and [ResumeRecord] already knows how to write the second half. Kept apart from the `dl_` rows on
- * purpose: those are downloads the viewer asked for and this is the one that arrived because they
- * pressed Play, and the whole of the storage story rests on the two never being confused.
+ * purpose: those are downloads the viewer asked for, this is what pressing Play left behind, and the
+ * storage accounting rests on the two never being confused.
  */
 private val CACHED_VIDEO_IDS = stringPreferencesKey("cached_video_ids")
 private val CACHED_VIDEO = stringPreferencesKey("cached_video")
@@ -55,7 +55,7 @@ private val CACHED_VIDEO = stringPreferencesKey("cached_video")
  *
  * One key holding every unfinished request, because it is only ever read whole at launch and
  * rewritten whole as the queue moves. A key per download would leave orphans behind whenever a
- * write was interrupted, which for a list this short buys nothing.
+ * write was interrupted.
  */
 private val DOWNLOAD_QUEUE = stringPreferencesKey("download_queue")
 private val SCREEN_ORIENTATION = stringPreferencesKey("screen_orientation")
@@ -106,16 +106,10 @@ class SettingsStore(private val context: Context) {
     /**
      * One preference, read the way every preference here is read.
      *
-     * Two things happen on the way out and both matter. DataStore re-emits the entire preference
-     * map to every collector on every write, so a favourite being starred used to wake all twelve
-     * of these flows and hand each of them a value identical to the one it had already published:
-     * with Compose's strong skipping on, a freshly built Set or Map compares by identity and never
-     * matches, so each of those no-op emissions forced a full recomposition of the chat list and
-     * the video grid. [distinctUntilChanged] is what stops a write about one thing from redrawing
-     * everything else.
-     *
-     * The mapping then happens off the main thread. Two of these walk every key in the store and
-     * decode as they go, and they were doing it on the thread drawing the screen, once per write.
+     * DataStore re-emits the entire preference map to every collector on every write, and a freshly
+     * built Set or Map compares by identity under Compose's strong skipping, so [distinctUntilChanged]
+     * is what stops a write about one thing from redrawing everything else. The mapping runs off the
+     * main thread because some of these walk every key in the store and decode as they go.
      */
     private fun <T> read(transform: (Preferences) -> T): Flow<T> = context.prefs.data
         .map(transform)
@@ -142,14 +136,10 @@ class SettingsStore(private val context: Context) {
     /**
      * Wipes every preference: favourites, watch history, size limits, the lot.
      *
-     * Signing out has to leave nothing of the previous account behind. TDLib clears its own
-     * database on log out, but everything this app remembers about their chats and their videos
-     * lives here, and none of it means anything to whoever signs in next.
-     *
-     * Two things survive, and neither is about the account: whether the app is drawn light or
-     * dark, and whether it takes its colours from the wallpaper. Those describe the phone and the
-     * person holding it, not the Telegram account signed into it, and having the app flip to dark
-     * halfway through signing out reads as a fault rather than as privacy.
+     * Signing out has to leave nothing of the previous account behind. Two things survive, and
+     * neither is about the account: the light or dark choice, and whether colours come from the
+     * wallpaper. Those describe the phone, not the Telegram account signed into it, and flipping
+     * the app to dark halfway through signing out reads as a fault rather than as privacy.
      */
     suspend fun clearEverything() {
         context.prefs.edit { prefs ->
@@ -171,10 +161,8 @@ class SettingsStore(private val context: Context) {
     /**
      * Skip the chat list and reopen whichever chat was last watched.
      *
-     * Off by default. Opening straight into a chat is the right thing for somebody who watches
-     * one channel every evening, and the wrong thing for everybody else: the app opens somewhere
-     * they did not ask to be, and the way back to the listing has to be discovered before the app
-     * can be used at all. A shortcut is worth having, but not before its owner has said so.
+     * Off by default: opening straight into a chat suits somebody who watches one channel every
+     * evening and nobody else, since the way back to the listing has to be discovered first.
      */
     val openLastChat: Flow<Boolean> = read { it[OPEN_LAST_CHAT] ?: false }
 
@@ -216,9 +204,7 @@ class SettingsStore(private val context: Context) {
      */
     suspend fun autoOpenTarget(): Long? {
         val prefs = context.prefs.data.first()
-        // The same default as [openLastChat], which is the switch the viewer is reading. It used to
-        // be true here and false there, so an install nobody had touched showed the setting off and
-        // opened straight into the last chat anyway.
+        // Must stay the same default as [openLastChat], which is the switch the viewer reads.
         return autoOpenChatId(prefs[LAST_CHAT] ?: 0L, prefs[OPEN_LAST_CHAT] ?: false)
     }
 
@@ -246,27 +232,15 @@ class SettingsStore(private val context: Context) {
     /**
      * Every video playback has left behind, newest first.
      *
-     * This used to be one record, on the theory that there is only ever one cached video: playing
-     * something else replaces it. The theory was right about what the disk should hold and wrong
-     * about what actually happens. Stepping from one episode to the next inside the player never
-     * went past the screen that does the replacing, so a series watched end to end left every
-     * episode on the device while this key still named the first of them. The Settings row quoted
-     * one film, the Downloads screen showed one film, and the other nine were two and a half
-     * gigabytes that nothing in the app could see, name or delete.
-     *
-     * So it is a list, written the same way downloads are, under `wc_`. [WatchCache] is what keeps
-     * it honest: it claims the video being played and gives up everything else at the same moment,
-     * so the list is normally one entry long and is never a lie when it is not.
+     * A list, written the same way downloads are, under `wc_`: stepping between episodes inside the
+     * player can leave more than one file behind, and anything not listed here is a video nothing in
+     * the app can see, name or delete. [WatchCache] keeps it honest by claiming the video being
+     * played and giving up everything else at the same moment, so the list is normally one entry.
      */
     val cachedVideos: Flow<List<ResumeRecord>> = read { prefs -> decodeCachedList(prefs) }
 
     /** Read once, at the moment a video is asked for, where a flow yet to emit would lie. */
     suspend fun cachedVideosNow(): List<ResumeRecord> = decodeCachedList(context.prefs.data.first())
-
-    /** The most recent of them, which is what the one-line places still want. */
-    val cachedVideo: Flow<ResumeRecord?> = read { prefs -> decodeCachedList(prefs).firstOrNull() }
-
-    suspend fun cachedVideoNow(): ResumeRecord? = cachedVideosNow().firstOrNull()
 
     private fun decodeCachedList(prefs: Preferences): List<ResumeRecord> = buildList {
         for ((key, value) in prefs.asMap()) {
@@ -282,8 +256,7 @@ class SettingsStore(private val context: Context) {
             add(record)
         }
         // The single record older installs wrote, carried across so the first launch after an
-        // update still knows what it was holding rather than starting from an empty list beside
-        // a full disk.
+        // update knows what it is holding rather than starting from an empty list beside a full disk.
         val legacy = prefs[CACHED_VIDEO_IDS]
         if (legacy != null && none { progressKey(it.chatId, it.messageId) == legacy }) {
             ResumeRecord.decode(
@@ -298,10 +271,9 @@ class SettingsStore(private val context: Context) {
     /**
      * Records another video as one playback put on the disk.
      *
-     * Adding rather than replacing. The file the cache used to hold is deleted by [WatchCache],
-     * which is the only place that can: this store knows preferences and TDLib owns the bytes, and
-     * a record dropped before its file has actually gone is how the untrackable gigabytes happened
-     * in the first place.
+     * Adding rather than replacing. Deleting the file is [WatchCache]'s job, since this store knows
+     * only preferences and TDLib owns the bytes. Never drop a record before its file has gone, or
+     * the disk keeps something nothing can name.
      */
     suspend fun rememberCachedVideo(item: MediaItem, chatTitle: String) {
         context.prefs.edit { prefs ->
@@ -344,9 +316,8 @@ class SettingsStore(private val context: Context) {
     /**
      * Refuse to fetch video over a connection the viewer pays for by the byte.
      *
-     * Off by default, because a great many people watch on mobile data by choice and an app that
-     * silently refuses to play is worse than one that asks. On, it is absolute: a video that is
-     * not already downloaded will not open until there is Wi-Fi.
+     * Off by default, because many people watch on mobile data by choice. On, it is absolute: a
+     * video that is not already downloaded will not open until there is Wi-Fi.
      */
     val wifiOnlyDownloads: Flow<Boolean> = read { it[WIFI_ONLY] ?: false }
 
@@ -361,9 +332,8 @@ class SettingsStore(private val context: Context) {
      * Whether a crash may be reported to the project, and the one thing in this app that ever
      * sends anything anywhere except Telegram and GitHub.
      *
-     * Off, on a fresh install and after signing out. Nothing about it is initialised until this
-     * is true: see [com.tmplayer.data.CrashReports] for what a report does and does not carry.
-     * Off is not a degraded mode, it is the normal one, and the app never asks twice.
+     * Off, on a fresh install and after signing out. Nothing is initialised until this is true: see
+     * [com.tmplayer.data.CrashReports] for what a report does and does not carry.
      */
     val crashReports: Flow<Boolean> = read { it[CRASH_REPORTS] ?: false }
 
@@ -395,7 +365,7 @@ class SettingsStore(private val context: Context) {
      * How the picture was last fitted to the screen.
      *
      * Remembered for the same reason the speed is: a viewer whose television overscans, or who
-     * cannot stand black bars, was choosing Crop again at the start of every single episode.
+     * cannot stand black bars, should not have to choose Crop again every episode.
      */
     suspend fun videoScaleNow(): String? = context.prefs.data.first()[VIDEO_SCALE]
 
@@ -406,10 +376,8 @@ class SettingsStore(private val context: Context) {
     /**
      * Which way up the player opens, on a phone.
      *
-     * Kept beside the scale for the same reason it is kept at all: both are answers about how this
-     * viewer likes to watch, not about the video in front of them, and a preference that has to be
-     * set again after every cold start is one the viewer stops trusting and starts working around.
-     * Read as a plain name so the player owns the meaning of it and this file stays a store.
+     * Kept beside the scale: both describe how this viewer likes to watch rather than the video in
+     * front of them. Read as a plain name so the player owns its meaning and this file stays a store.
      */
     suspend fun screenOrientationNow(): String? = context.prefs.data.first()[SCREEN_ORIENTATION]
 
@@ -422,14 +390,11 @@ class SettingsStore(private val context: Context) {
     /**
      * The audio track and the subtitles this series was last watched with.
      *
-     * Kept per series rather than per file, because the choice belongs to the show: a viewer who
-     * turned English subtitles on for episode one wants them on for episode two, and the file id
-     * changes with every episode. Kept per series rather than once for the whole app, because the
-     * answer genuinely differs between one show and the next: subtitles on for the Malayalam
-     * series, off for the English one, and neither preference should overwrite the other.
+     * Per series rather than per file, because the choice belongs to the show and the file id
+     * changes with every episode. Per series rather than app-wide, because the answer differs
+     * between shows: subtitles on for one, off for another, and neither should overwrite the other.
      *
-     * A video that is not part of a series is keyed by its own name, which makes this a no-op for
-     * it: nothing else will ever look that key up.
+     * A video that is not part of a series is keyed by its own name, so this is a no-op for it.
      */
     suspend fun trackChoice(series: String): TrackChoice {
         val prefs = context.prefs.data.first()
@@ -478,8 +443,7 @@ class SettingsStore(private val context: Context) {
      * The chat list as it was at the end of the last sync, for the first frame of the next launch.
      *
      * Read straight off disk rather than as a flow: it is wanted once, before anything else has
-     * happened, and a flow that has not emitted yet would hand back an empty list at exactly the
-     * moment the whole point is to have something to draw.
+     * happened, and a flow that has not emitted yet would hand back an empty list.
      */
     suspend fun cachedChatSnapshot(): List<ChatSummary> =
         ChatSnapshot.decode(context.prefs.data.first()[CHAT_SNAPSHOT])
@@ -487,9 +451,8 @@ class SettingsStore(private val context: Context) {
     suspend fun saveChatSnapshot(chats: List<ChatSummary>) {
         val encoded = ChatSnapshot.encode(chats)
         context.prefs.edit { prefs ->
-            // Written only when it has actually changed. This runs after every sync, and the
-            // whole preference file is rewritten and fsynced per edit, so a list that has not
-            // moved would cost a disk write every couple of minutes for nothing.
+            // Written only when it has actually changed: this runs after every sync, and the whole
+            // preference file is rewritten and fsynced per edit.
             if (prefs[CHAT_SNAPSHOT] != encoded) prefs[CHAT_SNAPSHOT] = encoded
         }
     }
@@ -597,8 +560,8 @@ class SettingsStore(private val context: Context) {
     /**
      * Everything half-watched, most recent first: the "Continue watching" row.
      *
-     * Entries without a stored description are skipped rather than guessed at: they were written
-     * by a build before the description existed, so there is no title to put on the card.
+     * Entries without a stored description are skipped rather than guessed at: there is no title to
+     * put on the card.
      */
     val continueWatching: Flow<List<ResumeRecord>> = read { prefs ->
         buildList {
@@ -688,14 +651,6 @@ class SettingsStore(private val context: Context) {
         context.prefs.edit { it.remove(downloadKey(chatId, messageId)) }
     }
 
-    /** Empties the Downloads list, for the button that deletes every file behind it. */
-    suspend fun forgetAllDownloads() {
-        context.prefs.edit { prefs ->
-            val doomed = prefs.asMap().keys.filter { it.name.startsWith("dl_") }
-            for (key in doomed) prefs.remove(key)
-        }
-    }
-
     /** The same cap the resume history has, for the same reason: this list is not a log. */
     private fun evictOldestDownloads(prefs: MutablePreferences) {
         val stamps = prefs.asMap().keys
@@ -736,10 +691,8 @@ class SettingsStore(private val context: Context) {
     /**
      * Keeps the history to [MAX_HISTORY] entries, oldest out first.
      *
-     * Nothing bounded it before, so a viewer who watches a video a day accumulates a key per video
-     * forever, and every one of them is walked on every read of Continue watching and rewritten on
-     * every ten-second heartbeat. The cap is generous: nobody scrolls past two hundred half-watched
-     * videos, and past that the list is a cost rather than a feature.
+     * Unbounded, every key would be walked on every read of Continue watching and rewritten on every
+     * ten-second heartbeat. The cap is generous: nobody scrolls past two hundred half-watched videos.
      */
     private fun evictOldestHistory(prefs: MutablePreferences) {
         val stamps = prefs.asMap().keys
@@ -780,13 +733,10 @@ class SettingsStore(private val context: Context) {
     /**
      * Drops half-watched entries that can no longer become a card, and says how many went.
      *
-     * A resume position is written the moment playback starts, but the description beside it comes
-     * from the video that was playing; a build that predates the description, a write interrupted by
-     * the stick killing the app, or a file id that has since been revoked all leave a position on
-     * disk that [continueWatching] can only skip. Skipping it every launch keeps a dead entry
-     * forever, and it counts against nothing the viewer can see or clear. This is the sweep that
-     * gets rid of them, and it uses the same decoder as the tab, so anything it deletes is exactly
-     * what the tab could not show.
+     * A resume position is written the moment playback starts, but the description beside it can be
+     * missing: an interrupted write, or a file id since revoked, leaves a position that
+     * [continueWatching] can only skip, forever and invisibly. This sweep uses the same decoder as
+     * the tab, so anything it deletes is exactly what the tab could not show.
      */
     suspend fun pruneBrokenHistory(): Int {
         var removed = 0

@@ -27,23 +27,18 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
  * Fetches videos the viewer asked to keep, with the app closed if need be, one at a time.
  *
- * The app had no downloads in this sense at all: playing a video filled the cache with it and
- * leaving the player cancelled whatever had not arrived, which is right for a television that
- * watches one thing at a time and wrong for somebody filling a phone before a train. A foreground
- * service is what Android gives for work the viewer started and expects to finish while they are
- * somewhere else, and the notification it must post is the same thing they will look at to see how
- * far it has come.
- *
  * It is a queue rather than a fan-out. Three videos fetched at once share one connection three ways
  * and all three land at the end; fetched in turn, the first is watchable while the third is still
  * coming, and the figures on the notification mean something because they describe one file. So
- * [MAX_PARALLEL] is one, the rest wait their turn where the viewer can see them, and the order they
- * were ticked in is the order they arrive in.
+ * [MAX_PARALLEL] is one, and the order they were ticked in is the order they arrive in.
  *
  * TDLib does the fetching; this only asks, watches and reports. The synchronous form of
  * `downloadFile` returns when the whole file has landed, so the progress loop beside it exists
@@ -72,9 +67,8 @@ class DownloadService : Service() {
      * Why the connection cannot carry a download at this moment, or null when it can.
      *
      * Kept here as well as acted on, because a video ticked while the phone is in a tunnel has to
-     * arrive on the list already waiting for a signal. Without it the new row went straight onto
-     * the queue and was started by the next pump, which then failed for the reason the app already
-     * knew about.
+     * arrive on the list already waiting for a signal rather than being started and failing for a
+     * reason the app already knew about.
      */
     @Volatile
     private var holdReason: OfflineDownloads.Stage? = null
@@ -98,17 +92,11 @@ class DownloadService : Service() {
     /**
      * True from the moment the ongoing notification has been taken down, so nothing puts it back.
      *
-     * This is the whole of a bug that outlived every download it was about. The last video of a
-     * queue finishing calls [done], which pumps, finds nothing left, takes the notification down
-     * and stops the service, and then calls [refresh], which posts the summary again. What went up
-     * was an ongoing notification with no service behind it: nothing owned it, so nothing took it
-     * away, and swiping does not dismiss an ongoing one. It sat there reading "Finishing up" with
-     * a bar that never moved. Pressing Cancel made it worse rather than better, because that is
-     * another start command, and the same sequence ran again and put it straight back.
-     *
-     * Ordering alone would not fix it: [stopSelf] is a request, not a return, and refreshes can
-     * arrive from the network watcher or a fetch's last breath after the decision to stop. So the
-     * decision is recorded, and every path that would draw the summary checks it first.
+     * An ongoing notification with no service behind it is owned by nothing, so nothing takes it
+     * away and swiping does not dismiss it. Ordering alone is not enough: [stopSelf] is a request,
+     * not a return, and refreshes can arrive from the network watcher or a fetch's last breath
+     * after the decision to stop. So the decision is recorded, and every path that would draw the
+     * summary checks it first.
      */
     @Volatile
     private var stopping = false
@@ -118,6 +106,7 @@ class DownloadService : Service() {
     override fun onCreate() {
         super.onCreate()
         channel()
+        startPersisting()
         // A service restarted into an app process that still holds a queue (the activity was
         // recreated, or restore() ran at launch) adopts it rather than starting from nothing.
         adoptExistingQueue()
@@ -130,15 +119,10 @@ class DownloadService : Service() {
     /**
      * Holds the queue when the connection cannot carry it, and puts it back when it can.
      *
-     * Two things stop a download that the viewer has not stopped, and both used to end the same
-     * way: badly. A phone walking into a tunnel produced a row reading "The download did not
-     * finish. Try again", which describes what happened and not what to do about it, since the
-     * answer is to wait and the app can do that itself. Mobile data was worse than that: the
-     * setting "Only download over Wi-Fi" was obeyed by the player and by nothing else, so a viewer
-     * who had turned it on and ticked three films paid for three films.
-     *
-     * Neither is a failure, so neither is written down as one. TDLib keeps the partial file, so
-     * what resumes is the rest of the video and not the whole of it again.
+     * Two things stop a download the viewer has not stopped: no signal, and mobile data while
+     * "Only download over Wi-Fi" is on. Neither is a failure, so neither is written down as one.
+     * TDLib keeps the partial file, so what resumes is the rest of the video and not the whole of
+     * it again.
      */
     private fun watchTheNetwork() {
         scope.launch {
@@ -431,11 +415,11 @@ class DownloadService : Service() {
         }
 
         // Room is checked again here, and not only when the video was ticked. A queue outlives the
-        // plan it was made with: the film behind two others no longer fits if the viewer watched
-        // something large while it waited, or ticked a second batch, or filled the phone with
-        // photographs. Asked before the request goes out, because TDLib's own answer to a full
-        // disk is a message written for a developer, and by the time it arrives the download has
-        // spent the viewer's data getting most of the way there.
+        // plan it was made with: the video behind two others no longer fits if the viewer watched
+        // something large while it waited, or ticked a second batch. Asked before the request goes
+        // out, because TDLib's own answer to a full disk is a message written for a developer, and
+        // by the time it arrives the download has spent the viewer's data getting most of the way
+        // there.
         val landedAlready = Td.localDownloadedBytes(request.fileId)
         val stillToCome = (request.sizeBytes - landedAlready).coerceAtLeast(0)
         val free = DiskSpace.read(applicationContext).freeBytes
@@ -460,11 +444,10 @@ class DownloadService : Service() {
             return@coroutineScope
         }
 
-        // Bounded, where it used to wait for ever. The row is already marked as running by the time
-        // this line is reached, so a TDLib that never gets a socket left the viewer looking at a
-        // video that claimed to be downloading, sat at zero bytes, with no error and nothing to
-        // press: the single most confusing thing this screen can show. Giving up says so instead,
-        // and Try again is one press away.
+        // Bounded, not an indefinite wait. The row is already marked as running by this line, so a
+        // TDLib that never gets a socket would leave the viewer looking at a video that claims to
+        // be downloading, sat at zero bytes, with no error and nothing to press. Giving up says so
+        // instead, and Try again is one press away.
         val session = Td.awaitConnectedSessionOrNull(CONNECT_WAIT_MS)
         if (session == null) {
             withContext(NonCancellable) {
@@ -482,8 +465,7 @@ class DownloadService : Service() {
 
         // TDLib will not fetch a file it cannot trace back to a message it has seen this session,
         // and a file id only means anything to the run of the client that issued it. A queue
-        // written down before the process was killed comes back holding ids in exactly that state,
-        // so the request failed the moment it was made and Try again failed the same way for ever.
+        // written down before the process was killed comes back holding ids in exactly that state.
         // Asking Telegram for the message again hands back a current id and gives TDLib the source
         // it wanted. Once per id, so a video whose number keeps moving cannot become a loop.
         if (resourceAndRequeue(request)) return@coroutineScope
@@ -504,9 +486,8 @@ class DownloadService : Service() {
         var error: String? = null
         // TDLib allows one synchronous request per file: the player asking for the same video from
         // a seek position replaces this one and answers it with "Canceled by another downloadFile
-        // request". That is somebody else's request arriving, not this download failing, and it
-        // happened for real on the phone the moment the viewer opened the video they had just put
-        // on to download. So the request is simply made again, and the fetch survives being watched.
+        // request". That is somebody else's request arriving, not this download failing, so the
+        // request is simply made again and the fetch survives being watched.
         for (attempt in 1..MAX_TAKEOVERS) {
             val result = runCatching {
                 session.client.downloadFile(
@@ -579,7 +560,7 @@ class DownloadService : Service() {
                     }
                 }
             } else {
-                // Only a finished file is written to the Downloads list. A half of a film is not
+                // Only a finished file is written to the Downloads list. Half a video is not
                 // something to offer somebody on a train as though it were there.
                 SettingsStore(applicationContext).noteDownload(request.item(), request.chatTitle)
                 synchronized(lock) { requests.remove(request.fileId) }
@@ -647,13 +628,40 @@ class DownloadService : Service() {
      * video it was.
      */
     private fun persist() {
-        scope.launch { persistNow() }
+        // Asked for, not performed. Two concurrent writes could each snapshot the queue and then
+        // reach the write in the other order, leaving the file holding the older of the two. The
+        // channel below conflates, so only the newest snapshot is written and two writes never
+        // overlap.
+        persistRequests.trySend(Unit)
     }
 
-    private suspend fun persistNow() {
+    /**
+     * Coalesces persistence requests. Conflated: a request arriving while one is being written
+     * replaces any other waiting, because the queue is written whole and only its latest state has
+     * ever mattered.
+     */
+    private val persistRequests = Channel<Unit>(Channel.CONFLATED)
+
+    /** The single writer. Started with the service and dies with its scope. */
+    private fun startPersisting() {
+        scope.launch { for (unused in persistRequests) persistNow() }
+    }
+
+    /**
+     * Writes the queue, now, and never alongside another write of it.
+     *
+     * Still called directly from the completion paths, which run under [NonCancellable] because
+     * the record of a finished download has to survive the service stopping a moment later: a
+     * conflated request would simply be dropped there. The lock is what makes those safe next to
+     * the coalesced writer above, since the snapshot and the write are one operation under it.
+     */
+    private suspend fun persistNow() = persistLock.withLock {
         val queued = OfflineDownloads.ordered.map { it.request }
         runCatching { SettingsStore(applicationContext).saveDownloadQueue(queued) }
+        Unit
     }
+
+    private val persistLock = Mutex()
 
     /**
      * Stops the service once nothing is moving and nothing is waiting on the world to change.
@@ -696,12 +704,11 @@ class DownloadService : Service() {
     /**
      * Puts the notification up, and says whether Android allowed it.
      *
-     * This used to be an unguarded call, which is a crash waiting for the right phone. From
-     * Android 14 `startForeground` throws when the start came from the background, and from
-     * Android 15 it throws when a data sync service has spent its allowance for the day. Both
-     * arrive as an exception out of `onStartCommand`, which takes the process down and with it the
-     * queue: the viewer loses every row rather than one download. Caught here, and the caller
-     * writes the queue down as failed so there is something left to press.
+     * From Android 14 `startForeground` throws when the start came from the background, and from
+     * Android 15 when a data sync service has spent its allowance for the day. Uncaught, both take
+     * the process down and the queue with it, so the viewer loses every row rather than one
+     * download. Caught here, and the caller writes the queue down as failed so there is something
+     * left to press.
      */
     private fun goToForeground(notification: Notification): Boolean = runCatching {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -715,9 +722,9 @@ class DownloadService : Service() {
      * Says so on every row, when this service is not allowed to exist.
      *
      * Including the video that was being asked for as this happened, which has no row yet: without
-     * one, the press the viewer just made leaves nothing at all on the screen, which is the whole
-     * complaint. Everything that was moving is written down as failed rather than left claiming to
-     * download, because nothing is going to move it now.
+     * one, the press the viewer just made leaves nothing at all on the screen. Everything that was
+     * moving is written down as failed rather than left claiming to download, because nothing is
+     * going to move it now.
      */
     private fun refuseEverything(asked: DownloadRequest?) {
         if (asked != null && OfflineDownloads.active.value[asked.fileId] == null) {
@@ -757,10 +764,9 @@ class DownloadService : Service() {
     /**
      * One notification per video, under the summary, saying which is which.
      *
-     * The summary alone could not answer the question the viewer actually has when they queue three
-     * films: not "how far along is this" but "did it take all three, and which one is it on". A
-     * count in a second line ("2 waiting") says how many and never says what, and the two waiting
-     * are exactly the ones with nothing on screen anywhere unless the app is open.
+     * The summary alone cannot answer the question the viewer has when they queue three videos:
+     * not "how far along is this" but "did it take all three, and which one is it on". A count in
+     * a second line ("2 waiting") says how many and never says what.
      *
      * Android groups them under [SUMMARY_ID] on its own, so the shade shows one entry that expands
      * into the queue. Each carries a Cancel for its own video, which is the one thing the summary's
@@ -861,13 +867,10 @@ class DownloadService : Service() {
     /**
      * The one notification a download gets.
      *
-     * There used to be two: a foreground one saying "Downloading for later" and a second one per
-     * file carrying the actual figures, which meant a single video produced a pair of entries in
-     * the shade, one of them saying nothing the other did not. The service still needs exactly one
-     * notification to hold it up, so that is the one given the title, the bar and the numbers, and
-     * nothing else is posted while the fetching goes on.
+     * The service needs exactly one notification to hold it up, so that is the one given the title,
+     * the bar and the numbers, and nothing else is posted while the fetching goes on.
      *
-     * It names the video being fetched, not the batch, because now only one is ever being fetched.
+     * It names the video being fetched, not the batch, because only one is ever being fetched.
      * What is behind it is a count on the second line, which is what a queue looks like from the
      * shade: this one, and how many after it.
      */
@@ -916,8 +919,8 @@ class DownloadService : Service() {
             }
             return builder
                 .setContentTitle(title)
-                // "Finishing up" is the last moment of a queue, not a state anything sits in: with
-                // rows still queued it said the opposite of what was happening.
+                // "Finishing up" is the last moment of a queue, not a state anything sits in, so
+                // rows still queued or paused say so instead.
                 .setContentText(
                     when {
                         paused > 0 -> "Paused"
@@ -963,8 +966,8 @@ class DownloadService : Service() {
      * Pause, which stops the fetching and keeps every byte that arrived.
      *
      * It acts on everything, the queue included, for the same reason "Cancel all" does: one button,
-     * several videos, and no honest way to choose between them from here. Holding one of several is
-     * on its own row in the Downloads screen, which has the space to name it.
+     * several videos, and no honest way to choose between them from here. Holding just one is done
+     * from its own row in the Downloads screen, which has the space to name it.
      */
     private fun pauseAction(): Notification.Action = action(
         icon = R.drawable.ic_notify_pause,
@@ -1029,10 +1032,8 @@ class DownloadService : Service() {
             .setOnlyAlertOnce(true)
 
     /**
-     * Where pressing the notification goes: the Downloads screen, which is what it is about.
-     *
-     * It used to open the app and leave the viewer wherever they had last been, which for a
-     * notification whose entire subject is a list of downloads is the wrong list.
+     * Where pressing the notification goes: the Downloads screen, which is what it is about, rather
+     * than wherever the viewer last was.
      */
     private fun openApp(): PendingIntent {
         val intent = Intent(this, MainActivity::class.java)
@@ -1108,7 +1109,7 @@ class DownloadService : Service() {
          * How long a download waits for TDLib to find a line to Telegram before saying it cannot.
          *
          * Longer than a screen would wait, because nobody is watching a spinner: a phone coming
-         * out of a tunnel deserves a couple of minutes. Not for ever, which is what it used to be.
+         * out of a tunnel deserves a couple of minutes. Bounded, so it cannot wait for ever.
          */
         private const val CONNECT_WAIT_MS = 120_000L
 

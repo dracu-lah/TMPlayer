@@ -115,10 +115,10 @@ fun Spinner(size: Dp = 56.dp, color: Color = Color.Unspecified, strokeWidth: Dp 
     // Unspecified rather than a literal, so a caller that says nothing gets the device's own
     // accent: the scheme's primary on a phone, the app's amber on a television.
     @Suppress("NAME_SHADOWING") val color = if (color == Color.Unspecified) Tone.accent else color
-    // On a phone, Material's own. It is the same two motions drawn below, kept in step with every
-    // other spinner on the device and with whatever the system's animation scale is set to,
-    // including the accessibility setting that turns animation off entirely. The hand-drawn one
-    // stays for the television, where TV Material ships no progress indicator at all.
+    // On a phone, Material's own: the same two motions drawn below, but kept in step with every
+    // other spinner on the device and with the system's animation scale, including the
+    // accessibility setting that turns animation off. The hand-drawn one is for the television,
+    // where TV Material ships no progress indicator at all.
     if (isTouch()) {
         CircularProgressIndicator(
             color = color,
@@ -182,11 +182,9 @@ private const val MIN_SWEEP = 12f
 /**
  * A calm, final statement. No Retry button, because there is nothing to retry.
  *
- * The one empty state in the app. The browse tabs drew their own, a copy of this with a
- * television's margins and a television's type on a phone as well, and the two drifted apart the
- * moment either was touched: an empty search said one thing in a chat and another in the list of
- * chats, in two different sizes. [icon] is the only thing that ever legitimately differed, since a
- * search that found nothing is not the same situation as a tab with nothing in it yet.
+ * The one empty state in the app: keep it that way, so an empty search reads the same in a chat as
+ * in the list of chats. [icon] is the only thing worth varying, since a search that found nothing
+ * is not the same situation as a tab with nothing in it yet.
  */
 @Composable
 fun BigEmpty(message: String, icon: ImageVector = Icons.Filled.Search) {

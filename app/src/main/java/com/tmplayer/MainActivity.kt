@@ -10,7 +10,6 @@ import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Alignment
@@ -29,7 +28,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.tv.material3.MaterialTheme
 import com.tmplayer.data.AuthState
 import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.CardLayout
@@ -38,6 +36,7 @@ import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaItem
+import com.tmplayer.data.RoomOnDisk
 import com.tmplayer.data.LocalFileAvailability
 import com.tmplayer.data.NetworkMonitor
 import com.tmplayer.data.OfflineDownloads
@@ -56,7 +55,6 @@ import com.tmplayer.ui.auth.IntroScreen
 import com.tmplayer.ui.auth.LoginScreen
 import com.tmplayer.ui.browse.BrowseScreen
 import com.tmplayer.ui.browse.BrowseSection
-import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.browse.ChatListViewModel
 import com.tmplayer.ui.browse.MediaGridScreen
 import com.tmplayer.ui.components.TvConfirm
@@ -99,11 +97,9 @@ private sealed interface Screen {
 /**
  * Saves which screen is open across a rotation or a process death.
  *
- * A plain `remember` lost it: turning the phone inside a chat, or coming back after the system
- * reclaimed the app while a video was playing, dumped the viewer back at the chat list. [Media]
- * carries a whole [ChatSummary], which is not parcelable and holds a blurred preview nobody needs
- * restored, so only the fields the media screen actually reads are written down and the row is
- * rebuilt from them. The picture reappears the moment the chat list lands.
+ * [Media] carries a whole [ChatSummary], which is not parcelable and holds a blurred preview nobody
+ * needs restored, so only the fields the media screen actually reads are written down and the row
+ * is rebuilt from them. The picture reappears the moment the chat list lands.
  */
 private val ScreenSaver = listSaver<Screen, Any>(
     save = { screen ->
@@ -147,11 +143,11 @@ private const val SCREEN_DOWNLOADS = "downloads"
  * A video that will not fit, and what the device is holding that the viewer could do something
  * about.
  *
- * The only prompt left on this path. Making room no longer asks: the watch cache is one film
- * nobody chose to keep, so it goes without a word, and the downloads that are not cache are never
- * touched. What remains is the case where even emptying the cache is not enough, which is not a
- * question with a "do it" answer: [reclaimBytes] is what is sitting in downloads, and the way out
- * is the screen where those are deleted by hand.
+ * The only prompt on this path. Making room does not ask: the watch cache is one video nobody chose
+ * to keep, so it goes without a word, and downloads that are not cache are never touched. This
+ * covers the case where even emptying the cache is not enough, which has no "do it" answer:
+ * [reclaimBytes] is what is sitting in downloads, and the way out is the screen where those are
+ * deleted by hand.
  */
 private data class RoomPrompt(
     val item: MediaItem,
@@ -163,11 +159,9 @@ private data class RoomPrompt(
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Asked for rather than inherited. Under targetSdk 35 Android draws behind the bars on
-        // API 35 and above whether or not anybody asked, but the stick and half the phones this
-        // runs on are older than that, and there the window stopped at the status bar and the app
-        // sat in a letterbox of system chrome. This makes the two the same everywhere, and every
-        // screen already handles its own insets.
+        // Asked for rather than inherited. API 35 and above draws behind the bars anyway, but the
+        // stick and half the phones this runs on are older, so this makes the two the same
+        // everywhere. Every screen already handles its own insets.
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         Td.start(this)
@@ -180,9 +174,8 @@ class MainActivity : ComponentActivity() {
     /**
      * The activity is `singleTask`, so a second launch arrives here rather than as a new instance.
      *
-     * Pressing a download's notification while the app is already open is exactly that case, and
-     * without this it brought the app forward on whatever screen it was last left on: the viewer
-     * pressed a row about a download and got the chat list.
+     * Pressing a download's notification while the app is already open is that case, and the new
+     * intent is what says which screen it is asking for.
      */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -205,9 +198,8 @@ class MainActivity : ComponentActivity() {
          * The ask, waiting to be read by the composition.
          *
          * A flow rather than the intent itself, because the composable that owns the current
-         * screen cannot see the activity's intent, and because it has to be cleared once acted on:
-         * left set, a rotation would send the viewer back to Downloads every time they turned the
-         * phone.
+         * screen cannot see the activity's intent. Must be cleared once acted on: left set, a
+         * rotation would send the viewer back to Downloads every time they turned the phone.
          */
         internal val requestedScreen = MutableStateFlow<String?>(null)
     }
@@ -223,10 +215,9 @@ private fun Root() {
     val telegramConnected by Td.connected.collectAsStateWithLifecycle()
     val settings = remember { SettingsStore(context) }
 
-    // The status and gesture bars draw their icons over the app's own background now that the app
-    // has a light theme, and `enableEdgeToEdge` decided their colour once, from the system's
-    // setting, at launch. Anybody who chose Light on a phone in dark mode got white icons on a
-    // white bar, which is not a subtle failure: the clock and the battery simply vanish.
+    // The status and gesture bars draw their icons over the app's own background, and
+    // `enableEdgeToEdge` decides their colour once at launch from the system setting. The app's
+    // own theme can disagree with it, so the icon appearance is kept in step here.
     val dark = LocalDarkTheme.current
     val activity = LocalActivity.current
     LaunchedEffect(dark, activity) {
@@ -267,7 +258,7 @@ private fun Root() {
 
     // Half-watched entries that can no longer be turned into a card are swept once per launch.
     // Left alone they are invisible: the tab skips them, so nothing the viewer can press will
-    // ever clear them. The message is only worth showing when something actually went.
+    // ever clear them.
     LaunchedEffect(Unit) {
         val removed = runCatching { settings.pruneBrokenHistory() }.getOrDefault(0)
         if (removed > 0) {
@@ -346,11 +337,10 @@ private fun Root() {
         screen = Screen.Downloads
         MainActivity.requestedScreen.value = null
     }
-    // Saveable, not just remembered. Playing a video puts a second activity in front of this one,
-    // and a 1 GB stick will happily kill what is behind it, so this composable is routinely
-    // rebuilt on the way back. Remembered state would come back false, the jump would re-arm, and
-    // Back out of the chat would drop the viewer straight into it again: the navigation rail and
-    // Settings become unreachable, including the switch that turns this behaviour off.
+    // Saveable, not just remembered. Playing a video puts a second activity in front of this one
+    // and a 1 GB stick will kill what is behind it, so this composable is routinely rebuilt on the
+    // way back. Remembered state would come back false, the jump would re-arm, and Back out of the
+    // chat would drop the viewer straight into it again, leaving the rail and Settings unreachable.
     var autoOpened by rememberSaveable { mutableStateOf(false) }
     // Whether it is settled yet whether this launch jumps into a chat. Until it is, the chat list
     // must not be drawn: it would appear fully for a moment and then be replaced, which reads as
@@ -359,7 +349,7 @@ private fun Root() {
     // Whether a first press of Back has already been made at the top level.
     var exitArmed by remember { mutableStateOf(false) }
     // Hoisted out of BrowseScreen: opening a chat replaces that screen entirely, so a tab held
-    // down there would be forgotten every time the viewer backed out of a video.
+    // down there would be forgotten every time the viewer backed out of a chat.
     //
     // Saved as a string rather than as the value itself: a folder is not an enum constant, it is
     // whatever this account happens to have, so there is nothing for the default saver to write.
@@ -387,15 +377,12 @@ private fun Root() {
      * state without every early return having to remember to clear it.
      */
     suspend fun playNow(item: MediaItem, confirmed: Boolean, chatTitle: String) {
-        // Off the main thread for the whole of the decision, and this is the reason the pending
-        // state above is not enough on its own. Everything between here and the plan is blocking
-        // work: two stat() calls to see whether the file is on disk, a statvfs() for the free
-        // space, a walk of every download record, and a TDLib round trip per record to measure it.
-        // Launched from a composition, every one of those resumed onto the thread drawing the
-        // grid, so the list froze for the whole of the gap between pressing OK and the player
-        // opening: exactly the moment the app is meant to feel quickest. Only the decision is
-        // moved. Everything that follows it touches Compose state or starts an activity and has
-        // to be back on Main to do it.
+        // Off the main thread for the whole of the decision. Everything between here and the plan
+        // is blocking work: two stat() calls to see whether the file is on disk, a statvfs() for
+        // the free space, a walk of every download record, and a TDLib round trip per record to
+        // measure it. Launched from a composition, each of those would resume onto the thread
+        // drawing the grid. Only the decision is moved: everything after it touches Compose state
+        // or starts an activity and has to be back on Main to do it.
         withContext(Dispatchers.Default) {
             val local = runCatching { Td.localFileAvailability(item.fileId) }
                 .getOrDefault(LocalFileAvailability.Missing)
@@ -421,43 +408,21 @@ private fun Root() {
                 0L
             }
 
-            // What the cache is holding, measured before a byte of the new video is asked for,
-            // which is the whole point: the answer to "will this fit" is known while it can still
-            // be acted on rather than two thirds of the way into a download.
-            //
-            // A record whose file is no longer on disk holds nothing and is dropped here rather
-            // than offered as room that would not come back.
-            // Every one of them, not just the last. A series watched through the player's own
-            // next-episode button used to leave a copy of each episode on the disk with only the
-            // first of them recorded, so the room this arithmetic thought it could reclaim was a
-            // fraction of what was actually sitting there.
-            val cachedRecords = runCatching { settings.cachedVideosNow() }.getOrDefault(emptyList())
-            val cached = cachedRecords.mapNotNull { record ->
-                val bytes = runCatching { Td.localDownloadedBytes(record.fileId) }.getOrDefault(0L)
-                if (bytes <= 0) null else CacheShelf.Held(record.fileId, bytes, record.updatedAt)
-            }
-            // The viewer's own downloads, which are never given up to make room. Measured only so
-            // a refusal can say where the space went and point at the screen that manages them.
-            val keptBytes = runCatching {
-                settings.downloadHistory.first()
-                    .distinctBy { it.fileId }
-                    .sumOf { Td.localDownloadedBytes(it.fileId).coerceAtLeast(0L) }
-            }.getOrDefault(0L)
+            // Will it fit, and what has to go first. Worked out by [RoomOnDisk], which the player
+            // asks the same question of before it opens an episode reached from inside itself:
+            // one decision in one place, so the answer cannot depend on which button was pressed.
+            val decision = RoomOnDisk.decide(
+                context = context,
+                item = item,
+                alreadyCached = alreadyCached,
+                partialBytes = partial,
+            )
+            val plan = decision.plan
 
             // A video the viewer downloaded on purpose is not cache and must not become it: taking
-            // it over as the cache slot would have the next play delete a film they chose to keep.
+            // it over as the cache slot would have the next play delete a video they chose to keep.
             val kept = runCatching { settings.isKeptDownload(item.chatId, item.messageId) }
                 .getOrDefault(false)
-
-            val plan = CacheShelf.plan(
-                targetFileId = item.fileId,
-                targetSizeBytes = item.sizeBytes,
-                targetPartialBytes = partial,
-                alreadyCached = alreadyCached,
-                cached = cached,
-                keptBytes = keptBytes,
-                freeBytes = free,
-            )
 
             // Back on Main from here down. Everything below writes Compose state or starts an
             // activity, and neither is a thing to do from a background thread.
@@ -467,16 +432,6 @@ private fun Root() {
                 // a series honest. This only has to leave the record alone for a kept download.
                 if (!kept) scope.launch { settings.rememberCachedVideo(item, chatTitle) }
                 context.startActivity(PlayerActivity.intent(context, item, chatTitle))
-            }
-
-            /** Deletes what the plan named, and forgets the cache rows that went with it. */
-            suspend fun evict(fileIds: List<Int>) {
-                for (fileId in fileIds.toSet()) {
-                    runCatching { Td.deleteFile(fileId) }
-                    val record = cachedRecords.firstOrNull { it.fileId == fileId } ?: continue
-                    val left = runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
-                    if (left <= 0) settings.forgetCachedVideo(record.chatId, record.messageId)
-                }
             }
 
             when (plan) {
@@ -491,11 +446,11 @@ private fun Root() {
                     )
                 }
 
-                // No question is asked. What goes is the single film the last press of Play left
+                // No question is asked. What goes is the single video the last press of Play left
                 // behind, which nobody chose to keep; anything the viewer downloaded on purpose is
-                // not a candidate and never was.
+                // never a candidate.
                 is CacheShelf.Plan.Evict -> {
-                    evict(plan.fileIds)
+                    decision.evict(context)
                     start()
                 }
                 }
@@ -508,10 +463,10 @@ private fun Root() {
      * [confirmed] is true once the viewer has answered the prompt.
      */
     fun play(item: MediaItem, confirmed: Boolean = false, chatTitle: String = "") {
-        // A press on a video is not the instant thing it looks like. Before the player can open,
-        // this asks TDLib whether the file is on disk, measures the disk, and reads the download
-        // history back through TDLib one record at a time. On a stick that is long enough for the
-        // viewer to conclude the press missed, press again, and get two of whatever happens next.
+        // A press on a video is not instant: before the player can open, this asks TDLib whether
+        // the file is on disk, measures the disk, and reads the download history back one record
+        // at a time. On a stick that is long enough for the viewer to conclude the press missed
+        // and press again, so a second press while one is in flight is ignored.
         if (preparing && !confirmed) return
         preparing = true
         scope.launch {
@@ -549,7 +504,7 @@ private fun Root() {
             // not a number this one can necessarily use. Asking Telegram for the message again
             // returns a current id and tells TDLib where the file came from, without which it
             // will not download it. The stored row is the fallback, and it is enough whenever the
-            // video is already on the device, which is the case that never broke.
+            // video is already on the device.
             val fresh = Td.refreshMedia(record.chatId, record.messageId)
             play(fresh ?: record.toMediaItem(), chatTitle = record.chatTitle)
         }
@@ -620,8 +575,7 @@ private fun Root() {
         }
 
         // A chat restored from the saved state carries only what could be written down, so its
-        // blurred preview is missing until the real row turns up. Swapping it back in is what
-        // makes a rotation inside a chat look like nothing happened at all.
+        // blurred preview is missing until the real row turns up, when it is swapped back in.
         LaunchedEffect(chats, screen) {
             val open = screen as? Screen.Media ?: return@LaunchedEffect
             if (open.chat.miniThumbnail != null) return@LaunchedEffect
@@ -648,8 +602,7 @@ private fun Root() {
 
         // At the top level Back would leave the app outright, and on a remote it sits right next
         // to the D-pad and is very easy to hit by accident. Two presses, the way every other app
-        // on this television does it: a dialog for something this ordinary was too much ceremony,
-        // and it had to be read and answered before the viewer could carry on.
+        // on this television does it.
         if (screen is Screen.Chats) {
             val activity = LocalActivity.current
             BackHandler {
@@ -696,9 +649,9 @@ private fun Root() {
                     downloadCount = activeDownloads.size,
                     updateVersion = (updateState as? UpdateState.Available)?.release?.version,
                     onUpdate = { showUpdate = true },
-                    // Each of these three changes the chat in Telegram, so each says out loud
-                    // what it did: the row itself has already moved by the time the menu closes,
-                    // and a row moving on its own is not an account of anything.
+                    // Each of these changes the chat in Telegram, so each says out loud what it
+                    // did: the row has already moved by the time the menu closes, and a row
+                    // moving on its own is not an account of anything.
                     onTogglePinned = { chat ->
                         chatsViewModel.setPinned(chat, !chat.isPinned) { toast(it) }
                         toast(
@@ -839,7 +792,7 @@ private fun Root() {
             is Screen.Settings -> {
                 val leaveSettings = {
                     // Only if it has had time to go stale. Settings cannot change the chat list,
-                    // so a full re-sync on the way out was work nothing had asked for.
+                    // so a full re-sync on the way out would be work nothing asked for.
                     chatsViewModel.refreshIfStale()
                     screen = Screen.Chats
                 }

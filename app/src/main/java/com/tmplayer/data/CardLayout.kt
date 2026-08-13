@@ -3,12 +3,9 @@ package com.tmplayer.data
 /**
  * How a screen full of cards is arranged.
  *
- * Both browsing screens hold the same kind of thing, a list of cards, and differ only in how many
- * fit across the screen, so one type covers both rather than each carrying its own flag.
- *
- * [List] puts one wide row per item: the title has room to be read in full, which is what a long
- * release file name needs. [Grid] trades that width for artwork and shows several rows at once,
- * which is fewer presses to reach the bottom of a large chat.
+ * Both browsing screens hold a list of cards and differ only in how many fit across, so one type
+ * covers both. [List] puts one wide row per item, giving a long release file name room to be read
+ * in full; [Grid] trades that width for artwork and fewer presses to reach the bottom of a chat.
  */
 enum class CardLayout {
     List,

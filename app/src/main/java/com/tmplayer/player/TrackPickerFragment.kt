@@ -134,11 +134,8 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
     }
 
     /**
-     * The two sound-format names a viewer might recognise, and nothing else.
-     *
-     * The raw codec id and the MIME subtype were both shown here before, which produced lines
-     * like "English · ac-3 AC3 5.1". Formats outside this list are left out; the channel layout
-     * beside it already identifies the track.
+     * The two sound-format names a viewer might recognise, and nothing else. Anything outside the
+     * list is left out: the channel layout beside it already identifies the track.
      */
     private fun soundFormat(format: Format): String? {
         val id = "${format.codecs.orEmpty()} ${format.sampleMimeType.orEmpty()}".lowercase(Locale.ROOT)

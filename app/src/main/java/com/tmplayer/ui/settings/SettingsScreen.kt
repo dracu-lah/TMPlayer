@@ -47,7 +47,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.IconButton as TouchIconButton
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
@@ -67,7 +66,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch as M3Switch
 import androidx.compose.material3.Text as M3Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -101,6 +99,8 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.CacheShelf
+import com.tmplayer.data.DiskInfo
+import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.CrashReports
 import com.tmplayer.data.DiskSpace
@@ -120,7 +120,6 @@ import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.update.UpdateDialog
 import com.tmplayer.ui.components.Spinner
-import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.focusRing
@@ -136,6 +135,9 @@ private sealed interface Prompt {
 
     /** Everything else TMPlayer is holding: previews, thumbnails and the database. */
     data object ClearOther : Prompt
+
+    /** Cache and pictures together, in one press. */
+    data object ClearAllButDownloads : Prompt
     data object ClearHistory : Prompt
     data object ClearFavorites : Prompt
     data object SignOut : Prompt
@@ -161,9 +163,8 @@ fun SettingsScreen(
     // Matches the stored default, so the switch does not show as on for the frame before the
     // first value arrives and then visibly flick off.
     val openLastChat by settings.openLastChat.collectAsStateWithLifecycle(initialValue = false)
-    // The single video watching leaves behind. Null until the first read, which is the same thing
-    // it says when there is none: a row that reads "Nothing cached" for a frame is honest either
-    // way, and the size beside it arrives with the rest of the storage figures.
+    // The single video watching leaves behind. Empty until the first read, which reads the same as
+    // having none: "Nothing cached" for a frame is honest either way.
     val cached by settings.cachedVideos.collectAsStateWithLifecycle(initialValue = emptyList())
     val downloadFirst by settings.downloadBeforePlaying.collectAsStateWithLifecycle(initialValue = false)
     val autoplayNext by settings.autoplayNext.collectAsStateWithLifecycle(initialValue = true)
@@ -189,39 +190,44 @@ fun SettingsScreen(
     val updateState by Updates.state.collectAsStateWithLifecycle()
     var showUpdate by remember { mutableStateOf(false) }
     // What TMPlayer is holding, split into downloads, cache and everything else. Worked out by
-    // [StorageSplit], which is also what the Downloads screen reads: the two panels were doing
-    // their own arithmetic and quoting different numbers for the same disk.
+    // [StorageSplit], which is also what the Downloads screen reads, so the two panels cannot
+    // quote different numbers for the same disk.
     var split by remember { mutableStateOf(StorageSplit.EMPTY) }
-    var disk by remember { mutableStateOf(DiskSpace.read(context)) }
+    // Filled by the first refresh, never read during composition: reading it is a blocking
+    // statvfs().
+    var disk by remember { mutableStateOf(DiskInfo.EMPTY) }
     var busy by remember { mutableStateOf<String?>(null) }
     var prompt by remember { mutableStateOf<Prompt?>(null) }
     // Which end of the range the D-pad is currently moving.
     var editingUpper by remember { mutableStateOf(false) }
-    // The range row is where focus lands, and where it is sent back to after a reset. It is the
-    // first control on the screen and it changes nothing on its own, unlike the delete row further
-    // down, which is both destructive and too far down the list to be on screen at all.
+    // Where focus lands, and where it is sent back to after a reset: the first control on the
+    // screen, and one that destroys nothing if it is pressed by accident.
     val rangeRow = remember { FocusRequester() }
 
     suspend fun refresh() {
-        disk = DiskSpace.read(context)
-        // A TDLib round trip per record and a walk of the files directory, so it is kept off the
-        // thread drawing the list: this screen scrolls while it is counting.
-        split = withContext(Dispatchers.Default) {
-            runCatching { StorageSplit.measure(context) }.getOrDefault(StorageSplit.EMPTY)
+        // A TDLib round trip per record and a walk of the files directory, kept off the thread
+        // drawing the list: this screen scrolls while it is counting.
+        //
+        // IO rather than Default. None of this is arithmetic, and Default is sized to the number
+        // of cores, which on the stick this app is built for is two. Parking both of them on a
+        // disk walk starves everything else scheduled there, including the preference reads this
+        // same screen is drawn from.
+        val measured = withContext(Dispatchers.IO) {
+            val readDisk = DiskSpace.read(context)
+            val readSplit = runCatching { StorageSplit.measure(context) }
+                .getOrDefault(StorageSplit.EMPTY)
+            readDisk to readSplit
         }
+        disk = measured.first
+        split = measured.second
     }
 
-    // The case that sends somebody to Settings in the first place: a device holding gigabytes with
-    // no video among them, where deleting the cached film returns nothing and the space is all in
-    // previews, thumbnails and the database. Only then is there a second row worth offering.
-    val onlyPicturesLeft = split.otherBytes >= CLEARING_WORTH_ASKING
-
     val touch = isTouch()
-    // These rows describe the machine they are running on, and half of them are about it by name.
+    // These rows describe the machine they are running on, and half of them name it.
     val device = if (touch) "phone" else "TV"
 
     // The size beside the cached video has to follow the video: watching something else replaces
-    // the record, and a figure left over from the last film is worse than no figure at all.
+    // the record, and a figure left over from the last video is worse than no figure at all.
     LaunchedEffect(cached.map { it.fileId }) { refresh() }
 
     LaunchedEffect(Unit) {
@@ -231,8 +237,8 @@ fun SettingsScreen(
         if (!touch) runCatching { rangeRow.requestFocus() }
     }
 
-    // Named, when the chat list has loaded. On a cold start into Settings it may not have, and
-    // the setting still has to describe itself, so the wording below covers both.
+    // Null until the chat list has loaded, which on a cold start into Settings it may not have.
+    // The wording below covers both cases.
     val lastChatTitle = remember(chats, lastChatId) {
         chats.firstOrNull { it.id == lastChatId }?.title
     }
@@ -262,14 +268,11 @@ fun SettingsScreen(
             top = if (touch) 4.dp else Tv.SafeV,
             bottom = if (touch) insets.calculateBottomPadding() + 32.dp else 40.dp,
         ),
-        // Full-bleed rows sit closer together than cards did: the gap between two rows of a
-        // preference list is a divider's worth of nothing, not a card margin.
+        // The gap between two rows of a phone's preference list is a divider's worth of nothing,
+        // not a card margin.
         verticalArrangement = Arrangement.spacedBy(if (touch) 0.dp else 10.dp),
     ) {
-        // The phone's app bar already says "Settings" and offers the way out, so repeating both
-        // one line below reads as a mistake. "Changes save as you make them." goes with them: a
-        // preference screen that saves as you go is what every Android user already assumes, and
-        // the sentence was the first thing on the screen either way.
+        // TV only: the phone's app bar already says "Settings" and offers the way out.
         if (!touch) {
             item {
                 Column(Modifier.padding(bottom = 12.dp)) {
@@ -287,9 +290,8 @@ fun SettingsScreen(
             }
         }
 
-        // Whatever is currently running, at the top rather than below the last row. "Deleting…"
-        // and "Signing out…" were written under a list the viewer would have to scroll past the
-        // end of to read, which is the one place they cannot be looking when they press the row.
+        // Whatever is currently running, at the top rather than below the last row: a viewer who
+        // has just pressed a row is not looking past the end of the list.
         busy?.let { message ->
             item {
                 Row(
@@ -305,9 +307,8 @@ fun SettingsScreen(
 
         // ---- appearance ----------------------------------------------------------------------
 
-        // First, on both devices. The television used to be left out of this section entirely, on
-        // the reasoning that a panel in a dark room is dark: true of the evening, and no answer at
-        // all for a screen in a bright kitchen, which is where a good many of these sticks live.
+        // First, on both devices: a stick often lives on a screen in a bright room, so the theme
+        // is worth offering there too.
         item { SectionTitle("Appearance") }
         item {
             if (touch) {
@@ -316,9 +317,8 @@ fun SettingsScreen(
                     onPick = { scope.launch { settings.setThemeChoice(it) } },
                 )
             } else {
-                // Segments are a thumb control: they cannot be reached with a D-pad, which is why
-                // the picker was never offered here. The stepper is the same one the size limits
-                // and the video count use, so Left and Right already mean "change this".
+                // Segments are a thumb control and cannot be reached with a D-pad. The stepper is
+                // the same one the size limits use, so Left and Right already mean "change this".
                 StepperRow(
                     title = "Theme",
                     subtitle = themeChoice.tvDescription,
@@ -379,9 +379,8 @@ fun SettingsScreen(
                 ResetChip(
                     enabled = minSize != SizeFilter.DEFAULT_MIN || maxSize != SizeFilter.DEFAULT_MAX,
                 ) {
-                    // Hand focus to the range row before resetting. The chip greys itself out the
-                    // moment the defaults are back, and focus left sitting on a spent control has
-                    // nowhere obvious to go; the row below is what the press just changed anyway.
+                    // Hand focus to the range row before resetting: the chip greys itself out the
+                    // moment the defaults are back, and the row below is what the press changed.
                     runCatching { rangeRow.requestFocus() }
                     scope.launch {
                         // Widen first, so the clamp that stops the two ends crossing cannot
@@ -424,9 +423,8 @@ fun SettingsScreen(
                 },
                 onSetRange = { low, high ->
                     scope.launch {
-                        // Widened first for the same reason the reset chip does it: the clamp
-                        // that stops the ends crossing would otherwise refuse a new floor on
-                        // its way past the old ceiling.
+                        // Widen first, as the reset chip does: the clamp that stops the ends
+                        // crossing would otherwise refuse a new floor past the old ceiling.
                         settings.setMaxSizeBytes(high)
                         settings.setMinSizeBytes(low)
                     }
@@ -436,10 +434,8 @@ fun SettingsScreen(
 
         // ---- lists ---------------------------------------------------------------------------
 
-        // Rows or tiles used to be set here. It now sits beside each list it rearranges, where
-        // the viewer can see what they are choosing between.
-        // The heading only appears when it has something under it. Both rows are conditional, so
-        // a viewer with no favourites and nothing on the go was shown "Lists" over empty space.
+        // Both rows below are conditional, so the heading only appears when it has something
+        // under it rather than standing over empty space.
         if (favorites.isNotEmpty() || history.isNotEmpty()) {
             item { SectionTitle("Lists") }
         }
@@ -533,19 +529,16 @@ fun SettingsScreen(
             )
         }
         // The one video watching leaves behind, named and measured, with the way to be rid of it.
-        // A row rather than a setting: there is nothing to choose here, since the cache is one
-        // film on every device and the next press of Play replaces it. What the viewer might
-        // reasonably want is to see what it is costing them and get the space back now.
+        // A row rather than a setting: the cache is one video on every device and the next press
+        // of Play replaces it, so the only useful choice is to get the space back now.
         item {
             val held = cached.firstOrNull()
             ActionRow(
-                // "Cached video" named the thing; this names the action, which is what the row
-                // actually does and what somebody hunting for space is looking for.
                 title = "Clear cache",
                 subtitle = when {
                     split.cachedBytes <= 0 -> "Nothing cached. Playing a video keeps a copy here."
-                    // More than one means episodes an older version of the app left behind. Saying
-                    // "1 video" and quoting two gigabytes is the confusing part, so it counts.
+                    // More than one means episodes an older version of the app left behind, so
+                    // the count is quoted rather than claiming "1 video" beside two gigabytes.
                     split.cachedCount > 1 ->
                         "${split.cachedCount} videos · ${StreamStats.formatBytes(split.cachedBytes)}"
                     held != null -> "\"${held.title}\" · ${StreamStats.formatBytes(split.cachedBytes)}"
@@ -553,8 +546,8 @@ fun SettingsScreen(
                 },
                 icon = TmIcons.Download,
                 onClick = {
-                    // Nothing to delete is not a dialog. The row stays where it is, focusable and
-                    // in the same place every time, and says so instead.
+                    // Nothing to delete is not a dialog. The row stays focusable and in the same
+                    // place every time, and says so instead.
                     if (split.cachedBytes <= 0) {
                         toast("There is nothing cached right now")
                     } else {
@@ -563,24 +556,51 @@ fun SettingsScreen(
                 },
             )
         }
-        // The escape hatch for a device that is full of everything except a video: thumbnails, the
-        // database, the previews the browse screens keep. Only offered when there is something
-        // substantial to get back, because a row that reads "Frees up 0 B" on a full stick is the
-        // least helpful thing the screen could say.
-        if (onlyPicturesLeft) {
-            item {
-                ActionRow(
-                    // Named for what it clears, beside the row above it that clears videos. "Free
-                    // up space" said neither, and two rows that both sound like the general answer
-                    // to a full disk are two rows nobody can choose between.
-                    title = "Clear pictures and previews",
-                    subtitle = "Frees ${StreamStats.formatBytes(split.otherBytes)} of " +
-                        "thumbnails and other data TMPlayer is holding. They come back as you " +
-                        "browse.",
-                    icon = Icons.Filled.Delete,
-                    onClick = { prompt = Prompt.ClearOther },
-                )
-            }
+        // Thumbnails, the database, the previews the browse screens keep. Always on the screen,
+        // not only once there is a lot to reclaim: this is the only control for that space, and a
+        // button that appears only on a full disk is one nobody can find on purpose.
+        item {
+            ActionRow(
+                // Named for what it clears, beside the row above it that clears videos: two rows
+                // that both sound like the general answer to a full disk cannot be told apart.
+                title = "Clear pictures and previews",
+                subtitle = if (split.otherBytes <= 0) {
+                    "Nothing held. Thumbnails and previews collect as you browse."
+                } else {
+                    "${StreamStats.formatBytes(split.otherBytes)} of thumbnails and other data " +
+                        "TMPlayer is holding. They come back as you browse."
+                },
+                icon = Icons.Filled.Delete,
+                onClick = {
+                    if (split.otherBytes <= 0) {
+                        toast("There is nothing to clear right now")
+                    } else {
+                        prompt = Prompt.ClearOther
+                    }
+                },
+            )
+        }
+        // Everything above in a single press, for a full disk and no patience for two of them.
+        // Downloads are not in it: they are the viewer's, and no button on this screen may take
+        // one away. They are deleted from the Downloads screen instead.
+        item {
+            ActionRow(
+                title = "Clear everything except downloads",
+                subtitle = if (split.cachedBytes + split.otherBytes <= 0) {
+                    "Nothing to clear. Your downloads are never touched by this."
+                } else {
+                    "Frees ${StreamStats.formatBytes(split.cachedBytes + split.otherBytes)}. " +
+                        "Your downloads are not touched."
+                },
+                icon = Icons.Filled.Delete,
+                onClick = {
+                    if (split.cachedBytes + split.otherBytes <= 0) {
+                        toast("There is nothing to clear right now")
+                    } else {
+                        prompt = Prompt.ClearAllButDownloads
+                    }
+                },
+            )
         }
 
         // ---- startup ------------------------------------------------------------------------
@@ -605,8 +625,8 @@ fun SettingsScreen(
                     title = "Forget it",
                     subtitle = "Start at the chat list again until you open another chat",
                     icon = Icons.Filled.Close,
-                    // This row deletes itself on success, so without a word it reads as the app
-                    // having lost the press rather than having done what was asked.
+                    // This row deletes itself on success, so it needs a toast: otherwise the
+                    // press reads as having been lost.
                     onClick = {
                         scope.launch {
                             settings.forgetLastChat()
@@ -742,9 +762,8 @@ fun SettingsScreen(
     }
 
     if (touch) {
-        // A real app bar, because before this there was no way off the phone's Settings screen at
-        // all except the hardware Back: no arrow, no title bar, nothing. The heading was a line of
-        // text scrolling away with the rest of the list.
+        // The phone needs an app bar: a heading that scrolls away with the list leaves no way off
+        // this screen but the hardware Back.
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -772,36 +791,16 @@ fun SettingsScreen(
                 "Clear the cached video?",
             message = "This frees up ${StreamStats.formatBytes(split.cachedBytes)}. Opening them again " +
                 "downloads them again.",
-            // Says what it will not touch, because this row sits where a button that deleted
-            // everything used to sit and the two must not be confused.
+            // Says what it will not touch, so it cannot be mistaken for the clear-everything row
+            // a little further down.
             detail = "Videos you downloaded on purpose stay where they are.",
             confirmLabel = "Clear",
             onConfirm = {
                 prompt = null
-                val doomed = cached
                 scope.launch {
                     busy = "Clearing…"
                     val freed = split.cachedBytes
-                    val keptIds = runCatching { settings.downloadHistory.first() }
-                        .getOrDefault(emptyList())
-                        .map { it.fileId }
-                        .toSet()
-                    for (record in doomed) {
-                        if (record.fileId in keptIds) continue
-                        runCatching { Td.deleteFile(record.fileId) }
-                        // Only forgotten once the file has actually gone, or the record stops
-                        // pointing at bytes that are still on the disk.
-                        val left = runCatching { Td.localDownloadedBytes(record.fileId) }
-                            .getOrDefault(0L)
-                        if (left <= 0) settings.forgetCachedVideo(record.chatId, record.messageId)
-                    }
-                    // And the episodes left behind by the versions of this app that kept one
-                    // record for the whole cache. They have no record to delete, only bytes.
-                    val accounted = (doomed.map { it.fileId } + keptIds)
-                        .distinct()
-                        .mapNotNull { runCatching { Td.localPathAnyway(it) }.getOrNull() }
-                        .toSet()
-                    for (stray in WatchCache.strays(context, accounted)) WatchCache.forget(stray)
+                    runCatching { WatchCache.clearAll(context) }
                     refresh()
                     busy = null
                     toast("Freed ${StreamStats.formatBytes(freed)}")
@@ -821,11 +820,33 @@ fun SettingsScreen(
                 scope.launch {
                     busy = "Deleting…"
                     val freed = split.otherBytes
-                    runCatching { Td.clearEverythingCached() }
-                    // The indexes go with the files. Left behind, their rows point at videos that
-                    // are no longer on disk.
-                    runCatching { settings.forgetAllDownloads() }
-                    runCatching { settings.forgetCachedVideo() }
+                    // Pictures only. Nothing here may touch the download index or the videos on
+                    // disk: this row is named for thumbnails.
+                    runCatching { Td.clearPicturesAndPreviews() }
+                    refresh()
+                    busy = null
+                    toast("Freed ${StreamStats.formatBytes(freed)}")
+                }
+            },
+            onDismiss = { prompt = null },
+        )
+
+        Prompt.ClearAllButDownloads -> TvConfirm(
+            title = "Clear everything except downloads?",
+            message = "This frees " +
+                "${StreamStats.formatBytes(split.cachedBytes + split.otherBytes)} of cached " +
+                "videos, previews and thumbnails.",
+            detail = "The videos you downloaded stay exactly where they are.",
+            confirmLabel = "Clear",
+            onConfirm = {
+                prompt = null
+                scope.launch {
+                    busy = "Clearing…"
+                    val freed = split.cachedBytes + split.otherBytes
+                    // The videos first, through the one thing that knows which of them are the
+                    // viewer's downloads, and then the pictures, which cannot be anybody's.
+                    runCatching { WatchCache.clearAll(context) }
+                    runCatching { Td.clearPicturesAndPreviews() }
                     refresh()
                     busy = null
                     toast("Freed ${StreamStats.formatBytes(freed)}")
@@ -844,8 +865,8 @@ fun SettingsScreen(
                 scope.launch {
                     val count = history.size
                     settings.clearWatchHistory()
-                    // The rows being cleared are on the browse screen, not this one; the only
-                    // thing that changes here is a row disappearing further down the list.
+                    // What was cleared lives on the browse screen, not this one, so the toast is
+                    // the only sign anything happened.
                     toast(if (count == 1) "Continue watching cleared" else "$count videos forgotten")
                 }
             },
@@ -881,10 +902,9 @@ fun SettingsScreen(
                     // goes: the video on disk and every preference. TDLib clears its own database
                     // as it logs out.
                     runCatching { Td.clearMediaCache() }
-                    // Consent to crash reporting goes out with the preferences, and the SDK is
-                    // shut down here rather than left running until the next launch. Somebody
-                    // handing the television on should not leave a reporter switched on behind
-                    // them, and turning it back on is one press.
+                    // Consent goes out with the preferences, so the SDK is shut down here rather
+                    // than left running until the next launch: somebody handing the television on
+                    // must not leave a reporter switched on behind them.
                     runCatching { CrashReports.stop() }
                     runCatching { settings.clearEverything() }
                     Td.logOut()
@@ -909,10 +929,7 @@ fun SettingsScreen(
  * Left/right are consumed here, so focus cannot escape sideways mid-adjustment. Settings is a
  * single vertical column, so nothing is lost by that.
  *
- * None of that exists for a finger. A phone sends no key events at all, so the whole control was
- * inert there: the numbers could be read and never changed. The touch layout drops the idea of a
- * live end entirely and gives each end its own pair of buttons, which needs no explaining and no
- * mode to keep track of.
+ * A phone sends no key events, so touch goes to [TouchRangeRow] instead.
  */
 @Composable
 private fun RangeRow(
@@ -940,8 +957,8 @@ private fun RangeRow(
         label = "rangeBackground",
     )
     val onSurface = if (focused) Tone.onFocusFill else Tone.text
-    // 0.8 rather than the 0.6 this was: the second line has to stay legible against the
-    // accent, and anything lighter drops under the 4.5:1 a small caption needs.
+    // 0.8 at the least: the second line has to stay legible against the accent, and anything
+    // lighter drops under the 4.5:1 a small caption needs.
     val dim = if (focused) Tone.onFocusFill.copy(alpha = 0.8f) else Tone.muted
 
     Column(
@@ -955,8 +972,7 @@ private fun RangeRow(
                 when (event.key) {
                     Key.DirectionLeft -> { onStep(editingUpper, -1); true }
                     Key.DirectionRight -> { onStep(editingUpper, 1); true }
-                    // OK swaps which end moves, so one control covers both without the viewer
-                    // having to work out which of two identical-looking rows they are on.
+                    // OK swaps which end moves, so one control covers both ends.
                     Key.DirectionCenter, Key.Enter -> { onSwitchEnd(); true }
                     else -> false
                 }
@@ -987,8 +1003,8 @@ private fun RangeRow(
             ) {
                 if (focused) {
                     // Drawn icons rather than the \u25C0 \u25B6 characters: TV firmware fonts often have no
-                    // glyph for those, and a row of tofu boxes would be the only explanation the
-                    // viewer gets for a control nothing else on screen describes.
+                    // glyph for those, and tofu boxes would be the whole explanation of the
+                    // control.
                     Icon(
                         Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                         contentDescription = null,
@@ -1002,8 +1018,8 @@ private fun RangeRow(
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(Modifier.width(8.dp))
-                    // Named after the captions overhead, because "upper" and "lower end" is how
-                    // the widget was built, not how it reads from the sofa.
+                    // Named after the captions overhead rather than "upper" and "lower", so the
+                    // hint and the labels match.
                     Text(
                         "change ${if (editingUpper) "Up to" else "From"}   \u00B7   " +
                             "OK switches to ${if (editingUpper) "From" else "Up to"}",
@@ -1025,8 +1041,7 @@ private fun RangeRow(
 /**
  * The same range, for a screen that is touched rather than pointed at.
  *
- * Both ends are shown at once and each carries its own smaller/larger pair, so there is no live
- * end to keep in mind and nothing that has to be switched before it will move. The track stays,
+ * Both ends are draggable at once, so there is no live end to keep in mind. The track stays,
  * because it is the only thing that says how far apart the two numbers are.
  */
 @Composable
@@ -1051,17 +1066,15 @@ private fun TouchRangeRow(
         shape = M3Theme.shapes.large,
     ) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-        // The two figures above the track rather than in two stepper rows below it: the thumbs
-        // are what the viewer is looking at, so the numbers belong where the eye already is.
+        // The two figures above the track, where the eye already is.
         Row(verticalAlignment = Alignment.CenterVertically) {
             RangeEnd("From", SizeFilter.label(low))
             Spacer(Modifier.weight(1f))
             RangeEnd("Up to", SizeFilter.label(high))
         }
         Spacer(Modifier.height(4.dp))
-        // Material's own control, in place of a hand-drawn track and four arrow buttons. Dragging
-        // a range is what a phone is for, and the stepper needed eighty presses to cross it. It
-        // also brings its own accessibility: TalkBack announces each thumb's value and moves it.
+        // Material's own control: dragging a range is what a phone is for, and it brings its own
+        // accessibility, with TalkBack announcing each thumb's value and moving it.
         RangeSlider(
             value = range,
             onValueChange = { range = it },
@@ -1179,9 +1192,8 @@ private fun BoxWithConstraintsScope.Thumb(width: Dp, value: Long, live: Boolean,
 @Composable
 private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
     if (isTouch()) {
-        // Material's own chip on a phone: it brings the height, the ripple, the disabled colours
-        // and the outline that the hand-rolled row below had to spell out one at a time. The
-        // television cannot use it, because a chip has no focus appearance to speak of.
+        // Material's own chip on a phone: height, ripple, disabled colours and outline for free.
+        // The television cannot use it, because a chip has no focus appearance to speak of.
         AssistChip(
             onClick = onClick,
             enabled = enabled,
@@ -1208,10 +1220,9 @@ private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
         Modifier
             .clip(CircleShape)
             .background(if (enabled) background else Tone.surface)
-            // Always clickable, never `enabled = false`: pressing this chip is what greys it out,
-            // and a disabled clickable installs no focus target, so the node the viewer was
-            // standing on would vanish underneath them and the next press would go nowhere.
-            // Greyed out it simply does nothing, and the caller moves focus off it.
+            // Always clickable, never `enabled = false`: a disabled clickable installs no focus
+            // target, so the node the viewer is standing on would vanish underneath them the
+            // moment the press greys the chip out. Greyed out it simply does nothing.
             .clickable(
                 interactionSource = interactions,
                 // Focus colour is the whole of the feedback on a TV.
@@ -1251,9 +1262,8 @@ private fun SectionTitle(text: String) {
     Text(
         text,
         style = sectionStyle(),
-        // Accent on a phone, which is what every Android preference screen does: with the rows
-        // un-carded there is no longer a shape separating one group from the next, so the colour
-        // is what does the separating.
+        // Accent on a phone, as every Android preference screen does: with the rows un-carded,
+        // the colour is what separates one group from the next.
         color = if (touch) Tone.accent else Tone.text,
         modifier = if (touch) {
             // The 16dp start is the same inset a ListItem gives its headline, so the heading and
@@ -1268,10 +1278,10 @@ private fun SectionTitle(text: String) {
 /**
  * The heading over a group of rows.
  *
- * Titles on this screen are two steps down on a phone: at TV size they are nearly as loud as the
- * screen's own heading, which on a narrow column reads as a list of headings with settings hidden
- * between them. `titleSmall` in the primary colour is what a Material preference screen uses, and
- * the colour rather than the size is what marks a heading out there.
+ * Two steps down on a phone: at TV size a heading is nearly as loud as the screen's own, which in
+ * a narrow column reads as a list of headings with the settings hidden between them. `titleSmall`
+ * in the primary colour is the Material preference screen's own answer, where colour rather than
+ * size marks a heading out.
  */
 @Composable
 private fun sectionStyle() = if (isTouch()) {
@@ -1283,14 +1293,9 @@ private fun sectionStyle() = if (isTouch()) {
 /**
  * Light, dark or whatever the phone is set to, as three segments rather than three rows.
  *
- * The three options are mutually exclusive and short enough to read at a glance, which is exactly
- * the case a segmented button exists for: a stack of radio rows would take three times the height
- * to say the same thing, and hide two thirds of the answer behind the one that is chosen.
- *
- * A segment carries a check mark as well as its word once it is chosen, so a third of a phone's
- * width is not much room. The segments therefore say only "System", "Light" and "Dark", and the
- * sentence that explains the chosen one sits under the row where it has the whole width to itself
- * rather than being cut off inside a button.
+ * A chosen segment carries a check mark as well as its word, and a third of a phone's width is not
+ * much room, so the segments say only "System", "Light" and "Dark". The sentence explaining the
+ * chosen one sits under the row, where it has the whole width to itself.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1337,9 +1342,9 @@ private fun StorageCard(
     val touch = isTouch()
     val bar = if (touch) 10.dp else 14.dp
 
-    // The bands are three roles of one palette on a phone, so they still read as three parts of
-    // the same thing when the wallpaper decides what that palette is. A television has no scheme
-    // to draw from and keeps the three alphas of the app's own green it was designed with.
+    // Three roles of one palette on a phone, so the bands still read as three parts of the same
+    // thing when the wallpaper decides that palette. A television has no scheme to draw from and
+    // uses three alphas of the app's own green.
     val videoBand = if (touch) M3Theme.colorScheme.primary else Tone.accent
     val pictureBand = if (touch) M3Theme.colorScheme.secondary else Tone.accent.copy(alpha = 0.6f)
     val otherBand = if (touch) M3Theme.colorScheme.tertiary else Tone.accent.copy(alpha = 0.3f)
@@ -1367,9 +1372,8 @@ private fun StorageCard(
                 .height(bar)
                 .clip(CircleShape)
                 .background(Tone.surfaceHigh)
-                // The bar is three coloured boxes and nothing else, so a screen reader had
-                // nothing at all to say about the one graphic on the screen that carries a
-                // figure. Merged into a single node, because the parts mean nothing apart.
+                // The bar is three coloured boxes and nothing else, so it needs a description of
+                // its own. Merged into a single node, because the parts mean nothing apart.
                 .semantics(mergeDescendants = true) {
                     contentDescription = "Storage: " +
                         "${StreamStats.formatBytes(used)} used of " +
@@ -1417,8 +1421,7 @@ private fun StorageCard(
         if (measured) {
             Spacer(Modifier.height(8.dp))
             // The same three names, in the same order, as the panel at the top of the Downloads
-            // screen. They are one measurement drawn twice, and a viewer who reads both should
-            // not have to work out whether they disagree.
+            // screen: one measurement drawn twice, so the two must not disagree.
             if (split.downloadBytes > 0) {
                 StorageLegend("Downloads", split.downloadBytes, videoBand)
             }
@@ -1431,9 +1434,8 @@ private fun StorageCard(
             Spacer(Modifier.height(8.dp))
         }
         Text(
-            // The two devices keep different bargains, and the card has to say which one it is
-            // looking at: a phone that claimed to replace the last video would be lying about
-            // where its space went.
+            // The two devices keep different bargains, so the wording has to name the one in
+            // hand: a phone also holds downloads the viewer deletes themselves.
             if (touch) {
                 "Playing a video leaves a copy behind, and the next one you play replaces it. " +
                     "Downloads are yours and stay until you delete them, which you can do from " +
@@ -1483,10 +1485,9 @@ private fun StorageLegend(label: String, bytes: Long, color: Color) {
 /**
  * A row whose value is a number the viewer walks up and down.
  *
- * A phone gets two arrow buttons at the end of the row, which is where Android puts a control that
- * belongs to a setting rather than being the setting. A television has no second target to aim at,
- * so the row itself takes focus and Up and Down on the remote move the number: the arrows are still
- * drawn, greyed at the ends, because they are what says the row can be moved at all.
+ * A phone gets two arrow buttons at the end of the row. A television has no second target to aim
+ * at, so the row itself takes focus and the D-pad moves the number: the arrows are still drawn,
+ * greyed at the ends, because they are what says the row can be moved at all.
  */
 @Composable
 private fun StepperRow(
@@ -1532,8 +1533,8 @@ private fun StepperRow(
         label = "stepperBackground",
     )
     val onSurface = if (focused) Tone.onFocusFill else Tone.text
-    // 0.8 rather than the 0.6 this was: the second line has to stay legible against the
-    // accent, and anything lighter drops under the 4.5:1 a small caption needs.
+    // 0.8 at the least: the second line has to stay legible against the accent, and anything
+    // lighter drops under the 4.5:1 a small caption needs.
     val dim = if (focused) Tone.onFocusFill.copy(alpha = 0.8f) else Tone.muted
 
     Row(
@@ -1545,9 +1546,8 @@ private fun StepperRow(
             .focusRing(focused, RoundedCornerShape(Corner.Large))
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                // Up and Down rather than Left and Right: the rows above and below are the other
-                // settings, and a list that moves under Up would strand the viewer on this one.
-                // Left and Right lead nowhere on this screen, so they are the pair to spend.
+                // Left and Right, not Up and Down: Up and Down move between settings, and Left
+                // and Right lead nowhere in a single column, so they are the pair to spend.
                 when (event.key) {
                     Key.DirectionLeft -> { if (canDecrease) onStep(-1); true }
                     Key.DirectionRight -> { if (canIncrease) onStep(1); true }
@@ -1668,14 +1668,12 @@ private fun ToggleRow(
                 modifier = Modifier.size(24.dp),
             )
         },
-        // A real switch, not a drawing of one. It animates its knob, it can be dragged as well as
-        // tapped, and TalkBack announces it as "switch, on" without being told: the drawn pill
-        // below reported nothing at all, so the one row on this screen whose state matters most
-        // was the one a screen reader could say least about.
+        // A real switch on a phone, not the drawn pill below: it can be dragged as well as
+        // tapped, and TalkBack announces it as "switch, on" without being told.
         trailing = { M3Switch(checked = checked, onCheckedChange = { onToggle() }) },
     ) { focused ->
-        // Carries an icon for the same reason ActionRow does: the two kinds of row are stacked in
-        // one column, and without it their titles would start at two different x positions.
+        // An icon for the same reason ActionRow has one: the two kinds of row are stacked in one
+        // column, and without it their titles would start at two different x positions.
         Icon(
             icon,
             contentDescription = null,
@@ -1713,9 +1711,8 @@ private fun ToggleRow(
 @Composable
 private fun Switch(checked: Boolean, focused: Boolean, touch: Boolean = false) {
     // The pill swaps which way round it is drawn depending on what is behind it. A focused row is
-    // filled in, so on it the live track has to be that fill's own contrast colour; off the row the
-    // accent itself is the live one. Drawing it white either way was readable only while the
-    // television had a dark accent of its own, and the accent is the phone's now.
+    // filled in, so on it the live track has to be that fill's own contrast colour; off the row
+    // the accent itself is the live one. A fixed colour cannot read against both.
     val track by animateColorAsState(
         targetValue = when {
             checked -> if (focused) Tone.onFocusFill else Tone.accent
@@ -1755,11 +1752,10 @@ private fun Switch(checked: Boolean, focused: Boolean, touch: Boolean = false) {
 /**
  * One row of the list, on either machine.
  *
- * A phone gets Material's own `ListItem`: it owns the two text styles, the leading and trailing
- * insets and the heights that every other Android settings screen is built from, and matching that
- * by hand is how a screen ends up almost right in a dozen small ways. A television cannot use it,
- * because the focused row there has to fill with colour and take its text white with it, which is
- * not something a `ListItem` will do. So the slots are drawn on the phone and [content] on the TV.
+ * A phone gets Material's own `ListItem`, which owns the text styles, insets and heights every
+ * other Android settings screen is built from. A television cannot use it, because a focused row
+ * there has to fill with colour and take its text white with it. So the slots are drawn on the
+ * phone and [content] on the TV.
  */
 @Composable
 private fun FocusRow(
@@ -1787,8 +1783,8 @@ private fun FocusRow(
             supportingContent = supporting,
             leadingContent = leading,
             trailingContent = trailing,
-            // Transparent, so the rows read as a list written on the window rather than a stack of
-            // panels: the screen's own background is what shows between them.
+            // Transparent, so the rows read as a list rather than a stack of panels: the screen's
+            // own background is what shows between them.
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
             modifier = modifier
                 .fillMaxWidth()
@@ -1796,8 +1792,7 @@ private fun FocusRow(
                 .clickable(
                     interactionSource = interactions,
                     indication = LocalIndication.current,
-                    // Named as a button, so a screen reader offers "double tap to activate" rather
-                    // than reading two lines of text with nothing to do about them.
+                    // Named as a button, so a screen reader offers "double tap to activate".
                     role = Role.Button,
                     onClick = onClick,
                 ),

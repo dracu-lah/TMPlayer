@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -19,10 +20,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tmplayer.data.Td
 import com.tmplayer.data.Thumbnails
 import com.tmplayer.ui.theme.Tone
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.withContext
 
 /**
  * A media preview that never leaves a hole in the grid: the blurred inline preview paints
@@ -36,12 +39,24 @@ fun MediaPreview(
     fallbackLabel: String,
     modifier: Modifier = Modifier,
 ) {
-    val mini = remember(miniThumbnail) { Thumbnails.mini(miniThumbnail) }
+    // Decoded off the composition thread. One ~40 px JPEG is nothing, but a grid row scrolling into
+    // view is a dozen of them in a single frame, plus a hash of each byte array to key the cache,
+    // which is a dropped frame on a stick every time the list moves.
+    val mini by produceState<Bitmap?>(initialValue = null, miniThumbnail) {
+        value = withContext(Dispatchers.Default) { Thumbnails.mini(miniThumbnail) }
+    }
 
-    val telegramConnected by Td.connected.collectAsStateWithLifecycle()
     var full by remember(thumbnailFileId) { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(thumbnailFileId, telegramConnected) {
+    // Retried when the connection comes back, but only a tile that still has no thumbnail collects
+    // [Td.connected]: TDLib on a stick flaps often, and twenty collectors would mean the effect
+    // restarting under every visible tile at once.
+    LaunchedEffect(thumbnailFileId) {
         if (full == null) full = Thumbnails.full(thumbnailFileId)
+        if (full != null) return@LaunchedEffect
+        Td.connected.collectLatest { connected ->
+            if (!connected || full != null) return@collectLatest
+            full = Thumbnails.full(thumbnailFileId)
+        }
     }
 
     // Whatever this stands in front of, it is the colour behind every avatar and every thumbnail

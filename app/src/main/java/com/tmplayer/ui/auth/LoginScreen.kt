@@ -98,12 +98,9 @@ fun LoginScreen(
 
     when (state) {
         is AuthState.Connecting -> ConnectingPane()
-        // No screen of its own any more. There were two ways in and a pane whose whole job was to
-        // ask which, when the right answer is a property of the device the app is running on:
-        // typing a number on a television costs a minute of D-pad, and scanning a code with the
-        // phone that is displaying it cannot be done at all. So each one opens on the way in that
-        // suits it and carries a button to the other, and nobody is asked a question the app can
-        // answer for them.
+        // Answered by the device rather than by the viewer: typing a number on a television costs
+        // a minute of D-pad, and scanning a code with the phone displaying it cannot be done at
+        // all. Each device opens on the way in that suits it and carries a button to the other.
         is AuthState.ChooseMethod -> {
             LaunchedEffect(touch) {
                 onChooseMethod(if (touch) SignInMethod.Phone else SignInMethod.Qr)
@@ -152,9 +149,8 @@ fun LoginScreen(
 /**
  * One answer on its way to Telegram, and whether it has arrived.
  *
- * Every submission on this screen is a suspend call somebody else runs: the pane hands over a
- * number or a code and is told nothing more about it. What it does see is the answer, either as a
- * new [AuthState] or as an error under the field, and that is what releases the button here.
+ * The pane hands over a number or a code and is told nothing more about it. What it does see is the
+ * answer, either as a new [AuthState] or as an error under the field, and that releases the button.
  *
  * The guard lives in [start] rather than only in the button's `enabled`, because a remote can send
  * two centre presses inside one frame and a second phone number sent while the first is in flight
@@ -179,10 +175,9 @@ private class Submission {
 /**
  * A [Submission] that releases itself when the answer lands.
  *
- * A rejection is an error, and a success is a different [AuthState], so those two are the release.
- * The ceiling is for the one call that can succeed silently: asking for the code again leaves both
- * the state and the error exactly as they were, and a button waiting on a change that will never
- * come would sit there busy for the rest of the sign-in.
+ * A rejection is an error and a success is a different [AuthState], so those two are the release.
+ * The ceiling covers the one call that can succeed silently: asking for the code again leaves both
+ * the state and the error unchanged, and the button would otherwise stay busy for good.
  */
 @Composable
 private fun rememberSubmission(state: AuthState, error: String?): Submission {
@@ -202,8 +197,8 @@ private fun rememberSubmission(state: AuthState, error: String?): Submission {
 /**
  * Back on the first screen of the sign-in, which means leaving the app.
  *
- * Two presses, the same guard the chat list uses: on a remote Back sits right beside the D-pad,
- * and before this a stray press dropped the viewer out of the app in the middle of scanning a code.
+ * Two presses, the same guard the chat list uses: on a remote Back sits right beside the D-pad, so
+ * a stray press must not drop the viewer out of the app in the middle of scanning a code.
  */
 @Composable
 private fun ExitOnBack() {
@@ -278,9 +273,8 @@ private fun PhonePane(
  * The number pane as Telegram itself asks for a number: country first, then a narrow dial code
  * beside a wide national number.
  *
- * The single international field the television uses works there because the remote is slow enough
- * that one field is a mercy; on a phone it asks people to know a dial code they have never had to
- * type, and it formats nothing, so a fifteen digit run comes out as a wall.
+ * The television's single international field works there because one field is a mercy on a remote;
+ * on a phone it asks people to know a dial code they have never had to type.
  */
 @Composable
 private fun TouchPhonePane(
@@ -294,11 +288,9 @@ private fun TouchPhonePane(
     val context = LocalContext.current
     var countries by remember { mutableStateOf(emptyList<Country>()) }
     var dial by rememberSaveable { mutableStateOf("") }
-    // Plain digits, exactly as typed. Telegram's own grouping used to be pulled in and written back
-    // into the field a moment after typing, which meant the text under the cursor changed length
-    // while the cursor sat still: a space appearing to the left of it moved the caret a character
-    // back, and on keyboards that report a selection of their own it jumped further still. The
-    // grouping was never worth that, so the field is now left alone and the spaces are gone.
+    // Plain digits, exactly as typed. Do not write grouped text back into the field: a space
+    // inserted to the left of a still cursor moves the caret a character back, and on keyboards
+    // that report a selection of their own it jumps further still.
     var national by rememberSaveable { mutableStateOf("") }
     var picking by rememberSaveable { mutableStateOf(false) }
     val country = remember(countries, dial) { PhoneCountries.byDialCode(countries, dial) }
@@ -457,8 +449,7 @@ private fun CodePane(
  *
  * The boxes are one field wearing a costume. Five real fields would each have to hand focus to the
  * next, and none of them would take a pasted code or an autofill from a text message, which is how
- * most codes on a phone are actually entered: the user taps a suggestion above the keyboard and
- * never reads the digits at all.
+ * most codes on a phone are entered.
  */
 @Composable
 private fun TouchCodePane(
@@ -611,9 +602,8 @@ private fun CodeBoxes(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     for (index in 0 until length) {
                         val filled = index < code.length
-                        // The box waiting for the next digit is the only one with anything to say,
-                        // so it is the only one outlined: without it the row is five identical
-                        // rectangles and nothing tells the eye where a tap will land.
+                        // Only the box waiting for the next digit is outlined: without it the row
+                        // is identical rectangles, with nothing to say where a tap will land.
                         val active = index == code.length
                         Box(
                             Modifier
@@ -704,10 +694,8 @@ private fun PaneHeader(onBack: () -> Unit) {
 /**
  * The QR pane, which is where a television's sign-in begins.
  *
- * It used to have no way off it at all: no header, no button, no back handler, so anybody who
- * picked QR and then changed their mind (the account is on this very phone, the other phone is
- * upstairs) was stuck short of killing the app. The way off is now the other way in, [onUsePhone],
- * rather than a chooser to go back to: nothing is lost either way, because nobody is signed in yet.
+ * The way off is the other way in, [onUsePhone], for anybody who picked QR and then changed their
+ * mind. Nothing is lost either way, because nobody is signed in yet.
  *
  * Back means two different things on the two devices, and both are what the viewer expects. On a
  * television this is the first screen, so Back leaves the app, guarded the way the chat list guards
@@ -795,7 +783,7 @@ private fun QrPane(link: String, onUsePhone: () -> Unit) {
             words()
             Spacer(Modifier.height(8.dp))
             // On a remote this is the only focusable thing on the pane, so it is also what gives
-            // the D-pad somewhere to be: before it, the screen took no input at all.
+            // the D-pad somewhere to be. Without it the screen takes no input at all.
             TmSecondaryButton(onClick = onUsePhone) { Text("Use my phone number") }
         }
     }
@@ -836,7 +824,7 @@ private fun PasswordPane(
     var password by remember { mutableStateOf("") }
     val submission = rememberSubmission(state, error)
 
-    // The remote's Back is what anybody stuck here reaches for first, and it did nothing.
+    // The remote's Back is what anybody stuck here reaches for first.
     BackHandler(onBack = onStartOver)
 
     LoginForm(
@@ -865,7 +853,7 @@ private fun PasswordPane(
  * The one typed pane, worn by the password everywhere and by the number and the code on a
  * television.
  *
- * All of them ask a single question, take a single line, and offer the same way back out, so they
+ * All of them ask a single question, take a single line and offer the same way back out, so they
  * are one layout with different words rather than three that have to be kept looking alike.
  */
 @Composable
@@ -997,7 +985,7 @@ private fun String.keepPhoneCharacters(): String {
 }
 
 /**
- * The national field: digits only. It carries no plus, because the dial code beside it is where
- * that lives, and no spaces, because nothing groups them any more.
+ * The national field: digits only. No plus, because the dial code beside it is where that lives,
+ * and no spaces, because nothing groups them.
  */
 private fun String.keepNationalCharacters(): String = filter { it.isDigit() }

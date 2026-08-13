@@ -47,7 +47,7 @@ data class BrowseData(
 
 /**
  * @param settings where the cold-start snapshot lives. Null in the contexts that have no
- *   Application to hand, in which case the first frame simply waits on TDLib as it used to.
+ *   Application to hand, in which case the first frame waits on TDLib.
  */
 class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel() {
 
@@ -78,16 +78,12 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
     }
 
     /**
-     * Keeps the list live while it is on screen.
-     *
-     * Nothing subscribed to any of this before, so a chat renamed on a phone kept its old name
-     * here until the app was restarted, a new profile picture never arrived at all, and a chat
-     * that had just received something stayed wherever it was until the list was synced again.
+     * Keeps the list live while it is on screen: titles, photos, order, unread counts and mutes.
      *
      * Order is followed through TDLib's own ordering rather than by sorting on the position it
      * hands out: `getChats` reads the list it already keeps sorted, out of its local database, and
-     * costs one round trip. The three hundred `getChat` calls that make a sync expensive are not
-     * repeated, because every row is already in hand and only its place is in question.
+     * costs one round trip, with no `getChat` fan-out, because every row is already in hand and
+     * only its place is in question.
      */
     private fun watchChatChanges() {
         viewModelScope.launch {
@@ -112,13 +108,10 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
                             }
                         }
                         launch {
-                            // A busy account moves several chats at once, and every message in
-                            // any of them is a position update. Coalesced, so one read follows a
-                            // burst instead of one read following each of it.
-                            //
-                            // The archive is watched as well as the main list, because moving a
-                            // chat between the two is reported as a position in each and the app
-                            // now has a tab that has to notice.
+                            // Every message is a position update, so a busy account produces a
+                            // burst. Coalesced, so one read follows the burst rather than each
+                            // update. The archive is watched too: moving a chat between the two
+                            // lists is reported as a position in each, and there is a tab for it.
                             client.chatPositionUpdates
                                 .filter {
                                     it.position.list is ChatListMain ||
@@ -126,9 +119,8 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
                                 }
                                 .onEach { update ->
                                     // The pin travels with the position, so it is read straight
-                                    // off the update. Re-reading the order alone would put a
-                                    // freshly pinned chat in the right place while its row still
-                                    // said it was not pinned.
+                                    // off the update: re-reading the order alone would move a
+                                    // freshly pinned chat while its row still said unpinned.
                                     val archived = update.position.list is ChatListArchive
                                     if (update.position.order != 0L) {
                                         edit(update.chatId) {
@@ -146,9 +138,8 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
                                 }
                         }
                         launch {
-                            // Reading a chat somewhere else empties its badge here, which is the
-                            // difference between an Unread tab that is a live list and one that
-                            // is a list of what was unread when the app happened to be opened.
+                            // Reading a chat somewhere else empties its badge here, which is what
+                            // keeps the Unread tab a live list.
                             client.chatReadInboxUpdates.collect { update ->
                                 edit(update.chatId) { it.copy(unreadCount = update.unreadCount) }
                             }
@@ -189,12 +180,11 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
         if (order.isEmpty()) return
         val byId = current.associateBy { it.id }
         // Arranged, not merely reordered. TDLib's order takes no view on pinning, so applying it
-        // raw would quietly undo the pinned-first arrangement the list was built with the moment
-        // any message arrived anywhere.
+        // raw would undo the pinned-first arrangement on any incoming message.
         val sorted = arrangeChats(order.mapNotNull(byId::get))
         // Only when every row survived the move. A short answer means TDLib is holding fewer
-        // chats than the screen is, and quietly dropping the difference would look like the
-        // library shrinking on its own.
+        // chats than the screen is, and dropping the difference would look like the library
+        // shrinking on its own.
         if (sorted.size != current.size || sorted == current) return
         chats = sorted
         publish()
@@ -221,12 +211,10 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
     /**
      * Refreshes only if the list has had time to go stale.
      *
-     * Every press of Back out of a chat or out of Settings used to call [load], and [load] pulls
-     * the whole chat list from the server and then re-reads three hundred chats out of TDLib's
-     * database one at a time. On a stick that is a visible stutter, and it happened on a screen
-     * the viewer had been looking at ninety seconds earlier. Telegram does reorder chats as
-     * messages arrive, so the list genuinely does go stale, but not in the time it takes to look
-     * at one chat and come back.
+     * [load] pulls the whole chat list from the server and then re-reads three hundred chats out
+     * of TDLib's database one at a time, which on a stick is a visible stutter. Telegram does
+     * reorder chats as messages arrive, so the list genuinely goes stale, but not in the time it
+     * takes to look at one chat and come back.
      */
     fun refreshIfStale() {
         if (chats == null || System.currentTimeMillis() - syncedAt > STALE_AFTER_MS) load()
@@ -235,9 +223,8 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
     /**
      * The Refresh button, which declines to make a flood wait worse.
      *
-     * Telegram answers a request made during one by extending it, so the button that exists to
-     * fix things was the thing making them worse, and it reported the same unhelpful sentence
-     * each time. Returns the seconds left when it refused, so the screen can say so.
+     * Telegram answers a request made during a flood wait by extending it, so this refuses instead
+     * and returns the seconds left, so the screen can say so.
      */
     fun refreshUnlessRateLimited(): Int {
         val waiting = Td.floodWaitRemainingSeconds()
@@ -282,9 +269,8 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
 
                 // The local database is the first answer. Telegram is then synchronized when its
                 // socket is ready, without holding the saved library behind a connection wait.
-                // Time-boxed. Waiting forever meant a device that never gets a socket sat on
-                // "Loading your chats…" until it was closed, with a perfectly good cached list
-                // one line of code away.
+                // The wait is time-boxed, so a device that never gets a socket still gets its
+                // cached list rather than sitting on "Loading your chats…".
                 val connected = Td.awaitConnectedSessionOrNull()
                 if (connected == null) {
                     if (session.isCurrent() && chats == null) {
@@ -318,11 +304,10 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
     /**
      * Pins, archives and marks read: the three actions that change Telegram rather than this app.
      *
-     * Each one draws its result immediately and then lets TDLib correct it. The alternative is
-     * waiting on a round trip before the row moves, which on a stick is a menu that closes onto a
-     * list that has not changed, and the honest reading of that is that the press did nothing.
-     * TDLib sends the real position and read state back within a moment, and the collectors above
-     * apply it, so a request that actually fails is undone rather than left as a false row.
+     * Each one draws its result immediately and then lets TDLib correct it. Waiting on a round trip
+     * before the row moves means a menu that closes onto an unchanged list, which reads as a press
+     * that did nothing. TDLib sends the real position and read state back within a moment, and the
+     * collectors above apply it, so a request that fails is undone rather than left as a false row.
      */
     fun setPinned(chat: ChatSummary, pinned: Boolean, onFailure: (String) -> Unit) {
         edit(chat.id) { it.copy(isPinned = pinned) }
@@ -377,8 +362,7 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
             } ?: return@launch
 
             onFailure(message)
-            // Whatever was drawn on trust is now wrong, and the only honest way back is to ask
-            // TDLib what is actually true.
+            // Whatever was drawn on trust is now wrong, so ask TDLib what is actually true.
             load()
         }
     }
@@ -488,17 +472,14 @@ class MediaListViewModel(
                     // A first page can come back empty while older pages still hold videos: a chat
                     // whose newest forty files are all outside the size limits, most often.
                     //
-                    // Continued here rather than by calling loadMore(), which is what this used to
-                    // do and which never ran: loadMore() refuses to start while pageJob is active,
-                    // and pageJob is this very coroutine, so the recovery was a guaranteed no-op
-                    // and such a chat simply reported itself as having no videos.
+                    // Continued by calling pageMore directly, never loadMore(): loadMore() refuses
+                    // to start while pageJob is active, and pageJob is this very coroutine, so it
+                    // would be a guaranteed no-op.
                     //
-                    // Nothing is published before the walk. Publishing an empty Content here, as
-                    // this did, put a blank body on the screen for the whole of it: no skeleton,
-                    // no chip, nothing to point the remote at, and on a television that reads as a
-                    // chat with no videos in it rather than one still being searched. Leaving the
-                    // state alone keeps the skeleton up on a first load and the old listing up on
-                    // a refresh, and pageMore publishes whatever it finds.
+                    // Nothing is published before the walk, so the skeleton stays up on a first
+                    // load and the old listing stays up on a refresh. An empty Content here would
+                    // be a blank body for the whole walk, with nothing to point the remote at, and
+                    // that reads as a chat with no videos rather than one still being searched.
                     if (page.items.isEmpty() && !page.endReached) {
                         pageMore(session, repository, emptyList(), page.endReached)
                         return@onSuccess
@@ -695,8 +676,8 @@ class MediaListViewModel(
                     item.copy(onDevice = onDevice)
                 }
             }
-            // No revision counter beside this any more: MediaItem compares by value, so a list
-            // whose badges moved is genuinely a different list and the flow publishes it.
+            // No revision counter needed: MediaItem compares by value, so a list whose badges
+            // moved is genuinely a different list and the flow publishes it.
             if (session.isCurrent() && changed) {
                 _state.value = UiState.Content(current.copy(items = updated))
             }
@@ -706,10 +687,9 @@ class MediaListViewModel(
     /**
      * Called when focus nears the end of the listing.
      *
-     * Scrolling never stops at a page boundary: pages keep being pulled until this one actually
-     * grew, or the chat ran out. Without that, a page whose videos are all outside the size limits
-     * adds nothing, the item count does not change, and the screen the viewer is scrolling has no
-     * reason left to ask for more, so the listing stops short of the end of the chat.
+     * Scrolling never stops at a page boundary: pages keep being pulled until the listing actually
+     * grew, or the chat ran out. Otherwise a page whose videos are all outside the size limits
+     * leaves the item count unchanged, and the screen has no reason left to ask for more.
      */
     fun loadMore() {
         val current = _state.value as? UiState.Content ?: return

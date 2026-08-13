@@ -4,7 +4,7 @@
   The chips used to be square blocks of flat #17171E, which is the one shape no video player has
   used for years: over a moving picture a hard-edged opaque rectangle reads as a defect in the
   video rather than as part of the app. A rounded, slightly translucent slab is what a viewer
-  recognises as an overlay, and letting a little of the frame through is what tells them the film
+  recognises as an overlay, and letting a little of the frame through is what tells them the video
   is still running underneath it.
 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"

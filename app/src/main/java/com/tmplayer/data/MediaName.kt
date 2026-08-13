@@ -20,13 +20,7 @@ data class ParsedName(
     /** What to send to a search box: the year disambiguates remakes, so keep it attached. */
     val query: String get() = if (year != null) "$title $year" else title
 
-    /**
-     * "S01E02", or "E02" where the uploader never wrote a season down.
-     *
-     * A button that says only "Next" leaves the viewer to guess whether it is the next episode,
-     * the next file in the chat, or the next thing the app happens to have found. Naming the
-     * episode it will actually play answers that before it is pressed.
-     */
+    /** "S01E02", or "E02" where the uploader never wrote a season down. */
     val episodeCode: String?
         get() {
             val number = episode ?: return null
@@ -39,22 +33,19 @@ data class ParsedName(
  * Turns "Harbour Notes (2026) Malayalam (1080p WEB-Rip E-AC3).mkv" into
  * "Harbour Notes", 2026.
  *
- * Scene releases follow a loose but real convention: the title comes first, then the year, then
- * an unbounded pile of technical markers. Nobody has written this down as a grammar, so the
- * practical approach, the one guessit and parse-torrent-title both take, is to find where the
- * technical markers begin and treat everything before them as the title.
+ * Descriptive file names follow a loose convention: title first, then the year, then an unbounded
+ * pile of technical markers. So the approach is to find where the technical markers begin and treat
+ * everything before them as the title.
  *
- * There is no Kotlin port of either library, so this is that approach reimplemented against the
- * cases this app actually sees. It is deliberately conservative: a wrong title produces a wrong
- * label in the player, which is worse than producing nothing, so anything ambiguous returns a
- * bare title with no year.
+ * Deliberately conservative: a wrong title produces a wrong label in the player, which is worse
+ * than producing nothing, so anything ambiguous returns a bare title with no year.
  */
 object MediaName {
 
     fun parse(fileName: String, maxYear: Int = thisYear() + 1): ParsedName {
         val stripped = stripDecoration(stripExtension(fileName))
-        // Separators are interchangeable in practice: the same release shows up dot-separated on
-        // one tracker and space-separated on another.
+        // Separators are interchangeable: the same release shows up dot-separated on one tracker
+        // and space-separated on another.
         val normalised = stripped.replace(SEPARATORS, " ").replace(WHITESPACE, " ").trim()
         if (normalised.isEmpty()) return ParsedName("", null)
 
@@ -83,25 +74,15 @@ object MediaName {
     /**
      * The file that carries on from [current], out of everything posted in the same chat.
      *
-     * A series watcher's next move is almost always the next episode, and the alternative is
-     * backing out to a grid of near-identical file names and finding it by eye. Matching is by
-     * title and by number rather than by position in the list, because a chat is in the order
-     * things were posted, which is not the order they are watched in.
-     *
-     * Only the next episode of the same season counts. Rolling on to the next season would be
-     * guessing at where a series ends, and guessing wrong sends the viewer somewhere they did
-     * not ask to go.
+     * Matching is by title and by number rather than by position in the list, because a chat is in
+     * the order things were posted, which is not the order they are watched in. Only the next
+     * episode of the same season counts: rolling on to the next season would be guessing at where
+     * a series ends.
      */
     fun <T> nextEpisode(current: String, candidates: List<T>, nameOf: (T) -> String): T? =
         episodeAt(current, candidates, step = 1, nameOf = nameOf)
 
-    /**
-     * The episode before [current], found the same way [nextEpisode] finds the one after it.
-     *
-     * The player needs both: somebody who has just pressed Next once too often, or who came back
-     * to a series a week later and started one episode too far along, is one press from where they
-     * meant to be rather than backing out of the video to look for it.
-     */
+    /** The episode before [current], found the same way [nextEpisode] finds the one after it. */
     fun <T> previousEpisode(current: String, candidates: List<T>, nameOf: (T) -> String): T? =
         episodeAt(current, candidates, step = -1, nameOf = nameOf)
 
@@ -132,9 +113,8 @@ object MediaName {
     /**
      * Finds an episode however the uploader chose to write it.
      *
-     * "S02E04" is the convention, but only in the sense that most people follow it. The rest
-     * arrive as "2x04", "Season 2 Episode 4", or a season and an episode written separately as
-     * "S01 EP04", which is the usual shape in the Indian and anime channels this app browses.
+     * Beyond "S02E04", names arrive as "2x04", "Season 2 Episode 4", or a season and an episode
+     * written separately as "S01 EP04".
      *
      * A season with no episode is a whole-season pack, and that is a real answer rather than a
      * failure: it still belongs to the television index, it just has no single episode to show.
@@ -196,12 +176,11 @@ object MediaName {
     /**
      * Removes the branding uploaders staple to the front of a file name.
      *
-     * Telegram creators sometimes sign uploads in whatever renders as a logo:
-     * "🅂🅂_Harbour_Notes_2025...", "@CreatorClips - Workshop.mkv", or
-     * "www.creatorfiles.org - Workshop.mkv". None of it is part of the title.
+     * Uploads get signed with whatever renders as a logo: "🅂🅂_Harbour_Notes_2025...",
+     * "@CreatorClips - Workshop.mkv", "www.creatorfiles.org - Workshop.mkv". None of it is title.
      *
-     * Symbols go by Unicode category rather than by an emoji list. The squared and circled letter
-     * ranges that channels favour are all OTHER_SYMBOL, alongside every emoji, so one rule covers
+     * Symbols go by Unicode category rather than by an emoji list: the squared and circled letter
+     * ranges channels favour are all OTHER_SYMBOL, alongside every emoji, so one rule covers
      * decoration nobody has invented yet. Letters and digits in any script are left alone, because
      * a title written in Tamil or Malayalam is a title.
      */
@@ -293,9 +272,8 @@ object MediaName {
             "\\d{3,4}[pi]", "4k", "uhd", "hd", "sd",
             // Source
             "bluray", "blu-ray", "bdrip", "brrip", "bdremux", "remux", "web-?rip", "web-?dl",
-            "webrip", "web", "hdrip", "hdtvrip", "dvdrip", "dvdscr", "dvdr", "hdtv", "pdtv",
-            "cam", "camrip", "hdcam", "vodrip", "ts", "telesync", "tc", "telecine", "scr",
-            "screener", "hdts", "hdtc", "predvd", "predvdrip", "ds4k", "workprint", "wp",
+            "webrip", "web", "hdrip", "hdtvrip", "dvdrip", "dvdr", "hdtv", "pdtv",
+            "vodrip", "ds4k",
             // Video codec
             "x264", "x265", "h ?264", "h ?265", "hevc", "avc", "xvid", "divx", "av1", "vp9",
             "10bit", "8bit", "hdr10\\+?", "hdr", "dolby ?vision", "dv",

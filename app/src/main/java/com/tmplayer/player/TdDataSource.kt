@@ -62,13 +62,12 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
      * The stretch of the file a real [TdFile] last confirmed was on disk, so reads inside it need
      * no call to TDLib at all.
      *
-     * This is the difference between smooth playback and a stutter every few seconds: Media3's
-     * extractors issue a great many small reads, and asking TDLib about the file on each one puts
-     * a request round-trip in front of every byte.
+     * Media3's extractors issue a great many small reads, and asking TDLib about the file on each
+     * one would put a request round-trip in front of every byte.
      *
-     * Held as one value rather than a pair of fields because both ends have to move together. A
+     * Held as one value rather than a pair of fields because both ends have to move together: a
      * reader that caught a new start against an old end would be trusting a window that never
-     * existed, which is the same class of bug as trusting no start at all.
+     * existed.
      */
     @Volatile
     private var window = Window.EMPTY
@@ -84,12 +83,9 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
      * One subscription to `updateFile` for the whole of an open source, rather than a fresh one
      * per slow read.
      *
-     * Every stalled read used to open its own collector on `fileUpdates`, take the first matching
-     * update and drop the subscription again. Between those windows the updates went nowhere, so
-     * the source came back to TDLib with `getFile` to learn what it had just been told and thrown
-     * away, and a seek into cold bytes paid a round trip per second of waiting. Now the collector
-     * runs from [open] to [close] and keeps [window] warm on its own, so a read that has to wait
-     * is woken by the update itself and reads the answer out of memory.
+     * The collector runs from [open] to [close] and keeps [window] warm on its own, so a read that
+     * has to wait is woken by the update itself and reads the answer out of memory instead of
+     * paying a `getFile` round trip per second of waiting.
      */
     private var updates: Job? = null
     private var scope: CoroutineScope? = null
@@ -117,7 +113,7 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
             ?: throw IOException("Not a Telegram file URI: ${dataSpec.uri}")
         position = dataSpec.position
 
-        // Subscribed before the first getFile, so nothing that arrives while it is in flight is
+        // Subscribed before the first getFile, so nothing arriving while it is in flight is
         // missed: an update dropped there is a second of stall for no reason.
         startWatching()
 
@@ -194,10 +190,9 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
      *
      * Both ends of that window matter. TDLib fills one stretch at a time and frees what falls
      * outside it, but the partial file on disk keeps its length, so a read below the window
-     * succeeds and hands back a hole instead of failing. Seeking forward and then back put the
-     * player exactly there: the window had moved on, the bytes underneath were gone, and the
-     * extractor was handed zeroes and died on them. Checking only the far end is what let that
-     * through, so the arithmetic is deferred to [DownloadWindow] rather than repeated here.
+     * succeeds and hands back a hole instead of failing, and the extractor dies on the zeroes.
+     * Seeking forward and then back lands exactly there, so the arithmetic is deferred to
+     * [DownloadWindow] rather than repeated here.
      */
     private fun cachedAvailable(target: Long): Long? {
         if (localPath == null) return null
@@ -271,7 +266,7 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
      * The collector is doing the listening; this only decides when to give up and when to ask
      * TDLib for a download that is not happening. A read that outlives its own subscription (the
      * collector died with the client) still makes progress, because a poll that hears nothing
-     * falls back to [getFile] exactly as the old shape did.
+     * falls back to `getFile`.
      */
     private suspend fun awaitBytesAt(target: Long): Long {
         // The collector may already have absorbed what this read needs.
@@ -281,9 +276,8 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
         var available = available(file, target)
         if (available > 0) return available
 
-        // Wall clock, not a count of turns round the loop. Adding the poll interval per pass
-        // measured attempts rather than time, so a file that updated busily without ever reaching
-        // the byte being read hit the stall timeout in a fraction of a minute.
+        // Wall clock, not a count of turns round the loop: a file updating busily without ever
+        // reaching the byte being read must still get the full stall timeout.
         val deadline = System.nanoTime() + STALL_TIMEOUT_MS * 1_000_000
         while (available == 0L) {
             val known = window
@@ -392,11 +386,8 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
         /**
          * The read's own ceiling, a little above the stall timeout it wraps.
          *
-         * These were nested the wrong way round: a 120 second outer timeout around a wait that
-         * already gives up at 60, so the outer one could never fire and the two figures had to be
-         * read together to work out that a stalled read fails after a minute. Now the inner wait
-         * is the one that decides, and this is only the backstop for a wait that never returns
-         * at all.
+         * The inner wait is the one that decides when a stalled read fails; this is only the
+         * backstop for a wait that never returns at all. Keep it above [STALL_TIMEOUT_MS].
          */
         const val READ_TIMEOUT_MS = STALL_TIMEOUT_MS + 10_000L
     }

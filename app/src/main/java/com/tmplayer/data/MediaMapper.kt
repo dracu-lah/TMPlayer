@@ -12,11 +12,10 @@ import java.util.Locale
 /**
  * One playable thing in a chat, flattened out of whatever message shape Telegram used.
  *
- * Equality is over every field. It used to be over the id alone, which made a list whose badges
- * had changed compare equal to the list before them, so the change never reached the screen and a
- * revision counter had to be bolted on beside it to force the update through. Comparing the whole
- * item removes the need for that counter and lets Compose skip the rows that genuinely did not
- * move. The blurred preview is compared by content because TDLib hands back a fresh array each read.
+ * Equality is over every field, not the id alone, or a list whose badges have changed compares
+ * equal to the one before it and the change never reaches the screen. It also lets Compose skip
+ * the rows that genuinely did not move. The blurred preview is compared by content because TDLib
+ * hands back a fresh array on each read.
  */
 @androidx.compose.runtime.Immutable
 data class MediaItem(
@@ -36,9 +35,9 @@ data class MediaItem(
     /**
      * "4K", "1080p": read off the file name, which is where releases state it.
      *
-     * Computed once and kept, rather than on every read. As a `get()` it ran a regex over the file
-     * name every time a tile recomposed, which on a scrolling grid is several hundred times a
-     * second for an answer that cannot change.
+     * Computed once and kept rather than on every read: as a `get()` the regex would run on every
+     * recomposition of a tile, several hundred times a second on a scrolling grid, for an answer
+     * that cannot change.
      */
     val qualityTags: List<String> by lazy(LazyThreadSafetyMode.PUBLICATION) {
         MediaMapper.qualityTags(fileName)
@@ -166,11 +165,11 @@ object MediaMapper {
     /**
      * The one marker worth a badge: how sharp the file is.
      *
-     * Scene releases put this in the file name and nowhere else; the container would have to be
-     * opened to learn it otherwise, which is not worth a download per tile. Codec and dynamic
-     * range used to sit here too and no longer do. HEVC and HDR tell somebody choosing what to
-     * watch nothing they can act on, and a tile wearing three badges is harder to read than one
-     * wearing the only badge that decides anything.
+     * Descriptive file names put this in the name and nowhere else; the container would have to be
+     * opened to learn it otherwise, which is not worth a download per tile. Deliberately only
+     * resolution: codec and dynamic range tell somebody choosing what to watch nothing they can
+     * act on, and a tile wearing three badges is harder to read than one wearing the badge that
+     * decides anything.
      */
     fun qualityTags(fileName: String?): List<String> {
         val name = fileName?.lowercase() ?: return emptyList()
@@ -207,18 +206,6 @@ object MediaMapper {
             size = file.size,
             expectedSize = file.expectedSize,
         ) == LocalFileAvailability.Complete
-    }
-
-    /**
-     * When the file was posted to the chat, as a date rather than a time.
-     *
-     * The hour is noise on a details page; what a viewer wants to know is whether this is the
-     * copy that went up last week or the one from two years ago.
-     */
-    fun formatPostedDate(epochSeconds: Int): String {
-        if (epochSeconds <= 0) return ""
-        val format = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
-        return format.format(Date(epochSeconds * 1000L))
     }
 
     fun formatSize(bytes: Long): String = when {

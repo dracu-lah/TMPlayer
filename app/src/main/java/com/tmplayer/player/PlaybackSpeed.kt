@@ -3,10 +3,9 @@ package com.tmplayer.player
 /**
  * The speeds the transport row offers, and the arithmetic for stepping between them.
  *
- * A phone gets this for free inside Media3's own settings sheet; a television had nothing at all,
- * because leanback's transport row ships no speed control and the gear menu it would live in does
- * not exist on a remote. So the TV steps through a fixed list with one button, which is what a
- * D-pad can actually drive, and the choice is remembered for the next video either way.
+ * A phone gets this inside Media3's own settings sheet. A television has no such sheet, so it steps
+ * through a fixed list with one button, which is what a D-pad can drive. The choice is remembered
+ * for the next video either way.
  *
  * Pure, so the stepping is tested rather than discovered on a sofa.
  */

@@ -14,17 +14,13 @@ import kotlin.math.roundToInt
 /**
  * The gestures a phone viewer expects from a video player, and nothing else.
  *
- * A remote has buttons for all of this, so none of it exists on the TV. A phone has a bare picture
- * and a thumb, and the conventions are old enough by now that a player without them reads as
- * broken: tap to raise the controls, double tap the sides to jump, drag the left half for
- * brightness, drag the right half for volume. Everything is worked out from the view it is
- * attached to, so nothing is carried between one drag and the next beyond the drag in progress.
+ * A remote has buttons for all of this, so none of it exists on the TV: tap to raise the controls,
+ * double tap the sides to jump, drag the left half for brightness, drag the right half for volume.
+ * Nothing is carried between one drag and the next beyond the drag in progress.
  *
  * Fed from the activity's own [android.app.Activity.dispatchTouchEvent] rather than attached to
- * the video view. Hanging this off the view was the original bug: the moment the controller came
- * up, its buttons and its scrub bar were the views under the finger, the video view saw nothing,
- * and double-tap seek and both drags silently stopped working for as long as the row was on
- * screen.
+ * the video view, because once the controller is up its buttons and scrub bar are the views under
+ * the finger and the video view sees nothing.
  *
  * While the controls are down the activity hands every touch here and to nowhere else, which is
  * what stops Media3's own view treating a brightness drag or a hold as a reason to throw the whole
@@ -52,9 +48,9 @@ class PlayerGestures(
     /**
      * True while the transport row is up, in which case vertical drags are left alone.
      *
-     * The row is what the finger came for: the scrub bar is a horizontal drag but a thumb rarely
-     * travels in a straight line, and stealing that as a volume change would make the one control
-     * everybody uses unreliable. Double taps and pinches still work, since neither collides.
+     * A thumb on the scrub bar rarely travels in a straight line, and stealing that as a volume
+     * change would make the one control everybody uses unreliable. Double taps and pinches still
+     * work, since neither collides.
      */
     var controlsVisible = false
 
@@ -85,9 +81,8 @@ class PlayerGestures(
             /**
              * Hold anywhere on the picture to run it fast, let go to drop back.
              *
-             * The gesture everybody learned from YouTube, and the one people reach for during a
-             * long establishing shot. It is a hold rather than a toggle on purpose: there is no
-             * state left behind to notice later and wonder about.
+             * A hold rather than a toggle on purpose: there is no state left behind to notice
+             * later and wonder about.
              */
             override fun onLongPress(event: MotionEvent) {
                 if (controlsVisible || scaling || dragKind != DRAG_NONE) return
@@ -120,8 +115,7 @@ class PlayerGestures(
                         onSkip(Skip.FORWARD_MS)
                         onFeedback("${Skip.FORWARD_MS / 1000} s   ▶▶", SIDE_RIGHT)
                     }
-                    // The middle third plays and pauses, which is what a thumb landing in the
-                    // centre of a picture twice has meant since the first phone player.
+                    // The middle third plays and pauses.
                     else -> onTogglePlay()
                 }
                 return true
@@ -171,7 +165,7 @@ class PlayerGestures(
             override fun onScale(detector: ScaleGestureDetector): Boolean {
                 // One step per pinch, not one per frame: the control has three stops, and
                 // reporting every intermediate scale factor would run through all of them
-                // before the fingers had finished moving.
+                // before the fingers finished moving.
                 if (detector.scaleFactor > 1f + PINCH_THRESHOLD) {
                     onPinch(true)
                     return true
@@ -221,11 +215,10 @@ class PlayerGestures(
      * Decides what a drag is for, once, and then stops asking.
      *
      * Measured from where the finger went down rather than from the last few pixels of travel,
-     * because a thumb moving across glass wobbles and one noisy sample was enough to file a volume
+     * because a thumb moving across glass wobbles and one noisy sample is enough to file a volume
      * drag as a scrub. There is a dead angle between the two: a drag has to be twice as tall as it
-     * is wide to count as vertical, and anything shallower is read as sideways. VLC uses the same
-     * two-to-one split, and the reason is the same, that a diagonal is a gesture whose owner has
-     * not decided yet and guessing at it is worse than waiting a frame.
+     * is wide to count as vertical, and anything shallower is read as sideways. A diagonal is a
+     * gesture whose owner has not decided yet, and guessing at it is worse than waiting a frame.
      *
      * Returns false while the travel is still inside the dead angle or too short to read, in which
      * case the next move event asks again.
@@ -237,8 +230,8 @@ class PlayerGestures(
         if (abs(travelY) < arm && abs(travelX) < arm) return false
         if (abs(travelY) <= abs(travelX) * VERTICAL_RATIO) {
             // Sideways: scrubbing. The double tap moves in fixed jumps and the scrub bar needs the
-            // controls up first, so without this there was no way to travel a few minutes through
-            // a film with the picture still fully visible.
+            // controls up first, so this is the only way to travel a few minutes through a video
+            // with the picture still fully visible.
             val length = durationMs()
             if (length <= 0) return false
             dragKind = DRAG_SEEK
@@ -246,9 +239,8 @@ class PlayerGestures(
             seekTarget = dragFromMs
             return true
         }
-        // A band down the middle belongs to neither, which is what stops a drag started in the
-        // centre of the picture from changing whichever of the two it happened to land a pixel
-        // nearer. VLC leaves the same gap, at the same three sevenths of the width.
+        // A band down the middle belongs to neither, which stops a drag started in the centre of
+        // the picture from changing whichever of the two it happened to land a pixel nearer.
         when {
             start.x < viewWidth * LEFT_EDGE -> {
                 dragKind = DRAG_BRIGHTNESS
@@ -266,9 +258,9 @@ class PlayerGestures(
     /**
      * Turns sideways travel into a position, and says where it would land.
      *
-     * Nothing is seeked until the finger lifts. Seeking on every frame of the drag means a
-     * network video fetching a new window for each one, which on a phone is a stutter and a
-     * pile of cancelled requests for a position the viewer was only passing through.
+     * Nothing is seeked until the finger lifts. Seeking on every frame of the drag would mean a
+     * network video fetching a new window for each one: a stutter, and a pile of cancelled
+     * requests for a position the viewer was only passing through.
      */
     private fun applySeek(travelPx: Float) {
         val length = durationMs()
@@ -297,9 +289,9 @@ class PlayerGestures(
     private fun currentBrightness(): Float {
         val set = window.attributes.screenBrightness
         if (set >= 0f) return set
-        // Nothing has been set on this window yet, so the drag has to pick up from whatever the
-        // phone itself is showing. Failing to read that is not worth an error: half is a
-        // defensible place to start from.
+        // Nothing has been set on this window yet, so the drag picks up from whatever the phone
+        // itself is showing. Failing to read that is not worth an error: half is a defensible
+        // place to start from.
         val system = runCatching {
             Settings.System.getInt(window.context.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
         }.getOrNull() ?: return 0.5f
@@ -335,11 +327,8 @@ class PlayerGestures(
         private const val DRAG_SEEK = 3
 
         /**
-         * Which side of the picture a figure belongs on.
-         *
-         * A brightness reading that appears on the right of the screen while the finger is on the
-         * left reads as a coincidence rather than as an answer, so each gesture's own indicator
-         * comes up where the gesture is.
+         * Which side of the picture a figure belongs on: each gesture's indicator comes up where
+         * the gesture is, so the reading reads as an answer rather than a coincidence.
          */
         const val SIDE_LEFT = -1
         const val SIDE_CENTRE = 0
@@ -348,7 +337,7 @@ class PlayerGestures(
         /**
          * How far a finger travels before the drag is classified, as a fraction of the picture's
          * height. Short enough not to be felt as a delay, long enough that the first noisy sample
-         * off the digitiser is not what decides between volume and a seek.
+         * off the digitiser does not decide between volume and a seek.
          */
         private const val ARM_FRACTION = 0.04f
 
@@ -359,7 +348,7 @@ class PlayerGestures(
         private const val LEFT_EDGE = 3f / 7f
         private const val RIGHT_EDGE = 4f / 7f
 
-        /** A drag from one edge of the picture to the other covers three minutes of film. */
+        /** A drag from one edge of the picture to the other covers three minutes of video. */
         private const val SEEK_RANGE_MS = 180_000f
 
 

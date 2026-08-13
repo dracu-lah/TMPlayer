@@ -14,14 +14,12 @@ import com.tmplayer.R
 /**
  * The app's own mark, the same drawing the launcher icon is made of.
  *
- * `ic_logo` is full bleed: it carries its own dark plate and its own rounded corners, so it needs
- * no background behind it and no padding around it, and it is the whole reason this is an [Image]
- * of a vector rather than a tinted [androidx.compose.material3.Icon]. The corner clip is only there
- * to keep the plate's radius proportional when the mark is drawn much smaller than the 192dp it was
- * authored at.
+ * `ic_logo` is full bleed: it carries its own dark plate and rounded corners, so it needs no
+ * background and no padding, and that is why this is an [Image] of a vector rather than a tinted
+ * [androidx.compose.material3.Icon]. The corner clip keeps the plate's radius proportional when the
+ * mark is drawn much smaller than the 192dp it was authored at.
  *
- * Deliberately kept out of ordinary screens. A logo on every pane is wallpaper; this belongs where
- * the app is introducing itself and nowhere else.
+ * Deliberately kept out of ordinary screens: a logo on every pane is wallpaper.
  */
 @Composable
 fun AppMark(size: Dp, modifier: Modifier = Modifier) {

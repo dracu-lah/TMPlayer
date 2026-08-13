@@ -83,7 +83,7 @@
           of this.
 
           Picture in picture so leaving the app pauses nothing: before this, pressing Home during a
-          film stopped it outright.
+          video stopped it outright.
         -->
         <activity
             android:name=".player.PlayerActivity"

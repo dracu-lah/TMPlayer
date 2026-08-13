@@ -10,17 +10,15 @@ import io.sentry.android.core.SentryAndroid
 /**
  * Crash reporting, off unless the viewer asks for it.
  *
- * The whole pitch of this app is that nothing passes through anything of mine: no server, no bot,
- * no analytics. That claim is worth more than a usage graph, so this is the one exception and it
- * is a narrow one. Nothing here runs until [start] is called, [start] does nothing unless the
- * switch in Settings is on, and the switch is off on a fresh install. Sentry's own auto-start
- * ContentProvider is disabled in the manifest, so there is no other way in.
+ * The app sends nothing to a server of mine, so this is the one narrow exception. Nothing here
+ * runs until [start] is called, [start] does nothing unless the switch in Settings is on, and the
+ * switch is off on a fresh install. Sentry's own auto-start ContentProvider is disabled in the
+ * manifest, so there is no other way in.
  *
- * What a report contains: the stack trace, the app version, the Android version and the device
- * model. What it does not: breadcrumbs of any kind, sessions, screen names, filenames, chat names,
- * or anything Sentry calls personally identifiable. [maxBreadcrumbs] is zero and every automatic
- * breadcrumb source is off, which is the part that matters here, because a breadcrumb is exactly
- * where the name of the film somebody was watching would otherwise turn up.
+ * A report contains the stack trace, the app version, the Android version and the device model,
+ * and nothing else: no breadcrumbs, sessions, screen names, filenames or chat names. Every
+ * automatic breadcrumb source is off, because a breadcrumb is exactly where the name of the video
+ * somebody was watching would otherwise turn up.
  *
  * With no [BuildConfig.SENTRY_DSN] compiled in, which is what a fork and every CI build get, this
  * is inert and Settings does not offer the switch at all.
@@ -52,9 +50,9 @@ object CrashReports {
             options.tracesSampleRate = 0.0
             options.isEnableAutoSessionTracking = false
 
-            // No trail of what the viewer was doing before the crash. A breadcrumb is written by
+            // No trail of what the viewer was doing before the crash: a breadcrumb is written by
             // every activity change, system event and network call, and any of them can carry the
-            // name of a chat or a file. The stack trace says where the bug is; the rest is theirs.
+            // name of a chat or a file.
             options.maxBreadcrumbs = 0
             options.isEnableActivityLifecycleBreadcrumbs = false
             options.isEnableAppComponentBreadcrumbs = false
@@ -69,9 +67,8 @@ object CrashReports {
             options.isAttachStacktrace = true
 
             // Two gates, in code rather than in configuration. If the switch went off between the
-            // crash and the send, the report is dropped on the floor. And the user object goes,
-            // which is where Sentry otherwise puts the installation identifier that would
-            // otherwise tie one person's reports together across weeks.
+            // crash and the send, the report is dropped. And the user object goes, which is where
+            // Sentry puts the installation identifier that would tie one person's reports together.
             options.setBeforeSend { event, _ ->
                 if (!enabledNow) {
                     null

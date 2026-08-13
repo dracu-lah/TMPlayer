@@ -8,9 +8,8 @@ import java.util.Locale
 /**
  * One row of the country picker.
  *
- * A trimmed [CountryInfo]: the picker sorts, searches and displays, and none of those want an
- * array of calling codes or a hidden flag hanging off them. Kept out of the UI package because
- * the matching below is ordinary logic that a test can reach.
+ * A trimmed [CountryInfo]. Kept out of the UI package because the matching below is ordinary
+ * logic that a test can reach.
  */
 data class Country(
     /** ISO 3166-1 alpha-2, as Telegram spells it: "IN", "GB". */
@@ -37,8 +36,7 @@ object PhoneCountries {
     /**
      * Whether a country answers to what has been typed in the search box.
      *
-     * Both halves of the box are the same box: people look for "India" and people look for "91",
-     * and Telegram accepts either without a mode switch, so a query is tried against the name and
+     * People look for "India" and people look for "91", so a query is tried against the name and
      * against the codes. A leading plus is ignored, since typing one is the natural thing to do.
      */
     fun matches(country: Country, query: String): Boolean {
@@ -79,8 +77,8 @@ object PhoneCountries {
 /**
  * The flag for an ISO code, built out of regional indicator letters.
  *
- * There is no flag image to ship and no icon set to grow: the two letters of the country code map
- * onto the two code points the platform's own emoji font draws as that flag.
+ * No flag image to ship: the two letters of the country code map onto the two code points the
+ * platform's own emoji font draws as that flag.
  */
 fun flagEmoji(iso: String): String {
     val code = iso.trim().uppercase(Locale.ROOT)

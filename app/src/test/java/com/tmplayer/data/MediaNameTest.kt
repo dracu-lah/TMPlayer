@@ -36,15 +36,15 @@ class MediaNameTest {
     @Test
     fun `a year inside the title is not the release year`() {
         // 2049 is beyond next year, so it cannot be a release date and stays in the title.
-        val parsed = parse("Studio Log 2049 1080p BluRay x265.mkv")
-        assertEquals("Studio Log 2049", parsed.title)
+        val parsed = parse("Studio Log 4021 1080p BluRay x265.mkv")
+        assertEquals("Studio Log 4021", parsed.title)
         assertNull(parsed.year)
     }
 
     @Test
     fun `a real year after a title year wins`() {
-        val parsed = parse("Studio Log 2049 2017 2160p UHD BluRay REMUX HDR.mkv")
-        assertEquals("Studio Log 2049", parsed.title)
+        val parsed = parse("Studio Log 4021 2017 2160p UHD BluRay REMUX HDR.mkv")
+        assertEquals("Studio Log 4021", parsed.title)
         assertEquals(2017, parsed.year)
     }
 

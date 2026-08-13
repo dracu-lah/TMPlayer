@@ -37,16 +37,12 @@ import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 
 /**
- * The field every sign-in pane types into.
- *
- * Pulled out of the old one-field login form because the number pane now wants three of them, of
- * two different widths, and a field that is redrawn per call site is a field that stops matching
- * the one beside it.
+ * The field every sign-in pane types into, stated once so that fields sitting beside each other
+ * cannot stop matching.
  *
  * A phone gets the platform's own outlined field, floating label and all, because a sign-in is the
- * one screen where looking like every other Android sign-in is the point: people trust the field
- * they already know, and a hand-drawn box on a light theme cannot borrow that. The television keeps
- * the dark rounded box, which is sized for a remote and for a room.
+ * one screen where looking like every other Android sign-in is the point. The television keeps the
+ * dark rounded box, which is sized for a remote and for a room.
  */
 @Composable
 fun PaneField(
@@ -71,8 +67,8 @@ fun PaneField(
             onValueChange = onValueChange,
             singleLine = true,
             label = { M3Text(label) },
-            // The placeholder survives the move because it is doing a second job on this flow:
-            // it shows the shape of the answer, and a floating label leaves room for it.
+            // Both label and placeholder: the placeholder shows the shape of the answer, and a
+            // floating label leaves room for it.
             placeholder = { M3Text(placeholder) },
             prefix = prefix?.let { { M3Text(it) } },
             textStyle = M3.typography.titleMedium,
@@ -161,8 +157,8 @@ fun PaneChooser(
             modifier = modifier
                 .fillMaxWidth()
                 .clip(M3.shapes.medium)
-                // Still spelled out: a ListItem is a row of text until something says otherwise,
-                // and a screen reader had no way to know the country row was something to press.
+                // Spelled out because a ListItem is a row of text until something says otherwise,
+                // and a screen reader has no other way to know this row can be pressed.
                 .clickable(role = Role.Button, onClick = onClick),
         )
         return

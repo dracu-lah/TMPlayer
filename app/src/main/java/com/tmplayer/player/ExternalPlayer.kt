@@ -12,18 +12,14 @@ import java.io.File
 /**
  * Hands one Telegram video to whatever else on the device can play it.
  *
- * There are formats this app will never play. A stray VC-1 remux, an obscure subtitle container,
- * a codec the stick's decoder has no licence for: the viewer knows VLC opens it, and until now
- * their only route to VLC was the browse grid's long press, which is nowhere near the screen that
- * has just said "Can't play this".
- *
- * Two things make this awkward, and both are handled here rather than at each call site. A stream
- * lives in TDLib's own directory inside this app's private storage, so a `file://` path across a
- * process boundary is a `FileUriExposedException`: the handover goes through the file provider the
- * manifest already declares, scoped to that directory, with a read grant that lasts as long as the
- * other app's task. And a video that is still downloading is a video that stops in the middle, with
- * nothing in the intent able to say so, so the readiness is worked out first and the caller is
- * given the sentence to put in front of the viewer.
+ * There are formats this app will never play, and the viewer may know another player that opens
+ * them. Two things make the handover awkward, and both are handled here rather than at each call
+ * site. A stream lives in TDLib's own directory inside this app's private storage, so a `file://`
+ * path across a process boundary is a `FileUriExposedException`: the handover goes through the file
+ * provider the manifest already declares, scoped to that directory, with a read grant that lasts as
+ * long as the other app's task. And a video that is still downloading is a video that stops in the
+ * middle, with nothing in the intent able to say so, so the readiness is worked out first and the
+ * caller is given the sentence to put in front of the viewer.
  */
 object ExternalPlayer {
 
@@ -78,9 +74,8 @@ object ExternalPlayer {
     /**
      * How much of the video is on disk, as a whole percent, or null when the size is not known.
      *
-     * Clamped at 99 while bytes are still outstanding: a 12 GB file that is four megabytes short
-     * rounds to 100, and telling somebody a video is fully downloaded a moment before it stops is
-     * exactly the sort of thing this is here to prevent.
+     * Clamped at 99 while bytes are still outstanding, so a nearly complete file is never reported
+     * as fully downloaded a moment before it stops.
      */
     fun percentDownloaded(downloadedBytes: Long, totalBytes: Long): Int? {
         if (totalBytes <= 0 || downloadedBytes < 0) return null
@@ -141,10 +136,9 @@ object ExternalPlayer {
      * The whole handover, for any screen that has a file id: ask TDLib where the file is, work out
      * how much of it there is, and put the chooser up.
      *
-     * This is the entry point for the browse grid's long press as well as the player's own, so the
-     * two cannot drift apart on the authority, the flags or the wording. It never cancels or
-     * deletes anything: a background download carries on while the other app reads what has landed
-     * so far, and the file stays exactly where TDLib put it.
+     * The single entry point, so no two screens drift apart on the authority, the flags or the
+     * wording. It never cancels or deletes anything: a background download carries on while the
+     * other app reads what has landed so far, and the file stays exactly where TDLib put it.
      */
     suspend fun handOver(
         context: Context,

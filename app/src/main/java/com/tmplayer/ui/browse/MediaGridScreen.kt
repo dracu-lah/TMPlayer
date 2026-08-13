@@ -69,7 +69,6 @@ import androidx.compose.material3.Icon as M3Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MaterialTheme as M3MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
@@ -171,12 +170,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * A store that lives exactly as long as one media screen.
- *
- * The alternative was the activity's own store, which lives as long as the app and never forgets
- * anything put into it.
- */
+/** A store that lives exactly as long as one media screen, so its view models are released with it. */
 private class MediaScreenStore : ViewModelStoreOwner {
     override val viewModelStore = ViewModelStore()
 }
@@ -220,13 +214,9 @@ fun MediaGridScreen(
     val touch = !FormFactor.isTv(context)
     val edge = if (touch) TOUCH_EDGE else Tv.SafeH
     // The limits are part of the key: changing them in Settings has to rebuild the listing,
-    // not leave a stale one filtered by the old bounds.
-    //
-    // Scoped to this screen rather than to the activity. Against the activity's store nothing was
-    // ever evicted, so every chat visited in a session left behind a whole item list, each of them
-    // holding a few hundred minithumbnail byte arrays, and every change to the size limits added
-    // another copy of the same chat beside it. On a 1 GB stick that is the likeliest way this app
-    // gets killed, and the cost of the change is one re-listing when a chat is reopened.
+    // not leave a stale one filtered by the old bounds. Scoped to this screen rather than to the
+    // activity, so a session's chats do not each leave behind an item list full of minithumbnail
+    // byte arrays. The cost is one re-listing when a chat is reopened.
     val owner = remember(chatId, minSizeBytes, maxSizeBytes) { MediaScreenStore() }
     DisposableEffect(owner) { onDispose { owner.viewModelStore.clear() } }
     val viewModel: MediaListViewModel = viewModel(
@@ -319,11 +309,6 @@ fun MediaGridScreen(
         if (offline) onOfflineAction("You're offline. Showing saved videos.")
     }
 
-    // A pull has to hold the spinner until the listing has actually come back, and the listing
-    // reports nothing of the sort: a refresh that keeps its content leaves the state a Content the
-    // whole way through. What does change is the instance, once the new page lands, so that is what
-    // the gesture waits on. The timeout is there because a request against a dead connection never
-    // emits anything at all, and a spinner left turning for ever is worse than one that gives up.
     // Whichever video a long press is asking about, and nothing while none is.
     var showingDetailsOf by remember(chatId) { mutableStateOf<MediaItem?>(null) }
 
@@ -350,8 +335,15 @@ fun MediaGridScreen(
     // Only while there is a selection to leave, so Back still leaves the chat the rest of the time.
     BackHandler(enabled = selecting) { leaveSelection() }
 
-    fun downloadSelection() {
-        val chosen = selected.values.toList()
+    /**
+     * Queues videos, having first asked the disk whether they fit.
+     *
+     * Takes the list rather than reading the selection, because the long-press menu's "Download
+     * for later" is one video and has to arrive here too. Every route in must come through this
+     * plan: calling [OfflineDownloads.start] directly skips the watch cache eviction below, and the
+     * service's late check then refuses the video on raw free space alone.
+     */
+    fun downloadThese(chosen: List<MediaItem>) {
         if (chosen.isEmpty()) return
         // Android 13 counts a download's progress notification as one the viewer has to have
         // agreed to. Asked here rather than at first launch, because here is the one moment the
@@ -359,14 +351,13 @@ fun MediaGridScreen(
         askForNotifications(context)
         leaveSelection()
         scope.launch {
-            // Off the main thread for the whole of the decision. Between here and the plan sits a
-            // walk of every download record with a TDLib round trip to measure each one, a
-            // statvfs() for the free space and a stat() per ticked video, and resumed onto the
-            // thread drawing the grid that is the listing frozen for the length of it.
+            // Off the main thread for the whole of the decision: it walks every download record
+            // with a TDLib round trip each, a statvfs() for the free space and a stat() per ticked
+            // video, which on the drawing thread would freeze the listing for its whole length.
             val (taken, message) = withContext(Dispatchers.Default) {
-                // Only the watch cache is on offer here. A film left behind by a press of Play is
-                // nobody's keepsake and should not be the reason a film somebody ticked is
-                // refused; the videos they downloaded on purpose are not touched either way.
+                // Only the watch cache is on offer here. A video left behind by a press of Play
+                // should not be the reason a video somebody ticked is refused; the videos they
+                // downloaded on purpose are not touched either way.
                 val cachedRecords = runCatching { settings.cachedVideosNow() }
                     .getOrDefault(emptyList())
                 val cached = cachedRecords.mapNotNull { record ->
@@ -412,6 +403,9 @@ fun MediaGridScreen(
         }
     }
 
+    // A refresh that keeps its content stays a Content state throughout, so the pull gesture waits
+    // on a new state instance instead. The timeout stops the spinner turning for ever when a
+    // request against a dead connection never emits at all.
     var refreshing by remember(chatId) { mutableStateOf(false) }
     LaunchedEffect(refreshing) {
         if (!refreshing) return@LaunchedEffect
@@ -426,10 +420,9 @@ fun MediaGridScreen(
             onRetry = viewModel::load,
             loading = { MediaGridSkeleton(layout = layout) },
         ) { list ->
-            // The grid's column count is the one thing on this screen that cannot be a constant on
-            // a phone: it has to follow the width, and the width follows which way up the phone is
-            // being held. Everything that counts in columns, the paging lead included, reads it
-            // from here so there is only ever one figure in play.
+            // On a phone the column count follows the width, which follows the orientation.
+            // Everything that counts in columns, the paging lead included, reads it from here so
+            // there is only ever one figure in play.
             BoxWithConstraints(Modifier.fillMaxSize()) {
             val columns = if (touch) {
                 ((maxWidth - edge * 2) / TOUCH_TILE_MIN).toInt().coerceAtLeast(1)
@@ -448,8 +441,7 @@ fun MediaGridScreen(
 
             // The phone's grid is compact but not captionless: smaller art than a television's
             // card, two lines of the file name under it in small type, and a hairline of a gap.
-            // A sheet of unlabelled pictures reads well for a camera roll and badly for a chat
-            // full of releases, where the name is the only thing telling two of them apart.
+            // The name is often the only thing telling two releases apart.
             val dense = touch && layout == CardLayout.Grid
             val gap = if (dense) DENSE_GAP else 16.dp
             val padding = PaddingValues(
@@ -588,6 +580,7 @@ fun MediaGridScreen(
                             selected = mapOf(item.id to item)
                             selecting = true
                         },
+                        onDownloadForLater = { downloadThese(listOf(item)) },
                         onDismiss = { showingDetailsOf = null },
                     )
                 }
@@ -603,8 +596,7 @@ fun MediaGridScreen(
                             // Above the name strip when there is one, rather than through it.
                             .padding(
                                 // Tv.SafeV is overscan clearance and means nothing on a phone,
-                                // where it only floated the chip well clear of the bottom edge
-                                // for no reason. The gesture bar is the real obstacle there.
+                                // where the gesture bar is the real obstacle.
                                 bottom = (if (touch) navigationBarPadding() else Tv.SafeV) +
                                     (if (standingOn != null) 46.dp else 0.dp) +
                                     connectionOffset,
@@ -636,9 +628,8 @@ fun MediaGridScreen(
             }
 
             // Switching arrangement rebuilds the list, taking the focused card with it, so the
-            // first item has to be asked for again or the remote is left with nowhere to go.
-            // Only on a remote. A phone has no focus to place, and asking for it there only puts a
-            // highlight on a card nobody pointed at.
+            // first item has to be asked for again or the remote is left with nowhere to go. Only
+            // on a remote: on a phone this would highlight a card nobody pointed at.
             LaunchedEffect(list.items.firstOrNull()?.id, layout, touch) {
                 if (!touch) runCatching { firstItem.requestFocus() }
             }
@@ -688,7 +679,7 @@ fun MediaGridScreen(
                 {
                     SelectionBar(
                         count = selected.size,
-                        onDownload = { downloadSelection() },
+                        onDownload = { downloadThese(selected.values.toList()) },
                         onSelectAll = { selected = listedItems.associateBy { it.id } },
                         onCancel = { leaveSelection() },
                         edge = edge,
@@ -696,9 +687,8 @@ fun MediaGridScreen(
                 }
             },
             content = {
-                // The circular arrow stays in the overflow, because a listing that is empty or in
-                // an error state has nothing to drag, but a downward pull is what a phone user
-                // reaches for first and this screen ignored it entirely.
+                // The circular arrow stays in the overflow too, because a listing that is empty or
+                // in an error state has nothing to drag.
                 PullToRefreshBox(
                     isRefreshing = refreshing,
                     onRefresh = {
@@ -719,7 +709,7 @@ fun MediaGridScreen(
             if (selecting) {
                 SelectionBar(
                     count = selected.size,
-                    onDownload = { downloadSelection() },
+                    onDownload = { downloadThese(selected.values.toList()) },
                     onSelectAll = { selected = listedItems.associateBy { it.id } },
                     onCancel = { leaveSelection() },
                     edge = edge,
@@ -768,11 +758,7 @@ fun MediaGridScreen(
 /**
  * The phone's version of this screen's chrome: a real app bar.
  *
- * What it replaces had no back affordance at all (only the hardware key knew how to leave), a 32sp
- * title padded by the television's overscan constant so that it sat under the status bar, and a row
- * of five labelled pills underneath it. That is most of a phone screen spent before the first video.
- *
- * Everything moves into the bar: an arrow, the chat's own picture, its name, and the actions as
+ * Everything lives in the bar: an arrow, the chat's own picture, its name, and the actions as
  * icons. Search expands to fill the bar the way it does on the chat list, so the two screens are
  * searched the same way.
  */
@@ -801,9 +787,8 @@ internal fun TouchMediaScaffold(
 ) {
     var searching by rememberSaveable { mutableStateOf(false) }
     val field = remember { FocusRequester() }
-    // The bar carries a picture, a name and three actions, which is a lot of a phone screen to
-    // spend on chrome while somebody is scrolling through videos. It leaves on the way down and
-    // comes back on the first flick up, the way every Google app's list screen behaves.
+    // The bar is a lot of a phone screen to spend on chrome while scrolling, so it leaves on the
+    // way down and comes back on the first flick up.
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     val startVoice = rememberVoiceSearch("Say a video name") {
         onQuery(it)
@@ -842,8 +827,7 @@ internal fun TouchMediaScaffold(
                             M3Text(
                                 chatTitle,
                                 // Material's default bar title is 22sp, which with an avatar in
-                                // front of it left room for about eight characters of a chat name.
-                                // Telegram's own chat bar is around this size for the same reason.
+                                // front of it leaves room for about eight characters of a name.
                                 style = M3MaterialTheme.typography.titleMedium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -888,8 +872,8 @@ internal fun TouchMediaScaffold(
                         )
                     }
                     // Two icons and a menu, not four icons. A phone app bar has around 200dp to
-                    // divide between the title and the actions, and with four of them the chat's
-                    // name was cut to "Weeke..." on a 1080p panel.
+                    // divide between the title and the actions, and four of them ellipsise the
+                    // chat's name on a 1080p panel.
                     BarOverflow(
                         listOf(
                             (if (layout == CardLayout.Grid) "Show as rows" else "Show as tiles")
@@ -921,10 +905,9 @@ private fun MediaSearchField(
     onVoiceSearch: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    // Not a Material SearchBar: that component owns the whole top of the screen, including its own
-    // back arrow and its own suggestion sheet, and this search lives inside an app bar that already
-    // has an arrow, an avatar and an overflow. What it borrows instead is the shape and the colour,
-    // so the field reads as the same thing the search bar would have been.
+    // Not a Material SearchBar: that component owns the whole top of the screen, arrow and
+    // suggestion sheet included, and this search sits inside an app bar that already has both. It
+    // borrows the shape and the colour so it still reads as a search bar.
     Surface(
         shape = M3MaterialTheme.shapes.extraLarge,
         color = Tone.surfaceHigh,
@@ -999,10 +982,8 @@ internal fun Header(
     Column(Modifier.padding(start = edge, end = edge, top = Tv.SafeV, bottom = 12.dp)) {
         // The same picture the chat was picked by, so it is obvious which one this listing is.
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // The way out, drawn. The phone's version of this screen has had a back arrow in its
-            // app bar all along and the television had nothing: the remote's own Back key worked,
-            // which is not the same as the screen saying so, and it is the one key on a stick
-            // remote that people are least sure of.
+            // The way out, drawn. The remote's Back key works, but Back is the key stick owners
+            // are least sure of, so the screen says it as well.
             Pill("Back to chats", Icons.AutoMirrored.Filled.ArrowBack, showLabel = false, onClick = onBack)
             Spacer(Modifier.width(16.dp))
             MediaPreview(
@@ -1042,8 +1023,7 @@ internal fun Header(
                 modifier = Modifier.weight(1f).focusRequester(searchField),
             )
             if (startVoice != null) {
-                // The microphone says what it does; the word beside it only took room from the
-                // search field.
+                // The microphone says what it does, so no label takes room from the search field.
                 Pill(label = "Voice search", icon = TmIcons.Mic, showLabel = false, onClick = startVoice)
             }
             if (query.isNotBlank()) {
@@ -1067,14 +1047,13 @@ internal fun Header(
             Pill(
                 label = if (layout == CardLayout.Grid) "As rows" else "As tiles",
                 icon = if (layout == CardLayout.Grid) Icons.AutoMirrored.Filled.List else TmIcons.Grid,
-                // The two glyphs are the ones every app uses for this; the words repeated them.
+                // The two glyphs are the ones every app uses for this, so a label adds nothing.
                 showLabel = false,
                 onClick = onToggleLayout,
             )
             // Telegram pushes new messages into TDLib's database, but this grid was built from a
             // search that ran when it opened, so a video posted since then needs a fresh search.
-            // Icon only, like the refresh on the chat list: the circular arrow is the one glyph
-            // nobody has to be told the meaning of, and the word cost the search field 90dp.
+            // Icon only, like the refresh on the chat list: a label costs the search field 90dp.
             Pill("Refresh", Icons.Filled.Refresh, showLabel = false, onClick = onRefresh)
         }
     }
@@ -1109,10 +1088,8 @@ private fun SelectionBar(
             },
             actions = {
                 TextButton(onClick = onSelectAll) { M3Text("Select all") }
-                // Words, not a bare arrow. The one control on this bar that actually does
-                // something to the ticked videos was a 24 dp glyph in the corner, which is the
-                // same shape and place as a dozen other icon buttons in the app and says nothing
-                // about what it is about to start.
+                // Words, not a bare arrow: this is the one control on the bar that acts on the
+                // ticked videos, and a corner glyph would say nothing about what it starts.
                 Button(
                     onClick = onDownload,
                     enabled = count > 0,
@@ -1178,8 +1155,7 @@ private fun SponsoredCard(
     val touch = isTouch()
     // The amber edge is the whole point of the treatment: this block is an advertisement and has to
     // stay tellable from the videos around it. On a phone that outline belongs to a card, which
-    // draws it in the theme's own amber and against the theme's own surface, rather than to a
-    // hand-painted panel that would still be dark grey on a light screen.
+    // draws it in the theme's own amber and surface rather than a panel painted dark by hand.
     val body: @Composable () -> Unit = {
         Row(
             Modifier
@@ -1291,11 +1267,9 @@ private fun SponsoredCard(
 /**
  * The call to action and the report affordance on a sponsored block.
  *
- * On a phone these are real buttons. What they were was a [Text] with a rounded background behind
- * it, which a screen reader announced as a label rather than as something pressable, and whose
- * touch target came out around 40dp tall. Reporting an advertisement is the one thing on this
- * screen a viewer has a right to be able to do, so it gets a component that behaves like a button.
- * The television keeps the hand-drawn one, whose whole job is to invert when the remote lands on it.
+ * On a phone these are real buttons, so a screen reader announces them as pressable and the touch
+ * target is the full height: reporting an advertisement has to be something a viewer can actually
+ * do. The television keeps the hand-drawn one, whose job is to invert when the remote lands on it.
  */
 @Composable
 private fun SponsoredButton(label: String, primary: Boolean, onClick: () -> Unit) {
@@ -1372,9 +1346,9 @@ private fun Pill(
  * The whole name of whatever the remote is standing on, along the bottom corner.
  *
  * Both arrangements have to cut the name short: a tile has a quarter of the width and a row has
- * two lines of it, and a release name beats either. This is the browser's trick of putting the
- * link under the cursor in the corner of the window. It stays out of the way of the listing, and
- * a name too long even for half the screen scrolls past instead of ending in an ellipsis.
+ * two lines of it, and a release name beats either. Like a browser putting the link under the
+ * cursor in the corner of the window: out of the way of the listing, and a name too long even for
+ * half the screen scrolls past instead of ending in an ellipsis.
  */
 @Composable
 private fun FullName(name: String, modifier: Modifier = Modifier) {
@@ -1474,14 +1448,13 @@ internal fun MediaCard(
         return
     }
 
-    // A phone has no focus to mark, so the hand-painted panel and its border buy it nothing: what
-    // it wants is the surface, the elevation and the ripple every other card in the system has.
+    // A phone has no focus to mark, so it takes the surface, elevation and ripple every other card
+    // in the system has instead of the hand-painted panel.
     if (isTouch()) {
         Card(
             shape = RoundedCornerShape(Corner.Medium),
-            // The same hairline the television's panel carries, for the same reason: in daylight a
-            // card's fill is a shade off the page it sits on, and the caption under it is one line
-            // on some tiles and two on others.
+            // The same hairline the television's panel carries: in daylight a card's fill is only a
+            // shade off the page it sits on.
             border = if (selected == true) {
                 BorderStroke(SELECTED_EDGE, Tone.accent)
             } else {
@@ -1501,10 +1474,8 @@ internal fun MediaCard(
             .background(if (focused) Tone.surfaceHigh else Tone.surface)
             .selectionEdge(selected, RoundedCornerShape(Corner.Medium))
             // A hairline under the focus border, so a tile has an edge even when the remote is
-            // somewhere else. Without it a card is only as visible as its own fill, which in
-            // daylight is a near-white panel on a near-white page: the pictures line up, but the
-            // captions below them do not, because a one-line title sits its running time and size
-            // a line higher than a two-line title does. The edge is what says where one tile ends.
+            // somewhere else. In daylight the fill alone is a near-white panel on a near-white
+            // page, and the edge is what says where one tile ends.
             .border(1.dp, Tone.outline, RoundedCornerShape(Corner.Medium))
             .border(3.dp, border, RoundedCornerShape(Corner.Medium))
             .holdOrPress(interactions, onClick, onLongClick),
@@ -1522,13 +1493,8 @@ private fun MediaCardBody(item: MediaItem, watched: WatchPoint?, selected: Boole
             item.title,
             style = MaterialTheme.typography.titleMedium,
             color = Tone.text,
-            // Two lines. A release file name fills both and then some, and one line cut a title
-            // so early that two videos in the same chat were often the same four words.
-            //
-            // Always two, whether or not the name needs them, which is what the phone's dense
-            // tile already does: the running time and the size hang off the bottom of the title,
-            // so a short name floated them a line above its neighbours and the row of captions
-            // came out ragged.
+            // Two lines, and always two: a release file name fills both, and reserving the height
+            // whether or not the name needs it keeps the meta lines across a row level.
             maxLines = 2,
             minLines = 2,
             overflow = TextOverflow.Ellipsis,
@@ -1589,10 +1555,9 @@ private fun MediaRow(
             MediaArt(
                 item,
                 watched,
-                // A fixed 176dp is a fifth of a television and half a phone held upright, where it
-                // would leave the title about a hundred dp to live in. Reading the whole name is
-                // the reason somebody chose this arrangement, so on a phone the art takes a share
-                // of the row instead and the words keep the rest.
+                // A fixed 176dp is a fifth of a television but half a phone held upright, which
+                // would leave the title about a hundred dp. Reading the whole name is the reason
+                // for this arrangement, so on a phone the art takes a share of the row instead.
                 (if (touch) Modifier.weight(TOUCH_ART_SHARE) else Modifier.width(ROW_ART_WIDTH))
                     .aspectRatio(16f / 9f)
                     .clip(RoundedCornerShape(Corner.Small)),
@@ -1616,8 +1581,8 @@ private fun MediaRow(
         }
     }
 
-    // Same reasoning as the tile: on a phone this is a card, with the system's own surface and
-    // ripple, and the border only ever meant anything to a remote.
+    // Same reasoning as the tile: on a phone this is a card with the system's own surface and
+    // ripple, since the focus border only means anything to a remote.
     if (touch) {
         Card(
             shape = RoundedCornerShape(Corner.Medium),
@@ -1634,9 +1599,8 @@ private fun MediaRow(
 /**
  * How much room the gesture bar or the navigation buttons take at the bottom of a phone.
  *
- * Read rather than assumed: it is 0 on a device with hardware keys, about 24 dp under gesture
- * navigation and about 48 dp under three buttons, and the last row of a grid was drawn under all
- * three of them.
+ * Read rather than assumed: 0 on a device with hardware keys, about 24 dp under gesture navigation
+ * and about 48 dp under three buttons. Without it the last row of a grid sits under the bar.
  */
 @Composable
 private fun navigationBarPadding(): Dp = with(LocalDensity.current) {
@@ -1657,9 +1621,8 @@ private fun MediaArt(
      */
     durationOverlay: Boolean = false,
     /**
-     * A tile a third of a phone wide, where the badges have to come down with it. At the
-     * television's size they are a label in the corner of a picture; at this size, drawn to the
-     * same figures, two of them cover most of the artwork they are annotating.
+     * A tile a third of a phone wide, where the badges have to come down with it: at the
+     * television's figures two of them would cover most of the artwork they annotate.
      */
     compact: Boolean = false,
     /**
@@ -1696,9 +1659,8 @@ private fun MediaArt(
         val waiting = coming
         if (waiting != null) {
             // Takes the "Saved" badge's corner, and takes precedence over it: a video being
-            // fetched is the more urgent fact, and both in one corner would overlap. This is the
-            // whole answer to "I ticked three films and only one of them looks like anything is
-            // happening": the other two say so on their own tiles.
+            // fetched is the more urgent fact, and both in one corner would overlap. Every ticked
+            // video says on its own tile where in the queue it is.
             Text(
                 when (waiting.stage) {
                     OfflineDownloads.Stage.Running ->
@@ -1727,8 +1689,7 @@ private fun MediaArt(
             )
         } else if (item.onDevice) {
             Text(
-                // Not "On this TV": the same badge is drawn on a phone, where it was telling the
-                // viewer about a television they are not holding.
+                // Not "On this TV": the same badge is drawn on a phone.
                 "Saved",
                 style = tagStyle,
                 // The one badge here that is the app speaking rather than a fact about the picture,
@@ -1778,14 +1739,12 @@ private fun MediaArt(
             )
         }
         if (watched != null && watched.fraction > 0f) {
-            // A thin bar along the bottom of the art, the one place a viewer already looks
-            // to see whether they have started something.
-            //
-            // Material draws this one on a phone, gap and rounded ends included, so it matches the
-            // bar under the video the tile opens. The television keeps the two plain rectangles:
-            // its progress bar is read across a room, where a gap in the middle of a 6dp line only
-            // reads as a fault in the panel. The track stays black in both, because it lies over
-            // artwork rather than over any surface the theme knows about.
+            // A thin bar along the bottom of the art, where a viewer already looks to see whether
+            // they have started something. Material draws it on a phone, gap and rounded ends
+            // included, so it matches the bar under the video the tile opens. The television keeps
+            // two plain rectangles: read across a room, a gap in a 6dp line looks like a fault in
+            // the panel. The track stays black in both, since it lies over artwork rather than
+            // over any surface the theme knows about.
             val track = Color.Black.copy(alpha = 0.55f)
             if (isTouch()) {
                 LinearProgressIndicator(
@@ -1864,10 +1823,8 @@ private fun Modifier.longPressable(onClick: () -> Unit, onLongClick: (() -> Unit
 /**
  * The remote's equivalent: OK opens the video, holding OK opens its menu.
  *
- * A television has no second button, so the menu that a phone reaches by long press had nowhere to
- * live on this screen and the tiles here were a plain press only. That was tolerable while the menu
- * only repeated what the name strip already says, and is not once it is the way into picking
- * several videos at once.
+ * A television has no second button, so a hold is the only way to reach the menu that a phone
+ * opens with a long press, and that menu is the way into picking several videos at once.
  */
 @Composable
 private fun Modifier.holdOrPress(
@@ -1893,10 +1850,6 @@ private fun Modifier.selectionEdge(selected: Boolean?, shape: Shape): Modifier =
 /**
  * What can be done with the video being held down.
  *
- * A television has the name strip along the bottom, which follows the remote with no gesture to
- * learn. A phone has nothing equivalent, so the long press opened a sheet, and for a while that
- * sheet said the name and the numbers and offered nothing at all to do about them.
- *
  * Sharing and handing the file to another player are only offered once the whole video is on the
  * device, because both of them pass a path to somebody else's app: a half-downloaded file opened
  * in VLC is a video that plays for two minutes and stops, with nothing on screen to say why.
@@ -1908,6 +1861,7 @@ private fun MediaActionsSheet(
     watched: WatchPoint?,
     onPlay: () -> Unit,
     onSelectVideos: () -> Unit,
+    onDownloadForLater: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -1975,11 +1929,9 @@ private fun MediaActionsSheet(
                     icon = TmIcons.Download,
                     detail = "Kept here, no signal needed",
                     onSelect = {
-                        // Android 13 counts a download's progress notification as one the viewer
-                        // has to have agreed to. Asked here rather than at first launch, because
-                        // here is the one moment the request explains itself.
-                        askForNotifications(context)
-                        OfflineDownloads.start(context, item, chatTitle)
+                        // Through the same planner the multi-select uses, which asks the disk
+                        // first and spends the watch cache if that is what makes room.
+                        onDownloadForLater()
                         onDismiss()
                     },
                 ),
@@ -2160,8 +2112,8 @@ private const val COLUMNS = 4
 /**
  * The narrowest a video tile may be on a phone before the grid drops a column.
  *
- * Smaller than it was: the art only has to be recognisable, and taking 36dp off it is what buys
- * the extra column and the room for the name underneath.
+ * The art only has to be recognisable, and this width is what leaves room for an extra column and
+ * for the name underneath.
  */
 private val TOUCH_TILE_MIN = 120.dp
 
@@ -2189,10 +2141,9 @@ private val DENSE_GAP = 4.dp
 /**
  * Thicker than the focus border it is drawn over, so the two never read as the same mark.
  *
- * Halved from five. A five dp edge on every tile of a selection is a grid that turns into a wall
- * of accent the moment more than two or three videos are ticked, and it ate enough of each
- * thumbnail to change what the picture showed. Two and a half still reads as deliberate against
- * the two dp focus ring, and the tick in the corner is what actually says "selected" anyway.
+ * Kept thin: a heavier edge on every ticked tile turns the grid into a wall of accent and eats
+ * enough of each thumbnail to change what the picture shows. This still reads as deliberate
+ * against the two dp focus ring, and the tick in the corner is what says "selected" anyway.
  */
 private val SELECTED_EDGE = 2.5.dp
 

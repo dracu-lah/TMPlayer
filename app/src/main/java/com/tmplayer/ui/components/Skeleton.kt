@@ -57,9 +57,8 @@ import com.tmplayer.ui.theme.Tv
 class Shimmer internal constructor(
     private val progress: State<Float>,
     /**
-     * The band's three stops, read once where the theme is in scope. A placeholder is the first
-     * thing a screen draws, so on a phone it has to be the scheme's own greys: a dark block
-     * shimmering on a white window is the loading state announcing the wrong app.
+     * The band's three stops, read once where the theme is in scope. They must be the scheme's own
+     * greys, so a light window does not shimmer a dark block.
      */
     private val colors: List<Color>,
 ) {
@@ -67,9 +66,8 @@ class Shimmer internal constructor(
         // A zero-width element would ask for a gradient whose two ends are the same point.
         if (width <= 0f) return SolidColor(colors.first())
         // The band is as wide as the element and travels from just off its left edge to just off
-        // its right, so every placeholder completes a full sweep in step with its neighbours no
-        // matter how wide it is. It is fully outside the element at both ends of the animation,
-        // which is what hides the jump back to the start.
+        // its right, so every placeholder sweeps in step with its neighbours whatever its width,
+        // and is fully outside the element at both ends, hiding the jump back to the start.
         val x = (progress.value * 2f - 1f) * width
         return Brush.linearGradient(
             colors = colors,
@@ -125,13 +123,10 @@ fun SkeletonBox(
 /**
  * Stand-in for the chat list, shaped like the rows that are about to replace it.
  *
- * The card itself is drawn solid and only its contents shimmer, because the row is the part we are
- * certain about; it is the avatar and the name inside it that are still unknown.
- *
- * The measurements follow the screen the same way the real listing does: a phone gets the touch
+ * The card is drawn solid and only its contents shimmer, because the row is the part we are certain
+ * about. The measurements follow the screen the way the real listing does: a phone gets the touch
  * insets and as many columns as its width allows, a television the overscan margin and its fixed
- * three. A placeholder laid out for the wrong screen is worse than none, because the jump when the
- * real cards arrive is exactly the shift it was there to prevent.
+ * three, so nothing shifts when the real cards arrive.
  */
 @Composable
 fun ChatListSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLayout.List) {
@@ -148,10 +143,8 @@ fun ChatListSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLay
         val height = maxHeight - top
 
         // The rows the real list draws, so the two agree. A phone's chat list is Material's
-        // two-line list item: 72dp full bleed, a 56dp avatar, 16dp in from each edge and 16dp
-        // between the picture and the name, with no gap between rows. The television's is an 84dp
-        // card with a 64dp avatar and a 14dp gap. A placeholder built to the other one's figures
-        // is exactly the jump it exists to prevent.
+        // two-line list item: 72dp full bleed, a 56dp avatar, 16dp insets, no gap between rows.
+        // The television's is an 84dp card with a 64dp avatar and a 14dp gap.
         val rowHeight = if (touch) 72.dp else 84.dp
         val rowGap = if (touch) 0.dp else 14.dp
         val avatar = if (touch) Avatar.List else 64.dp
@@ -188,8 +181,7 @@ fun ChatListSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLay
                         SkeletonBox(shimmer, Modifier.size(avatar), CircleShape)
                         Spacer(Modifier.width(if (touch) 16.dp else 24.dp))
                         // Weighted, so the bars below are measured against the room the name
-                        // actually has. Widths in dp were written for a television and run off
-                        // the side of a phone, where the row is a third as wide.
+                        // actually has. Widths in dp would run off the side of a phone.
                         Column(
                             Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -245,12 +237,9 @@ fun ChatListSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLay
 
 /**
  * Stand-in for the video listing: the same columns, the same 16:9 art and the same spacing, so
- * nothing shifts sideways at the moment the real tiles arrive. The column count is worked out the
- * way the listing works it out, from the width, so a phone in either orientation gets the grid it
- * is about to be given rather than the television's four.
- *
- * It follows [layout] for the same reason it matches the grid's measurements: a screen of tiles
- * that resolves into a screen of rows is the placeholder having described the wrong thing.
+ * nothing shifts sideways when the real tiles arrive. The column count is worked out from the width
+ * the way the listing works it out, so a phone in either orientation gets the grid it is about to
+ * be given. It follows [layout] for the same reason.
  */
 @Composable
 fun MediaGridSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLayout.Grid) {
@@ -264,8 +253,8 @@ fun MediaGridSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLa
         val height = maxHeight
 
         // The phone's grid is compact: small tiles a hairline apart, with two lines of the name
-        // under each. The placeholder has to be the same, or the shimmer resolves into a listing
-        // that has moved.
+        // under each. The placeholder must match, or the shimmer resolves into a listing that has
+        // moved.
         val dense = touch && layout == CardLayout.Grid
         val gridGap = if (dense) DENSE_GAP else 16.dp
         val gridEdge = if (dense) DENSE_GAP else edge
@@ -384,8 +373,8 @@ private fun MediaTileSkeleton(shimmer: Shimmer, modifier: Modifier = Modifier) {
 /**
  * Enough rows of [step] to reach the bottom of [height], and then one more.
  *
- * The spare row is what stops the placeholder ending in mid-screen on a tall phone, which reads as
- * a short list that has finished loading rather than a screen still on its way.
+ * The spare row stops the placeholder ending in mid-screen on a tall phone, which would read as a
+ * short list that has finished loading.
  */
 private fun rowsToFill(height: Dp, step: Dp): Int {
     if (step <= 0.dp) return 1
@@ -414,13 +403,13 @@ private const val MAX_ROWS = 12
 /** The smallest tile the phone grids accept, matching `TOUCH_TILE_MIN` on both browse screens. */
 private val TOUCH_TILE_MIN = 120.dp
 
-/** The phone insets, matching `TouchInsets` on the browse screen and `TOUCH_EDGE` on the grid. */
 /** Barely a hairline between tiles. Mirrors the listing's own figure. */
 private val DENSE_GAP = 4.dp
 
 /** Two small lines of caption under a dense tile, matching the two the real tile reserves. */
 private val DENSE_CAPTION_HEIGHT = 44.dp
 
+/** The phone insets, matching `TouchInsets` on the browse screen and `TOUCH_EDGE` on the grid. */
 private val TOUCH_INSET = 16.dp
 private val TOUCH_TOP = 8.dp
 
@@ -432,7 +421,7 @@ private val ROW_ART_WIDTH = 176.dp
 private const val TOUCH_ART_SHARE = 0.4f
 
 /**
- * Title bars as a share of the room the title has, rather than a width in dp: the same row is a
- * third as wide on a phone, where fixed bars would simply run off the side of the card.
+ * Title bars as a share of the room the title has, rather than a width in dp, since fixed bars
+ * would run off the side of a phone's narrower card.
  */
 private val TITLE_FRACTIONS: List<Float> = listOf(0.72f, 0.5f, 0.86f, 0.6f, 0.8f, 0.42f, 0.66f)

@@ -10,12 +10,10 @@ package com.tmplayer.data
  *
  * A video that landed only because somebody pressed Play is the cache. There is one of it. Playing
  * something else replaces it, on a television and on a phone alike, because a copy of last night's
- * film that nobody asked to keep is a gigabyte of somebody's device spent on nothing. The rule used
- * to be a number the viewer set, defaulting to one on both, and a setting whose every offered value
- * beyond the default was a way to fill your own disk by accident is a setting that was only ever
- * going to be turned back down.
+ * video that nobody asked to keep is a gigabyte of somebody's device spent on nothing. It is not a
+ * number the viewer can raise: every value above one is a way to fill your own disk by accident.
  *
- * Two things can force a deletion: the cache holding a different film, and the disk being full.
+ * Two things can force a deletion: the cache holding a different video, and the disk being full.
  * Both are answered before a single byte is fetched, so the viewer is told the video will not fit
  * instead of watching it stall two thirds of the way through. The arithmetic is all here, pure, so
  * it can be tested without a device or TDLib.
@@ -31,16 +29,12 @@ object CacheShelf {
     /**
      * What the app is allowed to keep on disk, given the size of the disk.
      *
-     * This was a flat four gigabytes, written for "a device whose whole disk is eight". The stick
-     * this app was built for reports 4.85 GB of usable data partition, not eight, so the ceiling
-     * was very nearly the whole volume: the app was behaving exactly as designed while filling the
-     * device to the last megabyte, and the trim that is supposed to stop that had no work to do
-     * until the disk was already gone. Anything expressed in absolute bytes has this failure in
-     * it somewhere, so the ceiling is a share of the volume with a floor and a cap.
+     * A share of the volume rather than a flat number of bytes: a flat ceiling written for a large
+     * disk is very nearly the whole volume on a small one, such as a stick with 4.85 GB usable.
      *
      * Two limits, whichever binds first: a share of the volume, and enough left over that the
      * device still works. [MIN_CEILING_BYTES] stops the arithmetic from arriving at a number too
-     * small to hold one film on a device that is already nearly full, where the honest answer is
+     * small to hold one video on a device that is already nearly full, where the honest answer is
      * that the video will not fit and [plan] is what says so.
      */
     fun ceiling(totalBytes: Long): Long {
@@ -50,7 +44,7 @@ object CacheShelf {
         return minOf(MAX_CEILING_BYTES, share, leavingRoom).coerceAtLeast(MIN_CEILING_BYTES)
     }
 
-    /** What the app keeps at most, on a device with room to spare: a couple of films. */
+    /** What the app keeps at most, on a device with room to spare: a couple of videos. */
     const val MAX_CEILING_BYTES = 4L * 1024 * 1024 * 1024
 
     /** Never less than this, or a stick could not hold a single video. */
@@ -125,7 +119,7 @@ object CacheShelf {
         val available = freeBytes + reclaim
         if (available < needed) {
             // Short even with the cache emptied. Nothing is deleted for a play that cannot happen:
-            // giving up last night's film and failing anyway is the worst of both.
+            // giving up last night's video and failing anyway is the worst of both.
             return Plan.NotEnoughSpace(
                 shortfallBytes = needed - available,
                 reclaimBytes = keptBytes,
@@ -149,7 +143,7 @@ object CacheShelf {
      *
      * [reclaimFileIds] is the cache the batch is spending to make room, which the caller deletes
      * before it starts fetching. [outOfSpace] is true when at least one video was turned away for
-     * want of room, which is the only thing that can turn one away now.
+     * want of room, which is the only thing that can turn one away.
      */
     data class Batch(
         val fits: List<Int>,
@@ -166,9 +160,9 @@ object CacheShelf {
      * exactly one place, and a batch is only ever what a sequence of ordinary downloads would
      * have been.
      *
-     * The watch cache is fair game here and the viewer's own downloads are not. A film nobody asked
-     * to keep should not be the reason a film somebody did ask for is refused, and equally, ticking
-     * three videos is not permission to delete last week's.
+     * The watch cache is fair game here and the viewer's own downloads are not. A video nobody
+     * asked to keep should not be the reason a video somebody did ask for is refused, and equally,
+     * ticking three videos is not permission to delete last week's.
      *
      * A refusal is not the end of the loop. A single large video in the middle of a selection can
      * be the only one that will not fit, and stopping there would refuse the small ones behind it
@@ -179,7 +173,7 @@ object CacheShelf {
         cached: List<Held>,
         freeBytes: Long,
     ): Batch {
-        // Spent up front rather than one video at a time: the cache is a single film, so the first
+        // Spent up front rather than one video at a time: the cache is a single video, so the first
         // candidate that needs the room takes all of it, and the rest are planned against a disk
         // that already has it back.
         val reclaimable = cached.distinctBy { it.fileId }

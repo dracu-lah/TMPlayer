@@ -5,26 +5,19 @@ import com.tmplayer.player.StreamStats
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 /**
  * The videos the viewer asked to keep: what is arriving, what is waiting its turn, what is held.
  *
- * This is the difference between the cache and a download. Playing something already fills the
- * cache with it, but that copy belongs to the player: closing the video cancels what was still
- * coming, and the next video may evict it. A download asked for by name is for the train, and has
- * to survive the app being put away, so it is fetched by a foreground service with a notification
- * of its own rather than by whichever screen happened to start it.
+ * Unlike a cached copy, a download has to survive the app being put away, so it is fetched by a
+ * foreground service rather than by whichever screen started it. Several ticked videos are fetched
+ * one at a time: bandwidth divided three ways finishes all three late rather than the first early.
+ * That queue is the state here, and the Downloads screen and the notification both draw it.
  *
- * Three videos ticked at once are three downloads, not one. They are fetched one at a time, because
- * a phone's bandwidth divided three ways finishes all three late rather than the first one early,
- * and the two that are not being fetched are visible and waiting rather than silently discarded.
- * That queue is the state here, and it is what the Downloads screen and the notification both draw.
- *
- * What is in memory is the live picture; [DownloadService] mirrors the unfinished part of it to the
- * preference store as it changes, so a crash or a kill comes back to the same list of videos rather
- * than to an empty screen and a half-written file nobody remembers asking for. [restore] is what
- * reads it back, and it comes back paused: a process that died deserves a viewer's press before it
- * starts pulling a gigabyte again.
+ * [DownloadService] mirrors the unfinished part to the preference store as it changes, so a crash
+ * comes back to the same list. [restore] reads it back paused, so a killed process does not start
+ * pulling a gigabyte again with nobody near the phone.
  */
 object OfflineDownloads {
 
@@ -44,18 +37,14 @@ object OfflineDownloads {
          *
          * Kept apart from [Paused] because the two have opposite futures. A viewer who pressed
          * Pause has said "not now", and nothing should start it again behind their back; a phone
-         * that walked into a tunnel has said nothing at all, and the download it interrupted
-         * should pick itself up when the signal does.
+         * that walked into a tunnel has said nothing at all, and should pick itself up when the
+         * signal does.
          */
         Offline,
 
         /**
-         * Held because the only connection is one the viewer pays for by the byte, and they have
-         * asked for Wi-Fi only.
-         *
-         * The setting existed and the player obeyed it; this did not, so somebody who had turned
-         * on "Only download over Wi-Fi" and ticked three films got three films over cellular. It
-         * waits for Wi-Fi in exactly the way the one above waits for a signal.
+         * Held because the only connection is metered and the viewer asked for Wi-Fi only. Waits
+         * for Wi-Fi in exactly the way [Offline] waits for a signal.
          */
         NoWifi,
 
@@ -146,11 +135,8 @@ object OfflineDownloads {
     /**
      * Writes down a download Android would not let this app start.
      *
-     * This used to be a line in logcat and nothing else, which is the worst answer this screen can
-     * give: the viewer pressed Download, no row appeared, no notification appeared, and there was
-     * nothing anywhere to press again. "I was not able to download it" is exactly what that looks
-     * like from the outside. A failed row is not a fix for the refusal, but it is the difference
-     * between a button that did nothing and a video that says what happened and offers Try again.
+     * A failed row is not a fix for the refusal, but it is the difference between a button that
+     * appears to do nothing and a video that says what happened and offers Try again.
      */
     private fun refused(request: DownloadRequest) {
         val existing = _active.value[request.fileId]
@@ -251,23 +237,38 @@ object OfflineDownloads {
 
     // ---- called by the service --------------------------------------------------------------
 
+    /**
+     * All of these go through [MutableStateFlow.update] rather than assigning `.value`.
+     *
+     * `value = value + x` is a read and then a write, and the writers here genuinely overlap: the
+     * per-second progress ticker on the service's scope, the block that finishes a download, the
+     * network watcher, and `enqueue`/`cancel`/`pause` arriving from `onStartCommand` on the main
+     * thread. A [forget] losing to a ticker's [note] built from an older snapshot leaves a row for
+     * a video that is finished or cancelled, and since `stopWhenIdle` asks this map whether
+     * anything is still busy, that ghost keeps the foreground service alive for the session.
+     *
+     * [stage] and [sample] read an entry and write a copy of it, so they take the whole
+     * read-modify-write inside one `update` block rather than reading first and calling [note].
+     */
     internal fun note(progress: Progress) {
-        _active.value = _active.value + (progress.fileId to progress)
+        _active.update { it + (progress.fileId to progress) }
     }
 
     /** Moves one entry to another stage, leaving its figures alone. Absent ids are ignored. */
     internal fun stage(fileId: Int, stage: Stage, failure: String? = null) {
-        val previous = _active.value[fileId] ?: return
-        note(
-            previous.copy(
-                stage = stage,
-                failure = failure,
-                // A row that is not running is not arriving at any speed, and a stale figure on a
-                // paused row reads as though it were still coming down.
-                bytesPerSecond = if (stage == Stage.Running) previous.bytesPerSecond else 0,
-                sampledAtMs = if (stage == Stage.Running) previous.sampledAtMs else 0,
-            ),
-        )
+        _active.update { map ->
+            val previous = map[fileId] ?: return@update map
+            map + (
+                fileId to previous.copy(
+                    stage = stage,
+                    failure = failure,
+                    // A row that is not running is not arriving at any speed, and a stale figure
+                    // on a paused row reads as though it were still coming down.
+                    bytesPerSecond = if (stage == Stage.Running) previous.bytesPerSecond else 0,
+                    sampledAtMs = if (stage == Stage.Running) previous.sampledAtMs else 0,
+                )
+                )
+        }
     }
 
     /**
@@ -281,10 +282,11 @@ object OfflineDownloads {
      * whatever it last managed.
      */
     internal fun sample(fileId: Int, downloadedBytes: Long, nowMs: Long = System.currentTimeMillis()) {
-        val previous = _active.value[fileId] ?: return
+        _active.update { map ->
+        val previous = map[fileId] ?: return@update map
         // A tick that arrives after the viewer pressed pause must not put the row back to running,
         // and must not report a speed for something that has stopped.
-        if (previous.stage != Stage.Running) return
+        if (previous.stage != Stage.Running) return@update map
         val elapsedMs = nowMs - previous.sampledAtMs
         val ready = previous.sampledAtMs > 0 && elapsedMs >= MIN_SAMPLE_MS
         val rate = when {
@@ -299,21 +301,18 @@ object OfflineDownloads {
                 }
             }
         }
-        note(
-            previous.copy(
+        map + (
+            fileId to previous.copy(
                 downloadedBytes = downloadedBytes,
                 bytesPerSecond = rate.toLong().coerceAtLeast(0L),
                 sampledAtMs = if (ready || previous.sampledAtMs == 0L) nowMs else previous.sampledAtMs,
-            ),
-        )
+            )
+            )
+        }
     }
 
     internal fun forget(fileId: Int) {
-        _active.value = _active.value - fileId
-    }
-
-    internal fun forgetAll() {
-        _active.value = emptyMap()
+        _active.update { it - fileId }
     }
 
     /** The file id that means "all of them", since no real file has it. */

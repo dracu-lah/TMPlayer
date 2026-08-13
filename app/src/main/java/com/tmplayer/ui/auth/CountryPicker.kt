@@ -50,10 +50,9 @@ import com.tmplayer.ui.theme.Tone
  * pane rather than floating over it: on a phone a list of two hundred rows behind a keyboard needs
  * the whole screen, and a half-height sheet only makes the scrolling longer.
  *
- * Touch only. The television keeps the plain international field it has always had, where a remote
- * would have to walk this list a row at a time. Because nothing but a phone ever draws it, this is
- * the one screen in the sign-in that can be written straight against the phone's Material theme
- * with no branch in it.
+ * Touch only: a remote would have to walk this list a row at a time, so the television keeps its
+ * plain international field. Since nothing but a phone draws this, it is the one sign-in screen
+ * written straight against the phone's Material theme with no branch in it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

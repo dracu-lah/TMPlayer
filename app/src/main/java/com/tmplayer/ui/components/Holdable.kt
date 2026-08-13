@@ -25,20 +25,15 @@ import androidx.compose.ui.semantics.semantics
 /**
  * OK opens the thing; holding OK opens its menu.
  *
- * Written out of key events rather than handed to `combinedClickable`, whose long press was
- * verified on the target device and does not fire: neither a real hold on the remote nor an
- * injected `input keyevent --longpress` reached the callback, and a hold swallowed the ordinary
- * click along with it. Auto-repeat is the signal used instead. A remote sends the first repeat
- * only once the key has been down for the system's own long-press interval, which is the same
- * instant a long press is meant to happen and it needs no timer of ours to measure.
+ * On the remote this is written out of key events: `combinedClickable`'s long press does not fire
+ * for a D-pad hold on the target device, and it swallows the ordinary click as well. Auto-repeat is
+ * the signal used instead, since the first repeat arrives exactly at the system's own long-press
+ * interval and needs no timer of ours. Click therefore fires on key up, not key down, so that a
+ * hold does not also count as a press.
  *
- * Click therefore fires on key up, not key down, so that a hold does not also count as a press.
- *
- * None of that applies to a finger. There are no key events to read on a phone, and the semantics
- * below describe the gestures without ever performing them, so a card wired only to the remote
- * path is inert under touch. `combinedClickable` is what does work there: its long press fires on
- * a real screen even though it did not on the remote, and it brings the press ripple that a touch
- * viewer expects and that focus colour alone cannot stand in for.
+ * A finger sends no key events, and the semantics below describe the gestures without performing
+ * them, so touch goes to `combinedClickable`: its long press does work on a real screen, and it
+ * brings the press ripple that focus colour alone cannot stand in for.
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
@@ -97,11 +92,9 @@ fun Modifier.holdable(
 /**
  * A plain press, with the feedback each device understands.
  *
- * A television marks the thing under the cursor with a border and a colour, and a ripple under a
- * cursor that is already visible is noise, so `indication = null` was right there and was applied
- * everywhere. On a phone there is no cursor and no focus: with the indication off, a tap on a
- * video tile produced no visible response at all until the player opened, which on a slow chat is
- * a second of the viewer wondering whether the tap landed.
+ * A television already marks the focused thing with a border and a colour, so a ripple there is
+ * noise. A phone has no focus to show, and without the ripple a tap has no visible answer until
+ * whatever it started finishes.
  */
 @Composable
 fun Modifier.pressable(

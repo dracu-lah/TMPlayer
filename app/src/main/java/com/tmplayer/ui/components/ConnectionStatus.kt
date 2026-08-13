@@ -61,7 +61,7 @@ fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier) {
                 )
                 ConnectionNotice.Reconnecting -> Spinner(
                     size = 20.dp,
-                    // The television's spinner is left at its accent, where it always was.
+                    // The television's spinner keeps its accent colour.
                     color = if (touch) onContainer else Color.Unspecified,
                     strokeWidth = 2.dp,
                 )

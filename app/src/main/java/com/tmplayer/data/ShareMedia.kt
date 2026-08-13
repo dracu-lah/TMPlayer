@@ -9,14 +9,8 @@ import java.io.File
 /**
  * Hands a downloaded video to whatever else is on the phone.
  *
- * The file provider and its scoped path have been in the manifest since downloads existed, with a
- * comment about the Share sheet and nothing anywhere that opened one: a viewer could fill a phone
- * with films for a journey and had no way to put one on somebody else's device, or to open one in
- * a player that reads a format this app cannot.
- *
- * Only complete files. A partial video is a video that stops in the middle, and neither the Share
- * sheet nor the app receiving it has any way to say so, which turns "here is the film" into a
- * complaint two hours away from here.
+ * Complete files only. A partial video stops in the middle, and neither the Share sheet nor the
+ * app receiving it has any way to say so.
  */
 object ShareMedia {
 
@@ -63,9 +57,8 @@ object ShareMedia {
      * A content URI for one file, or null when it is not somewhere this app may share from.
      *
      * The provider only maps TDLib's media directory, so anything outside it throws rather than
-     * returning null. That is the right answer and the wrong shape: a video that has been moved or
-     * deleted between the list being drawn and the button being pressed should drop out of the
-     * share, not take the app down with it.
+     * returning null. A video moved or deleted between the list being drawn and the button being
+     * pressed should drop out of the share rather than take the app down with it.
      */
     private fun uriFor(context: Context, path: String): Uri? {
         val file = File(path)

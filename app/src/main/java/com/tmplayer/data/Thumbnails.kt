@@ -24,8 +24,8 @@ object Thumbnails {
     /**
      * Sized from the device rather than fixed.
      *
-     * A flat 12 MB was a twelfth of the heap on a 1 GB stick, whose per-app limit is around 96 MB,
-     * and a rounding error on a phone with 8 GB. An eighth of the heap is the figure image
+     * A flat figure is a large share of the heap on a 1 GB stick, whose per-app limit is around
+     * 96 MB, and a rounding error on a phone with 8 GB. An eighth of the heap is the figure image
      * libraries settle on for the same reason.
      */
     @Volatile
@@ -42,12 +42,7 @@ object Thumbnails {
         cache = newCache(bytes)
     }
 
-    /**
-     * Hands the pictures back when the system says it needs the memory.
-     *
-     * Nothing implemented onTrimMemory anywhere before this, so the one cache in the app that
-     * holds bitmaps held on to all of them right up to the point the process was killed for it.
-     */
+    /** Hands the pictures back when the system says it needs the memory. */
     fun trim(level: Int) {
         if (level >= TRIM_EVERYTHING) cache.evictAll() else cache.trimToSize(cache.size() / 2)
     }
@@ -89,10 +84,9 @@ object Thumbnails {
         )
         if (started is TdlResult.Failure) return null
 
-        // A row scrolls away and the coroutine waiting on its picture is cancelled, but TDLib was
-        // never part of that conversation and carries on fetching. On a long scroll that is a
-        // queue of downloads for cards nobody can see, competing with the video for the same
-        // connection, so the request is withdrawn on the way out as well.
+        // Cancelling the waiting coroutine does not stop TDLib fetching, which on a long scroll
+        // leaves a queue of downloads for cards nobody can see competing with the video for the
+        // same connection. So withdraw the request on the way out too.
         val done = try {
             withTimeoutOrNull(DOWNLOAD_TIMEOUT_MS) {
                 td.fileUpdates

@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -136,10 +135,8 @@ internal fun TouchBrowseShell(
             // from the scheme, which on this device may have been taken from the wallpaper.
             ModalDrawerSheet(
                 drawerState = drawerState,
-                // Material's own default is 360dp, which is most of a phone's width given over
-                // to a handful of one-word destinations and a name. The sheet is sized to what
-                // it holds instead, and still yields to the screen on the narrowest devices so
-                // that it can never cover the page it is a way back to.
+                // Sized to what it holds rather than Material's 360dp default, and still yielding
+                // to the screen on the narrowest devices so it can never cover the page behind it.
                 modifier = Modifier.width(min(DRAWER_WIDTH, screenWidth * DRAWER_MAX_FRACTION)),
             ) {
                 DrawerBrand()
@@ -158,10 +155,8 @@ internal fun TouchBrowseShell(
 
                     DrawerSeparator("Chats")
 
-                    // The ways of slicing the chat list. Grouping them under a heading is what
-                    // turns a dozen flat destinations into short lists: flat, they read as one
-                    // undifferentiated pile, and the eye had to check every one of them to find
-                    // out that several were the same kind of thing.
+                    // The ways of slicing the chat list. The heading is what turns a dozen flat
+                    // destinations into short lists the eye can take in as groups.
                     DrawerDestinations(
                         sections.filter { it !in LIBRARY_TABS && it !is BrowseSection.Folder },
                         selected,
@@ -203,10 +198,9 @@ internal fun TouchBrowseShell(
                 DrawerDestination(
                     label = "Downloads",
                     selected = false,
-                    // How many videos are coming down right now, which is the one thing on this
-                    // row worth interrupting somebody for. A download outlives the screen it was
-                    // started from, so without a mark here the only evidence it is still running
-                    // is a notification the viewer may well have swiped away.
+                    // How many videos are coming down right now. A download outlives the screen it
+                    // was started from, so without a mark here the only evidence it is running is
+                    // a notification the viewer may well have swiped away.
                     badge = downloadCount.takeIf { it > 0 }?.toString(),
                     icon = { Icon(TmIcons.Download, contentDescription = null) },
                     onClick = { close(); onOpenDownloads() },
@@ -242,10 +236,9 @@ internal fun TouchBrowseShell(
         LaunchedEffect(searching) {
             if (searching) scrollBehavior.state.heightOffset = 0f
         }
-        // The bar comes back whenever the screen underneath it changes. Without this it stayed
-        // hidden across a change of tab and across coming back from the player, and on a tab too
-        // short to scroll there was then no pull-down that could bring it back: the title, the
-        // hamburger and every way out of the screen were simply gone.
+        // The bar comes back whenever the screen underneath it changes. A bar left hidden across a
+        // change of tab has no pull-down to restore it on a tab too short to scroll, which takes
+        // the title, the hamburger and every way out of the screen with it.
         LaunchedEffect(selected, title) { scrollBehavior.state.heightOffset = 0f }
         // And again on the way back from the player, which is an activity coming forward rather
         // than a recomposition, so nothing above would have noticed it.
@@ -319,9 +312,8 @@ internal fun TouchBrowseShell(
 /**
  * The search box that lives inside the app bar, in place of the title.
  *
- * This replaces a pill that sat permanently above the listing with a mic beside it and a Clear
- * button beside that: three controls, always on screen, in the space a phone wants to spend on
- * content. The Telegram idiom, and Material's, is a magnifier that becomes the bar.
+ * A magnifier that becomes the bar is both the Telegram idiom and Material's, and it spends no
+ * permanent screen space on controls a phone would rather give to content.
  *
  * A [BasicTextField] rather than a `TextField`, because Material's own field brings a container,
  * a label slot and a good deal of vertical padding that a 64 dp app bar has no room for.
@@ -390,9 +382,8 @@ private fun DrawerDestination(
 /**
  * One group of destinations.
  *
- * Split out so the drawer can be read as the two lists it actually is rather than as one column
- * of seven, which is what it was: a mark, an app name, an avatar, a name, a handle and then seven
- * peers, all before the eye reached anything it could act on.
+ * Split out so the drawer reads as the short lists it actually is rather than as one long column
+ * of peers.
  */
 @Composable
 private fun DrawerDestinations(
@@ -406,9 +397,8 @@ private fun DrawerDestinations(
         DrawerDestination(
             label = entry.label,
             selected = entry == selected,
-            // The only badges left in the list. A count is a thing that changes and is worth
-            // noticing; everything else that used to wear one was static text in a shape that
-            // promised otherwise.
+            // Only counts get a badge: a badge promises something that changes and is worth
+            // noticing, which static text is not.
             badge = when {
                 entry == BrowseSection.of(BrowseTab.Favorites) && favoriteCount > 0 ->
                     favoriteCount.toString()
@@ -425,10 +415,9 @@ private fun DrawerDestinations(
 /**
  * Which app this is, at the top of the drawer and nothing else.
  *
- * A drawer is pulled out of a phone that is running a dozen other things, so it is the
- * conventional place for the app to name itself once, quietly, the way YouTube and NewPipe both
- * do. What used to be here as well was the whole account block, which made the first thing in the
- * drawer the one thing in it nobody opened the drawer to reach.
+ * A drawer is pulled out of a phone that is running a dozen other things, so it is the conventional
+ * place for the app to name itself once, quietly, the way YouTube and NewPipe both do. The account
+ * belongs in the footer, not here: nobody opens a drawer to reach it.
  */
 @Composable
 private fun DrawerBrand() {
@@ -446,7 +435,7 @@ private fun DrawerBrand() {
  * A rule between groups, with an optional heading for the group below it.
  *
  * The heading is deliberately quiet: it is a label on a boundary, not a row, and anything with
- * enough weight to read as a row is one more thing in a drawer that had too many already.
+ * enough weight to read as a row is one more thing to scan past.
  */
 @Composable
 private fun DrawerSeparator(heading: String? = null) {
@@ -464,10 +453,10 @@ private fun DrawerSeparator(heading: String? = null) {
 /**
  * Whose library this is, along the bottom edge.
  *
- * Moved out of the header and shrunk to one line, because it answers a question that gets asked
- * once ever ("am I signed in as the right account?") and it was taking the most valuable space in
- * the sheet to do it. The build number rides here for the same reason: it is a thing to read off
- * when reporting a problem, not a destination, and as a badge on Settings it looked like one.
+ * One line along the bottom, because it answers a question asked once ever ("am I signed in as the
+ * right account?") and should not take the sheet's most valuable space to do it. The build number
+ * rides here for the same reason: it is something to read off when reporting a problem, and as a
+ * badge on Settings it would look like a destination.
  */
 @Composable
 private fun DrawerFooter(account: Account?) {
@@ -507,8 +496,8 @@ private fun DrawerFooter(account: Account?) {
                 overflow = TextOverflow.Ellipsis,
             )
         },
-        // The sheet has already painted its own background, and a row that paints a second one
-        // over it draws a panel around the account for no reason anybody looking at it could name.
+        // The sheet has already painted its own background, and a second one over it draws a
+        // panel around the account for no reason.
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     )
 }
@@ -516,9 +505,8 @@ private fun DrawerFooter(account: Account?) {
 /**
  * What this viewer has been watching. First, because it is what the app is opened for.
  *
- * Everything else the rail offers falls into the group below the rule without being named here: a
- * destination added later belongs in the drawer whether or not anybody remembers to list it, and a
- * second hand-written list is how one quietly stops appearing at all.
+ * Everything else the rail offers falls into the group below the rule without being named here, so
+ * a destination added later appears in the drawer whether or not anybody remembers to list it.
  */
 internal val LIBRARY_TABS = listOf(BrowseTab.Continue, BrowseTab.Favorites, BrowseTab.Recent)
     .map(BrowseSection::of)

@@ -5,8 +5,7 @@ import kotlin.math.roundToLong
 /**
  * Everything the loading screen needs to say "how fast, how much longer".
  *
- * Pure and free of Android so the arithmetic can be tested directly. The numbers on screen are
- * the difference between a viewer waiting patiently and a viewer assuming the app has hung.
+ * Pure and free of Android so the arithmetic can be tested directly.
  */
 object StreamStats {
 
@@ -46,8 +45,8 @@ object StreamStats {
      * How far into the video the download has reached, 0..1.
      *
      * TDLib fills one contiguous window at a time, so the end of that window is the point the
-     * video is watchable up to. That, rather than the number of bytes sitting on disk, is what
-     * someone pausing to ask "how much has downloaded?" wants to know.
+     * video is watchable up to, which is what a viewer means by "how much has downloaded?" rather
+     * than the number of bytes sitting on disk.
      */
     fun downloadedFraction(
         downloadOffset: Long,
@@ -115,8 +114,8 @@ object StreamStats {
  * Turns a series of "total bytes so far" readings into a download speed.
  *
  * Exponentially smoothed, because a raw delta between two TDLib updates swings wildly enough to
- * make the figure on screen unreadable. Resets rather than reports nonsense when the byte count
- * goes backwards, which happens on a seek when the download window moves.
+ * make the figure on screen unreadable. Resets rather than reporting nonsense when the byte count
+ * goes backwards, which happens on a seek as the download window moves.
  */
 class SpeedMeter(private val smoothing: Double = 0.3) {
 

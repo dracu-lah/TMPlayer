@@ -92,10 +92,8 @@ object Updates {
         if (!quiet) _state.value = UpdateState.Checking
         val attempt = withContext(Dispatchers.IO) { runCatching { fetchLatest() } }
         val release = attempt.getOrNull()
-        // Every way this can go wrong used to arrive as the same sentence, which on a television
-        // left nothing to act on and nothing in the log either: a rate-limited API, a release with
-        // no APK on it and a stick with no route out all read as "could not reach GitHub". The
-        // throw is kept, named and written out, so the next report says which of them it was.
+        // A rate-limited API, a release with no APK on it and a stick with no route out all reach
+        // the viewer as much the same sentence, so the cause is logged as well as reported.
         attempt.exceptionOrNull()?.let { Log.w(TAG, "Update check failed", it) }
 
         _state.value = when {
@@ -216,10 +214,10 @@ object Updates {
             setRequestProperty("User-Agent", "TMPlayer/${BuildConfig.VERSION_NAME}")
         }
         val body = connection.use {
-            // Reading the stream without asking what the status was turned a 403 into an
-            // IOException with nothing in it. An anonymous caller gets sixty requests an hour from
-            // an address, and a household behind one address can spend them, so the number is
-            // worth saying out loud rather than reporting as a network that is down.
+            // Check the status before reading the stream, or a 403 arrives as an empty
+            // IOException. An anonymous caller gets sixty requests an hour per address, and a
+            // household behind one address can spend them, so rate limiting is worth naming
+            // rather than reporting as a network that is down.
             val code = it.responseCode
             if (code !in 200..299) {
                 it.errorStream?.close()

@@ -37,10 +37,7 @@ import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.ThemeChoice
 
 /*
- * The six literals the television used to be painted from are gone. They lived here from the days
- * when the app was a television app with one appearance, and keeping them meant a phone and a
- * panel showing the same account in two different colour schemes. Everything now asks [Tone] for a
- * role, and [Tone] answers out of the one Material scheme below.
+ * Everything asks [Tone] for a role, and [Tone] answers out of the one Material scheme below.
  */
 
 
@@ -50,22 +47,16 @@ val Caution = Color(0xFFF5A524)
 /**
  * Red: something failed, or the press about to happen cannot be taken back.
  *
- * Lives here rather than beside each use because four files had grown their own copy of the same
- * literal, and once one of them widened its visibility the rest stopped compiling.
+ * Lives here rather than beside each use so there is a single literal for it.
  */
 val Danger = Color(0xFFE5484D)
 
 
 /**
- * The phone's scheme, handed to the television's Material.
- *
- * The two devices used to be painted from two different sets of colours: the phone from a full
- * Material scheme generated the way Material generates one, the television from six literals
- * chosen by hand years earlier. Put a phone and a panel side by side and they were plainly not the
- * same app, which is the one thing a client for the same account on two screens has to be.
+ * The phone's scheme, handed to the television's Material, so both devices are the same app.
  *
  * TV Material's scheme carries a subset of the roles, so this is the mapping between them. It is
- * built per composition rather than declared, because the phone's scheme is itself a choice now:
+ * built per composition rather than declared, because the phone's scheme is itself a choice:
  * light, dark, and on the television neither is a constant.
  */
 private fun tvColors(scheme: ColorScheme, dark: Boolean) = if (dark) {
@@ -79,8 +70,7 @@ private fun tvColors(scheme: ColorScheme, dark: Boolean) = if (dark) {
         surfaceVariant = scheme.surfaceContainerHigh,
         onSurfaceVariant = scheme.onSurface,
         // TV Material paints a filled Button with `onSurface` and labels it with
-        // `inverseOnSurface`. Leaving these at their defaults is what put white text on a
-        // white pill.
+        // `inverseOnSurface`, so both must be set or the label is invisible on the pill.
         inverseSurface = scheme.inverseSurface,
         inverseOnSurface = scheme.inverseOnSurface,
         error = scheme.error,
@@ -109,9 +99,9 @@ private fun tvColors(scheme: ColorScheme, dark: Boolean) = if (dark) {
  * Type is large enough to read from a sofa but small enough that a heading plus a search row does
  * not consume half the height and push content off the bottom edge.
  *
- * No style carries a colour. A colour baked in here wins over [LocalContentColor], which is how
- * a button ends up painting its label in the surface colour instead of its own content colour.
- * Anything that wants muted text asks [Tone] for it at the call site.
+ * No style carries a colour. A colour baked in here wins over [LocalContentColor], so a button
+ * would paint its label in the surface colour instead of its own content colour. Anything that
+ * wants muted text asks [Tone] for it at the call site.
  */
 private val typography = Typography(
     headlineLarge = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.Bold),
@@ -120,10 +110,8 @@ private val typography = Typography(
     titleMedium = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Medium),
     bodyLarge = TextStyle(fontSize = 15.sp),
     bodyMedium = TextStyle(fontSize = 13.sp),
-    // Defined rather than left to inherit. TV Material's default bodySmall is 12sp, a desk size,
-    // and the two places that use it carry the resume position on a Continue card and the
-    // "nothing is deleted from Telegram" reassurance in every destructive prompt, so the least
-    // readable text on those screens was the text that mattered most.
+    // Defined rather than left to inherit: TV Material's default bodySmall is 12sp, a desk size,
+    // and the places that use it carry text worth reading from a sofa.
     bodySmall = TextStyle(fontSize = 13.sp),
     labelLarge = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
 )
@@ -140,10 +128,8 @@ object Tv {
 /**
  * The three sizes a chat's picture is ever drawn at.
  *
- * There were five, none of them the same as each other and none of them a Material figure: 54 in
- * the phone list, 40 on the television's rail, 32 in the drawer's footer, 64 on a card. The list
- * one is the one that matters, and 56 is what Material's two-line list item is drawn with, which
- * is what Telegram and the dialler put there.
+ * The list size is Material's two-line list item figure, which is what Telegram and the dialler
+ * put there.
  */
 object Avatar {
     /** A row in a list of chats. */
@@ -159,10 +145,8 @@ object Avatar {
 /**
  * The corner radii the app is allowed to use, which is Material's shape scale and nothing else.
  *
- * There were nine of them in the source at one point, several a couple of dp apart: 14 next to 16
- * next to 20, chosen a screen at a time. Nobody can see two dp, but everybody can see that two
- * things which should match do not, and reading a number off a neighbouring file is how a scale
- * turns into a list. Five steps, named by what they are for.
+ * Five steps, named by what they are for. Do not add a sixth: radii a couple of dp apart read as
+ * two things that should match but do not.
  *
  * Anything genuinely round (a pill, a track, a rule, an avatar) uses `CircleShape` instead. Its
  * radius is half its own height, so it is geometry rather than taste and does not belong here.
@@ -187,8 +171,8 @@ object Corner {
 /**
  * Buttons the user can actually read: a calm raised surface at rest, accent when focused.
  *
- * The TV Material default is a near-white pill in every state, which is far louder than this
- * app wants and gives the remote no strong signal about where focus currently is.
+ * The TV Material default is a near-white pill in every state, which gives the remote no strong
+ * signal about where focus currently is.
  */
 @Composable
 fun tmButtonColors() = ButtonDefaults.colors(
@@ -205,12 +189,10 @@ fun tmButtonColors() = ButtonDefaults.colors(
 /**
  * A ring around whatever the remote is on, for the theme where the fill alone is not enough.
  *
- * [Tone.focusFill] is a pale blue in daylight, which is the point: a television's settings list
- * should not grow a black bar across it. But pale blue on near-white is a 1.24:1 step, well under
- * the 3:1 that a control is meant to stand out by, and across a room a quiet fill is no answer at
- * all. The accent is the dark end of the scale there, so an outline in it carries the signal the
- * fill cannot. In the dark theme the fill is already a bright block against a near-black screen,
- * and a ring in the same colour would be a ring nobody can see, so there is none.
+ * In daylight [Tone.focusFill] is a pale blue, a 1.24:1 step on near-white and well under the 3:1
+ * a control is meant to stand out by, so an outline in the accent carries the signal the fill
+ * cannot. In the dark theme the fill is already a bright block against a near-black screen, and a
+ * ring in the same colour would be invisible, so there is none.
  */
 @Composable
 fun Modifier.focusRing(focused: Boolean, shape: Shape): Modifier =
@@ -223,15 +205,9 @@ fun Modifier.focusRing(focused: Boolean, shape: Shape): Modifier =
 /**
  * The same roles at the sizes Material 3 ships for a device held in the hand.
  *
- * This is the single change that stops the phone build reading as a prototype. Every screen inside
- * the pane was drawing at the 10-foot scale: a chat row's title came out at 21sp semibold over a
- * 13sp subtitle, where a phone expects 16sp medium over 14sp. Nothing about the layouts was wrong
- * so much as the type was three sizes too big for the device, and the rest of the redesign is
- * unreadable against a scale that is fighting it.
- *
- * The values are Material 3's own defaults for these roles, written out rather than inherited
- * because the roles here belong to `androidx.tv.material3.Typography`, whose defaults are the
- * television's. No style carries a colour, for the same reason the television's does not.
+ * Material 3's own defaults for these roles, written out rather than inherited because the roles
+ * here belong to `androidx.tv.material3.Typography`, whose defaults are the television's. No style
+ * carries a colour, for the same reason the television's does not.
  */
 private val phoneTypography = Typography(
     headlineLarge = TextStyle(fontSize = 32.sp, lineHeight = 40.sp),
@@ -251,9 +227,8 @@ private val phoneTypography = Typography(
 /**
  * [phoneTypography] again, as the type the stock Material components read.
  *
- * The same figures twice is not a pleasure, but the two theme systems have their own `Typography`
- * classes and neither will take the other's. Material 3's own defaults for these roles, so a
- * component left alone looks like the platform.
+ * The figures appear twice because the two theme systems have their own `Typography` classes and
+ * neither will take the other's. Keep the two in step.
  */
 private val m3PhoneTypography = M3Typography(
     headlineLarge = TextStyle(fontSize = 32.sp, lineHeight = 40.sp),
@@ -273,14 +248,9 @@ private val m3PhoneTypography = M3Typography(
 /**
  * The app's palette as a complete Material 3 scheme, dark.
  *
- * The six colours at the top of this file are the television's, and they were the phone's as well:
- * a scheme built from six of the thirty roles Material components actually read, so every card,
- * chip and sheet that asked for `surfaceContainer` or `secondaryContainer` got Compose's own
- * lavender defaults, which belong to no app in particular. This is the full set, generated the way
- * Material generates one, from the app's blue.
- *
- * The hue is Telegram's, because that is what the app is: a Telegram client. Tone and chroma are
- * Material's, so a Material component drawn with it looks like a Material component.
+ * Every role Material components read is set, so no card, chip or sheet falls back to Compose's
+ * lavender defaults. The hue is Telegram's, because that is what the app is: a Telegram client.
+ * Tone and chroma are Material's, so a Material component drawn with it looks like one.
  */
 private val darkScheme = M3DarkColorScheme(
     primary = Color(0xFF79D0F5),
@@ -320,7 +290,7 @@ private val darkScheme = M3DarkColorScheme(
     scrim = Color(0xFF000000),
 )
 
-/** The same scheme in daylight, which the app had no version of at all until now. */
+/** The same scheme in daylight. */
 private val lightScheme = M3LightColorScheme(
     primary = Color(0xFF00677F),
     onPrimary = Color(0xFFFFFFFF),
@@ -408,9 +378,8 @@ fun TMPlayerTheme(content: @Composable () -> Unit) {
     val choice by settings.themeChoice.collectAsState(initial = ThemeChoice.Default)
     val dynamic by settings.dynamicColour.collectAsState(initial = false)
 
-    // A television has no system light mode to follow, so "System" there means the dark panel it
-    // has always been. Light and Dark are the viewer's own answer, on either device: a television
-    // in a bright room all day is a real television, and the app used to have no answer for it.
+    // A television has no system light mode to follow, so "System" there means dark. Light and
+    // Dark are the viewer's own answer, on either device: a television in a bright room is real.
     val dark = when {
         choice == ThemeChoice.Light -> false
         choice == ThemeChoice.Dark -> true
@@ -418,28 +387,21 @@ fun TMPlayerTheme(content: @Composable () -> Unit) {
         else -> systemDark
     }
 
-    // One scheme for both devices. The television does not offer the wallpaper's colours, because
-    // a television has no wallpaper, but everything else about it is now the phone's palette.
+    // One scheme for both devices. The television has no wallpaper to take colours from, but
+    // everything else about it is the phone's palette.
     val scheme = if (touch) phoneScheme(dark, dynamic) else if (dark) darkScheme else lightScheme
 
-    // Both themes, always, and the form factor decides only the type scale.
+    // Both themes, always, and the form factor decides only the type scale. Two theme systems are
+    // live because the two devices need different controls, and a shared screen reads one theme
+    // for its text and the other for its buttons, so neither may be missing.
     //
-    // Two theme systems are live in this app because the two devices genuinely need different
-    // controls, and a screen that is shared between them ends up reading one theme for its text
-    // and the other for its buttons. Providing both here means neither is ever missing, and it is
-    // what lets the whole touch tree, including Settings, the sign-in and every dialog, move to
-    // the phone scale without threading a theme through fourteen files by hand.
-    // Material's expressive theme entry point is published as internal in material3 1.4.0, so the
-    // motion scheme cannot be swapped wholesale here; the springs live at the call sites that want
-    // them instead. Colour and shape are the parts that matter at the root, and both are set.
+    // Material's expressive theme entry point is internal in material3 1.4.0, so the motion scheme
+    // cannot be swapped wholesale here; the springs live at the call sites that want them.
     M3MaterialTheme(
         colorScheme = scheme,
         shapes = m3Shapes,
-        // The phone scale, given to the theme the phone's components actually read. It was only
-        // ever handed to the television's MaterialTheme, so a screen that mixed the two, which is
-        // every phone screen, drew half its text at the app's scale and half at Compose's stock
-        // one: a drawer item at 16sp beside a chat row at 16sp that happened to agree, and a
-        // supporting line at 14 beside one at 12 that did not.
+        // The phone scale, given to the theme the phone's own components read, so a screen mixing
+        // the two theme systems draws all of its text at one scale.
         typography = if (touch) m3PhoneTypography else M3MaterialTheme.typography,
     ) {
         MaterialTheme(
@@ -447,9 +409,8 @@ fun TMPlayerTheme(content: @Composable () -> Unit) {
             typography = if (touch) phoneTypography else typography,
         ) {
             CompositionLocalProvider(
-                // Without this the default content colour is undefined at the root of the tree and
-                // every unstyled Text inherits whatever Compose falls back to. On the phone it is
-                // the scheme's, so a light theme does not draw its text in the dark theme's grey.
+                // Without this the root content colour is undefined and every unstyled Text
+                // inherits Compose's fallback, so a light theme would draw dark theme grey.
                 LocalContentColor provides scheme.onSurface,
                 LocalDarkTheme provides dark,
                 content = content,

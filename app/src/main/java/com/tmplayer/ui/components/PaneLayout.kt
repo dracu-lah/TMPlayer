@@ -36,19 +36,14 @@ fun isTouch(): Boolean = !FormFactor.isTv(LocalContext.current)
 /**
  * The one column of content that a sign-in or onboarding pane is.
  *
- * These panes ask one thing at a time and were written for a television: a fixed 640dp column
- * centred in the screen, inset by the overscan margin, which on a phone held upright is most of
- * the width given over to nothing and a column that cannot use the space it does have. The two
- * shapes are different enough that spelling them out at every call site is how they stop matching
- * each other, so they are spelled out once here.
+ * These panes ask one thing at a time, and the two shapes are stated once here so that call sites
+ * cannot drift apart. On a television it is a fixed 640dp column centred in the screen and inset by
+ * the overscan margin. On a phone the column fills the width up to a comfortable reading measure,
+ * starts at the top so the heading does not move when a keyboard appears, and keeps clear of the
+ * status bar, the gesture bar and the notch.
  *
- * On a phone the column fills the width up to a comfortable reading measure, starts at the top
- * rather than the middle so that the heading does not move when a keyboard appears, and keeps
- * clear of the status bar, the gesture bar and the notch. On a television it is the centred column
- * it always was.
- *
- * Scrolls in both cases. A code arriving on a small screen in landscape leaves very little height,
- * and a pane that cannot scroll simply loses its button off the bottom.
+ * Scrolls in both cases: a small screen in landscape leaves too little height, and a pane that
+ * cannot scroll loses its button off the bottom.
  */
 @Composable
 fun Pane(
@@ -84,9 +79,8 @@ fun Pane(
         modifier
             .fillMaxSize()
             // safeDrawing rather than systemBars: it is the one that also clears a notch and the
-            // gesture handle, and this pane is the first screen the app ever shows. It already
-            // carries the keyboard inset, so an imePadding() on top of it lifted every sign-in
-            // pane a whole keyboard height too high the moment the keyboard appeared.
+            // gesture handle. It already carries the keyboard inset, so do not add imePadding()
+            // here, which would lift the pane a whole keyboard height too high.
             .safeDrawingPadding(),
     ) {
         // Wide enough to be a tablet or a phone on its side, where a full-width column would run
@@ -120,10 +114,8 @@ fun Modifier.paneAction(): Modifier = if (isTouch()) fillMaxWidth() else this
 /**
  * What a phone pane leaves around its content.
  *
- * 16 dp a side is the Material margin and what every list on the device already sits at, the
- * browse grid included. This was 20, so a screen that used it stood four dp further in than the
- * screen the viewer had just come from, which is the sort of difference nobody names and everybody
- * sees when the two are one gesture apart.
+ * 16 dp a side is the Material margin and what every list on the device already sits at, the browse
+ * grid included, so one screen never stands further in than the one before it.
  */
 object PhonePad {
     val Side = 16.dp

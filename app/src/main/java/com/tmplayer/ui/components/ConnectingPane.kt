@@ -38,15 +38,10 @@ import kotlinx.coroutines.delay
  * The first thing anybody sees, and for a few seconds the only thing.
  *
  * Opening TMPlayer means waiting on TDLib to open its database, find a socket and say hello to
- * Telegram, which on a cold start over a slow connection is long enough to wonder whether the
- * press registered. What filled that wait was a grey spinner and four grey words on a black field,
- * which is the screen an app shows when it has nothing to say for itself, and it was the app's
- * first impression on every launch.
- *
- * So it says who it is: the mark it is installed under, a ring that is plainly moving, and a line
- * that changes as the wait goes on. The changing line is the honest part. A message that never
- * moves reads as a hang after about five seconds, and this one is telling the truth in order,
- * ending on the two things that are actually worth checking when a connection is not happening.
+ * Telegram, which on a cold start over a slow connection is long enough to wonder whether the press
+ * registered. So the wait says who it is: the mark the app is installed under, a ring that is
+ * plainly moving, and a line that changes as the wait goes on. A message that never moves reads as
+ * a hang after about five seconds.
  */
 @Composable
 fun ConnectingPane(label: String = "Connecting to Telegram") {
@@ -101,12 +96,8 @@ fun ConnectingPane(label: String = "Connecting to Telegram") {
  * Two rings swelling out of the mark and fading as they go.
  *
  * A spinner says "busy". This says "reaching out", which is what is actually happening, and it is
- * the one animation on the screen so it can afford to be slow: four seconds a ring, the second
- * half a cycle behind the first, which reads as a pulse rather than as something being stirred.
- *
- * Drawn rather than assembled from views because it is two circles, and because a `Canvas` costs
- * nothing to leave running on a television that will sit on this screen for three seconds and
- * never come back to it.
+ * the one animation on the screen so it can afford to be slow: four seconds a ring, the second half
+ * a cycle behind the first, which reads as a pulse rather than as something being stirred.
  */
 @Composable
 private fun PulseRings(size: androidx.compose.ui.unit.Dp) {

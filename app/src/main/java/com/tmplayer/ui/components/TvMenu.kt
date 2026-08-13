@@ -63,13 +63,11 @@ data class MenuAction(
 /**
  * The list of things that can be done to whatever the viewer was standing on.
  *
- * A television remote has no second button, so every action beyond "open it" has to live behind
- * either a hold of OK or a control taking up room on the screen. A hold is what the launcher and
- * every other TV app already train people to try, and it costs no space at all.
+ * A television remote has no second button, so every action beyond "open it" lives behind a hold of
+ * OK, which the launcher and every other TV app already train people to try.
  *
- * Nothing is selected when it opens. The hold that opened it ends in a release, and on some
- * remotes in a second press, and either landing on an action would run something the viewer never
- * chose. Focus sits on the heading instead, and one press of Down puts it on the first action.
+ * Nothing is selected when it opens: the hold that opened it ends in a release, and anything
+ * focused would be run without being chosen. Focus sits on the heading, and Down reaches the list.
  */
 @Composable
 fun TvMenu(
@@ -124,9 +122,8 @@ fun TvMenu(
                         title,
                         style = MaterialTheme.typography.titleLarge,
                         color = Tone.text,
-                        // A file name is what a video is called here, and one line of it is a
-                        // prefix and three dots. The panel is bounded, so three lines is where it
-                        // stops.
+                        // A video is named by its file name, and one line of that is a prefix and
+                        // three dots. The panel is bounded, so three lines is where it stops.
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -159,13 +156,8 @@ fun TvMenu(
 /**
  * The same menu as the sheet a phone expects.
  *
- * The panel it replaces floated in the middle of the screen with no visible way to close it, and
- * the tap-outside that was supposed to close it could not fire: the dark scrim was part of the
- * dialog's own content, so a tap on it landed on the content and was swallowed. The only way out
- * was the system back gesture, which is not something a menu should require anyone to know.
- *
  * [ModalBottomSheet] brings the drag handle, the working scrim, the swipe-down dismiss and the
- * bottom-of-the-screen position a thumb can actually reach, none of which had to be written here.
+ * bottom-of-the-screen position a thumb can actually reach, none of which has to be written here.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -181,11 +173,9 @@ private fun TouchMenuSheet(
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.padding(bottom = 24.dp)) {
             // The heading is what the sheet is about rather than something that can be chosen, so
-            // it sits in the padding a list section header sits in, not in a row.
-            // The name is the whole reason the sheet knows what it is acting on, so it is given
-            // the size of a heading, the scheme's own text colour rather than whatever content
-            // colour the sheet inherits, and as many lines as it needs. A video's name is a file
-            // name, and a file name cut to one line is a row of dots that names nothing.
+            // it sits in a section header's padding, not in a row, and it takes the scheme's text
+            // colour rather than the content colour the sheet inherits. It gets as many lines as
+            // it needs: a video's file name cut to one line is a row of dots that names nothing.
             Column(
                 Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -215,10 +205,9 @@ private fun TouchMenuSheet(
 
 @Composable
 private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Modifier) {
-    // A phone and a remote disagree about what a row of a menu even is. The television's is a
-    // filled tile that changes colour under focus, because focus is the only thing it has to say
-    // where it is; the phone's is a list item on the sheet's own surface, because there is no
-    // focus to show and a stack of coloured tiles reads as a stack of buttons rather than a list.
+    // The television's row is a filled tile that changes colour under focus, because focus is the
+    // only thing it has to say where it is. The phone's is a list item on the sheet's own surface,
+    // where a stack of coloured tiles would read as a stack of buttons rather than as a list.
     if (touch) {
         val destructive = action.destructive
         ListItem(
@@ -226,7 +215,7 @@ private fun MenuRow(action: MenuAction, touch: Boolean, modifier: Modifier = Mod
             headlineContent = {
                 M3Text(action.label, maxLines = 2, overflow = TextOverflow.Ellipsis)
             },
-            // Two lines, because a phone's list is narrow enough that a sentence which fits on a
+            // Two lines: a phone's list is narrow enough that a sentence which fits on a
             // television lands here as half a sentence and three dots.
             supportingContent = action.detail?.let {
                 { M3Text(it, maxLines = 2, overflow = TextOverflow.Ellipsis) }

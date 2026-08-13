@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -65,18 +64,14 @@ fun TvConfirm(
     val cancelFocus = remember { FocusRequester() }
     val touch = isTouch()
 
-    // A phone gets Material's own dialog. The hand-built panel below was close to it and still
-    // missed the things a stock dialog brings for nothing: a tap on the scrim dismisses it (the
-    // scrim here is part of the dialog's own content, so a tap on it went to the content and did
-    // nothing at all), the predictive-back animation works, and a screen reader announces it as a
-    // dialog rather than as a column of text that appeared.
+    // A phone gets Material's own dialog, which brings for nothing what the panel below cannot: a
+    // tap on the scrim dismisses it, the predictive-back animation works, and a screen reader
+    // announces it as a dialog rather than as a column of text that appeared.
     if (touch) {
         AlertDialog(
             onDismissRequest = onDismiss,
-            // The scheme already answers every colour a dialog asks: the container, the title, the
-            // body, and the error red a destructive press is entitled to. Naming them here only
-            // meant naming the television's, which on a phone in daylight is dark grey text on a
-            // white card.
+            // No colours stated: the scheme already answers the container, the title, the body and
+            // the error red a destructive press is entitled to.
             icon = {
                 M3Icon(
                     imageVector = icon,
@@ -122,12 +117,9 @@ fun TvConfirm(
         return
     }
 
-    // In its own window, not just a Box on top of the layout.
-    //
-    // Drawn inline, a prompt is an ordinary sibling: it sits above whatever was composed before
-    // it and underneath everything composed after, so the same component covered one screen and
-    // appeared *behind* the next. A Dialog is a separate window, which puts every prompt over
-    // the whole app, the navigation rail included, no matter where it is called from.
+    // In its own window, not a Box on top of the layout. Drawn inline, a prompt is an ordinary
+    // sibling and anything composed after it would cover it. A Dialog is a separate window, so
+    // every prompt sits over the whole app, the navigation rail included.
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -169,9 +161,8 @@ fun TvConfirm(
                     Text(detail, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
                 }
 
-                // Cancel is the quiet one and confirm is the loud one, which is the same ranking
-                // the TV colours gave them, only stated by which button is used rather than by a
-                // colour table each caller passes in.
+                // Cancel is the quiet one and confirm the loud one, stated by which button is used
+                // rather than by a colour table each caller passes in.
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.padding(top = 4.dp),

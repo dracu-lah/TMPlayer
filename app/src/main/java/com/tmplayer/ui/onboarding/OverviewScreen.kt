@@ -57,9 +57,9 @@ import com.tmplayer.ui.components.paneAction
 /**
  * One page: what it shows, and the picture of the app actually showing it.
  *
- * Three pictures, because there are three ways this app looks. [image] is the television, which
- * is dark and has no other mode to be in. [phoneLight] and [phoneDark] are the phone, where a
- * dark screenshot on a light page is somebody else's app.
+ * Three pictures, because there are three ways this app looks. [image] is the television, which is
+ * dark and has no other mode to be in. [phoneLight] and [phoneDark] are the phone, where a dark
+ * screenshot on a light page is somebody else's app.
  */
 private data class Page(
     val title: String,
@@ -73,10 +73,7 @@ private data class Page(
  * A short walk through the app, in pictures of the app itself.
  *
  * Every illustration is a real screenshot rather than a drawing, so a beginner is looking for the
- * thing they will actually see. They are stored small (960 wide, WebP): a television scales them
- * up to half the screen and nobody is inspecting the text in them.
- *
- * Shown once before signing in, and again whenever Settings asks for it.
+ * thing they will actually see. Shown once before signing in, and again whenever Settings asks.
  */
 @Composable
 fun OverviewScreen(onDone: () -> Unit) {
@@ -87,15 +84,13 @@ fun OverviewScreen(onDone: () -> Unit) {
     val last = index == PAGES.lastIndex
     val next = remember { FocusRequester() }
 
-    // Back walks the pages in reverse, which is what it does everywhere else in the app, and
-    // leaves altogether from the first one rather than trapping anybody here.
+    // Back walks the pages in reverse, as it does everywhere else in the app, and leaves
+    // altogether from the first one rather than trapping anybody here.
     BackHandler { if (index == 0) onDone() else index-- }
 
     if (touch) {
-        // Anybody handed three pages on a phone swipes them, and until now the swipe did nothing
-        // and Next was the only way forward. The pager makes the gesture real; `index` stays the
-        // one place the page number lives, so Back and the button still work as they always did
-        // and the two are kept in step in both directions below.
+        // `index` stays the one place the page number lives, so Back and the Next button keep
+        // working; the two effects below hold the pager and it in step in both directions.
         val pager = rememberPagerState(initialPage = index) { PAGES.size }
         LaunchedEffect(pager) {
             snapshotFlow { pager.currentPage }.collect { index = it }
@@ -104,14 +99,12 @@ fun OverviewScreen(onDone: () -> Unit) {
             if (pager.currentPage != index) pager.animateScrollToPage(index)
         }
 
-        // Stacked rather than side by side: a screenshot placed beside the words in a portrait
-        // column would be a couple of centimetres wide, which is not a picture of anything. It
-        // goes under the text at full width, where it is actually legible, and the buttons follow
-        // it so the thumb finds them at the bottom of the reading order.
+        // Stacked rather than side by side: a screenshot beside the words in a portrait column
+        // would be a couple of centimetres wide. It goes under the text at full width, and the
+        // buttons follow it so the thumb finds them at the bottom of the reading order.
         Pane(spacing = 12.dp) {
-            // "Step 2 of 3" was a sentence where the phone had a picture available. The bar says
-            // the same thing without being read, and carries the count in its semantics for the
-            // people who are having the screen read to them.
+            // The bar says "step 2 of 3" without being read, and carries the count in its
+            // semantics for the people who are having the screen read to them.
             M3LinearProgressIndicator(
                 progress = { (index + 1).toFloat() / PAGES.size },
                 modifier = Modifier
@@ -121,9 +114,8 @@ fun OverviewScreen(onDone: () -> Unit) {
                     },
             )
 
-            // Only the words and the picture move under the finger. The buttons below stay put:
-            // a Next that slid away as the page it belonged to left would be a Next nobody could
-            // press twice in a row.
+            // Only the words and the picture move under the finger. The buttons below stay put: a
+            // Next that slid away with its page would be a Next nobody could press twice in a row.
             HorizontalPager(
                 state = pager,
                 modifier = Modifier.fillMaxWidth(),
@@ -215,8 +207,7 @@ fun OverviewScreen(onDone: () -> Unit) {
     }
 
     // Focus follows the page, so Next stays under the remote through the whole walk. A phone has
-    // nothing to move: the button never leaves, and a focus ring drawn on it would be a mark the
-    // viewer has no way to account for.
+    // nothing to move, and a focus ring drawn there would be a mark with no explanation.
     if (!touch) {
         LaunchedEffect(index) { runCatching { next.requestFocus() } }
     }
@@ -251,10 +242,8 @@ private fun PageImage(page: Page, modifier: Modifier) {
 /**
  * The walkthrough, in the words of whichever device is reading it.
  *
- * The screenshots are of the television, and so was every sentence: a phone user was told to point
- * a camera at a TV they are not looking at, and that the rail sorts their chats on the left when
- * there is no rail, only a drawer. The pictures are the television's either way, so on a phone the
- * words describe the app rather than the picture, which is the honest version of the same page.
+ * A phone has no remote to point at a TV and no rail, only a drawer, so on touch the words describe
+ * the app rather than the picture.
  */
 private fun pages(touch: Boolean) = listOf(
     Page(
