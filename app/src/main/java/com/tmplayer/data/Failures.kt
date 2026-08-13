@@ -59,6 +59,42 @@ object Failures {
     }
 
     /**
+     * Whether the only useful answer to this error is to ask Telegram for the message again.
+     *
+     * A TDLib file id belongs to the run of the client that issued it, and TDLib will not fetch a
+     * file it cannot trace back to a message it has seen this session. A download queued before the
+     * process was killed comes back holding an id in exactly that state: the request fails the
+     * instant it is made, the row says "Telegram didn't answer", and every press of Try again fails
+     * the same way, because nothing in that loop ever asks for the message again. Re-fetching it
+     * hands back a current id and gives TDLib the source it was missing.
+     *
+     * Pure, and separate from [humanise], because this decides an action and that decides a
+     * sentence. The same string can want both.
+     */
+    fun needsFreshFileReference(message: String?): Boolean {
+        val raw = message?.trim().orEmpty()
+        if (raw.isEmpty()) return false
+        return STALE_FILE.any { raw.contains(it, ignoreCase = true) }
+    }
+
+    /**
+     * What TDLib says about a file id it no longer recognises, in the several ways it says it.
+     *
+     * The wording differs by which layer refused: the file manager, the request parser, or
+     * Telegram itself answering a request built from an expired reference.
+     */
+    private val STALE_FILE = listOf(
+        "FILE_REFERENCE",
+        "FILE_ID_INVALID",
+        "Invalid file identifier",
+        "Invalid file id",
+        "Unknown file id",
+        "File not found",
+        "Can't download file",
+        "File is not downloadable",
+    )
+
+    /**
      * `FLOOD_WAIT_42` / `Too Many Requests: retry after 42` both carry the same number.
      *
      * Public because the number is worth more than the sentence built out of it: Telegram is

@@ -137,8 +137,35 @@ object OfflineDownloads {
         // no, not the app being broken, and taking the process down over it would lose the queue.
         runCatching {
             context.startForegroundService(request.intent(context, DownloadService.ACTION_DOWNLOAD))
-        }.onFailure { android.util.Log.w("OfflineDownloads", "Could not start the download service", it) }
+        }.onFailure {
+            android.util.Log.w(TAG, "Could not start the download service", it)
+            refused(request)
+        }
     }
+
+    /**
+     * Writes down a download Android would not let this app start.
+     *
+     * This used to be a line in logcat and nothing else, which is the worst answer this screen can
+     * give: the viewer pressed Download, no row appeared, no notification appeared, and there was
+     * nothing anywhere to press again. "I was not able to download it" is exactly what that looks
+     * like from the outside. A failed row is not a fix for the refusal, but it is the difference
+     * between a button that did nothing and a video that says what happened and offers Try again.
+     */
+    private fun refused(request: DownloadRequest) {
+        val existing = _active.value[request.fileId]
+        val row = existing ?: Progress(
+            request = request,
+            downloadedBytes = 0,
+            totalBytes = request.sizeBytes,
+            stage = Stage.Failed,
+            order = nextOrder(),
+        )
+        note(row.copy(stage = Stage.Failed, failure = REFUSED, bytesPerSecond = 0))
+    }
+
+    /** The place a new row takes at the end of the list, when the service is not there to say. */
+    internal fun nextOrder(): Long = (_active.value.values.maxOfOrNull { it.order } ?: -1L) + 1L
 
     /** Stops one download, or every one of them, and keeps the bytes that already landed. */
     fun cancel(context: Context, fileId: Int) = send(context, DownloadService.ACTION_CANCEL, fileId)
@@ -174,7 +201,20 @@ object OfflineDownloads {
         // Started in the foreground form as well. Pausing the only running download leaves the
         // service alive holding paused rows, and a plain startService onto a process that Android
         // had already stopped throws rather than starting it.
-        runCatching { context.startForegroundService(intent) }
+        runCatching { context.startForegroundService(intent) }.onFailure {
+            android.util.Log.w(TAG, "Could not reach the download service for $action", it)
+            // Android would not start the service, so nobody is going to carry the press out. Both
+            // of these are the viewer taking something away, and a Cancel or a Pause that visibly
+            // does nothing is worse than one carried out here: the fetching has stopped either way,
+            // because the service that was doing it is not running.
+            val touched =
+                if (fileId == EVERYTHING) _active.value.keys.toList() else listOf(fileId)
+            when (action) {
+                DownloadService.ACTION_CANCEL -> touched.forEach(::forget)
+                DownloadService.ACTION_PAUSE -> touched.forEach { stage(it, Stage.Paused) }
+                else -> Unit
+            }
+        }
     }
 
     /**
@@ -278,6 +318,17 @@ object OfflineDownloads {
 
     /** The file id that means "all of them", since no real file has it. */
     private const val EVERYTHING = 0
+
+    private const val TAG = "OfflineDownloads"
+
+    /**
+     * What a row says when Android refused to start the service that would have fetched it.
+     *
+     * Android 14 refuses a foreground service started from the background, and Android 15 refuses
+     * a data sync one whose day's budget has been spent. Neither is something the app can argue
+     * with, and both are answered by opening the app and asking again, so that is what it says.
+     */
+    const val REFUSED = "Android would not start this download. Open TMPlayer and press Try again."
 
     /** Shorter than this and the clock, not the network, is what is being measured. */
     private const val MIN_SAMPLE_MS = 500L

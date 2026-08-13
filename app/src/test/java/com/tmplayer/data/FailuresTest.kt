@@ -1,6 +1,7 @@
 package com.tmplayer.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
@@ -75,5 +76,29 @@ class FailuresTest {
         assertEquals(42, Failures.floodWaitSeconds("Too Many Requests: retry after 42"))
         assertEquals(null, Failures.floodWaitSeconds("CHAT_NOT_FOUND"))
         assertEquals(null, Failures.floodWaitSeconds(null))
+    }
+
+    @Test
+    fun `the errors that mean the file id has gone stale are the ones worth re-sourcing`() {
+        for (raw in listOf(
+            "400: FILE_REFERENCE_EXPIRED",
+            "400: FILE_ID_INVALID",
+            "Invalid file identifier",
+            "Unknown file id",
+            "File not found",
+            "Can't download file",
+            "File is not downloadable",
+        )) {
+            assertTrue(raw, Failures.needsFreshFileReference(raw))
+        }
+    }
+
+    @Test
+    fun `an ordinary failure is not answered by asking for the message again`() {
+        assertFalse(Failures.needsFreshFileReference(null))
+        assertFalse(Failures.needsFreshFileReference("   "))
+        assertFalse(Failures.needsFreshFileReference("FLOOD_WAIT_42"))
+        assertFalse(Failures.needsFreshFileReference("Canceled by another downloadFile request"))
+        assertFalse(Failures.needsFreshFileReference("No space left on device"))
     }
 }

@@ -82,6 +82,9 @@ class DownloadService : Service() {
     /** What each video's own notification last said, so an unchanged one is not posted again. */
     private val lines = java.util.concurrent.ConcurrentHashMap<Int, String>()
 
+    /** File ids this service has already asked Telegram about. See [resourceAndRequeue]. */
+    private val resourced = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
+
     /**
      * The last start this service was given, so stopping it cannot swallow the next one.
      *
@@ -164,10 +167,20 @@ class DownloadService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // A start means this service is wanted again, whatever the last one decided.
         stopping = false
+        lastStartId = startId
         // Android gives a few seconds from startForegroundService to this call, whatever the
         // intent turns out to be, so the notification goes up before anything else is decided.
-        goToForeground(ongoing())
-        lastStartId = startId
+        if (!goToForeground(ongoing())) {
+            // Only a download carries a whole request. A Cancel intent carries a file id and
+            // nothing else, and building a row out of that would put a nameless failed video on
+            // the screen in answer to somebody pressing Cancel.
+            val asked = intent
+                ?.takeIf { it.action == ACTION_DOWNLOAD }
+                ?.let(DownloadRequest::from)
+            refuseEverything(asked)
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
 
         when (intent?.action) {
             ACTION_DOWNLOAD -> enqueue(DownloadRequest.from(intent))
@@ -362,17 +375,31 @@ class DownloadService : Service() {
     /** Starts as many as [MAX_PARALLEL] allows, and stops the service when there is nothing left. */
     private fun pump() {
         while (true) {
+            // An id that reached the front of the queue with no request behind it. It has been
+            // taken off `waiting` by now, so without this it would leave a row on the Downloads
+            // screen reading "Queued" that nothing would ever start, and the same pass would then
+            // decide the queue was empty and stop the service.
+            var stale = 0
             val next = synchronized(lock) {
                 if (running.size >= MAX_PARALLEL) return@synchronized null
                 val id = waiting.removeFirstOrNull() ?: return@synchronized null
-                val request = requests[id] ?: return@synchronized null
+                val request = requests[id]
+                if (request == null) {
+                    stale = id
+                    return@synchronized null
+                }
                 val job = scope.launch { fetch(request) }
                 running[id] = job
                 // Registered before the job can finish, so a fetch that fails immediately still
                 // finds its own entry to clear and still pumps whatever is behind it.
                 job.invokeOnCompletion { done(id) }
                 id
-            } ?: break
+            }
+            if (stale != 0) {
+                OfflineDownloads.forget(stale)
+                continue
+            }
+            if (next == null) break
             OfflineDownloads.stage(next, OfflineDownloads.Stage.Running)
         }
         stopWhenIdle()
@@ -433,7 +460,34 @@ class DownloadService : Service() {
             return@coroutineScope
         }
 
-        val session = Td.awaitConnectedSession()
+        // Bounded, where it used to wait for ever. The row is already marked as running by the time
+        // this line is reached, so a TDLib that never gets a socket left the viewer looking at a
+        // video that claimed to be downloading, sat at zero bytes, with no error and nothing to
+        // press: the single most confusing thing this screen can show. Giving up says so instead,
+        // and Try again is one press away.
+        val session = Td.awaitConnectedSessionOrNull(CONNECT_WAIT_MS)
+        if (session == null) {
+            withContext(NonCancellable) {
+                Log.w(TAG, "No connection to Telegram for ${request.title}")
+                val waitingInstead = holdReason
+                if (waitingInstead != null) {
+                    OfflineDownloads.stage(request.fileId, waitingInstead)
+                } else {
+                    writeFailure(request, Td.localDownloadedBytes(request.fileId), Failures.OFFLINE)
+                }
+                persistNow()
+            }
+            return@coroutineScope
+        }
+
+        // TDLib will not fetch a file it cannot trace back to a message it has seen this session,
+        // and a file id only means anything to the run of the client that issued it. A queue
+        // written down before the process was killed comes back holding ids in exactly that state,
+        // so the request failed the moment it was made and Try again failed the same way for ever.
+        // Asking Telegram for the message again hands back a current id and gives TDLib the source
+        // it wanted. Once per id, so a video whose number keeps moving cannot become a loop.
+        if (resourceAndRequeue(request)) return@coroutineScope
+
         // Watches the same file TDLib is filling, only so the notification and the row have
         // something to move. The download itself is the call below. A child of this coroutine, so
         // pausing or cancelling the fetch takes the ticker with it rather than leaving it running
@@ -479,6 +533,14 @@ class DownloadService : Service() {
             delay(TAKEOVER_BACKOFF_MS)
         }
         ticker.cancel()
+
+        // The id went stale while this was waiting its turn, or Telegram's file reference expired
+        // under it. Both are answered by asking for the message again rather than by a red row.
+        if (error != null && Failures.needsFreshFileReference(error)) {
+            var moved = false
+            withContext(NonCancellable) { moved = resourceAndRequeue(request) }
+            if (moved) return@coroutineScope
+        }
 
         // Uncancellable from here down, and that includes asking TDLib what actually landed: these
         // are the lines that decide what the row says and whether the video is listed as
@@ -526,6 +588,55 @@ class DownloadService : Service() {
             }
             persistNow()
         }
+    }
+
+    /**
+     * Asks Telegram for the video's message again, and moves the row onto the id it hands back.
+     *
+     * True when the row moved, which means this fetch is finished with: the old id is gone from
+     * every list, the new one is on the queue in the same place, and the pump behind [done] starts
+     * it. False when nothing needed to change, or when the message could not be reached, in which
+     * case the caller carries on with the id it has: Telegram being slow is not a reason to give up
+     * on a download that may well work.
+     *
+     * Each id is re-sourced once. A video whose number moves every time it is asked for would
+     * otherwise be a queue that fetches nothing and never stops trying.
+     */
+    private suspend fun resourceAndRequeue(request: DownloadRequest): Boolean {
+        if (request.chatId == 0L || request.messageId == 0L) return false
+        if (!resourced.add(request.fileId)) return false
+        val fresh = runCatching { Td.refreshMedia(request.chatId, request.messageId) }.getOrNull()
+        val id = fresh?.fileId ?: return false
+        if (id <= 0 || id == request.fileId) return false
+        Log.i(TAG, "Re-sourced ${request.title}: file ${request.fileId} is now $id")
+        val moved = request.copy(
+            fileId = id,
+            // The old row's size came from the same message, but a re-fetched one is the newer
+            // answer and the bar is drawn against it.
+            sizeBytes = fresh.sizeBytes.takeIf { it > 0 } ?: request.sizeBytes,
+        )
+        synchronized(lock) { requests.remove(request.fileId) }
+        OfflineDownloads.forget(request.fileId)
+        lines.remove(request.fileId)
+        runCatching { notifier().cancel(request.fileId.notificationId()) }
+        enqueue(moved)
+        persistNow()
+        return true
+    }
+
+    /** The one way a row is written down as failed: only when this fetch still owns it. */
+    private fun writeFailure(request: DownloadRequest, landed: Long, text: String) {
+        val row = OfflineDownloads.active.value[request.fileId] ?: return
+        if (row.stage != OfflineDownloads.Stage.Running) return
+        OfflineDownloads.note(
+            row.copy(
+                downloadedBytes = landed,
+                stage = OfflineDownloads.Stage.Failed,
+                failure = text,
+                bytesPerSecond = 0,
+            ),
+        )
+        runCatching { notifier().notify(request.fileId.notificationId(), failedNotification(request)) }
     }
 
     /**
@@ -582,12 +693,55 @@ class DownloadService : Service() {
 
     // ---- the notification --------------------------------------------------------------------
 
-    private fun goToForeground(notification: Notification) {
+    /**
+     * Puts the notification up, and says whether Android allowed it.
+     *
+     * This used to be an unguarded call, which is a crash waiting for the right phone. From
+     * Android 14 `startForeground` throws when the start came from the background, and from
+     * Android 15 it throws when a data sync service has spent its allowance for the day. Both
+     * arrive as an exception out of `onStartCommand`, which takes the process down and with it the
+     * queue: the viewer loses every row rather than one download. Caught here, and the caller
+     * writes the queue down as failed so there is something left to press.
+     */
+    private fun goToForeground(notification: Notification): Boolean = runCatching {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(SUMMARY_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
             startForeground(SUMMARY_ID, notification)
         }
+    }.onFailure { Log.w(TAG, "Android would not let the download service run", it) }.isSuccess
+
+    /**
+     * Says so on every row, when this service is not allowed to exist.
+     *
+     * Including the video that was being asked for as this happened, which has no row yet: without
+     * one, the press the viewer just made leaves nothing at all on the screen, which is the whole
+     * complaint. Everything that was moving is written down as failed rather than left claiming to
+     * download, because nothing is going to move it now.
+     */
+    private fun refuseEverything(asked: DownloadRequest?) {
+        if (asked != null && OfflineDownloads.active.value[asked.fileId] == null) {
+            OfflineDownloads.note(
+                OfflineDownloads.Progress(
+                    request = asked,
+                    downloadedBytes = 0,
+                    totalBytes = asked.sizeBytes,
+                    stage = OfflineDownloads.Stage.Failed,
+                    failure = OfflineDownloads.REFUSED,
+                    order = OfflineDownloads.nextOrder(),
+                ),
+            )
+        }
+        OfflineDownloads.ordered
+            .filter { it.busy }
+            .forEach {
+                OfflineDownloads.stage(
+                    it.fileId,
+                    OfflineDownloads.Stage.Failed,
+                    OfflineDownloads.REFUSED,
+                )
+            }
+        persist()
     }
 
     private fun refresh() {
@@ -949,6 +1103,14 @@ class DownloadService : Service() {
         private const val DOWNLOAD_PRIORITY = 32
 
         private const val PROGRESS_INTERVAL_MS = 1_000L
+
+        /**
+         * How long a download waits for TDLib to find a line to Telegram before saying it cannot.
+         *
+         * Longer than a screen would wait, because nobody is watching a spinner: a phone coming
+         * out of a tunnel deserves a couple of minutes. Not for ever, which is what it used to be.
+         */
+        private const val CONNECT_WAIT_MS = 120_000L
 
         /** What TDLib says when a newer request for the same file replaced this one. */
         private const val TAKEN_OVER = "Canceled by another downloadFile"
