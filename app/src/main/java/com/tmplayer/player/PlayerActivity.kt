@@ -34,10 +34,15 @@ import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.common.text.CueGroup
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.audio.ChannelMixingAudioProcessor
+import androidx.media3.common.audio.ChannelMixingMatrix
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.session.MediaSession
@@ -126,6 +131,16 @@ class PlayerActivity : FragmentActivity() {
     private var statusMeta: TextView? = null
     private var artDrift: android.animation.ObjectAnimator? = null
     private var statusRetry: android.widget.Button? = null
+
+    /**
+     * The failure sheet's other two ways forward: throw the local copy away and stream it again,
+     * and leave for an app whose decoders are not this one's.
+     */
+    private var statusReload: android.widget.Button? = null
+    private var statusOpenWith: android.widget.Button? = null
+
+    /** Set while [reloadFromScratch] is clearing the file, so a second press cannot race it. */
+    private var reloading = false
 
     /** The phone's episode buttons; null on a TV, where the transport row grows its own. */
     private var episodeRow: View? = null
@@ -284,6 +299,12 @@ class PlayerActivity : FragmentActivity() {
         statusMeta = findViewById(R.id.status_meta)
         statusRetry = findViewById<android.widget.Button>(R.id.status_retry).apply {
             setOnClickListener { retryPlayback() }
+        }
+        statusReload = findViewById<android.widget.Button>(R.id.status_reload).apply {
+            setOnClickListener { reloadFromScratch() }
+        }
+        statusOpenWith = findViewById<android.widget.Button>(R.id.status_open_with).apply {
+            setOnClickListener { openInAnotherApp() }
         }
         rebufferChip = findViewById(R.id.rebuffer_chip)
         rebufferText = findViewById(R.id.rebuffer_text)
@@ -932,6 +953,7 @@ class PlayerActivity : FragmentActivity() {
         statusProgress.visibility = View.GONE
         statusDetail.visibility = View.GONE
         statusTitle.text = "You're on mobile data"
+        hideFailureActions()
         statusText.text = "This video is ${MediaMapper.formatSize(fileSizeBytes)}. " +
             "Playing it now will use that much of your allowance."
         statusRetry?.apply {
@@ -952,10 +974,52 @@ class PlayerActivity : FragmentActivity() {
         return answer
     }
 
+    /**
+     * Movie, not the default "unknown". It is what tells the system this is long-form video, which
+     * is what the volume curve, the ducking behaviour and any connected audio device's own
+     * processing all key off. The same attributes ask for the output's channel count, because the
+     * answer depends on what the audio is for.
+     */
+    private val movieAudioAttributes = AudioAttributes.Builder()
+        .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+        .setUsage(C.USAGE_MEDIA)
+        .build()
+
     private fun buildPlayer(client: TdlClient): ExoPlayer {
         // Hardware decoders first; NextLib's FFmpeg renderers pick up the audio codecs a TV
         // stick has no silicon for: DTS and TrueHD tracks are common in video remuxes.
-        val renderers = NextRenderersFactory(this)
+        val renderers = object : NextRenderersFactory(this@PlayerActivity) {
+            /**
+             * The stock sink, plus the stereo fold described in [AudioDownmix].
+             *
+             * Built here rather than around the finished player because this is the only hook
+             * Media3 offers: the sink is created inside the factory and handed straight to the
+             * audio renderer.
+             */
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean,
+            ): AudioSink {
+                val matrices = AudioDownmix.matrices(FormFactor.isTv(context))
+                val processors = if (matrices.isEmpty()) {
+                    emptyArray()
+                } else {
+                    val mixer = ChannelMixingAudioProcessor()
+                    matrices.forEach { (input, output) ->
+                        mixer.putChannelMixingMatrix(
+                            ChannelMixingMatrix.createForConstantPower(input, output),
+                        )
+                    }
+                    arrayOf<AudioProcessor>(mixer)
+                }
+                return DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .setAudioProcessors(processors)
+                    .build()
+            }
+        }
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true)
 
@@ -1008,16 +1072,7 @@ class PlayerActivity : FragmentActivity() {
             .setSeekForwardIncrementMs(Skip.FORWARD_MS)
             .build()
             .apply {
-                // Movie, not the default "unknown". It is what tells the system this is long-form
-                // video, which is what the volume curve, the ducking behaviour and any connected
-                // audio device's own processing all key off.
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
-                        .setUsage(C.USAGE_MEDIA)
-                        .build(),
-                    /* handleAudioFocus = */ true,
-                )
+                setAudioAttributes(movieAudioAttributes, /* handleAudioFocus = */ true)
                 setHandleAudioBecomingNoisy(true)
                 setWakeMode(C.WAKE_MODE_LOCAL)
                 setPlaybackSpeed(playbackSpeed)
@@ -1336,6 +1391,7 @@ class PlayerActivity : FragmentActivity() {
         statusDetail.visibility = View.GONE
         statusTitle.text = mediaTitle.ifBlank { "Finished" }
         statusText.text = "That's the end."
+        hideFailureActions()
         statusRetry?.apply {
             text = "Watch again"
             visibility = View.VISIBLE
@@ -1378,6 +1434,14 @@ class PlayerActivity : FragmentActivity() {
         val pickerOpen = GuidedStepSupportFragment.getCurrentGuidedStepSupportFragment(supportFragmentManager) != null
         if (pickerOpen) return super.dispatchKeyEvent(event)
 
+        // Before anything else claims the same key. A held select on a remote, or the menu key,
+        // is the long press on a video that the browse grid already answers with a menu; here the
+        // one entry that menu would carry which the player has no other route to is the handover.
+        if (isLongPressOnTheVideo(event)) {
+            openInAnotherApp()
+            return true
+        }
+
         if (!FormFactor.isTv(this) && handleTouchDeviceKey(event)) return true
 
         when (event.keyCode) {
@@ -1404,6 +1468,25 @@ class PlayerActivity : FragmentActivity() {
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    /**
+     * A press held down on the picture itself, which is what asks to leave for another app.
+     *
+     * Only while the failure sheet is down and the controls are up: a held select over a bare
+     * picture is how leanback and Media3 both start a scrub, and a held select over the failure
+     * sheet is a press on whichever button has focus. Neither is a spare gesture, and taking one
+     * of them would break something that works to make room for something that has a button of
+     * its own two lines below.
+     */
+    private fun isLongPressOnTheVideo(event: KeyEvent): Boolean {
+        if (!event.isLongPress) return false
+        if (statusOverlay.visibility == View.VISIBLE) return false
+        return when (event.keyCode) {
+            KeyEvent.KEYCODE_MENU -> true
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> controlsUp
+            else -> false
+        }
     }
 
     /**
@@ -1767,6 +1850,7 @@ class PlayerActivity : FragmentActivity() {
         rebufferChip.visibility = View.GONE
         statusDetail.visibility = View.VISIBLE
         statusRetry?.visibility = View.GONE
+        hideFailureActions()
         showLoadingProgress(if (statusProgress.visibility == View.VISIBLE) {
             statusProgress.progress / 1000f
         } else {
@@ -1823,7 +1907,148 @@ class PlayerActivity : FragmentActivity() {
         }
         statusRetry?.visibility = if (retryable) View.VISIBLE else View.GONE
         if (retryable) statusRetry?.requestFocus()
+        showFailureActions(retryable)
         updateDownloadChip()
+    }
+
+    /** Puts the sheet back to the one button it had, for every state that is not a failure. */
+    private fun hideFailureActions() {
+        statusReload?.visibility = View.GONE
+        statusOpenWith?.visibility = View.GONE
+    }
+
+    /**
+     * The two extra ways out of a failure, and the honesty each of them needs.
+     *
+     * Reload is offered wherever Try again is, with the label saying which of the two things it is
+     * about to do, because a press that deletes a gigabyte and a press that does not should not
+     * read the same. The handover is offered even where Try again is not: a codec this device has
+     * not got is precisely the failure another app fixes, and it is the only useful button on that
+     * screen.
+     *
+     * Both are settled from disk, so both arrive a moment after the sheet does. That is the right
+     * way round: the sheet is up and readable immediately, and a button that appears is better than
+     * one that is up and then changes its mind about what it will do.
+     */
+    private fun showFailureActions(retryable: Boolean) {
+        statusReload?.visibility = View.GONE
+        statusOpenWith?.visibility = View.GONE
+        if (fileId <= 0) return
+        lifecycleScope.launch {
+            val plan = reloadPlan()
+            statusReload?.apply {
+                text = Reload.label(plan)
+                visibility = if (retryable) View.VISIBLE else View.GONE
+            }
+
+            val availability = runCatching { Td.localFileAvailability(fileId) }
+                .getOrDefault(LocalFileAvailability.Missing)
+            val downloaded = runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
+            val state = ExternalPlayer.readiness(availability, downloaded)
+            if (state == ExternalPlayer.Readiness.Nothing) return@launch
+            statusOpenWith?.apply {
+                text = if (state == ExternalPlayer.Readiness.Complete) {
+                    "Open in another app"
+                } else {
+                    "Open what's downloaded"
+                }
+                visibility = View.VISIBLE
+            }
+            // Said on the sheet rather than in a dialog on the way out: the viewer is being asked
+            // to choose between two buttons, and the difference between them is this sentence.
+            val caution = ExternalPlayer.caution(state, downloaded, fileSizeBytes)
+            if (caution != null) {
+                statusDetail.text = caution
+                statusDetail.visibility = View.VISIBLE
+            }
+            // Nothing else on this sheet can take focus when the failure is final, so the remote
+            // would otherwise land on a screen with no way in.
+            if (!retryable) statusOpenWith?.requestFocus()
+        }
+    }
+
+    /** Which of the two reloads this video gets, read off the two things that veto the destructive one. */
+    private suspend fun reloadPlan(): Reload.Plan = Reload.plan(
+        fileId = fileId,
+        keptForOffline = runCatching { settings.isKeptDownload(chatId, messageId) }
+            .getOrDefault(true),
+        queuedForOffline = OfflineDownloads.isDownloading(fileId),
+    )
+
+    /**
+     * Reload: throw away what is on disk for this video, then open the stream again from nothing.
+     *
+     * The failure this exists for is a partial file that is wrong rather than merely short, and
+     * every plain retry over it fails identically, which is what makes "Can't play this" look like
+     * a broken app rather than a broken cache. Deleting is safe here because the copy is a cache:
+     * TDLib fetches it again from the message it came from, which is untouched.
+     *
+     * Safe in the other direction too. A video the viewer downloaded on purpose, or one the
+     * download service is working on, falls back to a plain retry, because those bytes are not
+     * this screen's to delete: see [Reload.plan]. The player's own fetch is cancelled first, so
+     * TDLib is not writing into the file as it is being removed, and the entry comes out of the
+     * downloads list as well as off the disk, so nothing resumes into the hole that was left.
+     */
+    private fun reloadFromScratch() {
+        if (reloading) return
+        reloading = true
+        hideFailureActions()
+        statusRetry?.visibility = View.GONE
+        lifecycleScope.launch {
+            val plan = runCatching { reloadPlan() }.getOrDefault(Reload.Plan.PlainRetry)
+            showStatus(Reload.status(plan))
+            if (plan == Reload.Plan.StartOver) {
+                val session = Td.awaitAuthorizedSession()
+                runCatching {
+                    Td.cancelDownload(fileId)
+                    // Off the downloads list as well as off the disk. Leaving the entry behind
+                    // leaves TDLib with a record of a file it no longer has, which the Downloads
+                    // screen would draw as a row with nothing under it.
+                    session.client.removeFileFromDownloads(fileId, deleteFromCache = true)
+                    Td.deleteFile(fileId)
+                }
+            }
+            reloading = false
+            // The player is thrown away rather than re-prepared: its media source is still holding
+            // the descriptor of a file that has just been deleted, and preparing over that reads
+            // the bytes this press was here to get rid of.
+            if (plan == Reload.Plan.StartOver) {
+                mediaSession?.release()
+                mediaSession = null
+                // The surface goes with it, in this order, so the view never holds a released
+                // player and [startPlayback] does not stack a second one over the first.
+                touchSurface?.player = null
+                touchSurface?.let { findViewById<FrameLayout>(R.id.playback_container).removeView(it) }
+                touchSurface = null
+                player?.removeListener(playerListener)
+                player?.release()
+                player = null
+            }
+            retryPlayback()
+        }
+    }
+
+    /**
+     * Hands this video to VLC, MX Player, or whatever else the device has.
+     *
+     * The resume position is written first, so a viewer who leaves for another player and comes
+     * back lands where they left rather than at the start. The background download is deliberately
+     * not cancelled: the other app is reading the same file, and pulling the rest of it out from
+     * under it would be the one thing worse than not offering this at all.
+     */
+    fun openInAnotherApp() {
+        saveResumePosition()
+        lifecycleScope.launch {
+            val outcome = runCatching {
+                ExternalPlayer.handOver(this@PlayerActivity, fileId, mediaTitle)
+            }.getOrElse { ExternalPlayer.Handoff.Refused("That video can't be handed to another app.") }
+            when (outcome) {
+                is ExternalPlayer.Handoff.Started -> outcome.caution?.let(::showGestureFeedback)
+                ExternalPlayer.Handoff.NothingOnDisk ->
+                    showGestureFeedback("Nothing of this video is on the device yet.")
+                is ExternalPlayer.Handoff.Refused -> showGestureFeedback(outcome.reason)
+            }
+        }
     }
 
     /**
