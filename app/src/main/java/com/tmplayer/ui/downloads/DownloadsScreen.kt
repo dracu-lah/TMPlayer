@@ -296,8 +296,12 @@ fun DownloadsScreen(
      */
     suspend fun removeOne(row: DownloadRow): Unit = withContext(Dispatchers.IO) {
         val record = row.record
-        runCatching { Td.deleteFile(record.fileId) }
-        val left = runCatching { Td.localDownloadedBytes(record.fileId) }.getOrDefault(0L)
+        // The same resolution [measure] reads with: the saved id stops answering after a restart,
+        // and a delete through it removes nothing while the row still leaves the list.
+        val fileId = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }
+            .getOrDefault(record.fileId)
+        runCatching { Td.deleteFile(fileId) }
+        val left = runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
         if (left > 0) return@withContext
         settings.forgetDownload(record.chatId, record.messageId)
     }

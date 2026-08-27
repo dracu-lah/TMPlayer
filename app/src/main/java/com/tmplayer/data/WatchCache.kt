@@ -82,9 +82,22 @@ object WatchCache {
         val cached = runCatching { settings.cachedVideosNow() }.getOrDefault(emptyList())
         if (cached.isEmpty()) return
         val busy = OfflineDownloads.active.value.keys
+        // By file id as well as by message, because one remote video forwarded into two chats is
+        // one file in TDLib: a record from the chat it was watched in must not spend the copy the
+        // viewer downloaded from the other.
+        val keptIds = runCatching { settings.downloadHistory.first() }.getOrDefault(emptyList())
+            .map { it.fileId }
+            .toSet()
         for (record in cached) {
-            if (record.fileId == keepFileId || record.fileId in busy) continue
-            if (record.fileId in inFlight) continue
+            // The saved id belongs to the session that wrote it. After a restart it resolves to
+            // nothing: the delete below would quietly remove nothing, the zero read after it would
+            // pass for "the bytes went", and the record would be dropped with the gigabytes still
+            // on the disk. The message is the durable identity, so the id is re-asked from it.
+            val fileId = runCatching {
+                Td.currentFileId(record.chatId, record.messageId, record.fileId)
+            }.getOrDefault(record.fileId)
+            if (fileId == keepFileId || record.fileId == keepFileId) continue
+            if (fileId in busy || fileId in inFlight || fileId in keptIds) continue
             if (runCatching { settings.isKeptDownload(record.chatId, record.messageId) }
                     .getOrDefault(false)
             ) {
@@ -93,8 +106,8 @@ object WatchCache {
                 runCatching { settings.forgetCachedVideo(record.chatId, record.messageId) }
                 continue
             }
-            runCatching { Td.deleteFile(record.fileId) }
-            val left = runCatching { Td.localDownloadedBytes(record.fileId) }.getOrDefault(0L)
+            runCatching { Td.deleteFile(fileId) }
+            val left = runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
             if (left <= 0) runCatching { settings.forgetCachedVideo(record.chatId, record.messageId) }
         }
     }
@@ -182,13 +195,18 @@ object WatchCache {
         val doomed = runCatching { settings.cachedVideosNow() }.getOrDefault(emptyList())
         var freed = 0L
         for (record in doomed) {
-            if (record.fileId in keptIds || record.fileId in busy) continue
+            // Re-asked from the message: a saved id from an earlier session deletes nothing and
+            // measures as zero, which reads here as a file already gone. See [evictAllBut].
+            val fileId = runCatching {
+                Td.currentFileId(record.chatId, record.messageId, record.fileId)
+            }.getOrDefault(record.fileId)
+            if (fileId in keptIds || record.fileId in keptIds || fileId in busy) continue
             if ((record.chatId to record.messageId) in keptMessages) continue
-            val held = runCatching { Td.localDownloadedBytes(record.fileId) }.getOrDefault(0L)
-            runCatching { Td.deleteFile(record.fileId) }
+            val held = runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
+            runCatching { Td.deleteFile(fileId) }
             // Only forgotten once the file has actually gone, or the record stops pointing at
             // bytes that are still on the disk.
-            val left = runCatching { Td.localDownloadedBytes(record.fileId) }.getOrDefault(0L)
+            val left = runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
             if (left <= 0) {
                 freed += held
                 runCatching { settings.forgetCachedVideo(record.chatId, record.messageId) }

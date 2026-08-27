@@ -360,11 +360,19 @@ fun MediaGridScreen(
                 // downloaded on purpose are not touched either way.
                 val cachedRecords = runCatching { settings.cachedVideosNow() }
                     .getOrDefault(emptyList())
-                val cached = cachedRecords.mapNotNull { record ->
-                    val bytes = runCatching { Td.localDownloadedBytes(record.fileId) }
+                // Measured and later deleted through the id the message answers with now, not the
+                // one saved with the record: a saved id from an earlier session measures as zero
+                // and deletes nothing. See [WatchCache.evictAllBut].
+                val owned = cachedRecords.mapNotNull { record ->
+                    val fileId = runCatching {
+                        Td.currentFileId(record.chatId, record.messageId, record.fileId)
+                    }.getOrDefault(record.fileId)
+                    val bytes = runCatching { Td.localDownloadedBytes(fileId) }
                         .getOrDefault(0L)
-                    if (bytes <= 0) null else CacheShelf.Held(record.fileId, bytes, record.updatedAt)
+                    if (bytes <= 0) null else CacheShelf.Held(fileId, bytes, record.updatedAt) to record
                 }
+                val cached = owned.map { it.first }
+                val owners = owned.associate { it.first.fileId to it.second }
                 val coming = OfflineDownloads.active.value
                 val candidates = chosen.map { item ->
                     CacheShelf.Candidate(
@@ -389,7 +397,7 @@ fun MediaGridScreen(
                 if (batch.reclaimFileIds.isNotEmpty()) {
                     for (fileId in batch.reclaimFileIds) {
                         runCatching { Td.deleteFile(fileId) }
-                        val record = cachedRecords.firstOrNull { it.fileId == fileId } ?: continue
+                        val record = owners[fileId] ?: continue
                         val left = runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
                         if (left <= 0) {
                             runCatching { settings.forgetCachedVideo(record.chatId, record.messageId) }
