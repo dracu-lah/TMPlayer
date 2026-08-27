@@ -282,10 +282,20 @@ private fun Root() {
         },
     )
     val chatsState by chatsViewModel.state.collectAsStateWithLifecycle()
+    val accountHeader by chatsViewModel.accountHeader.collectAsStateWithLifecycle()
     val chats = (chatsState as? UiState.Content)?.value?.chats.orEmpty()
 
     LaunchedEffect(auth) {
-        if (auth is AuthState.Ready) chatsViewModel.load() else chatsViewModel.reset()
+        when (auth) {
+            is AuthState.Ready -> chatsViewModel.load()
+            // Connecting is not authorization lost: it is the first seconds of every cold start,
+            // while TDLib opens its database. Resetting here erased the snapshot the first frame
+            // had just painted, which put the skeletons back and made the whole launch wait on
+            // TDLib, the exact thing the snapshot exists to avoid. Failed is left alone for the
+            // same reason: a transient error over a drawn list is better read than a blank one.
+            is AuthState.Connecting, is AuthState.Failed -> Unit
+            else -> chatsViewModel.reset()
+        }
     }
 
     var connectionNotice by remember { mutableStateOf(ConnectionNotice.Hidden) }
@@ -624,6 +634,7 @@ private fun Root() {
                     // Held on its own loading state until the jump has been decided, so the
                     // launch looks like one screen loading rather than two screens fighting.
                     state = if (autoOpenDecided) chatsState else UiState.Loading(),
+                    account = accountHeader,
                     favorites = favorites,
                     continueWatching = continueWatching,
                     onRetry = chatsViewModel::load,

@@ -237,6 +237,12 @@ internal fun browseSections(folders: List<ChatFolderSummary>): List<BrowseSectio
 @Composable
 fun BrowseScreen(
     state: UiState<BrowseData>,
+    /**
+     * The header, delivered separately from [state] so a cold start can draw the name and face
+     * off the snapshot while the chat list is still loading. Falls back to what [state] carries,
+     * so callers without the separate flow (previews, fixtures) change nothing.
+     */
+    account: Account? = null,
     favorites: Set<Long>,
     continueWatching: List<ResumeRecord>,
     onRetry: () -> Unit,
@@ -433,7 +439,7 @@ fun BrowseScreen(
             }
         }
         TouchBrowseShell(
-            account = (state as? UiState.Content)?.value?.account,
+            account = (state as? UiState.Content)?.value?.account ?: account,
             selected = tab,
             sections = sections,
             favoriteCount = favorites.size,
@@ -499,7 +505,7 @@ fun BrowseScreen(
     } else {
         Row(Modifier.fillMaxSize()) {
             NavRail(
-                account = (state as? UiState.Content)?.value?.account,
+                account = (state as? UiState.Content)?.value?.account ?: account,
                 selected = tab,
                 sections = sections,
                 favoriteCount = favorites.size,

@@ -35,6 +35,7 @@ private val MAX_SIZE = longPreferencesKey("max_size_bytes")
 private val CHAT_LAYOUT = stringPreferencesKey("chat_layout")
 private val MEDIA_LAYOUT = stringPreferencesKey("media_layout")
 private val CHAT_SNAPSHOT = stringPreferencesKey("chat_snapshot")
+private val ACCOUNT_SNAPSHOT = stringPreferencesKey("account_snapshot")
 private val THEME_CHOICE = stringPreferencesKey("theme_choice")
 private val DYNAMIC_COLOUR = booleanPreferencesKey("dynamic_colour")
 private val VIDEO_SCALE = stringPreferencesKey("video_scale")
@@ -454,6 +455,51 @@ class SettingsStore(private val context: Context) {
             // Written only when it has actually changed: this runs after every sync, and the whole
             // preference file is rewritten and fsynced per edit.
             if (prefs[CHAT_SNAPSHOT] != encoded) prefs[CHAT_SNAPSHOT] = encoded
+        }
+    }
+
+    /**
+     * The account header as it was last seen, so a cold start does not open on "Your account"
+     * and a grey circle while TDLib gets its database up.
+     *
+     * The photo file id is deliberately not written down: a TDLib file id belongs to the session
+     * that issued it, and a remembered one would point at nothing after a restart. The blurred
+     * mini thumbnail is a couple of hundred bytes and carries the face until the real picture
+     * arrives from TDLib's cache, which is the same bargain the chat snapshot makes.
+     *
+     * Encoded as `username|base64(mini)|name`, the name last because it is the only field that
+     * can contain the separator.
+     */
+    suspend fun cachedAccountSnapshot(): Account? {
+        val encoded = context.prefs.data.first()[ACCOUNT_SNAPSHOT] ?: return null
+        val parts = encoded.split("|", limit = 3)
+        if (parts.size != 3 || parts[2].isBlank()) return null
+        val mini = parts[1].takeIf { it.isNotBlank() }?.let {
+            runCatching { java.util.Base64.getDecoder().decode(it) }.getOrNull()
+        }
+        return Account(
+            name = parts[2],
+            username = parts[0],
+            miniThumbnail = mini,
+            photoFileId = 0,
+        )
+    }
+
+    suspend fun saveAccountSnapshot(account: Account) {
+        val mini = account.miniThumbnail
+            ?.let { java.util.Base64.getEncoder().encodeToString(it) }
+            .orEmpty()
+        val encoded = "${account.username}|$mini|${account.name.replace('|', ' ')}"
+        context.prefs.edit { prefs ->
+            if (prefs[ACCOUNT_SNAPSHOT] != encoded) prefs[ACCOUNT_SNAPSHOT] = encoded
+        }
+    }
+
+    /** For sign-out: the next person to open the app must not be greeted as the last one. */
+    suspend fun clearColdStartSnapshots() {
+        context.prefs.edit { prefs ->
+            prefs.remove(CHAT_SNAPSHOT)
+            prefs.remove(ACCOUNT_SNAPSHOT)
         }
     }
 

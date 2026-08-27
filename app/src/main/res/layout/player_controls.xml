@@ -38,6 +38,19 @@
         android:layout_gravity="bottom"
         android:background="@drawable/bg_controls_scrim_bottom" />
 
+    <!-- The time of day, the way the television apps draw it: the viewer paused to look at the
+         controls, and "how late is it" is half of why. Top left because the status pill (download
+         percent and speed) already owns the top right corner of the frame. -->
+    <TextView
+        android:id="@+id/controls_clock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_marginStart="24dp"
+        android:layout_marginTop="16dp"
+        android:textColor="#E6FFFFFF"
+        android:textSize="15sp" />
+
     <LinearLayout
         android:id="@+id/controls_cluster"
         android:layout_width="match_parent"

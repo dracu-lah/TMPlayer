@@ -41,6 +41,7 @@ class PlayerControls(
     private val subtitle: TextView = root.findViewById(R.id.controls_subtitle)
     private val timeBar: DefaultTimeBar = root.findViewById(R.id.controls_timebar)
     private val time: TextView = root.findViewById(R.id.controls_time)
+    private val clock: TextView = root.findViewById(R.id.controls_clock)
     private val playPause: ImageButton = root.findViewById(R.id.control_play_pause)
     private val previous: ImageButton = root.findViewById(R.id.control_previous)
     private val next: ImageButton = root.findViewById(R.id.control_next)
@@ -155,6 +156,17 @@ class PlayerControls(
         poke()
     }
 
+    /**
+     * Puts the D-pad back on the buttons, for when a picker above the row closes and focus falls
+     * wherever the system drops it: left alone it lands on the scrub bar, and the next press
+     * seeks instead of walking the row.
+     */
+    fun focusRow() {
+        if (!isTv || !visible) return
+        playPause.requestFocus()
+        poke()
+    }
+
     fun toggle() = if (visible) hideAnimated() else show()
 
     fun hideAnimated() {
@@ -207,14 +219,33 @@ class PlayerControls(
             timeBar.setPosition(exo.currentPosition)
             renderClock(exo.currentPosition)
         }
+        renderWallClock()
         renderPlayPause()
     }
 
     private fun renderClock(position: Long) {
         val exo = player() ?: return
         val duration = exo.duration.takeIf { it > 0 } ?: 0L
-        time.text = "${StreamStats.formatClock(position)} / ${StreamStats.formatClock(duration)}"
+        val counter = "${StreamStats.formatClock(position)} / ${StreamStats.formatClock(duration)}"
+        // What the position means for the evening. Scrubbing reads it against the scrubbed-to
+        // position, which is exactly the question a scrub is asking: "if I start here, when am
+        // I done". The playback speed is honoured; watching at 1.5x ends earlier on the clock.
+        val speed = exo.playbackParameters.speed.takeIf { it > 0f } ?: 1f
+        time.text = if (duration > 0 && position <= duration) {
+            val endsAt = System.currentTimeMillis() + ((duration - position) / speed).toLong()
+            "$counter  ·  ends ${timeOfDay(endsAt)}"
+        } else {
+            counter
+        }
     }
+
+    private fun renderWallClock() {
+        clock.text = timeOfDay(System.currentTimeMillis())
+    }
+
+    private fun timeOfDay(atMillis: Long): String =
+        android.text.format.DateFormat.getTimeFormat(container.context)
+            .format(java.util.Date(atMillis))
 
     private companion object {
         /** Nuvio's figure, and Netflix's: long enough to read as calm, short enough to feel live. */

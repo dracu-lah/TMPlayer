@@ -70,6 +70,14 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
     private fun paintFromSnapshot() {
         val store = settings ?: return
         viewModelScope.launch {
+            // The header first: it is one small read, and a rail that says "Your account" over a
+            // grey circle for the seconds TDLib takes to open reads as the app having forgotten
+            // who it belongs to.
+            val rememberedAccount = runCatching { store.cachedAccountSnapshot() }.getOrNull()
+            if (rememberedAccount != null && account == null) {
+                account = rememberedAccount
+                publish()
+            }
             val remembered = runCatching { store.cachedChatSnapshot() }.getOrDefault(emptyList())
             if (remembered.isEmpty() || chats != null) return@launch
             chats = remembered
@@ -202,7 +210,21 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
     }
 
     private var loadJob: Job? = null
+
+    /**
+     * The header's own channel to the drawer, because [publish] cannot carry it until the chat
+     * list exists: on a cold start the name and face are read off disk in milliseconds while the
+     * list is still seconds away, and a header held hostage to the list is the "Your account"
+     * placeholder the snapshot was written to avoid.
+     */
+    private val _accountHeader = MutableStateFlow<Account?>(null)
+    val accountHeader: StateFlow<Account?> = _accountHeader.asStateFlow()
+
     private var account: Account? = null
+        set(value) {
+            field = value
+            _accountHeader.value = value
+        }
     private var chats: List<ChatSummary>? = null
 
     /** When the list last finished syncing, for [refreshIfStale]. */
@@ -251,18 +273,22 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
                 // QR sign-in. Neither is treated as the final answer; the connected pass below
                 // retries both without asking the viewer to press Refresh.
                 chats = try {
-                    repository.cachedChats()
+                    // An empty answer here is TDLib's database still waking, not an empty
+                    // account; the connected sync below is the one allowed to say "no chats".
+                    // Either way the cold-start snapshot is kept until something real beats it.
+                    repository.cachedChats().takeIf { it.isNotEmpty() } ?: chats
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Throwable) {
-                    null
+                    chats
                 }
                 account = try {
-                    Td.me(session)
+                    Td.me(session) ?: account
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Throwable) {
-                    null
+                    // The snapshot-seeded header, if there was one, survives a failed fetch.
+                    account
                 }
                 if (!session.isCurrent()) return@launch
                 if (chats != null) publish()
@@ -279,7 +305,13 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
                     return@launch
                 }
                 if (connected.generation != session.generation) return@launch
-                if (account == null) account = runCatching { Td.me(session) }.getOrNull()
+                // The connected pass always asks again: the answer before it may have been the
+                // cold-start snapshot, whose photo id is a placeholder. Written down afterwards
+                // for the next launch; content-equal writes are skipped in the store.
+                account = runCatching { Td.me(session) }.getOrNull() ?: account
+                account?.let { fresh ->
+                    settings?.let { store -> runCatching { store.saveAccountSnapshot(fresh) } }
+                }
                 // Handed what the local read already produced, so the sync fetches only chats it
                 // has not seen rather than the whole list a second time.
                 val sync = repository.syncChats(known = chats.orEmpty())
@@ -374,6 +406,11 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
         chats = null
         syncedAt = 0L
         _state.value = UiState.Loading("Loading your chats…")
+        // The cold-start snapshots go with it: they exist so the next launch opens on the last
+        // sync, and after a sign-out "the last sync" is somebody else's name, face and chats.
+        settings?.let { store ->
+            App.backgroundScope.launch { runCatching { store.clearColdStartSnapshots() } }
+        }
     }
 
     private companion object {

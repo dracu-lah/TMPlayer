@@ -333,6 +333,13 @@ class PlayerActivity : FragmentActivity() {
         )
         renderControlsTitle()
         renderOrientationButton()
+        // When a track picker closes, focus falls off its fragment and the scrub bar catches it,
+        // so the next D-pad press seeks instead of walking the row. Hand it back to the buttons.
+        supportFragmentManager.addOnBackStackChangedListener {
+            val pickerOpen =
+                GuidedStepSupportFragment.getCurrentGuidedStepSupportFragment(supportFragmentManager) != null
+            if (!pickerOpen) controls?.focusRow()
+        }
         subtitleView.setApplyEmbeddedStyles(true)
         // A TV's default caption size is tuned for broadcast subtitles; video subs need to be
         // legible from a sofa, with an outline that survives a bright frame behind them.
@@ -915,11 +922,20 @@ class PlayerActivity : FragmentActivity() {
                 // two seconds of bitstream instead of half a second. The stock figure is what let
                 // a Dolby Digital 5.1 track underrun on HDMI sinks that drain the AudioTrack in
                 // bursts, and an underrun reads on screen as the picture freezing for a moment
-                // and coming back. Memory cost is a few hundred kilobytes, on the stick's terms
-                // nothing next to one video frame.
+                // and coming back.
+                //
+                // The PCM floor matters just as much: when the FFmpeg renderer decodes the track
+                // (every DTS film, and Dolby on a device that will not take the bitstream), the
+                // sink is fed PCM and Media3's stock quarter-second floor applies. On the stick
+                // that track was seen going unfed for over a second at a stretch while the
+                // decoder fought the video for the same small cores, so the floor is raised to
+                // ride out exactly that. Memory cost is a couple of megabytes at worst, on the
+                // stick's terms nothing next to one video frame.
                 val audioBuffers = DefaultAudioTrackBufferSizeProvider.Builder()
                     .setPassthroughBufferDurationUs(PASSTHROUGH_BUFFER_US)
                     .setAc3BufferMultiplicationFactor(AC3_BUFFER_FACTOR)
+                    .setMinPcmBufferDurationUs(MIN_PCM_BUFFER_US)
+                    .setMaxPcmBufferDurationUs(MAX_PCM_BUFFER_US)
                     .build()
                 return DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(enableFloatOutput)
@@ -2430,6 +2446,14 @@ class PlayerActivity : FragmentActivity() {
         /** See the note on the sink in [buildPlayer]: about two seconds of AC-3 bitstream. */
         private const val PASSTHROUGH_BUFFER_US = 500_000
         private const val AC3_BUFFER_FACTOR = 4
+
+        /**
+         * The decoded-audio floor and ceiling. The stick was seen leaving the AudioTrack unfed
+         * for over a second while its cores were busy with the picture, and Media3's default
+         * quarter-second floor cannot ride that out.
+         */
+        private const val MIN_PCM_BUFFER_US = 1_500_000
+        private const val MAX_PCM_BUFFER_US = 2_000_000
 
         /** Enough for the back-seek a thumb makes when it missed a line of dialogue. */
         private const val BACK_BUFFER_MS = 10_000
