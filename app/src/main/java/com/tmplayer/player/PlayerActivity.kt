@@ -9,18 +9,17 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
 import android.os.SystemClock
+import android.util.Log
 import android.util.Rational
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
-import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -44,14 +43,15 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioTrackBufferSizeProvider
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.session.MediaSession
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.ui.CaptionStyleCompat
-import androidx.media3.ui.DefaultTimeBar
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import androidx.lifecycle.Lifecycle
@@ -152,16 +152,8 @@ class PlayerActivity : FragmentActivity() {
     /** Set while [reloadFromScratch] is clearing the file, so a second press cannot race it. */
     private var reloading = false
 
-    /** The phone's episode buttons; null on a TV, where the transport row grows its own. */
-    private var episodeRow: View? = null
-    private var previousEpisodeButton: android.widget.Button? = null
-    private var nextEpisodeButton: android.widget.Button? = null
-
-    /** The phone's picture shape and speed buttons, and the row holding them. Null on a TV. */
-    private var pictureRow: View? = null
-    private var scaleButton: android.widget.Button? = null
-    private var speedButton: android.widget.Button? = null
-    private var rotationButton: ImageView? = null
+    /** The transport overlay, one design on every device. Built in [onCreate], lives as long. */
+    private var controls: PlayerControls? = null
 
     /**
      * Which way up the picture is held, and whether the viewer has said so themselves.
@@ -172,7 +164,7 @@ class PlayerActivity : FragmentActivity() {
     private var orientation = lastOrientation
     private var orientationChosen = false
 
-    /** The touch transport row, on a phone. Null on a TV, where leanback's fragment has it. */
+    /** The video surface, on every device. Null until playback starts. */
     private var touchSurface: PlayerView? = null
     private var gestureHud: TextView? = null
     private val hideGestureHud = Runnable { gestureHud?.visibility = View.GONE }
@@ -232,6 +224,9 @@ class PlayerActivity : FragmentActivity() {
 
     /** True while the transport row is up: the download figure is shown alongside it. */
     private var controlsUp = false
+
+    /** Set once the row has introduced itself over the first frames, so it only does it once. */
+    private var controlsShownOnStart = false
 
     /** How far into the video the download has reached, and whether it has reached the end. */
     private var downloadedFraction = 0f
@@ -322,6 +317,22 @@ class PlayerActivity : FragmentActivity() {
         rebufferText = findViewById(R.id.rebuffer_text)
         downloadChip = findViewById(R.id.download_chip)
         gestureHud = findViewById(R.id.gesture_hud)
+        controls = PlayerControls(
+            root = findViewById(R.id.player_root),
+            isTv = FormFactor.isTv(this),
+            player = { player },
+            onVisibility = ::onControlsVisibilityChanged,
+            onTogglePlay = ::togglePlayback,
+            onSkip = ::skipBy,
+            onPickSubtitles = { showTrackPicker(C.TRACK_TYPE_TEXT) },
+            onPickAudio = { showTrackPicker(C.TRACK_TYPE_AUDIO) },
+            onCycleSpeed = ::cycleSpeed,
+            onCycleScale = ::cycleScale,
+            onCycleOrientation = ::cycleOrientation,
+            onPlayEpisode = ::playEpisode,
+        )
+        renderControlsTitle()
+        renderOrientationButton()
         subtitleView.setApplyEmbeddedStyles(true)
         // A TV's default caption size is tuned for broadcast subtitles; video subs need to be
         // legible from a sofa, with an outline that survives a bright frame behind them.
@@ -349,7 +360,7 @@ class PlayerActivity : FragmentActivity() {
         statusMeta?.text = mediaSubtitle.ifBlank { chatTitle }
         statusMeta?.visibility =
             if (statusMeta?.text.isNullOrBlank()) View.GONE else View.VISIBLE
-        if (!FormFactor.isTv(this)) wireEpisodeButtons()
+        watchEpisodes()
         observeDownload()
         observeConnectivity()
         startResumeHeartbeat()
@@ -393,9 +404,6 @@ class PlayerActivity : FragmentActivity() {
             // the wrong language.
             tracks = runCatching { settings.trackChoice(seriesKey) }
                 .getOrDefault(TrackChoice())
-            // The buttons were drawn with the defaults before any of this was read off disk.
-            scaleButton?.text = videoScale.label
-            speedButton?.text = PlaybackSpeed.label(playbackSpeed)
             if (!session.isCurrent()) return@launch
             startPlayback(session.client)
         }
@@ -412,40 +420,25 @@ class PlayerActivity : FragmentActivity() {
         }
         player = exo
         attachMediaSession(exo)
-
-        // Which surface depends only on the hardware. A remote drives leanback's transport row and
-        // nothing else, a thumb drives Media3's and nothing else, and neither works on the other.
-        if (FormFactor.isTv(this)) {
-            // Replace unconditionally: a fragment that came up before the player existed has no
-            // glue and has to be rebuilt. State loss is allowed because nothing here is restored,
-            // and under "download the whole video first" this can land after the activity has
-            // been stopped.
-            supportFragmentManager.beginTransaction()
-                .replace(R.id.playback_container, TvPlaybackFragment())
-                .commitAllowingStateLoss()
-        } else {
-            attachTouchSurface(exo)
-        }
+        attachSurface(exo)
     }
 
     /**
-     * The phone's video surface and transport row, in place of leanback's.
+     * The video surface, the same on every device: a bare PlayerView with its own chrome off.
      *
-     * Leanback's playback fragment is built around a D-pad and has no touch handling at all, which
-     * on a phone leaves a picture nobody can pause. Media3's own view is the same player behind a
-     * control row made for a thumb, so the surface is the only thing swapped: the activity still
-     * owns the ExoPlayer, and the loading sheet, the chips, the resume writes and the retry logic
-     * sit over this exactly as they sit over the TV.
+     * The transport row is this app's, in player_controls.xml, and is the same row a thumb and a
+     * D-pad drive. Leanback used to draw the television's controls and Media3 the phone's, which
+     * was two apps' worth of look for one app; both are gone, and the activity still owns the
+     * ExoPlayer while the loading sheet, the chips, the resume writes and the retry logic sit
+     * over this surface exactly as they always did.
      */
-    private fun attachTouchSurface(exo: ExoPlayer) {
+    private fun attachSurface(exo: ExoPlayer) {
         val view = PlayerView(this)
-        // The text renderer is live, so there is something for this button to choose.
-        view.setShowSubtitleButton(true)
         view.layoutParams = FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT,
         )
-        view.useController = true
+        view.useController = false
         // TMPlayer's own loading sheet and rebuffer chip already say what is happening, with a
         // speed and a percentage. A second spinner for the same wait is noise.
         view.setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
@@ -453,81 +446,60 @@ class PlayerActivity : FragmentActivity() {
         // straight off onCues. Leaving Media3's own subtitle view up renders every line twice,
         // slightly offset.
         view.subtitleView?.visibility = View.GONE
-        view.setControllerVisibilityListener(
-            PlayerView.ControllerVisibilityListener { visibility ->
-                onControlsVisibilityChanged(visibility == View.VISIBLE)
-            },
-        )
         view.player = exo
         findViewById<FrameLayout>(R.id.playback_container).addView(view)
         touchSurface = view
-
         view.resizeMode = videoScale.resizeMode
-        view.setControllerShowTimeoutMs(CONTROLLER_TIMEOUT_MS)
-        modernise(view)
 
-        // Fed from dispatchTouchEvent rather than attached here: see [PlayerGestures].
-        gestures = PlayerGestures(
-            context = this,
-            window = window,
-            onSkip = ::skipBy,
-            onFeedback = ::showGestureFeedback,
-            onPinch = ::pinchScale,
-            positionMs = { player?.currentPosition ?: 0L },
-            durationMs = { player?.duration?.takeIf { it > 0 } ?: 0L },
-            onSeekTo = { at -> player?.seekTo(at) },
-            onHold = ::holdFastForward,
-            onTapControls = ::toggleControls,
-            onTogglePlay = ::togglePlayback,
-        )
+        if (!FormFactor.isTv(this)) {
+            // Fed from dispatchTouchEvent rather than attached here: see [PlayerGestures].
+            gestures = PlayerGestures(
+                context = this,
+                window = window,
+                onSkip = ::skipBy,
+                onFeedback = ::showGestureFeedback,
+                onPinch = ::pinchScale,
+                positionMs = { player?.currentPosition ?: 0L },
+                durationMs = { player?.duration?.takeIf { it > 0 } ?: 0L },
+                onSeekTo = { at -> player?.seekTo(at) },
+                onHold = ::holdFastForward,
+                onTapControls = ::toggleControls,
+                onTogglePlay = ::togglePlayback,
+            )
+        }
 
-        insetTheControlsOnly(view)
+        insetTheControls()
     }
+
+    /** The surface the frames land on, for the display requests only it can carry. */
+    private fun videoSurface(): android.view.Surface? =
+        (touchSurface?.videoSurfaceView as? android.view.SurfaceView)?.holder?.surface
 
     /**
      * Keeps the safe area off the video and on the things a finger has to reach.
      *
-     * The video surface is laid out once at the full size of the window and never moves again.
-     * Padding the PlayerView would take every pixel of status bar, gesture handle and notch out of
-     * the picture, and would re-pad the surface each time the system bars ride in with the
-     * transport row, so the video would jump and resize under the controls.
-     *
-     * The controller keeps every pixel of the window too: it is not just the buttons, its first
-     * child is the dim wash over the whole picture and the transport row carries the gradient, so
-     * padding it leaves undimmed strips along the notch and the gesture handle. The inset is
-     * applied inside it, to the transport row and the scrub bar, which are the only things a
-     * finger has to reach.
+     * The video surface is laid out once at the full size of the window and never moves again:
+     * padding it would take every pixel of status bar, gesture handle and notch out of the
+     * picture. The gradient scrims keep every edge too, or an undimmed strip appears along the
+     * notch and the gesture handle. Only the cluster of text, bar and buttons is padded inwards,
+     * on top of the padding the layout already gives it.
      */
-    private fun insetTheControlsOnly(view: PlayerView) {
-        val controller = view.findViewById<View>(androidx.media3.ui.R.id.exo_controller)
-        val bottomBar = view.findViewById<View>(androidx.media3.ui.R.id.exo_bottom_bar)
-        val timeBar = view.findViewById<View>(androidx.media3.ui.R.id.exo_progress)
+    private fun insetTheControls() {
+        val cluster = findViewById<View>(R.id.controls_cluster)
         val corner = findViewById<View>(R.id.top_right_stack)
         val root = findViewById<View>(R.id.player_root)
-        val barHeight = bottomBar?.layoutParams?.height ?: 0
-        val timeBarMargin = (timeBar?.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin ?: 0
+        val baseLeft = cluster.paddingLeft
+        val baseRight = cluster.paddingRight
+        val baseBottom = cluster.paddingBottom
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val safe = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
             )
-            // The controller itself keeps every edge: padding it would move the dim and the
-            // gradient inwards along with the buttons.
-            controller?.updatePadding(left = 0, right = 0, top = 0, bottom = 0)
-            // The row grows by the bottom inset rather than being padded into its fixed height, so
-            // the gradient reaches the bottom of the screen while the buttons stay their own size.
-            bottomBar?.let {
-                it.updatePadding(left = safe.left, right = safe.right, bottom = safe.bottom)
-                if (barHeight > 0) {
-                    it.layoutParams = it.layoutParams.also { lp -> lp.height = barHeight + safe.bottom }
-                }
-            }
-            // The scrub bar is a sibling of that row, pinned to the bottom by a margin of its own.
-            (timeBar?.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
-                lp.bottomMargin = timeBarMargin + safe.bottom
-                lp.leftMargin = safe.left
-                lp.rightMargin = safe.right
-                timeBar.layoutParams = lp
-            }
+            cluster.updatePadding(
+                left = baseLeft + safe.left,
+                right = baseRight + safe.right,
+                bottom = baseBottom + safe.bottom,
+            )
             corner?.updatePadding(right = safe.right, top = safe.top)
             insets
         }
@@ -538,8 +510,7 @@ class PlayerActivity : FragmentActivity() {
 
     /** The single tap: the one gesture that raises the transport row, and drops it again. */
     private fun toggleControls() {
-        val view = touchSurface ?: return
-        if (controlsUp) view.hideController() else view.showController()
+        controls?.toggle()
     }
 
     /** The double tap in the middle of the picture, and the play or pause key on a phone. */
@@ -551,30 +522,6 @@ class PlayerActivity : FragmentActivity() {
         } else {
             exo.play()
             showGestureFeedback("▶")
-        }
-    }
-
-    /**
-     * The app's own colours on Media3's controller, and a scrim under it.
-     *
-     * Media3's stock row is close to invisible over a bright frame. The played portion and the
-     * scrubber take the app's accent, the rest a translucent white, and a gradient behind the row
-     * darkens the bottom of the picture only while there is something down there to read.
-     *
-     * All of it is looked up rather than declared, because the alternative is forking Media3's
-     * controller layout wholesale and inheriting the maintenance of every button in it.
-     */
-    private fun modernise(view: PlayerView) {
-        runCatching {
-            val accent = ContextCompat.getColor(this, R.color.accent)
-            view.findViewById<DefaultTimeBar>(androidx.media3.ui.R.id.exo_progress)?.apply {
-                setPlayedColor(accent)
-                setScrubberColor(accent)
-                setBufferedColor(BUFFERED_COLOR)
-                setUnplayedColor(UNPLAYED_COLOR)
-            }
-            view.findViewById<View>(androidx.media3.ui.R.id.exo_bottom_bar)
-                ?.setBackgroundResource(R.drawable.bg_player_scrim)
         }
     }
 
@@ -619,57 +566,35 @@ class PlayerActivity : FragmentActivity() {
     }
 
     /**
-     * Shows the phone's previous and next buttons once the chat has been asked about them.
+     * Feeds the transport row's episode buttons once the chat has been asked about them.
      *
-     * They are hidden until the search comes back, and hidden for good on a video that is not part
-     * of a series, so nothing appears that would do nothing when pressed.
+     * They stay hidden until the search comes back, and hidden for good on a video that is not
+     * part of a series, so nothing appears that would do nothing when pressed.
      */
-    private fun wireEpisodeButtons() {
-        wirePictureButtons()
-        episodeRow = findViewById(R.id.episode_row)
-        previousEpisodeButton = findViewById(R.id.previous_episode)
-        nextEpisodeButton = findViewById(R.id.next_episode)
+    private fun watchEpisodes() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 episodes.collect { found ->
-                    previousEpisodeButton?.apply {
-                        visibility = if (found.previous != null) View.VISIBLE else View.GONE
-                        text = episodeLabel("Prev", found.previous)
-                        setOnClickListener { found.previous?.let(::playEpisode) }
-                    }
-                    nextEpisodeButton?.apply {
-                        visibility = if (found.next != null) View.VISIBLE else View.GONE
-                        text = episodeLabel("Next", found.next)
-                        setOnClickListener { found.next?.let(::playEpisode) }
-                    }
-                    updateEpisodeRow()
+                    controls?.setEpisodes(
+                        previousEpisode = found.previous,
+                        nextEpisode = found.next,
+                        previousLabel = episodeLabel("Previous", found.previous),
+                        nextLabel = episodeLabel("Next", found.next),
+                    )
                 }
             }
         }
     }
 
-    /**
-     * The picture shape and the playback speed, as two buttons a thumb can reach.
-     *
-     * The shape can also be pinched and the speed found in Media3's gear menu, but neither is
-     * something a viewer discovers, and the shape is the control people go looking for the moment
-     * a video turns up with black bars down the sides. Each button carries its current value, so
-     * it says what the last press did.
-     */
-    private fun wirePictureButtons() {
-        pictureRow = findViewById(R.id.picture_row)
-        rotationButton = findViewById<ImageView>(R.id.rotation_button)?.apply {
-            setOnClickListener { cycleOrientation() }
-        }
-        renderOrientationButton()
-        scaleButton = findViewById<android.widget.Button>(R.id.scale_button)?.apply {
-            text = videoScale.label
-            setOnClickListener { cycleScale() }
-        }
-        speedButton = findViewById<android.widget.Button>(R.id.speed_button)?.apply {
-            text = PlaybackSpeed.label(playbackSpeed)
-            setOnClickListener { cycleSpeed() }
-        }
+    /** The name over the scrub bar: the parsed title, with the episode code and source under it. */
+    private fun renderControlsTitle() {
+        val parsed = MediaName.parse(mediaTitle)
+        val name = parsed.title.ifBlank { mediaTitle }
+        val detail = listOfNotNull(
+            parsed.episodeCode,
+            mediaSubtitle.ifBlank { chatTitle }.takeIf { it.isNotBlank() },
+        ).joinToString("  ·  ")
+        controls?.setTitle(name, detail)
     }
 
     /**
@@ -684,17 +609,6 @@ class PlayerActivity : FragmentActivity() {
         return "$direction $code"
     }
 
-    /** The buttons ride with the transport row, so they are never over the picture on their own. */
-    private fun updateEpisodeRow() {
-        val found = _episodes.value
-        val room = controlsUp && statusOverlay.visibility != View.VISIBLE
-        episodeRow?.visibility =
-            if (room && (found.previous != null || found.next != null)) View.VISIBLE else View.GONE
-        // The shape and speed buttons are offered on every video, series or not, and ride with the
-        // controller for the same reason the episode buttons do.
-        pictureRow?.visibility = if (room) View.VISIBLE else View.GONE
-    }
-
     /**
      * Every touch in the window is offered to the gestures before any view sees it.
      *
@@ -707,12 +621,14 @@ class PlayerActivity : FragmentActivity() {
      * video, so a brightness drag, a scrub or a hold would each end with the controls in the way of
      * what the gesture just did. Only [toggleControls] raises them, from a single tap.
      *
-     * The loading and error sheets are the exception in both directions: they carry buttons, and a
-     * button nobody can press is worse than no gesture at all.
+     * The loading and error sheets are the exception in both directions, and so is the track
+     * picker: they carry buttons, and a button nobody can press is worse than no gesture at all.
      */
     override fun dispatchTouchEvent(event: android.view.MotionEvent): Boolean {
         val surface = touchSurface
-        if (surface == null || inPictureInPicture || statusOverlay.visibility == View.VISIBLE) {
+        val pickerOpen =
+            GuidedStepSupportFragment.getCurrentGuidedStepSupportFragment(supportFragmentManager) != null
+        if (surface == null || inPictureInPicture || pickerOpen || statusOverlay.visibility == View.VISIBLE) {
             return super.dispatchTouchEvent(event)
         }
         gestures?.onTouchEvent(event, surface.width, surface.height)
@@ -774,43 +690,28 @@ class PlayerActivity : FragmentActivity() {
     }
 
     private fun renderOrientationButton() {
-        val button = rotationButton ?: return
-        button.setImageResource(
+        controls?.setOrientationIcon(
             when (orientation) {
                 ScreenOrientation.Follow -> R.drawable.ic_rotate_auto
                 ScreenOrientation.Landscape -> R.drawable.ic_rotate_landscape
                 ScreenOrientation.Portrait -> R.drawable.ic_rotate_portrait
             },
+            orientation.label,
         )
-        button.contentDescription = orientation.label
     }
 
-    /** The next picture shape along, from the television's own button. */
+    /** The next picture shape along. The button's press flashes the new name over the picture. */
     fun cycleScale() = applyScale(videoScale.next())
 
     /**
-     * Which lever shapes the picture, and why only one of them may move at a time.
-     *
-     * There are two. The PlayerView sizes its own surface to the chosen shape, and the codec's
-     * scaling mode scales the frames again inside that surface, so pulling both cancels them out.
-     * The phone therefore leaves the codec on plain scale-to-fit and lets the view own the shape.
-     *
-     * The television has no PlayerView to set a resize mode on: it draws onto leanback's bare
-     * surface, where the scaling mode is the only lever, and it has two positions, which is why
-     * Stretch is not offered there and Crop is what a second press reaches.
+     * The PlayerView owns the picture's shape on every device now, so the codec's own scaling
+     * stays on plain fit: the view sizes its surface to the chosen shape, and the codec scaling
+     * the frames again inside it would cancel the choice out.
      */
-    private fun scalingModeFor(scale: VideoScale): Int = when {
-        !FormFactor.isTv(this) -> C.VIDEO_SCALING_MODE_SCALE_TO_FIT
-        scale == VideoScale.Fit -> C.VIDEO_SCALING_MODE_SCALE_TO_FIT
-        else -> C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
-    }
-
     private fun applyScale(scale: VideoScale) {
         videoScale = scale
         touchSurface?.resizeMode = scale.resizeMode
-        player?.videoScalingMode = scalingModeFor(scale)
-        tvFragment()?.showVideoScale(scale)
-        scaleButton?.text = scale.label
+        player?.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
         showGestureFeedback(scale.label)
         lifecycleScope.launch { runCatching { settings.setVideoScale(scale.name) } }
     }
@@ -820,14 +721,9 @@ class PlayerActivity : FragmentActivity() {
         val next = PlaybackSpeed.next(playbackSpeed)
         playbackSpeed = next
         player?.setPlaybackSpeed(next)
-        tvFragment()?.showPlaybackSpeed(next)
-        speedButton?.text = PlaybackSpeed.label(next)
         showGestureFeedback(PlaybackSpeed.label(next))
         lifecycleScope.launch { runCatching { settings.setPlaybackSpeed(next) } }
     }
-
-    private fun tvFragment(): TvPlaybackFragment? =
-        supportFragmentManager.findFragmentById(R.id.playback_container) as? TvPlaybackFragment
 
     /**
      * A figure for whatever a gesture is changing, gone again shortly after the finger lifts.
@@ -989,8 +885,15 @@ class PlayerActivity : FragmentActivity() {
                     folds.forEach { fold ->
                         mixer.putChannelMixingMatrix(
                             when (fold) {
-                                is AudioDownmix.Fold.Untouched ->
-                                    ChannelMixingMatrix.create(fold.channels, fold.channels)
+                                // Spelt out because Media3 1.10 dropped the create() shorthand:
+                                // ones down the diagonal, every channel passed through as it is.
+                                is AudioDownmix.Fold.Untouched -> ChannelMixingMatrix(
+                                    fold.channels,
+                                    fold.channels,
+                                    FloatArray(fold.channels * fold.channels) { index ->
+                                        if (index % (fold.channels + 1) == 0) 1f else 0f
+                                    },
+                                )
 
                                 is AudioDownmix.Fold.ConstantPower ->
                                     ChannelMixingMatrix.createForConstantPower(
@@ -1008,10 +911,21 @@ class PlayerActivity : FragmentActivity() {
                     }
                     arrayOf<AudioProcessor>(mixer)
                 }
+                // Twice Media3's passthrough allowance, and four times its AC-3 multiplier: about
+                // two seconds of bitstream instead of half a second. The stock figure is what let
+                // a Dolby Digital 5.1 track underrun on HDMI sinks that drain the AudioTrack in
+                // bursts, and an underrun reads on screen as the picture freezing for a moment
+                // and coming back. Memory cost is a few hundred kilobytes, on the stick's terms
+                // nothing next to one video frame.
+                val audioBuffers = DefaultAudioTrackBufferSizeProvider.Builder()
+                    .setPassthroughBufferDurationUs(PASSTHROUGH_BUFFER_US)
+                    .setAc3BufferMultiplicationFactor(AC3_BUFFER_FACTOR)
+                    .build()
                 return DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                     .setAudioProcessors(processors)
+                    .setAudioTrackBufferSizeProvider(audioBuffers)
                     .build()
             }
         }
@@ -1021,6 +935,18 @@ class PlayerActivity : FragmentActivity() {
         // Deliberately small: on a 1 GB stick a generous buffer is what gets the app killed.
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(BUFFER_MIN_MS, BUFFER_MAX_MS, BUFFER_PLAYBACK_MS, BUFFER_REBUFFER_MS)
+            // The same figures again for what Media3 calls local playback. Since 1.9.0 a file://
+            // or content:// item gets one second of buffer on the theory that the whole file is
+            // already on disk; this app's videos are still being written while they play, and one
+            // second behind the write frontier stalls on any hiccup in the download. tdfile:// is
+            // not on Media3's local list today, but the values are pinned so a future scheme or a
+            // future Media3 cannot quietly put the one-second rule back.
+            .setBufferDurationsMsForLocalPlayback(
+                BUFFER_MIN_MS,
+                BUFFER_MAX_MS,
+                BUFFER_PLAYBACK_MS,
+                BUFFER_REBUFFER_MS,
+            )
             .setTargetBufferBytes(TARGET_BUFFER_BYTES)
             .setPrioritizeTimeOverSizeThresholds(false)
             // A few seconds of what has already played, kept behind the position. Without it a
@@ -1064,7 +990,31 @@ class PlayerActivity : FragmentActivity() {
                 setHandleAudioBecomingNoisy(true)
                 setWakeMode(C.WAKE_MODE_LOCAL)
                 setPlaybackSpeed(playbackSpeed)
-                videoScalingMode = scalingModeFor(videoScale)
+                videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+                // Media3 only ever asks the display for a seamless rate switch. On a television
+                // whose viewer set "Match content frame rate" to always, the app asks itself,
+                // with the stronger request, so Media3's own signalling is turned off there.
+                // See [FrameRateMatch].
+                if (FrameRateMatch.shouldTakeOver(this@PlayerActivity)) {
+                    setVideoChangeFrameRateStrategy(C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF)
+                }
+                // The one signal that separates "the network stalled" from "the audio pipeline
+                // ran dry": a stutter with these lines in the log is an output buffer problem,
+                // one without them is the download.
+                addAnalyticsListener(object : AnalyticsListener {
+                    override fun onAudioUnderrun(
+                        eventTime: AnalyticsListener.EventTime,
+                        bufferSize: Int,
+                        bufferSizeMs: Long,
+                        elapsedSinceLastFeedMs: Long,
+                    ) {
+                        Log.w(
+                            "TMPlayer",
+                            "Audio underrun: buffer ${bufferSizeMs}ms, " +
+                                "last fed ${elapsedSinceLastFeedMs}ms ago",
+                        )
+                    }
+                })
             }
     }
 
@@ -1120,12 +1070,16 @@ class PlayerActivity : FragmentActivity() {
             videoWidth = size.width
             videoHeight = size.height
             followVideoOrientation()
+            if (FrameRateMatch.shouldTakeOver(this@PlayerActivity)) {
+                FrameRateMatch.apply(videoSurface(), player?.videoFormat?.frameRate ?: 0f)
+            }
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             // A long download before the first frame is still the viewer waiting on this screen,
             // so the loading sheet counts as something worth staying awake for.
             keepScreenOn(isPlaying || openingFilm)
+            controls?.onPlayingChanged()
         }
 
         override fun onPlaybackStateChanged(state: Int) {
@@ -1139,6 +1093,12 @@ class PlayerActivity : FragmentActivity() {
                 Player.STATE_READY -> {
                     recoveryAttempts = 0
                     hideStatus()
+                    // Once, as the picture first lands: the viewer sees the name of what they
+                    // opened and where the controls live, and the row folds away on its own.
+                    if (!controlsShownOnStart) {
+                        controlsShownOnStart = true
+                        controls?.show()
+                    }
                 }
                 Player.STATE_ENDED -> onVideoEnded()
                 else -> Unit
@@ -1559,8 +1519,8 @@ class PlayerActivity : FragmentActivity() {
     }
 
     /**
-     * MEDIA keys always seek. D-pad seeks only while the transport row is hidden; once it is
-     * up, leanback's own scrubbing owns those keys.
+     * MEDIA keys always act. D-pad keys act on the bare picture and walk the row once it is up:
+     * the focused views own them then, including the scrub bar's own left and right stepping.
      */
     @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -1587,17 +1547,45 @@ class PlayerActivity : FragmentActivity() {
                 skipBy(-Skip.BACK_MS)
                 return true
             }
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                togglePlayback()
+                return true
+            }
+            KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                player?.play()
+                return true
+            }
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+                player?.pause()
+                return true
+            }
+            // Back drops the row before it leaves the film: the film is what Back was aimed at
+            // only once there is nothing else over it.
+            KeyEvent.KEYCODE_BACK -> {
+                if (controlsUp && statusOverlay.visibility != View.VISIBLE) {
+                    controls?.hideAnimated()
+                    return true
+                }
+            }
             KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_LEFT -> {
-                // Only asked of leanback, and only when leanback is what is on screen. A phone
-                // has no such fragment, and its transport row handles the arrows of an attached
-                // keyboard itself, so there is nothing here to route.
-                val fragment = supportFragmentManager
-                    .findFragmentById(R.id.playback_container) as? TvPlaybackFragment
-                if (fragment != null && !fragment.controlsVisible()) {
-                    val step = if (event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) Skip.FORWARD_MS else -Skip.BACK_MS
-                    skipBy(step)
-                    // Fall through so leanback also raises the controls: the user needs to see
-                    // where the seek landed.
+                // A remote's arrows over the bare picture seek, and the row comes up so the
+                // viewer sees where the seek landed. Once the row is up the same arrows walk it.
+                if (FormFactor.isTv(this) && !controlsUp && statusOverlay.visibility != View.VISIBLE) {
+                    skipBy(if (event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) Skip.FORWARD_MS else -Skip.BACK_MS)
+                    controls?.show()
+                    return true
+                }
+            }
+            KeyEvent.KEYCODE_DPAD_UP,
+            KeyEvent.KEYCODE_DPAD_DOWN,
+            KeyEvent.KEYCODE_DPAD_CENTER,
+            KeyEvent.KEYCODE_ENTER,
+            -> {
+                // Any other press over the bare picture asks for the row rather than doing
+                // anything irreversible; the second press does the thing it lands on.
+                if (FormFactor.isTv(this) && !controlsUp && statusOverlay.visibility != View.VISIBLE) {
+                    controls?.show()
+                    return true
                 }
             }
         }
@@ -1607,9 +1595,10 @@ class PlayerActivity : FragmentActivity() {
     /**
      * A press held down on the picture itself, which is what asks to leave for another app.
      *
-     * Only while the failure sheet is down and the controls are up: a held select over a bare
-     * picture is how leanback and Media3 both start a scrub, and a held select over the failure
-     * sheet is a press on whichever button has focus. Neither is a spare gesture to take.
+     * Only while the failure sheet is down and the controls are up: a held select over the bare
+     * picture is the first press of a scrub for anyone trained on other players, and a held
+     * select over the failure sheet is a press on whichever button has focus. Neither is a spare
+     * gesture to take.
      */
     private fun isLongPressOnTheVideo(event: KeyEvent): Boolean {
         if (!event.isLongPress) return false
@@ -1835,23 +1824,29 @@ class PlayerActivity : FragmentActivity() {
         inPictureInPicture = isInPictureInPictureMode
         // At thumbnail size there is room for the picture and nothing else. The system draws its
         // own play and pause over the window, fed by the media session.
-        touchSurface?.useController = !isInPictureInPictureMode
-        if (isInPictureInPictureMode) touchSurface?.hideController()
+        if (isInPictureInPictureMode) controls?.hideNow()
         subtitleView.visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
-        episodeRow?.visibility = View.GONE
-        pictureRow?.visibility = View.GONE
         downloadChip.visibility = View.GONE
         gestures?.controlsVisible = false
     }
 
-    /** Leanback raising or hiding the transport row; the download figure rides with it. */
+    /** The transport row coming or going; the chips and the system bars ride with it. */
     fun onControlsVisibilityChanged(visible: Boolean) {
         controlsUp = visible
         gestures?.controlsVisible = visible
         // The system bars ride with the transport row, as they do in every video app on the
         // platform.
         setSystemBarsHidden(!visible)
-        updateEpisodeRow()
+        // Subtitles climb clear of the raised row rather than being covered by it, and settle
+        // back once it goes. Posted so the first raise measures a laid-out cluster rather than
+        // the zero height it had while gone.
+        val cluster = findViewById<View>(R.id.controls_cluster)
+        cluster.post {
+            subtitleView.animate()
+                .translationY(if (visible && controlsUp) -cluster.height.toFloat() else 0f)
+                .setDuration(SUBTITLE_LIFT_MS)
+                .start()
+        }
         updateDownloadChip()
     }
 
@@ -2299,7 +2294,6 @@ class PlayerActivity : FragmentActivity() {
         statusOverlay.visibility = View.GONE
         stopArtDrift()
         rebufferChip.visibility = View.GONE
-        updateEpisodeRow()
         updateDownloadChip()
     }
 
@@ -2433,16 +2427,20 @@ class PlayerActivity : FragmentActivity() {
         private const val BUFFER_REBUFFER_MS = 5_000
         private const val TARGET_BUFFER_BYTES = 20 * 1024 * 1024
 
+        /** See the note on the sink in [buildPlayer]: about two seconds of AC-3 bitstream. */
+        private const val PASSTHROUGH_BUFFER_US = 500_000
+        private const val AC3_BUFFER_FACTOR = 4
+
         /** Enough for the back-seek a thumb makes when it missed a line of dialogue. */
         private const val BACK_BUFFER_MS = 10_000
         private const val END_GUARD_MS = 1_000L
         /** What a held finger runs the picture at, the same figure every player uses for it. */
         private const val HOLD_SPEED = 2f
 
-        /** The buffered and unbuffered halves of the scrub bar, over any frame. */
-        private const val BUFFERED_COLOR = 0x66FFFFFF.toInt()
-        private const val UNPLAYED_COLOR = 0x33FFFFFF.toInt()
         private const val RESUME_TICK_MS = 10_000L
+
+        /** The captions' climb out from under the raised transport row, and back. */
+        private const val SUBTITLE_LIFT_MS = 200L
 
         /** Twice a second: faster than the eye needs and slower than TDLib talks. */
         private const val PROGRESS_RENDER_MS = 500L
@@ -2474,9 +2472,6 @@ class PlayerActivity : FragmentActivity() {
 
         /** Long enough to read the figure a drag left behind, short enough to stay out of the way. */
         private const val GESTURE_HUD_MS = 900L
-
-        /** Long enough to read the row and reach for something on it, short enough to get out. */
-        private const val CONTROLLER_TIMEOUT_MS = 3_500
 
         /** Long enough to read the next title and to stop it; short enough not to be a wait. */
         private const val AUTOPLAY_COUNTDOWN_SEC = 8

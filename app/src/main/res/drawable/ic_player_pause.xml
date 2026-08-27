@@ -1,0 +1,13 @@
+<!-- Solar icon set, via SVG Repo (CC Attribution). See THIRD_PARTY_NOTICES.md. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M2,6C2,4.11 2,3.17 2.59,2.59C3.17,2 4.11,2 6,2C7.89,2 8.83,2 9.41,2.59C10,3.17 10,4.11 10,6V18C10,19.89 10,20.83 9.41,21.41C8.83,22 7.89,22 6,22C4.11,22 3.17,22 2.59,21.41C2,20.83 2,19.89 2,18V6Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M14,6C14,4.11 14,3.17 14.59,2.59C15.17,2 16.11,2 18,2C19.89,2 20.83,2 21.41,2.59C22,3.17 22,4.11 22,6V18C22,19.89 22,20.83 21.41,21.41C20.83,22 19.89,22 18,22C16.11,22 15.17,22 14.59,21.41C14,20.83 14,19.89 14,18V6Z" />
+</vector>

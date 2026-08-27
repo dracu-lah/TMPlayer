@@ -1,0 +1,27 @@
+<!--
+  A player control's seat: nothing at rest, a solid white circle under D-pad focus, and a bounded
+  ripple for a thumb. The white circle is the whole of the focus treatment, the way every
+  television streaming app does it: no border, no zoom, the button itself lights up.
+-->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#33FFFFFF">
+    <item android:id="@android:id/mask">
+        <shape android:shape="oval">
+            <solid android:color="#FFFFFFFF" />
+        </shape>
+    </item>
+    <item>
+        <selector>
+            <item android:state_focused="true">
+                <shape android:shape="oval">
+                    <solid android:color="#FFFFFFFF" />
+                </shape>
+            </item>
+            <item>
+                <shape android:shape="oval">
+                    <solid android:color="#00000000" />
+                </shape>
+            </item>
+        </selector>
+    </item>
+</ripple>

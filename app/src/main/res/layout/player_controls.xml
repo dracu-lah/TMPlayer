@@ -1,0 +1,296 @@
+<!--
+  The transport controls, one design for the thumb and the D-pad.
+
+  Everything sits at the bottom of the picture the way the big streaming apps draw it: the name of
+  the video, the scrub bar under it, and a single row of round buttons under that, all read against
+  a gradient that darkens only the bottom of the frame. There is no centre cluster and no top bar;
+  the picture keeps the screen.
+
+  The same layout serves the phone and the television. On a phone the buttons are pressed; on a
+  television they are walked with the D-pad, and the focused one fills with a white circle while
+  its glyph turns dark, which is the whole of the focus treatment. PlayerControls.kt owns showing,
+  hiding and the clock; nothing here has behaviour of its own.
+
+  The scrub bar is Media3's DefaultTimeBar because scrubbing is the one control not worth
+  rewriting: it already draws the buffered run ahead of the played one, takes a drag on a phone,
+  and steps under D-pad left and right when focused. Only its colours are this app's: the played
+  run and the thumb in the accent, the rest in translucent white.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/player_controls"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:alpha="0"
+    android:visibility="gone">
+
+    <View
+        android:id="@+id/controls_scrim_top"
+        android:layout_width="match_parent"
+        android:layout_height="120dp"
+        android:layout_gravity="top"
+        android:background="@drawable/bg_controls_scrim_top" />
+
+    <View
+        android:id="@+id/controls_scrim_bottom"
+        android:layout_width="match_parent"
+        android:layout_height="240dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/bg_controls_scrim_bottom" />
+
+    <LinearLayout
+        android:id="@+id/controls_cluster"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="vertical"
+        android:paddingLeft="24dp"
+        android:paddingRight="24dp"
+        android:paddingBottom="12dp">
+
+        <TextView
+            android:id="@+id/controls_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="#FFFFFFFF"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/controls_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="#E6FFFFFF"
+            android:textSize="14sp"
+            android:visibility="gone" />
+
+        <androidx.media3.ui.DefaultTimeBar
+            android:id="@+id/controls_timebar"
+            android:layout_width="match_parent"
+            android:layout_height="26dp"
+            android:layout_marginTop="10dp"
+            android:focusable="true"
+            android:nextFocusDown="@+id/control_play_pause"
+            app:bar_height="4dp"
+            app:buffered_color="#66FFFFFF"
+            app:played_color="@color/accent"
+            app:scrubber_color="@color/accent"
+            app:scrubber_dragged_size="18dp"
+            app:scrubber_enabled_size="12dp"
+            app:touch_target_height="26dp"
+            app:unplayed_color="#40FFFFFF" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <!--
+              Scrolls only when it must. A television and a phone held sideways fit the whole row;
+              a phone held upright scrolls it, which beats shrinking the buttons below what a
+              thumb can hit.
+            -->
+            <HorizontalScrollView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:overScrollMode="never"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/controls_buttons"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <ImageButton
+                        android:id="@+id/control_play_pause"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@drawable/bg_control_button"
+                        android:contentDescription="Pause"
+                        android:nextFocusUp="@id/controls_timebar"
+                        android:padding="12dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_player_pause"
+                        android:tint="@color/player_control_icon" />
+
+                    <FrameLayout
+                        android:id="@+id/control_rewind"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_control_button"
+                        android:clickable="true"
+                        android:contentDescription="Back 10 seconds"
+                        android:focusable="true"
+                        android:nextFocusUp="@id/controls_timebar">
+
+                        <ImageView
+                            android:layout_width="26dp"
+                            android:layout_height="26dp"
+                            android:layout_gravity="center"
+                            android:duplicateParentState="true"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_player_rewind"
+                            android:tint="@color/player_control_icon" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center"
+                            android:duplicateParentState="true"
+                            android:importantForAccessibility="no"
+                            android:text="10"
+                            android:textColor="@color/player_control_icon"
+                            android:textSize="8sp"
+                            android:textStyle="bold"
+                            android:translationY="1dp" />
+                    </FrameLayout>
+
+                    <FrameLayout
+                        android:id="@+id/control_forward"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_control_button"
+                        android:clickable="true"
+                        android:contentDescription="Forward 10 seconds"
+                        android:focusable="true"
+                        android:nextFocusUp="@id/controls_timebar">
+
+                        <ImageView
+                            android:layout_width="26dp"
+                            android:layout_height="26dp"
+                            android:layout_gravity="center"
+                            android:duplicateParentState="true"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_player_forward"
+                            android:tint="@color/player_control_icon" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_gravity="center"
+                            android:duplicateParentState="true"
+                            android:importantForAccessibility="no"
+                            android:text="10"
+                            android:textColor="@color/player_control_icon"
+                            android:textSize="8sp"
+                            android:textStyle="bold"
+                            android:translationY="1dp" />
+                    </FrameLayout>
+
+                    <ImageButton
+                        android:id="@+id/control_previous"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_control_button"
+                        android:contentDescription="Previous episode"
+                        android:nextFocusUp="@id/controls_timebar"
+                        android:padding="12dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_player_previous"
+                        android:tint="@color/player_control_icon"
+                        android:visibility="gone" />
+
+                    <ImageButton
+                        android:id="@+id/control_next"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_control_button"
+                        android:contentDescription="Next episode"
+                        android:nextFocusUp="@id/controls_timebar"
+                        android:padding="12dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_player_next"
+                        android:tint="@color/player_control_icon"
+                        android:visibility="gone" />
+
+                    <ImageButton
+                        android:id="@+id/control_subtitles"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_control_button"
+                        android:contentDescription="Subtitles"
+                        android:nextFocusUp="@id/controls_timebar"
+                        android:padding="12dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_subtitles"
+                        android:tint="@color/player_control_icon" />
+
+                    <ImageButton
+                        android:id="@+id/control_audio"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_control_button"
+                        android:contentDescription="Audio"
+                        android:nextFocusUp="@id/controls_timebar"
+                        android:padding="12dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_audio_language"
+                        android:tint="@color/player_control_icon" />
+
+                    <ImageButton
+                        android:id="@+id/control_speed"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_control_button"
+                        android:contentDescription="Playback speed"
+                        android:nextFocusUp="@id/controls_timebar"
+                        android:padding="12dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_speed"
+                        android:tint="@color/player_control_icon" />
+
+                    <ImageButton
+                        android:id="@+id/control_scale"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_control_button"
+                        android:contentDescription="Picture shape"
+                        android:nextFocusUp="@id/controls_timebar"
+                        android:padding="12dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_aspect"
+                        android:tint="@color/player_control_icon" />
+
+                    <ImageButton
+                        android:id="@+id/control_rotate"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_control_button"
+                        android:contentDescription="Screen orientation"
+                        android:nextFocusUp="@id/controls_timebar"
+                        android:padding="12dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_rotate_landscape"
+                        android:tint="@color/player_control_icon"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </HorizontalScrollView>
+
+            <TextView
+                android:id="@+id/controls_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:textColor="#E6FFFFFF"
+                android:textSize="14sp" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

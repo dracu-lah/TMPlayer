@@ -62,6 +62,10 @@ packaged in the APK.
   `site/fonts/OFL-Poppins.txt`.
 - The player mark was adapted and recoloured from an SVG Repo player icon. SVG Repo is credited in
   the website footer and README; the adapted vector is distributed with TMPlayer under GPL-3.0.
+- The in-player play and pause glyphs (`ic_player_play.xml`, `ic_player_pause.xml`) are from the
+  Solar icon set, obtained via SVG Repo under its CC Attribution licence:
+  <https://www.svgrepo.com>. The seek, previous and next glyphs are Material Symbols paths:
+  Apache License 2.0: <https://github.com/google/material-design-icons>.
 
 ## Licence texts
 

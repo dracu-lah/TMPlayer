@@ -1,0 +1,9 @@
+<!--
+  The glyph inverts with its button: white on the bare picture, near-black once focus fills the
+  circle behind it in white. Pure black next to pure white vibrates on a television panel, so the
+  dark is pulled back a step.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="#FF111111" android:state_focused="true" />
+    <item android:color="#FFFFFFFF" />
+</selector>
