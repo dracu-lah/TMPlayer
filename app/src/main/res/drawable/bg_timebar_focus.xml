@@ -1,0 +1,21 @@
+<!--
+  The scrub bar's focus cue: a translucent white pill behind the whole bar while it holds D-pad
+  focus, nothing at rest. The buttons announce focus by filling with a solid white circle; the
+  bar is a different shape and gets the same treatment in its own shape, wide and rounded, so
+  from a sofa at three metres "the bar is focused" is one glance and not a hunt for a scrubber
+  that grew two dp. The scrubber turning white rides along from code, because a drawable cannot
+  reach inside DefaultTimeBar.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#26FFFFFF" />
+            <corners android:radius="13dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#00000000" />
+        </shape>
+    </item>
+</selector>

@@ -1,0 +1,10 @@
+<!--
+  The playback details panel's slab: the same translucent family as bg_player_chip, with
+  squarer corners because this one holds a paragraph of figures rather than a phrase, and a
+  22dp radius on a block of text eats its own first line.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#CC101010" />
+    <corners android:radius="12dp" />
+</shape>

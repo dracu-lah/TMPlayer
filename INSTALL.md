@@ -78,13 +78,13 @@ You land on your chat list. Open any chat to see only its playable videos, and p
 
 | Key | What it does |
 | --- | --- |
-| **OK** | Play / pause, or show the controls |
-| **Left / Right** (controls hidden) | Jump back / forward 10 seconds |
-| **Left / Right** (controls showing) | Scrub the progress bar, then press **OK** to jump there |
-| **⏪ / ⏩** (if your remote has them) | Jump 30 seconds |
-| **Subtitle icon** in the controls | Pick a subtitle track, or turn them off |
-| **Speaker icon** in the controls | Pick an audio track (dual-audio releases) |
-| **Back** | Leave the player; the position is remembered |
+| **Left / Right** | Seek. The controls come up on the seek bar, presses pile up, and the jump lands as one seek a moment after the last press |
+| **OK** | Show the controls; on the seek bar it is play / pause, so OK twice from the bare picture pauses |
+| **Down** | The button row: play / pause, jumps, play from the beginning, subtitles, audio, speed, picture shape, sleep timer, playback details |
+| **0 - 9** (if your remote has them) | Jump to that tenth of the video; 5 is halfway |
+| **⏪ / ⏩** (if your remote has them) | Jump back 5 / forward 10 seconds |
+| **Hold OK** (controls up) | Open the video in another app |
+| **Back** | Close what is on top: the details panel, then the controls, then the player; the position is remembered |
 
 ## Storage
 

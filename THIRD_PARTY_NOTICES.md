@@ -64,8 +64,9 @@ packaged in the APK.
   the website footer and README; the adapted vector is distributed with TMPlayer under GPL-3.0.
 - The in-player play and pause glyphs (`ic_player_play.xml`, `ic_player_pause.xml`) are from the
   Solar icon set, obtained via SVG Repo under its CC Attribution licence:
-  <https://www.svgrepo.com>. The seek, previous and next glyphs are Material Symbols paths:
-  Apache License 2.0: <https://github.com/google/material-design-icons>.
+  <https://www.svgrepo.com>. The seek, previous, next, restart, playback info and sleep timer
+  glyphs are Material Symbols paths: Apache License 2.0:
+  <https://github.com/google/material-design-icons>.
 
 ## Licence texts
 

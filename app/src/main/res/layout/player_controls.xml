@@ -8,13 +8,21 @@
 
   The same layout serves the phone and the television. On a phone the buttons are pressed; on a
   television they are walked with the D-pad, and the focused one fills with a white circle while
-  its glyph turns dark, which is the whole of the focus treatment. PlayerControls.kt owns showing,
-  hiding and the clock; nothing here has behaviour of its own.
+  its glyph turns dark. The scrub bar is the one exception to that treatment and the first thing
+  focus lands on: the row comes up with the bar focused, so left and right seek immediately, and
+  its focus cue is a translucent pill behind the whole bar (bg_timebar_focus) with the scrubber
+  turned white from code. PlayerControls.kt owns showing, hiding and the clock; nothing here has
+  behaviour of its own.
 
   The scrub bar is Media3's DefaultTimeBar because scrubbing is the one control not worth
   rewriting: it already draws the buffered run ahead of the played one, takes a drag on a phone,
-  and steps under D-pad left and right when focused. Only its colours are this app's: the played
-  run and the thumb in the accent, the rest in translucent white.
+  and steps under D-pad left and right when focused, folding a burst of presses into a single
+  committed seek. Only its colours are this app's: the played run and the thumb in the accent,
+  the rest in translucent white.
+
+  Two things float outside the bottom cluster: the wall clock in the top left corner, and under
+  it the playback details panel, a dark slab of figures the info button toggles. While the panel
+  is up the row stays up with it; PlayerControls.kt suspends the auto-hide.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -50,6 +58,25 @@
         android:layout_marginTop="16dp"
         android:textColor="#E6FFFFFF"
         android:textSize="15sp" />
+
+    <!-- The playback details panel, toggled by the info button on the row: what is playing, what
+         it sounds like, how the download behind it is doing. Under the clock because both are
+         "state of the evening" rather than controls, and the top right corner already belongs to
+         the download chip. Filled and refreshed by PlayerControls.kt on its half-second tick. -->
+    <TextView
+        android:id="@+id/controls_info_panel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_marginStart="24dp"
+        android:layout_marginTop="48dp"
+        android:background="@drawable/bg_playback_info"
+        android:lineSpacingExtra="3dp"
+        android:maxWidth="360dp"
+        android:padding="14dp"
+        android:textColor="#E6FFFFFF"
+        android:textSize="13sp"
+        android:visibility="gone" />
 
     <LinearLayout
         android:id="@+id/controls_cluster"
@@ -87,6 +114,7 @@
             android:layout_width="match_parent"
             android:layout_height="26dp"
             android:layout_marginTop="10dp"
+            android:background="@drawable/bg_timebar_focus"
             android:focusable="true"
             android:nextFocusDown="@+id/control_play_pause"
             app:bar_height="4dp"
@@ -202,6 +230,19 @@
                     </FrameLayout>
 
                     <ImageButton
+                        android:id="@+id/control_restart"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_control_button"
+                        android:contentDescription="Play from the beginning"
+                        android:nextFocusUp="@id/controls_timebar"
+                        android:padding="12dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_restart"
+                        android:tint="@color/player_control_icon" />
+
+                    <ImageButton
                         android:id="@+id/control_previous"
                         android:layout_width="48dp"
                         android:layout_height="48dp"
@@ -279,6 +320,32 @@
                         android:padding="12dp"
                         android:scaleType="fitCenter"
                         android:src="@drawable/ic_aspect"
+                        android:tint="@color/player_control_icon" />
+
+                    <ImageButton
+                        android:id="@+id/control_sleep"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_control_button"
+                        android:contentDescription="Sleep timer"
+                        android:nextFocusUp="@id/controls_timebar"
+                        android:padding="12dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_sleep"
+                        android:tint="@color/player_control_icon" />
+
+                    <ImageButton
+                        android:id="@+id/control_info"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_control_button"
+                        android:contentDescription="Playback details"
+                        android:nextFocusUp="@id/controls_timebar"
+                        android:padding="12dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_info"
                         android:tint="@color/player_control_icon" />
 
                     <ImageButton

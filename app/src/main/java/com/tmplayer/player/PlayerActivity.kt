@@ -324,12 +324,15 @@ class PlayerActivity : FragmentActivity() {
             onVisibility = ::onControlsVisibilityChanged,
             onTogglePlay = ::togglePlayback,
             onSkip = ::skipBy,
+            onRestart = ::restartFromBeginning,
             onPickSubtitles = { showTrackPicker(C.TRACK_TYPE_TEXT) },
             onPickAudio = { showTrackPicker(C.TRACK_TYPE_AUDIO) },
             onCycleSpeed = ::cycleSpeed,
             onCycleScale = ::cycleScale,
+            onCycleSleep = ::cycleSleepTimer,
             onCycleOrientation = ::cycleOrientation,
             onPlayEpisode = ::playEpisode,
+            playbackInfo = ::playbackInfoText,
         )
         renderControlsTitle()
         renderOrientationButton()
@@ -371,6 +374,7 @@ class PlayerActivity : FragmentActivity() {
         observeDownload()
         observeConnectivity()
         startResumeHeartbeat()
+        startSleepWatch()
         findEpisodes()
 
         // Reading the saved position is a disk hit; do it off the main thread and seek once it
@@ -731,6 +735,107 @@ class PlayerActivity : FragmentActivity() {
         showGestureFeedback(PlaybackSpeed.label(next))
         lifecycleScope.launch { runCatching { settings.setPlaybackSpeed(next) } }
     }
+
+    /** The restart button: back to the top of the video, said out loud so the jump reads as meant. */
+    private fun restartFromBeginning() {
+        player?.seekTo(0)
+        showGestureFeedback("From the beginning")
+    }
+
+    /**
+     * The sleep button: the next step along, armed from this moment.
+     *
+     * Cycling through an already armed timer re-arms it from now, which is what a viewer
+     * adjusting the figure means: "another thirty from here", not thirty from whenever the
+     * first press was.
+     */
+    private fun cycleSleepTimer() {
+        val next = sleepChoice.next()
+        sleepChoice = next
+        sleepDeadline = next.deadlineFrom(SystemClock.elapsedRealtime()) ?: 0L
+        showGestureFeedback(next.label)
+    }
+
+    /**
+     * Watches the process-wide sleep deadline and puts the player to bed when it passes.
+     *
+     * Ridden on the activity's lifecycle rather than a timer of its own, because whichever
+     * activity is on screen when the deadline lands is the one holding the player to pause: the
+     * deadline itself lives in the companion precisely so that autoplay handing the evening to a
+     * fresh activity does not lose it. The row comes up with the pause so the screen says what
+     * just happened, except in picture in picture, where a transport row has no business in a
+     * thumbnail.
+     */
+    private fun startSleepWatch() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    delay(SLEEP_CHECK_MS)
+                    val deadline = sleepDeadline
+                    if (deadline <= 0L || SystemClock.elapsedRealtime() < deadline) continue
+                    sleepDeadline = 0L
+                    sleepChoice = SleepTimer.Off
+                    player?.pause()
+                    if (!inPictureInPicture) controls?.show()
+                    showGestureFeedback("Sleep timer: paused")
+                }
+            }
+        }
+    }
+
+    /**
+     * The figures behind the playback details panel, read fresh on each of its repaints.
+     *
+     * The panel itself is the transport row's furniture; this is the activity's half of it,
+     * because the player, the download meter and the sleep timer are all things only the
+     * activity holds. Everything is handed to [PlaybackInfo] as plain values, which is where
+     * the wording lives and is tested.
+     */
+    private fun playbackInfoText(): String {
+        val exo = player
+        val video = exo?.videoFormat
+        val audio = exo?.audioFormat
+        val subtitlesOn = exo?.currentTracks?.groups
+            ?.any { it.type == C.TRACK_TYPE_TEXT && it.isSelected } == true
+        return PlaybackInfo.render(
+            videoWidth = video?.width ?: 0,
+            videoHeight = video?.height ?: 0,
+            frameRate = video?.frameRate ?: 0f,
+            videoMimeType = video?.sampleMimeType,
+            videoCodecs = video?.codecs,
+            audioMimeType = audio?.sampleMimeType,
+            audioCodecs = audio?.codecs,
+            audioChannels = audio?.channelCount ?: 0,
+            audioSampleRate = audio?.sampleRate ?: 0,
+            audioLanguage = languageName(audio?.language),
+            subtitlesOn = subtitlesOn,
+            subtitleLanguage = languageName(selectedLanguage(C.TRACK_TYPE_TEXT)),
+            speedLabel = PlaybackSpeed.label(playbackSpeed),
+            fitLabel = videoScale.label,
+            bufferedAheadMs = exo?.let { (it.bufferedPosition - it.currentPosition).coerceAtLeast(0) }
+                ?: -1L,
+            sizeBytes = fileSizeBytes,
+            downloadedFraction = downloadedFraction,
+            downloadComplete = downloadComplete,
+            downloadSpeedBytesPerSec = speed.bytesPerSec,
+            sleepRemainingMs = sleepDeadline.takeIf { it > 0 }
+                ?.let { (it - SystemClock.elapsedRealtime()).coerceAtLeast(0) },
+        )
+    }
+
+    /** The language of the selected track of [type], as the container declared it, or null. */
+    private fun selectedLanguage(type: Int): String? = player?.currentTracks?.groups
+        ?.firstOrNull { it.type == type && it.isSelected }
+        ?.let { group ->
+            (0 until group.length)
+                .firstOrNull { group.isTrackSelected(it) }
+                ?.let { group.getTrackFormat(it).language }
+        }
+
+    /** "en" or "eng" the way a person says it, or null when the file never said. */
+    private fun languageName(code: String?): String? = code
+        ?.takeIf { it.isNotBlank() && it != C.LANGUAGE_UNDETERMINED }
+        ?.let { raw -> java.util.Locale(raw).displayLanguage.takeIf { it.isNotBlank() } ?: raw }
 
     /**
      * A figure for whatever a gesture is changing, gone again shortly after the finger lifts.
@@ -1535,8 +1640,13 @@ class PlayerActivity : FragmentActivity() {
     }
 
     /**
-     * MEDIA keys always act. D-pad keys act on the bare picture and walk the row once it is up:
-     * the focused views own them then, including the scrub bar's own left and right stepping.
+     * MEDIA keys always act, and so do the digits, which jump to that tenth of the video. D-pad
+     * keys act on the bare picture and walk the row once it is up: the focused views own them
+     * then, with two exceptions carved out below. Left and right over the bare picture raise the
+     * row and hand the very same press to the scrub bar, so a burst of presses lands as one
+     * committed seek instead of one download-window move each; and OK on the focused bar toggles
+     * playback rather than doing nothing, unless a scrub is mid-flight, in which case the bar
+     * takes the press and commits.
      */
     @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -1550,6 +1660,16 @@ class PlayerActivity : FragmentActivity() {
         if (isLongPressOnTheVideo(event)) {
             openInAnotherApp()
             return true
+        }
+
+        // The number row and the numpad, before the focused views see anything: nothing on the
+        // transport row uses a digit, so the row being up is no reason to swallow one. Only the
+        // status sheet keeps them, since a digit over an error would seek a video that is not
+        // playing.
+        if (statusOverlay.visibility != View.VISIBLE) {
+            digitOf(event.keyCode)?.let { digit ->
+                if (jumpToTenth(digit)) return true
+            }
         }
 
         if (!FormFactor.isTv(this) && handleTouchDeviceKey(event)) return true
@@ -1575,28 +1695,47 @@ class PlayerActivity : FragmentActivity() {
                 player?.pause()
                 return true
             }
-            // Back drops the row before it leaves the film: the film is what Back was aimed at
-            // only once there is nothing else over it.
+            // Back peels the overlays off in the order they were put on: the details panel first,
+            // then the row, and only then is the film what Back was aimed at.
             KeyEvent.KEYCODE_BACK -> {
-                if (controlsUp && statusOverlay.visibility != View.VISIBLE) {
-                    controls?.hideAnimated()
-                    return true
+                if (statusOverlay.visibility != View.VISIBLE) {
+                    if (controls?.infoVisible == true) {
+                        controls?.hideInfo()
+                        return true
+                    }
+                    if (controlsUp) {
+                        controls?.hideAnimated()
+                        return true
+                    }
                 }
             }
             KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_LEFT -> {
-                // A remote's arrows over the bare picture seek, and the row comes up so the
-                // viewer sees where the seek landed. Once the row is up the same arrows walk it.
+                // A remote's arrows over the bare picture seek. The press is not spent on an
+                // immediate seek: the row comes up with the bar focused and this press already
+                // scrubbing it, so the presses that follow pile onto the same scrub and commit
+                // as one seek, one download-window move, about a second after the last of them.
+                // Once the row is up the same arrows reach the focused view through super, which
+                // on the bar is this exact behaviour and on the buttons is walking the row.
                 if (FormFactor.isTv(this) && !controlsUp && statusOverlay.visibility != View.VISIBLE) {
-                    skipBy(if (event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) Skip.FORWARD_MS else -Skip.BACK_MS)
-                    controls?.show()
+                    controls?.seekKey(event)
                     return true
                 }
             }
-            KeyEvent.KEYCODE_DPAD_UP,
-            KeyEvent.KEYCODE_DPAD_DOWN,
-            KeyEvent.KEYCODE_DPAD_CENTER,
-            KeyEvent.KEYCODE_ENTER,
-            -> {
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                if (FormFactor.isTv(this) && statusOverlay.visibility != View.VISIBLE) {
+                    // Over the bare picture OK asks for the row rather than doing anything
+                    // irreversible. With the row up and the bar focused, OK is play or pause,
+                    // which makes two presses from bare video a pause, the reading every viewer
+                    // arrives already trained on. Repeats are ignored so a held OK stays the
+                    // long press it is about to become.
+                    if (!controlsUp) {
+                        controls?.show()
+                        return true
+                    }
+                    if (event.repeatCount == 0 && controls?.okOnTimeBar() == true) return true
+                }
+            }
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
                 // Any other press over the bare picture asks for the row rather than doing
                 // anything irreversible; the second press does the thing it lands on.
                 if (FormFactor.isTv(this) && !controlsUp && statusOverlay.visibility != View.VISIBLE) {
@@ -1606,6 +1745,26 @@ class PlayerActivity : FragmentActivity() {
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    /** The number row and the numpad, as one digit; null for every other key. */
+    private fun digitOf(keyCode: Int): Int? = when (keyCode) {
+        in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> keyCode - KeyEvent.KEYCODE_0
+        in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9 -> keyCode - KeyEvent.KEYCODE_NUMPAD_0
+        else -> null
+    }
+
+    /**
+     * A digit key jumps to that tenth of the video, 0 for the start and 5 for halfway, the way
+     * desktop players have always read the number row. Only when the duration is known, because a
+     * tenth of an unknown length is not a place: the key falls through untouched then.
+     */
+    private fun jumpToTenth(digit: Int): Boolean {
+        val exo = player ?: return false
+        val duration = exo.duration.takeIf { it > 0 } ?: return false
+        exo.seekTo(duration * digit / 10)
+        showGestureFeedback("${digit * 10}%")
+        return true
     }
 
     /**
@@ -2463,6 +2622,9 @@ class PlayerActivity : FragmentActivity() {
 
         private const val RESUME_TICK_MS = 10_000L
 
+        /** Often enough that "Sleep in 15 min" means 15 and not 15 and a bit; cheap either way. */
+        private const val SLEEP_CHECK_MS = 3_000L
+
         /** The captions' climb out from under the raised transport row, and back. */
         private const val SUBTITLE_LIFT_MS = 200L
 
@@ -2541,6 +2703,18 @@ class PlayerActivity : FragmentActivity() {
          * activity per episode and being asked at every one is worse than not asking at all.
          */
         private var meteredWarningAccepted = false
+
+        /**
+         * The sleep timer's step and its deadline, for the length of the process.
+         *
+         * Process-wide for the same reason the metered warning is, and with more riding on it:
+         * autoplay and the next-episode button build a new activity per episode, and a timer
+         * that died with its activity would play episodes all night to somebody asleep, which
+         * is exactly what it exists to prevent. The deadline is elapsed realtime, so neither a
+         * timezone change nor a clock correction in the small hours can move it.
+         */
+        private var sleepChoice = SleepTimer.Off
+        private var sleepDeadline = 0L
 
         /**
          * The rotation lock the viewer last chose, for the length of the process.
