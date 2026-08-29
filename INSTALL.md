@@ -78,13 +78,14 @@ You land on your chat list. Open any chat to see only its playable videos, and p
 
 | Key | What it does |
 | --- | --- |
-| **Left / Right** | Seek. The controls come up on the seek bar, presses pile up, and the jump lands as one seek a moment after the last press |
-| **OK** | Show the controls; on the seek bar it is play / pause, so OK twice from the bare picture pauses |
-| **Down** | The button row: play / pause, jumps, play from the beginning, subtitles, audio, speed, picture shape, sleep timer, playback details |
+| **Left / Right** | Jump back 5 / forward 10 seconds, right on the picture, nothing else comes up |
+| **OK** | Show the controls, with the seek bar focused; on the bar OK is play / pause, so OK twice from the bare picture pauses |
+| **Left / Right** (on the seek bar) | Travel: 30 seconds a press, presses pile up and land as one seek a moment after the last |
+| **Down** (controls up) | The button row: play / pause, jumps, subtitles, audio, speed, picture shape |
 | **0 - 9** (if your remote has them) | Jump to that tenth of the video; 5 is halfway |
 | **⏪ / ⏩** (if your remote has them) | Jump back 5 / forward 10 seconds |
 | **Hold OK** (controls up) | Open the video in another app |
-| **Back** | Close what is on top: the details panel, then the controls, then the player; the position is remembered |
+| **Back** | Close what is on top: the controls, then the player; the position is remembered |
 
 ## Storage
 

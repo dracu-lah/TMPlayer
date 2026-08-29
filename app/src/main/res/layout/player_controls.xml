@@ -20,9 +20,8 @@
   committed seek. Only its colours are this app's: the played run and the thumb in the accent,
   the rest in translucent white.
 
-  Two things float outside the bottom cluster: the wall clock in the top left corner, and under
-  it the playback details panel, a dark slab of figures the info button toggles. While the panel
-  is up the row stays up with it; PlayerControls.kt suspends the auto-hide.
+  One thing floats outside the bottom cluster: the wall clock in the top left corner. The top
+  right belongs to the status pill.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -58,25 +57,6 @@
         android:layout_marginTop="16dp"
         android:textColor="#E6FFFFFF"
         android:textSize="15sp" />
-
-    <!-- The playback details panel, toggled by the info button on the row: what is playing, what
-         it sounds like, how the download behind it is doing. Under the clock because both are
-         "state of the evening" rather than controls, and the top right corner already belongs to
-         the download chip. Filled and refreshed by PlayerControls.kt on its half-second tick. -->
-    <TextView
-        android:id="@+id/controls_info_panel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|start"
-        android:layout_marginStart="24dp"
-        android:layout_marginTop="48dp"
-        android:background="@drawable/bg_playback_info"
-        android:lineSpacingExtra="3dp"
-        android:maxWidth="360dp"
-        android:padding="14dp"
-        android:textColor="#E6FFFFFF"
-        android:textSize="13sp"
-        android:visibility="gone" />
 
     <LinearLayout
         android:id="@+id/controls_cluster"
@@ -230,19 +210,6 @@
                     </FrameLayout>
 
                     <ImageButton
-                        android:id="@+id/control_restart"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Play from the beginning"
-                        android:nextFocusUp="@id/controls_timebar"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_restart"
-                        android:tint="@color/player_control_icon" />
-
-                    <ImageButton
                         android:id="@+id/control_previous"
                         android:layout_width="48dp"
                         android:layout_height="48dp"
@@ -320,32 +287,6 @@
                         android:padding="12dp"
                         android:scaleType="fitCenter"
                         android:src="@drawable/ic_aspect"
-                        android:tint="@color/player_control_icon" />
-
-                    <ImageButton
-                        android:id="@+id/control_sleep"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Sleep timer"
-                        android:nextFocusUp="@id/controls_timebar"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_sleep"
-                        android:tint="@color/player_control_icon" />
-
-                    <ImageButton
-                        android:id="@+id/control_info"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Playback details"
-                        android:nextFocusUp="@id/controls_timebar"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_info"
                         android:tint="@color/player_control_icon" />
 
                     <ImageButton

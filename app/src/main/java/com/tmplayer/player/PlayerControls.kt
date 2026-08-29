@@ -1,7 +1,6 @@
 package com.tmplayer.player
 
 import android.graphics.Color
-import android.view.KeyEvent
 import android.view.View
 import android.widget.ImageButton
 import android.widget.TextView
@@ -21,22 +20,20 @@ import com.tmplayer.data.MediaItem
  * drive the same buttons, and the only per-device difference is which extras are offered: the
  * orientation button is a phone thing, and the automatic focus grab on show is a D-pad thing.
  *
- * That focus grab lands on the scrub bar, not on a button. On a remote the arrows are the seek
- * keys, and a row that opened onto play or pause made seeking a two-step trip: Up to the bar,
- * then the arrow. Opening onto the bar means left and right scrub the moment the row appears,
- * with the buttons one press Down away, and [seekKey] lets the very press that raised the row be
- * the first step of the scrub. The bar folds a burst of presses into one committed seek, which
- * matters here more than in most players: every committed seek moves TDLib's streaming download
- * window, so ten presses landing as one seek is nine downloads not restarted. [okOnTimeBar] gives
- * OK on the focused bar the Netflix meaning, play or pause, unless a scrub is mid-flight, in
- * which case the bar itself takes the press and commits.
+ * That focus grab lands on the scrub bar, not on a button. On a remote the arrows over the bare
+ * picture jump on their own, the activity's business; here they matter once the row is up, where
+ * a row that opened onto play or pause made scrubbing a two-step trip: Up to the bar, then the
+ * arrow. Opening onto the bar means left and right stride it the moment the row appears, with
+ * the buttons one press Down away. The bar's stride is [Skip.BAR_MS], deliberately coarser than
+ * the bare-picture jumps: whoever opened the row to scrub is travelling, not nudging. The bar
+ * folds a burst of presses into one committed seek, which matters here more than in most
+ * players: every committed seek moves TDLib's streaming download window, so ten presses landing
+ * as one seek is nine downloads not restarted. [okOnTimeBar] gives OK on the focused bar the
+ * Netflix meaning, play or pause, unless a scrub is mid-flight, in which case the bar itself
+ * takes the press and commits.
  *
- * Two of the row's buttons carry state of their own here: the info button toggles the playback
- * details panel, a slab of figures under the clock that pins the row while it is up and repaints
- * on the same half-second tick as the bar; the sleep button only forwards, because the timer it
- * cycles outlives this overlay on purpose. The activity stays the owner of every action. This
- * class decides nothing about playback; it raises, lowers and repaints the furniture, and
- * forwards each press to the lambda wired for it.
+ * The activity stays the owner of every action. This class decides nothing about playback; it
+ * raises, lowers and repaints the furniture, and forwards each press to the lambda wired for it.
  */
 class PlayerControls(
     root: View,
@@ -45,15 +42,12 @@ class PlayerControls(
     private val onVisibility: (Boolean) -> Unit,
     private val onTogglePlay: () -> Unit,
     private val onSkip: (Long) -> Unit,
-    private val onRestart: () -> Unit,
     private val onPickSubtitles: () -> Unit,
     private val onPickAudio: () -> Unit,
     private val onCycleSpeed: () -> Unit,
     private val onCycleScale: () -> Unit,
-    private val onCycleSleep: () -> Unit,
     private val onCycleOrientation: () -> Unit,
     private val onPlayEpisode: (MediaItem) -> Unit,
-    private val playbackInfo: () -> String,
 ) {
 
     private val container: View = root.findViewById(R.id.player_controls)
@@ -62,7 +56,6 @@ class PlayerControls(
     private val timeBar: DefaultTimeBar = root.findViewById(R.id.controls_timebar)
     private val time: TextView = root.findViewById(R.id.controls_time)
     private val clock: TextView = root.findViewById(R.id.controls_clock)
-    private val infoPanel: TextView = root.findViewById(R.id.controls_info_panel)
     private val playPause: ImageButton = root.findViewById(R.id.control_play_pause)
     private val previous: ImageButton = root.findViewById(R.id.control_previous)
     private val next: ImageButton = root.findViewById(R.id.control_next)
@@ -71,9 +64,6 @@ class PlayerControls(
     private val accent = ContextCompat.getColor(root.context, R.color.accent)
 
     val visible: Boolean get() = container.visibility == View.VISIBLE
-
-    /** True while the playback details panel is up, which pins the whole row up with it. */
-    val infoVisible: Boolean get() = infoPanel.visibility == View.VISIBLE
 
     /** True while a finger or the D-pad is on the bar; the clock leaves the bar alone then. */
     private var scrubbing = false
@@ -84,7 +74,6 @@ class PlayerControls(
         override fun run() {
             if (!visible) return
             renderProgress()
-            if (infoVisible) infoPanel.text = playbackInfo()
             container.postDelayed(this, TICK_MS)
         }
     }
@@ -93,19 +82,18 @@ class PlayerControls(
         wire(playPause) { onTogglePlay(); renderPlayPause() }
         wire(root.findViewById(R.id.control_rewind)) { onSkip(-Skip.BACK_MS) }
         wire(root.findViewById(R.id.control_forward)) { onSkip(Skip.FORWARD_MS) }
-        wire(root.findViewById(R.id.control_restart)) { onRestart() }
         wire(root.findViewById(R.id.control_subtitles)) { onPickSubtitles() }
         wire(root.findViewById(R.id.control_audio)) { onPickAudio() }
         wire(root.findViewById(R.id.control_speed)) { onCycleSpeed() }
         wire(root.findViewById(R.id.control_scale)) { onCycleScale() }
-        wire(root.findViewById(R.id.control_sleep)) { onCycleSleep() }
-        wire(root.findViewById(R.id.control_info)) { toggleInfo() }
         wire(rotate) { onCycleOrientation() }
         rotate.visibility = if (isTv) View.GONE else View.VISIBLE
 
-        // A press of D-pad left or right on the bar steps the position by this much, which keeps
-        // remote scrubbing in step with the seek buttons rather than Media3's twentieth-of-a-film.
-        timeBar.setKeyTimeIncrement(Skip.FORWARD_MS)
+        // A press of D-pad left or right on the bar steps the position by this much: coarser than
+        // the bare-picture arrow jumps on purpose, because opening the row to scrub is travelling,
+        // and fixed rather than Media3's twentieth-of-a-film so a press means the same thing on a
+        // short clip as on a long film.
+        timeBar.setKeyTimeIncrement(Skip.BAR_MS)
         // The pill behind the bar comes from its state-list background; the scrubber joins it by
         // turning white, because from a sofa the accent-blue dot alone does not read as "focused"
         // against the accent-blue played run it sits on.
@@ -194,22 +182,6 @@ class PlayerControls(
     }
 
     /**
-     * A left or right press arriving over the bare picture: the row comes up with the bar
-     * focused, and the press itself is handed straight to the bar, so the scrub starts on the
-     * press that asked for it rather than on the next one.
-     *
-     * The bar accumulates the presses that follow into one scrub and commits about a second
-     * after the last, through the scrub listener above. On this player that batching is the
-     * point: every committed seek moves TDLib's streaming download window, and on the stick a
-     * burst of presses landing as one seek instead of six is the difference between a scrub
-     * and a slideshow.
-     */
-    fun seekKey(event: KeyEvent): Boolean {
-        show()
-        return timeBar.onKeyDown(event.keyCode, event)
-    }
-
-    /**
      * OK on the focused bar toggles playback, the way Netflix reads it: two presses of OK from
      * the bare picture pause the film. Mid-scrub it stays out of the way and answers false, so
      * the press falls through to the bar itself, which commits the scrub.
@@ -239,7 +211,6 @@ class PlayerControls(
     fun hideAnimated() {
         container.removeCallbacks(hide)
         container.removeCallbacks(tick)
-        infoPanel.visibility = View.GONE
         if (!visible) return
         container.animate().alpha(0f).setDuration(FADE_MS)
             .withEndAction { container.visibility = View.GONE }
@@ -251,29 +222,10 @@ class PlayerControls(
     fun hideNow() {
         container.removeCallbacks(hide)
         container.removeCallbacks(tick)
-        infoPanel.visibility = View.GONE
         container.animate().cancel()
         container.alpha = 0f
         container.visibility = View.GONE
         onVisibility(false)
-    }
-
-    /** The info button: the details panel up with fresh figures, or down again. */
-    private fun toggleInfo() {
-        if (infoVisible) {
-            hideInfo()
-        } else {
-            infoPanel.text = playbackInfo()
-            infoPanel.visibility = View.VISIBLE
-            poke()
-        }
-    }
-
-    /** Drops the details panel; Back does this before it does anything else to the row. */
-    fun hideInfo() {
-        if (!infoVisible) return
-        infoPanel.visibility = View.GONE
-        poke()
     }
 
     /**
@@ -288,9 +240,6 @@ class PlayerControls(
     /** Buys the row its timeout again. Called by every interaction, however it arrived. */
     private fun poke() {
         container.removeCallbacks(hide)
-        // The details panel is read, not glanced at, and it pins the row: a slab of figures
-        // that dissolves mid-sentence teaches the viewer not to open it.
-        if (infoVisible) return
         if (player()?.isPlaying == true) container.postDelayed(hide, TIMEOUT_MS)
     }
 
@@ -316,17 +265,7 @@ class PlayerControls(
     private fun renderClock(position: Long) {
         val exo = player() ?: return
         val duration = exo.duration.takeIf { it > 0 } ?: 0L
-        val counter = "${StreamStats.formatClock(position)} / ${StreamStats.formatClock(duration)}"
-        // What the position means for the evening. Scrubbing reads it against the scrubbed-to
-        // position, which is exactly the question a scrub is asking: "if I start here, when am
-        // I done". The playback speed is honoured; watching at 1.5x ends earlier on the clock.
-        val speed = exo.playbackParameters.speed.takeIf { it > 0f } ?: 1f
-        time.text = if (duration > 0 && position <= duration) {
-            val endsAt = System.currentTimeMillis() + ((duration - position) / speed).toLong()
-            "$counter  ·  ends ${timeOfDay(endsAt)}"
-        } else {
-            counter
-        }
+        time.text = "${StreamStats.formatClock(position)} / ${StreamStats.formatClock(duration)}"
     }
 
     private fun renderWallClock() {
