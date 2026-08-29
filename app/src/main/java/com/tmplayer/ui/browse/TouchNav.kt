@@ -95,7 +95,11 @@ internal fun TouchBrowseShell(
     unreadCount: Int,
     onSelect: (BrowseSection) -> Unit,
     onOpenSettings: () -> Unit,
-    /** The phone's Downloads screen. A television keeps one video and has nothing to list. */
+    /**
+     * The Downloads screen. The one-video rule is the watch cache's, not this list's: downloads
+     * kept on purpose pile up on a television exactly as they do here, so its rail carries the
+     * same row this drawer does.
+     */
     onOpenDownloads: () -> Unit,
     updateVersion: String?,
     onUpdate: () -> Unit,

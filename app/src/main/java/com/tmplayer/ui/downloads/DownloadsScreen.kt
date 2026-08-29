@@ -2,8 +2,12 @@ package com.tmplayer.ui.downloads
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -56,6 +61,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -77,10 +85,13 @@ import com.tmplayer.data.StorageSplit
 import com.tmplayer.data.Td
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.BigEmpty
+import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.theme.Corner
+import com.tmplayer.ui.theme.LocalDarkTheme
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.focusRing
 import kotlinx.coroutines.launch
 
 /**
@@ -110,11 +121,15 @@ private data class DownloadRow(
 }
 
 /**
- * Everything this phone has downloaded or is waiting for, what it costs, and the way to be rid of it.
+ * Everything this device has downloaded or is waiting for, what it costs, and the way to be rid
+ * of it.
  *
- * The television has no screen like this and does not need one: it keeps a single video at a time
- * and replaces it on the next play, so there is never a list to manage. A phone keeps every
- * download until it is told otherwise, which is only a fair deal if the viewer can see them.
+ * Both form factors keep this list. The one-video-at-a-time arrangement on a television belongs
+ * to the watch cache, which playing fills and the next play replaces; a download the viewer asked
+ * for by name is kept on a TV exactly as it is on a phone, until it is deleted here. Keeping every
+ * download until told otherwise is only a fair deal if the viewer can see them, so a phone reaches
+ * this screen from the drawer and a television from the rail, and every control on it has to be
+ * findable with a D-pad as well as a thumb.
  *
  * Every row is a card, and every card carries its buttons underneath it at full width with their
  * names written on them: a card has an edge, so it is obvious where one video stops and the next
@@ -337,7 +352,12 @@ fun DownloadsScreen(
                 navigationIcon = {
                     // While picking, the arrow leaves the selection rather than the screen: that
                     // is what Back does here, and the two must not disagree.
-                    IconButton(onClick = { if (picking) leavePicking() else onBack() }) {
+                    val backFocus = remember { MutableInteractionSource() }
+                    IconButton(
+                        onClick = { if (picking) leavePicking() else onBack() },
+                        interactionSource = backFocus,
+                        modifier = Modifier.tvFocusRing(backFocus, CircleShape),
+                    ) {
                         Icon(
                             if (picking) Icons.Filled.Close else Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = if (picking) "Leave the selection" else "Back",
@@ -347,23 +367,18 @@ fun DownloadsScreen(
                 actions = {
                     if (picking) {
                         // Everything the list is showing, and never more than that.
-                        TextButton(
-                            onClick = { picked = shown.map { it.key }.toSet() },
-                            enabled = chosen.size < shown.size,
-                        ) {
-                            Text("Select all")
+                        TextAction("Select all", enabled = chosen.size < shown.size) {
+                            picked = shown.map { it.key }.toSet()
                         }
                         return@TopAppBar
                     }
                     if (rows.isNotEmpty() && tab == COMPLETED) {
-                        TextButton(onClick = { picking = true }) { Text("Select") }
+                        TextAction("Select") { picking = true }
                     }
                     // Offered on the rows and nothing else: a screen headed "Downloads" must not
                     // carry a button that empties the cache and the previews too.
                     if (rows.isNotEmpty() && tab == COMPLETED) {
-                        TextButton(onClick = { confirmingClearAll = true }) {
-                            Text("Delete all")
-                        }
+                        TextAction("Delete all") { confirmingClearAll = true }
                     }
                 },
             )
@@ -395,16 +410,24 @@ fun DownloadsScreen(
             // Fixed above the list rather than scrolled with it: switching between the two has to
             // be possible from anywhere in either.
             TabRow(selectedTabIndex = tab) {
+                // A tab is the one widget here whose shape really is the full rectangle it is
+                // given, so the ring follows that rather than pretending it is a pill.
+                val ongoingFocus = remember { MutableInteractionSource() }
                 Tab(
                     selected = tab == ONGOING,
                     onClick = { tab = ONGOING },
+                    interactionSource = ongoingFocus,
+                    modifier = Modifier.tvFocusRing(ongoingFocus, RectangleShape),
                     text = {
                         Text(if (active.isEmpty()) "Ongoing" else "Ongoing (${active.size})")
                     },
                 )
+                val completedFocus = remember { MutableInteractionSource() }
                 Tab(
                     selected = tab == COMPLETED,
                     onClick = { tab = COMPLETED },
+                    interactionSource = completedFocus,
+                    modifier = Modifier.tvFocusRing(completedFocus, RectangleShape),
                     text = {
                         Text(if (rows.isEmpty()) "Completed" else "Completed (${rows.size})")
                     },
@@ -521,15 +544,13 @@ fun DownloadsScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
+                TextAction("Delete") {
                     delete(row)
                     confirmingDelete = null
-                }) {
-                    Text("Delete")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmingDelete = null }) { Text("Keep it") }
+                TextAction("Keep it") { confirmingDelete = null }
             },
         )
     }
@@ -553,15 +574,13 @@ fun DownloadsScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
+                TextAction("Delete") {
                     confirmingDeleteMany = false
                     deleteMany(chosen)
-                }) {
-                    Text("Delete")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmingDeleteMany = false }) { Text("Keep them") }
+                TextAction("Keep them") { confirmingDeleteMany = false }
             },
         )
     }
@@ -581,7 +600,7 @@ fun DownloadsScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
+                TextAction("Delete all") {
                     confirmingClearAll = false
                     scope.launch {
                         // The downloads, one at a time, and nothing else. Each is only forgotten
@@ -589,14 +608,69 @@ fun DownloadsScreen(
                         for (row in rows) removeOne(row)
                         refresh(history)
                     }
-                }) {
-                    Text("Delete all")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmingClearAll = false }) { Text("Keep them") }
+                TextAction("Keep them") { confirmingClearAll = false }
             },
         )
+    }
+}
+
+/**
+ * The ring that says where the remote is standing, on the stock Material widgets this screen is
+ * built from.
+ *
+ * The app's own television controls answer focus with a filled row plus [focusRing]; the Material
+ * buttons, tabs and icon buttons here own their fill and answer it with a state layer a few
+ * percent of alpha deep, which from a sofa is no answer at all. So on a television this draws the
+ * theme's accent ring around whichever widget holds focus, in that widget's own shape, and on a
+ * phone it is a no-op: there is no roving focus to mark, and the screen must not change.
+ *
+ * [focusRing] on its own is not enough, because it deliberately draws nothing in the dark theme:
+ * its callers swap their fill to the focus colour, which in the dark is a bright block that would
+ * swallow a same-colour ring. Nothing here changes fill, so the dark theme gets the same 2.dp
+ * accent ring drawn by hand.
+ *
+ * [interactions] must also be handed to the widget itself, through its interactionSource
+ * parameter, so the state collected here is the widget's own focus rather than a parallel guess.
+ */
+@Composable
+private fun Modifier.tvFocusRing(
+    interactions: MutableInteractionSource,
+    shape: Shape,
+): Modifier {
+    if (isTouch()) return this
+    val focused by interactions.collectIsFocusedAsState()
+    return this
+        .focusRing(focused, shape)
+        .then(
+            if (focused && LocalDarkTheme.current) {
+                Modifier.border(2.dp, Tone.accent, shape)
+            } else {
+                Modifier
+            },
+        )
+}
+
+/**
+ * [TextButton], with the ring a remote needs.
+ *
+ * Every plain text action on this screen goes through here: the top bar, the queue heading and
+ * the dialog buttons, so none of them can be the one control focus disappears on. The dialogs
+ * matter most: a viewer who cannot see whether Delete or Keep holds focus is one press away from
+ * deleting the wrong thing. On a phone this is exactly the stock button.
+ */
+@Composable
+private fun TextAction(label: String, enabled: Boolean = true, onClick: () -> Unit) {
+    val interactions = remember { MutableInteractionSource() }
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        interactionSource = interactions,
+        modifier = Modifier.tvFocusRing(interactions, CircleShape),
+    ) {
+        Text(label)
     }
 }
 
@@ -630,7 +704,7 @@ private fun QueueHeading(title: String, bulk: String?, onBulk: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
         )
         if (bulk != null) {
-            TextButton(onClick = onBulk) { Text(bulk) }
+            TextAction(bulk, onClick = onBulk)
         }
     }
 }
@@ -706,18 +780,32 @@ private fun RowCard(
     onHold: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
+    val interactions = remember { MutableInteractionSource() }
+    // A clickable card is a focusable card, and on a television that is a trap: directional
+    // search will not step from a focused parent onto the buttons drawn inside it, so a card
+    // that takes D-pad focus in browse mode swallows the remote one row above Watch, with no
+    // ring to say where it went. So the card only takes D-pad focus while a press on it means
+    // something a remote wants, toggling its tick in a selection, and it wears the ring then;
+    // the rest of the time the remote lands straight on the buttons, and the hold-to-select
+    // shortcut stays what it always was, a touch gesture, with the Select button covering it.
+    val dpadFocusable = onClick != null || isTouch()
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp)
+            .tvFocusRing(interactions, RoundedCornerShape(Corner.Large))
             .then(
                 if (onClick == null && onHold == null) {
                     Modifier
                 } else {
-                    Modifier.combinedClickable(
-                        onClick = { onClick?.invoke() ?: onHold?.invoke() },
-                        onLongClick = onHold,
-                    )
+                    Modifier
+                        .focusProperties { canFocus = dpadFocusable }
+                        .combinedClickable(
+                            interactionSource = interactions,
+                            indication = LocalIndication.current,
+                            onClick = { onClick?.invoke() ?: onHold?.invoke() },
+                            onLongClick = onHold,
+                        )
                 },
             ),
         shape = RoundedCornerShape(Corner.Large),
@@ -756,7 +844,12 @@ private fun androidx.compose.foundation.layout.RowScope.PrimaryAction(
     icon: ImageVector,
     onClick: () -> Unit,
 ) {
-    FilledTonalButton(onClick = onClick, modifier = Modifier.weight(1f)) {
+    val interactions = remember { MutableInteractionSource() }
+    FilledTonalButton(
+        onClick = onClick,
+        interactionSource = interactions,
+        modifier = Modifier.weight(1f).tvFocusRing(interactions, CircleShape),
+    ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
         Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -771,9 +864,11 @@ private fun androidx.compose.foundation.layout.RowScope.SecondaryAction(
     danger: Boolean = false,
 ) {
     val colour = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    val interactions = remember { MutableInteractionSource() }
     OutlinedButton(
         onClick = onClick,
-        modifier = Modifier.weight(1f),
+        interactionSource = interactions,
+        modifier = Modifier.weight(1f).tvFocusRing(interactions, CircleShape),
         border = BorderStroke(1.dp, colour.copy(alpha = 0.5f)),
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = colour)
@@ -797,9 +892,11 @@ private fun IconOnlyAction(
     danger: Boolean = false,
 ) {
     val colour = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    val interactions = remember { MutableInteractionSource() }
     OutlinedButton(
         onClick = onClick,
-        modifier = Modifier.size(48.dp),
+        interactionSource = interactions,
+        modifier = Modifier.size(48.dp).tvFocusRing(interactions, CircleShape),
         border = BorderStroke(1.dp, colour.copy(alpha = 0.5f)),
         contentPadding = PaddingValues(0.dp),
     ) {

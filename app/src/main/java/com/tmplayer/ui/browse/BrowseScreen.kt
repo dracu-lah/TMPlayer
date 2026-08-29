@@ -254,9 +254,14 @@ fun BrowseScreen(
     onOpenChat: (ChatSummary) -> Unit,
     onResumeMedia: (ResumeRecord) -> Unit,
     onOpenSettings: () -> Unit,
-    /** The phone's Downloads screen, from the drawer. Never reached on a television. */
+    /**
+     * The Downloads screen, from the drawer on a phone and from the rail on a television. Both
+     * form factors keep the downloads the viewer asked for by name until told otherwise; only
+     * the watch cache is the television's one-video, replaced-on-next-play arrangement, so a TV
+     * accumulates a list worth managing exactly as a phone does.
+     */
     onOpenDownloads: () -> Unit = {},
-    /** How many downloads are running, for the badge on that row of the drawer. */
+    /** How many downloads are running, for the badge on that row of the drawer and the rail. */
     downloadCount: Int = 0,
     onToggleFavorite: (ChatSummary) -> Unit = {},
     /**
@@ -512,6 +517,8 @@ fun BrowseScreen(
                 unreadCount = unreadChats,
                 onSelect = { onPickTab(it); query = "" },
                 onOpenSettings = onOpenSettings,
+                onOpenDownloads = onOpenDownloads,
+                downloadCount = downloadCount,
                 updateVersion = updateVersion,
                 onUpdate = onUpdate,
             )
@@ -1076,6 +1083,10 @@ private fun NavRail(
     unreadCount: Int,
     onSelect: (BrowseSection) -> Unit,
     onOpenSettings: () -> Unit,
+    /** The Downloads screen: the videos kept on this device and the queue still fetching them. */
+    onOpenDownloads: () -> Unit,
+    /** Downloads in flight, badged on the Downloads item so a fetch is never invisible. */
+    downloadCount: Int,
     /** The version on GitHub, when it beats the one running. Null the rest of the time. */
     updateVersion: String? = null,
     onUpdate: () -> Unit = {},
@@ -1098,7 +1109,8 @@ private fun NavRail(
         AccountBadge(account)
         Spacer(Modifier.height(18.dp))
 
-        // Scrolls, and takes whatever height is left after Settings and the update item. Ten fixed
+        // Scrolls, and takes whatever height is left after the bottom cluster: Downloads,
+        // Settings and the update item. Ten fixed
         // items fill a 1080p rail, and each folder adds a row: a plain Column clips what it cannot
         // fit, so anything past the fold would be unreachable.
         //
@@ -1158,6 +1170,17 @@ private fun NavRail(
             )
             Spacer(Modifier.height(4.dp))
         }
+        RailItem(
+            label = "Downloads",
+            icon = TmIcons.Download,
+            // How many videos are coming down right now. A download outlives the screen it was
+            // started from, and a television has no notification shade to say one is still
+            // running, so this mark is the only place that says it at all.
+            badge = downloadCount.takeIf { it > 0 }?.toString(),
+            selected = false,
+            onClick = onOpenDownloads,
+        )
+        Spacer(Modifier.height(4.dp))
         RailItem(
             label = "Settings",
             icon = Icons.Filled.Settings,
