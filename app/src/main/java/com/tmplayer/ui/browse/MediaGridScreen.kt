@@ -203,6 +203,7 @@ fun MediaGridScreen(
     /** Leaving the chat. On a phone this is the app bar's arrow as well as the hardware key. */
     onBack: () -> Unit = {},
     onPlay: (MediaItem) -> Unit,
+    onSetWatched: (MediaItem, Boolean) -> Unit = { _, _ -> },
     onToggleLayout: () -> Unit,
     telegramConnected: Boolean,
     offline: Boolean,
@@ -587,6 +588,7 @@ fun MediaGridScreen(
                             SettingsStore.progressKey(item.chatId, item.messageId),
                         ],
                         onPlay = { onPlay(item) },
+                        onSetWatched = { value -> onSetWatched(item, value) },
                         onSelectVideos = {
                             selected = mapOf(item.id to item)
                             selecting = true
@@ -1749,6 +1751,31 @@ private fun MediaArt(
                     .padding(horizontal = plateH, vertical = plateV),
             )
         }
+        if (watched?.completed == true && selected == null) {
+            Row(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = inset, bottom = 10.dp)
+                    .clip(RoundedCornerShape(Corner.ExtraSmall))
+                    .background(Color.Black.copy(alpha = 0.78f))
+                    .padding(horizontal = plateH + 1.dp, vertical = plateV + 1.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                M3Icon(
+                    Icons.Filled.Check,
+                    contentDescription = stringResource(R.string.watched_accessibility),
+                    tint = Color.White,
+                    modifier = Modifier.size(if (compact) 13.dp else 17.dp),
+                )
+                Text(
+                    stringResource(R.string.watched),
+                    style = tagStyle,
+                    color = Color.White,
+                    maxLines = 1,
+                )
+            }
+        }
         if (watched != null && watched.fraction > 0f) {
             // A thin bar along the bottom of the art, where a viewer already looks to see whether
             // they have started something. Material draws it on a phone, gap and rounded ends
@@ -1871,6 +1898,7 @@ private fun MediaActionsSheet(
     chatTitle: String,
     watched: WatchPoint?,
     onPlay: () -> Unit,
+    onSetWatched: (Boolean) -> Unit,
     onSelectVideos: () -> Unit,
     onDownloadForLater: () -> Unit,
     onDismiss: () -> Unit,
@@ -1889,6 +1917,9 @@ private fun MediaActionsSheet(
         ?.takeIf { it.positionMs > 0 }
         ?.let { "  ·  Stopped at ${com.tmplayer.player.StreamStats.formatClock(it.positionMs)}" }
         .orEmpty()
+    val markWatchedLabel = stringResource(
+        if (watched?.completed == true) R.string.mark_unwatched else R.string.mark_watched,
+    )
 
     val actions = buildList {
         add(
@@ -1896,6 +1927,16 @@ private fun MediaActionsSheet(
                 label = if (watched != null && watched.positionMs > 0) "Resume" else "Play",
                 icon = Icons.Filled.PlayArrow,
                 onSelect = { onDismiss(); onPlay() },
+            ),
+        )
+        add(
+            MenuAction(
+                label = markWatchedLabel,
+                icon = Icons.Filled.Check,
+                onSelect = {
+                    onSetWatched(watched?.completed != true)
+                    onDismiss()
+                },
             ),
         )
         when {

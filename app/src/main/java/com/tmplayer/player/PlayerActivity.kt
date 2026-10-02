@@ -73,6 +73,7 @@ import com.tmplayer.data.NetworkMonitor
 import com.tmplayer.data.NetworkStatus
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.CompletionPolicy
 import com.tmplayer.data.TrackChoice
 import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.CacheShelf
@@ -120,6 +121,7 @@ class PlayerActivity : FragmentActivity() {
 
     private var chatId = 0L
     private var messageId = 0L
+    private var terminalPlaybackError = false
 
     private lateinit var settings: SettingsStore
     private lateinit var subtitleView: SubtitleView
@@ -291,6 +293,10 @@ class PlayerActivity : FragmentActivity() {
         chatTitle = intent.getStringExtra(EXTRA_CHAT_TITLE).orEmpty()
         fileSizeBytes = intent.getLongExtra(EXTRA_SIZE, 0)
         durationSec = intent.getIntExtra(EXTRA_DURATION, 0)
+        App.backgroundScope.launch {
+            val accountId = runCatching { Td.myId() }.getOrDefault(0L)
+            runCatching { settings.beginPlayback(accountId, chatId, messageId) }
+        }
 
         subtitleView = findViewById(R.id.subtitles)
         statusOverlay = findViewById(R.id.status_overlay)
@@ -1111,6 +1117,7 @@ class PlayerActivity : FragmentActivity() {
                 // Playing again is the only proof that a recovery worked, so the budget is
                 // refilled here rather than when the retry is issued.
                 Player.STATE_READY -> {
+                    terminalPlaybackError = false
                     recoveryAttempts = 0
                     hideStatus()
                     // Once, as the picture first lands: the viewer sees the name of what they
@@ -1128,6 +1135,7 @@ class PlayerActivity : FragmentActivity() {
         override fun onPlayerError(error: PlaybackException) {
             if (recoverFrom(error)) return
             if (resourceAgain(error)) return
+            terminalPlaybackError = true
             showError(friendlyError(error), retryable = !isHopeless(error))
         }
     }
@@ -1474,7 +1482,12 @@ class PlayerActivity : FragmentActivity() {
      */
     private fun onVideoEnded() {
         lifecycleScope.launch {
-            settings.clearResumePosition(chatId, messageId)
+            val position = player?.currentPosition ?: 0L
+            val duration = player?.duration ?: 0L
+            if (CompletionPolicy.isComplete(position, duration, endedNormally = true)) {
+                val accountId = runCatching { Td.myId() }.getOrDefault(0L)
+                settings.setWatched(accountId, chatId, messageId, true)
+            }
             val next = _episodes.value.next
             val autoplay = runCatching { settings.autoplayNextNow() }.getOrDefault(true)
             if (next == null || !autoplay) {
@@ -2459,7 +2472,11 @@ class PlayerActivity : FragmentActivity() {
         val exo = player ?: return
         val position = exo.currentPosition
         val duration = exo.duration
-        val watched = duration > 0 && position >= duration - SettingsStore.END_MARGIN_MS
+        val watched = CompletionPolicy.isComplete(
+            position,
+            duration,
+            playbackError = terminalPlaybackError,
+        )
         val store = settings
         val chat = chatId
         val message = messageId
@@ -2475,7 +2492,8 @@ class PlayerActivity : FragmentActivity() {
         )
         App.backgroundScope.launch {
             runCatching {
-                if (watched) store.clearResumePosition(chat, message)
+                val accountId = Td.myId()
+                if (watched) store.setWatched(accountId, chat, message, true)
                 else store.saveResumePosition(chat, message, position, duration, description)
             }
         }

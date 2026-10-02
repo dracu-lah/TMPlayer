@@ -36,6 +36,7 @@ private val CHAT_LAYOUT = stringPreferencesKey("chat_layout")
 private val MEDIA_LAYOUT = stringPreferencesKey("media_layout")
 private val CHAT_SNAPSHOT = stringPreferencesKey("chat_snapshot")
 private val ACCOUNT_SNAPSHOT = stringPreferencesKey("account_snapshot")
+private val ACCOUNT_ID = longPreferencesKey("account_id")
 private val THEME_CHOICE = stringPreferencesKey("theme_choice")
 private val DYNAMIC_COLOUR = booleanPreferencesKey("dynamic_colour")
 private val VIDEO_SCALE = stringPreferencesKey("video_scale")
@@ -85,6 +86,12 @@ private fun durationKey(chatId: Long, messageId: Long) =
 /** Title, chat and file id, so a half-watched video can be reopened without its chat loaded. */
 private fun metaKey(chatId: Long, messageId: Long) =
     stringPreferencesKey("meta_${chatId}_$messageId")
+
+private fun watchedKey(accountId: Long, chatId: Long, messageId: Long) =
+    booleanPreferencesKey("watched_${VideoIdentity(accountId, chatId, messageId).storageSuffix}")
+
+private fun explicitlyUnwatchedKey(accountId: Long, chatId: Long, messageId: Long) =
+    booleanPreferencesKey("unwatched_${VideoIdentity(accountId, chatId, messageId).storageSuffix}")
 
 /**
  * The same line again, for the Downloads screen.
@@ -472,14 +479,17 @@ class SettingsStore(private val context: Context) {
      */
     suspend fun cachedAccountSnapshot(): Account? {
         val encoded = context.prefs.data.first()[ACCOUNT_SNAPSHOT] ?: return null
-        val parts = encoded.split("|", limit = 3)
-        if (parts.size != 3 || parts[2].isBlank()) return null
-        val mini = parts[1].takeIf { it.isNotBlank() }?.let {
+        val parts = encoded.split("|", limit = 4)
+        val modern = parts.size == 4
+        if ((!modern && parts.size != 3) || parts.last().isBlank()) return null
+        val offset = if (modern) 1 else 0
+        val mini = parts[1 + offset].takeIf { it.isNotBlank() }?.let {
             runCatching { java.util.Base64.getDecoder().decode(it) }.getOrNull()
         }
         return Account(
-            name = parts[2],
-            username = parts[0],
+            id = if (modern) parts[0].toLongOrNull() ?: 0L else 0L,
+            name = parts[2 + offset],
+            username = parts[offset],
             miniThumbnail = mini,
             photoFileId = 0,
         )
@@ -489,9 +499,10 @@ class SettingsStore(private val context: Context) {
         val mini = account.miniThumbnail
             ?.let { java.util.Base64.getEncoder().encodeToString(it) }
             .orEmpty()
-        val encoded = "${account.username}|$mini|${account.name.replace('|', ' ')}"
+        val encoded = "${account.id}|${account.username}|$mini|${account.name.replace('|', ' ')}"
         context.prefs.edit { prefs ->
             if (prefs[ACCOUNT_SNAPSHOT] != encoded) prefs[ACCOUNT_SNAPSHOT] = encoded
+            if (account.id > 0L) prefs[ACCOUNT_ID] = account.id
         }
     }
 
@@ -591,7 +602,8 @@ class SettingsStore(private val context: Context) {
      * one disk read per item on a device with very little to spare.
      */
     val watchProgress: Flow<Map<String, WatchPoint>> = read { prefs ->
-        buildMap {
+        buildMap<String, WatchPoint> {
+            val accountId = prefs[ACCOUNT_ID] ?: 0L
             for ((key, value) in prefs.asMap()) {
                 val name = key.name
                 if (!name.startsWith("resume_")) continue
@@ -599,6 +611,72 @@ class SettingsStore(private val context: Context) {
                 val positionMs = value as? Long ?: continue
                 val durationMs = prefs[longPreferencesKey("duration_$ids")] ?: 0L
                 put(ids, WatchPoint(positionMs, durationMs))
+            }
+            if (accountId > 0L) {
+                for ((key, value) in prefs.asMap()) {
+                    val name = key.name
+                    val prefix = "watched_${accountId}_"
+                    if (!name.startsWith(prefix) || value != true) continue
+                    val ids = name.removePrefix(prefix)
+                    val previous = get(ids)
+                    put(ids, WatchPoint(previous?.positionMs ?: 0L, previous?.durationMs ?: 0L, true))
+                }
+            }
+        }
+    }
+
+    suspend fun setWatched(accountId: Long, chatId: Long, messageId: Long, watched: Boolean) {
+        if (accountId <= 0L) return
+        context.prefs.edit { prefs ->
+            prefs[ACCOUNT_ID] = accountId
+            if (watched) {
+                prefs[watchedKey(accountId, chatId, messageId)] = true
+                prefs.remove(explicitlyUnwatchedKey(accountId, chatId, messageId))
+            } else {
+                prefs.remove(watchedKey(accountId, chatId, messageId))
+                prefs[explicitlyUnwatchedKey(accountId, chatId, messageId)] = true
+            }
+            prefs.remove(resumeKey(chatId, messageId))
+            prefs.remove(durationKey(chatId, messageId))
+            prefs.remove(metaKey(chatId, messageId))
+        }
+    }
+
+    suspend fun beginPlayback(accountId: Long, chatId: Long, messageId: Long) {
+        if (accountId <= 0L) return
+        context.prefs.edit { prefs ->
+            if (prefs[explicitlyUnwatchedKey(accountId, chatId, messageId)] == true) {
+                prefs.remove(explicitlyUnwatchedKey(accountId, chatId, messageId))
+            }
+        }
+    }
+
+    suspend fun migrateCompletedProgress(accountId: Long) {
+        if (accountId <= 0L) return
+        context.prefs.edit { prefs ->
+            prefs[ACCOUNT_ID] = accountId
+            val idsToMigrate = prefs.asMap().keys.mapNotNull { key ->
+                key.name.removePrefixOrNull("resume_")
+            }.filter { ids ->
+                val parts = ids.split('_')
+                if (parts.size != 2) return@filter false
+                val chatId = parts[0].toLongOrNull() ?: return@filter false
+                val messageId = parts[1].toLongOrNull() ?: return@filter false
+                if (prefs[explicitlyUnwatchedKey(accountId, chatId, messageId)] == true) return@filter false
+                CompletionPolicy.canRecoverLegacy(
+                    prefs[longPreferencesKey("resume_$ids")] ?: 0L,
+                    prefs[longPreferencesKey("duration_$ids")] ?: 0L,
+                    explicitlyUnwatched = false,
+                )
+            }
+            for (ids in idsToMigrate) {
+                val parts = ids.split('_')
+                val chatId = parts[0].toLong()
+                val messageId = parts[1].toLong()
+                prefs[watchedKey(accountId, chatId, messageId)] = true
+                prefs.remove(longPreferencesKey("resume_$ids"))
+                prefs.remove(longPreferencesKey("duration_$ids"))
+                prefs.remove(stringPreferencesKey("meta_$ids"))
             }
         }
     }
@@ -856,7 +934,11 @@ data class TrackChoice(
 }
 
 /** How far into a video the viewer got, and how long it runs. */
-data class WatchPoint(val positionMs: Long, val durationMs: Long) {
+data class WatchPoint(
+    val positionMs: Long,
+    val durationMs: Long,
+    val completed: Boolean = false,
+) {
     val fraction: Float
         get() = if (durationMs <= 0) 0f else (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)
 }

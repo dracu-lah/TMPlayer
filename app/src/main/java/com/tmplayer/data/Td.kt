@@ -663,6 +663,7 @@ object Td {
             .joinToString(" ")
             .ifBlank { "Telegram" }
         return Account(
+            id = user.id,
             name = name,
             username = user.usernames?.activeUsernames?.firstOrNull().orEmpty(),
             miniThumbnail = user.profilePhoto?.minithumbnail?.data,
@@ -721,13 +722,14 @@ class TdSession internal constructor(
 
 /** Who is signed in. Shown in the rail so it is obvious whose library this is. */
 data class Account(
+    val id: Long = 0L,
     val name: String,
     val username: String,
     val miniThumbnail: ByteArray?,
     val photoFileId: Int,
 ) {
-    override fun equals(other: Any?) = other is Account && other.name == name &&
+    override fun equals(other: Any?) = other is Account && other.id == id && other.name == name &&
         other.username == username && other.photoFileId == photoFileId
 
-    override fun hashCode() = name.hashCode() * 31 + photoFileId
+    override fun hashCode() = ((id.hashCode() * 31) + name.hashCode()) * 31 + photoFileId
 }

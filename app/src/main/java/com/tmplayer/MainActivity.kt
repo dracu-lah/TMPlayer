@@ -289,6 +289,12 @@ private fun Root() {
     )
     val chatsState by chatsViewModel.state.collectAsStateWithLifecycle()
     val accountHeader by chatsViewModel.accountHeader.collectAsStateWithLifecycle()
+    LaunchedEffect(auth) {
+        if (auth is AuthState.Ready) {
+            val accountId = runCatching { Td.myId() }.getOrDefault(0L)
+            runCatching { settings.migrateCompletedProgress(accountId) }
+        }
+    }
     val chats = (chatsState as? UiState.Content)?.value?.chats.orEmpty()
 
     LaunchedEffect(auth) {
@@ -785,6 +791,12 @@ private fun Root() {
                         }
                     },
                     onPlay = { play(it, chatTitle = current.chat.title) },
+                    onSetWatched = { item, watched ->
+                        scope.launch {
+                            val accountId = runCatching { Td.myId() }.getOrDefault(0L)
+                            settings.setWatched(accountId, item.chatId, item.messageId, watched)
+                        }
+                    },
                     onToggleLayout = { scope.launch { settings.setMediaLayout(mediaLayout.toggled()) } },
                     telegramConnected = telegramConnected,
                     offline = networkStatus == NetworkStatus.Offline && !telegramConnected,
