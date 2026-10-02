@@ -12,9 +12,9 @@ arithmetically (`major*10000 + minor*100 + patch`), so the code can only ever in
 Android refuses to install an APK whose `versionCode` is lower than the one already on the
 device, and a hand-rolled number is easy to get wrong.
 
-Ordinary pushes and pull requests run `.github/workflows/ci.yml`, which tests and builds a
-debug APK. That job never sees the signing key or the Telegram credentials, so a pull request
-from a stranger cannot reach them.
+Ordinary pushes and pull requests run `.github/workflows/ci.yml`, which tests and builds a debug
+APK. Pushes to `main` use the Telegram repository secrets, while pull requests build without
+them. Neither path sees the signing key, and a pull request cannot reach any credentials.
 
 ## Repository secrets
 

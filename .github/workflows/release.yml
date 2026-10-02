@@ -77,8 +77,8 @@ jobs:
           # exist in that build. That is a smaller release, not a broken one, so it does not fail.
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
-          if [ -z "$TG_API_ID" ]; then
-            echo "::error::TG_API_ID is not set, so the released APK would not be able to sign in"
+          if [ -z "$TG_API_ID" ] || [ -z "$TG_API_HASH" ]; then
+            echo "::error::TG_API_ID and TG_API_HASH must both be set for a release"
             exit 1
           fi
           if [ -z "$SENTRY_DSN" ]; then
@@ -96,6 +96,7 @@ jobs:
       - name: Build signed APKs
         run: |
           ./gradlew :app:assembleRelease \
+            -PrequireTelegramCredentials=true \
             -PtmVersionName=${{ steps.version.outputs.name }} \
             -PtmVersionCode=${{ steps.version.outputs.code }}
 
