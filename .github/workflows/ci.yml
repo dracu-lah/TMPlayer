@@ -1,7 +1,7 @@
 name: CI
 
-# Every push and every pull request. This job never touches signing keys or Telegram
-# credentials, so it is safe to run on contributions from people you do not know.
+# Every push and every pull request builds without credentials, so contributions from people you
+# do not know cannot reach them. A manual run is the owner's route to an APK they can sign in with.
 on:
   push:
     branches: [main]
@@ -21,12 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # House style: no em or en dashes in tracked files. They are awkward to type consistently
-      # and they arrive invisibly on copy-paste, so the build rejects them rather than leaving it
-      # to review. Use a comma, a colon or two sentences.
       - name: No em or en dashes
-        # The codepoints are written as escapes rather than as the characters themselves, so
-        # this check does not match its own source and report a false positive.
         run: |
           if git ls-files -z | xargs -0 grep -InIP '[\x{2012}-\x{2015}]'; then
             echo "::error::Found an em or en dash. Replace it with ordinary punctuation."
@@ -43,13 +38,27 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      # No credentials on this path. The app compiles fine without them and says so at runtime,
-      # which is exactly what a fork or a pull request should get.
+      - name: Write Telegram credentials for a manual build
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+        run: |
+          if [ -z "$TG_API_ID" ] || [ -z "$TG_API_HASH" ]; then
+            echo "::error::TG_API_ID and TG_API_HASH must both be repository secrets for a manual build"
+            exit 1
+          fi
+          printf 'TG_API_ID=%s\nTG_API_HASH=%s\n' "$TG_API_ID" "$TG_API_HASH" > local.properties
+
       - name: Run unit tests
         run: ./gradlew :app:test
 
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug
+
+      - name: Remove Telegram credentials
+        if: always() && github.event_name == 'workflow_dispatch'
+        run: rm -f local.properties
 
       - name: Upload debug APKs
         uses: actions/upload-artifact@v7
