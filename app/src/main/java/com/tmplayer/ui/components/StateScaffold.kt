@@ -39,6 +39,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.tv.material3.Icon
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.tmplayer.R
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.ui.theme.Tone
@@ -244,7 +246,7 @@ fun BigError(message: String, onRetry: (() -> Unit)?) {
                 modifier = Modifier.size(if (touch) 44.dp else 56.dp),
             )
             Text(
-                "That didn't work",
+                stringResource(R.string.that_did_not_work),
                 style = if (touch) {
                     MaterialTheme.typography.titleMedium
                 } else {
@@ -275,7 +277,7 @@ fun BigError(message: String, onRetry: (() -> Unit)?) {
                         modifier = Modifier.size(22.dp),
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("Try again")
+                    Text(stringResource(R.string.try_again))
                 }
                 // The remote needs somewhere to land; a finger does not, and taking focus on a
                 // phone only draws a ring around the button.

@@ -85,7 +85,7 @@ android {
         // English only. Every androidx and Media3 dependency ships translations for ~80
         // locales, and none of this app's own strings are translated, so the rest is dead
         // weight in resources.arsc. Revisit the moment the UI itself is localised.
-        androidResources.localeFilters += listOf("en")
+        androidResources.localeFilters += listOf("en", "es")
 
     }
 

@@ -65,6 +65,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.tmplayer.R
 import androidx.compose.ui.unit.min
 import com.tmplayer.data.Account
 import com.tmplayer.data.Updates
@@ -200,7 +202,7 @@ internal fun TouchBrowseShell(
                     )
                 }
                 DrawerDestination(
-                    label = "Downloads",
+                        label = stringResource(R.string.downloads),
                     selected = false,
                     // How many videos are coming down right now. A download outlives the screen it
                     // was started from, so without a mark here the only evidence it is running is
@@ -210,7 +212,7 @@ internal fun TouchBrowseShell(
                     onClick = { close(); onOpenDownloads() },
                 )
                 DrawerDestination(
-                    label = "Settings",
+                    label = stringResource(R.string.settings),
                     selected = false,
                     badge = null,
                     icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
@@ -280,11 +282,11 @@ internal fun TouchBrowseShell(
                             IconButton(
                                 onClick = { searching = false; onSearchQueryChange("") },
                             ) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close search")
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.close_search))
                             }
                         } else {
                             IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                Icon(Icons.Filled.Menu, contentDescription = "Open navigation")
+                                Icon(Icons.Filled.Menu, contentDescription = stringResource(R.string.open_navigation))
                             }
                         }
                     },
@@ -294,7 +296,7 @@ internal fun TouchBrowseShell(
                         if (searching) return@TopAppBar
                         if (searchQuery != null) {
                             IconButton(onClick = { searching = true }) {
-                                Icon(Icons.Filled.Search, contentDescription = "Search")
+                                Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.search))
                             }
                         }
                         actions()
@@ -342,7 +344,7 @@ private fun AppBarSearchField(
             decorationBox = { inner ->
                 if (query.isEmpty()) {
                     Text(
-                        "Search",
+                        stringResource(R.string.search),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -355,11 +357,11 @@ private fun AppBarSearchField(
         // separate labelled button in the row below.
         if (query.isNotEmpty()) {
             IconButton(onClick = { onQueryChange("") }) {
-                Icon(Icons.Filled.Close, contentDescription = "Clear search")
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.clear_search))
             }
         } else if (onVoiceSearch != null) {
             IconButton(onClick = onVoiceSearch) {
-                Icon(TmIcons.Mic, contentDescription = "Search by voice")
+                Icon(TmIcons.Mic, contentDescription = stringResource(R.string.search_by_voice))
             }
         }
     }

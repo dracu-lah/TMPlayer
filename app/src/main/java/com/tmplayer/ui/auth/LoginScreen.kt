@@ -52,6 +52,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.tmplayer.R
 import androidx.compose.material3.MaterialTheme as M3
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -105,7 +107,7 @@ fun LoginScreen(
             LaunchedEffect(touch) {
                 onChooseMethod(if (touch) SignInMethod.Phone else SignInMethod.Qr)
             }
-            ConnectingPane("Getting ready")
+            ConnectingPane(stringResource(R.string.loading))
         }
         is AuthState.Qr -> QrPane(
             link = state.link,
@@ -141,7 +143,7 @@ fun LoginScreen(
             }
         is AuthState.Password ->
             PasswordPane(state, submitError, onSubmitPassword, onStartOver)
-        is AuthState.Ready -> ConnectingPane("Signing in")
+        is AuthState.Ready -> ConnectingPane(stringResource(R.string.signing_in))
         is AuthState.Failed -> BigError(state.message, onRetry = null)
     }
 }
@@ -245,7 +247,7 @@ private fun PhonePane(
     val submission = rememberSubmission(state, error)
 
     LoginForm(
-        title = "Your phone number",
+        title = stringResource(R.string.phone_number_title),
         blurb = "The number your Telegram account is registered to, with its country code.",
         note = null,
         value = number,
@@ -257,14 +259,14 @@ private fun PhonePane(
         keyboardType = KeyboardType.Phone,
         masked = false,
         error = error,
-        submitLabel = "Send me a code",
-        busyLabel = "Sending code…",
+        submitLabel = stringResource(R.string.send_code),
+        busyLabel = stringResource(R.string.sending_code),
         busy = submission.busy,
         canSubmit = number.count { it.isDigit() } >= MIN_PHONE_DIGITS,
         onSubmit = { submission.start { onSubmit(number) } },
         // On a television the other way in is one press away, and it is the quicker one, so the
         // secondary button says where it goes rather than only that it goes back.
-        backLabel = if (onBack == null) "Scan a QR code instead" else "Back",
+        backLabel = if (onBack == null) "Scan a QR code instead" else stringResource(R.string.back),
         onBack = onBack ?: onUseQr,
     )
 }
@@ -324,14 +326,14 @@ private fun TouchPhonePane(
         // No arrow on the first screen: an arrow that leaves the app is not what a back arrow
         // means anywhere else, and the pane's own buttons are the two ways on from here.
         if (onBack != null) PaneHeader(onBack = onBack)
-        Text("Your phone number", style = MaterialTheme.typography.headlineLarge)
+        Text(stringResource(R.string.phone_number_title), style = MaterialTheme.typography.headlineLarge)
         Text(
             "Telegram will send a code to the account this number belongs to.",
             style = MaterialTheme.typography.bodyLarge,
         )
 
         PaneChooser(
-            label = country?.let { "${it.flag}  ${it.name}" } ?: "Choose a country",
+            label = country?.let { "${it.flag}  ${it.name}" } ?: stringResource(R.string.choose_country),
             trailing = "Change",
             onClick = { picking = true },
         )
@@ -381,10 +383,10 @@ private fun TouchPhonePane(
             onClick = submit,
             enabled = (dial + national).length >= MIN_PHONE_DIGITS,
             loading = submission.busy,
-            busyLabel = "Sending code…",
+            busyLabel = stringResource(R.string.sending_code),
             modifier = Modifier.paneAction(),
         ) {
-            Text("Send me a code")
+            Text(stringResource(R.string.send_code))
         }
         TmSecondaryButton(onClick = onUseQr, modifier = Modifier.paneAction()) {
             Text("Scan a QR code instead")
@@ -419,7 +421,7 @@ private fun CodePane(
     val submission = rememberSubmission(state, error)
 
     LoginForm(
-        title = "Enter your code",
+        title = stringResource(R.string.enter_code),
         blurb = codeBlurb(state),
         note = null,
         value = code,
@@ -432,14 +434,14 @@ private fun CodePane(
         keyboardType = if (digits) KeyboardType.Number else KeyboardType.Text,
         masked = false,
         error = error,
-        submitLabel = "Sign in",
-        busyLabel = "Signing in…",
+        submitLabel = stringResource(R.string.sign_in),
+        busyLabel = stringResource(R.string.signing_in),
         busy = submission.busy,
         canSubmit = code.isNotEmpty(),
         onSubmit = { submission.start { onSubmit(code) } },
         // Not "Back": the code has been sent, so the way out is a fresh start, which is what
         // restarting the sign-in actually does.
-        backLabel = "Start over",
+        backLabel = stringResource(R.string.start_over),
         onBack = onStartOver,
     )
 }
@@ -495,7 +497,7 @@ private fun TouchCodePane(
 
     Pane {
         PaneHeader(onBack = onStartOver)
-        Text("Enter your code", style = MaterialTheme.typography.headlineLarge)
+        Text(stringResource(R.string.enter_code), style = MaterialTheme.typography.headlineLarge)
         Text(codeBlurb(state), style = MaterialTheme.typography.bodyLarge)
 
         if (boxed) {
@@ -528,10 +530,10 @@ private fun TouchCodePane(
             onClick = submit,
             enabled = code.isNotEmpty() && code != submitted,
             loading = signIn.busy,
-            busyLabel = "Signing in…",
+            busyLabel = stringResource(R.string.signing_in),
             modifier = Modifier.paneAction(),
         ) {
-            Text("Sign in")
+            Text(stringResource(R.string.sign_in))
         }
 
         TmSecondaryButton(
@@ -544,7 +546,7 @@ private fun TouchCodePane(
             },
             enabled = remaining <= 0,
             loading = resend.busy,
-            busyLabel = "Sending code…",
+            busyLabel = stringResource(R.string.sending_code),
             modifier = Modifier.paneAction(),
         ) {
             Text(if (remaining > 0) "Resend in ${clock(remaining)}" else resendLabel(state.next))
@@ -554,7 +556,7 @@ private fun TouchCodePane(
             Text("Change number")
         }
         TmSecondaryButton(onClick = onStartOver, modifier = Modifier.paneAction()) {
-            Text("Start over")
+            Text(stringResource(R.string.start_over))
         }
     }
 
@@ -742,7 +744,7 @@ private fun QrPane(link: String, onUsePhone: () -> Unit) {
     }
 
     val words: @Composable ColumnScope.() -> Unit = {
-        Text("Sign in to Telegram", style = MaterialTheme.typography.headlineLarge)
+        Text(stringResource(R.string.sign_in_telegram), style = MaterialTheme.typography.headlineLarge)
         Text(
             "Scan this code with the phone that has your Telegram account.",
             style = MaterialTheme.typography.bodyLarge,
@@ -767,7 +769,7 @@ private fun QrPane(link: String, onUsePhone: () -> Unit) {
             words()
             Spacer(Modifier.height(8.dp))
             TmSecondaryButton(onClick = onUsePhone, modifier = Modifier.paneAction()) {
-                Text("Use my phone number")
+                Text(stringResource(R.string.use_phone_number))
             }
         }
         return
@@ -784,7 +786,7 @@ private fun QrPane(link: String, onUsePhone: () -> Unit) {
             Spacer(Modifier.height(8.dp))
             // On a remote this is the only focusable thing on the pane, so it is also what gives
             // the D-pad somewhere to be. Without it the screen takes no input at all.
-            TmSecondaryButton(onClick = onUsePhone) { Text("Use my phone number") }
+            TmSecondaryButton(onClick = onUsePhone) { Text(stringResource(R.string.use_phone_number)) }
         }
     }
 }
@@ -828,23 +830,23 @@ private fun PasswordPane(
     BackHandler(onBack = onStartOver)
 
     LoginForm(
-        title = "Two-step verification",
+        title = stringResource(R.string.two_step_verification),
         blurb = "Your Telegram account has a password. Enter it to finish signing in.",
         note = state.hint.takeIf { it.isNotBlank() }?.let { "Hint: $it" },
         value = password,
         onValueChange = { password = it },
-        placeholder = "Password",
+        placeholder = stringResource(R.string.password),
         keyboardType = KeyboardType.Password,
         masked = true,
         error = error,
-        submitLabel = "Sign in",
-        busyLabel = "Signing in…",
+        submitLabel = stringResource(R.string.sign_in),
+        busyLabel = stringResource(R.string.signing_in),
         busy = submission.busy,
         canSubmit = password.isNotEmpty(),
         onSubmit = { submission.start { onSubmit(password) } },
         // The way out: scanned with the wrong account, or the password is not to hand. Nothing is
         // lost, because nobody is signed in yet.
-        backLabel = "Start over",
+        backLabel = stringResource(R.string.start_over),
         onBack = onStartOver,
     )
 }

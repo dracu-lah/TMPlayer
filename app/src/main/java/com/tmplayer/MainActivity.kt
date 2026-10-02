@@ -1,6 +1,7 @@
 package com.tmplayer
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -38,6 +39,7 @@ import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.RoomOnDisk
 import com.tmplayer.data.LocalFileAvailability
+import com.tmplayer.data.Language
 import com.tmplayer.data.NetworkMonitor
 import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.NetworkStatus
@@ -157,6 +159,10 @@ private data class RoomPrompt(
 )
 
 class MainActivity : ComponentActivity() {
+
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(Language.wrap(base))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Asked for rather than inherited. API 35 and above draws behind the bars anyway, but the

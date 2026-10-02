@@ -36,7 +36,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -62,8 +64,8 @@ import com.tmplayer.ui.components.paneAction
  * screenshot on a light page is somebody else's app.
  */
 private data class Page(
-    val title: String,
-    val body: String,
+    val title: Int,
+    val body: Int,
     val image: Int,
     val phoneLight: Int,
     val phoneDark: Int,
@@ -77,6 +79,7 @@ private data class Page(
  */
 @Composable
 fun OverviewScreen(onDone: () -> Unit) {
+    val context = LocalContext.current
     var index by remember { mutableIntStateOf(0) }
     val touch = isTouch()
     val PAGES = remember(touch) { pages(touch) }
@@ -110,7 +113,7 @@ fun OverviewScreen(onDone: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .semantics {
-                        contentDescription = "Step ${index + 1} of ${PAGES.size}"
+                        contentDescription = context.getString(R.string.step_of, index + 1, PAGES.size)
                     },
             )
 
@@ -125,12 +128,12 @@ fun OverviewScreen(onDone: () -> Unit) {
                 val shown = PAGES[pageIndex]
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     M3Text(
-                        shown.title,
+                        stringResource(shown.title),
                         style = M3MaterialTheme.typography.headlineSmall,
                         color = Tone.text,
                     )
                     M3Text(
-                        shown.body,
+                        stringResource(shown.body),
                         style = M3MaterialTheme.typography.bodyMedium,
                         color = Tone.muted,
                     )
@@ -142,7 +145,7 @@ fun OverviewScreen(onDone: () -> Unit) {
                 onClick = { if (last) onDone() else index++ },
                 modifier = Modifier.paneAction(),
             ) {
-                M3Text(if (last) "Start" else "Next")
+                M3Text(stringResource(if (last) R.string.start else R.string.next))
                 if (!last) {
                     Spacer(Modifier.width(8.dp))
                     M3Icon(
@@ -154,7 +157,7 @@ fun OverviewScreen(onDone: () -> Unit) {
             }
             if (!last) {
                 TmSecondaryButton(onClick = onDone, modifier = Modifier.paneAction()) {
-                    M3Text("Skip")
+                    M3Text(stringResource(R.string.skip))
                 }
             }
             // Clears the gesture bar's own strip, which a button flush to the bottom of the scroll
@@ -169,16 +172,16 @@ fun OverviewScreen(onDone: () -> Unit) {
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "Step ${index + 1} of ${PAGES.size}",
+                    stringResource(R.string.step_of, index + 1, PAGES.size),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Tone.accent,
                 )
                 Text(
-                    page.title,
+                    stringResource(page.title),
                     style = MaterialTheme.typography.headlineLarge,
                     color = Tone.text,
                 )
-                Text(page.body, style = MaterialTheme.typography.bodyLarge, color = Tone.muted)
+                Text(stringResource(page.body), style = MaterialTheme.typography.bodyLarge, color = Tone.muted)
 
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -186,7 +189,7 @@ fun OverviewScreen(onDone: () -> Unit) {
                         onClick = { if (last) onDone() else index++ },
                         modifier = Modifier.focusRequester(next),
                     ) {
-                        Text(if (last) "Start" else "Next")
+                        Text(stringResource(if (last) R.string.start else R.string.next))
                         if (!last) {
                             Spacer(Modifier.width(8.dp))
                             Icon(
@@ -197,7 +200,7 @@ fun OverviewScreen(onDone: () -> Unit) {
                         }
                     }
                     if (!last) {
-                        TmSecondaryButton(onClick = onDone) { Text("Skip") }
+                        TmSecondaryButton(onClick = onDone) { Text(stringResource(R.string.skip)) }
                     }
                 }
             }
@@ -247,14 +250,8 @@ private fun PageImage(page: Page, modifier: Modifier) {
  */
 private fun pages(touch: Boolean) = listOf(
     Page(
-        title = if (touch) "Sign in with your number" else "Sign in with your phone",
-        body = if (touch) {
-            "Type the number your Telegram account is registered to and TMPlayer sends you a " +
-                "code. If your account lives on another phone, scan a QR code instead."
-        } else {
-            "TMPlayer shows a code. Open Telegram on your phone, go to Settings then Devices, " +
-                "and point the camera at the TV. Nothing is typed on the remote."
-        },
+        title = if (touch) R.string.overview_signin_phone_title else R.string.overview_signin_tv_title,
+        body = if (touch) R.string.overview_signin_phone_body else R.string.overview_signin_tv_body,
         // Deliberately blurred: the real code on that screen is a live sign-in token, and a
         // scannable one shipped inside the app would be a working key to somebody's account.
         image = R.drawable.overview_signin,
@@ -262,22 +259,15 @@ private fun pages(touch: Boolean) = listOf(
         phoneDark = R.drawable.overview_signin_touch_dark,
     ),
     Page(
-        title = if (touch) "Your Telegram chats" else "Your Telegram chats, on the left",
-        body = if (touch) {
-            "The menu sorts them: channels, groups, people, or everything at once. Star the " +
-                "chats you watch from and they sit in Favourites, one tap away."
-        } else {
-            "The rail sorts them: channels, groups, people, or everything at once. Star the " +
-                "chats you watch from and they sit in Favourites, one press away."
-        },
+        title = if (touch) R.string.overview_chats_phone_title else R.string.overview_chats_tv_title,
+        body = if (touch) R.string.overview_chats_phone_body else R.string.overview_chats_tv_body,
         image = R.drawable.overview_chats,
         phoneLight = R.drawable.overview_chats_touch,
         phoneDark = R.drawable.overview_chats_touch_dark,
     ),
     Page(
-        title = "Open a chat to see its videos",
-        body = "TMPlayer lists the videos posted in that chat, newest first, with their size and " +
-            "quality. Short clips are filtered out; the size limits are yours to change.",
+        title = R.string.overview_media_title,
+        body = R.string.overview_media_body,
         image = R.drawable.overview_media,
         phoneLight = R.drawable.overview_media_touch,
         phoneDark = R.drawable.overview_media_touch_dark,

@@ -1,6 +1,7 @@
 package com.tmplayer.ui.settings
 
 import android.content.Intent
+import android.app.Activity
 import android.net.Uri
 import android.os.Build
 import androidx.compose.animation.animateColorAsState
@@ -89,6 +90,7 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.BoxWithConstraintsScope
@@ -99,12 +101,15 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.CacheShelf
+import com.tmplayer.R
 import com.tmplayer.data.DiskInfo
 import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.CrashReports
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.Language
+import com.tmplayer.data.LanguageChoice
 import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.StorageSplit
 import com.tmplayer.data.WatchCache
@@ -159,6 +164,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings = remember { SettingsStore(context) }
+    var language by remember { mutableStateOf(LanguageChoice.current(context)) }
 
     // Matches the stored default, so the switch does not show as on for the frame before the
     // first value arrives and then visibly flick off.
@@ -277,12 +283,12 @@ fun SettingsScreen(
             item {
                 Column(Modifier.padding(bottom = 12.dp)) {
                     Text(
-                        "Settings",
+                        stringResource(R.string.settings),
                         style = MaterialTheme.typography.headlineLarge,
                         color = Tone.text,
                     )
                     Text(
-                        "Changes save as you make them.",
+                        stringResource(R.string.settings_saved_automatically),
                         style = MaterialTheme.typography.bodyMedium,
                         color = Tone.muted,
                     )
@@ -309,7 +315,34 @@ fun SettingsScreen(
 
         // First, on both devices: a stick often lives on a screen in a bright room, so the theme
         // is worth offering there too.
-        item { SectionTitle("Appearance") }
+        item { SectionTitle(stringResource(R.string.appearance)) }
+        item {
+            val labels = listOf(
+                stringResource(R.string.language_system),
+                stringResource(R.string.language_spanish),
+                stringResource(R.string.language_english),
+            )
+            val descriptions = listOf(
+                stringResource(R.string.system_language_description),
+                stringResource(R.string.spanish_language_description),
+                stringResource(R.string.english_language_description),
+            )
+            StepperRow(
+                title = stringResource(R.string.language),
+                subtitle = descriptions[language.ordinal],
+                value = labels[language.ordinal],
+                icon = TmIcons.CircleOutline,
+                canDecrease = language.ordinal > 0,
+                canIncrease = language.ordinal < LanguageChoice.entries.lastIndex,
+                onStep = { direction ->
+                    LanguageChoice.entries.getOrNull(language.ordinal + direction)?.let { next ->
+                        language = next
+                        Language.select(context, next)
+                        (context as? Activity)?.recreate()
+                    }
+                },
+            )
+        }
         item {
             if (touch) {
                 ThemePicker(
@@ -320,7 +353,7 @@ fun SettingsScreen(
                 // Segments are a thumb control and cannot be reached with a D-pad. The stepper is
                 // the same one the size limits use, so Left and Right already mean "change this".
                 StepperRow(
-                    title = "Theme",
+                    title = stringResource(R.string.theme),
                     subtitle = themeChoice.tvDescription,
                     value = themeChoice.label,
                     icon = TmIcons.CircleOutline,
@@ -470,7 +503,7 @@ fun SettingsScreen(
 
         // ---- playback -----------------------------------------------------------------------
 
-        item { SectionTitle("Playback") }
+        item { SectionTitle(stringResource(R.string.playback)) }
         item {
             ToggleRow(
                 title = "Play the next episode automatically",
@@ -520,7 +553,7 @@ fun SettingsScreen(
 
         // ---- storage ------------------------------------------------------------------------
 
-        item { SectionTitle("Storage") }
+        item { SectionTitle(stringResource(R.string.storage)) }
         item {
             StorageCard(
                 split = split,
@@ -605,7 +638,7 @@ fun SettingsScreen(
 
         // ---- startup ------------------------------------------------------------------------
 
-        item { SectionTitle("On launch") }
+        item { SectionTitle(stringResource(R.string.on_launch)) }
         item {
             ToggleRow(
                 title = "Carry on from the last chat",
@@ -639,7 +672,7 @@ fun SettingsScreen(
 
         // ---- version -------------------------------------------------------------------------
 
-        item { SectionTitle("Version") }
+        item { SectionTitle(stringResource(R.string.version)) }
         (updateState as? UpdateState.Available)?.let { available ->
             item {
                 ActionRow(
@@ -668,7 +701,7 @@ fun SettingsScreen(
 
         // ---- help ----------------------------------------------------------------------------
 
-        item { SectionTitle("Help") }
+        item { SectionTitle(stringResource(R.string.help)) }
         item {
             ActionRow(
                 title = "Show the walkthrough again",
@@ -731,7 +764,7 @@ fun SettingsScreen(
 
         // ---- account ------------------------------------------------------------------------
 
-        item { SectionTitle("Account") }
+        item { SectionTitle(stringResource(R.string.account)) }
         item {
             ActionRow(
                 title = "Sign out of Telegram",
@@ -767,12 +800,12 @@ fun SettingsScreen(
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { M3Text("Settings") },
+                    title = { M3Text(stringResource(R.string.settings)) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             M3Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back to chats",
+                                contentDescription = stringResource(R.string.back_to_chats),
                             )
                         }
                     },

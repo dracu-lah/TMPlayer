@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
+import com.tmplayer.R
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 import com.tmplayer.ui.components.AppMark
@@ -95,7 +97,7 @@ private fun ColumnScope.Intro(touch: Boolean, focus: FocusRequester, onContinue:
             AppMark(MarkSize.Hero)
             Spacer(Modifier.width(20.dp))
             Text(
-                "Welcome to TMPlayer",
+                stringResource(R.string.welcome_title),
                 style = MaterialTheme.typography.headlineLarge,
                 color = Tone.text,
             )
@@ -104,7 +106,7 @@ private fun ColumnScope.Intro(touch: Boolean, focus: FocusRequester, onContinue:
 
     if (touch) {
         Text(
-            "Welcome to TMPlayer",
+            stringResource(R.string.welcome_title),
             style = MaterialTheme.typography.headlineSmall,
             color = Tone.text,
             textAlign = TextAlign.Center,
@@ -113,13 +115,7 @@ private fun ColumnScope.Intro(touch: Boolean, focus: FocusRequester, onContinue:
     }
 
     Text(
-        if (touch) {
-            "TMPlayer plays videos from your own Telegram chats. Here's what that means before " +
-                "you sign in."
-        } else {
-            "TMPlayer plays videos from your own Telegram chats on this TV. Here's what that " +
-                "means before you sign in."
-        },
+        stringResource(if (touch) R.string.intro_body_phone else R.string.intro_body_tv),
         style = if (touch) {
             MaterialTheme.typography.bodyMedium
         } else {
@@ -132,33 +128,20 @@ private fun ColumnScope.Intro(touch: Boolean, focus: FocusRequester, onContinue:
     Point(
         touch,
         Icons.Filled.Lock,
-        "You stay signed in to your own account",
-        if (touch) {
-            "Signing in adds this device to your Telegram devices, just like a computer does. " +
-                "Your media comes from Telegram and nowhere else."
-        } else {
-            "Signing in adds this TV to your Telegram devices, just like a computer does. " +
-                "Your media comes from Telegram and nowhere else."
-        },
+        stringResource(R.string.intro_account_title),
+        stringResource(if (touch) R.string.intro_account_phone else R.string.intro_account_tv),
     )
     Point(
         touch,
         Icons.Filled.PlayArrow,
-        "Videos only, never your messages",
-        "TMPlayer reads your chats to list the videos in them. It never shows messages, " +
-            "and it never sends any.",
+        stringResource(R.string.intro_videos_title),
+        stringResource(R.string.intro_videos_body),
     )
     Point(
         touch,
         Icons.Filled.Star,
-        if (touch) "One video on this device at a time" else "One video on this TV at a time",
-        if (touch) {
-            "TMPlayer saves the video you're watching and deletes it when you start the next " +
-                "one, so this phone doesn't fill up. It always asks you first."
-        } else {
-            "TMPlayer saves the video you're watching and deletes it when you start the " +
-                "next one, so this TV doesn't fill up. It always asks you first."
-        },
+        stringResource(if (touch) R.string.intro_cache_title_phone else R.string.intro_cache_title_tv),
+        stringResource(if (touch) R.string.intro_cache_body_phone else R.string.intro_cache_body_tv),
     )
 
     Spacer(Modifier.size(10.dp))
@@ -167,7 +150,7 @@ private fun ColumnScope.Intro(touch: Boolean, focus: FocusRequester, onContinue:
         modifier = Modifier.focusRequester(focus).paneAction(),
     ) {
         // Trailing, unlike the leading icons elsewhere: it points where the button goes.
-        Text("Continue to sign in")
+        Text(stringResource(R.string.continue_sign_in))
         Spacer(Modifier.width(8.dp))
         Icon(
             Icons.AutoMirrored.Filled.ArrowForward,

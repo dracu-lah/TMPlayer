@@ -37,6 +37,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.tmplayer.R
 import com.tmplayer.data.Country
 import com.tmplayer.data.PhoneCountries
 import com.tmplayer.ui.components.PhonePad
@@ -74,12 +76,12 @@ fun CountryPicker(
         containerColor = Tone.background,
         topBar = {
             TopAppBar(
-                title = { Text("Choose a country") },
+                title = { Text(stringResource(R.string.choose_country)) },
                 navigationIcon = {
                     IconButton(onClick = onDismiss) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Close the country list",
+                            contentDescription = stringResource(R.string.close),
                         )
                     }
                 },
@@ -92,14 +94,14 @@ fun CountryPicker(
                 value = query,
                 onValueChange = { query = it },
                 singleLine = true,
-                label = { Text("Search by name or code") },
+                label = { Text(stringResource(R.string.search)) },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 trailingIcon = {
                     // Two hundred rows filtered to none is a dead end, and clearing a field by
                     // holding backspace is a chore nobody should be set on a sign-in screen.
                     if (query.isNotEmpty()) {
                         IconButton(onClick = { query = "" }) {
-                            Icon(Icons.Filled.Close, contentDescription = "Clear the search")
+                            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.clear_search))
                         }
                     }
                 },

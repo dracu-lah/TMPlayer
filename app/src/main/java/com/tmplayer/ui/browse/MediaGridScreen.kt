@@ -118,6 +118,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import com.tmplayer.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
@@ -857,14 +860,14 @@ internal fun TouchMediaScaffold(
                     ) {
                         M3Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = if (searching) "Close search" else "Back to chats",
+                            contentDescription = if (searching) stringResource(R.string.close_search) else stringResource(R.string.back_to_chats),
                         )
                     }
                 },
                 actions = {
                     if (searching) return@TopAppBar
                     IconButton(onClick = { searching = true }) {
-                        M3Icon(Icons.Filled.Search, contentDescription = "Search this chat")
+                        M3Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.search_chat))
                     }
                     IconButton(onClick = onToggleFavorite) {
                         M3Icon(
@@ -886,7 +889,7 @@ internal fun TouchMediaScaffold(
                         listOf(
                             (if (layout == CardLayout.Grid) "Show as rows" else "Show as tiles")
                                 to onToggleLayout,
-                            "Refresh" to onRefresh,
+                            stringResource(R.string.refresh) to onRefresh,
                         ),
                     )
                 },
@@ -954,11 +957,11 @@ private fun MediaSearchField(
             )
             if (query.isNotEmpty()) {
                 IconButton(onClick = { onQueryChange("") }) {
-                    M3Icon(Icons.Filled.Close, contentDescription = "Clear search")
+                    M3Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.clear_search))
                 }
             } else if (onVoiceSearch != null) {
                 IconButton(onClick = onVoiceSearch) {
-                    M3Icon(TmIcons.Mic, contentDescription = "Search by voice")
+                    M3Icon(TmIcons.Mic, contentDescription = stringResource(R.string.search_by_voice))
                 }
             }
         }
@@ -992,7 +995,7 @@ internal fun Header(
         Row(verticalAlignment = Alignment.CenterVertically) {
             // The way out, drawn. The remote's Back key works, but Back is the key stick owners
             // are least sure of, so the screen says it as well.
-            Pill("Back to chats", Icons.AutoMirrored.Filled.ArrowBack, showLabel = false, onClick = onBack)
+            Pill(stringResource(R.string.back_to_chats), Icons.AutoMirrored.Filled.ArrowBack, showLabel = false, onClick = onBack)
             Spacer(Modifier.width(16.dp))
             MediaPreview(
                 miniThumbnail = chatMiniThumbnail,
@@ -1026,16 +1029,16 @@ internal fun Header(
             TvSearchField(
                 value = query,
                 onValueChange = onQuery,
-                placeholder = "Search this chat",
+                placeholder = stringResource(R.string.search_chat),
                 onSubmit = onSubmit,
                 modifier = Modifier.weight(1f).focusRequester(searchField),
             )
             if (startVoice != null) {
                 // The microphone says what it does, so no label takes room from the search field.
-                Pill(label = "Voice search", icon = TmIcons.Mic, showLabel = false, onClick = startVoice)
+                Pill(label = stringResource(R.string.search_by_voice), icon = TmIcons.Mic, showLabel = false, onClick = startVoice)
             }
             if (query.isNotBlank()) {
-                Pill("Clear", Icons.Filled.Close) {
+                Pill(stringResource(R.string.clear), Icons.Filled.Close) {
                     // Focus has to leave before the state change, because clearing the query is
                     // what removes this pill from the layout. Letting it vanish while focused
                     // strands the remote: the next press goes nowhere or jumps to the rail.
@@ -1062,7 +1065,7 @@ internal fun Header(
             // Telegram pushes new messages into TDLib's database, but this grid was built from a
             // search that ran when it opened, so a video posted since then needs a fresh search.
             // Icon only, like the refresh on the chat list: a label costs the search field 90dp.
-            Pill("Refresh", Icons.Filled.Refresh, showLabel = false, onClick = onRefresh)
+            Pill(stringResource(R.string.refresh), Icons.Filled.Refresh, showLabel = false, onClick = onRefresh)
         }
     }
 }
@@ -1084,18 +1087,18 @@ private fun SelectionBar(
     onCancel: () -> Unit,
     edge: Dp,
 ) {
-    val label = if (count == 1) "1 selected" else "$count selected"
+    val label = pluralStringResource(R.plurals.selected_count, count, count)
 
     if (isTouch()) {
         TopAppBar(
             title = { M3Text(label, style = M3MaterialTheme.typography.titleMedium) },
             navigationIcon = {
                 IconButton(onClick = onCancel) {
-                    M3Icon(Icons.Filled.Close, contentDescription = "Stop selecting")
+                    M3Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.stop_selecting))
                 }
             },
             actions = {
-                TextButton(onClick = onSelectAll) { M3Text("Select all") }
+                TextButton(onClick = onSelectAll) { M3Text(stringResource(R.string.select_all)) }
                 // Words, not a bare arrow: this is the one control on the bar that acts on the
                 // ticked videos, and a corner glyph would say nothing about what it starts.
                 Button(
@@ -1130,9 +1133,9 @@ private fun SelectionBar(
             color = Tone.text,
             modifier = Modifier.weight(1f),
         )
-        Pill("Download", TmIcons.Download, onClick = onDownload)
-        Pill("Select all", Icons.Filled.Check, onClick = onSelectAll)
-        Pill("Cancel", Icons.Filled.Close, onClick = onCancel)
+        Pill(stringResource(R.string.download), TmIcons.Download, onClick = onDownload)
+        Pill(stringResource(R.string.select_all), Icons.Filled.Check, onClick = onSelectAll)
+        Pill(stringResource(R.string.cancel), Icons.Filled.Close, onClick = onCancel)
     }
 }
 

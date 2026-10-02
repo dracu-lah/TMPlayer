@@ -1,8 +1,10 @@
 package com.tmplayer
 
 import android.app.Application
+import android.content.Context
 import com.tmplayer.data.CrashReports
 import com.tmplayer.data.NetworkMonitor
+import com.tmplayer.data.Language
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import com.tmplayer.data.Thumbnails
@@ -15,6 +17,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class App : Application() {
+
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(Language.wrap(base))
+    }
 
     override fun onCreate() {
         super.onCreate()

@@ -106,6 +106,10 @@ import java.io.File
 @UnstableApi
 class PlayerActivity : FragmentActivity() {
 
+    override fun attachBaseContext(base: android.content.Context) {
+        super.attachBaseContext(com.tmplayer.data.Language.wrap(base))
+    }
+
     var player: ExoPlayer? = null
         private set
 
