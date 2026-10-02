@@ -12,6 +12,20 @@ val localProps = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 
+val telegramApiId = localProps.getProperty("TG_API_ID") ?: "0"
+val telegramApiHash = localProps.getProperty("TG_API_HASH") ?: ""
+
+// CI and release builds that are meant to support sign-in opt into a strict check. Keeping the
+// check behind a property lets forks and pull requests continue to build without credentials.
+if ((findProperty("requireTelegramCredentials") as String?)?.toBoolean() == true) {
+    require(telegramApiId.toIntOrNull()?.let { it > 0 } == true) {
+        "TG_API_ID must be a positive integer for this build"
+    }
+    require(telegramApiHash.isNotBlank()) {
+        "TG_API_HASH must be set for this build"
+    }
+}
+
 // Optional release signing: create keystore.properties (gitignored) to enable
 val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore.properties")
@@ -55,8 +69,8 @@ android {
         versionName = (findProperty("tmVersionName") as String?) ?: "1.16.0"
 
         // Telegram API credentials. Bring your own via local.properties (see README)
-        buildConfigField("int", "TG_API_ID", localProps.getProperty("TG_API_ID") ?: "0")
-        buildConfigField("String", "TG_API_HASH", "\"${localProps.getProperty("TG_API_HASH") ?: ""}\"")
+        buildConfigField("int", "TG_API_ID", telegramApiId)
+        buildConfigField("String", "TG_API_HASH", "\"$telegramApiHash\"")
 
         // Where an opted-in crash report goes. Empty is the normal case and the honest default:
         // with no DSN the reporting code never initialises, the Settings switch is not offered,

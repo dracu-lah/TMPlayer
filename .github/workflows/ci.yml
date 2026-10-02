@@ -1,7 +1,7 @@
 name: CI
 
-# Every push and every pull request builds without credentials, so contributions from people you
-# do not know cannot reach them. A manual run is the owner's route to an APK they can sign in with.
+# Pull requests build without credentials, so contributions from people you do not know cannot
+# reach them. Pushes to main and manual runs produce an APK that can sign in to Telegram.
 on:
   push:
     branches: [main]
@@ -38,26 +38,36 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Write Telegram credentials for a manual build
-        if: github.event_name == 'workflow_dispatch'
+      - name: Write Telegram credentials for a trusted build
+        if: github.event_name != 'pull_request'
         env:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
         run: |
           if [ -z "$TG_API_ID" ] || [ -z "$TG_API_HASH" ]; then
-            echo "::error::TG_API_ID and TG_API_HASH must both be repository secrets for a manual build"
+            echo "::error::TG_API_ID and TG_API_HASH must both be repository secrets for a trusted build"
             exit 1
           fi
           printf 'TG_API_ID=%s\nTG_API_HASH=%s\n' "$TG_API_ID" "$TG_API_HASH" > local.properties
 
       - name: Run unit tests
-        run: ./gradlew :app:test
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            ./gradlew :app:test
+          else
+            ./gradlew :app:test -PrequireTelegramCredentials=true
+          fi
 
       - name: Build debug APK
-        run: ./gradlew :app:assembleDebug
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            ./gradlew :app:assembleDebug
+          else
+            ./gradlew :app:assembleDebug -PrequireTelegramCredentials=true
+          fi
 
       - name: Remove Telegram credentials
-        if: always() && github.event_name == 'workflow_dispatch'
+        if: always() && github.event_name != 'pull_request'
         run: rm -f local.properties
 
       - name: Upload debug APKs
