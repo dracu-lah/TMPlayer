@@ -3,9 +3,11 @@ package com.tmplayer.ui.browse
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -143,80 +145,107 @@ internal fun TouchBrowseShell(
                 // to the screen on the narrowest devices so it can never cover the page behind it.
                 modifier = Modifier.width(min(DRAWER_WIDTH, screenWidth * DRAWER_MAX_FRACTION)),
             ) {
-                DrawerBrand()
-
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                    // The three tabs about this viewer's own watching, first because they are
-                    // what somebody opening the app in the evening is reaching for.
-                    DrawerDestinations(
-                        sections.filter { it in LIBRARY_TABS },
-                        selected,
-                        favoriteCount,
-                        unreadCount,
-                    ) {
-                        close(); onSelect(it)
+                // Measured rather than read from the configuration, which on some phones reports a
+                // portrait window while the screen is drawn sideways.
+                BoxWithConstraints {
+                    // A phone held sideways is too short to pin the brand and the bottom rows and
+                    // still scroll a useful middle between them: the middle shrank to a single row
+                    // and the chats could not be reached at all. Short sheets scroll as one list
+                    // instead.
+                    val short = maxHeight < SHORT_DRAWER
+                    val sheetScroll = rememberScrollState()
+                    val sheet = if (short) {
+                        Modifier.verticalScroll(sheetScroll)
+                    } else {
+                        Modifier.fillMaxHeight()
                     }
+                    Column(sheet) {
+                        DrawerBrand()
 
-                    DrawerSeparator("Chats")
-
-                    // The ways of slicing the chat list. The heading is what turns a dozen flat
-                    // destinations into short lists the eye can take in as groups.
-                    DrawerDestinations(
-                        sections.filter { it !in LIBRARY_TABS && it !is BrowseSection.Folder },
-                        selected,
-                        favoriteCount,
-                        unreadCount,
-                    ) {
-                        close(); onSelect(it)
-                    }
-
-                    // Folders last, and only with a heading when there are any: an account with
-                    // none would otherwise get a rule and the word "Folders" over nothing. They
-                    // follow the fixed tabs because they are the personal part of this list, and
-                    // a group that changes size does less damage at the bottom than in the middle.
-                    val folders = sections.filterIsInstance<BrowseSection.Folder>()
-                    if (folders.isNotEmpty()) {
-                        DrawerSeparator("Folders")
-                        DrawerDestinations(folders, selected, favoriteCount, unreadCount) {
-                            close(); onSelect(it)
+                        val middleScroll = rememberScrollState()
+                        val middle = if (short) {
+                            Modifier
+                        } else {
+                            Modifier.weight(1f).verticalScroll(middleScroll)
                         }
+                        Column(middle) {
+                            // The three tabs about this viewer's own watching, first because they
+                            // are what somebody opening the app in the evening is reaching for.
+                            DrawerDestinations(
+                                sections.filter { it in LIBRARY_TABS },
+                                selected,
+                                favoriteCount,
+                                unreadCount,
+                            ) {
+                                close(); onSelect(it)
+                            }
+
+                            DrawerSeparator("Chats")
+
+                            // The ways of slicing the chat list. The heading is what turns a dozen
+                            // flat destinations into short lists the eye can take in as groups.
+                            val ways = sections.filter {
+                                it !in LIBRARY_TABS && it !is BrowseSection.Folder
+                            }
+                            DrawerDestinations(
+                                ways,
+                                selected,
+                                favoriteCount,
+                                unreadCount,
+                            ) {
+                                close(); onSelect(it)
+                            }
+
+                            // Folders last, and only with a heading when there are any: an account
+                            // with none would otherwise get a rule and the word "Folders" over
+                            // nothing. They follow the fixed tabs because they are the personal
+                            // part of this list, and a group that changes size does less damage at
+                            // the bottom than in the middle.
+                            val folders = sections.filterIsInstance<BrowseSection.Folder>()
+                            if (folders.isNotEmpty()) {
+                                DrawerSeparator("Folders")
+                                DrawerDestinations(folders, selected, favoriteCount, unreadCount) {
+                                    close(); onSelect(it)
+                                }
+                            }
+                        }
+
+                        DrawerSeparator()
+                        if (updateVersion != null) {
+                            DrawerDestination(
+                                label = "Update",
+                                selected = false,
+                                badge = updateVersion,
+                                icon = {
+                                    Icon(
+                                        Icons.Filled.Refresh,
+                                        contentDescription = null,
+                                        tint = Tone.caution,
+                                    )
+                                },
+                                onClick = { close(); onUpdate() },
+                            )
+                        }
+                        DrawerDestination(
+                            label = "Downloads",
+                            selected = false,
+                            // How many videos are coming down right now. A download outlives the
+                            // screen it was started from, so without a mark here the only evidence
+                            // it is running is a notification the viewer may well have swiped away.
+                            badge = downloadCount.takeIf { it > 0 }?.toString(),
+                            icon = { Icon(TmIcons.Download, contentDescription = null) },
+                            onClick = { close(); onOpenDownloads() },
+                        )
+                        DrawerDestination(
+                            label = "Settings",
+                            selected = false,
+                            badge = null,
+                            icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                            onClick = { close(); onOpenSettings() },
+                        )
+                        DrawerFooter(account)
                     }
                 }
-
-                DrawerSeparator()
-                if (updateVersion != null) {
-                    DrawerDestination(
-                        label = "Update",
-                        selected = false,
-                        badge = updateVersion,
-                        icon = {
-                            Icon(
-                                Icons.Filled.Refresh,
-                                contentDescription = null,
-                                tint = Tone.caution,
-                            )
-                        },
-                        onClick = { close(); onUpdate() },
-                    )
-                }
-                DrawerDestination(
-                    label = "Downloads",
-                    selected = false,
-                    // How many videos are coming down right now. A download outlives the screen it
-                    // was started from, so without a mark here the only evidence it is running is
-                    // a notification the viewer may well have swiped away.
-                    badge = downloadCount.takeIf { it > 0 }?.toString(),
-                    icon = { Icon(TmIcons.Download, contentDescription = null) },
-                    onClick = { close(); onOpenDownloads() },
-                )
-                DrawerDestination(
-                    label = "Settings",
-                    selected = false,
-                    badge = null,
-                    icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
-                    onClick = { close(); onOpenSettings() },
-                )
-                DrawerFooter(account)
             }
         },
     ) {
@@ -522,6 +551,9 @@ internal val LIBRARY_TABS = listOf(BrowseTab.Continue, BrowseTab.Favorites, Brow
  * all the sheet ever holds.
  */
 private val DRAWER_WIDTH = 260.dp
+
+/** Below this the drawer scrolls as one list rather than pinning its top and bottom. */
+private val SHORT_DRAWER = 560.dp
 
 /** On a small screen the drawer gives way, so the listing behind it stays visible and tappable. */
 private const val DRAWER_MAX_FRACTION = 0.68f

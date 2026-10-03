@@ -79,6 +79,10 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
     @Volatile
     private var downloading = false
 
+    /** Every byte of the file on disk, wherever it is, as of the last update seen. */
+    @Volatile
+    private var downloadedTotal = 0L
+
     /**
      * One subscription to `updateFile` for the whole of an open source, rather than a fresh one
      * per slow read.
@@ -229,6 +233,7 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
             expectedSize = file.expectedSize,
         )
         downloading = file.local.isDownloadingActive
+        downloadedTotal = file.local.downloadedSize
         if (availability == LocalFileAvailability.Complete) {
             completed = true
             window = Window(0, size)
@@ -279,8 +284,37 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
         // Wall clock, not a count of turns round the loop: a file updating busily without ever
         // reaching the byte being read must still get the full stall timeout.
         val deadline = System.nanoTime() + STALL_TIMEOUT_MS * 1_000_000
+        var nudgeAt = System.nanoTime() + NUDGE_AFTER_MS * 1_000_000
+        var totalAtAsk = downloadedTotal
+        var nudges = 0
         while (available == 0L) {
             val known = window
+            // TDLib can take a request, report itself busy, and fill everything but the bytes that
+            // were asked for: seen on the jump to an MKV's index in its last half megabyte, where
+            // tens of megabytes came down elsewhere and the prefix at the offset stayed at zero
+            // until the viewer backed out and opened the video again. That reopen is what this
+            // does, without the viewer: drop TDLib's download and ask afresh, from the byte itself
+            // and then from the start of its megabyte, which is how Telegram hands out parts.
+            // Only when bytes are visibly arriving somewhere else: a slow link bringing nothing at
+            // all is left to the stall timeout, since restarting it every few seconds would only
+            // make it slower.
+            if (
+                downloading &&
+                System.nanoTime() >= nudgeAt &&
+                downloadedTotal - totalAtAsk >= NUDGE_ELSEWHERE_BYTES
+            ) {
+                val from = if (nudges % 2 == 0) target else target - target % NUDGE_ALIGN_BYTES
+                nudges++
+                android.util.Log.i(TAG, "No bytes at $target of file $fileId; asking again from $from ($nudges)")
+                // A download the viewer asked to keep shares this file in TDLib; it is not ours to
+                // cancel, and the fresh request below moves it just the same.
+                if (!com.tmplayer.data.OfflineDownloads.isDownloading(fileId)) {
+                    td.cancelDownloadFile(fileId, onlyIfPending = false)
+                }
+                requestDownloadFrom(from)
+                nudgeAt = System.nanoTime() + NUDGE_AFTER_MS * 1_000_000
+                totalAtAsk = downloadedTotal
+            }
             if (DownloadWindow.needsRestart(
                     position = target,
                     downloadOffset = known.start,
@@ -380,6 +414,14 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
         /** 1..32; playback gets the top of the range so thumbnails never starve it. */
         const val PLAYBACK_PRIORITY = 32
         const val POLL_INTERVAL_MS = 1_000L
+        const val TAG = "TdDataSource"
+
+        /** How long a busy download may bring nothing at the read position before it is redone. */
+        const val NUDGE_AFTER_MS = 3_000L
+        const val NUDGE_ALIGN_BYTES = 1024L * 1024
+
+        /** What has to arrive elsewhere in the file meanwhile for the wait to count as stuck. */
+        const val NUDGE_ELSEWHERE_BYTES = 2L * 1024 * 1024
         const val STALL_TIMEOUT_MS = 60_000L
         const val OPEN_TIMEOUT_MS = 120_000L
 
