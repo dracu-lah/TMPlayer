@@ -45,11 +45,12 @@ If it is smooth there, it is smooth everywhere. An Android TV emulator (API 28 o
 
 These version constraints are not free choices, and changing them breaks the build:
 
-- **Kotlin must be 2.3.x or newer.** `dev.g000sha256:tdl-coroutines` ships Kotlin 2.3 metadata;
-  an older compiler rejects it outright.
-- **`compileSdk` is 36** because `androidx.core` 1.17+ and `activity-compose` 1.11+ require it,
+- **Kotlin must be 2.4.x or newer.** `dev.g000sha256:tdl-coroutines` 15 is built against
+  `kotlin-stdlib` 2.4.10 and ships Kotlin 2.4 metadata; an older compiler rejects it outright.
+- **`compileSdk` is 37** because `tdl-coroutines` 14+ declares that minimum in its AAR metadata,
   and **AGP stays on 8.x** because `androidx.core` 1.19 / `lifecycle` 2.11 would drag in AGP 9
-  and Gradle 9. `targetSdk` deliberately stays at 35.
+  and Gradle 9. AGP 8.13 is only tested up to API 36.1, so `gradle.properties` silences its
+  warning about 37; it builds and tests cleanly. `targetSdk` deliberately stays at 35.
 - **media3 and NextLib versions are coupled**: `nextlib-media3ext` is published as
   `<media3-version>-<nextlib-version>`, so bumping one means bumping both to a pair that exists.
 - **`org.json` is a test-only dependency and must stay that way.** Android already ships

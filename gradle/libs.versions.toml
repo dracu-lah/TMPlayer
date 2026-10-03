@@ -1,14 +1,14 @@
 [versions]
 agp = "8.13.2"
-# tdl-coroutines 9.0.0 ships Kotlin 2.3 metadata, so the compiler has to be at least that new
-kotlin = "2.3.10"
+# tdl-coroutines 15.0.0 is built against kotlin-stdlib 2.4.10, so the compiler has to be at least 2.4
+kotlin = "2.4.20"
 coreKtx = "1.18.0"
 activityCompose = "1.12.0"
 composeBom = "2026.06.01"
 tvMaterial = "1.1.0"
 lifecycle = "2.10.0"
 coroutines = "1.11.0"
-tdl = "9.0.0"
+tdl = "15.0.0"
 zxing = "3.5.3"
 # 1.8.0 was the release that began surfacing transient AudioTrack underruns as visible
 # freeze-then-resume buffering; 1.9.1 added the 100 ms grace period that debounces them, which is

@@ -9,11 +9,46 @@ import org.junit.Test
 
 class PhoneCountriesTest {
 
-    private val india = CountryInfo("IN", "India", "India", false, arrayOf("91"))
-    private val uk = CountryInfo("GB", "United Kingdom", "United Kingdom", false, arrayOf("44"))
-    private val usa = CountryInfo("US", "United States", "United States", false, arrayOf("1"))
-    private val bahamas = CountryInfo("BS", "Bahamas", "Bahamas", false, arrayOf("1242"))
-    private val hidden = CountryInfo("XX", "Nowhere", "Nowhere", true, arrayOf("999"))
+    private val india = CountryInfo(
+        countryCode = "IN",
+        name = "India",
+        englishName = "India",
+        flagEmoji = "",
+        isHidden = false,
+        callingCodes = arrayOf("91"),
+    )
+    private val uk = CountryInfo(
+        countryCode = "GB",
+        name = "United Kingdom",
+        englishName = "United Kingdom",
+        flagEmoji = "",
+        isHidden = false,
+        callingCodes = arrayOf("44"),
+    )
+    private val usa = CountryInfo(
+        countryCode = "US",
+        name = "United States",
+        englishName = "United States",
+        flagEmoji = "",
+        isHidden = false,
+        callingCodes = arrayOf("1"),
+    )
+    private val bahamas = CountryInfo(
+        countryCode = "BS",
+        name = "Bahamas",
+        englishName = "Bahamas",
+        flagEmoji = "",
+        isHidden = false,
+        callingCodes = arrayOf("1242"),
+    )
+    private val hidden = CountryInfo(
+        countryCode = "XX",
+        name = "Nowhere",
+        englishName = "Nowhere",
+        flagEmoji = "",
+        isHidden = true,
+        callingCodes = arrayOf("999"),
+    )
 
     private val all = PhoneCountries.from(listOf(uk, india, usa, bahamas, hidden))
 
@@ -24,7 +59,14 @@ class PhoneCountriesTest {
 
     @Test
     fun `a country with no calling code has nothing to dial and is left out`() {
-        val codeless = CountryInfo("ZZ", "Codeless", "Codeless", false, emptyArray())
+        val codeless = CountryInfo(
+            countryCode = "ZZ",
+            name = "Codeless",
+            englishName = "Codeless",
+            flagEmoji = "",
+            isHidden = false,
+            callingCodes = emptyArray(),
+        )
         assertTrue(PhoneCountries.from(listOf(codeless)).isEmpty())
     }
 
