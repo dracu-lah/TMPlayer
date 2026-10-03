@@ -107,6 +107,7 @@ private val blankCursor: PointerIcon by lazy {
  *   player moved on to by itself.
  * @param onEngine hands the engine out once it exists, for the dev harness's scripted runs.
  * @param detailsOpen start with the Playback details panel up (the harness's `--details`).
+ * @param engineFactory the engine; libmpv in the app, a fake in the UI tests that drive the mouse.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -125,8 +126,9 @@ fun PlayerScreen(
     onPlayingItemChanged: (MediaItem) -> Unit = {},
     onEngine: (PlaybackEngine) -> Unit = {},
     detailsOpen: Boolean = false,
+    engineFactory: () -> PlaybackEngine = { MpvPlaybackEngine(OpenPrefs.hwdecFor(prefs.now.softwareDecoding)) },
 ) {
-    val engine = remember { MpvPlaybackEngine(OpenPrefs.hwdecFor(prefs.now.softwareDecoding)) }
+    val engine = remember { engineFactory() }
     val desktop by prefs.state.collectAsState()
     DisposableEffect(engine) { onDispose { engine.close() } }
     LaunchedEffect(engine) { onEngine(engine) }
@@ -505,7 +507,7 @@ fun PlayerScreen(
                 .pointerHoverIcon(if (fullscreen && !showControls && menu == null) blankCursor else PointerIcon.Default)
                 .subtitleDropTarget(onDrop = ::loadSubtitle, onRefused = { showFlash(Flash.Kind.Text, it) }),
         ) {
-            MpvMediampPlayerSurface(engine.player, Modifier.fillMaxSize())
+            (engine as? MpvPlaybackEngine)?.let { MpvMediampPlayerSurface(it.player, Modifier.fillMaxSize()) }
 
             VideoGestures(
                 onClick = {
@@ -646,10 +648,14 @@ fun PlayerScreen(
             )
 
             if (showShortcuts) {
-                ShortcutSheet(onClose = {
-                    showShortcuts = false
-                    refocus()
-                })
+                ShortcutSheet(
+                    onClose = {
+                        showShortcuts = false
+                        refocus()
+                    },
+                    mac = mac,
+                    wheelSeeks = desktop.wheelSeeks,
+                )
             }
         }
     }

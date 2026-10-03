@@ -74,6 +74,7 @@ import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -129,7 +130,7 @@ internal fun BoxScope.VideoGestures(
     val back by rememberUpdatedState(onMouseBack)
     var pending by remember { mutableStateOf<Job?>(null) }
     Box(
-        Modifier.matchParentSize().pointerInput(Unit) {
+        Modifier.matchParentSize().testTag("video").pointerInput(Unit) {
             awaitPointerEventScope {
                 while (true) {
                     val event = awaitPointerEvent()
@@ -443,9 +444,10 @@ private fun TimeBar(position: Long, duration: Long, buffered: Long, onSeekTo: (L
     val seek by rememberUpdatedState(onSeekTo)
     val length by rememberUpdatedState(duration)
     Box(
-        Modifier.fillMaxWidth().height(28.dp)
+        Modifier.fillMaxWidth().height(28.dp).testTag("timebar")
             .onSizeChanged { width = it.width.toFloat() }
             .onPointerEvent(PointerEventType.Move) { hoverX = it.changes.firstOrNull()?.position?.x }
+            .onPointerEvent(PointerEventType.Enter) { hoverX = it.changes.firstOrNull()?.position?.x }
             .onPointerEvent(PointerEventType.Exit) { hoverX = null }
             .pointerInput(Unit) {
                 awaitEachGesture {
@@ -774,13 +776,13 @@ internal fun BoxScope.StatusSheet(
 }
 
 @Composable
-internal fun BoxScope.ShortcutSheet(onClose: () -> Unit) {
+internal fun BoxScope.ShortcutSheet(onClose: () -> Unit, mac: Boolean = false, wheelSeeks: Boolean = false) {
     Box(Modifier.matchParentSize().background(Color(0x99000000)).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
         Surface(shape = RoundedCornerShape(12.dp), color = Color(0xF21C1C1E), modifier = Modifier.widthIn(max = 560.dp)) {
             Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState())) {
                 Text("Keyboard shortcuts", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(12.dp))
-                PlayerKeys.SHEET.forEach { (what, keys) ->
+                PlayerKeys.sheet(mac, wheelSeeks).forEach { (what, keys) ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
                         Text(what, color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
                         Text(keys, color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)

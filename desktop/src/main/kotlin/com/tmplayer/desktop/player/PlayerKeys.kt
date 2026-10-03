@@ -161,28 +161,37 @@ object PlayerKeys {
         else -> null
     }
 
-    /** The sheet behind '?', in the order the plan's table reads. */
-    val SHEET: List<Pair<String, String>> = listOf(
-        "Play or pause" to "Space, K",
-        "Seek 5 s" to "Left, Right",
-        "Seek 10 s" to "J, L",
-        "Seek 1 min" to "Shift+Left, Shift+Right",
-        "Seek 5 min" to "Ctrl+Alt+Left, Ctrl+Alt+Right",
-        "Frame step while paused" to ", and .",
-        "Jump to 0 to 90 %" to "0 to 9",
-        "Volume" to "Up, Down, wheel",
-        "Seek with the wheel" to "Shift+wheel",
-        "Mute" to "M",
-        "Fullscreen" to "F, F11, double click",
-        "Subtitles next, previous, on or off" to "S, Shift+S, C",
-        "Audio next, previous" to "A, Shift+A",
-        "Speed up, down, reset" to "], [, Backspace",
-        "Next, previous episode" to "Shift+N, Shift+P",
-        "Always on top" to "Ctrl+T",
-        "Mini player" to "Ctrl+P",
-        "Playback details" to "I",
-        "Back" to "Esc, Backspace",
-        "Quit" to "Ctrl+Q",
-        "This sheet" to "?",
-    )
+    /**
+     * The sheet behind '?', in the order the plan's table reads: the primary keys of [actionFor],
+     * spelled for this OS ([mac] says Cmd where the table's command key is), and the wheel the way
+     * the "Mouse wheel seeks" setting has it. PlayerKeysTest reads every key here back through
+     * [actionFor], so the sheet cannot promise a key the player does not have.
+     */
+    fun sheet(mac: Boolean = false, wheelSeeks: Boolean = false): List<Pair<String, String>> {
+        val cmd = if (mac) "Cmd" else "Ctrl"
+        return listOf(
+            "Play or pause" to "Space, K",
+            "Seek 5 s" to "Left, Right",
+            "Seek 10 s" to "J, L",
+            "Seek 1 min" to "Shift+Left, Shift+Right",
+            "Seek 5 min" to if (mac) "Cmd+Shift+Alt+Left, Cmd+Shift+Alt+Right" else "Ctrl+Alt+Left, Ctrl+Alt+Right",
+            "Frame step while paused" to ", and .",
+            "Jump to 0 to 90 %" to "0 to 9",
+            "Start, end" to "Home, End",
+            "Volume" to if (wheelSeeks) "Up, Down, Shift+wheel" else "Up, Down, wheel",
+            "Seek 10 s with the wheel" to if (wheelSeeks) "wheel" else "Shift+wheel",
+            "Mute" to "M",
+            "Fullscreen" to "F, F11, double click",
+            "Subtitles next, previous, on or off" to "S, Shift+S, C",
+            "Audio next, previous" to "A, Shift+A",
+            "Speed up, down, reset" to "], [, Backspace",
+            "Next, previous episode" to "Shift+N, Shift+P",
+            "Always on top" to "$cmd+T",
+            "Mini player" to "$cmd+P",
+            "Playback details" to "I",
+            "Back" to "Esc, Backspace",
+            "Quit" to "$cmd+Q",
+            "This sheet" to "?",
+        )
+    }
 }
