@@ -375,6 +375,8 @@ None of them fire while a search field has focus.
 | **] / [ / Backspace** | Faster / slower / back to normal speed |
 | **Shift+N / Shift+P** | Next / previous episode (also Page Down / Page Up) |
 | **Ctrl+T** | Keep the window on top |
+| **Ctrl+P** | Mini player: a small always on top picture in the corner, and back |
+| **?** | Show every shortcut |
 | **I** | Playback details |
 | **Esc**, **Backspace** | Back to the grid (also the mouse's back button) |
 | **Ctrl+Q** | Quit |

@@ -125,8 +125,12 @@ fullscreen, the wheel sets the volume. The whole table is in
 place, and opening it a second time brings the first window forward. Downloads stay on the
 computer until you remove them, on their own page.
 
-**What it does not do yet.** No voice search (there is no portable speech API), no mini player,
-and no self update: install a newer release over the old one. Windows builds are not signed yet,
+**Mini player and shortcuts.** Ctrl+P shrinks the window to a small always on top picture in a
+corner of the screen and brings it back; `?` lists every key. Once a day it checks for a newer
+release and says so in a corner of the window (Settings can turn that off).
+
+**What it does not do yet.** No voice search (there is no portable speech API) and no self
+update: the notice opens the download page, and a newer release installs over the old one. Windows builds are not signed yet,
 so SmartScreen warns the first time.
 
 ## What it is not
