@@ -146,6 +146,11 @@ object WindowMemory {
 
     fun save(state: WindowState) = store.save(state)
 
+    /** While on, window changes are not remembered (the mini player is not the window's size). */
+    fun freeze(on: Boolean) {
+        store.frozen = on
+    }
+
     /** Watches [state] until cancelled, keeping the floating bounds current. */
     suspend fun follow(state: WindowState) = store.follow(state)
 
@@ -214,8 +219,13 @@ class WindowMemoryStore(private val file: File, private val screens: () -> List<
         )
     }
 
+    /** Set while the mini player has the window, whose bounds are not the ones to keep. */
+    @Volatile
+    var frozen = false
+
     /** Records [state]'s bounds if it is floating now; otherwise keeps the floating ones. */
     fun observe(state: WindowState) {
+        if (frozen) return
         if (state.placement != WindowPlacement.Floating || state.isMinimized) return
         val size = state.size
         if (!size.isSpecified) return

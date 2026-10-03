@@ -15,6 +15,7 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.desktop.DesktopPrefs
+import com.tmplayer.desktop.os.MiniPlayerWindow
 import kotlinx.coroutines.delay
 import java.io.File
 import kotlin.system.exitProcess
@@ -34,6 +35,7 @@ import kotlin.system.exitProcess
  * - `--size <W>x<H>` the window size.
  * - `--seek-after <ms> --seek-to <ms>` and `--pause-after <ms>` script a run, for screenshots.
  * - `--details` opens the Playback details panel from the start.
+ * - `--mini-after <ms>` turns the mini player on, prints the window's bounds, and off again a second later.
  * - `--sub <file>` loads a subtitle file once playing, as dropping it on the picture does.
  * - `--quit-after <ms>` closes the window, so a scripted run ends on its own.
  */
@@ -58,6 +60,7 @@ fun main(argv: Array<String>) {
     val pauseAfter = value("--pause-after")?.toLongOrNull()
     val quitAfter = value("--quit-after")?.toLongOrNull()
     val sub = value("--sub")
+    val miniAfter = value("--mini-after")?.toLongOrNull()
 
     application {
         val state = rememberWindowState(size = DpSize(w.dp, h.dp))
@@ -68,6 +71,7 @@ fun main(argv: Array<String>) {
         Window(onCloseRequest = ::exitApplication, state = state, title = "TMPlayer player (dev): ${file.name}") {
             val media = remember { LocalPlayerMedia(file, rate, settingsDir) }
             var engine by remember { mutableStateOf<PlaybackEngine?>(null) }
+            val mini = remember { MiniPlayerWindow(window) }
             PlayerScreen(
                 media = media,
                 startFromBeginning = flag("--from-start"),
@@ -80,6 +84,7 @@ fun main(argv: Array<String>) {
                 onToggleAlwaysOnTop = { window.isAlwaysOnTop = !window.isAlwaysOnTop },
                 onQuit = ::exitApplication,
                 onEngine = { engine = it },
+                onMiniPlayer = mini::toggle,
                 detailsOpen = flag("--details"),
             )
             LaunchedEffect(engine) {
@@ -94,6 +99,16 @@ fun main(argv: Array<String>) {
                 if (sub != null) {
                     at(500)
                     println("dev: sub-add ${e.addSubtitle(File(sub).absolutePath)}")
+                }
+                if (miniAfter != null) {
+                    at(miniAfter)
+                    println("dev: window ${window.bounds}")
+                    mini.enter()
+                    delay(1_000)
+                    println("dev: mini ${window.bounds} on top ${window.isAlwaysOnTop}")
+                    mini.leave()
+                    delay(500)
+                    println("dev: back ${window.bounds} on top ${window.isAlwaysOnTop}")
                 }
                 if (seekAfter != null && seekTo != null) {
                     at(seekAfter)

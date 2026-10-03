@@ -17,12 +17,21 @@ import com.tmplayer.desktop.player.PlaybackEngine
 import com.tmplayer.desktop.player.PlayerScreen
 import com.tmplayer.desktop.player.TelegramPlayerMedia
 import com.tmplayer.desktop.ui.PlayRequest
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.awt.LocalAwtWindow
+import com.tmplayer.desktop.os.MiniPlayerWindow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import javax.swing.SwingUtilities
+
+private const val MINI_AFTER_FULLSCREEN_MS = 500L
 
 /**
  * The player as the shell shows it, tied to the OS: the screen stays awake while a video plays,
  * and the desktop's media controls (MPRIS on Linux) see the title and drive the engine.
  */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun PlayerHost(
     request: PlayRequest,
@@ -57,6 +66,13 @@ fun PlayerHost(
         }
     }
 
+    // The mini player shrinks this window; whatever closes the player puts it back.
+    val awtWindow = LocalAwtWindow.current as? java.awt.Frame
+    val mini = remember(awtWindow) { awtWindow?.let(::MiniPlayerWindow) }
+    DisposableEffect(mini) { onDispose { mini?.leave() } }
+    val scope = rememberCoroutineScope()
+    val isFullscreen by rememberUpdatedState(fullscreen)
+
     val media = remember(request.item.chatId, request.item.messageId) {
         TelegramPlayerMedia(request.item, request.chatTitle, DesktopServices.downloads, DesktopServices.watchCache)
     }
@@ -69,6 +85,19 @@ fun PlayerHost(
         settings = settings,
         prefs = DesktopServices.prefs,
         onToggleAlwaysOnTop = onToggleAlwaysOnTop,
+        onMiniPlayer = mini?.let { m ->
+            {
+                scope.launch {
+                    // Out of fullscreen first, and only then smaller, or the window manager
+                    // finishes leaving fullscreen on top of the new size.
+                    if (isFullscreen && !m.active) {
+                        onToggleFullscreen()
+                        delay(MINI_AFTER_FULLSCREEN_MS)
+                    }
+                    m.toggle()
+                }
+            }
+        },
         onQuit = onQuit,
         onPlayingItemChanged = { playing = it },
         onEngine = { engine = it },

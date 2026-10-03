@@ -430,7 +430,7 @@ fun PlayerScreen(
             PlayerAction.AlwaysOnTop -> onToggleAlwaysOnTop?.invoke()
                 ?: showFlash(Flash.Kind.Text, "Always on top is not available here")
             PlayerAction.MiniPlayer -> onMiniPlayer?.invoke()
-                ?: showFlash(Flash.Kind.Text, "Mini player is coming soon")
+                ?: showFlash(Flash.Kind.Text, "The mini player is not available here")
             PlayerAction.Stats -> showDetails = !showDetails
             PlayerAction.Back -> onBack()
             PlayerAction.Quit -> onQuit?.invoke()
