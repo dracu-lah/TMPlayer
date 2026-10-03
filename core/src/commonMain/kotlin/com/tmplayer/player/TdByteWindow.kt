@@ -22,7 +22,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.io.EOFException
 import java.io.File
 import java.io.IOException
-import java.io.RandomAccessFile
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
+import java.nio.file.Paths
+import java.nio.file.StandardOpenOption
 
 /**
  * The part of streaming a Telegram file that does not depend on the player reading it.
@@ -51,7 +54,7 @@ class TdByteWindow(private val td: TdlClient) {
     var size = 0L
         private set
 
-    private var handle: RandomAccessFile? = null
+    private var handle: FileChannel? = null
     private var localPath: String? = null
 
     /**
@@ -165,9 +168,7 @@ class TdByteWindow(private val td: TdlClient) {
      */
     fun read(position: Long, buffer: ByteArray, offset: Int, length: Int): Int {
         val read = synchronized(this) {
-            val file = openHandle()
-            file.seek(position)
-            file.read(buffer, offset, length)
+            openHandle().read(ByteBuffer.wrap(buffer, offset, length), position)
         }
         if (read <= 0) {
             // TDLib reported the bytes but the file on disk is shorter: it was trimmed or
@@ -349,10 +350,17 @@ class TdByteWindow(private val td: TdlClient) {
         throw IOException(Failures.humanise(error))
     }
 
-    /** Call under the instance lock. [awaitBytesAt] has already recorded a usable path. */
-    private fun openHandle(): RandomAccessFile = handle ?: run {
+    /**
+     * Call under the instance lock. [awaitBytesAt] has already recorded a usable path.
+     *
+     * A NIO channel rather than a `RandomAccessFile`: on Windows, NIO opens with delete sharing,
+     * so TDLib can still rename the partial file into place when the download finishes while
+     * the player has it open; `java.io` would hold the rename off with a sharing violation. On
+     * Android and Linux the two read the same.
+     */
+    private fun openHandle(): FileChannel = handle ?: run {
         val path = localPath ?: throw IOException("No local file for $fileId yet")
-        RandomAccessFile(path, "r").also { handle = it }
+        FileChannel.open(Paths.get(path), StandardOpenOption.READ).also { handle = it }
     }
 
     private fun closeHandle() = synchronized(this) {

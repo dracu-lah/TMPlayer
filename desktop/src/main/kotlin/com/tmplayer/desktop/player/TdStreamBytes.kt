@@ -3,7 +3,11 @@ package com.tmplayer.desktop.player
 import com.tmplayer.data.valueOrNull
 import com.tmplayer.player.TdByteWindow
 import dev.g000sha256.tdl.TdlClient
-import java.io.RandomAccessFile
+import java.io.EOFException
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
+import java.nio.file.Paths
+import java.nio.file.StandardOpenOption
 
 /**
  * [StreamBytes] over TDLib, through the same [TdByteWindow] Android's `TdDataSource` wraps.
@@ -52,11 +56,13 @@ class TdStreamBytes(private val td: TdlClient, val fileId: Int) : StreamBytes {
             (local.downloadOffset <= offset && local.downloadOffset + local.downloadedPrefixSize >= offset + length)
         if (!landed) return null
         val path = local.path.takeIf { it.isNotBlank() } ?: return null
-        return RandomAccessFile(path, "r").use { file ->
-            ByteArray(length).also { bytes ->
-                file.seek(offset)
-                file.readFully(bytes)
+        // NIO, for the delete sharing on Windows that lets TDLib rename the file meanwhile.
+        return FileChannel.open(Paths.get(path), StandardOpenOption.READ).use { channel ->
+            val bytes = ByteBuffer.allocate(length)
+            while (bytes.hasRemaining()) {
+                if (channel.read(bytes, offset + bytes.position()) < 0) throw EOFException("Short read at $offset")
             }
+            bytes.array()
         }
     }
 
