@@ -1,0 +1,53 @@
+# Flathub variant of io.github.dracu_lah.TMPlayer.yml: identical, except that the tarball comes
+# from a GitHub release. Nothing has been submitted to Flathub. To submit, bump the url and sha256
+# to the release (sha256sum TMPlayer-<v>-linux-x64.tar.gz, or take it from SHA256SUMS-<v>.txt),
+# add desktop screenshots to the metainfo, and open the pull request at flathub/flathub.
+# x-checker-data lets Flathub's external data checker propose the bump on each new release.
+id: io.github.dracu_lah.TMPlayer
+runtime: org.freedesktop.Platform
+runtime-version: "25.08"
+sdk: org.freedesktop.Sdk
+command: tmplayer
+
+finish-args:
+  - --share=network
+  - --share=ipc
+  # AWT draws only through X11 (XWayland on a Wayland session). fallback-x11 would withhold the X
+  # socket exactly when Wayland is there, leaving the window nowhere to open.
+  - --socket=x11
+  - --socket=pulseaudio
+  # libmpv's GL and Vulkan output, and VA-API decoding.
+  - --device=dri
+  - --filesystem=xdg-download
+  # Keeping the screen awake while a video plays (os/LinuxKeepAwake.kt).
+  - --talk-name=org.freedesktop.ScreenSaver
+  - --talk-name=org.freedesktop.PowerManagement
+  - --talk-name=org.gnome.SessionManager
+  # MPRIS (os/Mpris.kt): the name, or name.instance<pid> when another copy already holds it.
+  - --own-name=org.mpris.MediaPlayer2.tmplayer
+  - --own-name=org.mpris.MediaPlayer2.tmplayer.*
+
+modules:
+  - name: tmplayer
+    buildsystem: simple
+    build-options:
+      # Stripping would change libskiko's checksum (it then unpacks a second copy per user) and
+      # gains nothing on prebuilt, already stripped libraries.
+      strip: false
+      no-debuginfo: true
+    build-commands:
+      - mkdir -p /app/lib/tmplayer /app/bin /app/share
+      - cp -a bin lib /app/lib/tmplayer/
+      - ln -s ../lib/tmplayer/bin/TMPlayer /app/bin/tmplayer
+      - cp -a share/applications share/icons share/metainfo /app/share/
+      - install -Dm644 share/doc/tmplayer/copyright /app/share/licenses/io.github.dracu_lah.TMPlayer/LICENSE
+    sources:
+      - type: archive
+        url: https://github.com/dracu-lah/TMPlayer/releases/download/v1.18.0/TMPlayer-1.18.0-linux-x64.tar.gz
+        # Fill in from the release: sha256sum TMPlayer-1.18.0-linux-x64.tar.gz
+        sha256: 0000000000000000000000000000000000000000000000000000000000000000
+        x-checker-data:
+          type: json
+          url: https://api.github.com/repos/dracu-lah/TMPlayer/releases/latest
+          version-query: .tag_name | sub("^v"; "")
+          url-query: .assets[] | select(.name | endswith("-linux-x64.tar.gz")) | .browser_download_url

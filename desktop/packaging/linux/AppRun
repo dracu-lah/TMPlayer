@@ -1,0 +1,4 @@
+#!/bin/sh
+# AppImage entry point: the jpackage launcher finds its runtime and jars relative to itself.
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/lib/tmplayer/bin/TMPlayer" "$@"

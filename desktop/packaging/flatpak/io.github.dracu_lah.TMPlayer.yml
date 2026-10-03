@@ -1,0 +1,48 @@
+# The Flatpak, built from the Linux release tarball by build.sh (next to this file), which copies
+# the tarball here as TMPlayer-linux-x64.tar.gz first. The Flathub variant of this manifest,
+# io.github.dracu_lah.TMPlayer.flathub.yml, is the same with the tarball fetched from a release.
+#
+# The app carries its own JVM, TDLib and libmpv, so nothing is compiled here. The runtime brings
+# glibc, libstdc++, OpenSSL, PulseAudio, ALSA, Vulkan and GL, which is why the Flatpak runs on
+# distributions too old for the deb, rpm and AppImage (Ubuntu 22.04, Debian 12, RHEL 9).
+id: io.github.dracu_lah.TMPlayer
+runtime: org.freedesktop.Platform
+runtime-version: "25.08"
+sdk: org.freedesktop.Sdk
+command: tmplayer
+
+finish-args:
+  - --share=network
+  - --share=ipc
+  # AWT draws only through X11 (XWayland on a Wayland session). fallback-x11 would withhold the X
+  # socket exactly when Wayland is there, leaving the window nowhere to open.
+  - --socket=x11
+  - --socket=pulseaudio
+  # libmpv's GL and Vulkan output, and VA-API decoding.
+  - --device=dri
+  - --filesystem=xdg-download
+  # Keeping the screen awake while a video plays (os/LinuxKeepAwake.kt).
+  - --talk-name=org.freedesktop.ScreenSaver
+  - --talk-name=org.freedesktop.PowerManagement
+  - --talk-name=org.gnome.SessionManager
+  # MPRIS (os/Mpris.kt): the name, or name.instance<pid> when another copy already holds it.
+  - --own-name=org.mpris.MediaPlayer2.tmplayer
+  - --own-name=org.mpris.MediaPlayer2.tmplayer.*
+
+modules:
+  - name: tmplayer
+    buildsystem: simple
+    build-options:
+      # Stripping would change libskiko's checksum (it then unpacks a second copy per user) and
+      # gains nothing on prebuilt, already stripped libraries.
+      strip: false
+      no-debuginfo: true
+    build-commands:
+      - mkdir -p /app/lib/tmplayer /app/bin /app/share
+      - cp -a bin lib /app/lib/tmplayer/
+      - ln -s ../lib/tmplayer/bin/TMPlayer /app/bin/tmplayer
+      - cp -a share/applications share/icons share/metainfo /app/share/
+      - install -Dm644 share/doc/tmplayer/copyright /app/share/licenses/io.github.dracu_lah.TMPlayer/LICENSE
+    sources:
+      - type: archive
+        path: TMPlayer-linux-x64.tar.gz
