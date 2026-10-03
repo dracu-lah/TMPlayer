@@ -66,6 +66,7 @@ dependencies {
     implementation(libs.dbus.java.transport.native.unixsocket)
     implementation(libs.jna)
     implementation(libs.jna.platform)
+    runtimeOnly(libs.slf4j.nop)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

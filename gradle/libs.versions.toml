@@ -41,6 +41,8 @@ cmpMaterialIcons = "1.7.3"
 # Compose and mediamp already resolve to, so the classpath carries one copy.
 dbusJava = "5.2.2"
 jna = "5.16.0"
+# dbus-java logs through SLF4J; with no provider every start prints a warning. Nothing to log to.
+slf4j = "2.0.17"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -99,6 +101,7 @@ dbus-java-core = { group = "com.github.hypfvieh", name = "dbus-java-core", versi
 dbus-java-transport-native-unixsocket = { group = "com.github.hypfvieh", name = "dbus-java-transport-native-unixsocket", version.ref = "dbusJava" }
 jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 jna-platform = { group = "net.java.dev.jna", name = "jna-platform", version.ref = "jna" }
+slf4j-nop = { group = "org.slf4j", name = "slf4j-nop", version.ref = "slf4j" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
