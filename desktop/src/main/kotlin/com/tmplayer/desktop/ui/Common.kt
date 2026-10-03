@@ -31,6 +31,11 @@ import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -77,7 +82,8 @@ fun Centred(content: @Composable () -> Unit) {
 
 /**
  * The page's search field. "/" and Ctrl+F land here through [focus]; Esc first clears it and lets
- * go of the focus, and only a second Esc goes back a page.
+ * go of the focus, and only a second Esc goes back a page. [onDown] is the Down arrow, which moves
+ * into the results below.
  */
 @Composable
 fun SearchField(
@@ -86,6 +92,7 @@ fun SearchField(
     placeholder: String,
     focus: FocusRequester,
     modifier: Modifier = Modifier,
+    onDown: (() -> Unit)? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
@@ -109,7 +116,16 @@ fun SearchField(
         shape = MaterialTheme.shapes.extraLarge,
         modifier = modifier
             .focusRequester(focus)
-            .onFocusChanged { focused = it.isFocused },
+            .onFocusChanged { focused = it.isFocused }
+            .onPreviewKeyEvent { event ->
+                // Down from the search field goes to the results, the way a browser's does.
+                if (onDown != null && event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
+                    onDown()
+                    true
+                } else {
+                    false
+                }
+            },
     )
 }
 

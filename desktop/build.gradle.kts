@@ -77,6 +77,8 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // ComposeUiTest: the browse keyboard and the player's mouse driven off screen.
+    testImplementation(compose.desktop.uiTestJUnit4)
 }
 
 // The player on its own, over a file on disk, for working on it without a Telegram account:

@@ -17,6 +17,19 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.border
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -68,6 +81,8 @@ fun ChatsPage(state: ShellState, model: ChatListViewModel, favouritesOnly: Boole
     var sectionKey by rememberSaveable { mutableStateOf(BrowseSection.encode(BrowseSection.of(BrowseTab.All))) }
     val toast = rememberToast()
     val scope = rememberCoroutineScope()
+    val listState = if (favouritesOnly) androidx.compose.foundation.lazy.rememberLazyListState() else state.chatListState
+    val nav = rememberKeyboardNav(remember(listState) { ListSurface(listState) })
 
     // The Continue tab lists videos and has a page of its own; Favourites has its own page too.
     val sections = remember(folders) {
@@ -90,6 +105,7 @@ fun ChatsPage(state: ShellState, model: ChatListViewModel, favouritesOnly: Boole
                     placeholder = "Search chats",
                     focus = state.searchFocus,
                     modifier = Modifier.width(320.dp),
+                    onDown = { nav.focus(0) },
                 )
                 IconButton(onClick = {
                     val waiting = model.refreshUnlessRateLimited()
@@ -131,40 +147,84 @@ fun ChatsPage(state: ShellState, model: ChatListViewModel, favouritesOnly: Boole
                     )
                 }
             } else {
-                Box(Modifier.fillMaxSize()) {
-                    val listState = if (favouritesOnly) androidx.compose.foundation.lazy.rememberLazyListState() else state.chatListState
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize().padding(end = 12.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    ) {
-                        items(visible, key = { it.id }) { chat ->
-                            ChatRow(
-                                chat = chat,
-                                favourite = chat.id in favourites,
-                                onOpen = { state.openChat(chat) },
-                                onStar = { scope.launch { state.settings.toggleFavorite(chat.id) } },
-                            )
-                        }
-                    }
-                    VerticalScrollbar(
-                        rememberScrollbarAdapter(listState),
-                        Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                    )
-                }
+                ChatList(
+                    chats = visible,
+                    favourites = favourites,
+                    listState = listState,
+                    nav = nav,
+                    onOpen = state::openChat,
+                    onStar = { chat -> scope.launch { state.settings.toggleFavorite(chat.id) } },
+                )
             }
         }
     }
 }
 
+/**
+ * The rows themselves, with a scrollbar and the keyboard of [KeyboardNav]: Up and Down a row,
+ * Home and End, Page Up and Page Down, Enter opens, S stars. Split from [ChatsPage] so the UI tests
+ * can drive it without TDLib.
+ */
+@Composable
+internal fun ChatList(
+    chats: List<ChatSummary>,
+    favourites: Set<Long>,
+    listState: LazyListState,
+    nav: KeyboardNav,
+    onOpen: (ChatSummary) -> Unit,
+    onStar: (ChatSummary) -> Unit,
+) {
+    Box(Modifier.fillMaxSize()) {
+        val count by rememberUpdatedState(chats.size)
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize().padding(end = 12.dp).navKeys(nav) { count },
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            itemsIndexed(chats, key = { _, it -> it.id }) { index, chat ->
+                ChatRow(
+                    chat = chat,
+                    favourite = chat.id in favourites,
+                    modifier = Modifier.navCell(nav, index),
+                    onOpen = { onOpen(chat) },
+                    onStar = { onStar(chat) },
+                )
+            }
+        }
+        VerticalScrollbar(
+            rememberScrollbarAdapter(listState),
+            Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+        )
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun ChatRow(chat: ChatSummary, favourite: Boolean, onOpen: () -> Unit, onStar: () -> Unit) {
+internal fun ChatRow(
+    chat: ChatSummary,
+    favourite: Boolean,
+    onOpen: () -> Unit,
+    onStar: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var focused by remember { mutableStateOf(false) }
     Row(
         Modifier
             .fillMaxWidth()
             .widthIn(max = 960.dp)
             .clip(MaterialTheme.shapes.medium)
+            .then(if (focused) Modifier.border(2.dp, Tone.accent, MaterialTheme.shapes.medium) else Modifier)
+            .then(modifier)
+            .onFocusChanged { focused = it.isFocused }
+            .onPreviewKeyEvent { event ->
+                // Enter opens (the click); S stars, the one other thing a row does.
+                if (event.type == KeyEventType.KeyDown && event.key == Key.S && !event.isCtrlPressed && !event.isMetaPressed && !event.isAltPressed) {
+                    onStar()
+                    true
+                } else {
+                    false
+                }
+            }
             .clickable(onClick = onOpen)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -26,6 +26,21 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.border
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed as keyCtrl
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
@@ -113,6 +128,8 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
         val model = rememberViewModel(Triple(chat.id, min, max)) { MediaListViewModel(chat.id, min, max) }
         val ui by model.state.collectAsState()
         var query by remember(chat.id) { mutableStateOf("") }
+        // The grid's keyboard focus, once the grid exists; the search field's Down arrow enters it.
+        var gridNav by remember(chat.id) { mutableStateOf<KeyboardNav?>(null) }
         LaunchedEffect(model, query) {
             delay(SEARCH_SETTLE_MS)
             model.search(query.trim())
@@ -129,7 +146,7 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 ChatAvatar(chat.miniThumbnail, chat.photoFileId, chat.title, 40.dp)
             },
             actions = {
-                SearchField(query, { query = it }, "Search this chat", state.searchFocus, Modifier.width(300.dp))
+                SearchField(query, { query = it }, "Search this chat", state.searchFocus, Modifier.width(300.dp), onDown = { gridNav?.focus(0) })
                 PosterSizeStep(state)
                 IconButton(onClick = { model.load() }) { Icon(Icons.Filled.Refresh, contentDescription = "Refresh") }
             },
@@ -137,37 +154,66 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
         StateBox(ui, onRetry = { model.load() }) { content ->
             val grid = rememberLazyGridState()
             LoadMoreNearEnd(grid, enabled = !content.endReached && !content.loadingMore) { model.loadMore() }
-            Box(Modifier.fillMaxSize()) {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(state.posterWidth),
-                    state = grid,
-                    contentPadding = PaddingValues(start = 24.dp, end = 32.dp, top = 8.dp, bottom = 24.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    content.sponsored?.messages?.firstOrNull()?.let { ad ->
-                        item(key = "sponsored", span = { GridItemSpan(maxLineSpan) }) {
-                            SponsoredCard(ad, model)
-                        }
-                    }
-                    items(content.items, key = { it.id }) { item ->
-                        MediaTile(state, item, chat.title)
-                    }
-                    if (content.loadingMore) {
-                        item(key = "more", span = { GridItemSpan(maxLineSpan) }) {
-                            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(Modifier.size(28.dp))
-                            }
-                        }
+            val ad = content.sponsored?.messages?.firstOrNull()
+            VideoGrid(
+                state = state,
+                items = content.items,
+                chatTitle = chat.title,
+                grid = grid,
+                onNav = { gridNav = it },
+                header = ad?.let { { SponsoredCard(it, model) } },
+                loadingMore = content.loadingMore,
+            )
+        }
+    }
+}
+
+/**
+ * A chat's posters in an adaptive grid with a scrollbar, the arrow keys of [KeyboardNav] over
+ * them, an optional full width [header] (the sponsored message) and a spinner row while the next
+ * page loads. Split from [MediaGridPage] so the UI tests can drive it without TDLib.
+ */
+@Composable
+internal fun VideoGrid(
+    state: ShellState,
+    items: List<MediaItem>,
+    chatTitle: String,
+    grid: LazyGridState = rememberLazyGridState(),
+    onNav: (KeyboardNav) -> Unit = {},
+    header: (@Composable () -> Unit)? = null,
+    loadingMore: Boolean = false,
+) {
+    val cells by rememberUpdatedState(items)
+    val headerItems by rememberUpdatedState(if (header != null) 1 else 0)
+    val nav = rememberKeyboardNav(remember(grid) { GridSurface(grid, { headerItems }, { cells.size }) })
+    LaunchedEffect(nav) { onNav(nav) }
+    Box(Modifier.fillMaxSize()) {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(state.posterWidth),
+            state = grid,
+            contentPadding = PaddingValues(start = 24.dp, end = 32.dp, top = 8.dp, bottom = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+            modifier = Modifier.fillMaxSize().navKeys(nav) { cells.size },
+        ) {
+            if (header != null) {
+                item(key = "sponsored", span = { GridItemSpan(maxLineSpan) }) { header() }
+            }
+            itemsIndexed(items, key = { _, it -> it.id }) { index, item ->
+                MediaTile(state, item, chatTitle, nav, index)
+            }
+            if (loadingMore) {
+                item(key = "more", span = { GridItemSpan(maxLineSpan) }) {
+                    Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(Modifier.size(28.dp))
                     }
                 }
-                VerticalScrollbar(
-                    rememberScrollbarAdapter(grid),
-                    Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(vertical = 4.dp),
-                )
             }
         }
+        VerticalScrollbar(
+            rememberScrollbarAdapter(grid),
+            Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(vertical = 4.dp),
+        )
     }
 }
 
@@ -213,6 +259,8 @@ fun ContinuePage(state: ShellState) {
             list.isEmpty() -> Centred { Text("Nothing part-watched yet. Videos you stop half way wait here.", color = Tone.muted) }
             else -> {
                 val grid = rememberLazyGridState()
+                val records by rememberUpdatedState(list)
+                val nav = rememberKeyboardNav(remember(grid) { GridSurface(grid, { 0 }, { records.size }) })
                 Box(Modifier.fillMaxSize()) {
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(state.posterWidth),
@@ -220,11 +268,11 @@ fun ContinuePage(state: ShellState) {
                         contentPadding = PaddingValues(start = 24.dp, end = 32.dp, top = 8.dp, bottom = 24.dp),
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalArrangement = Arrangement.spacedBy(20.dp),
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().navKeys(nav) { records.size },
                     ) {
-                        items(list, key = { "${it.chatId}:${it.messageId}" }) { record ->
+                        itemsIndexed(list, key = { _, it -> "${it.chatId}:${it.messageId}" }) { index, record ->
                             LaunchedEffect(record) { state.noteChatTitle(record.chatId, record.chatTitle) }
-                            ContinueTile(state, record) {
+                            ContinueTile(state, record, nav, index) {
                                 scope.launch { state.settings.clearResumePosition(record.chatId, record.messageId) }
                             }
                         }
@@ -237,10 +285,12 @@ fun ContinuePage(state: ShellState) {
 }
 
 @Composable
-private fun ContinueTile(state: ShellState, record: ResumeRecord, onForget: () -> Unit) {
+private fun ContinueTile(state: ShellState, record: ResumeRecord, nav: KeyboardNav?, index: Int, onForget: () -> Unit) {
     val item = remember(record) { record.toMediaItem() }
     Poster(
         state = state,
+        nav = nav,
+        index = index,
         item = item,
         chatTitle = record.chatTitle,
         progress = record.fraction,
@@ -258,11 +308,13 @@ private fun ContinueTile(state: ShellState, record: ResumeRecord, onForget: () -
 
 /** A video in a chat's grid. */
 @Composable
-internal fun MediaTile(state: ShellState, item: MediaItem, chatTitle: String) {
+internal fun MediaTile(state: ShellState, item: MediaItem, chatTitle: String, nav: KeyboardNav? = null, index: Int = 0) {
     val progress by state.settings.watchProgress.collectAsState(initial = emptyMap())
     val point: WatchPoint? = progress[SettingsStore.progressKey(item.chatId, item.messageId)]
     Poster(
         state = state,
+        nav = nav,
+        index = index,
         item = item,
         chatTitle = chatTitle,
         progress = point?.fraction,
@@ -283,11 +335,17 @@ internal fun MediaTile(state: ShellState, item: MediaItem, chatTitle: String) {
  * The poster every grid draws: art at 16:9, a progress line, a title under it. Hovering for a
  * moment lifts it and shows Play and the overflow; a right click (Ctrl+click on macOS) opens the
  * same overflow where the pointer is.
+ *
+ * From the keyboard ([nav], B2.1): focus draws a ring and lifts it like a hover, the arrows move
+ * between posters, Enter, Space or P plays, and the context menu key or Shift+F10 opens the
+ * overflow.
  */
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 private fun Poster(
     state: ShellState,
+    nav: KeyboardNav?,
+    index: Int,
     item: MediaItem,
     chatTitle: String,
     progress: Float?,
@@ -307,8 +365,11 @@ private fun Poster(
             lifted = false
         }
     }
-    val scale by animateFloatAsState(if (lifted) 1.05f else 1f)
+    var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (lifted || focused) 1.05f else 1f)
     var menu by remember { mutableStateOf(false) }
+    val requester = remember { FocusRequester() }
+    val play = { state.openPlayer(item, startFromBeginning = false) }
     val downloads by OfflineDownloads.active.collectAsState()
     val download = downloads[item.fileId]
 
@@ -319,7 +380,23 @@ private fun Poster(
                 val macContext = IS_MAC && event.keyboardModifiers.isCtrlPressed && event.buttons.isPrimaryPressed
                 if (event.buttons.isSecondaryPressed || macContext) menu = true
             }
-            .clickable { state.openPlayer(item, startFromBeginning = false) },
+            .then(if (nav != null) Modifier.navCell(nav, index, requester) else Modifier.focusRequester(requester))
+            .onFocusChanged { focused = it.isFocused }
+            .onPreviewKeyEvent { event ->
+                when {
+                    GridNav.isMenuKey(event) -> {
+                        menu = true
+                        true
+                    }
+                    event.type == KeyEventType.KeyDown && event.key in PLAY_KEYS && !event.keyCtrl &&
+                        !event.isAltPressed && !event.isMetaPressed && !event.isShiftPressed -> {
+                        play()
+                        true
+                    }
+                    else -> false
+                }
+            }
+            .clickable(onClick = play),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(
@@ -327,7 +404,8 @@ private fun Poster(
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
                 .graphicsLayer { scaleX = scale; scaleY = scale }
-                .clip(MaterialTheme.shapes.medium),
+                .clip(MaterialTheme.shapes.medium)
+                .then(if (focused) Modifier.border(3.dp, Tone.accent, MaterialTheme.shapes.medium) else Modifier),
         ) {
             art()
             if (progress != null && progress > 0f) {
@@ -342,7 +420,7 @@ private fun Poster(
                 item.onDevice -> Badge(Icons.Filled.CheckCircle, "On this computer", Modifier.align(Alignment.TopStart))
                 download != null -> Badge(TmIcons.Download, "Downloading", Modifier.align(Alignment.TopStart))
             }
-            if (lifted || menu) {
+            if (lifted || menu || focused) {
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)))
                 Surface(
                     shape = CircleShape,
@@ -359,7 +437,11 @@ private fun Poster(
                 }
             }
             Box(Modifier.align(Alignment.TopEnd)) {
-                TileMenu(state, item, chatTitle, expanded = menu, onDismiss = { menu = false }, extra = extraMenu)
+                TileMenu(state, item, chatTitle, expanded = menu, onDismiss = {
+                    menu = false
+                    // Back to the poster, so the arrows carry on from where the menu was opened.
+                    if (focused || nav?.current == index) runCatching { requester.requestFocus() }
+                }, extra = extraMenu)
             }
         }
         Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -466,6 +548,7 @@ private fun SponsoredCard(ad: SponsoredItem, model: MediaListViewModel) {
     }
 }
 
+private val PLAY_KEYS = setOf(Key.Enter, Key.NumPadEnter, Key.Spacebar, Key.P)
 private val IS_MAC = System.getProperty("os.name").orEmpty().lowercase().contains("mac")
 private const val HOVER_INTENT_MS = 300L
 private const val SEARCH_SETTLE_MS = 300L
