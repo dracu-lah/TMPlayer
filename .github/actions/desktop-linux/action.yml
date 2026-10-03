@@ -20,7 +20,7 @@ runs:
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y -qq --no-install-recommends \
-          desktop-file-utils appstream flatpak flatpak-builder rpm dbus \
+          desktop-file-utils appstream flatpak rpm dbus \
           libvulkan1 libpulse0 libasound2t64 libegl1 libgl1 libxtst6 libxi6 libfontconfig1
 
     - name: Run desktop tests
@@ -96,9 +96,15 @@ runs:
         docker run --rm -v "$PWD/dist:/dist:ro" opensuse/tumbleweed sh -euc \
           'zypper --non-interactive install --allow-unsigned-rpm /dist/tmplayer-${{ inputs.version }}.x86_64.rpm && tmplayer --self-test'
 
+    # Flathub's own build of flatpak-builder: Ubuntu 24.04's packaged one composes the AppStream
+    # data with the host's appstreamcli, which fails on this app with a bare "file-read-error".
     - name: Build the Flatpak
       shell: bash
-      run: OUT="$PWD/dist" desktop/packaging/flatpak/build.sh "${{ inputs.version }}"
+      run: |
+        flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+        flatpak install --user -y --noninteractive flathub org.flatpak.Builder
+        FLATPAK_BUILDER="flatpak run org.flatpak.Builder" OUT="$PWD/dist" \
+          desktop/packaging/flatpak/build.sh "${{ inputs.version }}"
 
     - name: Install the Flatpak and self-test it
       shell: bash

@@ -4,8 +4,8 @@
 #   desktop/packaging/linux/package.sh 1.18.0 tar
 #   desktop/packaging/flatpak/build.sh 1.18.0
 #
-# Needs flatpak and flatpak-builder, and the flathub remote for the user (the runtime and SDK are
-# installed from it on first use). The bundle names Flathub as its runtime source, so
+# Needs flatpak and flatpak-builder (or FLATPAK_BUILDER, below); the runtime and SDK are
+# installed from Flathub on first use. The bundle names Flathub as its runtime source, so
 # `flatpak install --user TMPlayer-<v>.flatpak` fetches org.freedesktop.Platform when missing.
 set -euo pipefail
 
@@ -25,7 +25,9 @@ cp "$tarball" "$work/TMPlayer-linux-x64.tar.gz"
 
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 # rofiles-fuse needs FUSE, which containers and CI runners may not offer; it only guards caching.
-flatpak-builder --user --install-deps-from=flathub --disable-rofiles-fuse --force-clean \
+# FLATPAK_BUILDER="flatpak run org.flatpak.Builder" uses the Flathub build of the tool instead.
+read -ra builder <<< "${FLATPAK_BUILDER:-flatpak-builder}"
+"${builder[@]}" --user --install-deps-from=flathub --disable-rofiles-fuse --force-clean \
   --repo="$work/repo" "$work/build" "$work/$id.yml"
 flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
   "$work/repo" "$out/TMPlayer-$version.flatpak" "$id"
