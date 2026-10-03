@@ -2,7 +2,7 @@ package com.tmplayer.ui.browse
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.tmplayer.App
+import com.tmplayer.platform.Background
 import com.tmplayer.data.Account
 import com.tmplayer.data.AuthState
 import com.tmplayer.data.ChatRepository
@@ -259,7 +259,7 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
         val store = settings ?: return
         // On the background scope rather than this one: it outlives the screen on purpose, since
         // the whole value of the write is to the launch after this one.
-        App.backgroundScope.launch { runCatching { store.saveChatSnapshot(chats) } }
+        Background.scope.launch { runCatching { store.saveChatSnapshot(chats) } }
     }
 
     fun load() {
@@ -409,7 +409,7 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
         // The cold-start snapshots go with it: they exist so the next launch opens on the last
         // sync, and after a sign-out "the last sync" is somebody else's name, face and chats.
         settings?.let { store ->
-            App.backgroundScope.launch { runCatching { store.clearColdStartSnapshots() } }
+            Background.scope.launch { runCatching { store.clearColdStartSnapshots() } }
         }
     }
 

@@ -33,6 +33,9 @@ kotlin {
         commonMain.dependencies {
             api(project(":core"))
             implementation(libs.zxing.core)
+            // Multiplatform itself, at the version :app already uses, so the chat list and media
+            // view models are shared as they are.
+            api(libs.androidx.lifecycle.viewmodel)
         }
         androidMain {
             kotlin.srcDir("src/shared/kotlin")

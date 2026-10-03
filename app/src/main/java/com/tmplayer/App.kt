@@ -15,8 +15,6 @@ import com.tmplayer.data.WatchCache
 import com.tmplayer.platform.Logger
 import com.tmplayer.player.PlayerActivity
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -83,7 +81,7 @@ class App : Application() {
          * For work that has to finish even as a screen is going away (saving where playback
          * stopped, trimming the cache), where a lifecycle scope would be cancelled too early.
          */
-        val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val backgroundScope: CoroutineScope = com.tmplayer.platform.Background.scope
 
         /** Long enough to be past the first screen and whatever it wanted off the disk. */
         private const val CACHE_TRIM_DELAY_MS = 20_000L
