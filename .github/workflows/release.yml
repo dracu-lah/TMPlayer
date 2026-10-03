@@ -138,26 +138,26 @@ jobs:
           git archive --format=tar.gz --prefix="TMPlayer-$VERSION/" \
             --output="dist/TMPlayer-$VERSION-source.tar.gz" "$GITHUB_SHA"
 
-          git clone --depth 1 --branch 1.8.0-0.9.0 \
+          git clone --depth 1 --branch v1.10.1-0.13.0 \
             https://github.com/anilbeesetti/nextlib.git \
-            "nextlib-1.8.0-0.9.0"
-          test "$(git -C nextlib-1.8.0-0.9.0 rev-parse HEAD)" = \
-            "1b69e9490c172c42f73f7a6f1b9ffd1c8be4a060"
-          rm -rf nextlib-1.8.0-0.9.0/.git
-          mkdir -p nextlib-1.8.0-0.9.0/upstream-sources
+            "nextlib-1.10.1-0.13.0"
+          test "$(git -C nextlib-1.10.1-0.13.0 rev-parse HEAD)" = \
+            "773c841f86d9775abd0fe18c1fd0f84e00e355c8"
+          rm -rf nextlib-1.10.1-0.13.0/.git
+          mkdir -p nextlib-1.10.1-0.13.0/upstream-sources
           curl --fail --location --retry 3 \
             https://ffmpeg.org/releases/ffmpeg-6.0.tar.gz \
-            --output nextlib-1.8.0-0.9.0/upstream-sources/ffmpeg-6.0.tar.gz
+            --output nextlib-1.10.1-0.13.0/upstream-sources/ffmpeg-6.0.tar.gz
           curl --fail --location --retry 3 \
             https://github.com/webmproject/libvpx/archive/refs/tags/v1.13.0.tar.gz \
-            --output nextlib-1.8.0-0.9.0/upstream-sources/libvpx-1.13.0.tar.gz
+            --output nextlib-1.10.1-0.13.0/upstream-sources/libvpx-1.13.0.tar.gz
           curl --fail --location --retry 3 \
             https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v3.4.1.tar.gz \
-            --output nextlib-1.8.0-0.9.0/upstream-sources/mbedtls-3.4.1.tar.gz
-          sha256sum nextlib-1.8.0-0.9.0/upstream-sources/*.tar.gz \
-            > nextlib-1.8.0-0.9.0/upstream-sources/SHA256SUMS
+            --output nextlib-1.10.1-0.13.0/upstream-sources/mbedtls-3.4.1.tar.gz
+          sha256sum nextlib-1.10.1-0.13.0/upstream-sources/*.tar.gz \
+            > nextlib-1.10.1-0.13.0/upstream-sources/SHA256SUMS
           tar -czf "dist/nextlib-corresponding-source-$VERSION.tar.gz" \
-            nextlib-1.8.0-0.9.0
+            nextlib-1.10.1-0.13.0
 
           cp LICENSE "dist/LICENSE-GPL-3.0.txt"
           cp THIRD_PARTY_NOTICES.md "dist/THIRD_PARTY_NOTICES.md"

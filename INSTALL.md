@@ -87,6 +87,25 @@ You land on your chat list. Open any chat to see only its playable videos, and p
 | **Hold OK** (controls up) | Open the video in another app |
 | **Back** | Close what is on top: the controls, then the player; the position is remembered |
 
+## Using a phone
+
+| Touch | What it does |
+| --- | --- |
+| **Tap** | Show or hide the controls. Settings, Player can make a tap play and pause instead |
+| **Big button in the middle** | Play / pause; the arrows either side jump, the outer buttons change episode |
+| **Double tap left / right** | Jump back / forward 10 seconds; keep tapping to add 10 more each time |
+| **Double tap the middle** | Play / pause |
+| **Hold** | Play at 2x for as long as your finger stays down |
+| **Drag sideways** | Travel through the video; it jumps when you let go |
+| **Drag up / down, left side** | Brightness |
+| **Drag up / down, right side** | Volume |
+| **Pinch** | Fit, fill or stretch the picture |
+| **Tap the total time** | Show the time remaining instead |
+| **⋮ menu** | Lock the screen, picture in picture, speed, start over, open in another app, details |
+
+The jump length, the hold speed, how long the controls stay up, each drag and the vibration are
+all in Settings, Player.
+
 ## Storage
 
 Telegram keeps what it has streamed so re-watching is instant. TMPlayer caps that at **1 GB**

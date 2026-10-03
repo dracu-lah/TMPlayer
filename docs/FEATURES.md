@@ -53,6 +53,12 @@ a Material 3 type scale, full-bleed chat rows, search that expands into the app 
 toolbar icons, real switches and dialogs and sheets, a back arrow on every screen, and a player
 that hides the system bars instead of playing underneath them.
 
+**Plays like a phone player.** A big play and pause in the middle with the jumps and episode
+buttons beside it, and every control in reach with the phone held either way. Double tap a side to
+jump, and keep tapping to go further; hold to play at 2x; drag for brightness, volume or to travel
+through the video, each with its own gauge on screen. Lock the screen against a stray thumb, get a
+"Next episode" card in the last half minute, and set how all of it behaves under Settings, Player.
+
 **Stays out of the way.** Rows or tiles, chosen beside the list it rearranges and remembered.
 Size limits keep a chat full of tiny clips from burying longer videos. A resolution badge on
 each tile and nothing else, because the codec was never going to change anyone's mind. A tile

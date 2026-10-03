@@ -3,9 +3,9 @@ package com.tmplayer.player
 /**
  * The speeds the transport row offers, and the arithmetic for stepping between them.
  *
- * A phone gets this inside Media3's own settings sheet. A television has no such sheet, so it steps
- * through a fixed list with one button, which is what a D-pad can drive. The choice is remembered
- * for the next video either way.
+ * The speed button steps through a fixed list on both devices, which is what a D-pad can drive; a
+ * phone's overflow menu also lists every stop to pick from directly. The choice is remembered for
+ * the next video either way.
  *
  * Pure, so the stepping is tested rather than discovered on a sofa.
  */

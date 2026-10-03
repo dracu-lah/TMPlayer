@@ -5,12 +5,12 @@ copyrights remain with their respective authors, and their licence terms continu
 
 ## Native media extension
 
-### NextLib Media3 Extensions 1.8.0-0.9.0
+### NextLib Media3 Extensions 1.10.1-0.13.0
 
 - Author: Anil Kumar Beesetti and contributors
 - Licence: GNU General Public License version 3
-- Source: <https://github.com/anilbeesetti/nextlib/tree/1.8.0-0.9.0>
-- Exact commit: `1b69e9490c172c42f73f7a6f1b9ffd1c8be4a060`
+- Source: <https://github.com/anilbeesetti/nextlib/tree/v1.10.1-0.13.0>
+- Exact commit: `773c841f86d9775abd0fe18c1fd0f84e00e355c8`
 
 The released AAR contains native codec libraries built by NextLib's `ffmpeg/setup.sh` from these
 upstream sources:
@@ -26,20 +26,21 @@ the exact NextLib source and build scripts plus the three upstream source archiv
 
 ## Telegram client stack
 
-### tdl-coroutines 9.0.0
+### tdl-coroutines 15.0.0
 
 - Author: Georgii Ippolitov and contributors
 - Licence: Apache License 2.0
-- Source: <https://github.com/g000sha256/tdl-coroutines/tree/9.0.0>
-- Exact commit: `cdbaa628a8453fffbc0805afed47c9df85521429`
+- Source: <https://github.com/g000sha256/tdl-coroutines/tree/15.0.0>
+- Exact commit: `1e21103b4204a9dae060b8f203a4fcc1388cdb3d`
 
-The Android artifact bundles TDLib 1.8.61 native libraries:
+The Android artifact bundles TDLib 1.8.67 native libraries:
 
-- TDLib 1.8.61: Boost Software License 1.0
-- Source: <https://github.com/tdlib/td/tree/6d509061574d684117f74133056aa43df89022fc>
-- Exact commit: `6d509061574d684117f74133056aa43df89022fc`
-- The TDLib Android build uses OpenSSL `OpenSSL_1_1_1w`; its OpenSSL and original SSLeay licence
-  texts are included in the OpenSSL source distribution.
+- TDLib 1.8.67: Boost Software License 1.0
+- Source: <https://github.com/tdlib/td/tree/bc9c263e2bfee06aaab41e82db51a103376030bc>
+- Exact commit: `bc9c263e2bfee06aaab41e82db51a103376030bc`
+- The TDLib Android build links OpenSSL; its OpenSSL licence text is included in the OpenSSL
+  source distribution, and the exact OpenSSL revision is recorded in tdl-coroutines' build
+  scripts at the commit above.
 
 The exact tdl-coroutines and TDLib source revisions are linked here for reproducibility. Both are
 under permissive licences and do not impose a corresponding-source requirement on TMPlayer.
@@ -64,8 +65,10 @@ packaged in the APK.
   the website footer and README; the adapted vector is distributed with TMPlayer under GPL-3.0.
 - The in-player play and pause glyphs (`ic_player_play.xml`, `ic_player_pause.xml`) are from the
   Solar icon set, obtained via SVG Repo under its CC Attribution licence:
-  <https://www.svgrepo.com>. The seek, previous and next glyphs are Material Symbols paths:
-  Apache License 2.0: <https://github.com/google/material-design-icons>.
+  <https://www.svgrepo.com>. The seek, previous, next, back, overflow, lock, picture in picture,
+  brightness and volume glyphs are Material Symbols paths: Apache License 2.0:
+  <https://github.com/google/material-design-icons>. The phone's morphing play and pause glyph
+  (`PlayPauseIcon.kt`) is drawn in code by TMPlayer.
 
 ## Licence texts
 

@@ -6,7 +6,8 @@ working plan and is written so work can resume from it alone after a context com
 
 Scope decisions, made by the user on 2026-08-11:
 
-- **Desktop port and web version are DROPPED.** The app targets Android phone and Android TV
+- **Desktop port and web version are DROPPED.** (Superseded on 2026-10-03: desktop is planned
+  again in `2026-10-03-phone-player-ux-and-desktop-plan.md`; web stays dropped.) The app targets Android phone and Android TV
   only. (The earlier desktop research concluded a JVM port was feasible but a real project;
   a web version was rejected because browsers cannot play MKV/AC3/DTS. Kept here as one line
   of history, not as work.)
