@@ -197,6 +197,9 @@ dependencies {
     // that is not Android's, shared with the desktop app. It brings tdl-coroutines, coroutines and
     // DataStore's preferences core with it.
     implementation(project(":core"))
+    // The Compose pieces shared with the desktop: palette and Material 3 theme, icons, skeletons,
+    // thumbnails, the QR code, back handling and the device form. Built against the same BOM.
+    implementation(project(":ui"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

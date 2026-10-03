@@ -79,6 +79,7 @@ import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.RoomOnDisk
 import com.tmplayer.data.Td
 import com.tmplayer.data.Thumbnails
+import androidx.compose.ui.graphics.asAndroidBitmap
 import com.tmplayer.data.WatchCache
 import com.tmplayer.data.errorMessage
 import com.tmplayer.data.valueOrNull
@@ -2378,7 +2379,7 @@ class PlayerActivity : FragmentActivity() {
      * there is something to draw.
      */
     private fun showArtwork() {
-        val mini = Thumbnails.mini(intent.getByteArrayExtra(EXTRA_MINI_THUMBNAIL))
+        val mini = Thumbnails.mini(intent.getByteArrayExtra(EXTRA_MINI_THUMBNAIL))?.asAndroidBitmap()
         if (mini != null) {
             statusArt?.setImageBitmap(mini)
             statusPoster?.setImageBitmap(mini)
@@ -2388,7 +2389,7 @@ class PlayerActivity : FragmentActivity() {
         val thumbnailId = intent.getIntExtra(EXTRA_THUMBNAIL_ID, 0)
         if (thumbnailId <= 0) return
         lifecycleScope.launch {
-            val full = runCatching { Thumbnails.full(thumbnailId) }.getOrNull() ?: return@launch
+            val full = runCatching { Thumbnails.full(thumbnailId) }.getOrNull()?.asAndroidBitmap() ?: return@launch
             statusPoster?.setImageBitmap(full)
             // Where there was a minithumbnail the backdrop keeps it: stretching a real thumbnail
             // across 1080p is a soft, ugly photograph, while stretching a forty-pixel one is a

@@ -8,6 +8,7 @@ import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import com.tmplayer.data.start
 import com.tmplayer.data.Thumbnails
+import com.tmplayer.data.trim
 import com.tmplayer.data.Updates
 import com.tmplayer.data.configureForAndroid
 import com.tmplayer.data.WatchCache
@@ -44,6 +45,7 @@ class App : Application() {
         // order of magnitude apart, and one fixed figure is wrong for both.
         val memory = (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).memoryClass
         Thumbnails.sizeFor(memory)
+        Thumbnails.connectivity = NetworkMonitor
         NetworkMonitor.start(this)
         // TDLib takes a moment to open its database; starting here means the login screen is
         // already showing a QR code by the time the user has finished reading the first line.

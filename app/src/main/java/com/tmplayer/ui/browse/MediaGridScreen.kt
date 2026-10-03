@@ -10,7 +10,7 @@ import android.content.Intent
 import android.util.Log
 import android.widget.Toast
 import android.net.Uri
-import androidx.activity.compose.BackHandler
+import com.tmplayer.ui.nav.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background

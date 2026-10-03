@@ -1,6 +1,6 @@
 package com.tmplayer.ui.auth
 
-import androidx.activity.compose.BackHandler
+import com.tmplayer.ui.nav.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -41,7 +41,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.onFillData
@@ -705,7 +704,7 @@ private fun PaneHeader(onBack: () -> Unit) {
 private fun QrPane(link: String, onUsePhone: () -> Unit) {
     if (isTouch()) BackHandler(onBack = onUsePhone) else ExitOnBack()
 
-    val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, key1 = link) {
+    val bitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, key1 = link) {
         value = withContext(Dispatchers.Default) { QrCode.render(link, QR_PIXELS) }
     }
 
@@ -731,7 +730,7 @@ private fun QrPane(link: String, onUsePhone: () -> Unit) {
                 BigLoader(null)
             } else {
                 Image(
-                    bitmap = rendered.asImageBitmap(),
+                    bitmap = rendered,
                     contentDescription = "Telegram login QR code",
                     // Inset from the plate's edge: a QR code needs a quiet margin of its own
                     // colour around it or a scanner cannot find its corners.

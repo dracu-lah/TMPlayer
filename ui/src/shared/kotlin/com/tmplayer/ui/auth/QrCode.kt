@@ -1,7 +1,6 @@
 package com.tmplayer.ui.auth
 
-import android.graphics.Bitmap
-import android.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
@@ -11,11 +10,12 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
  * Renders a Telegram login link as a QR code.
  *
  * Deliberately plain black-on-white: phone cameras across a living room read that far more
- * reliably than anything tinted to match the app.
+ * reliably than anything tinted to match the app. zxing is plain Java, so the matrix is shared;
+ * only turning the pixels into an [ImageBitmap] is each platform's (`QrBitmap.kt`).
  */
 object QrCode {
 
-    fun render(text: String, sizePx: Int): Bitmap? = runCatching {
+    fun render(text: String, sizePx: Int): ImageBitmap? = runCatching {
         val hints = mapOf(
             EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
             EncodeHintType.MARGIN to 1,
@@ -28,11 +28,12 @@ object QrCode {
         for (y in 0 until height) {
             val row = y * width
             for (x in 0 until width) {
-                pixels[row + x] = if (matrix.get(x, y)) Color.BLACK else Color.WHITE
+                pixels[row + x] = if (matrix.get(x, y)) BLACK else WHITE
             }
         }
-        Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565).apply {
-            setPixels(pixels, 0, width, 0, 0, width, height)
-        }
+        opaqueImage(pixels, width, height)
     }.getOrNull()
+
+    private const val BLACK = 0xFF000000.toInt()
+    private const val WHITE = 0xFFFFFFFF.toInt()
 }

@@ -1,8 +1,6 @@
 package com.tmplayer.data
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.util.LruCache
+import androidx.compose.ui.graphics.ImageBitmap
 import dev.g000sha256.tdl.TdlResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +16,9 @@ import kotlinx.coroutines.withTimeoutOrNull
  * something the instant it scrolls into view, then swap in the real thumbnail once TDLib has
  * fetched it. No image library involved: these are tiny bitmaps and a 1 GB stick appreciates
  * the missing dependency.
+ *
+ * The cache and the fetching are shared; turning bytes into an [ImageBitmap] is each platform's
+ * (`ThumbnailDecoding.kt`: `BitmapFactory` on Android, Skia on the desktop).
  */
 object Thumbnails {
 
@@ -31,38 +32,43 @@ object Thumbnails {
     @Volatile
     private var cache = newCache(CACHE_BYTES)
 
-    private fun newCache(bytes: Int) = object : LruCache<String, Bitmap>(bytes) {
-        override fun sizeOf(key: String, value: Bitmap) = value.byteCount
-    }
+    /**
+     * Asked before a thumbnail is fetched over the network. Android installs its `NetworkMonitor`;
+     * with nothing installed every fetch is allowed to try.
+     */
+    @Volatile
+    var connectivity: Connectivity? = null
 
-    /** Called once from [com.tmplayer.App], before anything has been cached. */
+    private fun newCache(bytes: Int) = SizedLru<String, ImageBitmap>(bytes) { it.byteCount() }
+
+    /** Called once at start-up, before anything has been cached. */
     fun sizeFor(memoryClassMb: Int) {
         val bytes = (memoryClassMb * 1024 * 1024 / CACHE_HEAP_FRACTION)
             .coerceIn(MIN_CACHE_BYTES, MAX_CACHE_BYTES)
         cache = newCache(bytes)
     }
 
-    /** Hands the pictures back when the system says it needs the memory. */
-    fun trim(level: Int) {
-        if (level >= TRIM_EVERYTHING) cache.evictAll() else cache.trimToSize(cache.size() / 2)
+    /** Hands the pictures back: all of them, or half when the system is only asking politely. */
+    fun trim(everything: Boolean) {
+        if (everything) cache.evictAll() else cache.trimToSize(cache.size() / 2)
     }
 
-    fun mini(data: ByteArray?): Bitmap? {
+    fun mini(data: ByteArray?): ImageBitmap? {
         if (data == null || data.isEmpty()) return null
         val key = "mini:${data.size}:${data.contentHashCode()}"
         cache.get(key)?.let { return it }
-        return decode(data, 0, data.size)?.also { cache.put(key, it) }
+        return decodeImage(data)?.also { cache.put(key, it) }
     }
 
     /** Downloads the real thumbnail if needed. Returns null when there isn't one. */
-    suspend fun full(fileId: Int): Bitmap? {
+    suspend fun full(fileId: Int): ImageBitmap? {
         if (fileId <= 0) return null
         val key = "file:$fileId"
         cache.get(key)?.let { return it }
 
         val path = withContext(Dispatchers.IO) { downloadThumbnail(fileId) } ?: return null
         return withContext(Dispatchers.IO) {
-            runCatching { decodeFile(path) }.getOrNull()?.also { cache.put(key, it) }
+            runCatching { decodeImageFile(path, MAX_THUMBNAIL_WIDTH) }.getOrNull()?.also { cache.put(key, it) }
         }
     }
 
@@ -72,7 +78,8 @@ object Thumbnails {
         if (file.local.isDownloadingCompleted && !file.local.path.isNullOrEmpty()) {
             return file.local.path
         }
-        if (!NetworkMonitor.canTryInternet() && !Td.connected.value) return null
+        val online = connectivity?.canTryInternet() ?: true
+        if (!online && !Td.connected.value) return null
 
         // Thumbnails are small and plentiful; low priority keeps them behind playback.
         val started = td.downloadFile(
@@ -102,30 +109,51 @@ object Thumbnails {
         return path?.takeIf { it.isNotEmpty() }
     }
 
-    private fun decode(data: ByteArray, offset: Int, length: Int): Bitmap? =
-        runCatching { BitmapFactory.decodeByteArray(data, offset, length) }.getOrNull()
-
-    private fun decodeFile(path: String): Bitmap? {
-        // Card art is never larger than ~400 px wide; decoding full size would waste heap.
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(path, bounds)
-        var sample = 1
-        while (bounds.outWidth / sample > MAX_THUMBNAIL_WIDTH * 2) sample *= 2
-        val options = BitmapFactory.Options().apply {
-            inSampleSize = sample
-            inPreferredConfig = Bitmap.Config.RGB_565
-        }
-        return BitmapFactory.decodeFile(path, options)
-    }
-
     private const val CACHE_BYTES = 12 * 1024 * 1024
     private const val CACHE_HEAP_FRACTION = 8
     private const val MIN_CACHE_BYTES = 4 * 1024 * 1024
     private const val MAX_CACHE_BYTES = 32 * 1024 * 1024
 
-    /** At or above this, the system is asking for everything it can get. */
-    private const val TRIM_EVERYTHING = android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE
+    /** Card art is never larger than ~400 px wide; decoding full size would waste heap. */
     private const val MAX_THUMBNAIL_WIDTH = 400
     private const val THUMBNAIL_PRIORITY = 4
     private const val DOWNLOAD_TIMEOUT_MS = 20_000L
+}
+
+/**
+ * A least recently used map bounded by the total of [sizeOf] over its values, as Android's
+ * `LruCache` is, written out because that class is Android's alone.
+ */
+internal class SizedLru<K : Any, V : Any>(
+    private val maxSize: Int,
+    private val sizeOf: (V) -> Int,
+) {
+    private val map = LinkedHashMap<K, V>(0, 0.75f, true)
+    private var size = 0
+
+    @Synchronized
+    fun get(key: K): V? = map[key]
+
+    @Synchronized
+    fun put(key: K, value: V) {
+        map.put(key, value)?.let { size -= sizeOf(it) }
+        size += sizeOf(value)
+        trimToSize(maxSize)
+    }
+
+    @Synchronized
+    fun size(): Int = size
+
+    @Synchronized
+    fun evictAll() = trimToSize(-1)
+
+    @Synchronized
+    fun trimToSize(target: Int) {
+        val entries = map.entries.iterator()
+        while (size > target && entries.hasNext()) {
+            val eldest = entries.next()
+            size -= sizeOf(eldest.value)
+            entries.remove()
+        }
+    }
 }

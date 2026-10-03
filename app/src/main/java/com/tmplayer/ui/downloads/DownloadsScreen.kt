@@ -1,6 +1,6 @@
 package com.tmplayer.ui.downloads
 
-import androidx.activity.compose.BackHandler
+import com.tmplayer.ui.nav.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.border

@@ -13,25 +13,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.tmplayer.data.FormFactor
 import com.tmplayer.ui.theme.Tv
 
-/**
- * True when this device is driven by a finger rather than by a remote.
- *
- * Read it for layout rather than for behaviour. What a control does when it is operated belongs
- * inside that control, so that the two halves of the app cannot drift apart; what a pane looks
- * like is a decision each pane has to make for itself.
- */
-@Composable
-@ReadOnlyComposable
-fun isTouch(): Boolean = !FormFactor.isTv(LocalContext.current)
+// isTouch() lives in :ui (DeviceForms.kt), shared with the desktop.
 
 /**
  * The one column of content that a sign-in or onboarding pane is.

@@ -1,6 +1,6 @@
 package com.tmplayer.ui.browse
 
-import androidx.activity.compose.BackHandler
+import com.tmplayer.ui.nav.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
