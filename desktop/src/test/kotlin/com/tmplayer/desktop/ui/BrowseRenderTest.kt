@@ -23,6 +23,11 @@ import com.tmplayer.data.DownloadRequest
 import com.tmplayer.data.DownloadRunner
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.desktop.DesktopPrefs
+import com.tmplayer.desktop.DesktopUpdates
+import com.tmplayer.desktop.DesktopWatchCache
+import com.tmplayer.desktop.LatestRelease
+import androidx.compose.foundation.layout.padding
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.TmMaterialTheme
 import org.jetbrains.skia.Color
@@ -45,11 +50,23 @@ class BrowseRenderTest {
     private val settings = SettingsStore(
         SettingsStore.openDataStore(Files.createTempDirectory("tm-render").resolve(SettingsStore.FILE_NAME).toFile()),
     )
-    private val shell = ShellState(settings, object : DownloadRunner {
-        override fun download(request: DownloadRequest) = Unit
-        override fun cancel(fileId: Int) = Unit
-        override fun pause(fileId: Int) = Unit
-    })
+    private val dir = Files.createTempDirectory("tm-render-extras").toFile()
+    private val prefs = DesktopPrefs(dir.resolve("desktop.properties"))
+    private val shell = ShellState(
+        settings,
+        object : DownloadRunner {
+            override fun download(request: DownloadRequest) = Unit
+            override fun cancel(fileId: Int) = Unit
+            override fun pause(fileId: Int) = Unit
+        },
+        services = {
+            DesktopExtras(
+                prefs = prefs,
+                updates = DesktopUpdates(prefs, installed = "2.0.0", fetch = { null }),
+                watchCache = DesktopWatchCache(settings, dir.resolve("tdlib-files")),
+            )
+        },
+    )
 
     @Test
     fun chatList() {
@@ -102,6 +119,22 @@ class BrowseRenderTest {
             }
         }
         save("grid.png", png)
+    }
+
+    @Test
+    fun settingsAndUpdateNotice() {
+        val png = render {
+            Box(Modifier.fillMaxSize()) {
+                SettingsPage(shell, "2.0.0")
+                UpdateNotice(
+                    LatestRelease("2.0.1", "https://github.com/dracu-lah/TMPlayer/releases/tag/v2.0.1", listOf("TMPlayer.msi")),
+                    onDownload = {},
+                    onDismiss = {},
+                    modifier = Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(24.dp),
+                )
+            }
+        }
+        save("settings.png", png)
     }
 
     private fun render(page: @androidx.compose.runtime.Composable () -> Unit): ByteArray =
