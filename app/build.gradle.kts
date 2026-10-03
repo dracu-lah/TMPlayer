@@ -36,7 +36,9 @@ val releaseAbis: List<String> = (findProperty("tmAbis") as String?)
 
 android {
     namespace = "com.tmplayer"
-    compileSdk = 36
+    // 37 because tdl-coroutines 14+ refuses to be compiled against anything older. targetSdk is
+    // separate and stays where it is.
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.tmplayer"
