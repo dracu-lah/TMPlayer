@@ -26,6 +26,16 @@ junit = "4.13.2"
 # Android ships org.json in the platform; a plain JVM does not, so `:core`'s jvm target carries
 # this for update-response parsing (and its tests), and the Android build never bundles it.
 json = "20240303"
+# Desktop (Part B of the 2026-10-03 plan). Compose Multiplatform 1.12.1 maps to Jetpack Compose
+# 1.12; mediamp 0.5.0 is built against 1.12.0 and wraps libmpv. Its native runtime is a separate
+# artifact per OS and does not come in transitively, so :desktop names the ones it ships.
+composeMultiplatform = "1.12.1"
+mediamp = "0.5.0"
+appdirs = "1.4.0"
+# Material3 for Compose Multiplatform 1.12 (maps to Jetpack Material3 1.5 alphas); icons stay on
+# the last published core set, the same handful :app uses.
+cmpMaterial3 = "1.12.0-alpha03"
+cmpMaterialIcons = "1.7.3"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -63,10 +73,23 @@ androidx-datastore-preferences-core = { group = "androidx.datastore", name = "da
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 sentry-android-core = { group = "io.sentry", name = "sentry-android-core", version.ref = "sentry" }
 
+mediamp-api = { group = "org.openani.mediamp", name = "mediamp-api", version.ref = "mediamp" }
+mediamp-mpv = { group = "org.openani.mediamp", name = "mediamp-mpv", version.ref = "mediamp" }
+mediamp-runtime-linux-x64 = { group = "org.openani.mediamp", name = "mediamp-mpv-runtime-linux-x64", version.ref = "mediamp" }
+mediamp-runtime-windows-x64 = { group = "org.openani.mediamp", name = "mediamp-mpv-runtime-windows-x64", version.ref = "mediamp" }
+mediamp-runtime-macos-arm64 = { group = "org.openani.mediamp", name = "mediamp-mpv-runtime-macos-arm64", version.ref = "mediamp" }
+mediamp-runtime-macos-x64 = { group = "org.openani.mediamp", name = "mediamp-mpv-runtime-macos-x64", version.ref = "mediamp" }
+kotlinx-coroutines-swing = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-swing", version.ref = "coroutines" }
+cmp-material3 = { group = "org.jetbrains.compose.material3", name = "material3", version.ref = "cmpMaterial3" }
+cmp-material-icons = { group = "org.jetbrains.compose.material", name = "material-icons-core", version.ref = "cmpMaterialIcons" }
+appdirs = { group = "net.harawata", name = "appdirs", version.ref = "appdirs" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 # AGP's own plugin for the Android target of a Kotlin Multiplatform library, used by `:core`.
 android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
