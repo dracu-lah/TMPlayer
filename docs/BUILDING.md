@@ -2,9 +2,10 @@
 
 ## What you need
 
-JDK 17 or newer (21 is what this is built with) and Android SDK platform 36. Any recent Android
-Studio works, but the project builds fine from the command line. The app itself runs on API 26
-and up.
+JDK 21 and Android SDK platform 36. JDK 17 still builds the Android app, but the desktop app
+needs 21, so 21 is the one to install. Any recent Android Studio works, but the project builds
+fine from the command line. The Android app runs on API 26 and up; the desktop app on Windows 10
+and 11 and on 64-bit Linux.
 
 ## Telegram credentials
 
@@ -35,6 +36,44 @@ that gets abused is acted on by Telegram, and it traces back to whoever register
 ./gradlew assembleDebug     # one debug APK, every architecture, emulator included
 ./gradlew assembleRelease   # signed release, needs keystore.properties
 ```
+
+## The desktop app
+
+The `:desktop` module is a Compose Desktop app over the shared `:core` and `:ui` modules, playing
+through libmpv by way of [mediamp](https://github.com/open-ani/mediamp). It needs **JDK 21**
+(`kotlin { jvmToolchain(21) }`: Gradle looks for an installed JDK 21 and does not download one) and
+reads the same `TG_API_ID` and `TG_API_HASH` from `local.properties` as the Android build. No
+Android SDK is involved in building it.
+
+```bash
+./gradlew :desktop:run            # the app, signed in with your own account
+./gradlew :desktop:test           # its unit tests, including the fake-data render tests
+./gradlew :desktop:runPlayerDev --args="--file /path/to/clip.mkv"
+```
+
+`runPlayerDev` opens the player on its own over a file on disk, through the same streaming path
+the app uses for a Telegram file, so the player can be worked on without an account.
+`--args="--file clip.mkv --growing 4"` feeds the file in at 4 MB a second, to see how it behaves
+while a download is still arriving.
+
+Installers come from the Compose Gradle plugin, and only for the system you build on: there is no
+cross compilation, which is why the release builds each one on its own runner.
+
+```bash
+./gradlew :desktop:packageDistributionForCurrentOS   # whatever this OS makes
+./gradlew :desktop:packageMsi                        # Windows
+./gradlew :desktop:packageDeb :desktop:packageRpm    # Linux
+./gradlew :desktop:createDistributable               # the plain app folder, no installer
+```
+
+They land under `desktop/build/compose/binaries/main/`. The AppImage, the Flatpak, the Linux
+tarball and the Windows portable zip are wrapped from the `createDistributable` folder by the
+release workflow, with the recipes in `packaging/`. The libmpv runtime pulled in is the one for
+the host only, since each is 30 to 75 MB and the other systems' would never load.
+
+Linux notes: on a tiling window manager set `_JAVA_AWT_WM_NONREPARENTING=1` or the window stays
+blank; hardware decoding may fail on Fedora, where the bundled libva looks in Debian's driver
+path, and software decoding takes over.
 
 ## Test devices
 

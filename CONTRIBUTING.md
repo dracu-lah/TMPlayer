@@ -9,6 +9,14 @@ devices and the version pins you must not casually bump lives in
 [docs/BUILDING.md](docs/BUILDING.md). Read it before your first build, and before changing any
 dependency version. Cutting a release is [docs/RELEASING.md](docs/RELEASING.md).
 
+In short: JDK 21, your own Telegram credentials in `local.properties`, then
+
+```bash
+./gradlew test assembleDebug                 # the Android app
+./gradlew :desktop:test :desktop:run         # the desktop app, on Windows or Linux
+./gradlew :desktop:runPlayerDev --args="--file /path/to/clip.mkv"   # the desktop player alone
+```
+
 Never commit credentials.
 
 ## Ground rules
@@ -28,4 +36,4 @@ Never commit credentials.
 
 ## Reporting issues
 
-Include: device model + Android TV version, what you did, what happened, and `adb logcat` output around the failure if you can. For playback issues, the file's container/codecs (e.g. from VLC's media info) helps a lot.
+Include the platform (Android phone, Android TV, Windows, or Linux with its distribution and version), the app version, the device or computer, what you did, what happened, and logs around the failure if you can: `adb logcat` on Android, or the output of starting the desktop app from a terminal. Say which file you installed on Linux (deb, rpm, AppImage, Flatpak, tarball or AUR). For playback issues, the file's container and codecs (from VLC's or mpv's media info) helps a lot.
