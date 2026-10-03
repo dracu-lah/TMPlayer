@@ -1033,6 +1033,174 @@ summary:hover { color: var(--on-surface); }
 .prev-assets { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 0; padding: 0; list-style: none; }
 .prev-assets a { font-size: 0.88rem; }
 
+/* ---------- Platforms ----------
+
+   The download page lists every system the release has files for, one card each, in a fixed
+   order that works with scripting off. app.js then moves the visitor's own system to the top,
+   marks it, and colours its first-choice row the way the single universal APK used to be. */
+
+/* A skeleton waits on a script; without one it would shimmer for ever. */
+html:not(.js) .js-only { display: none; }
+
+.release-strip { padding: clamp(18px, 2.6vw, 26px) clamp(22px, 3.5vw, 32px); }
+.release-strip .release-head { padding-bottom: 0; }
+
+.platforms { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; margin-top: 20px; }
+
+.platform {
+  position: relative;
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-xl);
+  padding: clamp(16px, 3.5vw, 34px);
+  scroll-margin-top: 96px;
+  min-width: 0;
+}
+.platform.is-yours { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+
+.platform-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.platform-title { min-width: 0; flex: 1 1 14rem; }
+.platform-title h3 {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.024em;
+}
+.platform-req { margin: 2px 0 0; color: var(--on-surface-variant); font-size: 0.92rem; }
+
+.platform .abi-list { margin-top: 20px; grid-template-columns: minmax(0, 1fr); }
+.platform .abi { min-width: 0; }
+.platform .abi { background: var(--surface-container-low); }
+.platform .abi:hover { background: var(--surface-container); }
+.platform .abi.pick { background: var(--primary-container); }
+.platform .abi-text { flex: 1 1 18rem; max-width: 100%; }
+@media (max-width: 560px) {
+  .platform .abi { padding: 16px; }
+  .platform .abi-text { flex-basis: 100%; }
+}
+
+.badge-quiet { background: var(--secondary-container); color: var(--on-secondary-container); }
+.abi.pick .badge-quiet { background: var(--primary); color: var(--on-primary); }
+
+.abi-file {
+  margin: 8px 0 0;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--on-surface-variant);
+  word-break: break-all;
+}
+.abi.pick .abi-file { color: var(--on-primary-container); }
+
+.abi-cmd {
+  margin: 10px 0 0;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  background: var(--surface-container-high);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-s);
+  padding: 8px 12px;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--on-surface);
+  max-width: 100%;
+}
+.abi-cmd code { background: none; border: 0; padding: 0; font-size: inherit; }
+.abi.pick .abi-cmd { background: color-mix(in srgb, var(--surface-container-lowest) 70%, transparent); }
+
+/* A row whose file this release does not carry still links to the release page, quietly. */
+.abi.missing .abi-size { font-style: italic; }
+
+.callout-warn {
+  background: var(--tertiary-container);
+  color: var(--on-tertiary-container);
+  border-color: color-mix(in srgb, var(--on-tertiary-container) 22%, transparent);
+}
+.callout em { font-style: normal; font-weight: 600; }
+
+.platform-foot { margin: 16px 0 0; font-size: 0.92rem; }
+.platform-foot .sep { padding: 0 10px; color: var(--on-surface-variant); }
+
+.platform-jump {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 22px;
+}
+.platform-jump a {
+  padding: 8px 16px;
+  border-radius: var(--shape-full);
+  border: 1px solid var(--outline-variant);
+  background: var(--surface-container-low);
+  color: var(--on-surface);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.platform-jump a:hover { text-decoration: none; border-color: var(--outline); background: var(--surface-container); }
+
+.os-note {
+  margin: 18px auto 0;
+  max-width: var(--measure-tight);
+  padding: 14px 20px;
+  border-radius: var(--shape-l);
+  background: var(--tertiary-container);
+  color: var(--on-tertiary-container);
+  font-size: 0.95rem;
+}
+
+.later {
+  margin-top: 20px;
+  padding: 18px 22px;
+  border: 1px dashed var(--outline);
+  border-radius: var(--shape-l);
+  color: var(--on-surface-variant);
+}
+.later p { margin: 0; font-size: 0.95rem; }
+.later strong { color: var(--on-surface); font-weight: 600; }
+
+/* ---------- Key table ----------
+
+   The desktop player's keyboard, on the features page. A table because it is one: an action and
+   the keys that do it, read across. */
+
+.keys-wrap {
+  overflow-x: auto;
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-xl);
+  padding: 6px clamp(14px, 2.6vw, 26px);
+}
+.keys { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+.keys th, .keys td { text-align: left; padding: 12px 8px; vertical-align: top; }
+.keys thead th {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  color: var(--on-surface-variant);
+  font-weight: 600;
+}
+.keys tbody tr + tr td, .keys tbody tr + tr th { border-top: 1px solid var(--outline-variant); }
+.keys tbody th { font-weight: 500; color: var(--on-surface); width: 46%; }
+.keys td { color: var(--on-surface-variant); }
+kbd {
+  display: inline-block;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  padding: 2px 8px;
+  margin: 2px 2px 2px 0;
+  border-radius: var(--shape-xs);
+  background: var(--surface-container-high);
+  border: 1px solid var(--outline-variant);
+  border-bottom-width: 2px;
+  color: var(--on-surface);
+  white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .keys tbody th { width: auto; }
+  .keys th, .keys td { padding: 10px 4px; }
+}
+
 /* ---------- Screenshots ---------- */
 
 .shots { display: grid; gap: clamp(40px, 6vw, 80px); }
@@ -2224,3 +2392,31 @@ a.card:hover .card-go svg { transform: translateX(4px); }
   .prev-tag:hover { color: var(--primary); }
   .brand:hover { color: var(--on-surface); }
 }
+
+/* ---------- Desktop install ----------
+
+   The Linux formats as a grid of small cards, one command block each, and the shortcut help as
+   panels of prose rather than ticked lists. */
+
+.formats { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 880px) { .formats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.format {
+  min-width: 0;
+  padding: clamp(20px, 3vw, 28px);
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-xl);
+}
+.format h3 { margin: 0 0 14px; font-size: 1.1rem; letter-spacing: -0.016em; }
+.format p { margin: 0; color: var(--on-surface-variant); font-size: 0.94rem; }
+.format .code { margin-bottom: 12px; }
+.format .code:last-child { margin-bottom: 0; }
+.format em { font-style: normal; font-weight: 600; color: var(--on-surface); }
+
+.panel-prose { min-width: 0; }
+.panel-prose h3 { margin-bottom: 16px; }
+.panel-prose p { color: var(--on-surface-variant); margin: 0 0 0.9rem; font-size: 0.98rem; }
+.panel-prose p:last-child { margin-bottom: 0; }
+.panel-prose em { font-style: normal; font-weight: 600; color: var(--on-surface); }
+.panel-wide { margin-top: 16px; }
+@media (min-width: 880px) { .panel-wide { margin-top: 24px; } }

@@ -1,6 +1,13 @@
 /* TMPlayer site: pulls release data from the public GitHub API.
    No auth, no token. Unauthenticated calls are limited to 60 per hour per IP,
-   so every failure path has to end somewhere useful rather than in a spinner. */
+   so every failure path has to end somewhere useful rather than in a spinner.
+
+   Why the API and not a plain link: the release files carry the version in
+   their names (TMPlayer-1.18.0-windows-x64.msi), so GitHub's stable
+   releases/latest/download/<name> form would need a name that never changes.
+   The markup therefore links every row to the releases/latest page, which
+   always works, and this script swaps in the file itself once it has read the
+   release list. */
 (function () {
   'use strict';
 
@@ -8,61 +15,138 @@
   var REPO = 'TMPlayer';
   var API = 'https://api.github.com/repos/' + OWNER + '/' + REPO + '/releases?per_page=10';
   var RELEASES_PAGE = 'https://github.com/' + OWNER + '/' + REPO + '/releases';
+  var LATEST_PAGE = RELEASES_PAGE + '/latest';
   var TIMEOUT_MS = 9000;
 
-  /* The current release is universal. Older split releases remain readable below. */
-  var BUILDS = [
-    {
-      id: 'universal',
-      label: 'Universal APK',
-      note: 'One file for every supported device, television or phone. No chip type to look up.'
-    },
-    {
-      id: 'armeabi-v7a',
-      label: 'armeabi-v7a',
-      note: 'Mi TV Stick, most sticks sold between 2018 and 2021, and older phones. Start here.'
-    },
-    {
-      id: 'arm64-v8a',
-      label: 'arm64-v8a',
-      note: 'Chromecast with Google TV, Nvidia Shield, newer 64-bit boxes, and every current phone.'
-    },
-    {
-      id: 'x86_64',
-      label: 'x86_64',
-      note: 'Emulators and the handful of x86 Android TV boxes.'
-    }
+  /* Every file a release can carry, matched loosely on the end of its name so a
+     version in the middle never matters. The label is what the previous
+     releases list calls it. Older releases had x86_64 APKs, so that stays. */
+  var KINDS = [
+    { id: 'apk-universal', label: 'Universal APK', test: /universal\.apk$/i },
+    { id: 'apk-arm64', label: 'arm64-v8a', test: /arm64-v8a\.apk$/i },
+    { id: 'apk-armv7', label: 'armeabi-v7a', test: /armeabi-v7a\.apk$/i },
+    { id: 'apk-x86_64', label: 'x86_64', test: /x86_64\.apk$/i },
+    { id: 'win-msi', label: 'Windows installer', test: /windows-x64\.msi$/i },
+    { id: 'win-zip', label: 'Windows zip', test: /windows-x64-portable\.zip$/i },
+    { id: 'linux-deb', label: 'deb', test: /_amd64\.deb$/i },
+    { id: 'linux-rpm', label: 'rpm', test: /\.x86_64\.rpm$/i },
+    { id: 'linux-appimage', label: 'AppImage', test: /\.appimage$/i },
+    { id: 'linux-flatpak', label: 'Flatpak', test: /\.flatpak$/i },
+    { id: 'linux-tar', label: 'Linux tarball', test: /linux-x64\.tar\.gz$/i },
+    { id: 'sums', label: 'Checksums', test: /^sha256sums/i, quiet: true }
   ];
+
+  var NAMES = {
+    android: 'Android',
+    'android-tv': 'Android TV',
+    windows: 'Windows',
+    linux: 'Linux'
+  };
 
   var el = {
     version: document.getElementById('release-version'),
     date: document.getElementById('release-date'),
     status: document.getElementById('release-status'),
-    abiList: document.getElementById('abi-list'),
-    abiCallout: document.getElementById('abi-callout'),
     notesWrap: document.getElementById('release-notes-wrap'),
     notes: document.getElementById('release-notes'),
     prevWrap: document.getElementById('previous-wrap'),
     prevList: document.getElementById('previous-list'),
     card: document.getElementById('release-card'),
-    skeleton: document.getElementById('abi-skeleton'),
+    platforms: document.getElementById('platforms'),
+    osBtn: document.getElementById('os-download'),
+    osLabel: document.getElementById('os-download-label'),
+    osNote: document.getElementById('os-note'),
     heroBtn: document.getElementById('hero-download'),
     heroLabel: document.getElementById('hero-download-label')
   };
 
-  /* The site is several pages now, and only two of them ask GitHub anything:
-     the home page has the hero button and the download page has the card. A
+  /* The site is several pages, and only two of them ask GitHub anything: the
+     home page has the hero button and the download page has the platforms. A
      page with neither wants no request at all. */
   if (!el.version && !el.heroBtn) { return; }
 
   /* On the page that has one but not the other, every node that is missing
-     becomes a detached stand-in. The rendering below then writes to it exactly
-     as it always did, and nothing it writes reaches the document, which is a
-     good deal cheaper than a guard on every line that touches el. */
+     becomes a detached stand-in, so the rendering below writes to it as usual
+     and nothing it writes reaches the document. */
   for (var key in el) {
     if (Object.prototype.hasOwnProperty.call(el, key) && !el[key]) {
       el[key] = document.createElement('span');
     }
+  }
+
+  /* ---------- which system is this ---------- */
+
+  /* A guess from the user agent, used only to choose an order and a button: every
+     platform stays on the page whatever it says. ?os=windows (or linux, android,
+     android-tv, mac, ios) overrides it, for checking each layout by hand.
+     Android TV browsers rarely say so, so a television mostly reads as a phone,
+     which lands on the same universal APK anyway. */
+  function detectOs() {
+    try {
+      var forced = /[?&]os=([a-z-]+)/.exec(window.location.search);
+      if (forced) { return forced[1]; }
+    } catch (e) {}
+    var nav = window.navigator || {};
+    var ua = String(nav.userAgent || '');
+    var platform = String((nav.userAgentData && nav.userAgentData.platform) || nav.platform || '');
+    if (/Android/i.test(ua)) {
+      return /\b(TV|AFT[A-Z0-9]*|BRAVIA|SmartTV|GoogleTV|Chromecast|AndroidTV)\b/i.test(ua) ? 'android-tv' : 'android';
+    }
+    if (/iPhone|iPad|iPod/i.test(ua)) { return 'ios'; }
+    if (/Win/i.test(platform) || /Windows/i.test(ua)) { return 'windows'; }
+    if (/Mac/i.test(platform) || /Macintosh/i.test(ua)) {
+      // An iPad asks for the desktop site and says Macintosh; it has a touch screen.
+      return nav.maxTouchPoints > 1 ? 'ios' : 'mac';
+    }
+    if (/CrOS/i.test(ua)) { return null; }
+    if (/Linux|X11/i.test(platform + ' ' + ua)) { return 'linux'; }
+    return null;
+  }
+
+  /* Which Linux row the button should point at. Most browsers say only "Linux",
+     and a few still name the distribution; with nothing to go on the AppImage
+     is the one that runs everywhere. */
+  function linuxFlavour() {
+    var ua = String((window.navigator && window.navigator.userAgent) || '');
+    if (/Ubuntu|Debian|Mint|Pop!?_?OS|elementary/i.test(ua)) { return 'deb'; }
+    if (/Fedora|Red Hat|CentOS|Rocky|Alma|SUSE/i.test(ua)) { return 'rpm'; }
+    return 'any';
+  }
+
+  var os = detectOs();
+
+  function primaryRow(osId) {
+    var card = document.getElementById(osId);
+    if (!card || !card.querySelector) { return null; }
+    if (osId === 'linux') {
+      var flavour = card.querySelector('[data-distro="' + linuxFlavour() + '"]');
+      if (flavour) { return flavour; }
+    }
+    return card.querySelector('[data-primary]');
+  }
+
+  /* The visitor's platform goes first and gets the filled button. Done before
+     the request, so the page is in its final order while GitHub is answering. */
+  function arrange() {
+    if (!document.getElementById('platforms')) { return; }
+    if (os === 'mac' || os === 'ios') {
+      el.osNote.textContent = os === 'mac'
+        ? 'There is no macOS version yet: it is coming later. Everything below is for Android, Windows and Linux.'
+        : 'There is no iPhone or iPad version. Everything below is for Android, Windows and Linux.';
+      el.osNote.hidden = false;
+      return;
+    }
+    var card = os && document.getElementById(os);
+    if (!card || !el.platforms.insertBefore) { return; }
+    el.platforms.insertBefore(card, el.platforms.firstChild);
+    card.className += ' is-yours';
+    var badge = card.querySelector('.platform-yours');
+    if (badge) { badge.hidden = false; }
+    var row = primaryRow(os);
+    if (row) { row.className += ' pick'; }
+    el.osBtn.href = '#' + os;
+    el.osLabel.textContent = 'Download for ' + NAMES[os];
+    el.osBtn.hidden = false;
   }
 
   /* ---------- small helpers ---------- */
@@ -88,18 +172,12 @@
     return mb.toFixed(1) + ' MB';
   }
 
-  /* GitHub counts every fetch of a release asset. For a sideloaded app that is
-     the only install figure that exists, so it goes on the page rather than in
-     a dashboard: it is public data either way. */
+  /* GitHub counts every fetch of a release asset. For an app outside any store
+     that is the only install figure that exists, so it goes on the page rather
+     than in a dashboard: it is public data either way. */
   function formatCount(n) {
     if (typeof n !== 'number' || !isFinite(n) || n < 0) { return ''; }
     return n.toLocaleString('en-GB') + (n === 1 ? ' download' : ' downloads');
-  }
-
-  function releaseDownloads(release) {
-    return apkAssets(release).reduce(function (total, asset) {
-      return total + (asset.download_count || 0);
-    }, 0);
   }
 
   function formatDate(iso) {
@@ -119,53 +197,41 @@
     while (node.firstChild) { node.removeChild(node.firstChild); }
   }
 
-  function downloadIcon() {
-    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('width', '15');
-    svg.setAttribute('height', '15');
-    svg.setAttribute('aria-hidden', 'true');
-    svg.setAttribute('focusable', 'false');
-    var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('fill', 'currentColor');
-    path.setAttribute('d', 'M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z');
-    svg.appendChild(path);
-    return svg;
-  }
-
-  /* Assets are named TMPlayer-<version>-<build>.apk, but match loosely so a
-     rename upstream does not silently empty this list. */
-  function findApk(release, build) {
-    var assets = (release && release.assets) || [];
-    for (var i = 0; i < assets.length; i++) {
-      var name = String(assets[i].name || '').toLowerCase();
-      if (name.slice(-4) === '.apk' && name.indexOf(build) !== -1) {
-        return assets[i];
-      }
+  function kindOf(asset) {
+    var name = String((asset && asset.name) || '');
+    for (var i = 0; i < KINDS.length; i++) {
+      if (KINDS[i].test.test(name)) { return KINDS[i]; }
     }
     return null;
   }
 
-  function apkAssets(release) {
+  function findAsset(release, kindId) {
+    var assets = (release && release.assets) || [];
+    for (var i = 0; i < assets.length; i++) {
+      var kind = kindOf(assets[i]);
+      if (kind && kind.id === kindId) { return assets[i]; }
+    }
+    return null;
+  }
+
+  /* The files a person installs: APKs and desktop packages, not the checksums,
+     the source archive or the R8 mapping. */
+  function appAssets(release) {
     return ((release && release.assets) || []).filter(function (a) {
-      return String(a.name || '').toLowerCase().slice(-4) === '.apk';
+      var kind = kindOf(a);
+      return kind && !kind.quiet;
     });
   }
 
-  function assetLabel(asset) {
-    var name = String((asset && asset.name) || '').toLowerCase();
-    for (var i = 0; i < BUILDS.length; i++) {
-      if (name.indexOf(BUILDS[i].id) !== -1) { return BUILDS[i].label; }
-    }
-    return asset.name;
+  function releaseDownloads(release) {
+    return appAssets(release).reduce(function (total, asset) {
+      return total + (asset.download_count || 0);
+    }, 0);
   }
 
   /* ---------- rendering ---------- */
 
-  /* The card stops pretending. Called on every path out of the fetch, including the ones that
-     fail, because a skeleton left behind after an error is a page that never finished loading. */
   function settled() {
-    el.skeleton.hidden = true;
     if (el.card && el.card.removeAttribute) { el.card.removeAttribute('aria-busy'); }
   }
 
@@ -185,6 +251,83 @@
     });
   }
 
+  /* Each row in the markup names the kind of file it offers. It gets the file's
+     own link, size, count and name; a kind the release lacks keeps its link to
+     the release page and says so. */
+  function fillRows(release, tag) {
+    var rows = document.querySelectorAll('[data-asset]');
+    Array.prototype.forEach.call(rows, function (row) {
+      var asset = findAsset(release, row.getAttribute('data-asset'));
+      var dl = row.querySelector('[data-dl]');
+      var size = row.querySelector('[data-size]');
+      var files = row.querySelectorAll('[data-file]');
+      if (!asset) {
+        row.className += ' missing';
+        if (size) { size.textContent = 'Not in ' + tag; }
+        if (dl) {
+          dl.href = release.html_url || LATEST_PAGE;
+          var label = dl.querySelector('span');
+          if (label) { label.textContent = 'On GitHub'; }
+        }
+        return;
+      }
+      if (dl) {
+        dl.href = asset.browser_download_url;
+        dl.setAttribute('aria-label', 'Download ' + asset.name);
+      }
+      if (size) {
+        var bits = [formatSize(asset.size)];
+        if (asset.download_count) { bits.push(formatCount(asset.download_count)); }
+        size.textContent = bits.filter(Boolean).join(', ');
+      }
+      Array.prototype.forEach.call(files, function (f) { f.textContent = asset.name; });
+    });
+
+    var sums = document.querySelectorAll('[data-asset-link]');
+    Array.prototype.forEach.call(sums, function (a) {
+      var asset = findAsset(release, a.getAttribute('data-asset-link'));
+      if (!asset) { return; }
+      a.href = asset.browser_download_url;
+      var f = a.querySelector('[data-file]');
+      if (f) { f.textContent = asset.name; }
+    });
+  }
+
+  /* The filled button on the download page and the hero on the home page both
+     point at the visitor's first-choice file, when this release has it. */
+  function fillButtons(release, tag) {
+    var row = os && NAMES[os] ? primaryRow(os) : null;
+    var kindId = row ? row.getAttribute('data-asset') : null;
+
+    // The home page has no rows to read, so it carries the same choice here.
+    if (!kindId && os && NAMES[os]) {
+      kindId = {
+        android: 'apk-universal',
+        'android-tv': 'apk-universal',
+        windows: 'win-msi',
+        linux: { deb: 'linux-deb', rpm: 'linux-rpm', any: 'linux-appimage' }[linuxFlavour()]
+      }[os];
+    }
+
+    var asset = kindId ? findAsset(release, kindId) : null;
+    if (asset) {
+      el.osBtn.href = asset.browser_download_url;
+      el.heroBtn.href = asset.browser_download_url;
+      var what = kindOf(asset).label;
+      el.heroLabel.textContent = 'Download ' + tag + ' for ' + NAMES[os];
+      el.osLabel.textContent = 'Download ' + tag + ' for ' + NAMES[os];
+      el.osBtn.title = asset.name;
+      el.heroBtn.title = asset.name + ' (' + what + ')';
+      return;
+    }
+
+    // No guess, or a guess this release has no file for: the download page.
+    el.heroBtn.href = '/download/';
+    el.heroLabel.textContent = os === 'mac' || os === 'ios'
+      ? 'Download ' + tag + ' for Android, Windows or Linux'
+      : 'Download ' + tag;
+  }
+
   function renderLatest(release) {
     settled();
     var tag = release.tag_name || release.name || 'Latest';
@@ -193,86 +336,17 @@
     var total = releaseDownloads(release);
     el.date.textContent = total ? when + ', ' + formatCount(total) : when;
 
-    var found = apkAssets(release);
-    if (found.length === 0) {
+    if (appAssets(release).length === 0) {
       showStatus('error', [
-        { text: 'This release has no APK attached yet. The build may still be running.' },
+        { text: 'This release has no files attached yet. The build may still be running.' },
         { link: { href: release.html_url || RELEASES_PAGE, text: 'Open ' + tag + ' on GitHub' } }
       ]);
-      return;
+    } else {
+      el.status.hidden = true;
     }
 
-    el.status.hidden = true;
-    clear(el.abiList);
-
-    var universal = findApk(release, 'universal');
-    var builds = universal ? [BUILDS[0]] : BUILDS.slice(1);
-    var primary = universal || findApk(release, 'armeabi-v7a') || found[0];
-
-    builds.forEach(function (build) {
-      var asset = findApk(release, build.id);
-      if (!asset) { return; }
-      var recommended = asset === primary;
-
-      var li = make('li', 'abi' + (recommended ? ' pick' : ''));
-
-      var text = make('div', 'abi-text');
-      var name = make('p', 'abi-name');
-      name.appendChild(document.createTextNode(build.label));
-      if (recommended) {
-        name.appendChild(make('span', 'badge', universal ? 'One file' : 'Most TV sticks'));
-      }
-      text.appendChild(name);
-      text.appendChild(make('p', 'abi-note', build.note));
-      li.appendChild(text);
-
-      var get = make('div', 'abi-get');
-      get.appendChild(make('span', 'abi-size', formatSize(asset.size)));
-      if (asset.download_count) {
-        get.appendChild(make('span', 'abi-size', formatCount(asset.download_count)));
-      }
-      var a = link(asset.browser_download_url, 'dl');
-      a.appendChild(downloadIcon());
-      a.appendChild(make('span', null, 'Download'));
-      a.setAttribute('aria-label', 'Download ' + asset.name);
-      get.appendChild(a);
-      li.appendChild(get);
-
-      el.abiList.appendChild(li);
-
-      if (recommended && el.heroBtn) {
-        el.heroBtn.href = asset.browser_download_url;
-        el.heroLabel.textContent = universal
-          ? 'Download ' + tag + ' universal APK'
-          : 'Download ' + tag + ' for armeabi-v7a';
-      }
-    });
-
-    /* No known build matched: fall back to whatever APK is attached. */
-    if (!el.abiList.firstChild) {
-      found.forEach(function (asset) {
-        var li = make('li', 'abi');
-        var text = make('div', 'abi-text');
-        text.appendChild(make('p', 'abi-name', asset.name));
-        li.appendChild(text);
-        var get = make('div', 'abi-get');
-        get.appendChild(make('span', 'abi-size', formatSize(asset.size)));
-        var a = link(asset.browser_download_url, 'dl');
-        a.appendChild(downloadIcon());
-        a.appendChild(make('span', null, 'Download'));
-        get.appendChild(a);
-        li.appendChild(get);
-        el.abiList.appendChild(li);
-
-        if (asset === primary && el.heroBtn) {
-          el.heroBtn.href = asset.browser_download_url;
-          el.heroLabel.textContent = 'Download ' + tag;
-        }
-      });
-    }
-
-    el.abiList.hidden = false;
-    el.abiCallout.hidden = !universal;
+    fillRows(release, tag);
+    fillButtons(release, tag);
 
     /* Release notes are untrusted text from the API. textContent only. */
     var body = (release.body || '').trim();
@@ -290,20 +364,18 @@
       var li = make('li', 'prev-item');
 
       var head = make('div', 'prev-head');
-      var tagLink = link(release.html_url || RELEASES_PAGE, 'prev-tag', release.tag_name || release.name || 'Release');
-      head.appendChild(tagLink);
+      head.appendChild(link(release.html_url || RELEASES_PAGE, 'prev-tag', release.tag_name || release.name || 'Release'));
       var when = formatDate(release.published_at || release.created_at);
       var total = releaseDownloads(release);
       head.appendChild(make('span', 'prev-date', total ? when + ', ' + formatCount(total) : when));
       li.appendChild(head);
 
-      var assets = apkAssets(release);
+      var assets = appAssets(release);
       if (assets.length) {
         var list = make('ul', 'prev-assets');
         assets.forEach(function (asset) {
           var item = make('li');
-          var label = assetLabel(asset);
-          var a = link(asset.browser_download_url, null, label);
+          var a = link(asset.browser_download_url, null, kindOf(asset).label);
           a.setAttribute('aria-label', 'Download ' + asset.name);
           item.appendChild(a);
           list.appendChild(item);
@@ -321,38 +393,30 @@
     settled();
     el.version.textContent = 'Unavailable';
     el.date.textContent = '';
-    el.abiList.hidden = true;
-    el.abiCallout.hidden = true;
 
     showStatus('error', [
       { text: reason },
       {
-        text: 'The downloads are still there. ',
-        link: { href: RELEASES_PAGE, text: 'Open the releases page on GitHub' },
-        after: ' and download the universal APK.'
+        text: 'The downloads are still there: every button below opens ',
+        link: { href: LATEST_PAGE, text: 'the latest release on GitHub' },
+        after: ', where the files are listed by name.'
       }
     ]);
 
-    if (el.heroBtn) {
-      el.heroBtn.href = RELEASES_PAGE;
-      el.heroLabel.textContent = 'Get the APK from GitHub';
-    }
+    el.heroBtn.href = '/download/';
+    el.heroLabel.textContent = 'Go to the downloads';
   }
 
   function noReleases() {
     settled();
     el.version.textContent = 'Not released yet';
     el.date.textContent = '';
-    el.abiList.hidden = true;
-    el.abiCallout.hidden = true;
     showStatus('error', [
       { text: 'No release has been published yet. You can still build the app from source.' },
       { link: { href: 'https://github.com/' + OWNER + '/' + REPO, text: 'Read the build instructions on GitHub' } }
     ]);
-    if (el.heroBtn) {
-      el.heroBtn.href = 'https://github.com/' + OWNER + '/' + REPO;
-      el.heroLabel.textContent = 'View the project on GitHub';
-    }
+    el.heroBtn.href = 'https://github.com/' + OWNER + '/' + REPO;
+    el.heroLabel.textContent = 'View the project on GitHub';
   }
 
   /* ---------- fetch ---------- */
@@ -413,6 +477,7 @@
     });
   }
 
+  arrange();
   load();
 })();
 
