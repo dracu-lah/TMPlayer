@@ -71,6 +71,17 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
 }
 
+// The player on its own, over a file on disk, for working on it without a Telegram account:
+// ./gradlew :desktop:runPlayerDev --args="--file /path/to/clip.mkv"
+tasks.register<JavaExec>("runPlayerDev") {
+    group = "application"
+    description = "Plays a local video through the desktop PlayerScreen (pass --args=\"--file <path>\")."
+    mainClass.set("com.tmplayer.desktop.player.DevPlayerMainKt")
+    classpath = project.extensions.getByType<JavaPluginExtension>().sourceSets["main"].runtimeClasspath
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
+    jvmArgs("-Dsun.java2d.uiScale.enabled=true")
+}
+
 compose.desktop {
     application {
         mainClass = "com.tmplayer.desktop.MainKt"
