@@ -29,7 +29,7 @@ val POSTER_STEPS = listOf(160.dp, 208.dp, 264.dp, 320.dp)
 enum class Destination(val label: String) {
     Chats("Chats"),
     Favourites("Favourites"),
-    Continue("Continue watching"),
+    Continue("Continue"),
     Downloads("Downloads"),
     Settings("Settings"),
 }

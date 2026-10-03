@@ -207,7 +207,7 @@ fun ContinuePage(state: ShellState) {
     val records by state.settings.continueWatching.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
-        PageHeader("Continue watching", "Pick up where you left off", actions = { PosterSizeStep(state) })
+        PageHeader("Continue", "Pick up where you left off", actions = { PosterSizeStep(state) })
         val list = records
         when {
             list == null -> Centred { CircularProgressIndicator() }
