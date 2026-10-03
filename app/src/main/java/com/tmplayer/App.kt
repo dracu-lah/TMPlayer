@@ -1,12 +1,17 @@
 package com.tmplayer
 
 import android.app.Application
+import com.tmplayer.data.AndroidLogSink
 import com.tmplayer.data.CrashReports
 import com.tmplayer.data.NetworkMonitor
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
+import com.tmplayer.data.start
 import com.tmplayer.data.Thumbnails
+import com.tmplayer.data.Updates
+import com.tmplayer.data.configureForAndroid
 import com.tmplayer.data.WatchCache
+import com.tmplayer.platform.Logger
 import com.tmplayer.player.PlayerActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +23,9 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // The shared code logs through a facade; on Android it goes to logcat as it always has.
+        Logger.sink = AndroidLogSink
+        Updates.configureForAndroid()
         // The isolated screenshot fixture must never open TDLib or touch a Telegram account.
         // BuildConfig is variant-specific, and the promo package is never part of a release APK.
         if (BuildConfig.APPLICATION_ID.endsWith(".promo")) return

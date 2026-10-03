@@ -30,7 +30,8 @@ that gets abused is acted on by Telegram, and it traces back to whoever register
 ## The commands
 
 ```bash
-./gradlew test              # unit tests
+./gradlew :core:jvmTest     # tests of the shared core, on a plain JVM
+./gradlew test              # the Android app's own unit tests
 ./gradlew assembleDebug     # one debug APK, every architecture, emulator included
 ./gradlew assembleRelease   # signed release, needs keystore.properties
 ```
@@ -53,9 +54,13 @@ These version constraints are not free choices, and changing them breaks the bui
   warning about 37; it builds and tests cleanly. `targetSdk` deliberately stays at 35.
 - **media3 and NextLib versions are coupled**: `nextlib-media3ext` is published as
   `<media3-version>-<nextlib-version>`, so bumping one means bumping both to a pair that exists.
-- **`org.json` is a test-only dependency and must stay that way.** Android already ships
-  `org.json` at runtime, but the `android.jar` used to compile unit tests stubs every method to
-  throw. Promoting it to `implementation` would ship a second copy of a library the platform
-  already provides.
+- **`org.json` belongs to `:core`'s jvm target only and must stay that way.** Android already
+  ships `org.json` at runtime, and the Android side of `:core` compiles against that copy. Adding
+  it to `commonMain` or to `:app` would ship a second copy of a library the platform already
+  provides.
+- **`:core` is Kotlin Multiplatform with two targets, android and jvm,** and nothing else. A
+  source set shared only by JVM targets may use the JDK, so its `commonMain` is ordinary JVM
+  Kotlin. It applies the Compose compiler plugin without drawing anything: that is what records
+  its models as stable for the app's screens, as they were before they moved.
 
 Cutting a release is a separate topic: see [RELEASING.md](RELEASING.md).

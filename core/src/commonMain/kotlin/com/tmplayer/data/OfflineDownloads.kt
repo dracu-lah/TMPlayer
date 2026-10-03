@@ -1,6 +1,6 @@
 package com.tmplayer.data
 
-import android.content.Context
+import com.tmplayer.platform.Logger
 import com.tmplayer.player.StreamStats
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,9 +15,11 @@ import kotlinx.coroutines.flow.update
  * one at a time: bandwidth divided three ways finishes all three late rather than the first early.
  * That queue is the state here, and the Downloads screen and the notification both draw it.
  *
- * [DownloadService] mirrors the unfinished part to the preference store as it changes, so a crash
- * comes back to the same list. [restore] reads it back paused, so a killed process does not start
- * pulling a gigabyte again with nobody near the phone.
+ * The fetching itself belongs to the platform, behind a [DownloadRunner]: on Android a foreground
+ * service, on the desktop a coroutine in the app process. The runner mirrors the unfinished part to
+ * the preference store as it changes, so a crash comes back to the same list. [restore] reads it
+ * back paused, so a killed process does not start pulling a gigabyte again with nobody near the
+ * phone.
  */
 object OfflineDownloads {
 
@@ -112,22 +114,19 @@ object OfflineDownloads {
      * Safe to call twice: the service checks its own queue, so a second press on a row that is
      * already coming down does nothing rather than starting a second fetch of the same bytes.
      */
-    fun start(context: Context, item: MediaItem, chatTitle: String) {
-        start(context, DownloadRequest.from(item, chatTitle))
+    fun start(runner: DownloadRunner, item: MediaItem, chatTitle: String) {
+        start(runner, DownloadRequest.from(item, chatTitle))
     }
 
-    fun start(context: Context, request: DownloadRequest) {
-        // A foreground service, so it keeps going with the app closed. Android requires the
-        // notification within a few seconds of this call, which the service posts first thing.
-        //
+    fun start(runner: DownloadRunner, request: DownloadRequest) {
         // Guarded, because from Android 12 a foreground service may not be started while the app
         // is in the background, and this is reachable from one: a screen that was left open while
         // the phone went to sleep still has a Resume button on it. The throw is the system saying
         // no, not the app being broken, and taking the process down over it would lose the queue.
         runCatching {
-            context.startForegroundService(request.intent(context, DownloadService.ACTION_DOWNLOAD))
+            runner.download(request)
         }.onFailure {
-            android.util.Log.w(TAG, "Could not start the download service", it)
+            Logger.w(TAG, "Could not start the download service", it)
             refused(request)
         }
     }
@@ -151,18 +150,18 @@ object OfflineDownloads {
     }
 
     /** The place a new row takes at the end of the list, when the service is not there to say. */
-    internal fun nextOrder(): Long = (_active.value.values.maxOfOrNull { it.order } ?: -1L) + 1L
+    fun nextOrder(): Long = (_active.value.values.maxOfOrNull { it.order } ?: -1L) + 1L
 
     /** Stops one download, or every one of them, and keeps the bytes that already landed. */
-    fun cancel(context: Context, fileId: Int) = send(context, DownloadService.ACTION_CANCEL, fileId)
+    fun cancel(runner: DownloadRunner, fileId: Int) = send(runner, Action.Cancel, fileId)
 
     /** Holds a download where it is. The partial file stays, so resuming is not starting again. */
-    fun pause(context: Context, fileId: Int) = send(context, DownloadService.ACTION_PAUSE, fileId)
+    fun pause(runner: DownloadRunner, fileId: Int) = send(runner, Action.Pause, fileId)
 
     /** Puts a paused or failed download back on the end of the queue. */
-    fun resume(context: Context, fileId: Int) {
+    fun resume(runner: DownloadRunner, fileId: Int) {
         val request = _active.value[fileId]?.request ?: return
-        start(context, request)
+        start(runner, request)
     }
 
     /**
@@ -171,24 +170,24 @@ object OfflineDownloads {
      * The notification has room for one button, and with several videos held the honest thing for
      * it to do is the same as its "Cancel all": act on all of them rather than pick one silently.
      */
-    fun pauseAll(context: Context) = send(context, DownloadService.ACTION_PAUSE, EVERYTHING)
+    fun pauseAll(runner: DownloadRunner) = send(runner, Action.Pause, EVERYTHING)
 
-    fun resumeAll(context: Context) {
+    fun resumeAll(runner: DownloadRunner) {
         val held = _active.value.values.filter { !it.busy }.sortedBy { it.order }
         if (held.isEmpty()) return
-        held.forEach { start(context, it.request) }
+        held.forEach { start(runner, it.request) }
     }
 
-    private fun send(context: Context, action: String, fileId: Int) {
-        val intent = android.content.Intent(context, DownloadService::class.java).apply {
-            this.action = action
-            putExtra(DownloadService.EXTRA_FILE_ID, fileId)
-        }
-        // Started in the foreground form as well. Pausing the only running download leaves the
-        // service alive holding paused rows, and a plain startService onto a process that Android
-        // had already stopped throws rather than starting it.
-        runCatching { context.startForegroundService(intent) }.onFailure {
-            android.util.Log.w(TAG, "Could not reach the download service for $action", it)
+    private enum class Action { Cancel, Pause }
+
+    private fun send(runner: DownloadRunner, action: Action, fileId: Int) {
+        runCatching {
+            when (action) {
+                Action.Cancel -> runner.cancel(fileId)
+                Action.Pause -> runner.pause(fileId)
+            }
+        }.onFailure {
+            Logger.w(TAG, "Could not reach the download service for $action", it)
             // Android would not start the service, so nobody is going to carry the press out. Both
             // of these are the viewer taking something away, and a Cancel or a Pause that visibly
             // does nothing is worse than one carried out here: the fetching has stopped either way,
@@ -196,9 +195,8 @@ object OfflineDownloads {
             val touched =
                 if (fileId == EVERYTHING) _active.value.keys.toList() else listOf(fileId)
             when (action) {
-                DownloadService.ACTION_CANCEL -> touched.forEach(::forget)
-                DownloadService.ACTION_PAUSE -> touched.forEach { stage(it, Stage.Paused) }
-                else -> Unit
+                Action.Cancel -> touched.forEach(::forget)
+                Action.Pause -> touched.forEach { stage(it, Stage.Paused) }
             }
         }
     }
@@ -211,9 +209,9 @@ object OfflineDownloads {
      * on. Restoring them as running would mean a process the system killed for using too much
      * silently starting to use it again, with the viewer nowhere near the phone.
      */
-    suspend fun restore(context: Context) {
+    suspend fun restore(settings: SettingsStore) {
         if (_active.value.isNotEmpty()) return
-        val stored = runCatching { SettingsStore(context).downloadQueueNow() }.getOrDefault(emptyList())
+        val stored = runCatching { settings.downloadQueueNow() }.getOrDefault(emptyList())
         if (stored.isEmpty()) return
         var order = 0L
         val restored = stored.mapNotNull { request ->
@@ -232,10 +230,10 @@ object OfflineDownloads {
             )
         }.toMap()
         _active.value = restored
-        runCatching { SettingsStore(context).saveDownloadQueue(restored.values.map { it.request }) }
+        runCatching { settings.saveDownloadQueue(restored.values.map { it.request }) }
     }
 
-    // ---- called by the service --------------------------------------------------------------
+    // ---- called by the runner ---------------------------------------------------------------
 
     /**
      * All of these go through [MutableStateFlow.update] rather than assigning `.value`.
@@ -250,12 +248,12 @@ object OfflineDownloads {
      * [stage] and [sample] read an entry and write a copy of it, so they take the whole
      * read-modify-write inside one `update` block rather than reading first and calling [note].
      */
-    internal fun note(progress: Progress) {
+    fun note(progress: Progress) {
         _active.update { it + (progress.fileId to progress) }
     }
 
     /** Moves one entry to another stage, leaving its figures alone. Absent ids are ignored. */
-    internal fun stage(fileId: Int, stage: Stage, failure: String? = null) {
+    fun stage(fileId: Int, stage: Stage, failure: String? = null) {
         _active.update { map ->
             val previous = map[fileId] ?: return@update map
             map + (
@@ -281,7 +279,7 @@ object OfflineDownloads {
      * bytes at all is still fed in, so a stalled download falls to zero rather than freezing at
      * whatever it last managed.
      */
-    internal fun sample(fileId: Int, downloadedBytes: Long, nowMs: Long = System.currentTimeMillis()) {
+    fun sample(fileId: Int, downloadedBytes: Long, nowMs: Long = System.currentTimeMillis()) {
         _active.update { map ->
         val previous = map[fileId] ?: return@update map
         // A tick that arrives after the viewer pressed pause must not put the row back to running,
@@ -311,12 +309,12 @@ object OfflineDownloads {
         }
     }
 
-    internal fun forget(fileId: Int) {
+    fun forget(fileId: Int) {
         _active.update { it - fileId }
     }
 
     /** The file id that means "all of them", since no real file has it. */
-    private const val EVERYTHING = 0
+    const val EVERYTHING = 0
 
     private const val TAG = "OfflineDownloads"
 
@@ -334,4 +332,22 @@ object OfflineDownloads {
 
     /** How much of each new reading to believe: low enough that one stalled second does not show. */
     private const val SMOOTHING = 0.3
+}
+
+/**
+ * Whatever actually fetches the videos [OfflineDownloads] keeps track of.
+ *
+ * Each call may throw when the platform refuses to carry it out (Android will not start a
+ * foreground service from the background, for one); [OfflineDownloads] catches that and shows the
+ * row as failed or does the cancel or pause itself, so a press is never silently lost.
+ */
+interface DownloadRunner {
+    /** Queues [request]. Asking for a file that is already queued or running does nothing. */
+    fun download(request: DownloadRequest)
+
+    /** Stops [fileId], or everything when it is [OfflineDownloads.EVERYTHING], keeping the bytes. */
+    fun cancel(fileId: Int)
+
+    /** Holds [fileId], or everything when it is [OfflineDownloads.EVERYTHING], where it is. */
+    fun pause(fileId: Int)
 }

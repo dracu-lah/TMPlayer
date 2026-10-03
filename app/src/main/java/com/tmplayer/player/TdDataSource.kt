@@ -7,31 +7,12 @@ import androidx.media3.datasource.BaseDataSource
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DataSourceException
-import com.tmplayer.data.Failures
-import com.tmplayer.data.LocalFileAvailability
-import com.tmplayer.data.LocalFilePolicy
-import com.tmplayer.data.errorMessage
-import com.tmplayer.data.valueOrNull
 import dev.g000sha256.tdl.TdlClient
-import dev.g000sha256.tdl.dto.File as TdFile
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.withTimeoutOrNull
-import java.io.EOFException
-import java.io.File
 import java.io.IOException
 import java.io.InterruptedIOException
-import java.io.RandomAccessFile
 
 /** `tdfile://<fileId>`, the only URI scheme [TdDataSource] understands. */
 fun tdFileUri(fileId: Int): Uri = Uri.parse("tdfile://$fileId")
@@ -39,92 +20,35 @@ fun tdFileUri(fileId: Int): Uri = Uri.parse("tdfile://$fileId")
 /**
  * Streams a Telegram file straight into the player without downloading it first.
  *
- * TDLib is asked to fill the file starting at whatever byte the player wants; reads then come
- * off the partial file on disk as soon as the bytes land. Seeking works because Media3 re-opens
- * the source at a new offset and this class simply points TDLib at that offset instead:
- * no full download, no waiting for the end of a 12 GB remux to watch minute 90.
- *
- * Written against TDLib's public file API only.
+ * The Media3 shell around [TdByteWindow], which does the streaming: this turns Media3's open, read
+ * and close into calls on it, blocks Media3's loading thread while a read waits for its bytes,
+ * and reports the end of input the way Media3 expects.
  */
 @UnstableApi
-class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
+class TdDataSource(td: TdlClient) : BaseDataSource(true) {
 
-    private var fileId = -1
+    private val bytes = TdByteWindow(td)
+
     private var uri: Uri? = null
-    private var handle: RandomAccessFile? = null
-    private var localPath: String? = null
     private var position = 0L
     private var bytesRemaining = 0L
     private var opened = false
-    private var size = 0L
-
-    /**
-     * The stretch of the file a real [TdFile] last confirmed was on disk, so reads inside it need
-     * no call to TDLib at all.
-     *
-     * Media3's extractors issue a great many small reads, and asking TDLib about the file on each
-     * one would put a request round-trip in front of every byte.
-     *
-     * Held as one value rather than a pair of fields because both ends have to move together: a
-     * reader that caught a new start against an old end would be trusting a window that never
-     * existed.
-     */
-    @Volatile
-    private var window = Window.EMPTY
-
-    @Volatile
-    private var completed = false
-
-    /** Whether TDLib says it is currently filling the file, as of the last update seen. */
-    @Volatile
-    private var downloading = false
-
-    /** Every byte of the file on disk, wherever it is, as of the last update seen. */
-    @Volatile
-    private var downloadedTotal = 0L
-
-    /**
-     * One subscription to `updateFile` for the whole of an open source, rather than a fresh one
-     * per slow read.
-     *
-     * The collector runs from [open] to [close] and keeps [window] warm on its own, so a read that
-     * has to wait is woken by the update itself and reads the answer out of memory instead of
-     * paying a `getFile` round trip per second of waiting.
-     */
-    private var updates: Job? = null
-    private var scope: CoroutineScope? = null
-
-    /**
-     * Bumped once per absorbed update, so a waiting read can tell "TDLib said something" from
-     * "the poll timed out" without comparing windows itself.
-     */
-    private val revision = MutableStateFlow(0L)
-
-    /** Bytes `[start, end)` of the file, as TDLib last reported them. */
-    private data class Window(val start: Long, val end: Long) {
-        companion object {
-            val EMPTY = Window(0, 0)
-        }
-    }
 
     override fun getUri(): Uri? = uri
 
     override fun open(dataSpec: DataSpec): Long {
         transferInitializing(dataSpec)
         uri = dataSpec.uri
-        fileId = dataSpec.uri.authority?.toIntOrNull()
+        val fileId = dataSpec.uri.authority?.toIntOrNull()
             ?: dataSpec.uri.lastPathSegment?.toIntOrNull()
             ?: throw IOException("Not a Telegram file URI: ${dataSpec.uri}")
         position = dataSpec.position
 
         // Subscribed before the first getFile, so nothing arriving while it is in flight is
         // missed: an update dropped there is a second of stall for no reason.
-        startWatching()
+        bytes.watch(fileId)
 
-        val file = blocking(OPEN_TIMEOUT_MS) { td.getFile(fileId).valueOrNull }
-            ?: throw IOException("Telegram lost track of file $fileId")
-        size = if (file.size > 0) file.size else file.expectedSize
-        if (size <= 0) throw IOException("Unknown size for file $fileId")
+        val size = blocking(OPEN_TIMEOUT_MS) { bytes.lookUp() }
         if (position > size) throw DataSourceException(C.RESULT_END_OF_INPUT)
 
         bytesRemaining = if (dataSpec.length == C.LENGTH_UNSET.toLong()) {
@@ -133,10 +57,9 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
             minOf(dataSpec.length, size - position)
         }
 
-        absorb(file)
         // A finished file needs nothing from TDLib, not even a download request, which would
         // only re-enter its scheduler for bytes that are already sitting on disk.
-        if (!completed) blocking(OPEN_TIMEOUT_MS) { requestDownloadFrom(position) }
+        if (!bytes.completed) blocking(OPEN_TIMEOUT_MS) { bytes.requestDownloadFrom(position) }
 
         opened = true
         transferStarted(dataSpec)
@@ -148,23 +71,11 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
         if (bytesRemaining == 0L) return C.RESULT_END_OF_INPUT
 
         // Fast path: no coroutine and no TDLib round-trip, which is all but a handful of reads.
-        val available = cachedAvailable(position) ?: blocking(READ_TIMEOUT_MS) { awaitBytesAt(position) }
+        val available = bytes.cachedAvailable(position)
+            ?: blocking(READ_TIMEOUT_MS) { bytes.awaitBytesAt(position) }
         val wanted = minOf(length.toLong(), bytesRemaining, available).toInt()
 
-        val read = synchronized(this) {
-            val file = openHandle()
-            file.seek(position)
-            file.read(buffer, offset, wanted)
-        }
-        if (read <= 0) {
-            // TDLib reported the bytes but the file on disk is shorter: it was trimmed or
-            // re-created underneath us. Drop the cached window too, so the next read goes back
-            // and asks TDLib what is really there instead of trusting a stale boundary.
-            closeHandle()
-            window = Window.EMPTY
-            completed = false
-            throw EOFException("Short read at $position of file $fileId")
-        }
+        val read = bytes.read(position, buffer, offset, wanted)
 
         position += read
         bytesRemaining -= read
@@ -173,224 +84,13 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
     }
 
     override fun close() {
-        stopWatching()
-        closeHandle()
-        // Media3 may reopen this instance at a different offset; nothing learned about the old
-        // window is safe to carry across.
-        window = Window.EMPTY
-        completed = false
+        // Media3 may reopen this instance at a different offset; the window forgets the old one.
+        bytes.close()
         uri = null
         if (opened) {
             opened = false
             transferEnded()
         }
-    }
-
-    /**
-     * How many bytes at [target] are already known-good, or `null` if TDLib has to be asked.
-     *
-     * Never optimistic: it only answers from a window that a real [TdFile] confirmed earlier, and
-     * any doubt returns `null` so the slow path re-checks.
-     *
-     * Both ends of that window matter. TDLib fills one stretch at a time and frees what falls
-     * outside it, but the partial file on disk keeps its length, so a read below the window
-     * succeeds and hands back a hole instead of failing, and the extractor dies on the zeroes.
-     * Seeking forward and then back lands exactly there, so the arithmetic is deferred to
-     * [DownloadWindow] rather than repeated here.
-     */
-    private fun cachedAvailable(target: Long): Long? {
-        if (localPath == null) return null
-        val known = window
-        return DownloadWindow.availableAt(
-            position = target,
-            size = size,
-            downloadOffset = known.start,
-            downloadedPrefixSize = known.end - known.start,
-            completed = completed,
-        ).takeIf { it > 0 }
-    }
-
-    /** Records what a fresh [TdFile] tells us, so later reads can skip the round-trip. */
-    private fun absorb(file: TdFile) {
-        val path = file.local.path
-        val diskFile = path.takeIf { it.isNotBlank() }?.let(::File)
-        val usablePath = path.takeIf { diskFile?.isFile == true }
-        // TDLib moves a file when a download finishes (the partial name is renamed away), so
-        // the handle is dropped on any path change rather than reading a stale inode.
-        synchronized(this) {
-            if (usablePath != localPath) {
-                runCatching { handle?.close() }
-                handle = null
-                localPath = usablePath
-            }
-        }
-        val availability = LocalFilePolicy.evaluate(
-            downloadCompleted = file.local.isDownloadingCompleted,
-            pathPresent = diskFile != null,
-            regularFile = diskFile?.isFile == true,
-            length = diskFile?.length() ?: 0,
-            size = file.size,
-            expectedSize = file.expectedSize,
-        )
-        downloading = file.local.isDownloadingActive
-        downloadedTotal = file.local.downloadedSize
-        if (availability == LocalFileAvailability.Complete) {
-            completed = true
-            window = Window(0, size)
-        } else {
-            completed = false
-            val start = file.local.downloadOffset
-            window = Window(start, start + file.local.downloadedPrefixSize)
-        }
-    }
-
-    /** Starts, or restarts, the one subscription that keeps [window] current. */
-    private fun startWatching() {
-        stopWatching()
-        val watcher = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        scope = watcher
-        val watched = fileId
-        updates = watcher.launch {
-            td.fileUpdates.filter { it.file.id == watched }.collect { update ->
-                absorb(update.file)
-                revision.value += 1
-            }
-        }
-    }
-
-    private fun stopWatching() {
-        updates = null
-        scope?.cancel()
-        scope = null
-    }
-
-    /**
-     * Blocks until at least one byte at [target] is on disk, restarting the download whenever
-     * TDLib's window has drifted away from where the player is reading.
-     *
-     * The collector is doing the listening; this only decides when to give up and when to ask
-     * TDLib for a download that is not happening. A read that outlives its own subscription (the
-     * collector died with the client) still makes progress, because a poll that hears nothing
-     * falls back to `getFile`.
-     */
-    private suspend fun awaitBytesAt(target: Long): Long {
-        // The collector may already have absorbed what this read needs.
-        cachedAvailable(target)?.let { return it }
-
-        val file = td.getFile(fileId).valueOrNull ?: throw IOException("File $fileId disappeared")
-        var available = available(file, target)
-        if (available > 0) return available
-
-        // Wall clock, not a count of turns round the loop: a file updating busily without ever
-        // reaching the byte being read must still get the full stall timeout.
-        val deadline = System.nanoTime() + STALL_TIMEOUT_MS * 1_000_000
-        var nudgeAt = System.nanoTime() + NUDGE_AFTER_MS * 1_000_000
-        var totalAtAsk = downloadedTotal
-        var nudges = 0
-        while (available == 0L) {
-            val known = window
-            // TDLib can take a request, report itself busy, and fill everything but the bytes that
-            // were asked for: seen on the jump to an MKV's index in its last half megabyte, where
-            // tens of megabytes came down elsewhere and the prefix at the offset stayed at zero
-            // until the viewer backed out and opened the video again. That reopen is what this
-            // does, without the viewer: drop TDLib's download and ask afresh, from the byte itself
-            // and then from the start of its megabyte, which is how Telegram hands out parts.
-            // Only when bytes are visibly arriving somewhere else: a slow link bringing nothing at
-            // all is left to the stall timeout, since restarting it every few seconds would only
-            // make it slower.
-            if (
-                downloading &&
-                System.nanoTime() >= nudgeAt &&
-                downloadedTotal - totalAtAsk >= NUDGE_ELSEWHERE_BYTES
-            ) {
-                val from = if (nudges % 2 == 0) target else target - target % NUDGE_ALIGN_BYTES
-                nudges++
-                android.util.Log.i(TAG, "No bytes at $target of file $fileId; asking again from $from ($nudges)")
-                // A download the viewer asked to keep shares this file in TDLib; it is not ours to
-                // cancel, and the fresh request below moves it just the same.
-                if (!com.tmplayer.data.OfflineDownloads.isDownloading(fileId)) {
-                    td.cancelDownloadFile(fileId, onlyIfPending = false)
-                }
-                requestDownloadFrom(from)
-                nudgeAt = System.nanoTime() + NUDGE_AFTER_MS * 1_000_000
-                totalAtAsk = downloadedTotal
-            }
-            if (DownloadWindow.needsRestart(
-                    position = target,
-                    downloadOffset = known.start,
-                    downloadedPrefixSize = known.end - known.start,
-                    active = downloading,
-                    completed = completed,
-                )
-            ) {
-                requestDownloadFrom(target)
-            }
-
-            // updateFile arrives on every few hundred KB, so this normally returns immediately;
-            // the timeout is only there so a silent connection still gets re-poked.
-            val seen = revision.value
-            val heard = withTimeoutOrNull(POLL_INTERVAL_MS) {
-                revision.first { it != seen }
-            } != null
-
-            available = if (heard) {
-                cachedAvailable(target) ?: 0L
-            } else {
-                // Silence. Either nothing is moving, or this source has no collector to hear it,
-                // so the question goes to TDLib directly.
-                val fresh = td.getFile(fileId).valueOrNull
-                    ?: throw IOException("File $fileId disappeared")
-                available(fresh, target)
-            }
-            if (available == 0L && System.nanoTime() >= deadline) {
-                throw IOException("Telegram stopped sending file $fileId at byte $target")
-            }
-        }
-        return available
-    }
-
-    private fun available(file: TdFile, target: Long): Long {
-        absorb(file)
-        if (localPath == null) return 0
-        return DownloadWindow.availableAt(
-            position = target,
-            size = size,
-            downloadOffset = file.local.downloadOffset,
-            downloadedPrefixSize = file.local.downloadedPrefixSize,
-            completed = completed,
-        )
-    }
-
-    /**
-     * `limit = 0` means "keep going to the end of the file", exactly what playback wants.
-     *
-     * The result is checked rather than dropped. A refused request looks exactly like a slow
-     * one from here (no bytes arrive), and swallowing it turns a flood wait or an expired file
-     * reference into a minute of blank screen followed by "Telegram stopped sending", which
-     * says nothing a viewer can act on.
-     */
-    private suspend fun requestDownloadFrom(offset: Long) {
-        val result = td.downloadFile(
-            fileId = fileId,
-            priority = PLAYBACK_PRIORITY,
-            offset = offset,
-            limit = 0,
-            synchronous = false,
-        )
-        val error = result.errorMessage ?: return
-        throw IOException(Failures.humanise(error))
-    }
-
-    /** Call under the instance lock. [awaitBytesAt] has already recorded a usable path. */
-    private fun openHandle(): RandomAccessFile = handle ?: run {
-        val path = localPath ?: throw IOException("No local file for $fileId yet")
-        RandomAccessFile(path, "r").also { handle = it }
-    }
-
-    private fun closeHandle() = synchronized(this) {
-        runCatching { handle?.close() }
-        handle = null
-        localPath = null
     }
 
     /**
@@ -411,26 +111,15 @@ class TdDataSource(private val td: TdlClient) : BaseDataSource(true) {
     }
 
     private companion object {
-        /** 1..32; playback gets the top of the range so thumbnails never starve it. */
-        const val PLAYBACK_PRIORITY = 32
-        const val POLL_INTERVAL_MS = 1_000L
-        const val TAG = "TdDataSource"
-
-        /** How long a busy download may bring nothing at the read position before it is redone. */
-        const val NUDGE_AFTER_MS = 3_000L
-        const val NUDGE_ALIGN_BYTES = 1024L * 1024
-
-        /** What has to arrive elsewhere in the file meanwhile for the wait to count as stuck. */
-        const val NUDGE_ELSEWHERE_BYTES = 2L * 1024 * 1024
-        const val STALL_TIMEOUT_MS = 60_000L
         const val OPEN_TIMEOUT_MS = 120_000L
 
         /**
          * The read's own ceiling, a little above the stall timeout it wraps.
          *
          * The inner wait is the one that decides when a stalled read fails; this is only the
-         * backstop for a wait that never returns at all. Keep it above [STALL_TIMEOUT_MS].
+         * backstop for a wait that never returns at all. Keep it above
+         * [TdByteWindow.STALL_TIMEOUT_MS].
          */
-        const val READ_TIMEOUT_MS = STALL_TIMEOUT_MS + 10_000L
+        const val READ_TIMEOUT_MS = TdByteWindow.STALL_TIMEOUT_MS + 10_000L
     }
 }

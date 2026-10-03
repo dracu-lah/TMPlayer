@@ -142,7 +142,7 @@ private fun mapReportResult(result: ReportSponsoredResult): SponsoredReportOutco
  * A spacing of zero means Telegram wants one card after all ordinary items. Positive spacing is
  * the minimum number of ordinary items between cards; unused sponsor messages are not repeated.
  */
-internal fun <T> placeSponsored(
+fun <T> placeSponsored(
     media: List<T>,
     sponsored: SponsoredBatch?,
 ): List<MediaFeedEntry<T>> {
@@ -169,5 +169,5 @@ sealed interface MediaFeedEntry<out T> {
     data class Sponsored(val item: SponsoredItem) : MediaFeedEntry<Nothing>
 }
 
-internal fun isSponsoredTextFullyVisible(top: Float, bottom: Float, viewportHeight: Float): Boolean =
+fun isSponsoredTextFullyVisible(top: Float, bottom: Float, viewportHeight: Float): Boolean =
     viewportHeight > 0f && top >= 0f && bottom <= viewportHeight && bottom >= top

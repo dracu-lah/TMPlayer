@@ -1,9 +1,9 @@
 package com.tmplayer.data
 
-import android.content.Context
-import android.os.Build
-import android.util.Log
-import com.tmplayer.BuildConfig
+import com.tmplayer.platform.Credentials
+import com.tmplayer.platform.DeviceInfo
+import com.tmplayer.platform.Logger
+import com.tmplayer.platform.Paths
 import dev.g000sha256.tdl.TdlClient
 import dev.g000sha256.tdl.TdlResult
 import dev.g000sha256.tdl.dto.AuthorizationState
@@ -102,11 +102,19 @@ object Td {
     private val _folders = MutableStateFlow<List<ChatFolderSummary>>(emptyList())
     val folders: StateFlow<List<ChatFolderSummary>> = _folders.asStateFlow()
 
-    private lateinit var appContext: Context
+    private lateinit var paths: Paths
+    private lateinit var device: DeviceInfo
+    private lateinit var credentials: Credentials
 
-    fun start(context: Context) {
-        if (::appContext.isInitialized) return
-        appContext = context.applicationContext
+    /**
+     * Starts the client once per process; later calls are ignored. Each app supplies where TDLib
+     * keeps its files, what the device calls itself, and the API credentials it was built with.
+     */
+    fun start(paths: Paths, device: DeviceInfo, credentials: Credentials) {
+        if (::paths.isInitialized) return
+        this.device = device
+        this.credentials = credentials
+        this.paths = paths
         scope.launch { clientLoop() }
     }
 
@@ -183,7 +191,7 @@ object Td {
         if (_auth.value !is AuthState.Failed || step.state !is AuthState.Connecting) {
             _auth.value = step.state
         }
-        Log.i(TAG, "auth: ${state::class.simpleName} -> ${step.state::class.simpleName}")
+        Logger.i(TAG, "auth: ${state::class.simpleName} -> ${step.state::class.simpleName}")
 
         when (step.action) {
             AuthAction.SendParameters -> sendParameters(td)
@@ -289,7 +297,7 @@ object Td {
     }
 
     private suspend fun sendParameters(td: TdlClient) {
-        if (BuildConfig.TG_API_ID == 0) {
+        if (!credentials.present) {
             _auth.value = AuthState.Failed(
                 "No Telegram API credentials in this build. Add TG_API_ID and TG_API_HASH to local.properties and rebuild. See the README.",
             )
@@ -297,19 +305,19 @@ object Td {
         }
         val result = td.setTdlibParameters(
             useTestDc = false,
-            databaseDirectory = File(appContext.filesDir, "tdlib").absolutePath,
-            filesDirectory = File(appContext.filesDir, "tdlib-files").absolutePath,
+            databaseDirectory = paths.databaseDir.absolutePath,
+            filesDirectory = paths.filesDir.absolutePath,
             databaseEncryptionKey = ByteArray(0),
             useFileDatabase = true,
             useChatInfoDatabase = true,
             useMessageDatabase = true,
             useSecretChats = false,
-            apiId = BuildConfig.TG_API_ID,
-            apiHash = BuildConfig.TG_API_HASH,
+            apiId = credentials.apiId,
+            apiHash = credentials.apiHash,
             systemLanguageCode = "en",
-            deviceModel = Build.MODEL ?: "Android TV",
-            systemVersion = Build.VERSION.RELEASE ?: "",
-            applicationVersion = BuildConfig.VERSION_NAME,
+            deviceModel = device.model,
+            systemVersion = device.systemVersion,
+            applicationVersion = device.appVersion,
         )
         if (result is TdlResult.Failure) {
             _auth.value = AuthState.Failed("TDLib rejected its parameters: ${result.message}")
@@ -677,8 +685,8 @@ object Td {
      * What TMPlayer is allowed to keep on disk before the oldest of it starts going, measured
      * against the disk it is actually installed on. See [CacheShelf.ceiling].
      */
-    fun cacheCeilingBytes(): Long = if (::appContext.isInitialized) {
-        CacheShelf.ceiling(DiskSpace.read(appContext).totalBytes)
+    fun cacheCeilingBytes(): Long = if (::paths.isInitialized) {
+        CacheShelf.ceiling(paths.disk().totalBytes)
     } else {
         CacheShelf.MAX_CEILING_BYTES
     }

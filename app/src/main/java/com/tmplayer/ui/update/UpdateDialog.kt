@@ -48,6 +48,9 @@ import androidx.tv.material3.Text
 import com.tmplayer.data.Release
 import com.tmplayer.data.UpdateState
 import com.tmplayer.data.Updates
+import com.tmplayer.data.canInstall
+import com.tmplayer.data.downloadAndInstall
+import com.tmplayer.data.unknownSourcesIntent
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.PhonePad
 import com.tmplayer.ui.components.ignoreStrayRelease
@@ -291,9 +294,10 @@ private fun TouchUpdateDialog(
                 if (downloading != null) {
                     // An unknown length becomes the indeterminate bar rather than an empty
                     // trough, which is what the platform's own control is for.
-                    if (downloading.fraction != null) {
+                    val fraction = downloading.fraction
+                    if (fraction != null) {
                         LinearProgressIndicator(
-                            progress = { downloading.fraction.coerceIn(0f, 1f) },
+                            progress = { fraction.coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxWidth(),
                         )
                     } else {

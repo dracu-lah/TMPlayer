@@ -136,6 +136,8 @@ import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.OfflineDownloads
+import com.tmplayer.data.cancel
+import com.tmplayer.data.start
 import com.tmplayer.data.Td
 import com.tmplayer.data.MediaFeedEntry
 import com.tmplayer.data.MediaMapper

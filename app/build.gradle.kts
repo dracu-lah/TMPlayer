@@ -193,6 +193,11 @@ kotlin {
 }
 
 dependencies {
+    // TDLib, the repositories, settings, the download queue and the streaming window: everything
+    // that is not Android's, shared with the desktop app. It brings tdl-coroutines, coroutines and
+    // DataStore's preferences core with it.
+    implementation(project(":core"))
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.foundation)
@@ -222,13 +227,10 @@ dependencies {
     implementation(libs.androidx.fragment.ktx)
     implementation(libs.nextlib.media3ext)
 
-    implementation(libs.androidx.datastore.preferences)
-
     // Crash reporting, off unless the viewer turns it on in Settings. Nothing here runs at
     // startup: auto-init is switched off in the manifest and CrashReports does the rest.
     implementation(libs.sentry.android.core)
 
     testImplementation(libs.junit)
-    testImplementation(libs.json)
     testImplementation(libs.kotlinx.coroutines.test)
 }

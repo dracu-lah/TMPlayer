@@ -23,8 +23,8 @@ datastore = "1.2.1"
 # umbrella pulls in NDK, fragment, Compose and Room integrations, none of which this needs.
 sentry = "8.16.0"
 junit = "4.13.2"
-# Android ships org.json, but android.jar stubs every method to throw; update-response parsing
-# therefore needs a real implementation on the JVM test classpath only.
+# Android ships org.json in the platform; a plain JVM does not, so `:core`'s jvm target carries
+# this for update-response parsing (and its tests), and the Android build never bundles it.
 json = "20240303"
 
 [libraries]
@@ -35,6 +35,9 @@ androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = 
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+# For `:core`, whose models carry @Immutable and are compiled by the Compose compiler so that
+# :app's screens see them as stable exactly as they did when the classes lived in :app.
+androidx-compose-runtime = { group = "androidx.compose.runtime", name = "runtime" }
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
 # Icons only. The "extended" set is thousands of vectors; core carries the handful used here.
 androidx-compose-material-icons = { group = "androidx.compose.material", name = "material-icons-core" }
@@ -55,9 +58,15 @@ androidx-leanback = { group = "androidx.leanback", name = "leanback", version.re
 androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragment" }
 nextlib-media3ext = { group = "io.github.anilbeesetti", name = "nextlib-media3ext", version.ref = "nextlib" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
+# The multiplatform half of DataStore, which is all `:core` needs: no Context, just a path.
+androidx-datastore-preferences-core = { group = "androidx.datastore", name = "datastore-preferences-core", version.ref = "datastore" }
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 sentry-android-core = { group = "io.sentry", name = "sentry-android-core", version.ref = "sentry" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+# AGP's own plugin for the Android target of a Kotlin Multiplatform library, used by `:core`.
+android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }

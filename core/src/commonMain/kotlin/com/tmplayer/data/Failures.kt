@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import com.tmplayer.platform.Logger
 import java.io.IOException
 
 /**
@@ -52,7 +53,7 @@ object Failures {
                 OFFLINE
 
             else -> {
-                android.util.Log.w(TAG, "Unmapped failure: $raw")
+                Logger.w(TAG, "Unmapped failure: $raw")
                 DEFAULT
             }
         }

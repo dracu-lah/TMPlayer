@@ -8,23 +8,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** Android's best current answer about whether the wider internet is reachable. */
-enum class NetworkStatus {
-    Unknown,
-    Online,
-    Offline,
-}
-
 /**
  * Process-wide connectivity, based on a validated network rather than Wi-Fi being switched on.
  *
  * TDLib has its own connection state as well. Screens combine the two because a live TDLib
  * connection is stronger evidence than an occasionally late Android connectivity callback.
  */
-object NetworkMonitor {
+object NetworkMonitor : Connectivity {
 
     private val _status = MutableStateFlow(NetworkStatus.Unknown)
-    val status: StateFlow<NetworkStatus> = _status.asStateFlow()
+    override val status: StateFlow<NetworkStatus> = _status.asStateFlow()
 
     /**
      * Whether the connection currently in use is one the viewer pays for by the byte.
@@ -33,7 +26,7 @@ object NetworkMonitor {
      * playback is worse than a guess that allows it.
      */
     private val _metered = MutableStateFlow(false)
-    val metered: StateFlow<Boolean> = _metered.asStateFlow()
+    override val metered: StateFlow<Boolean> = _metered.asStateFlow()
 
     @Volatile
     private var started = false
@@ -69,7 +62,7 @@ object NetworkMonitor {
     }
 
     /** Unknown is allowed to try; only a confirmed offline state should suppress a request. */
-    fun canTryInternet(): Boolean = _status.value != NetworkStatus.Offline
+    override fun canTryInternet(): Boolean = _status.value != NetworkStatus.Offline
 
     /** Absent capabilities mean an unknown network, which is read as unmetered on purpose. */
     private fun meteredOf(capabilities: NetworkCapabilities?): Boolean =

@@ -45,6 +45,11 @@ jobs:
 
       # No credentials on this path. The app compiles fine without them and says so at runtime,
       # which is exactly what a fork or a pull request should get.
+      # :core is the shared half (TDLib, settings, downloads, the streaming window) that the
+      # desktop app builds on too. Its tests run on a plain JVM, the way the desktop runs it.
+      - name: Run core tests
+        run: ./gradlew :core:jvmTest
+
       - name: Run unit tests
         run: ./gradlew :app:test
 
@@ -64,6 +69,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: test-results
-          path: app/build/reports/tests/
+          path: |
+            core/build/reports/tests/
+            app/build/reports/tests/
           retention-days: 14
           if-no-files-found: ignore

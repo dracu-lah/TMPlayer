@@ -26,6 +26,9 @@ object FormFactor {
      */
     fun isTv(context: Context): Boolean = cached ?: compute(context).also { cached = it }
 
+    /** The same answer as [isTv], in the shared vocabulary: Android is never [DeviceForm.Desktop]. */
+    fun form(context: Context): DeviceForm = if (isTv(context)) DeviceForm.Tv else DeviceForm.Phone
+
     /**
      * Answers [isTv] with [value] from here on, whatever the hardware says.
      *

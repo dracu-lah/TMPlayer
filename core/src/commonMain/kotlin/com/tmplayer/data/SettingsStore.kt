@@ -1,6 +1,7 @@
 package com.tmplayer.data
 
-import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
@@ -9,7 +10,6 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import com.tmplayer.player.PlaybackSpeed
 import com.tmplayer.player.TouchPrefs
 import kotlinx.coroutines.flow.Flow
@@ -18,8 +18,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-
-private val Context.prefs by preferencesDataStore("tmplayer")
+import okio.Path.Companion.toPath
+import java.io.File
 
 private val FAVORITES = stringSetPreferencesKey("favorite_chats")
 private val INTRO_SEEN = booleanPreferencesKey("intro_seen")
@@ -114,7 +114,14 @@ private const val CACHED_PREFIX = "wc_"
 private fun cachedKey(chatId: Long, messageId: Long) =
     stringPreferencesKey("$CACHED_PREFIX${chatId}_$messageId")
 
-class SettingsStore(private val context: Context) {
+/**
+ * Every setting and every small record the app keeps, over one preferences DataStore.
+ *
+ * The store is handed in rather than built here, because DataStore allows exactly one live
+ * instance per file in a process: each app opens it once, with [openDataStore], and every
+ * `SettingsStore` shares that instance.
+ */
+class SettingsStore(private val prefs: DataStore<Preferences>) {
 
     /**
      * One preference, read the way every preference here is read.
@@ -124,7 +131,7 @@ class SettingsStore(private val context: Context) {
      * is what stops a write about one thing from redrawing everything else. The mapping runs off the
      * main thread because some of these walk every key in the store and decode as they go.
      */
-    private fun <T> read(transform: (Preferences) -> T): Flow<T> = context.prefs.data
+    private fun <T> read(transform: (Preferences) -> T): Flow<T> = prefs.data
         .map(transform)
         .distinctUntilChanged()
         .flowOn(Dispatchers.Default)
@@ -137,7 +144,7 @@ class SettingsStore(private val context: Context) {
 
     suspend fun toggleFavorite(chatId: Long): Boolean {
         var nowFavorite = false
-        context.prefs.edit { prefs ->
+        prefs.edit { prefs ->
             val current = prefs[FAVORITES].orEmpty().toMutableSet()
             val key = chatId.toString()
             nowFavorite = if (current.remove(key)) false else current.add(key)
@@ -155,7 +162,7 @@ class SettingsStore(private val context: Context) {
      * the app to dark halfway through signing out reads as a fault rather than as privacy.
      */
     suspend fun clearEverything() {
-        context.prefs.edit { prefs ->
+        prefs.edit { prefs ->
             val theme = prefs[THEME_CHOICE]
             val dynamic = prefs[DYNAMIC_COLOUR]
             prefs.clear()
@@ -166,7 +173,7 @@ class SettingsStore(private val context: Context) {
 
     /** Unstars every chat at once, which is the only way back from a tab full of them. */
     suspend fun clearFavorites() {
-        context.prefs.edit { it.remove(FAVORITES) }
+        prefs.edit { it.remove(FAVORITES) }
     }
 
     // ---- what opens on launch ---------------------------------------------------------------
@@ -180,7 +187,7 @@ class SettingsStore(private val context: Context) {
     val openLastChat: Flow<Boolean> = read { it[OPEN_LAST_CHAT] ?: false }
 
     suspend fun setOpenLastChat(value: Boolean) {
-        context.prefs.edit { it[OPEN_LAST_CHAT] = value }
+        prefs.edit { it[OPEN_LAST_CHAT] = value }
     }
 
     /**
@@ -192,21 +199,21 @@ class SettingsStore(private val context: Context) {
     val autoplayNext: Flow<Boolean> = read { it[AUTOPLAY_NEXT] ?: true }
 
     suspend fun setAutoplayNext(value: Boolean) {
-        context.prefs.edit { it[AUTOPLAY_NEXT] = value }
+        prefs.edit { it[AUTOPLAY_NEXT] = value }
     }
 
     /** Read from disk at the end of a video, where a flow's placeholder would be a wrong answer. */
-    suspend fun autoplayNextNow(): Boolean = context.prefs.data.first()[AUTOPLAY_NEXT] ?: true
+    suspend fun autoplayNextNow(): Boolean = prefs.data.first()[AUTOPLAY_NEXT] ?: true
 
     /** The chat opened most recently, or zero when there has not been one yet. */
     val lastChatId: Flow<Long> = read { it[LAST_CHAT] ?: 0L }
 
     suspend fun rememberChatOpened(chatId: Long) {
-        context.prefs.edit { it[LAST_CHAT] = chatId }
+        prefs.edit { it[LAST_CHAT] = chatId }
     }
 
     suspend fun forgetLastChat() {
-        context.prefs.edit { it.remove(LAST_CHAT) }
+        prefs.edit { it.remove(LAST_CHAT) }
     }
 
     /**
@@ -216,7 +223,7 @@ class SettingsStore(private val context: Context) {
      * chats arrive, and a flow that has not emitted yet would still be reporting its placeholder.
      */
     suspend fun autoOpenTarget(): Long? {
-        val prefs = context.prefs.data.first()
+        val prefs = prefs.data.first()
         // Must stay the same default as [openLastChat], which is the switch the viewer reads.
         return autoOpenChatId(prefs[LAST_CHAT] ?: 0L, prefs[OPEN_LAST_CHAT] ?: false)
     }
@@ -233,12 +240,12 @@ class SettingsStore(private val context: Context) {
     val downloadBeforePlaying: Flow<Boolean> = read { it[DOWNLOAD_FIRST] ?: false }
 
     suspend fun setDownloadBeforePlaying(value: Boolean) {
-        context.prefs.edit { it[DOWNLOAD_FIRST] = value }
+        prefs.edit { it[DOWNLOAD_FIRST] = value }
     }
 
     /** Read once at the start of playback, where a flow that has not emitted yet would lie. */
     suspend fun downloadBeforePlayingNow(): Boolean =
-        context.prefs.data.first()[DOWNLOAD_FIRST] ?: false
+        prefs.data.first()[DOWNLOAD_FIRST] ?: false
 
     // ---- the watch cache ---------------------------------------------------------------------
 
@@ -253,7 +260,7 @@ class SettingsStore(private val context: Context) {
     val cachedVideos: Flow<List<ResumeRecord>> = read { prefs -> decodeCachedList(prefs) }
 
     /** Read once, at the moment a video is asked for, where a flow yet to emit would lie. */
-    suspend fun cachedVideosNow(): List<ResumeRecord> = decodeCachedList(context.prefs.data.first())
+    suspend fun cachedVideosNow(): List<ResumeRecord> = decodeCachedList(prefs.data.first())
 
     private fun decodeCachedList(prefs: Preferences): List<ResumeRecord> = buildList {
         for ((key, value) in prefs.asMap()) {
@@ -289,7 +296,7 @@ class SettingsStore(private val context: Context) {
      * the disk keeps something nothing can name.
      */
     suspend fun rememberCachedVideo(item: MediaItem, chatTitle: String) {
-        context.prefs.edit { prefs ->
+        prefs.edit { prefs ->
             prefs[cachedKey(item.chatId, item.messageId)] = ResumeRecord.encode(
                 fileId = item.fileId,
                 title = item.title,
@@ -303,7 +310,7 @@ class SettingsStore(private val context: Context) {
 
     /** Forgets one cached video, once its file has actually gone. */
     suspend fun forgetCachedVideo(chatId: Long, messageId: Long) {
-        context.prefs.edit { prefs ->
+        prefs.edit { prefs ->
             prefs.remove(cachedKey(chatId, messageId))
             if (prefs[CACHED_VIDEO_IDS] == progressKey(chatId, messageId)) {
                 prefs.remove(CACHED_VIDEO_IDS)
@@ -314,7 +321,7 @@ class SettingsStore(private val context: Context) {
 
     /** Forgets the lot, for the button that deletes every file behind them. */
     suspend fun forgetCachedVideo() {
-        context.prefs.edit { prefs ->
+        prefs.edit { prefs ->
             val doomed = prefs.asMap().keys.filter { it.name.startsWith(CACHED_PREFIX) }
             for (key in doomed) prefs.remove(key)
             prefs.remove(CACHED_VIDEO_IDS)
@@ -324,7 +331,7 @@ class SettingsStore(private val context: Context) {
 
     /** Whether this video is one the viewer downloaded on purpose, and so is never evicted. */
     suspend fun isKeptDownload(chatId: Long, messageId: Long): Boolean =
-        context.prefs.data.first()[downloadKey(chatId, messageId)] != null
+        prefs.data.first()[downloadKey(chatId, messageId)] != null
 
     /**
      * Refuse to fetch video over a connection the viewer pays for by the byte.
@@ -335,11 +342,11 @@ class SettingsStore(private val context: Context) {
     val wifiOnlyDownloads: Flow<Boolean> = read { it[WIFI_ONLY] ?: false }
 
     suspend fun setWifiOnlyDownloads(value: Boolean) {
-        context.prefs.edit { it[WIFI_ONLY] = value }
+        prefs.edit { it[WIFI_ONLY] = value }
     }
 
     /** Read at the start of playback, where the flow's first emission has not arrived yet. */
-    suspend fun wifiOnlyDownloadsNow(): Boolean = context.prefs.data.first()[WIFI_ONLY] ?: false
+    suspend fun wifiOnlyDownloadsNow(): Boolean = prefs.data.first()[WIFI_ONLY] ?: false
 
     /**
      * Whether a crash may be reported to the project, and the one thing in this app that ever
@@ -351,11 +358,11 @@ class SettingsStore(private val context: Context) {
     val crashReports: Flow<Boolean> = read { it[CRASH_REPORTS] ?: false }
 
     suspend fun setCrashReports(value: Boolean) {
-        context.prefs.edit { it[CRASH_REPORTS] = value }
+        prefs.edit { it[CRASH_REPORTS] = value }
     }
 
     /** Read once during startup, before anything has had a chance to crash. */
-    suspend fun crashReportsNow(): Boolean = context.prefs.data.first()[CRASH_REPORTS] ?: false
+    suspend fun crashReportsNow(): Boolean = prefs.data.first()[CRASH_REPORTS] ?: false
 
     /**
      * The speed the last video was left at, applied to the next one.
@@ -368,11 +375,11 @@ class SettingsStore(private val context: Context) {
     }
 
     suspend fun setPlaybackSpeed(value: Float) {
-        context.prefs.edit { it[PLAYBACK_SPEED] = PlaybackSpeed.sanitise(value) }
+        prefs.edit { it[PLAYBACK_SPEED] = PlaybackSpeed.sanitise(value) }
     }
 
     suspend fun playbackSpeedNow(): Float =
-        PlaybackSpeed.sanitise(context.prefs.data.first()[PLAYBACK_SPEED] ?: PlaybackSpeed.DEFAULT)
+        PlaybackSpeed.sanitise(prefs.data.first()[PLAYBACK_SPEED] ?: PlaybackSpeed.DEFAULT)
 
     /**
      * How the picture was last fitted to the screen.
@@ -380,10 +387,10 @@ class SettingsStore(private val context: Context) {
      * Remembered for the same reason the speed is: a viewer whose television overscans, or who
      * cannot stand black bars, should not have to choose Crop again every episode.
      */
-    suspend fun videoScaleNow(): String? = context.prefs.data.first()[VIDEO_SCALE]
+    suspend fun videoScaleNow(): String? = prefs.data.first()[VIDEO_SCALE]
 
     suspend fun setVideoScale(name: String) {
-        context.prefs.edit { it[VIDEO_SCALE] = name }
+        prefs.edit { it[VIDEO_SCALE] = name }
     }
 
     /**
@@ -392,10 +399,10 @@ class SettingsStore(private val context: Context) {
      * Kept beside the scale: both describe how this viewer likes to watch rather than the video in
      * front of them. Read as a plain name so the player owns its meaning and this file stays a store.
      */
-    suspend fun screenOrientationNow(): String? = context.prefs.data.first()[SCREEN_ORIENTATION]
+    suspend fun screenOrientationNow(): String? = prefs.data.first()[SCREEN_ORIENTATION]
 
     suspend fun setScreenOrientation(name: String) {
-        context.prefs.edit { it[SCREEN_ORIENTATION] = name }
+        prefs.edit { it[SCREEN_ORIENTATION] = name }
     }
 
     // ---- the phone player's touch settings -------------------------------------------------
@@ -407,10 +414,10 @@ class SettingsStore(private val context: Context) {
      */
     val touchPrefs: Flow<TouchPrefs> = read(::touchPrefsOf)
 
-    suspend fun touchPrefsNow(): TouchPrefs = touchPrefsOf(context.prefs.data.first())
+    suspend fun touchPrefsNow(): TouchPrefs = touchPrefsOf(prefs.data.first())
 
     suspend fun updateTouchPrefs(change: (TouchPrefs) -> TouchPrefs) {
-        context.prefs.edit { prefs ->
+        prefs.edit { prefs ->
             val next = change(touchPrefsOf(prefs))
             prefs[TAP_PLAYS_PAUSES] = next.tapPlaysPauses
             prefs[DOUBLE_TAP_MS] = TouchPrefs.sanitiseDoubleTap(next.doubleTapMs)
@@ -448,7 +455,7 @@ class SettingsStore(private val context: Context) {
      * A video that is not part of a series is keyed by its own name, so this is a no-op for it.
      */
     suspend fun trackChoice(series: String): TrackChoice {
-        val prefs = context.prefs.data.first()
+        val prefs = prefs.data.first()
         val key = seriesKey(series)
         return TrackChoice(
             audioLanguage = prefs[audioKey(key)]?.takeIf { it.isNotBlank() },
@@ -459,7 +466,7 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setTrackChoice(series: String, choice: TrackChoice) {
         val key = seriesKey(series)
-        context.prefs.edit { prefs ->
+        prefs.edit { prefs ->
             choice.audioLanguage?.let { prefs[audioKey(key)] = it } ?: prefs.remove(audioKey(key))
             choice.textLanguage?.let { prefs[textKey(key)] = it } ?: prefs.remove(textKey(key))
             prefs[subtitlesKey(key)] = choice.subtitlesOn
@@ -475,14 +482,14 @@ class SettingsStore(private val context: Context) {
         read { it[MAX_SIZE] ?: SizeFilter.DEFAULT_MAX }
 
     suspend fun setMinSizeBytes(value: Long) {
-        context.prefs.edit { prefs ->
+        prefs.edit { prefs ->
             val max = prefs[MAX_SIZE] ?: SizeFilter.DEFAULT_MAX
             prefs[MIN_SIZE] = SizeFilter.clampMin(value, max)
         }
     }
 
     suspend fun setMaxSizeBytes(value: Long) {
-        context.prefs.edit { prefs ->
+        prefs.edit { prefs ->
             val min = prefs[MIN_SIZE] ?: SizeFilter.DEFAULT_MIN
             prefs[MAX_SIZE] = SizeFilter.clampMax(value, min)
         }
@@ -497,11 +504,11 @@ class SettingsStore(private val context: Context) {
      * happened, and a flow that has not emitted yet would hand back an empty list.
      */
     suspend fun cachedChatSnapshot(): List<ChatSummary> =
-        ChatSnapshot.decode(context.prefs.data.first()[CHAT_SNAPSHOT])
+        ChatSnapshot.decode(prefs.data.first()[CHAT_SNAPSHOT])
 
     suspend fun saveChatSnapshot(chats: List<ChatSummary>) {
         val encoded = ChatSnapshot.encode(chats)
-        context.prefs.edit { prefs ->
+        prefs.edit { prefs ->
             // Written only when it has actually changed: this runs after every sync, and the whole
             // preference file is rewritten and fsynced per edit.
             if (prefs[CHAT_SNAPSHOT] != encoded) prefs[CHAT_SNAPSHOT] = encoded
@@ -521,7 +528,7 @@ class SettingsStore(private val context: Context) {
      * can contain the separator.
      */
     suspend fun cachedAccountSnapshot(): Account? {
-        val encoded = context.prefs.data.first()[ACCOUNT_SNAPSHOT] ?: return null
+        val encoded = prefs.data.first()[ACCOUNT_SNAPSHOT] ?: return null
         val parts = encoded.split("|", limit = 3)
         if (parts.size != 3 || parts[2].isBlank()) return null
         val mini = parts[1].takeIf { it.isNotBlank() }?.let {
@@ -540,14 +547,14 @@ class SettingsStore(private val context: Context) {
             ?.let { java.util.Base64.getEncoder().encodeToString(it) }
             .orEmpty()
         val encoded = "${account.username}|$mini|${account.name.replace('|', ' ')}"
-        context.prefs.edit { prefs ->
+        prefs.edit { prefs ->
             if (prefs[ACCOUNT_SNAPSHOT] != encoded) prefs[ACCOUNT_SNAPSHOT] = encoded
         }
     }
 
     /** For sign-out: the next person to open the app must not be greeted as the last one. */
     suspend fun clearColdStartSnapshots() {
-        context.prefs.edit { prefs ->
+        prefs.edit { prefs ->
             prefs.remove(CHAT_SNAPSHOT)
             prefs.remove(ACCOUNT_SNAPSHOT)
         }
@@ -564,7 +571,7 @@ class SettingsStore(private val context: Context) {
         read { CardLayout.decode(it[CHAT_LAYOUT], CardLayout.List) }
 
     suspend fun setChatLayout(value: CardLayout) {
-        context.prefs.edit { it[CHAT_LAYOUT] = value.name }
+        prefs.edit { it[CHAT_LAYOUT] = value.name }
     }
 
     /**
@@ -576,7 +583,7 @@ class SettingsStore(private val context: Context) {
         read { CardLayout.decode(it[MEDIA_LAYOUT], CardLayout.Grid) }
 
     suspend fun setMediaLayout(value: CardLayout) {
-        context.prefs.edit { it[MEDIA_LAYOUT] = value.name }
+        prefs.edit { it[MEDIA_LAYOUT] = value.name }
     }
 
     // ---- appearance -------------------------------------------------------------------------
@@ -591,7 +598,7 @@ class SettingsStore(private val context: Context) {
         read { ThemeChoice.from(it[THEME_CHOICE]) }
 
     suspend fun setThemeChoice(value: ThemeChoice) {
-        context.prefs.edit { it[THEME_CHOICE] = value.name }
+        prefs.edit { it[THEME_CHOICE] = value.name }
     }
 
     /**
@@ -604,7 +611,7 @@ class SettingsStore(private val context: Context) {
     val dynamicColour: Flow<Boolean> = read { it[DYNAMIC_COLOUR] ?: false }
 
     suspend fun setDynamicColour(value: Boolean) {
-        context.prefs.edit { it[DYNAMIC_COLOUR] = value }
+        prefs.edit { it[DYNAMIC_COLOUR] = value }
     }
 
     // ---- prompts ----------------------------------------------------------------------------
@@ -612,7 +619,7 @@ class SettingsStore(private val context: Context) {
     val introSeen: Flow<Boolean> = read { it[INTRO_SEEN] ?: false }
 
     suspend fun markIntroSeen() {
-        context.prefs.edit { it[INTRO_SEEN] = true }
+        prefs.edit { it[INTRO_SEEN] = true }
     }
 
     /**
@@ -622,17 +629,17 @@ class SettingsStore(private val context: Context) {
     val overviewSeen: Flow<Boolean> = read { it[OVERVIEW_SEEN] ?: false }
 
     suspend fun markOverviewSeen() {
-        context.prefs.edit { it[OVERVIEW_SEEN] = true }
+        prefs.edit { it[OVERVIEW_SEEN] = true }
     }
 
     suspend fun replayOverview() {
-        context.prefs.edit { it[OVERVIEW_SEEN] = false }
+        prefs.edit { it[OVERVIEW_SEEN] = false }
     }
 
     // ---- resume -----------------------------------------------------------------------------
 
     suspend fun resumePosition(chatId: Long, messageId: Long): Long =
-        context.prefs.data.first()[resumeKey(chatId, messageId)] ?: 0L
+        prefs.data.first()[resumeKey(chatId, messageId)] ?: 0L
 
     /**
      * Every stored resume point, keyed by `chatId:messageId`, read in one pass.
@@ -707,7 +714,7 @@ class SettingsStore(private val context: Context) {
      * the live queue is the one in memory and this is only its footprint on disk.
      */
     suspend fun downloadQueueNow(): List<DownloadRequest> =
-        DownloadRequest.decodeAll(context.prefs.data.first()[DOWNLOAD_QUEUE])
+        DownloadRequest.decodeAll(prefs.data.first()[DOWNLOAD_QUEUE])
 
     /**
      * Records the queue as it now stands. An empty list clears the key rather than storing "".
@@ -718,7 +725,7 @@ class SettingsStore(private val context: Context) {
      * write.
      */
     suspend fun saveDownloadQueue(requests: List<DownloadRequest>) {
-        context.prefs.edit { prefs ->
+        prefs.edit { prefs ->
             if (requests.isEmpty()) {
                 prefs.remove(DOWNLOAD_QUEUE)
             } else {
@@ -729,7 +736,7 @@ class SettingsStore(private val context: Context) {
 
     /** Remembers a video as one that has been fetched, so Downloads can name it later. */
     suspend fun noteDownload(item: MediaItem, chatTitle: String) {
-        context.prefs.edit { prefs ->
+        prefs.edit { prefs ->
             prefs[downloadKey(item.chatId, item.messageId)] = ResumeRecord.encode(
                 fileId = item.fileId,
                 title = item.title,
@@ -744,7 +751,7 @@ class SettingsStore(private val context: Context) {
 
     /** Drops one row from Downloads, once its file has actually been deleted. */
     suspend fun forgetDownload(chatId: Long, messageId: Long) {
-        context.prefs.edit { it.remove(downloadKey(chatId, messageId)) }
+        prefs.edit { it.remove(downloadKey(chatId, messageId)) }
     }
 
     /** The same cap the resume history has, for the same reason: this list is not a log. */
@@ -768,7 +775,7 @@ class SettingsStore(private val context: Context) {
         durationMs: Long = 0L,
         description: String? = null,
     ) {
-        context.prefs.edit { prefs ->
+        prefs.edit { prefs ->
             val key = resumeKey(chatId, messageId)
             // Under a minute in, or basically finished: there is nothing worth resuming.
             if (positionMs < MIN_RESUME_MS) {
@@ -817,7 +824,7 @@ class SettingsStore(private val context: Context) {
      * while its own map is walked otherwise.
      */
     suspend fun clearWatchHistory() {
-        context.prefs.edit { prefs ->
+        prefs.edit { prefs ->
             val doomed = prefs.asMap().keys.filter { key ->
                 val name = key.name
                 name.startsWith("resume_") || name.startsWith("duration_") || name.startsWith("meta_")
@@ -836,7 +843,7 @@ class SettingsStore(private val context: Context) {
      */
     suspend fun pruneBrokenHistory(): Int {
         var removed = 0
-        context.prefs.edit { prefs ->
+        prefs.edit { prefs ->
             // Collected before anything is removed: [MutablePreferences] is being written to while
             // its own map is walked otherwise.
             val doomed = prefs.asMap().keys
@@ -865,7 +872,7 @@ class SettingsStore(private val context: Context) {
     }
 
     suspend fun clearResumePosition(chatId: Long, messageId: Long) {
-        context.prefs.edit {
+        prefs.edit {
             it.remove(resumeKey(chatId, messageId))
             it.remove(durationKey(chatId, messageId))
             it.remove(metaKey(chatId, messageId))
@@ -873,6 +880,16 @@ class SettingsStore(private val context: Context) {
     }
 
     companion object {
+        /**
+         * The file name Android's `preferencesDataStore("tmplayer")` delegate has always used, in
+         * `filesDir/datastore/`. Keeping it is what keeps an upgraded install's settings.
+         */
+        const val FILE_NAME = "tmplayer.preferences_pb"
+
+        /** Opens the store at [file]. Call once per process and share the result. */
+        fun openDataStore(file: File): DataStore<Preferences> =
+            PreferenceDataStoreFactory.createWithPath(produceFile = { file.absolutePath.toPath() })
+
         /** Whether launch should skip the chat list, given what is remembered and the setting. */
         fun autoOpenChatId(lastChatId: Long, enabled: Boolean): Long? =
             if (enabled && lastChatId != 0L) lastChatId else null

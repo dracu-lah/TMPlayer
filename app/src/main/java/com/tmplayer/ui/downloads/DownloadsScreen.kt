@@ -78,6 +78,11 @@ import kotlinx.coroutines.withContext
 import com.tmplayer.data.LocalFileAvailability
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.OfflineDownloads
+import com.tmplayer.data.cancel
+import com.tmplayer.data.pause
+import com.tmplayer.data.pauseAll
+import com.tmplayer.data.resume
+import com.tmplayer.data.resumeAll
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.ShareMedia
 import com.tmplayer.data.SettingsStore

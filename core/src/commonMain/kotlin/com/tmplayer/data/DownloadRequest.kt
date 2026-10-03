@@ -1,8 +1,5 @@
 package com.tmplayer.data
 
-import android.content.Context
-import android.content.Intent
-
 /**
  * One video the viewer asked to keep, in the only form that survives everything it has to survive.
  *
@@ -38,20 +35,6 @@ data class DownloadRequest(
         fileName = fileName,
     )
 
-    fun intent(context: Context, action: String): Intent =
-        Intent(context, DownloadService::class.java).apply {
-            this.action = action
-            putExtra(DownloadService.EXTRA_FILE_ID, fileId)
-            putExtra(DownloadService.EXTRA_TITLE, title)
-            putExtra(DownloadService.EXTRA_SIZE, sizeBytes)
-            putExtra(DownloadService.EXTRA_CHAT_ID, chatId)
-            putExtra(DownloadService.EXTRA_MESSAGE_ID, messageId)
-            putExtra(DownloadService.EXTRA_CHAT_TITLE, chatTitle)
-            putExtra(DownloadService.EXTRA_DURATION, durationSec)
-            putExtra(DownloadService.EXTRA_MIME, mimeType)
-            putExtra(DownloadService.EXTRA_FILE_NAME, fileName)
-        }
-
     /** One line of the stored queue. See [decode] for why it is not JSON. */
     fun encode(): String = listOf(
         fileId.toString(),
@@ -79,22 +62,6 @@ data class DownloadRequest(
             mimeType = item.mimeType,
             fileName = item.fileName,
         )
-
-        fun from(intent: Intent): DownloadRequest? {
-            val fileId = intent.getIntExtra(DownloadService.EXTRA_FILE_ID, 0)
-            if (fileId <= 0) return null
-            return DownloadRequest(
-                fileId = fileId,
-                title = intent.getStringExtra(DownloadService.EXTRA_TITLE).orEmpty(),
-                sizeBytes = intent.getLongExtra(DownloadService.EXTRA_SIZE, 0),
-                chatId = intent.getLongExtra(DownloadService.EXTRA_CHAT_ID, 0),
-                messageId = intent.getLongExtra(DownloadService.EXTRA_MESSAGE_ID, 0),
-                chatTitle = intent.getStringExtra(DownloadService.EXTRA_CHAT_TITLE).orEmpty(),
-                durationSec = intent.getIntExtra(DownloadService.EXTRA_DURATION, 0),
-                mimeType = intent.getStringExtra(DownloadService.EXTRA_MIME).orEmpty(),
-                fileName = intent.getStringExtra(DownloadService.EXTRA_FILE_NAME).orEmpty(),
-            )
-        }
 
         /**
          * Rebuilds a request from its stored line, or null when the line cannot be trusted.

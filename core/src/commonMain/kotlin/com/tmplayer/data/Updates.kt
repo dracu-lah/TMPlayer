@@ -1,11 +1,6 @@
 package com.tmplayer.data
 
-import android.content.Context
-import android.content.Intent
-import android.os.Build
-import android.util.Log
-import androidx.core.content.FileProvider
-import com.tmplayer.BuildConfig
+import com.tmplayer.platform.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,7 +32,7 @@ sealed interface UpdateState {
     /** Downloading, 0f to 1f. Null while the server has not said how big the file is. */
     data class Downloading(val release: Release, val fraction: Float?) : UpdateState
 
-    /** Downloaded and handed to Android's installer, which is now in front of the app. */
+    /** Downloaded and handed to the platform's installer, which is now in front of the app. */
     data class Ready(val release: Release, val file: File) : UpdateState
     data class Failed(val message: String) : UpdateState
 }
@@ -49,9 +44,11 @@ sealed interface UpdateState {
  * new version exists. The releases page is the only source: one HTTP call to the public API, no
  * account, no analytics, and only when this app asks.
  *
- * Downloading is one thing and installing is another. This object does the first and hands the
- * file to Android for the second, which is the only way an app may install anything: the system
- * shows its own confirmation, and TMPlayer is never able to install anything silently.
+ * Downloading is one thing and installing is another. This object does the first; installing is
+ * the platform's, and on Android it means handing the file to the system, which shows its own
+ * confirmation, so TMPlayer is never able to install anything silently.
+ *
+ * Each app calls [configure] once at startup, before anything reads [installedVersion].
  */
 object Updates {
 
@@ -62,7 +59,28 @@ object Updates {
     val state: StateFlow<UpdateState> = _state.asStateFlow()
 
     /** This build's own version, as it is written on the releases page. */
-    val installedVersion: String get() = BuildConfig.VERSION_NAME
+    @Volatile
+    var installedVersion: String = "0"
+        private set
+
+    /** The device's architectures, most preferred first, for picking a per-ABI asset. */
+    @Volatile
+    private var abis: List<String> = emptyList()
+
+    @Volatile
+    private var connectivity: Connectivity? = null
+
+    /**
+     * What this build is and runs on. [abis] is Android's `Build.SUPPORTED_ABIS`; a platform
+     * without per-architecture assets passes an empty list.
+     */
+    fun configure(installedVersion: String, abis: List<String>, connectivity: Connectivity) {
+        this.installedVersion = installedVersion
+        this.abis = abis
+        this.connectivity = connectivity
+    }
+
+    private fun canTryInternet(): Boolean = connectivity?.canTryInternet() ?: true
 
     /** Set once a check has run, so the quiet launch check does not repeat all evening. */
     @Volatile
@@ -79,7 +97,7 @@ object Updates {
         if (quiet && checkedThisLaunch) return
         if (_state.value is UpdateState.Downloading) return
 
-        if (!NetworkMonitor.canTryInternet()) {
+        if (!canTryInternet()) {
             _state.value = if (quiet) {
                 UpdateState.Idle
             } else {
@@ -94,7 +112,7 @@ object Updates {
         val release = attempt.getOrNull()
         // A rate-limited API, a release with no APK on it and a stick with no route out all reach
         // the viewer as much the same sentence, so the cause is logged as well as reported.
-        attempt.exceptionOrNull()?.let { Log.w(TAG, "Update check failed", it) }
+        attempt.exceptionOrNull()?.let { Logger.w(TAG, "Update check failed", it) }
 
         _state.value = when {
             release != null && isNewer(release.version, installedVersion) ->
@@ -110,21 +128,23 @@ object Updates {
     }
 
     /**
-     * Fetches the APK for this TV and hands it to the system installer.
+     * Fetches the release's file into [dir] and, once it is whole, moves the state to
+     * [UpdateState.Ready] and returns it for the platform to install. Null when it did not arrive,
+     * with the state already saying why.
      *
-     * The file lands in the cache directory: once Android has installed it there is no reason to
-     * keep a second copy of the app around on a stick with eight gigabytes on it.
+     * Android passes its cache directory: once the system has installed the APK there is no reason
+     * to keep a second copy of the app around on a stick with eight gigabytes on it.
      */
-    suspend fun downloadAndInstall(context: Context, release: Release) {
-        if (!NetworkMonitor.canTryInternet()) {
+    suspend fun download(release: Release, dir: File): File? {
+        if (!canTryInternet()) {
             _state.value = UpdateState.Failed("Connect to the internet to download the update.")
-            return
+            return null
         }
         _state.value = UpdateState.Downloading(release, null)
 
         val file = withContext(Dispatchers.IO) {
             runCatching {
-                val dir = File(context.cacheDir, "updates").apply { mkdirs() }
+                dir.mkdirs()
                 // One file, overwritten: a half-finished download from last time is worthless.
                 dir.listFiles()?.forEach { it.delete() }
                 val target = File(dir, "TMPlayer-${release.version}.apk")
@@ -157,33 +177,17 @@ object Updates {
 
         if (file == null || file.length() == 0L) {
             _state.value = UpdateState.Failed("The download did not finish. Try again.")
-            return
+            return null
         }
 
         _state.value = UpdateState.Ready(release, file)
-        runCatching { context.startActivity(installIntent(context, file)) }
-            .onFailure {
-                _state.value = UpdateState.Failed(
-                    "TMPlayer could not open Android's installer. Install it by hand from " +
-                        "$RELEASES_PAGE.",
-                )
-            }
+        return file
     }
 
-    /** Whether the TV will let TMPlayer hand an APK to the installer at all. */
-    fun canInstall(context: Context): Boolean =
-        context.packageManager.canRequestPackageInstalls()
-
-    /**
-     * The system screen where "allow apps from this source" is turned on.
-     *
-     * Android will not take that answer from inside this app, so the viewer is sent to the
-     * system's own switch and comes back with Back.
-     */
-    fun unknownSourcesIntent(context: Context): Intent =
-        Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
-            .setData(android.net.Uri.parse("package:${context.packageName}"))
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    /** For the platform's installer to report that it could not take the file. */
+    fun installFailed(message: String) {
+        _state.value = UpdateState.Failed(message)
+    }
 
     /**
      * Clears a finished outcome once the viewer has read it.
@@ -197,13 +201,6 @@ object Updates {
         }
     }
 
-    private fun installIntent(context: Context, file: File): Intent {
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.updates", file)
-        return Intent(Intent.ACTION_VIEW)
-            .setDataAndType(uri, "application/vnd.android.package-archive")
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-
     private fun fetchLatest(): Release? {
         val connection = (URL(LATEST_URL).openConnection() as HttpURLConnection).apply {
             connectTimeout = CONNECT_TIMEOUT_MS
@@ -211,7 +208,7 @@ object Updates {
             setRequestProperty("Accept", "application/vnd.github+json")
             // GitHub asks every caller to name itself and answers 403 to some that do not. The
             // default here is whatever the platform puts on the wire, which is not a name.
-            setRequestProperty("User-Agent", "TMPlayer/${BuildConfig.VERSION_NAME}")
+            setRequestProperty("User-Agent", "TMPlayer/$installedVersion")
         }
         val body = connection.use {
             // Check the status before reading the stream, or a 403 arrives as an empty
@@ -236,7 +233,7 @@ object Updates {
         if (version.isBlank()) throw UpdateFailure("GitHub sent a release with no version on it.")
 
         val assets = json.optJSONArray("assets")
-        val asset = assets?.let { selectApkAsset(it, Build.SUPPORTED_ABIS.orEmpty()) }
+        val asset = assets?.let { selectApkAsset(it, abis.toTypedArray()) }
             ?: throw UpdateFailure("The newest release has no APK this device can install.")
         return Release(
             version = version,

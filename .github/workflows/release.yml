@@ -91,7 +91,7 @@ jobs:
           EOF
 
       - name: Run unit tests
-        run: ./gradlew :app:test
+        run: ./gradlew :core:jvmTest :app:test
 
       - name: Build signed APKs
         run: |
