@@ -102,9 +102,12 @@ runs:
       shell: bash
       run: |
         flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-        flatpak install --user -y --noninteractive flathub org.flatpak.Builder
+        flatpak install --user -y --noninteractive flathub org.flatpak.Builder \
+          org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08
+        # The sandboxed builder reaches the host's flatpak over the session bus, which a runner
+        # has none of until one is started for it.
         FLATPAK_BUILDER="flatpak run org.flatpak.Builder" OUT="$PWD/dist" \
-          desktop/packaging/flatpak/build.sh "${{ inputs.version }}"
+          dbus-run-session -- desktop/packaging/flatpak/build.sh "${{ inputs.version }}"
 
     - name: Install the Flatpak and self-test it
       shell: bash
