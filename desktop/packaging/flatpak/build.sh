@@ -12,8 +12,8 @@ set -euo pipefail
 version="${1:?usage: build.sh <version> [tarball]}"
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../../.." && pwd)"
-tarball="${2:-$root/desktop/build/packages/TMPlayer-$version-linux-x64.tar.gz}"
 out="${OUT:-$root/desktop/build/packages}"
+tarball="${2:-$out/TMPlayer-$version-linux-x64.tar.gz}"
 work="${WORK:-$root/desktop/build/flatpak-work}"
 id="io.github.dracu_lah.TMPlayer"
 

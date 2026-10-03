@@ -81,8 +81,9 @@ runs:
 
         # Exactly one product may carry TMPlayer's upgrade code afterwards: the new one.
         $installer = New-Object -ComObject WindowsInstaller.Installer
-        $products = @($installer.RelatedProducts('{6F1D3C0E-2B8A-4B7E-9D2C-7A1E5F4C3B21}'))
-        $versions = $products | ForEach-Object { $installer.ProductInfo($_, 'VersionString') }
+        $products = @()
+        foreach ($code in $installer.RelatedProducts('{6F1D3C0E-2B8A-4B7E-9D2C-7A1E5F4C3B21}')) { $products += [string]$code }
+        $versions = @($products | ForEach-Object { [string]$installer.ProductInfo($_, 'VersionString') })
         Write-Host "Installed under the upgrade code: $($versions -join ', ')"
         $want = "${{ inputs.version }}".Split('-')[0]
         if ($products.Count -ne 1 -or $versions[0] -ne $want) {
