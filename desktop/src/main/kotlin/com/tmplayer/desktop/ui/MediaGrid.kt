@@ -90,10 +90,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
-import java.awt.Desktop
+import com.tmplayer.desktop.os.OpenExternal
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
-import java.net.URI
 
 /**
  * One chat's videos as a grid of posters: the shared [MediaListViewModel] (paging, search, size
@@ -459,7 +458,7 @@ private fun SponsoredCard(ad: SponsoredItem, model: MediaListViewModel) {
             if (ad.sponsorUrl.isNotBlank()) {
                 OutlinedButton(onClick = {
                     model.clickSponsored(ad, media = false, onSuccess = {
-                        runCatching { Desktop.getDesktop().browse(URI(ad.sponsorUrl)) }
+                        OpenExternal.browse(ad.sponsorUrl)
                     }, onFailure = toast)
                 }) { Text(ad.buttonText.ifBlank { "Open" }) }
             }

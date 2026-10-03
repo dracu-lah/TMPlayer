@@ -19,8 +19,23 @@ import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DownloadRunner
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.desktop.DesktopPrefs
+import com.tmplayer.desktop.DesktopServices
+import com.tmplayer.desktop.DesktopUpdates
+import com.tmplayer.desktop.DesktopWatchCache
 import com.tmplayer.ui.nav.BackStack
 import com.tmplayer.ui.nav.isBackKey
+
+/** The desktop only services the pages reach through the shell. */
+class DesktopExtras(
+    val prefs: DesktopPrefs,
+    val updates: DesktopUpdates?,
+    val watchCache: DesktopWatchCache?,
+) {
+    companion object {
+        fun live() = DesktopExtras(DesktopServices.prefs, DesktopServices.updates, DesktopServices.watchCache)
+    }
+}
 
 /** Poster widths for the grids, smallest first. */
 val POSTER_STEPS = listOf(160.dp, 208.dp, 264.dp, 320.dp)
@@ -56,7 +71,11 @@ data class PlayRequest(
 class ShellState(
     val settings: SettingsStore,
     val downloads: DownloadRunner,
+    services: () -> DesktopExtras = { DesktopExtras.live() },
 ) {
+    /** The desktop's own settings, cache and update check; opened on first use, so tests that never touch them pay nothing. */
+    val extras: DesktopExtras by lazy(services)
+
     var destination by mutableStateOf(Destination.Chats)
         private set
 

@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.SizeFilter
+import com.tmplayer.desktop.DesktopSettings
 import com.tmplayer.data.Td
 import com.tmplayer.data.ThemeChoice
 import com.tmplayer.player.StreamStats
@@ -64,6 +65,7 @@ fun SettingsPage(state: ShellState, version: String = "") {
     val openLast by settings.openLastChat.collectAsState(initial = false)
     val minSize by settings.minSizeBytes.collectAsState(initial = SizeFilter.FLOOR)
     val maxSize by settings.maxSizeBytes.collectAsState(initial = SizeFilter.CEILING)
+    val desktop by state.extras.prefs.state.collectAsState()
     var used by remember { mutableLongStateOf(-1L) }
     var confirmSignOut by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { used = runCatching { Td.storageUsedBytes() }.getOrDefault(-1L) }
@@ -97,6 +99,24 @@ fun SettingsPage(state: ShellState, version: String = "") {
                     scope.launch { settings.setDownloadBeforePlaying(it) }
                 }
 
+                Toggle(
+                    "Mouse wheel seeks",
+                    if (desktop.wheelSeeks) "The wheel skips 10 s; Shift and the wheel change the volume" else "The wheel changes the volume; Shift and the wheel skip 10 s",
+                    desktop.wheelSeeks,
+                ) { on -> state.extras.prefs.update { it.copy(wheelSeeks = on) } }
+                Toggle("Downmix to stereo", "Fold surround sound into two speakers or headphones", desktop.downmix) { on ->
+                    state.extras.prefs.update { it.copy(downmix = on) }
+                }
+                Toggle(
+                    "Force software decoding",
+                    if (DesktopSettings.defaultSoftwareDecoding()) {
+                        "On by default on Linux, where the bundled video drivers rarely match the system's. Turn off to try the graphics card"
+                    } else {
+                        "Decode on the processor instead of the graphics card, if videos show green or broken frames"
+                    },
+                    desktop.softwareDecoding,
+                ) { on -> state.extras.prefs.update { it.copy(softwareDecoding = on) } }
+
                 Group("Library")
                 Toggle("Open the last chat on launch", "Start where you left off rather than on the chat list", openLast) {
                     scope.launch { settings.setOpenLastChat(it) }
@@ -127,6 +147,17 @@ fun SettingsPage(state: ShellState, version: String = "") {
                         }
                     }) { Text("Clear pictures") }
                 }
+                state.extras.watchCache?.let { cache ->
+                    Setting("Cached videos", "What streaming left on the disk. Downloads stay") {
+                        OutlinedButton(onClick = {
+                            scope.launch {
+                                val freed = runCatching { cache.clearAll() }.getOrDefault(0L)
+                                used = runCatching { Td.storageUsedBytes() }.getOrDefault(-1L)
+                                toast(if (freed > 0) "${StreamStats.formatBytes(freed)} freed" else "No cached videos to clear")
+                            }
+                        }) { Text("Clear cache") }
+                    }
+                }
 
                 Group("History")
                 Setting("Continue watching", "Forget where every video was stopped") {
@@ -144,6 +175,18 @@ fun SettingsPage(state: ShellState, version: String = "") {
                             toast("Favourites cleared")
                         }
                     }) { Text("Clear") }
+                }
+
+                state.extras.updates?.let { updates ->
+                    Group("Updates")
+                    Toggle(
+                        "Tell me when a new version is out",
+                        "Asks GitHub once a day. Nothing is downloaded or installed without you",
+                        desktop.checkForUpdates,
+                    ) { on -> state.extras.prefs.update { it.copy(checkForUpdates = on) } }
+                    Setting("Check now", "TMPlayer $version") {
+                        OutlinedButton(onClick = { scope.launch { toast(updates.check(quiet = false)) } }) { Text("Check") }
+                    }
                 }
 
                 Group("Account")

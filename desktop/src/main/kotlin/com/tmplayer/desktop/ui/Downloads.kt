@@ -41,7 +41,10 @@ import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.Td
 import com.tmplayer.player.StreamStats
+import com.tmplayer.desktop.os.OpenExternal
 import com.tmplayer.ui.components.TmIcons
+import com.tmplayer.ui.components.rememberToast
+import java.io.File
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.launch
 
@@ -54,6 +57,7 @@ fun DownloadsPage(state: ShellState) {
     val active by OfflineDownloads.active.collectAsState()
     val history by state.settings.downloadHistory.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
+    val toast = rememberToast()
     val queue = active.values.sortedBy { it.order }
 
     Column(Modifier.fillMaxSize()) {
@@ -95,9 +99,20 @@ fun DownloadsPage(state: ShellState) {
                             state.noteChatTitle(record.chatId, record.chatTitle)
                             state.openPlayer(record.toMediaItem(), startFromBeginning = false)
                         },
+                        onShowInFolder = {
+                            scope.launch {
+                                val id = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }
+                                    .getOrDefault(record.fileId)
+                                val path = runCatching { Td.localFilePath(id) }.getOrNull()
+                                if (path == null) toast("The file is not on this computer any more") else OpenExternal.reveal(File(path))
+                            }
+                        },
                         onRemove = {
                             scope.launch {
-                                runCatching { Td.deleteFile(record.fileId) }
+                                // The saved id dies with the TDLib session; ask again from the message.
+                                val id = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }
+                                    .getOrDefault(record.fileId)
+                                runCatching { Td.deleteFile(id) }
                                 state.settings.forgetDownload(record.chatId, record.messageId)
                             }
                         },
@@ -166,7 +181,7 @@ private fun ActiveRow(state: ShellState, row: OfflineDownloads.Progress) {
 }
 
 @Composable
-private fun KeptRow(record: ResumeRecord, onPlay: () -> Unit, onRemove: () -> Unit) {
+private fun KeptRow(record: ResumeRecord, onPlay: () -> Unit, onShowInFolder: () -> Unit, onRemove: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -188,6 +203,7 @@ private fun KeptRow(record: ResumeRecord, onPlay: () -> Unit, onRemove: () -> Un
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        IconButton(onClick = onShowInFolder) { Icon(TmIcons.Folder, contentDescription = "Show in folder") }
         IconButton(onClick = onRemove) { Icon(Icons.Filled.Delete, contentDescription = "Remove download") }
     }
 }

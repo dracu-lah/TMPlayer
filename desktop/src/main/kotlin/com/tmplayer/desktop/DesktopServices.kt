@@ -22,4 +22,7 @@ object DesktopServices {
     }
 
     val prefs: DesktopPrefs by lazy { DesktopPrefs(java.io.File(DesktopPaths.configDir, "desktop.properties")) }
+
+    /** The once a day "a newer version is out" check. */
+    val updates: DesktopUpdates by lazy { DesktopUpdates(prefs) }
 }

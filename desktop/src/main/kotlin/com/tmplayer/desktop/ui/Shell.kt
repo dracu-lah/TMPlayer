@@ -47,6 +47,8 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.data.AuthState
 import com.tmplayer.desktop.BuildInfo
 import com.tmplayer.ui.components.UiState
+import com.tmplayer.desktop.os.OpenExternal
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapNotNull
 import com.tmplayer.data.Td
@@ -120,6 +122,14 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         if (state.openChat == null && state.destination == Destination.Chats) state.openChat(chat)
     }
 
+    // Housekeeping once signed in: the strays streaming left behind, after the first screen has
+    // settled, and the once a day look for a newer version.
+    LaunchedEffect(Unit) {
+        delay(HOUSEKEEPING_DELAY_MS)
+        runCatching { state.extras.watchCache?.sweep() }
+    }
+    LaunchedEffect(Unit) { runCatching { state.extras.updates?.checkIfDue() } }
+
     BackHandler(enabled = state.openChat != null) { state.closeChat() }
     BackHandler(enabled = state.openChat == null && state.destination != Destination.Chats) {
         state.go(Destination.Chats)
@@ -147,6 +157,20 @@ private fun Browse(state: ShellState, player: PlayerContent) {
             }
         }
 
+        val updates = state.extras.updates
+        val release = updates?.available?.collectAsState()?.value
+        if (release != null && state.nowPlaying == null) {
+            UpdateNotice(
+                release = release,
+                onDownload = {
+                    OpenExternal.browse(release.pageUrl)
+                    updates.dismiss()
+                },
+                onDismiss = updates::dismiss,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
+            )
+        }
+
         // Over the page rather than instead of it, so the page keeps its scroll position and its
         // search, and closing the player is simply taking this away.
         val playing = state.nowPlaying
@@ -160,6 +184,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
 }
 
 private val SIDEBAR_FROM = 1000.dp
+private const val HOUSEKEEPING_DELAY_MS = 20_000L
 
 private fun Destination.icon(): ImageVector = when (this) {
     Destination.Chats -> Icons.Filled.Home
