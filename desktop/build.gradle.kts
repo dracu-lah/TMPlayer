@@ -61,6 +61,10 @@ dependencies {
     runtimeOnly(libs.mediamp.runtime.windows.x64)
     runtimeOnly(libs.mediamp.runtime.macos.arm64)
     runtimeOnly(libs.mediamp.runtime.macos.x64)
+    implementation(libs.dbus.java.core)
+    implementation(libs.dbus.java.transport.native.unixsocket)
+    implementation(libs.jna)
+    implementation(libs.jna.platform)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

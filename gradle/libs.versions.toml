@@ -36,6 +36,11 @@ appdirs = "1.4.0"
 # the last published core set, the same handful :app uses.
 cmpMaterial3 = "1.12.0-alpha03"
 cmpMaterialIcons = "1.7.3"
+# Desktop OS services (com.tmplayer.desktop.os). dbus-java carries MPRIS and the Linux sleep
+# inhibit; its native unix socket transport needs nothing beyond JDK 16+. JNA is pinned to what
+# Compose and mediamp already resolve to, so the classpath carries one copy.
+dbusJava = "5.2.2"
+jna = "5.16.0"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -83,6 +88,10 @@ kotlinx-coroutines-swing = { group = "org.jetbrains.kotlinx", name = "kotlinx-co
 cmp-material3 = { group = "org.jetbrains.compose.material3", name = "material3", version.ref = "cmpMaterial3" }
 cmp-material-icons = { group = "org.jetbrains.compose.material", name = "material-icons-core", version.ref = "cmpMaterialIcons" }
 appdirs = { group = "net.harawata", name = "appdirs", version.ref = "appdirs" }
+dbus-java-core = { group = "com.github.hypfvieh", name = "dbus-java-core", version.ref = "dbusJava" }
+dbus-java-transport-native-unixsocket = { group = "com.github.hypfvieh", name = "dbus-java-transport-native-unixsocket", version.ref = "dbusJava" }
+jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
+jna-platform = { group = "net.java.dev.jna", name = "jna-platform", version.ref = "jna" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
