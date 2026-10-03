@@ -58,7 +58,7 @@ fun PlayerHost(
     }
 
     val media = remember(request.item.chatId, request.item.messageId) {
-        TelegramPlayerMedia(request.item, request.chatTitle)
+        TelegramPlayerMedia(request.item, request.chatTitle, DesktopServices.downloads, DesktopServices.watchCache)
     }
     PlayerScreen(
         media = media,
@@ -67,6 +67,7 @@ fun PlayerHost(
         fullscreen = fullscreen,
         onToggleFullscreen = onToggleFullscreen,
         settings = settings,
+        prefs = DesktopServices.prefs,
         onToggleAlwaysOnTop = onToggleAlwaysOnTop,
         onQuit = onQuit,
         onPlayingItemChanged = { playing = it },

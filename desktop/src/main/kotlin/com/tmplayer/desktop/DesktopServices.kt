@@ -14,4 +14,12 @@ object DesktopServices {
     }
 
     val downloads: DesktopDownloadRunner by lazy { DesktopDownloadRunner(settings) }
+
+    /** Volume, decoder, wheel and update choices: the settings the phone does not have. */
+    /** What streaming leaves on the disk: claimed by the player, swept at launch. */
+    val watchCache: DesktopWatchCache by lazy {
+        DesktopWatchCache(settings, DesktopPaths.filesDir, playing = { com.tmplayer.desktop.player.ActiveStreams.openIds() })
+    }
+
+    val prefs: DesktopPrefs by lazy { DesktopPrefs(java.io.File(DesktopPaths.configDir, "desktop.properties")) }
 }

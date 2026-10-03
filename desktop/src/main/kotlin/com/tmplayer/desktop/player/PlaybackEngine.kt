@@ -32,6 +32,9 @@ interface PlaybackEngine {
     fun setScale(scale: VideoScale)
     fun setDownmix(stereo: Boolean)
 
+    /** Loads a subtitle file from disk beside the video's own tracks and selects it. */
+    fun addSubtitle(path: String): Boolean
+
     /** What is actually playing, as label and value pairs for the Playback details panel. */
     fun details(): List<Pair<String, String>>
 
@@ -49,7 +52,17 @@ data class OpenPrefs(
     val downmix: Boolean = false,
     val volume: Int = 100,
     val muted: Boolean = false,
-)
+    /** mpv's `hwdec`: [HWDEC_AUTO] or [HWDEC_SOFTWARE]. */
+    val hwdec: String = HWDEC_AUTO,
+) {
+    companion object {
+        /** Hardware where mpv considers it safe, software otherwise; mpv also falls back per stream. */
+        const val HWDEC_AUTO = "auto-safe"
+        const val HWDEC_SOFTWARE = "no"
+
+        fun hwdecFor(softwareDecoding: Boolean) = if (softwareDecoding) HWDEC_SOFTWARE else HWDEC_AUTO
+    }
+}
 
 data class PlaybackStatus(
     val opened: Boolean = false,

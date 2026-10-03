@@ -1,6 +1,8 @@
 package com.tmplayer.desktop.player
 
 import com.tmplayer.data.ChatRepository
+import com.tmplayer.data.DownloadRunner
+import com.tmplayer.desktop.DesktopWatchCache
 import com.tmplayer.data.LocalFileAvailability
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaName
@@ -49,6 +51,15 @@ interface PlayerMedia {
 
     /** The viewer left this video: stop what was only fetched for it. */
     fun release()
+
+    /** Whether the menu offers Copy link and Download: only a Telegram video has either. */
+    val fromTelegram: Boolean get() = false
+
+    /** The t.me link to the message, or null where the chat gives none (private groups, a file). */
+    suspend fun messageLink(): String? = null
+
+    /** Queues the whole file to be kept, and says what happened in words for a notice. */
+    fun download(): String = "Only Telegram videos can be downloaded"
 }
 
 /** Which Telegram files a player currently has open, so a late cancel never stops a new playback. */
@@ -57,6 +68,7 @@ internal object ActiveStreams {
     fun opened(fileId: Int) { open.merge(fileId, 1, Int::plus) }
     fun closed(fileId: Int) { open.computeIfPresent(fileId) { _, n -> (n - 1).takeIf { it > 0 } } }
     fun isOpen(fileId: Int): Boolean = open.containsKey(fileId)
+    fun openIds(): Set<Int> = open.keys.toSet()
 }
 
 private val background = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -65,7 +77,15 @@ private val background = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 class TelegramPlayerMedia(
     override val item: MediaItem,
     override val chatTitle: String = "",
+    private val downloads: DownloadRunner? = null,
+    private val cache: DesktopWatchCache? = null,
 ) : PlayerMedia {
+
+    override val fromTelegram: Boolean get() = true
+
+    /** The file played straight off the disk, counted open in [ActiveStreams] until [release]. */
+    @Volatile
+    private var openedFromDisk: Int? = null
 
     private val _downloaded = MutableStateFlow<Float?>(null)
     override val downloaded: StateFlow<Float?> = _downloaded.asStateFlow()
@@ -75,10 +95,15 @@ class TelegramPlayerMedia(
         val session = Td.awaitAuthorizedSession()
         val fileId = Td.currentFileId(item.chatId, item.messageId, item.fileId)
         watchDownload(fileId)
+        // The player claims the cache for every video it opens (the phone's rule): this one is
+        // the cached video now, and the one before it goes, unless either is a download.
+        cache?.let { c -> background.launch { runCatching { c.claim(item, chatTitle, fileId) } } }
         // A finished file plays straight off the disk, through mpv's own file reader.
         if (Td.localFileAvailability(fileId) == LocalFileAvailability.Complete) {
             Td.localFilePath(fileId)?.let { path ->
                 _downloaded.value = 1f
+                ActiveStreams.opened(fileId)
+                openedFromDisk = fileId
                 return UriMediaData(path)
             }
         }
@@ -138,7 +163,19 @@ class TelegramPlayerMedia(
         return episodesAmong(name, candidates)
     }
 
-    override fun episode(other: MediaItem): PlayerMedia = TelegramPlayerMedia(other, chatTitle)
+    override fun episode(other: MediaItem): PlayerMedia = TelegramPlayerMedia(other, chatTitle, downloads, cache)
+
+    override suspend fun messageLink(): String? = runCatching {
+        Td.client.getMessageLink(item.chatId, item.messageId, 0, 0, "", false, false).valueOrNull?.link
+    }.getOrNull()?.takeIf { it.isNotBlank() }
+
+    override fun download(): String {
+        val runner = downloads ?: return "Downloads are not available here"
+        if (_downloaded.value == 1f) return "Already on this computer"
+        if (OfflineDownloads.active.value.containsKey(item.fileId)) return "Already downloading"
+        OfflineDownloads.start(runner, item, chatTitle)
+        return "Downloading ${item.title}"
+    }
 
     override suspend fun tdlibVersion(): String? = runCatching {
         (Td.awaitAuthorizedSession().client.getOption("version").valueOrNull as? OptionValueString)?.value
@@ -146,6 +183,8 @@ class TelegramPlayerMedia(
 
     override fun release() {
         watcher?.cancel()
+        openedFromDisk?.let(ActiveStreams::closed)
+        openedFromDisk = null
     }
 
     private companion object {

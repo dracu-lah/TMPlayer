@@ -102,6 +102,8 @@ internal sealed interface MenuAction {
     data object ToggleDownmix : MenuAction
     data object StartOver : MenuAction
     data object ToggleIgnoreClicks : MenuAction
+    data object CopyLink : MenuAction
+    data object Download : MenuAction
     data object Details : MenuAction
     data object Shortcuts : MenuAction
 }
@@ -176,6 +178,7 @@ internal fun BoxScope.PlayerOverlay(
     ignoreClicks: Boolean,
     miniPlayerAvailable: Boolean,
     alwaysOnTopAvailable: Boolean,
+    fromTelegram: Boolean,
     onHoverControls: (Boolean) -> Unit,
     onBack: () -> Unit,
     onTogglePlay: () -> Unit,
@@ -196,7 +199,7 @@ internal fun BoxScope.PlayerOverlay(
     // The right click menu hangs at the cursor whether or not the controls are up.
     if (menu?.anchor == MenuAt.Anchor.Cursor) {
         Box(Modifier.offset { IntOffset(menu.at.x.roundToInt(), menu.at.y.roundToInt()) }.size(1.dp)) {
-            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, onOpenMenu, onCloseMenu, onMenuAction)
+            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, onOpenMenu, onCloseMenu, onMenuAction)
         }
     }
 
@@ -226,7 +229,7 @@ internal fun BoxScope.PlayerOverlay(
                 Box {
                     OverlayButton(PlayerIcons.MoreVert, "More", onClick = { onOpenMenu(MenuAt(MenuPage.Main, MenuAt.Anchor.Overflow)) })
                     if (menu?.anchor == MenuAt.Anchor.Overflow) {
-                        PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, onOpenMenu, onCloseMenu, onMenuAction)
+                        PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, onOpenMenu, onCloseMenu, onMenuAction)
                     }
                 }
             }
@@ -286,13 +289,13 @@ internal fun BoxScope.PlayerOverlay(
                     Box {
                         OverlayButton(PlayerIcons.Subtitles, "Subtitles (S, C)", onClick = { onOpenMenu(MenuAt(MenuPage.Subtitles, MenuAt.Anchor.Subtitles)) })
                         if (menu?.anchor == MenuAt.Anchor.Subtitles) {
-                            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, onOpenMenu, onCloseMenu, onMenuAction)
+                            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, onOpenMenu, onCloseMenu, onMenuAction)
                         }
                     }
                     Box {
                         OverlayButton(PlayerIcons.Audio, "Audio (A)", onClick = { onOpenMenu(MenuAt(MenuPage.Audio, MenuAt.Anchor.Audio)) })
                         if (menu?.anchor == MenuAt.Anchor.Audio) {
-                            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, onOpenMenu, onCloseMenu, onMenuAction)
+                            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, onOpenMenu, onCloseMenu, onMenuAction)
                         }
                     }
                     Tip("Speed (] and [)") {
@@ -499,6 +502,7 @@ private fun PlayerMenu(
     ignoreClicks: Boolean,
     miniPlayerAvailable: Boolean,
     alwaysOnTopAvailable: Boolean,
+    fromTelegram: Boolean,
     onOpenMenu: (MenuAt) -> Unit,
     onClose: () -> Unit,
     onAction: (MenuAction) -> Unit,
@@ -541,6 +545,10 @@ private fun PlayerMenu(
                 Entry("Ignore clicks on the video", checked = ignoreClicks) { pick(MenuAction.ToggleIgnoreClicks) }
                 HorizontalDivider()
                 Entry("Start over") { pick(MenuAction.StartOver) }
+                if (fromTelegram) {
+                    Entry("Copy link") { pick(MenuAction.CopyLink) }
+                    Entry("Download") { pick(MenuAction.Download) }
+                }
                 Entry("Playback details", trailing = "I") { pick(MenuAction.Details) }
                 Entry("Keyboard shortcuts", trailing = "?") { pick(MenuAction.Shortcuts) }
             }

@@ -14,6 +14,7 @@ import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.desktop.DesktopPrefs
 import kotlinx.coroutines.delay
 import java.io.File
 import kotlin.system.exitProcess
@@ -49,6 +50,7 @@ fun main(argv: Array<String>) {
     val settingsDir = File(value("--settings") ?: File(System.getProperty("java.io.tmpdir"), "tmplayer-dev").path)
         .apply { mkdirs() }
     val store = SettingsStore(SettingsStore.openDataStore(File(settingsDir, SettingsStore.FILE_NAME)))
+    val prefs = DesktopPrefs(File(settingsDir, "desktop.properties"))
     val (w, h) = (value("--size") ?: "1280x720").split("x").map { it.toInt() }
     val seekAfter = value("--seek-after")?.toLongOrNull()
     val seekTo = value("--seek-to")?.toLongOrNull()
@@ -71,6 +73,7 @@ fun main(argv: Array<String>) {
                 fullscreen = fullscreen,
                 onToggleFullscreen = { fullscreen = !fullscreen },
                 settings = store,
+                prefs = prefs,
                 modifier = Modifier.fillMaxSize(),
                 onToggleAlwaysOnTop = { window.isAlwaysOnTop = !window.isAlwaysOnTop },
                 onQuit = ::exitApplication,

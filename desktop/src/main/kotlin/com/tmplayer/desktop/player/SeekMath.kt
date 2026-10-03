@@ -49,6 +49,21 @@ object SeekMath {
         return if (seek) PlayerAction.SeekBy(direction * stepMs) else PlayerAction.VolumeBy(direction * stepVolume)
     }
 
+    /**
+     * What a wheel event over the picture does, from its raw deltas.
+     *
+     * By default the vertical wheel is volume and Shift+wheel seeks; [wheelSeeks] (the setting)
+     * swaps the two. Compose Desktop delivers Shift+wheel as a horizontal delta, so a horizontal
+     * delta with Shift held is that swapped vertical wheel and keeps its sign; without Shift it is
+     * a real horizontal wheel or a touchpad swipe, which always seeks, right going forward.
+     */
+    fun wheelAction(dx: Float, dy: Float, shift: Boolean, wheelSeeks: Boolean): PlayerAction? = when {
+        dy != 0f -> wheel(dy, seek = shift != wheelSeeks)
+        dx != 0f && shift -> wheel(dx, seek = !wheelSeeks)
+        dx != 0f -> wheel(-dx, seek = true)
+        else -> null
+    }
+
     /** ] and [: a tenth at a time, rounded so 1.1 does not become 1.0999999. */
     fun fineSpeed(current: Float, up: Boolean): Float {
         val next = current + if (up) FINE_SPEED_STEP else -FINE_SPEED_STEP

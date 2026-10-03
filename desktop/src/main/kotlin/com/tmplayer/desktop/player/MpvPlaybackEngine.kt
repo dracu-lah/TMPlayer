@@ -46,7 +46,7 @@ object MpvNatives {
  *
  * @param hwdec mpv's `hwdec`; `auto-safe` by default, `no` for the force software setting.
  */
-class MpvPlaybackEngine(hwdec: String = "auto-safe") : PlaybackEngine {
+class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -76,6 +76,9 @@ class MpvPlaybackEngine(hwdec: String = "auto-safe") : PlaybackEngine {
         MpvNatives.prepare()
         player = MpvMediampPlayer(Unit, SupervisorJob() + Dispatchers.Default, configureOptions = { h ->
             h.option("hwdec", hwdec)
+            // A hardware decoder that starts and then fails on a frame drops to software rather
+            // than leaving a frozen picture (mpv's default is a count; "yes" is any failure).
+            h.option("hwdec-software-fallback", "yes")
             h.option("audio-channels", "auto-safe")
             // Subtitles come with the file and are drawn by libass inside the frame.
             h.option("sub-auto", "no")
@@ -216,6 +219,7 @@ class MpvPlaybackEngine(hwdec: String = "auto-safe") : PlaybackEngine {
             h.setPropertyDouble("volume", prefs.volume.toDouble())
             h.setPropertyBoolean("mute", prefs.muted)
             h.setPropertyString("audio-channels", if (prefs.downmix) "stereo" else "auto-safe")
+            h.setPropertyString("hwdec", prefs.hwdec)
         }
         applyScale(prefs.scale)
         try {
@@ -330,6 +334,13 @@ class MpvPlaybackEngine(hwdec: String = "auto-safe") : PlaybackEngine {
     override fun setDownmix(stereo: Boolean) {
         runCatching { handle.setPropertyString("audio-channels", if (stereo) "stereo" else "auto-safe") }
         _state.update { it.copy(downmix = stereo) }
+    }
+
+    override fun addSubtitle(path: String): Boolean {
+        if (!_state.value.opened) return false
+        val ok = runCatching { handle.command("sub-add", path, "select") }.getOrDefault(false)
+        tracksDirty = true
+        return ok
     }
 
     override fun details(): List<Pair<String, String>> {

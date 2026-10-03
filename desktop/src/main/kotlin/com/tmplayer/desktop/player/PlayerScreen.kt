@@ -43,6 +43,7 @@ import com.tmplayer.data.MediaName
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.TrackChoice
+import com.tmplayer.desktop.DesktopPrefs
 import com.tmplayer.player.PlaybackSpeed
 import com.tmplayer.player.VideoScale
 import com.tmplayer.platform.Logger
@@ -55,58 +56,6 @@ import org.openani.mediamp.mpv.compose.MpvMediampPlayerSurface
 import java.awt.Point
 import java.awt.Toolkit
 import java.awt.image.BufferedImage
-
-/**
- * The desktop player: the video, the overlay of B2.4, the keyboard of B2.2 and the mouse of B2.3.
- *
- * Plays a Telegram video. Fullscreen belongs to the window, so the shell passes its state in and
- * flips it through [onToggleFullscreen]; the same goes for always on top, the mini player and
- * quitting, each of which is offered only when the shell passes a callback for it.
- *
- * @param startFromBeginning ignore the saved position for this first video (Start over from the
- *   browse screen). Episodes played after it resume as usual.
- * @param settings the process's one [SettingsStore]; resume points, speed, picture shape and the
- *   per series track choice are read from and written to it exactly as on Android.
- * @param onPlayingItemChanged called with each item once it has opened, including episodes the
- *   player moved on to by itself.
- */
-@Composable
-fun PlayerScreen(
-    item: MediaItem,
-    startFromBeginning: Boolean,
-    onBack: () -> Unit,
-    fullscreen: Boolean,
-    onToggleFullscreen: () -> Unit,
-    settings: SettingsStore,
-    modifier: Modifier = Modifier,
-    chatTitle: String = "",
-    onMiniPlayer: (() -> Unit)? = null,
-    onToggleAlwaysOnTop: (() -> Unit)? = null,
-    onQuit: (() -> Unit)? = null,
-    onPlayingItemChanged: (MediaItem) -> Unit = {},
-) {
-    val media = remember(item.chatId, item.messageId) { TelegramPlayerMedia(item, chatTitle) }
-    PlayerScreen(
-        media = media,
-        startFromBeginning = startFromBeginning,
-        onBack = onBack,
-        fullscreen = fullscreen,
-        onToggleFullscreen = onToggleFullscreen,
-        settings = settings,
-        modifier = modifier,
-        onMiniPlayer = onMiniPlayer,
-        onToggleAlwaysOnTop = onToggleAlwaysOnTop,
-        onQuit = onQuit,
-        onPlayingItemChanged = onPlayingItemChanged,
-    )
-}
-
-/** The volume, mute and downmix the viewer last chose, kept for the life of the process. */
-internal object PlayerMemory {
-    @Volatile var volume = 100
-    @Volatile var muted = false
-    @Volatile var downmix = false
-}
 
 /** Outlives the screen, so the resume write on the way out survives the Back that caused it. */
 private val playerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -141,8 +90,21 @@ private val blankCursor: PointerIcon by lazy {
 }
 
 /**
- * The same screen over any [PlayerMedia]: Telegram in the app, a file on disk in the dev harness.
+ * The desktop player: the video, the overlay of B2.4, the keyboard of B2.2 and the mouse of B2.3,
+ * over any [PlayerMedia] (Telegram in the app, a file on disk in the dev harness).
  *
+ * Fullscreen belongs to the window, so the shell passes its state in and flips it through
+ * [onToggleFullscreen]; the same goes for always on top, the mini player and quitting, each of
+ * which is offered only when the shell passes a callback for it.
+ *
+ * @param startFromBeginning ignore the saved position for this first video (Start over from the
+ *   browse screen). Episodes played after it resume as usual.
+ * @param settings the process's one [SettingsStore]; resume points, speed, picture shape and the
+ *   per series track choice are read from and written to it exactly as on Android.
+ * @param prefs the desktop's own settings: volume, mute and downmix are kept there across
+ *   launches, and the wheel and decoder choices are read from it.
+ * @param onPlayingItemChanged called with each item once it has opened, including episodes the
+ *   player moved on to by itself.
  * @param onEngine hands the engine out once it exists, for the dev harness's scripted runs.
  * @param detailsOpen start with the Playback details panel up (the harness's `--details`).
  */
@@ -155,6 +117,7 @@ fun PlayerScreen(
     fullscreen: Boolean,
     onToggleFullscreen: () -> Unit,
     settings: SettingsStore,
+    prefs: DesktopPrefs,
     modifier: Modifier = Modifier,
     onMiniPlayer: (() -> Unit)? = null,
     onToggleAlwaysOnTop: (() -> Unit)? = null,
@@ -163,7 +126,8 @@ fun PlayerScreen(
     onEngine: (PlaybackEngine) -> Unit = {},
     detailsOpen: Boolean = false,
 ) {
-    val engine = remember { MpvPlaybackEngine() }
+    val engine = remember { MpvPlaybackEngine(OpenPrefs.hwdecFor(prefs.now.softwareDecoding)) }
+    val desktop by prefs.state.collectAsState()
     DisposableEffect(engine) { onDispose { engine.close() } }
     LaunchedEffect(engine) { onEngine(engine) }
 
@@ -228,9 +192,10 @@ fun PlayerScreen(
             subtitlesOn = if (trackChoice.empty) null else trackChoice.subtitlesOn,
             speed = runCatching { settings.playbackSpeedNow() }.getOrDefault(PlaybackSpeed.DEFAULT),
             scale = runCatching { VideoScale.from(settings.videoScaleNow()) }.getOrDefault(VideoScale.Fit),
-            downmix = PlayerMemory.downmix,
-            volume = PlayerMemory.volume,
-            muted = PlayerMemory.muted,
+            downmix = prefs.now.downmix,
+            volume = prefs.now.volume,
+            muted = prefs.now.muted,
+            hwdec = OpenPrefs.hwdecFor(prefs.now.softwareDecoding),
         )
         val data = try {
             current.open()
@@ -385,15 +350,14 @@ fun PlayerScreen(
 
     fun setVolume(value: Int) {
         engine.setVolume(value)
-        PlayerMemory.volume = value
-        if (value > 0) PlayerMemory.muted = false
+        prefs.update { it.copy(volume = value, muted = if (value > 0) false else it.muted) }
         showFlash(Flash.Kind.Volume, "$value%")
     }
 
     fun toggleMute() {
         val muted = !status.muted
         engine.setMuted(muted)
-        PlayerMemory.muted = muted
+        prefs.update { it.copy(muted = muted) }
         showFlash(Flash.Kind.Volume, if (muted) "Muted" else "${status.volume}%")
     }
 
@@ -473,6 +437,27 @@ fun PlayerScreen(
     }
 
     val dispatchNow by rememberUpdatedState(::dispatch)
+    val wheelSeeksNow by rememberUpdatedState(desktop.wheelSeeks)
+
+    fun loadSubtitle(path: String) {
+        if (phase != Phase.Playing) return
+        val name = java.io.File(path).name
+        if (engine.addSubtitle(path)) showFlash(Flash.Kind.Text, "Subtitles: $name") else showFlash(Flash.Kind.Text, "Could not load $name")
+    }
+
+    fun copyLink() {
+        scope.launch {
+            val link = current.messageLink()
+            if (link == null) {
+                showFlash(Flash.Kind.Text, "This chat has no links to its messages")
+            } else {
+                runCatching {
+                    java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(java.awt.datatransfer.StringSelection(link), null)
+                }
+                showFlash(Flash.Kind.Text, "Link copied")
+            }
+        }
+    }
     val mac = remember { System.getProperty("os.name").orEmpty().startsWith("Mac") }
 
     // ---- layout ------------------------------------------------------------------------------
@@ -514,12 +499,11 @@ fun PlayerScreen(
                 .onPointerEvent(PointerEventType.Scroll) { event ->
                     if (phase != Phase.Playing) return@onPointerEvent
                     val delta = event.changes.firstOrNull()?.scrollDelta ?: return@onPointerEvent
-                    val horizontal = delta.x != 0f && delta.y == 0f
-                    val seek = horizontal || event.keyboardModifiers.pointerShift
-                    val notches = if (horizontal) -delta.x else delta.y
-                    SeekMath.wheel(notches, seek)?.let(dispatchNow)
+                    SeekMath.wheelAction(delta.x, delta.y, event.keyboardModifiers.pointerShift, wheelSeeksNow)
+                        ?.let(dispatchNow)
                 }
-                .pointerHoverIcon(if (fullscreen && !showControls && menu == null) blankCursor else PointerIcon.Default),
+                .pointerHoverIcon(if (fullscreen && !showControls && menu == null) blankCursor else PointerIcon.Default)
+                .subtitleDropTarget(onDrop = ::loadSubtitle, onRefused = { showFlash(Flash.Kind.Text, it) }),
         ) {
             MpvMediampPlayerSurface(engine.player, Modifier.fillMaxSize())
 
@@ -555,6 +539,7 @@ fun PlayerScreen(
                 ignoreClicks = ignoreClicks,
                 miniPlayerAvailable = onMiniPlayer != null,
                 alwaysOnTopAvailable = onToggleAlwaysOnTop != null,
+                fromTelegram = current.fromTelegram,
                 onHoverControls = { overControls = it },
                 onBack = onBack,
                 onTogglePlay = ::togglePlay,
@@ -586,7 +571,7 @@ fun PlayerScreen(
                         MenuAction.ToggleDownmix -> {
                             val on = !status.downmix
                             engine.setDownmix(on)
-                            PlayerMemory.downmix = on
+                            prefs.update { it.copy(downmix = on) }
                             showFlash(Flash.Kind.Text, if (on) "Downmix to stereo on" else "Downmix to stereo off")
                         }
                         MenuAction.StartOver -> startOver()
@@ -594,6 +579,8 @@ fun PlayerScreen(
                             ignoreClicks = !ignoreClicks
                             showFlash(Flash.Kind.Text, if (ignoreClicks) "Clicks on the video are ignored" else "Clicks on the video work again")
                         }
+                        MenuAction.CopyLink -> copyLink()
+                        MenuAction.Download -> showFlash(Flash.Kind.Text, current.download())
                         MenuAction.Details -> showDetails = true
                         MenuAction.Shortcuts -> showShortcuts = true
                     }

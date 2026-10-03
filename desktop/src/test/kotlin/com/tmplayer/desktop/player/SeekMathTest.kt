@@ -80,4 +80,19 @@ class SeekMathTest {
         val last = listOf(sub(1, false), sub(2, true))
         assertNull(last.cycle(TrackType.Subtitle, forward = true))
     }
+
+    @Test
+    fun `wheel actions follow the wheel seeks setting`() {
+        // Default: vertical is volume, Shift (vertical or the swapped horizontal delta) seeks.
+        assertEquals(PlayerAction.VolumeBy(5), SeekMath.wheelAction(0f, -1f, shift = false, wheelSeeks = false))
+        assertEquals(PlayerAction.SeekBy(-10_000), SeekMath.wheelAction(0f, 1f, shift = true, wheelSeeks = false))
+        assertEquals(PlayerAction.SeekBy(-10_000), SeekMath.wheelAction(1f, 0f, shift = true, wheelSeeks = false))
+        // The setting swaps them.
+        assertEquals(PlayerAction.SeekBy(10_000), SeekMath.wheelAction(0f, -1f, shift = false, wheelSeeks = true))
+        assertEquals(PlayerAction.VolumeBy(-5), SeekMath.wheelAction(1f, 0f, shift = true, wheelSeeks = true))
+        // A real horizontal wheel always seeks, right going forward.
+        assertEquals(PlayerAction.SeekBy(10_000), SeekMath.wheelAction(1f, 0f, shift = false, wheelSeeks = false))
+        assertEquals(PlayerAction.SeekBy(-10_000), SeekMath.wheelAction(-1f, 0f, shift = false, wheelSeeks = true))
+        assertNull(SeekMath.wheelAction(0f, 0f, shift = false, wheelSeeks = false))
+    }
 }
