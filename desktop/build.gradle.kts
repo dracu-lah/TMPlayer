@@ -47,6 +47,14 @@ val generateBuildInfo by tasks.registering {
 }
 kotlin.sourceSets.main { kotlin.srcDir(generateBuildInfo) }
 
+val hostOs: String = System.getProperty("os.name").lowercase()
+val hostArm: Boolean = System.getProperty("os.arch").let { it == "aarch64" || it == "arm64" }
+val mpvRuntime = when {
+    hostOs.contains("win") -> libs.mediamp.runtime.windows.x64
+    hostOs.contains("mac") -> if (hostArm) libs.mediamp.runtime.macos.arm64 else libs.mediamp.runtime.macos.x64
+    else -> libs.mediamp.runtime.linux.x64
+}
+
 dependencies {
     implementation(project(":core"))
     implementation(project(":ui"))
@@ -58,10 +66,9 @@ dependencies {
     implementation(libs.zxing.core)
     implementation(libs.mediamp.api)
     implementation(libs.mediamp.mpv)
-    runtimeOnly(libs.mediamp.runtime.linux.x64)
-    runtimeOnly(libs.mediamp.runtime.windows.x64)
-    runtimeOnly(libs.mediamp.runtime.macos.arm64)
-    runtimeOnly(libs.mediamp.runtime.macos.x64)
+    // libmpv and its FFmpeg for the OS being built on, and only that one: installers are made on
+    // the matching host anyway, and each runtime is 30 to 75 MB the other two would never load.
+    runtimeOnly(mpvRuntime)
     implementation(libs.dbus.java.core)
     implementation(libs.dbus.java.transport.native.unixsocket)
     implementation(libs.jna)
