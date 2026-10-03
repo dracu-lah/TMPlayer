@@ -81,7 +81,6 @@ class PlayerControls(
     private val topBar: View = root.findViewById(R.id.controls_topbar)
     private val topTitle: TextView = root.findViewById(R.id.topbar_title)
     private val topSubtitle: TextView = root.findViewById(R.id.topbar_subtitle)
-    private val topClock: TextView = root.findViewById(R.id.topbar_clock)
     private val center: View = root.findViewById(R.id.controls_center)
     private val centerPrevious: ImageButton = root.findViewById(R.id.center_previous)
     private val centerNext: ImageButton = root.findViewById(R.id.center_next)
@@ -226,6 +225,30 @@ class PlayerControls(
                 }
             }
         }
+
+        // A long press names the button, the way every phone app's icons do. The names already
+        // exist for TalkBack, so the tooltip is the same text; [describe] keeps the two together
+        // when a label changes later.
+        nameButtons(root)
+    }
+
+    private fun nameButtons(view: View) {
+        if (view.isClickable && !view.contentDescription.isNullOrEmpty()) {
+            view.tooltipText = view.contentDescription
+        }
+        if (view is android.view.ViewGroup) {
+            for (i in 0 until view.childCount) nameButtons(view.getChildAt(i))
+        }
+    }
+
+    /**
+     * A button's name: read aloud by TalkBack and, on a phone, shown when it is long pressed. Not
+     * on a television, where a held OK on a focused button would otherwise pop a tooltip.
+     */
+    private fun describe(view: View?, text: String) {
+        if (view == null || view.contentDescription == text) return
+        view.contentDescription = text
+        if (!isTv) view.tooltipText = text
     }
 
     /** Whether this phone can do picture in picture at all; the PiP button is hidden if not. */
@@ -248,12 +271,10 @@ class PlayerControls(
         label(R.id.control_forward_label, forwardMs)
         label(R.id.center_rewind_label, backMs)
         label(R.id.center_forward_label, forwardMs)
-        root.findViewById<View>(R.id.control_rewind)?.contentDescription = "Back ${backMs / 1000} seconds"
-        root.findViewById<View>(R.id.control_forward)?.contentDescription =
-            "Forward ${forwardMs / 1000} seconds"
-        root.findViewById<View>(R.id.center_rewind)?.contentDescription = "Back ${backMs / 1000} seconds"
-        root.findViewById<View>(R.id.center_forward)?.contentDescription =
-            "Forward ${forwardMs / 1000} seconds"
+        describe(root.findViewById(R.id.control_rewind), "Back ${backMs / 1000} seconds")
+        describe(root.findViewById(R.id.control_forward), "Forward ${forwardMs / 1000} seconds")
+        describe(root.findViewById(R.id.center_rewind), "Back ${backMs / 1000} seconds")
+        describe(root.findViewById(R.id.center_forward), "Forward ${forwardMs / 1000} seconds")
     }
 
     /** Mid-play buffering: the phone swaps the play glyph for a spinner in the same disc. */
@@ -302,12 +323,12 @@ class PlayerControls(
         nextLabel: String,
     ) {
         previous.visibility = if (previousEpisode != null) View.VISIBLE else View.GONE
-        previous.contentDescription = previousLabel
+        describe(previous, previousLabel)
         previous.setOnClickListener {
             previousEpisode?.let(onPlayEpisode)
         }
         next.visibility = if (nextEpisode != null) View.VISIBLE else View.GONE
-        next.contentDescription = nextLabel
+        describe(next, nextLabel)
         next.setOnClickListener {
             nextEpisode?.let(onPlayEpisode)
         }
@@ -319,17 +340,17 @@ class PlayerControls(
         previous.visibility = View.GONE
         next.visibility = View.GONE
         centerPrevious.visibility = if (previousEpisode != null) View.VISIBLE else View.INVISIBLE
-        centerPrevious.contentDescription = previousLabel
+        describe(centerPrevious, previousLabel)
         centerPrevious.setOnClickListener { previousEpisode?.let(onPlayEpisode) }
         centerNext.visibility = if (nextEpisode != null) View.VISIBLE else View.INVISIBLE
-        centerNext.contentDescription = nextLabel
+        describe(centerNext, nextLabel)
         centerNext.setOnClickListener { nextEpisode?.let(onPlayEpisode) }
     }
 
     /** The orientation button carries its current state, drawn by the activity that owns it. */
     fun setOrientationIcon(resId: Int, label: String) {
         rotate.setImageResource(resId)
-        rotate.contentDescription = label
+        describe(rotate, label)
     }
 
     fun show() {
@@ -420,11 +441,11 @@ class PlayerControls(
         val exo = player()
         val playing = exo?.isPlaying == true || (exo?.playWhenReady == true && buffering)
         playPause.setImageResource(if (playing) R.drawable.ic_player_pause else R.drawable.ic_player_play)
-        playPause.contentDescription = if (playing) "Pause" else "Play"
+        describe(playPause, if (playing) "Pause" else "Play")
         if (!isTv) {
             centerIcon.setShowsPlay(!playing, animate = animate && centerDrawn && visible)
             centerDrawn = true
-            centerPlay.contentDescription = if (playing) "Pause" else "Play"
+            describe(centerPlay, if (playing) "Pause" else "Play")
         }
     }
 
@@ -454,13 +475,15 @@ class PlayerControls(
         } else {
             StreamStats.formatClock(duration)
         }
-        timesDuration.contentDescription =
-            if (showRemaining) "Show the total length" else "Show the time remaining"
+        describe(timesDuration, if (showRemaining) "Show the total length" else "Show the time remaining")
     }
 
+    /**
+     * The television's clock. A phone has none of its own: the status bar comes down with the
+     * controls and already shows the time, and a second clock beside it was just noise.
+     */
     private fun renderWallClock() {
-        val now = timeOfDay(System.currentTimeMillis())
-        if (isTv) clock.text = now else topClock.text = now
+        if (isTv) clock.text = timeOfDay(System.currentTimeMillis())
     }
 
     private fun timeOfDay(atMillis: Long): String =

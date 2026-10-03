@@ -101,6 +101,7 @@ You land on your chat list. Open any chat to see only its playable videos, and p
 | **Drag up / down, right side** | Volume |
 | **Pinch** | Fit, fill or stretch the picture |
 | **Tap the total time** | Show the time remaining instead |
+| **Hold a button** | Show its name |
 | **⋮ menu** | Lock the screen, picture in picture, speed, start over, open in another app, details |
 
 The jump length, the hold speed, how long the controls stay up, each drag and the vibration are

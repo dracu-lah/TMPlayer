@@ -59,6 +59,34 @@ object WatchCache {
         }
     }
 
+    /**
+     * The files open in a player right now, counted, because backing out of a video and opening it
+     * again can briefly put two players on one file.
+     *
+     * The player's claim on the cache is written in the background, after its download has begun,
+     * so for the first moments of a watch the file has no record at all. A sweep running then, at
+     * launch or on the way out of the previous episode, took that for a stray and deleted the part
+     * file underneath the download: the player sat on Loading until it was closed and opened again.
+     */
+    private val playing = mutableMapOf<Int, Int>()
+
+    fun startedPlaying(fileId: Int) {
+        if (fileId <= 0) return
+        synchronized(playing) { playing[fileId] = (playing[fileId] ?: 0) + 1 }
+    }
+
+    fun stoppedPlaying(fileId: Int) {
+        if (fileId <= 0) return
+        synchronized(playing) {
+            val left = (playing[fileId] ?: 0) - 1
+            if (left > 0) playing[fileId] = left else playing.remove(fileId)
+        }
+    }
+
+    fun isPlaying(fileId: Int): Boolean = synchronized(playing) { fileId in playing }
+
+    private fun playingNow(): Set<Int> = synchronized(playing) { playing.keys.toSet() }
+
     /** Serialises [claim] against itself. See the note there. */
     private val claiming = Mutex()
 
@@ -254,8 +282,18 @@ object WatchCache {
         // again. There is no hurry here, so it waits.
         if (accounted.size != known.size) return@withContext 0L
 
+        // Asked last, after the slow resolving above, so a video opened while that ran is spared.
+        // Best effort: a path TDLib will not give yet is covered by the age rule below.
+        val open = playingNow().mapNotNull { runCatching { Td.localPathAnyway(it) }.getOrNull() }
+
+        // Nothing written in the last few minutes is a stray: a file being fetched is touched with
+        // every chunk, and one that has just stopped may belong to a player between two requests.
+        val settled = System.currentTimeMillis() - STRAY_MIN_AGE_MS
         var freed = 0L
-        for (stray in strays(context, accounted.toSet())) if (forget(stray)) freed += stray.bytes
+        for (stray in strays(context, (accounted + open).toSet())) {
+            if (stray.modifiedAt > settled) continue
+            if (forget(stray)) freed += stray.bytes
+        }
         freed
     }
 
@@ -267,6 +305,8 @@ object WatchCache {
      * button for the viewer who wants that space anyway. `temp` is here because a watch abandoned
      * part way leaves its bytes there, and half a video is still half a gigabyte.
      */
+    private const val STRAY_MIN_AGE_MS = 10 * 60_000L
+
     private val MEDIA_DIRECTORIES = listOf(
         "videos",
         "documents",

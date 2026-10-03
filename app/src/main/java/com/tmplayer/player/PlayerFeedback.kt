@@ -56,11 +56,15 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
     }
     private val level = LevelPill(context)
     private val scrub = ScrubCard(context)
+    private val spinner = ProgressBar(context).apply {
+        isIndeterminate = true
+        indeterminateTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+    }
 
     init {
         val at = insertBelow?.let { root.indexOfChild(it) }?.takeIf { it >= 0 } ?: root.childCount
         // Inserted in reverse so they land in this order, bottom to top.
-        listOf(scrub, level, hold, ripple, flash).forEach { view ->
+        listOf(spinner, scrub, level, hold, ripple, flash).forEach { view ->
             if (view.layoutParams == null) {
                 view.layoutParams = FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -73,6 +77,34 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
         flash.layoutParams = FrameLayout.LayoutParams(dp(88f), dp(88f), Gravity.CENTER)
         level.layoutParams = FrameLayout.LayoutParams(dp(36f), dp(196f), Gravity.CENTER_VERTICAL)
         scrub.layoutParams = FrameLayout.LayoutParams(wrap, wrap, Gravity.CENTER)
+        spinner.layoutParams = FrameLayout.LayoutParams(dp(56f), dp(56f), Gravity.CENTER)
+    }
+
+    // ---- waiting -----------------------------------------------------------------------------
+
+    private var waiting = false
+    private var controlsUp = false
+    private val showSpinner = Runnable { spinner.visibility = View.VISIBLE }
+
+    /** A stall mid-play. Shown a beat late, so the brief wait after each jump does not flicker. */
+    fun buffering(on: Boolean) {
+        waiting = on
+        renderSpinner()
+    }
+
+    /** While the row is up its play disc spins instead, in the same spot. */
+    fun controlsShown(up: Boolean) {
+        controlsUp = up
+        renderSpinner()
+    }
+
+    private fun renderSpinner() {
+        spinner.removeCallbacks(showSpinner)
+        if (!waiting || controlsUp) {
+            spinner.visibility = View.GONE
+        } else if (spinner.visibility != View.VISIBLE) {
+            spinner.postDelayed(showSpinner, SPINNER_DELAY_MS)
+        }
     }
 
     // ---- play and pause --------------------------------------------------------------------
@@ -133,7 +165,9 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
 
     /** Drops everything at once, for picture in picture and the lock. */
     fun clear() {
-        listOf(flash, ripple, hold, level, scrub).forEach {
+        waiting = false
+        spinner.removeCallbacks(showSpinner)
+        listOf(flash, ripple, hold, level, scrub, spinner).forEach {
             it.animate().cancel()
             it.visibility = View.GONE
         }
@@ -411,6 +445,7 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
 
     private companion object {
         const val FADE_MS = 300L
+        const val SPINNER_DELAY_MS = 400L
         const val FLASH_MS = 450L
         const val WAVE_MS = 650L
         const val CHEVRON_CYCLE_MS = 750L

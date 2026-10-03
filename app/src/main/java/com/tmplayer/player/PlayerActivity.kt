@@ -446,6 +446,7 @@ class PlayerActivity : FragmentActivity() {
             }
             if (!allowedOnThisConnection(availability)) return@launch
             if (!makeRoomForThisVideo(availability)) return@launch
+            holdFile(fileId)
             claimTheWatchCache()
             val downloadFirst = runCatching { settings.downloadBeforePlayingNow() }
                 .getOrDefault(false)
@@ -932,6 +933,7 @@ class PlayerActivity : FragmentActivity() {
         statusOverlay.visibility = View.VISIBLE
         statusIcon.visibility = View.GONE
         rebufferChip.visibility = View.GONE
+        feedback?.buffering(false)
         statusSpinner?.visibility = View.GONE
         statusProgress.visibility = View.GONE
         statusDetail.visibility = View.GONE
@@ -1326,6 +1328,7 @@ class PlayerActivity : FragmentActivity() {
                 return@launch
             }
             fileId = fresh.fileId
+            holdFile(fileId)
             fileSizeBytes = fresh.sizeBytes
             // The old id is baked into the media source, so the player goes rather than re-prepares.
             releasePlayerAndSurface()
@@ -1607,6 +1610,7 @@ class PlayerActivity : FragmentActivity() {
         statusOverlay.visibility = View.VISIBLE
         statusIcon.visibility = View.GONE
         rebufferChip.visibility = View.GONE
+        feedback?.buffering(false)
         statusSpinner?.visibility = View.GONE
         statusProgress.visibility = View.GONE
         statusDetail.visibility = View.GONE
@@ -2324,6 +2328,8 @@ class PlayerActivity : FragmentActivity() {
         // The system bars ride with the transport row, as they do in every video app on the
         // platform.
         setSystemBarsHidden(!visible)
+        // The centre disc carries its own spinner while the row is up, so the bare one stands down.
+        feedback?.controlsShown(visible)
         // Subtitles climb clear of the raised row rather than being covered by it, and settle
         // back once it goes. Posted so the first raise measures a laid-out cluster rather than
         // the zero height it had while gone.
@@ -2550,6 +2556,7 @@ class PlayerActivity : FragmentActivity() {
         statusOverlay.visibility = View.VISIBLE
         statusIcon.visibility = View.GONE
         rebufferChip.visibility = View.GONE
+        feedback?.buffering(false)
         statusDetail.visibility = View.VISIBLE
         statusRetry?.visibility = View.GONE
         hideFailureActions()
@@ -2576,11 +2583,18 @@ class PlayerActivity : FragmentActivity() {
     private fun showRebuffering() {
         openingFilm = false
         statusOverlay.visibility = View.GONE
-        rebufferChip.visibility = View.VISIBLE
-        rebufferText.text = if (networkOffline && !downloadComplete) {
-            "Offline. Waiting for internet…"
+        val offline = networkOffline && !downloadComplete
+        // A phone waits the way phone players do, with a spinner in the middle of the picture: the
+        // corner chip sat on top of the double tap's ripple, since every jump on a stream stalls
+        // for a moment. Being offline is news rather than a wait, so that keeps its words.
+        val phone = feedback
+        if (phone != null && !offline) {
+            rebufferChip.visibility = View.GONE
+            phone.buffering(true)
         } else {
-            "Loading…"
+            feedback?.buffering(false)
+            rebufferChip.visibility = View.VISIBLE
+            rebufferText.text = if (offline) "Offline. Waiting for internet…" else "Loading…"
         }
         updateDownloadChip()
     }
@@ -2598,6 +2612,7 @@ class PlayerActivity : FragmentActivity() {
         // the app already shows.
         statusIcon.visibility = View.VISIBLE
         rebufferChip.visibility = View.GONE
+        feedback?.buffering(false)
         statusSpinner?.visibility = View.GONE
         statusProgress.visibility = View.GONE
         statusDetail.visibility = View.GONE
@@ -2781,6 +2796,7 @@ class PlayerActivity : FragmentActivity() {
         statusOverlay.visibility = View.GONE
         stopArtDrift()
         rebufferChip.visibility = View.GONE
+        feedback?.buffering(false)
         updateDownloadChip()
     }
 
@@ -2812,6 +2828,7 @@ class PlayerActivity : FragmentActivity() {
     override fun onDestroy() {
         stopArtDrift()
         saveResumePosition()
+        holdFile(0)
         stopDownload()
         trimCache()
         gestureHud?.removeCallbacks(hideGestureHud)
@@ -2844,8 +2861,21 @@ class PlayerActivity : FragmentActivity() {
         // it. Only the bytes this screen pulled in for itself are the player's to cancel.
         if (OfflineDownloads.isDownloading(id)) return
         App.backgroundScope.launch {
+            // Opened again straight away: the new player's download is the same file, and a late
+            // cancel would stop it.
+            if (WatchCache.isPlaying(id)) return@launch
             runCatching { Td.cancelDownload(id) }
         }
+    }
+
+    /** The file this player has told [WatchCache] it is playing, so the sweep leaves it be. */
+    private var heldFileId = 0
+
+    private fun holdFile(id: Int) {
+        if (id == heldFileId) return
+        WatchCache.stoppedPlaying(heldFileId)
+        WatchCache.startedPlaying(id)
+        heldFileId = id
     }
 
     /**
