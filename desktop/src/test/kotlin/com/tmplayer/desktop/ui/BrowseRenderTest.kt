@@ -1,0 +1,149 @@
+package com.tmplayer.desktop.ui
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material3.Surface
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.ui.ImageComposeScene
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.use
+import com.tmplayer.data.ChatKind
+import com.tmplayer.data.ChatSummary
+import com.tmplayer.data.DownloadRequest
+import com.tmplayer.data.DownloadRunner
+import com.tmplayer.data.MediaItem
+import com.tmplayer.data.SettingsStore
+import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.TmMaterialTheme
+import org.jetbrains.skia.Color
+import org.jetbrains.skia.EncodedImageFormat
+import org.jetbrains.skia.Paint
+import org.jetbrains.skia.Rect
+import org.jetbrains.skia.Surface as SkSurface
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.File
+import java.nio.file.Files
+
+/**
+ * Draws the chat list and a chat's grid off screen with made-up chats and videos, as a check that
+ * the shared Material 3 pieces compose on the JVM. With TMPLAYER_SHOTS=<dir> in the
+ * environment the frames are written there as PNGs for a person to look at.
+ */
+class BrowseRenderTest {
+
+    private val settings = SettingsStore(
+        SettingsStore.openDataStore(Files.createTempDirectory("tm-render").resolve(SettingsStore.FILE_NAME).toFile()),
+    )
+    private val shell = ShellState(settings, object : DownloadRunner {
+        override fun download(request: DownloadRequest) = Unit
+        override fun cancel(fileId: Int) = Unit
+        override fun pause(fileId: Int) = Unit
+    })
+
+    @Test
+    fun chatList() {
+        val chats = listOf(
+            chat(1, "Saved Messages", ChatKind.Saved, 0, 0xFF2AABEE.toInt()),
+            chat(2, "Film Club", ChatKind.Channel, 12, 0xFFE5484D.toInt()),
+            chat(3, "Documentaries in 4K", ChatKind.Channel, 0, 0xFF46A758.toInt()),
+            chat(4, "Weekend series", ChatKind.Group, 3, 0xFFF5A524.toInt()),
+            chat(5, "Anna", ChatKind.Direct, 0, 0xFF8E4EC6.toInt()),
+            chat(6, "Old lectures", ChatKind.Channel, 0, 0xFF0090FF.toInt()),
+        )
+        val png = render {
+            Column(Modifier.fillMaxSize()) {
+                PageHeader("Chats", "Everything, newest first")
+                Column(Modifier.fillMaxSize()) {
+                    chats.forEachIndexed { at, chat -> ChatRow(chat, favourite = at == 1, onOpen = {}, onStar = {}) }
+                }
+            }
+        }
+        save("chats.png", png)
+    }
+
+    @Test
+    fun mediaGrid() {
+        val titles = listOf(
+            "The Long Road S01E01", "The Long Road S01E02", "The Long Road S01E03",
+            "Night Train (2019) 1080p", "Mountains, a film", "Lecture 7: Compilers",
+            "Harbour Lights S02E05", "Harbour Lights S02E06",
+        )
+        val colours = listOf(0xFF2AABEE, 0xFFE5484D, 0xFF46A758, 0xFFF5A524, 0xFF8E4EC6, 0xFF0090FF, 0xFF12A594, 0xFFD6409F)
+        val items = titles.mapIndexed { at, title ->
+            MediaItem(
+                chatId = 2, messageId = at + 1L, fileId = 0, title = title,
+                sizeBytes = (300L + at * 170L) * 1024 * 1024, durationSec = 1500 + at * 431,
+                mimeType = "video/mp4", thumbnailFileId = 0, miniThumbnail = jpeg(colours[at].toInt()),
+                date = 0, fileName = "$title.mkv", onDevice = at == 2,
+            )
+        }
+        val png = render {
+            Column(Modifier.fillMaxSize()) {
+                PageHeader("Film Club", "8 videos")
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(shell.posterWidth),
+                    contentPadding = PaddingValues(24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                ) {
+                    items(items, key = { it.id }) { MediaTile(shell, it, "Film Club") }
+                }
+            }
+        }
+        save("grid.png", png)
+    }
+
+    private fun render(page: @androidx.compose.runtime.Composable () -> Unit): ByteArray =
+        ImageComposeScene(WIDTH, HEIGHT, Density(1f)) {
+            TmMaterialTheme(dark = true) {
+                Surface(Modifier.fillMaxSize(), color = Tone.background) {
+                    Row(Modifier.fillMaxSize()) {
+                        Sidebar(shell)
+                        VerticalDivider(color = Tone.outline)
+                        Box(Modifier.weight(1f).fillMaxHeight()) { page() }
+                    }
+                }
+            }
+        }.use { scene ->
+            scene.render(0)
+            // A second frame after the thumbnails have decoded off the composition thread.
+            Thread.sleep(400)
+            scene.render(500_000_000)
+            scene.render(1_000_000_000).encodeToData(EncodedImageFormat.PNG)!!.bytes
+        }
+
+    private fun save(name: String, png: ByteArray) {
+        assertTrue(png.size > 1000)
+        val dir = System.getenv("TMPLAYER_SHOTS")?.takeIf { it.isNotBlank() } ?: return
+        File(dir).apply { mkdirs() }.resolve(name).writeBytes(png)
+    }
+
+    private fun chat(id: Long, title: String, kind: ChatKind, unread: Int, argb: Int) = ChatSummary(
+        id = id, title = title, miniThumbnail = jpeg(argb), photoFileId = 0, kind = kind,
+        unreadCount = unread, isPinned = id == 1L,
+    )
+
+    /** A tiny JPEG, a gradient in [argb], standing in for Telegram's minithumbnail. */
+    private fun jpeg(argb: Int): ByteArray {
+        val surface = SkSurface.makeRasterN32Premul(40, 24)
+        surface.canvas.drawRect(Rect.makeWH(40f, 24f), Paint().apply { color = argb })
+        surface.canvas.drawRect(Rect.makeXYWH(0f, 14f, 40f, 10f), Paint().apply { color = Color.makeRGB(16, 20, 24) })
+        return surface.makeImageSnapshot().encodeToData(EncodedImageFormat.JPEG, 80)!!.bytes
+    }
+
+    private companion object {
+        const val WIDTH = 1280
+        const val HEIGHT = 800
+    }
+}

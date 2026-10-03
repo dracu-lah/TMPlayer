@@ -49,6 +49,7 @@ kotlin.sourceSets.main { kotlin.srcDir(generateBuildInfo) }
 
 dependencies {
     implementation(project(":core"))
+    implementation(project(":ui"))
     implementation(compose.desktop.currentOs)
     implementation(libs.cmp.material3)
     implementation(libs.cmp.material.icons)

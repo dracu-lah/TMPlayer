@@ -1,0 +1,17 @@
+package com.tmplayer.desktop
+
+import com.tmplayer.data.SettingsStore
+
+/**
+ * The desktop's process-wide services, each opened exactly once.
+ *
+ * DataStore refuses two instances over one file in a process, so the settings store is a single
+ * lazy value that every screen and the download runner share.
+ */
+object DesktopServices {
+    val settings: SettingsStore by lazy {
+        SettingsStore(SettingsStore.openDataStore(DesktopPaths.settingsFile))
+    }
+
+    val downloads: DesktopDownloadRunner by lazy { DesktopDownloadRunner(settings) }
+}
