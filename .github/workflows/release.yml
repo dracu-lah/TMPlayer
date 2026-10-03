@@ -7,6 +7,10 @@ name: Release
 # Nothing else builds a signed APK. That matters because this is the only job that can see the
 # signing key, and keeping it off the push-to-main path means an ordinary commit, or a pull
 # request from a stranger, can never reach it.
+#
+# One tag makes one GitHub release with everything in it: the Android APKs, the Windows MSI and
+# portable zip, and the Linux deb, rpm, AppImage, Flatpak and tarball. Each platform builds in its
+# own job; the last job gathers them, writes one checksum file over all of it and publishes.
 on:
   push:
     tags: ["v*"]
@@ -15,24 +19,13 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: Build signed release
+  version:
+    name: Derive version from the tag
     runs-on: ubuntu-latest
-    # Attach required reviewers to this environment in repo settings to gate access to the key.
-    environment: release
-
+    outputs:
+      name: ${{ steps.version.outputs.name }}
+      code: ${{ steps.version.outputs.code }}
     steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
       - name: Derive version from the tag
         id: version
         run: |
@@ -48,6 +41,25 @@ jobs:
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
           echo "Building $NAME (versionCode $CODE)"
+
+  android:
+    name: Android (signed APKs)
+    needs: version
+    runs-on: ubuntu-latest
+    # Attach required reviewers to this environment in repo settings to gate access to the key.
+    environment: release
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Restore signing key
         env:
@@ -96,14 +108,13 @@ jobs:
       - name: Build signed APKs
         run: |
           ./gradlew :app:assembleRelease \
-            -PtmVersionName=${{ steps.version.outputs.name }} \
-            -PtmVersionCode=${{ steps.version.outputs.code }}
+            -PtmVersionName=${{ needs.version.outputs.name }} \
+            -PtmVersionCode=${{ needs.version.outputs.code }}
 
       - name: Name the APKs after the version
-        id: rename
         run: |
           mkdir -p dist
-          VERSION="${{ steps.version.outputs.name }}"
+          VERSION="${{ needs.version.outputs.name }}"
           OUT=app/build/outputs/apk/release
 
           # The universal APK keeps the name it has always had: it is what the site links to and
@@ -126,15 +137,165 @@ jobs:
           # the splits differ only in which .so files they carry, not in any compiled Kotlin.
           cp app/build/outputs/mapping/release/mapping.txt \
             "dist/mapping-$VERSION.txt"
+          ls -la dist
 
-          # Sideloading is a copy-and-paste business and a truncated download looks like a broken
-          # app, so publish something people can check the file against.
-          ( cd dist && sha256sum ./*.apk > "SHA256SUMS-$VERSION.txt" )
+      # Anything holding the signing key is deleted before the job can reach a step that
+      # uploads output. Workflow files are cleaned up by the runner anyway; this is belt
+      # and braces against a future step accidentally archiving the workspace.
+      - name: Shred signing material
+        run: rm -f release.keystore keystore.properties local.properties
+
+      - name: Hand the APKs to the publish job
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-android
+          path: dist/*
+          retention-days: 3
+          if-no-files-found: error
+
+  # Linux packages, built and self-tested by the same composite action CI runs on every push.
+  # Ubuntu 24.04, pinned: the bundled TDLib and libmpv need glibc 2.38 to run the self-test, and
+  # the runner the deb is installed on to prove its dependencies should not move under a release.
+  desktop-linux:
+    name: Desktop (Linux)
+    needs: version
+    runs-on: ubuntu-24.04
+    # The Telegram credentials are secrets of this environment.
+    environment: release
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Write Telegram credentials
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+        run: |
+          if [ -z "$TG_API_ID" ]; then
+            echo "::error::TG_API_ID is not set, so the released app would not be able to sign in"
+            exit 1
+          fi
+          cat > local.properties <<EOF
+          TG_API_ID=$TG_API_ID
+          TG_API_HASH=$TG_API_HASH
+          EOF
+
+      - name: Package and self-test
+        uses: ./.github/actions/desktop-linux
+        with:
+          version: ${{ needs.version.outputs.name }}
+
+      - name: Shred credentials
+        if: always()
+        run: rm -f local.properties
+
+      - name: Hand the Linux packages to the publish job
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-linux
+          path: dist/*
+          retention-days: 3
+          if-no-files-found: error
+
+  desktop-windows:
+    name: Desktop (Windows)
+    needs: version
+    runs-on: windows-latest
+    environment: release
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Write Telegram credentials
+        shell: bash
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+        run: |
+          if [ -z "$TG_API_ID" ]; then
+            echo "::error::TG_API_ID is not set, so the released app would not be able to sign in"
+            exit 1
+          fi
+          printf 'TG_API_ID=%s\nTG_API_HASH=%s\n' "$TG_API_ID" "$TG_API_HASH" > local.properties
+
+      - name: Package and self-test
+        uses: ./.github/actions/desktop-windows
+        with:
+          version: ${{ needs.version.outputs.name }}
+
+      - name: Shred credentials
+        if: always()
+        shell: bash
+        run: rm -f local.properties
+
+      - name: Hand the Windows packages to the publish job
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-windows
+          path: dist/*
+          retention-days: 3
+          if-no-files-found: error
+
+  publish:
+    name: Publish the release
+    needs: [version, android, desktop-linux, desktop-windows]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Gather every platform's files
+        uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Check that nothing is missing
+        run: |
+          VERSION="${{ needs.version.outputs.name }}"
+          # An explicit list, so a job that quietly stops producing a file fails the release
+          # instead of publishing a short one. The site and the Android updater match these names.
+          for f in \
+            "TMPlayer-$VERSION-universal.apk" \
+            "TMPlayer-$VERSION-arm64-v8a.apk" \
+            "TMPlayer-$VERSION-armeabi-v7a.apk" \
+            "mapping-$VERSION.txt" \
+            "TMPlayer-$VERSION-windows-x64.msi" \
+            "TMPlayer-$VERSION-windows-x64-portable.zip" \
+            "tmplayer_${VERSION}_amd64.deb" \
+            "tmplayer-$VERSION.x86_64.rpm" \
+            "TMPlayer-$VERSION-x86_64.AppImage" \
+            "TMPlayer-$VERSION-linux-x64.tar.gz" \
+            "TMPlayer-$VERSION.flatpak"; do
+            if [ ! -s "dist/$f" ]; then
+              echo "::error::dist/$f is missing"
+              exit 1
+            fi
+          done
           ls -la dist
 
       - name: Package GPL source and notices
         run: |
-          VERSION="${{ steps.version.outputs.name }}"
+          VERSION="${{ needs.version.outputs.name }}"
           git archive --format=tar.gz --prefix="TMPlayer-$VERSION/" \
             --output="dist/TMPlayer-$VERSION-source.tar.gz" "$GITHUB_SHA"
 
@@ -166,42 +327,105 @@ jobs:
           test -s "dist/LICENSE-GPL-3.0.txt"
           test -s "dist/THIRD_PARTY_NOTICES.md"
 
-      # Anything holding the signing key is deleted before the job can reach a step that
-      # publishes output. Workflow files are cleaned up by the runner anyway; this is belt
-      # and braces against a future step accidentally archiving the workspace.
-      - name: Shred signing material
-        run: rm -f release.keystore keystore.properties local.properties
+      # Sideloading and installing by hand is a copy-and-paste business and a truncated download
+      # looks like a broken app, so publish one file people can check any download against.
+      - name: Write the checksums
+        run: |
+          VERSION="${{ needs.version.outputs.name }}"
+          ( cd dist && sha256sum -- * > "../SHA256SUMS-$VERSION.txt" )
+          mv "SHA256SUMS-$VERSION.txt" dist/
+          cat "dist/SHA256SUMS-$VERSION.txt"
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2
         with:
-          name: TMPlayer ${{ steps.version.outputs.name }}
+          name: TMPlayer ${{ needs.version.outputs.name }}
           files: |
             dist/*
+          make_latest: "true"
           generate_release_notes: true
           body: |
+            ## New: TMPlayer for Windows and Linux
+
+            This release is the first with a desktop app. It signs in with the same Telegram
+            account (QR code or phone number) and plays the same chats, with the keyboard, the
+            mouse and your media keys. The Android app carries on as before.
+
+            ## Downloads
+
+            | Platform | File |
+            | --- | --- |
+            | Android TV, sticks and phones | `TMPlayer-${{ needs.version.outputs.name }}-universal.apk` (or a per-ABI APK, see below) |
+            | Windows 10 and 11, 64-bit | `TMPlayer-${{ needs.version.outputs.name }}-windows-x64.msi`, or `TMPlayer-${{ needs.version.outputs.name }}-windows-x64-portable.zip` to run without installing |
+            | Debian 13, Ubuntu 24.04, Linux Mint 22, Pop!_OS 24.04 and newer | `tmplayer_${{ needs.version.outputs.name }}_amd64.deb` |
+            | Fedora 39, openSUSE Tumbleweed, RHEL 10 and newer | `tmplayer-${{ needs.version.outputs.name }}.x86_64.rpm` |
+            | Arch Linux and derivatives | `TMPlayer-${{ needs.version.outputs.name }}-linux-x64.tar.gz` through the PKGBUILD in [`desktop/packaging/aur`](https://github.com/${{ github.repository }}/tree/${{ github.ref_name }}/desktop/packaging/aur) |
+            | Any Linux, nothing installed | `TMPlayer-${{ needs.version.outputs.name }}-x86_64.AppImage` |
+            | Any Linux, including older ones (Ubuntu 22.04, Debian 12, RHEL 9) | `TMPlayer-${{ needs.version.outputs.name }}.flatpak` |
+            | Any Linux, by hand | `TMPlayer-${{ needs.version.outputs.name }}-linux-x64.tar.gz`: unpack it and run `bin/TMPlayer` |
+
+            The deb, rpm, AppImage and tarball need glibc 2.38 or newer (that is what the bundled
+            TDLib and libmpv were built against). On an older distribution, take the Flatpak: it
+            brings its own runtime. All desktop builds are 64-bit x86 only for now.
+
             ## Install
 
-            Take the universal APK unless you have a reason not to. It runs on every television,
-            stick and phone the app supports, and choosing wrongly below costs you the download
-            again.
+            **Windows.** Run the MSI. It installs for your user only (no administrator prompt) and
+            adds TMPlayer to the Start menu and the desktop; a newer MSI later replaces it in
+            place. The installer is not code signed yet, so Windows SmartScreen says "Windows
+            protected your PC". Click **More info**, then **Run anyway**. If your browser blocks
+            the download, keep it from the downloads list. The portable zip needs no installer:
+            unpack it anywhere and run `TMPlayer\TMPlayer.exe`.
+
+            **Debian, Ubuntu, Mint, Pop!_OS**
+            ```
+            sudo apt install ./tmplayer_${{ needs.version.outputs.name }}_amd64.deb
+            ```
+
+            **Fedora, RHEL**
+            ```
+            sudo dnf install ./tmplayer-${{ needs.version.outputs.name }}.x86_64.rpm
+            ```
+
+            **openSUSE**
+            ```
+            sudo zypper install --allow-unsigned-rpm ./tmplayer-${{ needs.version.outputs.name }}.x86_64.rpm
+            ```
+
+            **Flatpak** (fetches the Freedesktop runtime from Flathub if you do not have it)
+            ```
+            flatpak install --user TMPlayer-${{ needs.version.outputs.name }}.flatpak
+            flatpak run io.github.dracu_lah.TMPlayer
+            ```
+
+            **AppImage**
+            ```
+            chmod +x TMPlayer-${{ needs.version.outputs.name }}-x86_64.AppImage
+            ./TMPlayer-${{ needs.version.outputs.name }}-x86_64.AppImage
+            ```
+            If it complains about FUSE, install your distribution's `fuse` or `libfuse2` package, or
+            run it with `--appimage-extract-and-run`.
+
+            **Android.** Take the universal APK unless you have a reason not to. It runs on every
+            television, stick and phone the app supports, and choosing wrongly below costs you the
+            download again.
 
             ```
-            adb install TMPlayer-${{ steps.version.outputs.name }}-universal.apk
+            adb install TMPlayer-${{ needs.version.outputs.name }}-universal.apk
             ```
 
             | File | For |
             | --- | --- |
-            | `TMPlayer-${{ steps.version.outputs.name }}-universal.apk` | Everything. The one to take if you are unsure. |
-            | `TMPlayer-${{ steps.version.outputs.name }}-arm64-v8a.apk` | 64-bit ARM: Chromecast with Google TV, Shield, Fire TV Stick 4K, and any phone made since about 2017. Around 40 per cent smaller. |
-            | `TMPlayer-${{ steps.version.outputs.name }}-armeabi-v7a.apk` | The older 32-bit sticks. Around half the size. |
+            | `TMPlayer-${{ needs.version.outputs.name }}-universal.apk` | Everything. The one to take if you are unsure. |
+            | `TMPlayer-${{ needs.version.outputs.name }}-arm64-v8a.apk` | 64-bit ARM: Chromecast with Google TV, Shield, Fire TV Stick 4K, and any phone made since about 2017. Around 40 per cent smaller. |
+            | `TMPlayer-${{ needs.version.outputs.name }}-armeabi-v7a.apk` | The older 32-bit sticks. Around half the size. |
 
             `adb shell getprop ro.product.cpu.abi` says which one a device wants. The 64-bit file
             on a 32-bit stick is refused at install time with `INSTALL_FAILED_NO_MATCHING_ABIS`; the
             32-bit file on a 64-bit device installs and works, just as a 32-bit process. Neither
             mistake leaves you with an app that breaks later.
 
-            Check a download against `SHA256SUMS-${{ steps.version.outputs.name }}.txt`.
+            Check any download against `SHA256SUMS-${{ needs.version.outputs.name }}.txt`.
 
             See [INSTALL.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/INSTALL.md)
             for sideloading steps and the remote-control reference.

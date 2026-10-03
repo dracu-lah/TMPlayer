@@ -1,0 +1,112 @@
+name: Desktop Linux packages
+description: >
+  Tests the desktop app, builds every Linux format (tarball, deb, rpm, AppImage, Flatpak) into
+  dist/, and runs the packaged app's --self-test from each of them, so that no package whose
+  natives fail to load can leave CI. Shared by ci.yml and release.yml; the caller checks out,
+  sets up JDK 21 and Gradle, and writes local.properties if the build should carry credentials.
+
+inputs:
+  version:
+    description: The version to build, x.y.z or x.y.z-suffix
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # The libraries the bundled TDLib, libmpv and JVM load from the system (the same list the deb
+    # declares), plus the tools for validating metadata and building the Flatpak.
+    - name: Install packaging tools and runtime libraries
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq --no-install-recommends \
+          desktop-file-utils appstream flatpak flatpak-builder rpm dbus \
+          libvulkan1 libpulse0 libasound2t64 libegl1 libgl1 libxtst6 libxi6 libfontconfig1
+
+    - name: Run desktop tests
+      shell: bash
+      run: ./gradlew :desktop:test
+
+    - name: Build the app image
+      shell: bash
+      run: ./gradlew :desktop:createDistributable -PdesktopVersion=${{ inputs.version }}
+
+    - name: Self-test the app image
+      shell: bash
+      run: desktop/build/compose/binaries/main/app/TMPlayer/bin/TMPlayer --self-test
+
+    # Raises the alarm if a dependency bump ships a native that needs a newer glibc than the
+    # packages declare (2.38, from the TDLib and libmpv builds).
+    - name: Check the glibc floor
+      shell: bash
+      run: desktop/packaging/linux/glibc-floor.sh desktop/build/compose/binaries/main/app/TMPlayer
+
+    - name: Fetch nfpm and appimagetool
+      shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/tools"
+        cd "$RUNNER_TEMP/tools"
+        curl -sSfL -o nfpm.tgz https://github.com/goreleaser/nfpm/releases/download/v2.47.0/nfpm_2.47.0_Linux_x86_64.tar.gz
+        curl -sSfL -o appimagetool https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+        sha256sum -c <<'EOF'
+        0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783  nfpm.tgz
+        ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  appimagetool
+        EOF
+        tar xzf nfpm.tgz nfpm
+        chmod +x nfpm appimagetool
+        echo "NFPM=$RUNNER_TEMP/tools/nfpm" >> "$GITHUB_ENV"
+        echo "APPIMAGETOOL=$RUNNER_TEMP/tools/appimagetool" >> "$GITHUB_ENV"
+
+    - name: Build the tarball, deb, rpm and AppImage
+      shell: bash
+      run: OUT="$PWD/dist" desktop/packaging/linux/package.sh "${{ inputs.version }}"
+
+    - name: Self-test the tarball
+      shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/tar"
+        tar -C "$RUNNER_TEMP/tar" -xzf "dist/TMPlayer-${{ inputs.version }}-linux-x64.tar.gz"
+        "$RUNNER_TEMP/tar/TMPlayer-${{ inputs.version }}/bin/TMPlayer" --self-test
+
+    - name: Self-test the AppImage
+      shell: bash
+      run: |
+        # No FUSE on the runner: the AppImage unpacks itself and runs from there instead.
+        APPIMAGE_EXTRACT_AND_RUN=1 "dist/TMPlayer-${{ inputs.version }}-x86_64.AppImage" --self-test
+
+    # apt resolves the deb's declared dependencies on Ubuntu 24.04, then the installed command runs.
+    - name: Install the deb and self-test it
+      shell: bash
+      run: |
+        sudo apt-get install -y -qq "$PWD/dist/tmplayer_${{ inputs.version }}_amd64.deb"
+        test -L /usr/bin/tmplayer
+        desktop-file-validate /usr/share/applications/io.github.dracu_lah.TMPlayer.desktop
+        tmplayer --self-test
+        sudo apt-get remove -y -qq tmplayer
+
+    # The rpm asks for libraries by soname, so dnf and zypper each resolve them from their own
+    # repositories; installing into a bare container proves the list is complete.
+    - name: Install the rpm on Fedora and openSUSE and self-test it
+      shell: bash
+      run: |
+        rpm -qpi "dist/tmplayer-${{ inputs.version }}.x86_64.rpm"
+        rpm -qpR "dist/tmplayer-${{ inputs.version }}.x86_64.rpm"
+        docker run --rm -v "$PWD/dist:/dist:ro" fedora:latest sh -euc \
+          'dnf install -y -q /dist/tmplayer-${{ inputs.version }}.x86_64.rpm && tmplayer --self-test'
+        docker run --rm -v "$PWD/dist:/dist:ro" opensuse/tumbleweed sh -euc \
+          'zypper --non-interactive install --allow-unsigned-rpm /dist/tmplayer-${{ inputs.version }}.x86_64.rpm && tmplayer --self-test'
+
+    - name: Build the Flatpak
+      shell: bash
+      run: OUT="$PWD/dist" desktop/packaging/flatpak/build.sh "${{ inputs.version }}"
+
+    - name: Install the Flatpak and self-test it
+      shell: bash
+      run: |
+        flatpak install --user -y --noninteractive "dist/TMPlayer-${{ inputs.version }}.flatpak"
+        dbus-run-session -- flatpak run io.github.dracu_lah.TMPlayer --self-test
+        flatpak uninstall --user -y --noninteractive io.github.dracu_lah.TMPlayer
+
+    - name: List the packages
+      shell: bash
+      run: ls -la dist

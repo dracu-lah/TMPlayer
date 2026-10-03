@@ -1,0 +1,96 @@
+name: Desktop Windows packages
+description: >
+  Tests the desktop app, builds the MSI and the portable zip into dist/, and runs --self-test from
+  the unpacked zip and from the installed MSI. With upgrade-from, an older MSI is built and
+  installed first, and the new one must replace it rather than install beside it. Shared by ci.yml
+  and release.yml; the caller checks out, sets up JDK 21 and Gradle, and writes local.properties
+  if the build should carry credentials.
+
+inputs:
+  version:
+    description: The version to build, x.y.z or x.y.z-suffix (the MSI takes the x.y.z)
+    required: true
+  upgrade-from:
+    description: An older x.y.z to install first, to prove the upgrade; empty to skip
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Run desktop tests
+      shell: bash
+      run: ./gradlew :desktop:test
+
+    - name: Build the older MSI to upgrade from
+      if: inputs.upgrade-from != ''
+      shell: bash
+      run: |
+        ./gradlew :desktop:packageMsi -PdesktopVersion=${{ inputs.upgrade-from }}
+        mkdir -p "$RUNNER_TEMP/old"
+        mv desktop/build/compose/binaries/main/msi/*.msi "$RUNNER_TEMP/old/old.msi"
+
+    - name: Build the MSI and the app image
+      shell: bash
+      run: ./gradlew :desktop:packageMsi :desktop:createDistributable -PdesktopVersion=${{ inputs.version }}
+
+    - name: Name the MSI and zip the portable app
+      shell: bash
+      run: |
+        V="${{ inputs.version }}"
+        mkdir -p dist
+        msis=(desktop/build/compose/binaries/main/msi/*.msi)
+        [ ${#msis[@]} -eq 1 ] || { echo "::error::expected one MSI, found ${msis[*]}"; exit 1; }
+        cp "${msis[0]}" "dist/TMPlayer-$V-windows-x64.msi"
+        # The zip holds one TMPlayer folder; TMPlayer.exe inside it runs from wherever it lands.
+        (cd desktop/build/compose/binaries/main/app && 7z a -tzip -mx=7 "$GITHUB_WORKSPACE/dist/TMPlayer-$V-windows-x64-portable.zip" TMPlayer > /dev/null)
+        ls -la dist
+
+    - name: Check the bundled C++ runtime
+      shell: pwsh
+      run: |
+        # TDLib imports MSVCP140, VCRUNTIME140 and VCRUNTIME140_1; the app loads the JVM's copies
+        # (WindowsRuntime in SelfTest.kt), so they must be in the bundled runtime.
+        $bin = "desktop/build/compose/binaries/main/app/TMPlayer/runtime/bin"
+        foreach ($dll in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
+          if (-not (Test-Path (Join-Path $bin $dll))) { Write-Error "$dll is missing from $bin" }
+        }
+        Get-ChildItem $bin -Filter *.dll | Select-Object Name, Length | Format-Table -AutoSize
+
+    - name: Self-test the portable zip
+      shell: pwsh
+      run: |
+        $dest = Join-Path $env:RUNNER_TEMP "portable"
+        7z x "dist/TMPlayer-${{ inputs.version }}-windows-x64-portable.zip" "-o$dest" | Out-Null
+        & "$env:GITHUB_ACTION_PATH/selftest.ps1" -Exe (Join-Path $dest "TMPlayer/TMPlayer.exe")
+
+    - name: Install the older MSI
+      if: inputs.upgrade-from != ''
+      shell: pwsh
+      run: |
+        $p = Start-Process msiexec.exe -ArgumentList '/i', "`"$env:RUNNER_TEMP\old\old.msi`"", '/qn', '/l*v', "`"$env:RUNNER_TEMP\old-install.log`"" -Wait -PassThru
+        if ($p.ExitCode -ne 0) { Get-Content "$env:RUNNER_TEMP\old-install.log" -Tail 60; exit 1 }
+
+    - name: Install the MSI and self-test it
+      shell: pwsh
+      run: |
+        $msi = (Resolve-Path "dist/TMPlayer-${{ inputs.version }}-windows-x64.msi").Path
+        $log = Join-Path $env:RUNNER_TEMP "install.log"
+        $p = Start-Process msiexec.exe -ArgumentList '/i', "`"$msi`"", '/qn', '/l*v', "`"$log`"" -Wait -PassThru
+        if ($p.ExitCode -ne 0) { Get-Content $log -Tail 60; exit 1 }
+
+        # Exactly one product may carry TMPlayer's upgrade code afterwards: the new one.
+        $installer = New-Object -ComObject WindowsInstaller.Installer
+        $products = @($installer.RelatedProducts('{6F1D3C0E-2B8A-4B7E-9D2C-7A1E5F4C3B21}'))
+        $versions = $products | ForEach-Object { $installer.ProductInfo($_, 'VersionString') }
+        Write-Host "Installed under the upgrade code: $($versions -join ', ')"
+        $want = "${{ inputs.version }}".Split('-')[0]
+        if ($products.Count -ne 1 -or $versions[0] -ne $want) {
+          Write-Error "Expected exactly version $want installed, found: $($versions -join ', ')"
+        }
+        $location = $installer.ProductInfo($products[0], 'InstallLocation')
+        $exe = Get-ChildItem -Path $env:LOCALAPPDATA, $env:ProgramFiles -Recurse -Filter TMPlayer.exe -Depth 3 -ErrorAction SilentlyContinue | Select-Object -First 1
+        Write-Host "InstallLocation: $location; launcher: $($exe.FullName)"
+        $lnk = Get-ChildItem -Path "$env:APPDATA\Microsoft\Windows\Start Menu", ([Environment]::GetFolderPath('Desktop')) -Recurse -Filter *.lnk -ErrorAction SilentlyContinue | Where-Object Name -like 'TMPlayer*'
+        Write-Host "Shortcuts: $($lnk.FullName -join ', ')"
+        & "$env:GITHUB_ACTION_PATH/selftest.ps1" -Exe $exe.FullName
