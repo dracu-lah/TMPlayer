@@ -34,6 +34,7 @@ import kotlin.system.exitProcess
  * - `--size <W>x<H>` the window size.
  * - `--seek-after <ms> --seek-to <ms>` and `--pause-after <ms>` script a run, for screenshots.
  * - `--details` opens the Playback details panel from the start.
+ * - `--sub <file>` loads a subtitle file once playing, as dropping it on the picture does.
  * - `--quit-after <ms>` closes the window, so a scripted run ends on its own.
  */
 fun main(argv: Array<String>) {
@@ -56,6 +57,7 @@ fun main(argv: Array<String>) {
     val seekTo = value("--seek-to")?.toLongOrNull()
     val pauseAfter = value("--pause-after")?.toLongOrNull()
     val quitAfter = value("--quit-after")?.toLongOrNull()
+    val sub = value("--sub")
 
     application {
         val state = rememberWindowState(size = DpSize(w.dp, h.dp))
@@ -88,6 +90,10 @@ fun main(argv: Array<String>) {
                     while (!e.state.value.opened) delay(20)
                     val wait = ms - (System.currentTimeMillis() - t0)
                     if (wait > 0) delay(wait)
+                }
+                if (sub != null) {
+                    at(500)
+                    println("dev: sub-add ${e.addSubtitle(File(sub).absolutePath)}")
                 }
                 if (seekAfter != null && seekTo != null) {
                     at(seekAfter)
