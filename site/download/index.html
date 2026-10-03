@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Download TMPlayer: the free Telegram media player APK for Android</title>
-<meta name="description" content="Download the latest TMPlayer release. One universal APK for every supported Android device, television or phone, 32-bit and 64-bit, free and GPL-3.0, straight from GitHub.">
+<title>Download TMPlayer for Android, Android TV, Windows and Linux</title>
+<meta name="description" content="Download the latest TMPlayer release: the universal APK for Android phones and TVs, an installer or portable zip for Windows, and deb, rpm, AppImage, Flatpak or a tarball for Linux. Free and GPL-3.0, straight from GitHub.">
 <link rel="canonical" href="https://tmplayer.org/download/">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta name="author" content="dracu-lah">
@@ -14,8 +14,8 @@
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="TMPlayer">
-<meta property="og:title" content="Download TMPlayer: the free Telegram media player APK for Android">
-<meta property="og:description" content="Download the latest TMPlayer release. One universal APK for every supported Android device, television or phone, 32-bit and 64-bit, free and GPL-3.0, straight from GitHub.">
+<meta property="og:title" content="Download TMPlayer for Android, Android TV, Windows and Linux">
+<meta property="og:description" content="Download the latest TMPlayer release: the universal APK for Android phones and TVs, an installer or portable zip for Windows, and deb, rpm, AppImage, Flatpak or a tarball for Linux. Free and GPL-3.0, straight from GitHub.">
 <meta property="og:url" content="https://tmplayer.org/download/">
 <meta property="og:image" content="https://tmplayer.org/og.png">
 <meta property="og:image:type" content="image/png">
@@ -24,8 +24,8 @@
 <meta property="og:locale" content="en_GB">
 
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Download TMPlayer: the free Telegram media player APK for Android">
-<meta name="twitter:description" content="Download the latest TMPlayer release. One universal APK for every supported Android device, television or phone, 32-bit and 64-bit, free and GPL-3.0, straight from GitHub.">
+<meta name="twitter:title" content="Download TMPlayer for Android, Android TV, Windows and Linux">
+<meta name="twitter:description" content="Download the latest TMPlayer release: the universal APK for Android phones and TVs, an installer or portable zip for Windows, and deb, rpm, AppImage, Flatpak or a tarball for Linux. Free and GPL-3.0, straight from GitHub.">
 <meta name="twitter:image" content="https://tmplayer.org/og.png">
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -144,11 +144,25 @@
     <div class="wrap page-head-wrap">
       <p class="crumbs"><a href="/">Home</a><span aria-hidden="true">/</span>Download</p>
       <h1>Download <em>TMPlayer</em></h1>
-      <p class="page-lede">One file for every supported device, television or phone. No chip type to look up, no account, no charge. The card below reads the release straight from GitHub, so it is never out of date.</p>
+      <p class="page-lede">For Android phones and televisions, Windows and Linux. No account, no charge, straight from the GitHub release. macOS later.</p>
+      <!--
+        The filled button is drawn by app.js once it knows which system this is, and only then:
+        with scripting off there is no guess to make, and the platform list below does the job.
+      -->
       <div class="page-actions">
+        <a class="btn btn-filled" id="os-download" href="#platforms" hidden>
+          <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.4l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg>
+          <span id="os-download-label">Download</span>
+        </a>
         <a class="btn btn-outline" href="/install/">How to install it <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><path fill="currentColor" d="M5 12a1 1 0 0 1 1-1h10.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4l3.3-3.3H6a1 1 0 0 1-1-1Z"/></svg></a>
-        <a class="btn btn-outline" href="https://github.com/dracu-lah/TMPlayer/releases" rel="noopener">All releases on GitHub <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><path fill="currentColor" d="M5 12a1 1 0 0 1 1-1h10.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4l3.3-3.3H6a1 1 0 0 1-1-1Z"/></svg></a>
       </div>
+      <p class="os-note" id="os-note" role="status" hidden></p>
+      <nav class="platform-jump" aria-label="Platforms">
+        <a href="#android">Android phone</a>
+        <a href="#android-tv">Android TV</a>
+        <a href="#windows">Windows</a>
+        <a href="#linux">Linux</a>
+      </nav>
     </div>
   </section>
 
@@ -158,52 +172,241 @@
     <div class="wrap">
       <div class="section-head" data-reveal>
         <div class="section-title">
-          <h2 id="download-h">Latest release</h2>
-          <p class="section-sub">Published by the release workflow in this repository, signed with the project's own key.</p>
+          <h2 id="download-h">Every platform, one release</h2>
+          <p class="section-sub">Every file comes from one GitHub release, built by the release workflow in this repository. The Android files are signed with the project's own key; the Windows ones are not signed yet.</p>
         </div>
       </div>
 
       <div class="section-body" data-reveal>
         <!--
-          The card is drawn before GitHub has answered, in the shape the answer will take: a
-          version, a date and one download row. A spinner would say something is happening; this
-          says what is about to be there, and nothing on the page moves when it arrives.
+          The version line is drawn before GitHub has answered, in the shape the answer will take.
+          Every row below is already a working link to the latest release page. The file names
+          carry the version, so GitHub's latest/download/<name> form cannot be written into the
+          markup; app.js reads the release list instead and swaps in the file itself, its size and
+          its real name. With scripting off the rows stay as they are and still get you there.
         -->
-        <div class="release-card" id="release-card" aria-busy="true">
+        <div class="release-card release-strip" id="release-card" aria-busy="true">
           <div class="release-head">
             <div>
               <p class="release-label">Latest release</p>
-              <p class="release-version" id="release-version"><span class="skeleton sk-version"></span></p>
+              <p class="release-version" id="release-version"><span class="skeleton sk-version js-only"></span><noscript><a href="https://github.com/dracu-lah/TMPlayer/releases/latest" rel="noopener">On GitHub</a></noscript></p>
             </div>
-            <p class="release-date" id="release-date"><span class="skeleton sk-date"></span></p>
+            <p class="release-date" id="release-date"><span class="skeleton sk-date js-only"></span></p>
           </div>
-
           <div id="release-status" class="status" role="status" hidden></div>
-
-          <ul class="abi-list" id="abi-skeleton" aria-hidden="true">
-            <li class="abi">
-              <div class="abi-text">
-                <p class="abi-name"><span class="skeleton sk-name"></span></p>
-                <p class="abi-note"><span class="skeleton sk-note"></span></p>
-              </div>
-              <div class="abi-get">
-                <span class="skeleton sk-size"></span>
-                <span class="skeleton sk-button"></span>
-              </div>
-            </li>
-          </ul>
-
-          <ul class="abi-list" id="abi-list" hidden></ul>
-
-          <div class="callout" id="abi-callout" hidden>
-            <p><strong>One download, no guesswork.</strong> The universal APK includes the native code needed by 32-bit and 64-bit televisions and phones alike.</p>
-          </div>
-
-          <details id="release-notes-wrap" hidden>
-            <summary>Release notes</summary>
-            <pre class="notes" id="release-notes"></pre>
-          </details>
         </div>
+
+        <div class="platforms" id="platforms">
+
+          <article class="platform" id="android" data-os="android" aria-labelledby="android-h">
+            <div class="platform-head">
+              <span class="panel-icon icon-yes" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><path fill="currentColor" d="M8 2h8a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3Zm0 2a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H8Zm2 13h4a1 1 0 1 1 0 2h-4a1 1 0 1 1 0-2Z"/></svg>
+              </span>
+              <div class="platform-title">
+                <h3 id="android-h">Android phone</h3>
+                <p class="platform-req">Android 8.0 and above</p>
+              </div>
+              <span class="badge platform-yours" hidden>Your device</span>
+            </div>
+            <ul class="abi-list">
+              <li class="abi" data-asset="apk-universal" data-primary>
+                <div class="abi-text">
+                  <p class="abi-name">Universal APK <span class="badge badge-quiet">Start here</span></p>
+                  <p class="abi-note">One file for every supported phone, 32-bit and 64-bit. Open it when it lands and say yes when Android asks.</p>
+                  <p class="abi-file" data-file>TMPlayer-&lt;version&gt;-universal.apk</p>
+                </div>
+                <div class="abi-get">
+                  <span class="abi-size" data-size></span>
+                  <a class="dl" data-dl href="https://github.com/dracu-lah/TMPlayer/releases/latest" rel="noopener"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg><span>Download</span></a>
+                </div>
+              </li>
+              <li class="abi" data-asset="apk-arm64">
+                <div class="abi-text">
+                  <p class="abi-name">arm64-v8a APK</p>
+                  <p class="abi-note">About 40 per cent smaller, for any phone from about 2017 on.</p>
+                  <p class="abi-file" data-file>TMPlayer-&lt;version&gt;-arm64-v8a.apk</p>
+                </div>
+                <div class="abi-get">
+                  <span class="abi-size" data-size></span>
+                  <a class="dl" data-dl href="https://github.com/dracu-lah/TMPlayer/releases/latest" rel="noopener"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg><span>Download</span></a>
+                </div>
+              </li>
+            </ul>
+            <p class="platform-foot"><a href="/install/#android">How to install on a phone</a></p>
+          </article>
+
+          <article class="platform" id="android-tv" data-os="android-tv" aria-labelledby="android-tv-h">
+            <div class="platform-head">
+              <span class="panel-icon icon-play" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm4 15h8a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2Z"/></svg>
+              </span>
+              <div class="platform-title">
+                <h3 id="android-tv-h">Android TV</h3>
+                <p class="platform-req">Android TV 8.0 and above: sticks, boxes and televisions</p>
+              </div>
+              <span class="badge platform-yours" hidden>Your device</span>
+            </div>
+            <ul class="abi-list">
+              <li class="abi" data-asset="apk-universal" data-primary>
+                <div class="abi-text">
+                  <p class="abi-name">Universal APK <span class="badge badge-quiet">Start here</span></p>
+                  <p class="abi-note">The same file as the phone's. Get it onto the television with Downloader, Send files to TV or <code>adb</code>.</p>
+                  <p class="abi-file" data-file>TMPlayer-&lt;version&gt;-universal.apk</p>
+                </div>
+                <div class="abi-get">
+                  <span class="abi-size" data-size></span>
+                  <a class="dl" data-dl href="https://github.com/dracu-lah/TMPlayer/releases/latest" rel="noopener"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg><span>Download</span></a>
+                </div>
+              </li>
+              <li class="abi" data-asset="apk-armv7">
+                <div class="abi-text">
+                  <p class="abi-name">armeabi-v7a APK</p>
+                  <p class="abi-note">Smaller, for the older 32-bit sticks, the original Mi TV Stick among them.</p>
+                  <p class="abi-file" data-file>TMPlayer-&lt;version&gt;-armeabi-v7a.apk</p>
+                </div>
+                <div class="abi-get">
+                  <span class="abi-size" data-size></span>
+                  <a class="dl" data-dl href="https://github.com/dracu-lah/TMPlayer/releases/latest" rel="noopener"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg><span>Download</span></a>
+                </div>
+              </li>
+            </ul>
+            <p class="platform-foot"><a href="/install/#android">How to install on a television</a><span class="sep" aria-hidden="true">&middot;</span><a href="/android-tv/">Made for the TV</a></p>
+          </article>
+
+          <article class="platform" id="windows" data-os="windows" aria-labelledby="windows-h">
+            <div class="platform-head">
+              <span class="panel-icon icon-browse" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><path fill="currentColor" d="M3 5.5 10.5 4.4v7.1H3v-6Zm8.5-1.2L21 3v8.5h-9.5V4.3ZM3 12.5h7.5v7.1L3 18.5v-6Zm8.5 0H21V21l-9.5-1.3v-7.2Z"/></svg>
+              </span>
+              <div class="platform-title">
+                <h3 id="windows-h">Windows</h3>
+                <p class="platform-req">Windows 10 and 11, 64-bit</p>
+              </div>
+              <span class="badge platform-yours" hidden>Your computer</span>
+            </div>
+            <ul class="abi-list">
+              <li class="abi" data-asset="win-msi" data-primary>
+                <div class="abi-text">
+                  <p class="abi-name">Installer <span class="badge badge-quiet">Start here</span></p>
+                  <p class="abi-note">Installs for your user, with a Start menu entry and a desktop shortcut. No administrator needed.</p>
+                  <p class="abi-file" data-file>TMPlayer-&lt;version&gt;-windows-x64.msi</p>
+                </div>
+                <div class="abi-get">
+                  <span class="abi-size" data-size></span>
+                  <a class="dl" data-dl href="https://github.com/dracu-lah/TMPlayer/releases/latest" rel="noopener"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg><span>Download</span></a>
+                </div>
+              </li>
+              <li class="abi" data-asset="win-zip">
+                <div class="abi-text">
+                  <p class="abi-name">Portable zip</p>
+                  <p class="abi-note">Nothing installed. Unzip it anywhere, a USB stick included, and run <code>TMPlayer.exe</code>.</p>
+                  <p class="abi-file" data-file>TMPlayer-&lt;version&gt;-windows-x64-portable.zip</p>
+                </div>
+                <div class="abi-get">
+                  <span class="abi-size" data-size></span>
+                  <a class="dl" data-dl href="https://github.com/dracu-lah/TMPlayer/releases/latest" rel="noopener"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg><span>Download</span></a>
+                </div>
+              </li>
+            </ul>
+            <div class="callout callout-warn">
+              <p><strong>Windows will warn you first.</strong> The build is not signed yet, so SmartScreen says <em>Windows protected your PC</em>. Click <em>More info</em>, then <em>Run anyway</em>.</p>
+            </div>
+            <p class="platform-foot"><a href="/install/#windows">How to install on Windows</a></p>
+          </article>
+
+          <article class="platform" id="linux" data-os="linux" aria-labelledby="linux-h">
+            <div class="platform-head">
+              <span class="panel-icon icon-no" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><path fill="currentColor" d="M4 3h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm0 2v14h16V5H4Zm2.3 3.3a1 1 0 0 1 1.4 0l3 3a1 1 0 0 1 0 1.4l-3 3a1 1 0 1 1-1.4-1.4L8.6 12 6.3 9.7a1 1 0 0 1 0-1.4ZM12 15h5a1 1 0 1 1 0 2h-5a1 1 0 1 1 0-2Z"/></svg>
+              </span>
+              <div class="platform-title">
+                <h3 id="linux-h">Linux</h3>
+                <p class="platform-req">x86_64. Take your distribution's own package, or a format that runs anywhere</p>
+              </div>
+              <span class="badge platform-yours" hidden>Your computer</span>
+            </div>
+            <ul class="abi-list">
+              <li class="abi" data-asset="linux-deb" data-distro="deb">
+                <div class="abi-text">
+                  <p class="abi-name">deb package</p>
+                  <p class="abi-note">Debian, Ubuntu, Linux Mint, Pop!_OS and the rest of that family.</p>
+                  <pre class="abi-cmd"><code>sudo apt install ./<span data-file>tmplayer_&lt;version&gt;_amd64.deb</span></code></pre>
+                </div>
+                <div class="abi-get">
+                  <span class="abi-size" data-size></span>
+                  <a class="dl" data-dl href="https://github.com/dracu-lah/TMPlayer/releases/latest" rel="noopener"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg><span>Download</span></a>
+                </div>
+              </li>
+              <li class="abi" data-asset="linux-rpm" data-distro="rpm">
+                <div class="abi-text">
+                  <p class="abi-name">rpm package</p>
+                  <p class="abi-note">Fedora, RHEL and its rebuilds, and openSUSE, where it is <code>sudo zypper install</code> instead.</p>
+                  <pre class="abi-cmd"><code>sudo dnf install ./<span data-file>tmplayer-&lt;version&gt;.x86_64.rpm</span></code></pre>
+                </div>
+                <div class="abi-get">
+                  <span class="abi-size" data-size></span>
+                  <a class="dl" data-dl href="https://github.com/dracu-lah/TMPlayer/releases/latest" rel="noopener"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg><span>Download</span></a>
+                </div>
+              </li>
+              <li class="abi" data-asset="linux-appimage" data-distro="any" data-primary>
+                <div class="abi-text">
+                  <p class="abi-name">AppImage <span class="badge badge-quiet">Any distribution</span></p>
+                  <p class="abi-note">One file that runs as it is on any distribution. Make it executable and open it.</p>
+                  <pre class="abi-cmd"><code>chmod +x <span data-file>TMPlayer-&lt;version&gt;-x86_64.AppImage</span></code></pre>
+                </div>
+                <div class="abi-get">
+                  <span class="abi-size" data-size></span>
+                  <a class="dl" data-dl href="https://github.com/dracu-lah/TMPlayer/releases/latest" rel="noopener"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg><span>Download</span></a>
+                </div>
+              </li>
+              <li class="abi" data-asset="linux-flatpak">
+                <div class="abi-text">
+                  <p class="abi-name">Flatpak bundle</p>
+                  <p class="abi-note">Any distribution with Flatpak. Needs the Flathub remote for the <code>org.freedesktop.Platform</code> runtime.</p>
+                  <pre class="abi-cmd"><code>flatpak install --user ./<span data-file>TMPlayer-&lt;version&gt;.flatpak</span></code></pre>
+                </div>
+                <div class="abi-get">
+                  <span class="abi-size" data-size></span>
+                  <a class="dl" data-dl href="https://github.com/dracu-lah/TMPlayer/releases/latest" rel="noopener"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg><span>Download</span></a>
+                </div>
+              </li>
+              <li class="abi" data-asset="linux-tar">
+                <div class="abi-text">
+                  <p class="abi-name">Tarball</p>
+                  <p class="abi-note">The plain app folder. Unpack it where you like and run <code>TMPlayer/bin/TMPlayer</code>.</p>
+                  <pre class="abi-cmd"><code>tar xzf <span data-file>TMPlayer-&lt;version&gt;-linux-x64.tar.gz</span></code></pre>
+                </div>
+                <div class="abi-get">
+                  <span class="abi-size" data-size></span>
+                  <a class="dl" data-dl href="https://github.com/dracu-lah/TMPlayer/releases/latest" rel="noopener"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 1 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg><span>Download</span></a>
+                </div>
+              </li>
+              <li class="abi">
+                <div class="abi-text">
+                  <p class="abi-name">Arch Linux</p>
+                  <p class="abi-note">A PKGBUILD for the AUR lives in the repository under <code>packaging/aur</code>. Or take the AppImage or the Flatpak, which run on Arch as they are.</p>
+                </div>
+                <div class="abi-get">
+                  <a class="dl" href="https://github.com/dracu-lah/TMPlayer/tree/main/packaging/aur" rel="noopener"><span>The recipe</span></a>
+                </div>
+              </li>
+            </ul>
+            <p class="platform-foot"><a href="/install/#linux">How to install on Linux, and put it in the app menu</a></p>
+          </article>
+
+        </div>
+
+        <div class="later">
+          <p><strong>macOS later.</strong> The desktop app is built to run on a Mac too, and a Mac build will follow once it can be signed, since macOS will not open one that is not. There is no iPhone or iPad version.</p>
+        </div>
+
+        <p class="muted small section-note">Each release also carries <a data-asset-link="sums" href="https://github.com/dracu-lah/TMPlayer/releases/latest" rel="noopener"><span data-file>SHA256SUMS-&lt;version&gt;.txt</span></a>. Check a download against it with <code>sha256sum -c --ignore-missing</code> in the same folder.</p>
+
+        <details id="release-notes-wrap" hidden>
+          <summary>Release notes</summary>
+          <pre class="notes" id="release-notes"></pre>
+        </details>
 
         <section class="previous" id="previous-wrap" aria-labelledby="previous-h" hidden>
           <h3 id="previous-h">Previous releases</h3>
@@ -221,7 +424,7 @@
       <div class="section-head" data-reveal>
         <div class="section-title">
           <h2 id="before-h">Before you open the file</h2>
-          <p class="section-sub">Three things worth knowing about a sideloaded APK, this one included.</p>
+          <p class="section-sub">A few things worth knowing about an app from outside the store, this one included.</p>
         </div>
       </div>
 
@@ -235,8 +438,8 @@
           </h3>
           <ul class="ticks">
             <li><strong>Android 8.0 and above</strong>, on a television, a stick, a box or a phone. It has been run in anger on a Mi TV Stick with 1 GB of RAM.</li>
-            <li><strong>The universal build.</strong> Older releases were split by chip type and those files are still on GitHub; anything current is the one file.</li>
-            <li><strong>The source of that exact build.</strong> Every release carries a source archive and the R8 mapping file, so a crash report from it can be decoded and the binary can be checked against the code.</li>
+            <li><strong>A desktop app for Windows and Linux.</strong> The same library and the same sign-in, played through mpv, with a keyboard that behaves like YouTube's and a window that remembers where you left it.</li>
+            <li><strong>The source of that exact build.</strong> Every release carries a source archive, and the Android build its R8 mapping file, so a crash report can be decoded and the binary checked against the code.</li>
           </ul>
         </div>
         <div class="panel">
@@ -247,9 +450,9 @@
             What it will not do
           </h3>
           <ul class="crosses">
-            <li>It is not on the Play Store, so Android will ask you to allow this one install. That prompt is doing its job: read it.</li>
+            <li>It is not in any store, so Android asks you to allow this one install and Windows shows its SmartScreen warning. Those prompts are doing their job: read them.</li>
             <li>It does not come with media. It shows you what is already in your own chats and nothing else.</li>
-            <li>It will not update through the store either. The app checks GitHub itself and offers you the newer release when there is one.</li>
+            <li>It will not update through a store either. The Android app checks GitHub itself and offers the newer release; on a computer, install the newer file over the old one.</li>
           </ul>
         </div>
       </div>
@@ -262,7 +465,7 @@
     <div class="wrap">
       <div class="support" data-reveal>
         <h2 id="support-h">Star it if it helped</h2>
-        <p>This is a sideloaded APK that signs into your Telegram account, which is a lot to ask of a stranger. A star is the evidence the next person reads before they decide.</p>
+        <p>This is an app from outside any store that signs into your Telegram account, which is a lot to ask of a stranger. A star is the evidence the next person reads before they decide.</p>
         <div class="support-actions">
           <a class="btn btn-filled" href="https://github.com/dracu-lah/TMPlayer" rel="noopener">
             <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg>

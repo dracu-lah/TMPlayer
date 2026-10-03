@@ -1,7 +1,21 @@
+# Installing TMPlayer
+
+TMPlayer is not in any store, and it never will be (it needs its own Telegram API credentials to
+exist at all). Every build is on the [Releases](../../releases) page, and the
+[download page](https://tmplayer.org/download/) lists them by platform.
+
+- [Android TV and phones](#installing-tmplayer-on-an-android-tv-device): sideload the APK
+- [Windows](#windows): an MSI installer or a portable zip
+- [Linux](#linux): deb, rpm, AppImage, Flatpak, a tarball, or the AUR recipe
+- [Desktop, menu and taskbar shortcuts](#putting-it-on-the-desktop-in-the-menu-and-on-the-taskbar)
+- [The desktop keyboard](#using-the-keyboard-and-mouse)
+
+macOS is planned for later; there is no Mac build yet.
+
 # Installing TMPlayer on an Android TV device
 
-TMPlayer is sideloaded. It is not on the Play Store, and it never will be (it needs your own
-Telegram API credentials to exist at all).
+The same APK installs on a phone: open the file and say yes when Android asks. The steps below are
+for a television, where there is no browser to open it from.
 
 ## 1. Download the APK
 
@@ -127,3 +141,265 @@ again; it resumes from where you were.
 
 **The app is missing from the launcher.** Some TVs hide sideloaded apps in a separate row at
 the bottom, or under **Settings → Apps → See all apps**.
+
+---
+
+# Installing TMPlayer on a computer
+
+The desktop app runs on **Windows 10 and 11 (64-bit)** and on **64-bit x86 Linux**. It signs in
+to the same Telegram account, shows the same library and streams the same way as the Android app,
+played through mpv, which is bundled: there is nothing to install beside it. macOS is planned for
+later; there is no build for it yet.
+
+Every file is on the same GitHub release as the APKs, from version 1.18.0 on:
+
+| File | For |
+| --- | --- |
+| `TMPlayer-<version>-windows-x64.msi` | Windows installer, per user, no administrator needed |
+| `TMPlayer-<version>-windows-x64-portable.zip` | Windows, nothing installed: unzip and run `TMPlayer.exe` |
+| `tmplayer_<version>_amd64.deb` | Debian, Ubuntu, Linux Mint, Pop!_OS |
+| `tmplayer-<version>.x86_64.rpm` | Fedora, RHEL and rebuilds, openSUSE |
+| `TMPlayer-<version>-x86_64.AppImage` | Any distribution, one file |
+| `TMPlayer-<version>.flatpak` | Any distribution with Flatpak |
+| `TMPlayer-<version>-linux-x64.tar.gz` | Any distribution, the plain app folder |
+| `SHA256SUMS-<version>.txt` | Checksums for all of the above |
+
+Check a download with `sha256sum -c --ignore-missing SHA256SUMS-<version>.txt` in the folder that
+holds both (on Windows, `Get-FileHash <file>` in PowerShell and compare by eye).
+
+## Windows
+
+1. Download `TMPlayer-<version>-windows-x64.msi`.
+2. Open it. The build is not signed yet, so SmartScreen says **Windows protected your PC**. Click
+   **More info**, then **Run anyway**.
+3. Click through the installer. It installs for your user only, into your own profile, so it does
+   not ask for an administrator password.
+4. Open TMPlayer from the Start menu or the desktop shortcut.
+
+Installing a newer MSI later upgrades the app in place; your sign-in, history and downloads live in
+your user profile and are kept. Remove it under **Settings, Apps, Installed apps**.
+
+**Portable zip.** Unzip `TMPlayer-<version>-windows-x64-portable.zip` anywhere, a USB stick
+included, and run `TMPlayer.exe` from the folder. SmartScreen can show the same warning the first
+time. If it asks about every file, right click the zip before unzipping, choose **Properties**,
+tick **Unblock** and unzip it again.
+
+## Linux
+
+64-bit x86 only for now. Pick by how you like to install software; every format is the same app.
+
+**Debian, Ubuntu, Mint and relatives:**
+
+```bash
+sudo apt install ./tmplayer_<version>_amd64.deb
+```
+
+**Fedora, RHEL and rebuilds:**
+
+```bash
+sudo dnf install ./tmplayer-<version>.x86_64.rpm
+```
+
+**openSUSE:**
+
+```bash
+sudo zypper install ./tmplayer-<version>.x86_64.rpm
+```
+
+**Flatpak, on any distribution.** The bundle takes the `org.freedesktop.Platform` runtime from
+Flathub, so add that remote first if you do not have it (the first line does nothing if you do):
+
+```bash
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak install --user ./TMPlayer-<version>.flatpak
+```
+
+**AppImage, on any distribution:**
+
+```bash
+chmod +x TMPlayer-<version>-x86_64.AppImage
+./TMPlayer-<version>-x86_64.AppImage
+```
+
+Or tick *Allow executing file as program* in the file's properties and double click it.
+
+**Tarball, on any distribution:**
+
+```bash
+mkdir -p ~/.local/opt
+tar xzf TMPlayer-<version>-linux-x64.tar.gz -C ~/.local/opt
+~/.local/opt/TMPlayer/bin/TMPlayer
+```
+
+**Arch Linux.** A PKGBUILD for the AUR lives in [packaging/aur](packaging/aur): build it with
+`makepkg -si` from that folder. The AppImage and the Flatpak also run on Arch as they are.
+
+To upgrade, install the newer file the same way: the deb, rpm and Flatpak replace the old version,
+and for the AppImage or tarball you replace the file or folder. Your sign-in and history live in
+your home directory and are kept. To remove it: `sudo apt remove tmplayer`, `sudo dnf remove
+tmplayer`, or `flatpak uninstall` with the ID that `flatpak list` shows.
+
+## First run on a computer
+
+1. Open TMPlayer. A QR code fills the window within a few seconds.
+2. On your phone: **Telegram, Settings, Devices, Link Desktop Device**, and point the camera at the
+   screen. **Log in by phone number** is under the code, for an account with no phone to hand.
+3. If your account has two-step verification, type the password.
+
+You land on your chats. The sidebar has Chats, Favourites, Continue, Downloads and Settings; open a
+chat for its videos, hover a tile for its Play button, or right click it to play from the start,
+download it or copy its Telegram link.
+
+## Putting it on the desktop, in the menu and on the taskbar
+
+### Windows
+
+- **Installed with the MSI:** TMPlayer is already in the Start menu and on the desktop. To pin it
+  to the taskbar, open Start, find TMPlayer, right click it and choose **Pin to taskbar**. Or,
+  while it is running, right click its taskbar icon and choose **Pin to taskbar**.
+- **From the portable zip:** right click `TMPlayer.exe`, then **Send to**, then **Desktop (create
+  shortcut)**. On Windows 11 these are under **Show more options**. For a Start menu entry, press
+  `Win`+`R`, type `shell:programs`, and move that shortcut into the folder that opens. Pinning to
+  the taskbar works from the same right click menu, or from the running app's taskbar icon.
+
+### Linux: deb, rpm and Flatpak
+
+These add TMPlayer to the app menu on their own, under Multimedia or Sound and Video.
+
+- **GNOME:** open Activities, search for TMPlayer, right click it and choose **Pin to Dash**
+  (**Add to Favourites** on older releases). Right clicking the running app's icon in the dash
+  does the same.
+- **KDE Plasma:** open the application launcher, right click TMPlayer and choose **Pin to Task
+  Manager**, or **Add to Favourites** for the launcher's own list. Right clicking the running
+  app's icon in the task manager offers **Pin to Task Manager** too.
+- **Xfce, Cinnamon, MATE:** right click the entry in the menu and choose **Add to Panel** or
+  **Add to Favourites**.
+
+### Linux: AppImage and tarball
+
+A single file has nowhere to register a menu entry, so you write one. These commands move the
+AppImage somewhere permanent (renamed, so an update is a drop-in replacement), fetch the icon and
+create a launcher in `~/.local/share/applications`:
+
+```bash
+mkdir -p ~/Applications ~/.local/share/icons ~/.local/share/applications
+mv ~/Downloads/TMPlayer-<version>-x86_64.AppImage ~/Applications/TMPlayer.AppImage
+chmod +x ~/Applications/TMPlayer.AppImage
+curl -Lo ~/.local/share/icons/tmplayer.png https://tmplayer.org/icon-512.png
+
+cat > ~/.local/share/applications/tmplayer.desktop <<EOF
+[Desktop Entry]
+Type=Application
+Name=TMPlayer
+Comment=Telegram media player
+Exec=$HOME/Applications/TMPlayer.AppImage
+Icon=$HOME/.local/share/icons/tmplayer.png
+Categories=AudioVideo;Video;Player;
+Terminal=false
+EOF
+
+chmod +x ~/.local/share/applications/tmplayer.desktop
+update-desktop-database ~/.local/share/applications
+```
+
+The shell expands `$HOME` while writing the file, which matters: a launcher needs full paths and
+does not understand `~`. The finished file reads, for a user called `you`:
+
+```ini
+[Desktop Entry]
+Type=Application
+Name=TMPlayer
+Comment=Telegram media player
+Exec=/home/you/Applications/TMPlayer.AppImage
+Icon=/home/you/.local/share/icons/tmplayer.png
+Categories=AudioVideo;Video;Player;
+Terminal=false
+```
+
+For the tarball unpacked into `~/.local/opt`, use the same commands without the `mv` and `chmod`
+of the AppImage, and change one line:
+
+```ini
+Exec=/home/you/.local/opt/TMPlayer/bin/TMPlayer
+```
+
+TMPlayer then appears in the app menu (log out and in again if your desktop is slow to notice),
+and you can pin it as described above.
+
+Prefer not to type it? [Gear Lever](https://flathub.org/apps/it.mijorus.gearlever) and
+[AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher) both move an AppImage into
+place and create its menu entry for you.
+
+### Linux: an icon on the desktop
+
+Copy a launcher onto the desktop and mark it trusted. For the AppImage or tarball launcher made
+above:
+
+```bash
+cp ~/.local/share/applications/tmplayer.desktop ~/Desktop/
+chmod +x ~/Desktop/tmplayer.desktop
+gio set ~/Desktop/tmplayer.desktop metadata::trusted true
+```
+
+For a deb, rpm or Flatpak install, find the launcher the package added and copy that one the same
+way:
+
+```bash
+find /usr/share/applications ~/.local/share/flatpak/exports/share/applications \
+  /var/lib/flatpak/exports/share/applications -iname '*tmplayer*.desktop' 2>/dev/null
+```
+
+GNOME shows desktop icons only with the Desktop Icons NG extension, and the first time you need to
+right click the icon and choose **Allow Launching**. KDE Plasma asks once whether to run it. Xfce
+and Cinnamon read the trusted flag the last command set.
+
+## Using the keyboard and mouse
+
+The player's keys follow YouTube's letters, with mpv's and VLC's punctuation working as well.
+None of them fire while a search field has focus.
+
+| Key | What it does |
+| --- | --- |
+| **Space**, **K** | Play or pause (also a single click on the picture) |
+| **Left / Right** | Back / forward 5 seconds |
+| **J / L** | Back / forward 10 seconds (also Shift with the mouse wheel) |
+| **Shift+Left / Shift+Right** | Back / forward 1 minute |
+| **Ctrl+Alt+Left / Ctrl+Alt+Right** | Back / forward 5 minutes |
+| **, / .** | One frame back / forward, while paused |
+| **0 - 9** | Jump to that tenth of the video; 5 is halfway. **Home** and **End** go to the start and the end |
+| **Up / Down** | Volume (also the mouse wheel) |
+| **M** | Mute |
+| **F**, **F11**, **Alt+Enter** | Fullscreen (also a double click); **Esc** leaves it |
+| **S / Shift+S / C** | Next / previous subtitles, subtitles on or off |
+| **A / Shift+A** | Next / previous audio track |
+| **] / [ / Backspace** | Faster / slower / back to normal speed |
+| **Shift+N / Shift+P** | Next / previous episode (also Page Down / Page Up) |
+| **Ctrl+T** | Keep the window on top |
+| **I** | Playback details |
+| **Esc**, **Backspace** | Back to the grid (also the mouse's back button) |
+| **Ctrl+Q** | Quit |
+
+Right click the picture for the player's menu: audio, subtitles, speed, picture shape and the
+rest. In the grid, **/** or **Ctrl+F** searches and **Ctrl+,** opens Settings. The media keys on
+a keyboard work while the window has focus, and on Linux the desktop's own media controls drive it
+through MPRIS.
+
+## Troubleshooting on a computer
+
+**Windows shows no Run anyway button.** Click **More info** first; the button only appears after
+it. On a managed work computer a policy can forbid unsigned apps, and nothing in the app can
+change that.
+
+**The AppImage does nothing when opened.** Usually FUSE is missing, which Ubuntu 22.04 and newer
+no longer install by default. Run it from a terminal to see the message, then install `libfuse2t64`
+(Ubuntu 24.04 and newer) or `libfuse2` (22.04). Or skip FUSE with
+`./TMPlayer-<version>-x86_64.AppImage --appimage-extract-and-run`.
+
+**Flatpak says a runtime is missing.** Add the Flathub remote with the `flatpak remote-add` line
+above and install again.
+
+**The window is blank or grey on a tiling window manager** (sway, i3, Hyprland and the like).
+Start it with `_JAVA_AWT_WM_NONREPARENTING=1` set in the environment.
+
+**A build you made yourself never shows a QR code.** It was built without `TG_API_ID` /
+`TG_API_HASH` in `local.properties`. See [docs/BUILDING.md](docs/BUILDING.md).

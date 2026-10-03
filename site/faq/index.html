@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TMPlayer questions: what this Telegram media player does and does not do</title>
-<meta name="description" content="Answers about TMPlayer: whether you wait for the download, whether a server or bot is involved, which file to get, whether it can read your messages, and what it is deliberately not.">
+<meta name="description" content="Answers about TMPlayer: whether you wait for the download, whether a server or bot is involved, which file to get, whether there is a Windows, Linux or Mac version, whether it can read your messages, and what it is deliberately not.">
 <link rel="canonical" href="https://tmplayer.org/faq/">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta name="author" content="dracu-lah">
@@ -15,7 +15,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="TMPlayer">
 <meta property="og:title" content="TMPlayer questions: what this Telegram media player does and does not do">
-<meta property="og:description" content="Answers about TMPlayer: whether you wait for the download, whether a server or bot is involved, which file to get, whether it can read your messages, and what it is deliberately not.">
+<meta property="og:description" content="Answers about TMPlayer: whether you wait for the download, whether a server or bot is involved, which file to get, whether there is a Windows, Linux or Mac version, whether it can read your messages, and what it is deliberately not.">
 <meta property="og:url" content="https://tmplayer.org/faq/">
 <meta property="og:image" content="https://tmplayer.org/og.png">
 <meta property="og:image:type" content="image/png">
@@ -25,7 +25,7 @@
 
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="TMPlayer questions: what this Telegram media player does and does not do">
-<meta name="twitter:description" content="Answers about TMPlayer: whether you wait for the download, whether a server or bot is involved, which file to get, whether it can read your messages, and what it is deliberately not.">
+<meta name="twitter:description" content="Answers about TMPlayer: whether you wait for the download, whether a server or bot is involved, which file to get, whether there is a Windows, Linux or Mac version, whether it can read your messages, and what it is deliberately not.">
 <meta name="twitter:image" content="https://tmplayer.org/og.png">
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -89,7 +89,7 @@
       "name": "Is there a server or a bot involved?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Neither. The TV talks to Telegram directly, signed in as you through Telegram's own official library. Nothing passes through anything of mine."
+        "text": "Neither. The app talks to Telegram directly, signed in as you through Telegram's own official library. Nothing passes through anything of mine."
       }
     },
     {
@@ -97,7 +97,15 @@
       "name": "Which file do I download?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Download the universal APK. The same file works on every supported device, television or phone, including 32-bit and 64-bit ones."
+        "text": "On an Android television or phone, the universal APK: the same file works on every supported device, 32-bit and 64-bit. On Windows, the MSI installer, or the portable zip if you would rather install nothing. On Linux, the deb or rpm package your distribution uses, or the AppImage, Flatpak or tarball, which run anywhere. The download page puts your own system first."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is there a Windows, Linux or Mac version?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes for Windows and Linux, from the same release as the Android app: an installer and a portable zip for Windows 10 and 11, and deb, rpm, AppImage, Flatpak and a tarball for 64-bit Linux, with a recipe for Arch. It signs in with the same QR code and plays through mpv. A macOS version is planned for later. There is no iPhone or iPad version."
       }
     },
     {
@@ -137,7 +145,7 @@
       "name": "How does it update if it is not in the Play Store?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "The app checks GitHub for a newer release and offers to install it. Nothing is downloaded until you say yes."
+        "text": "On Android the app checks GitHub for a newer release and offers to install it, and nothing is downloaded until you say yes. On a computer, download the newer file and install it over the old one: the MSI, deb, rpm and Flatpak upgrade in place and keep your sign-in."
       }
     },
     {
@@ -228,7 +236,7 @@
       <div class="page-actions">
         <a class="btn btn-filled" href="/download/">
           <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.4l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg>
-          Download the APK
+          Download
         </a>
         <a class="btn btn-outline" href="/features/">What it does <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><path fill="currentColor" d="M5 12a1 1 0 0 1 1-1h10.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4l3.3-3.3H6a1 1 0 0 1-1-1Z"/></svg></a>
       </div>
@@ -242,7 +250,7 @@
       <div class="section-head" data-reveal>
         <div class="section-title">
           <h2 id="faq-h">Common questions</h2>
-          <p class="section-sub">Every row is closed to start with. Nine questions are short enough to scan as nine headings, and opening one on load would only tell you which answer I think you wanted.</p>
+          <p class="section-sub">Every row is closed to start with. Ten questions are short enough to scan as ten headings, and opening one on load would only tell you which answer I think you wanted.</p>
         </div>
       </div>
 
@@ -262,14 +270,21 @@
             <span class="faq-q">Is there a server or a bot involved?</span>
             <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
           </summary>
-          <div class="faq-body"><p>Neither. The TV talks to Telegram directly, signed in as you through Telegram's own official library. Nothing passes through anything of mine.</p></div>
+          <div class="faq-body"><p>Neither. The app talks to Telegram directly, signed in as you through Telegram's own official library. Nothing passes through anything of mine.</p></div>
         </details>
         <details class="faq-item" name="faq">
           <summary>
             <span class="faq-q">Which file do I download?</span>
             <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
           </summary>
-          <div class="faq-body"><p>Download the universal APK. The same file works on every supported device, television or phone, including 32-bit and 64-bit ones.</p></div>
+          <div class="faq-body"><p>On an Android television or phone, the universal APK: the same file works on every supported device, 32-bit and 64-bit. On Windows, the MSI installer, or the portable zip if you would rather install nothing. On Linux, the deb or rpm package your distribution uses, or the AppImage, Flatpak or tarball, which run anywhere. <a href="/download/">The download page</a> puts your own system first.</p></div>
+        </details>
+        <details class="faq-item" name="faq" id="desktop">
+          <summary>
+            <span class="faq-q">Is there a Windows, Linux or Mac version?</span>
+            <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
+          </summary>
+          <div class="faq-body"><p>Yes for Windows and Linux, from the same release as the Android app: an installer and a portable zip for Windows 10 and 11, and deb, rpm, AppImage, Flatpak and a tarball for 64-bit Linux, with a recipe for Arch. It signs in with the same QR code and plays through mpv, with the keyboard shortcuts you know from YouTube. A macOS version is planned for later. There is no iPhone or iPad version. <a href="/download/">Get it from the download page</a>.</p></div>
         </details>
         <details class="faq-item" name="faq">
           <summary>
@@ -304,7 +319,7 @@
             <span class="faq-q">How does it update if it is not in the Play Store?</span>
             <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
           </summary>
-          <div class="faq-body"><p>The app checks GitHub for a newer release and offers to install it. Nothing is downloaded until you say yes.</p></div>
+          <div class="faq-body"><p>On Android the app checks GitHub for a newer release and offers to install it, and nothing is downloaded until you say yes. On a computer, download the newer file and install it over the old one: the MSI, deb, rpm and Flatpak upgrade in place and keep your sign-in.</p></div>
         </details>
         <details class="faq-item" name="faq">
           <summary>

@@ -1,7 +1,7 @@
 {
   "name": "TMPlayer",
   "short_name": "TMPlayer",
-  "description": "An open source Android TV app that signs into your own Telegram account by QR code and streams the videos already in your chats.",
+  "description": "An open source Telegram media player for Android TV, phones, Windows and Linux that signs into your own Telegram account by QR code and streams the videos already in your chats.",
   "start_url": "/",
   "scope": "/",
   "id": "/",

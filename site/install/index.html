@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>How to install TMPlayer on Android TV, a stick, or a phone</title>
-<meta name="description" content="Sideload TMPlayer in four steps: allow apps from outside the store, get the APK onto the device with Downloader, Send files to TV or adb, sign in with a QR code, and press play.">
+<title>How to install TMPlayer on Android TV, a phone, Windows or Linux</title>
+<meta name="description" content="Install TMPlayer on Android TV or a phone in four steps, on Windows past the SmartScreen warning, or on Linux from a deb, rpm, AppImage, Flatpak or tarball. Then put it on the desktop, in the app menu and on the taskbar.">
 <link rel="canonical" href="https://tmplayer.org/install/">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta name="author" content="dracu-lah">
@@ -14,8 +14,8 @@
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="TMPlayer">
-<meta property="og:title" content="How to install TMPlayer on Android TV, a stick, or a phone">
-<meta property="og:description" content="Sideload TMPlayer in four steps: allow apps from outside the store, get the APK onto the device with Downloader, Send files to TV or adb, sign in with a QR code, and press play.">
+<meta property="og:title" content="How to install TMPlayer on Android TV, a phone, Windows or Linux">
+<meta property="og:description" content="Install TMPlayer on Android TV or a phone in four steps, on Windows past the SmartScreen warning, or on Linux from a deb, rpm, AppImage, Flatpak or tarball. Then put it on the desktop, in the app menu and on the taskbar.">
 <meta property="og:url" content="https://tmplayer.org/install/">
 <meta property="og:image" content="https://tmplayer.org/og.png">
 <meta property="og:image:type" content="image/png">
@@ -24,8 +24,8 @@
 <meta property="og:locale" content="en_GB">
 
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="How to install TMPlayer on Android TV, a stick, or a phone">
-<meta name="twitter:description" content="Sideload TMPlayer in four steps: allow apps from outside the store, get the APK onto the device with Downloader, Send files to TV or adb, sign in with a QR code, and press play.">
+<meta name="twitter:title" content="How to install TMPlayer on Android TV, a phone, Windows or Linux">
+<meta name="twitter:description" content="Install TMPlayer on Android TV or a phone in four steps, on Windows past the SmartScreen warning, or on Linux from a deb, rpm, AppImage, Flatpak or tarball. Then put it on the desktop, in the app menu and on the taskbar.">
 <meta name="twitter:image" content="https://tmplayer.org/og.png">
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -190,25 +190,31 @@
   <section class="page-head">
     <div class="wrap page-head-wrap">
       <p class="crumbs"><a href="/">Home</a><span aria-hidden="true">/</span>How to install</p>
-      <h1>How to install it, <em>in four steps</em></h1>
-      <p class="page-lede">On a television or on a phone. You only do them once, and the third one is the only one that needs your phone in your hand.</p>
+      <h1>How to install it, <em>wherever you watch</em></h1>
+      <p class="page-lede">On a television, a phone, a Windows computer or a Linux one. You only do it once, and signing in is the only step that needs your phone in your hand.</p>
       <div class="page-actions">
         <a class="btn btn-filled" href="/download/">
           <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.4l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg>
-          Get the APK first
+          Get the file first
         </a>
         <a class="btn btn-outline" href="https://github.com/dracu-lah/TMPlayer/blob/main/INSTALL.md" rel="noopener">The full INSTALL.md <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><path fill="currentColor" d="M5 12a1 1 0 0 1 1-1h10.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4l3.3-3.3H6a1 1 0 0 1-1-1Z"/></svg></a>
       </div>
+      <nav class="platform-jump" aria-label="Platforms">
+        <a href="#android">Android TV and phone</a>
+        <a href="#windows">Windows</a>
+        <a href="#linux">Linux</a>
+        <a href="#shortcuts">Desktop and menu shortcuts</a>
+      </nav>
     </div>
   </section>
 
 <svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
 
-  <section class="band band-tonal" id="install" aria-labelledby="install-h">
+  <section class="band band-tonal" id="android" aria-labelledby="install-h">
     <div class="wrap">
       <div class="section-head" data-reveal>
         <div class="section-title">
-          <h2 id="install-h">The four steps</h2>
+          <h2 id="install-h">On Android TV or a phone: four steps</h2>
           <p class="section-sub">Nothing here is specific to TMPlayer: it is how any app that is not in the store gets onto an Android device.</p>
         </div>
       </div>
@@ -243,19 +249,168 @@ adb install TMPlayer-&lt;version&gt;-universal.apk</code></pre>
             <p>Your chats open into grids or rows of their playable videos: big cards and a focus ring on a television, dense tiles under your thumb on a phone. Choose one and it starts in a few seconds.</p>
           </li>
         </ol>
-        <p class="muted small section-note"><a href="https://github.com/dracu-lah/TMPlayer/blob/main/INSTALL.md" rel="noopener">INSTALL.md</a> covers the sideloading steps in full, plus the remote-control reference and troubleshooting.</p>
+        <p class="muted small section-note"><a href="https://github.com/dracu-lah/TMPlayer/blob/main/INSTALL.md" rel="noopener">INSTALL.md</a> covers every step in full, plus the remote, the touch and the keyboard references and troubleshooting.</p>
       </div>
     </div>
   </section>
 
 <svg class="wave wave-flip" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
 
-  <section class="band" aria-labelledby="trouble-h">
+  <section class="band" id="windows" aria-labelledby="windows-h">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <div class="section-title">
+          <h2 id="windows-h">On Windows</h2>
+          <p class="section-sub">Windows 10 or 11, 64-bit. The installer puts it in your own user folder, so it needs no administrator password.</p>
+        </div>
+      </div>
+
+      <div class="section-body" data-reveal>
+        <ol class="steps">
+          <li id="win-1">
+            <h3>Download the installer</h3>
+            <p>Take <code>TMPlayer-&lt;version&gt;-windows-x64.msi</code> from <a href="/download/#windows">the download page</a>. If you would rather install nothing at all, take the portable zip instead, unzip it anywhere and run <code>TMPlayer.exe</code> from the folder.</p>
+          </li>
+          <li id="win-2">
+            <h3>Get past SmartScreen</h3>
+            <p>The build is not signed yet, so Windows says <em>Windows protected your PC</em>. Click <em>More info</em>, then <em>Run anyway</em>. The same warning can appear the first time you open the portable <code>TMPlayer.exe</code>.</p>
+          </li>
+          <li id="win-3">
+            <h3>Install and open it</h3>
+            <p>Click through the installer. TMPlayer is then in the Start menu, with a shortcut on the desktop. Installing a newer MSI later upgrades it in place and keeps you signed in.</p>
+          </li>
+          <li id="win-4">
+            <h3>Sign in with the QR code</h3>
+            <p>A QR code fills the window. On your phone open Telegram, then <em>Settings</em>, <em>Devices</em>, <em>Link Desktop Device</em>, and point the camera at the screen. <em>Log in by phone number</em> is underneath it, for an account with no phone to hand.</p>
+          </li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+<svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
+
+  <section class="band band-tonal" id="linux" aria-labelledby="linux-h">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <div class="section-title">
+          <h2 id="linux-h">On Linux</h2>
+          <p class="section-sub">64-bit x86 for now. Every format below is the same app, so pick by how you like to install things, then sign in with the QR code exactly as on Windows.</p>
+        </div>
+      </div>
+
+      <div class="section-body" data-reveal>
+        <div class="formats">
+          <div class="format">
+            <h3>Debian, Ubuntu, Mint and relatives</h3>
+            <pre class="code"><code>sudo apt install ./tmplayer_&lt;version&gt;_amd64.deb</code></pre>
+          </div>
+          <div class="format">
+            <h3>Fedora, RHEL and rebuilds</h3>
+            <pre class="code"><code>sudo dnf install ./tmplayer-&lt;version&gt;.x86_64.rpm</code></pre>
+            <p>openSUSE: <code>sudo zypper install ./tmplayer-&lt;version&gt;.x86_64.rpm</code></p>
+          </div>
+          <div class="format">
+            <h3>Flatpak, on any distribution</h3>
+            <pre class="code"><code>flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak install --user ./TMPlayer-&lt;version&gt;.flatpak</code></pre>
+            <p>The first line adds Flathub, where the <code>org.freedesktop.Platform</code> runtime comes from, and does nothing if you already have it.</p>
+          </div>
+          <div class="format">
+            <h3>AppImage, on any distribution</h3>
+            <pre class="code"><code>chmod +x TMPlayer-&lt;version&gt;-x86_64.AppImage
+./TMPlayer-&lt;version&gt;-x86_64.AppImage</code></pre>
+            <p>Or tick <em>Allow executing file as program</em> in the file's properties and double click it.</p>
+          </div>
+          <div class="format">
+            <h3>Tarball, on any distribution</h3>
+            <pre class="code"><code>mkdir -p ~/.local/opt
+tar xzf TMPlayer-&lt;version&gt;-linux-x64.tar.gz -C ~/.local/opt
+~/.local/opt/TMPlayer/bin/TMPlayer</code></pre>
+          </div>
+          <div class="format">
+            <h3>Arch Linux</h3>
+            <p>Build the package from the recipe in <a href="https://github.com/dracu-lah/TMPlayer/tree/main/packaging/aur" rel="noopener"><code>packaging/aur</code></a> with <code>makepkg -si</code>, or use the AppImage or the Flatpak, which run on Arch as they are.</p>
+          </div>
+        </div>
+        <p class="muted small section-note">The deb, rpm and Flatpak add TMPlayer to your app menu on their own. The AppImage and the tarball do not, which is what the next section is for.</p>
+      </div>
+    </div>
+  </section>
+
+<svg class="wave wave-flip" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
+
+  <section class="band" id="shortcuts" aria-labelledby="shortcuts-h">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <div class="section-title">
+          <h2 id="shortcuts-h">On the desktop, in the menu, on the taskbar</h2>
+          <p class="section-sub">Where to find it once it is installed, and how to keep it one click away.</p>
+        </div>
+      </div>
+
+      <div class="section-body" data-reveal>
+        <div class="two-col">
+          <div class="panel panel-prose">
+            <h3>Windows</h3>
+            <p><strong>Installed with the MSI:</strong> it is already in the Start menu and on the desktop. To pin it to the taskbar, open Start, find TMPlayer, right click it and choose <em>Pin to taskbar</em>. Or, while it is running, right click its taskbar icon and choose the same.</p>
+            <p><strong>From the portable zip:</strong> right click <code>TMPlayer.exe</code>, then <em>Send to</em>, then <em>Desktop (create shortcut)</em>. On Windows 11 those entries are under <em>Show more options</em>. For a Start menu entry, press <kbd>Win</kbd>+<kbd>R</kbd>, type <code>shell:programs</code> and move that shortcut into the folder that opens.</p>
+          </div>
+          <div class="panel panel-prose">
+            <h3>Linux: deb, rpm and Flatpak</h3>
+            <p>TMPlayer is in the app menu as soon as the install finishes, under Multimedia or Sound and Video.</p>
+            <p><strong>GNOME:</strong> open Activities, search for TMPlayer, right click it and choose <em>Pin to Dash</em> (<em>Add to Favourites</em> on older releases). <strong>KDE Plasma:</strong> open the application launcher, right click TMPlayer and choose <em>Pin to Task Manager</em> or <em>Add to Favourites</em>. Either way, right clicking the icon of the running app does the same.</p>
+          </div>
+        </div>
+
+        <div class="panel panel-prose panel-wide">
+          <h3>Linux: AppImage and tarball, in the app menu</h3>
+          <p>A single file has nowhere to put a menu entry, so you make one. Move the app somewhere it will stay, fetch the icon, and write a launcher file. These commands do it for the AppImage, renamed so an update is a drop-in replacement:</p>
+          <pre class="code"><code>mkdir -p ~/Applications ~/.local/share/icons ~/.local/share/applications
+mv ~/Downloads/TMPlayer-&lt;version&gt;-x86_64.AppImage ~/Applications/TMPlayer.AppImage
+chmod +x ~/Applications/TMPlayer.AppImage
+curl -Lo ~/.local/share/icons/tmplayer.png https://tmplayer.org/icon-512.png
+
+cat &gt; ~/.local/share/applications/tmplayer.desktop &lt;&lt;EOF
+[Desktop Entry]
+Type=Application
+Name=TMPlayer
+Comment=Telegram media player
+Exec=$HOME/Applications/TMPlayer.AppImage
+Icon=$HOME/.local/share/icons/tmplayer.png
+Categories=AudioVideo;Video;Player;
+Terminal=false
+EOF
+
+chmod +x ~/.local/share/applications/tmplayer.desktop
+update-desktop-database ~/.local/share/applications</code></pre>
+          <p>The shell fills in <code>$HOME</code> as it writes the file, because a launcher needs full paths and does not understand <code>~</code>. For the tarball unpacked into <code>~/.local/opt</code>, the one line that changes is <code>Exec=$HOME/.local/opt/TMPlayer/bin/TMPlayer</code>. Then pin it to the dock or the task manager as above.</p>
+          <p>Would rather click than type? <a href="https://flathub.org/apps/it.mijorus.gearlever" rel="noopener">Gear Lever</a> and <a href="https://github.com/TheAssassin/AppImageLauncher" rel="noopener">AppImageLauncher</a> both move an AppImage into place and make its menu entry for you.</p>
+        </div>
+
+        <div class="panel panel-prose panel-wide">
+          <h3>Linux: an icon on the desktop</h3>
+          <p>Copy the launcher onto the desktop and tell the desktop you trust it. For the AppImage or tarball launcher made above:</p>
+          <pre class="code"><code>cp ~/.local/share/applications/tmplayer.desktop ~/Desktop/
+chmod +x ~/Desktop/tmplayer.desktop
+gio set ~/Desktop/tmplayer.desktop metadata::trusted true</code></pre>
+          <p>For a deb, rpm or Flatpak install, find the launcher it added and copy that one instead:</p>
+          <pre class="code"><code>find /usr/share/applications ~/.local/share/flatpak/exports/share/applications \
+  /var/lib/flatpak/exports/share/applications -iname '*tmplayer*.desktop' 2&gt;/dev/null</code></pre>
+          <p>On GNOME the desktop shows icons only with the Desktop Icons NG extension, and the first time you need to right click the icon and choose <em>Allow Launching</em>. KDE Plasma asks once whether to run it; Xfce and Cinnamon read the trusted flag the last command set.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+<svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
+
+  <section class="band band-tonal" aria-labelledby="trouble-h">
     <div class="wrap">
       <div class="section-head" data-reveal>
         <div class="section-title">
           <h2 id="trouble-h">If it goes wrong</h2>
-          <p class="section-sub">The three that account for nearly every stuck install.</p>
+          <p class="section-sub">The ones that account for nearly every stuck install, on a television and on a computer.</p>
         </div>
       </div>
 
@@ -286,19 +441,47 @@ adb install TMPlayer-&lt;version&gt;-universal.apk</code></pre>
             its own every so often, so a stale one is never the problem for long. Telegram's scanner lives under Settings, Devices,
             Link Desktop Device, not in the camera app.</p></div>
         </details>
+        <details class="faq-item" name="trouble">
+          <summary>
+            <span class="faq-q">Windows shows no Run anyway button</span>
+            <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
+          </summary>
+          <div class="faq-body"><p>Click <em>More info</em> first: the button only appears after it. On a work computer, a policy set by whoever manages it can forbid unsigned apps outright, and nothing in the app can change that. For the portable zip, right click the zip, choose <em>Properties</em>, tick <em>Unblock</em> and unzip it again, so Windows stops asking about every file inside.</p></div>
+        </details>
+        <details class="faq-item" name="trouble">
+          <summary>
+            <span class="faq-q">The AppImage does nothing when opened</span>
+            <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
+          </summary>
+          <div class="faq-body"><p>Most often FUSE is missing, which Ubuntu 22.04 and newer no longer install by default. Run it from a terminal to see the message, then install <code>libfuse2t64</code> (Ubuntu 24.04 and newer) or <code>libfuse2</code> (22.04). Or skip FUSE entirely with <code>./TMPlayer-&lt;version&gt;-x86_64.AppImage --appimage-extract-and-run</code>.</p></div>
+        </details>
+        <details class="faq-item" name="trouble">
+          <summary>
+            <span class="faq-q">Flatpak says a runtime is missing</span>
+            <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
+          </summary>
+          <div class="faq-body"><p>The bundle takes its <code>org.freedesktop.Platform</code> runtime from Flathub. Add the remote with <code>flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo</code> and run the install again.</p></div>
+        </details>
+        <details class="faq-item" name="trouble">
+          <summary>
+            <span class="faq-q">The window is blank or grey on a tiling window manager</span>
+            <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
+          </summary>
+          <div class="faq-body"><p>Java needs telling that the window manager does not reparent. Start it with <code>_JAVA_AWT_WM_NONREPARENTING=1</code> set, on sway, i3, Hyprland and the like.</p></div>
+        </details>
       </div>
 
-      <p class="muted small section-note" data-reveal>Still stuck? <a href="https://github.com/dracu-lah/TMPlayer/issues" rel="noopener">Open an issue</a> with the device, the Android version and what the screen said.</p>
+      <p class="muted small section-note" data-reveal>Still stuck? <a href="https://github.com/dracu-lah/TMPlayer/issues" rel="noopener">Open an issue</a> with the device or the system, its version and what the screen said.</p>
     </div>
   </section>
 
-<svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
+<svg class="wave wave-flip" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
 
-  <section class="band band-tonal" aria-labelledby="support-h">
+  <section class="band" aria-labelledby="support-h">
     <div class="wrap">
       <div class="support" data-reveal>
         <h2 id="support-h">Star it if it helped</h2>
-        <p>If these steps got one of your own videos onto your television tonight, a star is the thanks that actually helps: it is what puts the project in front of the next person looking for the same thing.</p>
+        <p>If these steps got one of your own videos onto your screen tonight, a star is the thanks that actually helps: it is what puts the project in front of the next person looking for the same thing.</p>
         <div class="support-actions">
           <a class="btn btn-filled" href="https://github.com/dracu-lah/TMPlayer" rel="noopener">
             <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg>

@@ -92,6 +92,43 @@ The phone gets its own layout out of the same APK: the chat list, then the chat'
   <img src="screenshots/phone.webp" width="80%" alt="TMPlayer on a phone: the chat list beside a chat's videos as a grid" />
 </p>
 
+## On a computer
+
+A desktop app for **Windows 10 and 11** and **64-bit Linux**, from the same release as the APKs.
+macOS is planned for later. It is the same account, the same library and the same streaming, drawn
+for a mouse and a keyboard. How to install it is in [INSTALL.md](../INSTALL.md#installing-tmplayer-on-a-computer).
+
+**Signs in the same way.** A QR code fills the window: Telegram on your phone, Settings, Devices,
+Link Desktop Device. A phone number and two-step verification work too.
+
+**A sidebar and a grid.** Chats, Favourites, Continue, Downloads and Settings down the side above
+a certain width, an icon rail below it. Posters you can make bigger or smaller, a Play button and a
+menu when you hover a tile, and a right click menu to play, play from the start, download, remove
+a download or copy the Telegram link. `/` or `Ctrl+F` searches, `Ctrl+,` opens Settings, and Esc,
+Backspace, Alt+Left and the mouse's back button all go back.
+
+**Plays through mpv.** libmpv and its FFmpeg are bundled, so it opens what the Android app opens,
+MKV, MP4, AVI and TS with image subtitles and DTS, TrueHD and E-AC3, without anything installed
+beside it. It streams while the file arrives and seeks without waiting, exactly as the television
+does, and picks up where you stopped, offers the next episode near the end, and keeps your audio
+and subtitle choice for the rest of a series.
+
+**A keyboard you already know.** YouTube's letters, with mpv's and VLC's punctuation as aliases:
+Space or K to pause, arrows for 5 seconds and volume, J and L for 10, Shift with an arrow for a
+minute, 0 to 9 to jump through the video, F for fullscreen, S and A for subtitles and audio, `]`
+and `[` for speed, Shift+N and Shift+P for episodes. A single click pauses, a double click goes
+fullscreen, the wheel sets the volume. The whole table is in
+[INSTALL.md](../INSTALL.md#using-the-keyboard-and-mouse).
+
+**Behaves like a desktop app.** Keeps the screen awake while a video plays, answers the media keys
+(and on Linux the desktop's own media controls, through MPRIS), remembers its window size and
+place, and opening it a second time brings the first window forward. Downloads stay on the
+computer until you remove them, on their own page.
+
+**What it does not do yet.** No voice search (there is no portable speech API), no mini player,
+and no self update: install a newer release over the old one. Windows builds are not signed yet,
+so SmartScreen warns the first time.
+
 ## What it is not
 
 It hosts nothing, indexes nothing and uploads nothing. There is no server, no bot, and no account
