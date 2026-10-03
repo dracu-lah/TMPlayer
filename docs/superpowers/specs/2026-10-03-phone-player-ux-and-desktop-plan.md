@@ -883,6 +883,8 @@ Part B, desktop
   - [x] Update notice: at most once a day, with a switch in Settings, the desktop asks GitHub's latest release and, when it is newer than `BuildInfo.VERSION` (semver order, so 2.0.0 beats 2.0.0-alpha.1) and carries a package for this OS, shows a corner notice with Download (the release page) and Not now. Never installs. Its own small fetch (`DesktopUpdates`) rather than `:core`'s `Updates`, which picks an APK and fails without one
   - [ ] Tag `2.0.0-alpha.1`
 - [ ] Phase 2: Conveyor, signing, three OS installers, native inventory, smoke tests, macOS day; `2.0.0-beta.1`
+  - [x] Release train changed on 2026-10-04 at the user's request: desktop ships in the same release as the APKs, as 1.18.0, Windows and Linux only, unsigned. The Compose plugin's jpackage plus nfpm, appimagetool and flatpak-builder (`desktop/packaging/`) instead of Conveyor. Assets: MSI, portable zip, deb, rpm, AppImage, Flatpak bundle, tarball; AUR PKGBUILD and a Flathub manifest in the repo, not submitted. `--self-test` runs from every package in CI (deb on Ubuntu 24.04, rpm on Fedora and Tumbleweed containers, Flatpak, MSI installed and upgraded). Linux floor glibc 2.38 from the prebuilt TDLib and libmpv; older systems take the Flatpak
+  - [ ] Signing (Windows SignPath or a certificate), macOS in the release, Flathub and AUR submissions, desktop screenshots for AppStream
 - [ ] Phase 3: SMTC, Now Playing, `tg:` links, Linux dark mode, notifications, size trimming; `2.0.0` (the mini player, subtitle drag and drop and the shortcut sheet landed early, in Phase 1)
 - [ ] Phase 4 backlog: Flatpak, AppImage, Intel macOS, TV overlay on the shared composable
 
