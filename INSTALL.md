@@ -188,6 +188,10 @@ tick **Unblock** and unzip it again.
 
 64-bit x86 only for now. Pick by how you like to install software; every format is the same app.
 
+The deb, rpm, AppImage and tarball need a 2024 or newer system (glibc 2.38): Ubuntu 24.04, Debian
+13, Linux Mint 22, Fedora 39, openSUSE Tumbleweed, RHEL 10, Arch, or anything newer. On an older
+system, such as Ubuntu 22.04, Debian 12 or RHEL 9, take the Flatpak, which brings its own runtime.
+
 **Debian, Ubuntu, Mint and relatives:**
 
 ```bash
@@ -203,7 +207,7 @@ sudo dnf install ./tmplayer-<version>.x86_64.rpm
 **openSUSE:**
 
 ```bash
-sudo zypper install ./tmplayer-<version>.x86_64.rpm
+sudo zypper install --allow-unsigned-rpm ./tmplayer-<version>.x86_64.rpm
 ```
 
 **Flatpak, on any distribution.** The bundle takes the `org.freedesktop.Platform` runtime from
@@ -231,7 +235,7 @@ tar xzf TMPlayer-<version>-linux-x64.tar.gz -C ~/.local/opt
 ~/.local/opt/TMPlayer/bin/TMPlayer
 ```
 
-**Arch Linux.** A PKGBUILD for the AUR lives in [packaging/aur](packaging/aur): build it with
+**Arch Linux.** A PKGBUILD for the AUR lives in [desktop/packaging/aur](desktop/packaging/aur): build it with
 `makepkg -si` from that folder. The AppImage and the Flatpak also run on Arch as they are.
 
 To upgrade, install the newer file the same way: the deb, rpm and Flatpak replace the old version,
@@ -296,6 +300,7 @@ Exec=$HOME/Applications/TMPlayer.AppImage
 Icon=$HOME/.local/share/icons/tmplayer.png
 Categories=AudioVideo;Video;Player;
 Terminal=false
+StartupWMClass=com-tmplayer-desktop-MainKt
 EOF
 
 chmod +x ~/.local/share/applications/tmplayer.desktop
@@ -314,6 +319,7 @@ Exec=/home/you/Applications/TMPlayer.AppImage
 Icon=/home/you/.local/share/icons/tmplayer.png
 Categories=AudioVideo;Video;Player;
 Terminal=false
+StartupWMClass=com-tmplayer-desktop-MainKt
 ```
 
 For the tarball unpacked into `~/.local/opt`, use the same commands without the `mv` and `chmod`

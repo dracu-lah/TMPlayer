@@ -68,7 +68,7 @@ cross compilation, which is why the release builds each one on its own runner.
 
 They land under `desktop/build/compose/binaries/main/`. The AppImage, the Flatpak, the Linux
 tarball and the Windows portable zip are wrapped from the `createDistributable` folder by the
-release workflow, with the recipes in `packaging/`. The libmpv runtime pulled in is the one for
+release workflow, with the recipes in `desktop/packaging/`. The libmpv runtime pulled in is the one for
 the host only, since each is 30 to 75 MB and the other systems' would never load.
 
 Linux notes: on a tiling window manager set `_JAVA_AWT_WM_NONREPARENTING=1` or the window stays

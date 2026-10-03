@@ -322,7 +322,7 @@
               </span>
               <div class="platform-title">
                 <h3 id="linux-h">Linux</h3>
-                <p class="platform-req">x86_64. Take your distribution's own package, or a format that runs anywhere</p>
+                <p class="platform-req">x86_64. Take your distribution's own package, or a format that runs anywhere. deb, rpm, AppImage and tarball need Ubuntu 24.04, Debian 13, Fedora 39 or newer; older systems take the Flatpak</p>
               </div>
               <span class="badge platform-yours" hidden>Your computer</span>
             </div>
@@ -341,7 +341,7 @@
               <li class="abi" data-asset="linux-rpm" data-distro="rpm">
                 <div class="abi-text">
                   <p class="abi-name">rpm package</p>
-                  <p class="abi-note">Fedora, RHEL and its rebuilds, and openSUSE, where it is <code>sudo zypper install</code> instead.</p>
+                  <p class="abi-note">Fedora, RHEL and its rebuilds, and openSUSE, where it is <code>sudo zypper install --allow-unsigned-rpm</code> instead.</p>
                   <pre class="abi-cmd"><code>sudo dnf install ./<span data-file>tmplayer-&lt;version&gt;.x86_64.rpm</span></code></pre>
                 </div>
                 <div class="abi-get">
@@ -385,10 +385,10 @@
               <li class="abi">
                 <div class="abi-text">
                   <p class="abi-name">Arch Linux</p>
-                  <p class="abi-note">A PKGBUILD for the AUR lives in the repository under <code>packaging/aur</code>. Or take the AppImage or the Flatpak, which run on Arch as they are.</p>
+                  <p class="abi-note">A PKGBUILD for the AUR lives in the repository under <code>desktop/packaging/aur</code>. Or take the AppImage or the Flatpak, which run on Arch as they are.</p>
                 </div>
                 <div class="abi-get">
-                  <a class="dl" href="https://github.com/dracu-lah/TMPlayer/tree/main/packaging/aur" rel="noopener"><span>The recipe</span></a>
+                  <a class="dl" href="https://github.com/dracu-lah/TMPlayer/tree/main/desktop/packaging/aur" rel="noopener"><span>The recipe</span></a>
                 </div>
               </li>
             </ul>

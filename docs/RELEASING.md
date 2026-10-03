@@ -23,7 +23,7 @@ Compose packager only makes installers for the system it runs on. For `v1.18.0` 
 | `TMPlayer-1.18.0-universal.apk`, `-arm64-v8a.apk`, `-armeabi-v7a.apk` | Linux, signed with the release key |
 | `TMPlayer-1.18.0-windows-x64.msi`, `TMPlayer-1.18.0-windows-x64-portable.zip` | Windows, unsigned |
 | `tmplayer_1.18.0_amd64.deb`, `tmplayer-1.18.0.x86_64.rpm` | Linux |
-| `TMPlayer-1.18.0-x86_64.AppImage`, `TMPlayer-1.18.0-linux-x64.tar.gz`, `TMPlayer-1.18.0.flatpak` | Linux, wrapped from the app folder with the recipes in `packaging/` |
+| `TMPlayer-1.18.0-x86_64.AppImage`, `TMPlayer-1.18.0-linux-x64.tar.gz`, `TMPlayer-1.18.0.flatpak` | Linux, wrapped from the app folder with the recipes in `desktop/packaging/` |
 | `SHA256SUMS-1.18.0.txt` | over every file above |
 
 These names are what the website matches on: `site/app.js` reads the release list from the GitHub

@@ -308,7 +308,7 @@ adb install TMPlayer-&lt;version&gt;-universal.apk</code></pre>
           <div class="format">
             <h3>Fedora, RHEL and rebuilds</h3>
             <pre class="code"><code>sudo dnf install ./tmplayer-&lt;version&gt;.x86_64.rpm</code></pre>
-            <p>openSUSE: <code>sudo zypper install ./tmplayer-&lt;version&gt;.x86_64.rpm</code></p>
+            <p>openSUSE: <code>sudo zypper install --allow-unsigned-rpm ./tmplayer-&lt;version&gt;.x86_64.rpm</code></p>
           </div>
           <div class="format">
             <h3>Flatpak, on any distribution</h3>
@@ -330,7 +330,7 @@ tar xzf TMPlayer-&lt;version&gt;-linux-x64.tar.gz -C ~/.local/opt
           </div>
           <div class="format">
             <h3>Arch Linux</h3>
-            <p>Build the package from the recipe in <a href="https://github.com/dracu-lah/TMPlayer/tree/main/packaging/aur" rel="noopener"><code>packaging/aur</code></a> with <code>makepkg -si</code>, or use the AppImage or the Flatpak, which run on Arch as they are.</p>
+            <p>Build the package from the recipe in <a href="https://github.com/dracu-lah/TMPlayer/tree/main/desktop/packaging/aur" rel="noopener"><code>desktop/packaging/aur</code></a> with <code>makepkg -si</code>, or use the AppImage or the Flatpak, which run on Arch as they are.</p>
           </div>
         </div>
         <p class="muted small section-note">The deb, rpm and Flatpak add TMPlayer to your app menu on their own. The AppImage and the tarball do not, which is what the next section is for.</p>
@@ -380,6 +380,7 @@ Exec=$HOME/Applications/TMPlayer.AppImage
 Icon=$HOME/.local/share/icons/tmplayer.png
 Categories=AudioVideo;Video;Player;
 Terminal=false
+StartupWMClass=com-tmplayer-desktop-MainKt
 EOF
 
 chmod +x ~/.local/share/applications/tmplayer.desktop

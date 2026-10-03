@@ -36,7 +36,7 @@ No messages, no server, no account except yours.
   stick with a gigabyte of RAM, so a cheap device is the target rather than an afterthought.
 - **Windows 10 and 11**, 64-bit, as an MSI installer or a portable zip.
 - **Linux**, 64-bit x86, as a deb, an rpm, an AppImage, a Flatpak or a tarball, with an AUR
-  recipe in [packaging/aur](packaging/aur).
+  recipe in [desktop/packaging/aur](desktop/packaging/aur).
 
 macOS is planned for later. Everything is on the same [GitHub release](../../releases), and
 [tmplayer.org/download](https://tmplayer.org/download/) lists it by platform.
@@ -68,12 +68,12 @@ for your user only, with a Start menu entry and a desktop shortcut. The
 
 ```bash
 sudo apt install ./tmplayer_<version>_amd64.deb         # Debian, Ubuntu, Mint
-sudo dnf install ./tmplayer-<version>.x86_64.rpm        # Fedora (openSUSE: sudo zypper install)
+sudo dnf install ./tmplayer-<version>.x86_64.rpm        # Fedora (openSUSE: sudo zypper install --allow-unsigned-rpm)
 flatpak install --user ./TMPlayer-<version>.flatpak     # any distribution, needs the Flathub remote
 chmod +x TMPlayer-<version>-x86_64.AppImage             # any distribution, then run it
 ```
 
-Arch: build from [packaging/aur](packaging/aur), or use the AppImage or the Flatpak.
+Arch: build from [desktop/packaging/aur](desktop/packaging/aur), or use the AppImage or the Flatpak.
 
 [INSTALL.md](INSTALL.md) has the full steps for every platform, how to put the app on the desktop,
 in the app menu and on the taskbar, the remote, touch and keyboard references, and troubleshooting.
