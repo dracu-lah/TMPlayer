@@ -26,4 +26,11 @@
     <dimen name="player_gesture_hud_side">40dp</dimen>
     <!-- Clear of the transport row, which on a phone is Media3's and about 70dp tall. -->
     <dimen name="player_subtitle_bottom">32dp</dimen>
+    <!--
+      The scrub bar's touch height. A thumb wants the Material 48dp; a television's bar is reached
+      with the D-pad and keeps the slimmer figure its focus pill was drawn around.
+    -->
+    <dimen name="player_timebar_touch">48dp</dimen>
+    <!-- Space over the scrub bar. A phone's 48dp touch strip already carries its own air. -->
+    <dimen name="player_timebar_gap">0dp</dimen>
 </resources>

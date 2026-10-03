@@ -36,6 +36,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import com.tmplayer.player.TouchPrefs
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -169,6 +170,7 @@ fun SettingsScreen(
     val downloadFirst by settings.downloadBeforePlaying.collectAsStateWithLifecycle(initialValue = false)
     val autoplayNext by settings.autoplayNext.collectAsStateWithLifecycle(initialValue = true)
     val wifiOnly by settings.wifiOnlyDownloads.collectAsStateWithLifecycle(initialValue = false)
+    val touchPrefs by settings.touchPrefs.collectAsStateWithLifecycle(initialValue = TouchPrefs())
     val history by settings.continueWatching.collectAsStateWithLifecycle(initialValue = emptyList())
     val favorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
     val lastChatId by settings.lastChatId.collectAsStateWithLifecycle(initialValue = 0L)
@@ -514,6 +516,108 @@ fun SettingsScreen(
                     icon = TmIcons.Wifi,
                     checked = wifiOnly,
                     onToggle = { scope.launch { settings.setWifiOnlyDownloads(!wifiOnly) } },
+                )
+            }
+        }
+
+        // ---- the phone player ------------------------------------------------------------------
+        // Touch only: a remote has buttons for every one of these, and its key model is settled.
+        if (touch) {
+            fun update(change: (TouchPrefs) -> TouchPrefs) {
+                scope.launch { settings.updateTouchPrefs(change) }
+            }
+            item { SectionTitle("Player") }
+            item {
+                ToggleRow(
+                    title = "Tap the picture to play or pause",
+                    subtitle = if (touchPrefs.tapPlaysPauses) {
+                        "A tap pauses and shows the controls; another tap plays"
+                    } else {
+                        "Off: a tap shows the controls, and the big button pauses"
+                    },
+                    icon = TmIcons.Pause,
+                    checked = touchPrefs.tapPlaysPauses,
+                    onToggle = { update { it.copy(tapPlaysPauses = !it.tapPlaysPauses) } },
+                )
+            }
+            item {
+                val choices = TouchPrefs.DOUBLE_TAP_CHOICES_MS
+                StepperRow(
+                    title = "Double tap to jump",
+                    subtitle = "Each tap on a side of the picture, and the jump buttons",
+                    value = "${touchPrefs.doubleTapMs / 1000} seconds",
+                    icon = Icons.Filled.Refresh,
+                    canDecrease = touchPrefs.doubleTapMs != choices.first(),
+                    canIncrease = touchPrefs.doubleTapMs != choices.last(),
+                    onStep = { direction ->
+                        update { it.copy(doubleTapMs = TouchPrefs.step(choices, it.doubleTapMs, direction)) }
+                    },
+                )
+            }
+            item {
+                val choices = TouchPrefs.HOLD_CHOICES
+                StepperRow(
+                    title = "Hold to speed up",
+                    subtitle = "Plays fast for as long as a finger is held on the picture",
+                    value = TouchPrefs.holdLabel(touchPrefs.holdSpeed),
+                    icon = Icons.Filled.PlayArrow,
+                    canDecrease = touchPrefs.holdSpeed != choices.first(),
+                    canIncrease = touchPrefs.holdSpeed != choices.last(),
+                    onStep = { direction ->
+                        update { it.copy(holdSpeed = TouchPrefs.step(choices, it.holdSpeed, direction)) }
+                    },
+                )
+            }
+            item {
+                val choices = TouchPrefs.TIMEOUT_CHOICES_MS
+                StepperRow(
+                    title = "Hide the controls after",
+                    subtitle = "While playing; a paused video keeps them up",
+                    value = TouchPrefs.timeoutLabel(touchPrefs.controlsTimeoutMs),
+                    icon = TmIcons.Clock,
+                    canDecrease = touchPrefs.controlsTimeoutMs != choices.first(),
+                    canIncrease = touchPrefs.controlsTimeoutMs != choices.last(),
+                    onStep = { direction ->
+                        update {
+                            it.copy(controlsTimeoutMs = TouchPrefs.step(choices, it.controlsTimeoutMs, direction))
+                        }
+                    },
+                )
+            }
+            item {
+                ToggleRow(
+                    title = "Swipe sideways to seek",
+                    subtitle = "Drag across the picture to travel through the video",
+                    icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    checked = touchPrefs.seekGesture,
+                    onToggle = { update { it.copy(seekGesture = !it.seekGesture) } },
+                )
+            }
+            item {
+                ToggleRow(
+                    title = "Swipe on the left for brightness",
+                    subtitle = "Up and down on the left side of the picture",
+                    icon = Icons.Filled.KeyboardArrowUp,
+                    checked = touchPrefs.brightnessGesture,
+                    onToggle = { update { it.copy(brightnessGesture = !it.brightnessGesture) } },
+                )
+            }
+            item {
+                ToggleRow(
+                    title = "Swipe on the right for volume",
+                    subtitle = "Up and down on the right side of the picture",
+                    icon = Icons.Filled.KeyboardArrowUp,
+                    checked = touchPrefs.volumeGesture,
+                    onToggle = { update { it.copy(volumeGesture = !it.volumeGesture) } },
+                )
+            }
+            item {
+                ToggleRow(
+                    title = "Vibrate on taps",
+                    subtitle = "A light tick for play, pause, jumps and the hold",
+                    icon = TmIcons.Bell,
+                    checked = touchPrefs.haptics,
+                    onToggle = { update { it.copy(haptics = !it.haptics) } },
                 )
             }
         }

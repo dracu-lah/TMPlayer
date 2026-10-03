@@ -1,0 +1,12 @@
+<!--
+  The phone's big play and pause seat in the middle of the picture: a translucent dark disc that
+  keeps a white glyph legible over a bright frame, with a bounded ripple for the thumb.
+-->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#33FFFFFF">
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#59000000" />
+        </shape>
+    </item>
+</ripple>

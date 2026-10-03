@@ -222,6 +222,31 @@ class PlayerActivity : FragmentActivity() {
 
     private var gestures: PlayerGestures? = null
 
+    /** The phone's gesture answers (flash, ripple, pills). Null on a television. */
+    private var feedback: PlayerFeedback? = null
+
+    /** The phone's touch settings, read off disk once the player opens. */
+    private var touchPrefs = TouchPrefs()
+
+    /**
+     * True while the screen is locked against touches: every gesture and button is off, the
+     * orientation is frozen, and the only thing a tap does is offer the way out.
+     */
+    private var locked = false
+    private var lockShield: FrameLayout? = null
+    private var unlockPill: TextView? = null
+    private val hideUnlockPill = Runnable { unlockPill?.animate()?.alpha(0f)?.setDuration(300)?.start() }
+
+    /**
+     * The "Next episode in 30" card, raised near the end of an episode with a successor. Once it
+     * has been seen the end of the video goes straight to the next one; once it has been hidden the
+     * end of the video stays put.
+     */
+    private var nextUpCard: View? = null
+    private var nextUpText: TextView? = null
+    private var nextUpShown = false
+    private var nextUpDismissed = false
+
     /** True while the transport row is up: the download figure is shown alongside it. */
     private var controlsUp = false
 
@@ -330,7 +355,30 @@ class PlayerActivity : FragmentActivity() {
             onCycleScale = ::cycleScale,
             onCycleOrientation = ::cycleOrientation,
             onPlayEpisode = ::playEpisode,
+            onBack = ::finish,
+            onMore = ::showOverflow,
+            onLock = ::lockScreen,
+            onPictureInPicture = ::enterPictureInPictureNow,
+            onRemainingToggled = { remaining ->
+                touchPrefs = touchPrefs.copy(showRemaining = remaining)
+                lifecycleScope.launch {
+                    runCatching { settings.updateTouchPrefs { it.copy(showRemaining = remaining) } }
+                }
+            },
         )
+        controls?.pictureInPictureAvailable =
+            packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+        // The television's row jumps by [Skip]: its glyphs used to say ten both ways while the
+        // back jump was five. The phone's buttons follow the double tap setting, read below.
+        controls?.setSkip(Skip.BACK_MS, Skip.FORWARD_MS)
+        if (!FormFactor.isTv(this)) {
+            feedback = PlayerFeedback(findViewById(R.id.player_root), findViewById(R.id.overlay_container))
+            buildNextUpCard()
+            lifecycleScope.launch {
+                touchPrefs = runCatching { settings.touchPrefsNow() }.getOrDefault(TouchPrefs())
+                applyTouchPrefs()
+            }
+        }
         renderControlsTitle()
         renderOrientationButton()
         // When a track picker closes, focus falls off its fragment and the scrub bar catches it,
@@ -464,15 +512,20 @@ class PlayerActivity : FragmentActivity() {
                 context = this,
                 window = window,
                 onSkip = ::skipBy,
-                onFeedback = ::showGestureFeedback,
+                onSeekStep = { zone, total, x, y -> feedback?.seekStep(zone, total, x, y) },
+                onLevel = { left, fraction, brightness -> feedback?.level(left, fraction, brightness) },
+                onScrub = { delta, target, length -> feedback?.scrub(delta, target, length) },
+                onScrubEnd = { feedback?.scrubEnded() },
                 onPinch = ::pinchScale,
                 positionMs = { player?.currentPosition ?: 0L },
                 durationMs = { player?.duration?.takeIf { it > 0 } ?: 0L },
                 onSeekTo = { at -> player?.seekTo(at) },
                 onHold = ::holdFastForward,
                 onTapControls = ::toggleControls,
-                onTogglePlay = ::togglePlayback,
-            )
+                onTogglePlay = ::togglePlaybackFromPicture,
+                isOnChrome = { x, y -> controls?.isOnChrome(x, y) == true || isOnNextUpCard(x, y) },
+                systemEdges = ::systemGestureEdges,
+            ).also { it.prefs = touchPrefs }
         }
 
         insetTheControls()
@@ -495,9 +548,15 @@ class PlayerActivity : FragmentActivity() {
         val cluster = findViewById<View>(R.id.controls_cluster)
         val corner = findViewById<View>(R.id.top_right_stack)
         val root = findViewById<View>(R.id.player_root)
+        val topBar = findViewById<View>(R.id.controls_topbar)
+        val phone = !FormFactor.isTv(this)
         val baseLeft = cluster.paddingLeft
         val baseRight = cluster.paddingRight
         val baseBottom = cluster.paddingBottom
+        val barLeft = topBar.paddingLeft
+        val barRight = topBar.paddingRight
+        // On a phone the top bar owns the top edge, so the corner chips sit under it.
+        val underTheBar = if (phone) (TOP_BAR_DP * resources.displayMetrics.density).toInt() else 0
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val safe = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
@@ -507,8 +566,25 @@ class PlayerActivity : FragmentActivity() {
                 right = baseRight + safe.right,
                 bottom = baseBottom + safe.bottom,
             )
-            corner?.updatePadding(right = safe.right, top = safe.top)
+            topBar.updatePadding(left = barLeft + safe.left, right = barRight + safe.right, top = safe.top)
+            corner?.updatePadding(right = safe.right, top = safe.top + underTheBar)
+            nextUpCard?.updateLayoutParams<FrameLayout.LayoutParams> {
+                rightMargin = safe.right + NEXT_UP_MARGIN_PX
+                bottomMargin = safe.bottom + NEXT_UP_BOTTOM_PX
+            }
             insets
+        }
+        if (phone) {
+            // A drag that starts on the scrub bar near the left edge is a scrub, not the system's
+            // back gesture: the bar's own strip is the one place that asks the system to stand
+            // aside. Nothing else does, so the back swipe still works everywhere else.
+            val timeBar = findViewById<View>(R.id.controls_timebar)
+            timeBar.addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+                ViewCompat.setSystemGestureExclusionRects(
+                    view,
+                    listOf(android.graphics.Rect(0, 0, view.width, view.height)),
+                )
+            }
         }
         // The video surface arrives long after the window's first inset pass, so without this the
         // controls keep the padding of whatever the insets were before there was a player at all.
@@ -520,15 +596,31 @@ class PlayerActivity : FragmentActivity() {
         controls?.toggle()
     }
 
-    /** The double tap in the middle of the picture, and the play or pause key on a phone. */
+    /**
+     * Play or pause from a button, a key or a headset. The phone's centre button morphs on its
+     * own, so a press with the row up needs nothing more; with the row down a phone flashes the
+     * big glyph and a television shows its figure.
+     */
     private fun togglePlayback() {
         val exo = player ?: return
-        if (exo.isPlaying) {
-            exo.pause()
-            showGestureFeedback("❙❙")
-        } else {
-            exo.play()
-            showGestureFeedback("▶")
+        val nowPlaying = !exo.isPlaying
+        if (nowPlaying) exo.play() else exo.pause()
+        if (controlsUp && feedback != null) return
+        feedback?.flashPlayPause(nowPlaying) ?: showGestureFeedback(if (nowPlaying) "▶" else "❙❙")
+    }
+
+    /**
+     * Play or pause from the picture itself: a double tap in its middle, or a single tap where the
+     * viewer has chosen that. A single tap that pauses also raises the row, the way a paused
+     * player always shows where it is; one that resumes lets the row go.
+     */
+    private fun togglePlaybackFromPicture(fromSingleTap: Boolean) {
+        val exo = player ?: return
+        val nowPlaying = !exo.isPlaying
+        if (nowPlaying) exo.play() else exo.pause()
+        feedback?.flashPlayPause(nowPlaying)
+        if (fromSingleTap) {
+            if (nowPlaying) controls?.hideAnimated() else controls?.show()
         }
     }
 
@@ -635,6 +727,10 @@ class PlayerActivity : FragmentActivity() {
         val surface = touchSurface
         val pickerOpen =
             GuidedStepSupportFragment.getCurrentGuidedStepSupportFragment(supportFragmentManager) != null
+        if (locked) {
+            // The shield over everything takes the touch; it offers the way out and nothing else.
+            return super.dispatchTouchEvent(event)
+        }
         if (surface == null || inPictureInPicture || pickerOpen || statusOverlay.visibility == View.VISIBLE) {
             return super.dispatchTouchEvent(event)
         }
@@ -664,10 +760,14 @@ class PlayerActivity : FragmentActivity() {
     private fun holdFastForward(holding: Boolean) {
         val exo = player ?: return
         if (holding) {
-            exo.setPlaybackSpeed(HOLD_SPEED)
-            showGestureFeedback("${HOLD_SPEED.toInt()}x  ▶▶")
+            val speed = touchPrefs.holdSpeed.takeIf { it > 0f } ?: TouchPrefs.HOLD_DEFAULT
+            exo.setPlaybackSpeed(speed)
+            // The picture is what the viewer is skimming; the row would only be in the way.
+            controls?.hideAnimated()
+            feedback?.holdStarted(speed)
         } else {
             exo.setPlaybackSpeed(playbackSpeed)
+            feedback?.holdEnded()
         }
     }
 
@@ -1096,18 +1196,22 @@ class PlayerActivity : FragmentActivity() {
             // so the loading sheet counts as something worth staying awake for.
             keepScreenOn(isPlaying || openingFilm)
             controls?.onPlayingChanged()
+            updatePictureInPictureParams()
         }
 
         override fun onPlaybackStateChanged(state: Int) {
             when (state) {
                 // Only the very first wait earns the full screen; later stalls get the chip.
-                Player.STATE_BUFFERING ->
+                Player.STATE_BUFFERING -> {
                     if (openingFilm) showStatus("Loading…") else showRebuffering()
+                    controls?.setBuffering(!openingFilm)
+                }
 
                 // Playing again is the only proof that a recovery worked, so the budget is
                 // refilled here rather than when the retry is issued.
                 Player.STATE_READY -> {
                     recoveryAttempts = 0
+                    controls?.setBuffering(false)
                     hideStatus()
                     // Once, as the picture first lands: the viewer sees the name of what they
                     // opened and where the controls live, and the row folds away on its own.
@@ -1473,8 +1577,15 @@ class PlayerActivity : FragmentActivity() {
             settings.clearResumePosition(chatId, messageId)
             val next = _episodes.value.next
             val autoplay = runCatching { settings.autoplayNextNow() }.getOrDefault(true)
-            if (next == null || !autoplay) {
+            hideNextUp()
+            if (next == null || !autoplay || nextUpDismissed) {
                 showFinished()
+                return@launch
+            }
+            // The card already counted the last half minute down in front of the viewer; a second
+            // countdown after it would be a wait for nothing.
+            if (nextUpShown) {
+                playEpisode(next)
                 return@launch
             }
             for (second in AUTOPLAY_COUNTDOWN_SEC downTo 1) {
@@ -1546,6 +1657,11 @@ class PlayerActivity : FragmentActivity() {
      */
     @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (locked && event.keyCode == KeyEvent.KEYCODE_BACK) {
+            // Locked means locked: Back offers the way out rather than leaving the film.
+            if (event.action == KeyEvent.ACTION_DOWN) showUnlockPill()
+            return true
+        }
         if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
         val pickerOpen = GuidedStepSupportFragment.getCurrentGuidedStepSupportFragment(supportFragmentManager) != null
         if (pickerOpen) return super.dispatchKeyEvent(event)
@@ -1870,11 +1986,42 @@ class PlayerActivity : FragmentActivity() {
         if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return
         if (player?.isPlaying != true) return
         if (statusOverlay.visibility == View.VISIBLE) return
+        // From Android 12 the system enters on its own, through setAutoEnterEnabled, which is the
+        // smooth version of the same transition; asking again here would only race it.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) return
         runCatching { enterPictureInPictureMode(pictureInPictureParams()) }
+    }
+
+    /** The overflow menu's and the row's picture in picture: straight into the corner. */
+    private fun enterPictureInPictureNow() {
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return
+        runCatching { enterPictureInPictureMode(pictureInPictureParams()) }
+    }
+
+    /**
+     * Keeps the system's picture in picture request in step with playback: entered on its own when
+     * the viewer goes home while something plays, never over a paused video or a status sheet.
+     */
+    private fun updatePictureInPictureParams() {
+        if (FormFactor.isTv(this)) return
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) return
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return
+        runCatching { setPictureInPictureParams(pictureInPictureParams()) }
     }
 
     private fun pictureInPictureParams(): PictureInPictureParams {
         val builder = PictureInPictureParams.Builder()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val autoEnter = player?.isPlaying == true &&
+                statusOverlay.visibility != View.VISIBLE &&
+                !locked
+            builder.setAutoEnterEnabled(autoEnter)
+        }
+        // The window grows out of the picture rather than out of a grey box.
+        touchSurface?.let { view ->
+            val bounds = android.graphics.Rect()
+            if (view.getGlobalVisibleRect(bounds)) builder.setSourceRectHint(bounds)
+        }
         // Android refuses anything narrower than 1:2.39 or wider than 2.39:1, and a video that
         // falls outside that takes the whole request down with it, so it is only offered when
         // the picture's own shape is known to be inside the range.
@@ -1895,10 +2042,279 @@ class PlayerActivity : FragmentActivity() {
         inPictureInPicture = isInPictureInPictureMode
         // At thumbnail size there is room for the picture and nothing else. The system draws its
         // own play and pause over the window, fed by the media session.
-        if (isInPictureInPictureMode) controls?.hideNow()
+        if (isInPictureInPictureMode) {
+            controls?.hideNow()
+            feedback?.clear()
+            hideNextUp()
+        }
         subtitleView.visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
         downloadChip.visibility = View.GONE
         gestures?.controlsVisible = false
+    }
+
+    // ---- the phone's extras: settings, overflow, lock, next up --------------------------------
+
+    /** Hands the viewer's touch settings to everything that reads them. */
+    private fun applyTouchPrefs() {
+        gestures?.prefs = touchPrefs
+        feedback?.hapticsEnabled = touchPrefs.haptics
+        controls?.timeoutMs = touchPrefs.controlsTimeoutMs
+        controls?.showRemaining = touchPrefs.showRemaining
+        controls?.setSkip(touchPrefs.doubleTapMs, touchPrefs.doubleTapMs)
+    }
+
+    /** The left and right system gesture strips, in pixels, for the scrub's edge rule. */
+    private fun systemGestureEdges(): Pair<Int, Int> {
+        val insets = touchSurface?.let { ViewCompat.getRootWindowInsets(it) } ?: return 0 to 0
+        val edges = insets.getInsets(WindowInsetsCompat.Type.systemGestures())
+        return edges.left to edges.right
+    }
+
+    /**
+     * The phone's overflow: everything that does not earn a seat on an upright row, and the
+     * handover to another app, which used to be reachable only through a held key.
+     */
+    private fun showOverflow(anchor: View) {
+        val menu = android.widget.PopupMenu(this, anchor, Gravity.END)
+        val items = menu.menu
+        items.add(0, MENU_LOCK, 0, "Lock the screen")
+        if (packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
+            items.add(0, MENU_PIP, 1, "Picture in picture")
+        }
+        val speeds = items.addSubMenu(0, MENU_SPEED, 2, "Playback speed (${PlaybackSpeed.label(playbackSpeed)})")
+        PlaybackSpeed.CHOICES.forEachIndexed { index, choice ->
+            speeds.add(1, MENU_SPEED_BASE + index, index, PlaybackSpeed.label(choice))
+                .setCheckable(true)
+                .setChecked(choice == playbackSpeed)
+        }
+        speeds.setGroupCheckable(1, true, true)
+        items.add(0, MENU_START_OVER, 3, "Start over")
+        items.add(0, MENU_OPEN_WITH, 4, "Open in another app")
+        items.add(0, MENU_DETAILS, 5, "Playback details")
+        menu.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                MENU_LOCK -> lockScreen()
+                MENU_PIP -> enterPictureInPictureNow()
+                MENU_START_OVER -> startOver()
+                MENU_OPEN_WITH -> openInAnotherApp()
+                MENU_DETAILS -> showPlaybackDetails()
+                in MENU_SPEED_BASE until MENU_SPEED_BASE + PlaybackSpeed.CHOICES.size ->
+                    setSpeed(PlaybackSpeed.CHOICES[item.itemId - MENU_SPEED_BASE])
+                else -> return@setOnMenuItemClickListener false
+            }
+            true
+        }
+        menu.setOnDismissListener { controls?.poke() }
+        menu.show()
+    }
+
+    private fun setSpeed(value: Float) {
+        playbackSpeed = value
+        player?.setPlaybackSpeed(value)
+        showGestureFeedback(PlaybackSpeed.label(value))
+        lifecycleScope.launch { runCatching { settings.setPlaybackSpeed(value) } }
+    }
+
+    /** Back to the first frame, for a viewer who did not want the saved position. */
+    private fun startOver() {
+        val exo = player ?: return
+        exo.seekTo(0)
+        exo.playWhenReady = true
+        showGestureFeedback("From the start")
+    }
+
+    /** What is actually playing: the figures a bug report needs, in words a viewer can read. */
+    private fun showPlaybackDetails() {
+        val exo = player ?: return
+        val video = exo.videoFormat
+        val audio = exo.audioFormat
+        val lines = buildList {
+            if (video != null) {
+                add("Picture: ${video.width} x ${video.height}" +
+                    (video.frameRate.takeIf { it > 0 }?.let { ", %.3g fps".format(it) } ?: ""))
+                video.sampleMimeType?.let { add("Video codec: ${it.substringAfter('/')}") }
+            }
+            if (audio != null) {
+                add("Sound: ${audio.channelCount} channels at ${audio.sampleRate} Hz")
+                audio.sampleMimeType?.let { add("Audio codec: ${it.substringAfter('/')}") }
+            }
+            if (fileSizeBytes > 0) add("File: ${StreamStats.formatBytes(fileSizeBytes)}")
+            add("Downloaded: ${(downloadedFraction * 100).toInt()}%")
+            add("Speed: ${PlaybackSpeed.label(playbackSpeed)}")
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle(mediaTitle.ifBlank { "Playback details" })
+            .setMessage(lines.joinToString("\n"))
+            .setPositiveButton("Close", null)
+            .show()
+    }
+
+    /**
+     * Locks the screen against touches: for a phone propped up on a lap, or handed to a child.
+     * Everything is off, the orientation is frozen, and a tap anywhere offers the unlock pill.
+     */
+    private fun lockScreen() {
+        if (locked) return
+        locked = true
+        controls?.hideAnimated()
+        feedback?.clear()
+        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
+        val root = findViewById<FrameLayout>(R.id.player_root)
+        val shield = lockShield ?: FrameLayout(this).also { built ->
+            built.isClickable = true
+            built.isFocusable = true
+            built.setOnClickListener { showUnlockPill() }
+            val pill = TextView(this).apply {
+                text = "Tap here to unlock"
+                setTextColor(getColor(R.color.text_primary))
+                textSize = 15f
+                background = getDrawable(R.drawable.bg_player_chip)
+                val pad = (16 * resources.displayMetrics.density).toInt()
+                setPadding(pad * 3 / 2, pad, pad * 3 / 2, pad)
+                setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_lock_open, 0, 0, 0)
+                compoundDrawablePadding = pad / 2
+                setOnClickListener { unlockScreen() }
+            }
+            built.addView(
+                pill,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM,
+                ).apply { bottomMargin = (72 * resources.displayMetrics.density).toInt() },
+            )
+            unlockPill = pill
+            lockShield = built
+        }
+        if (shield.parent == null) {
+            root.addView(
+                shield,
+                FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT),
+            )
+        }
+        updatePictureInPictureParams()
+        showUnlockPill()
+    }
+
+    private fun showUnlockPill() {
+        val pill = unlockPill ?: return
+        pill.removeCallbacks(hideUnlockPill)
+        pill.animate().cancel()
+        pill.alpha = 1f
+        pill.postDelayed(hideUnlockPill, UNLOCK_PILL_MS)
+    }
+
+    private fun unlockScreen() {
+        if (!locked) return
+        locked = false
+        unlockPill?.removeCallbacks(hideUnlockPill)
+        lockShield?.let { (it.parent as? android.view.ViewGroup)?.removeView(it) }
+        applyOrientation()
+        updatePictureInPictureParams()
+        controls?.show()
+    }
+
+    /** The bottom-right card that offers the next episode before this one ends. Phone only. */
+    private fun buildNextUpCard() {
+        val density = resources.displayMetrics.density
+        fun px(dp: Int) = (dp * density).toInt()
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = getDrawable(R.drawable.bg_player_chip)
+            setPadding(px(18), px(14), px(18), px(12))
+            visibility = View.GONE
+            isClickable = true
+        }
+        val text = TextView(this).apply {
+            setTextColor(getColor(R.color.text_primary))
+            textSize = 14f
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            maxWidth = px(260)
+        }
+        val buttons = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+        }
+        fun button(label: String, action: () -> Unit) = android.widget.Button(
+            this, null, android.R.attr.borderlessButtonStyle,
+        ).apply {
+            this.text = label
+            setTextColor(getColor(R.color.accent))
+            isAllCaps = false
+            setOnClickListener { action() }
+        }
+        buttons.addView(button("Hide") {
+            nextUpDismissed = true
+            hideNextUp()
+        })
+        buttons.addView(button("Play now") {
+            _episodes.value.next?.let(::playEpisode)
+        })
+        card.addView(text)
+        card.addView(buttons)
+        val root = findViewById<FrameLayout>(R.id.player_root)
+        root.addView(
+            card,
+            root.indexOfChild(findViewById(R.id.overlay_container)),
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.END or Gravity.BOTTOM,
+            ).apply {
+                rightMargin = NEXT_UP_MARGIN_PX
+                bottomMargin = NEXT_UP_BOTTOM_PX
+            },
+        )
+        nextUpCard = card
+        nextUpText = text
+        watchForTheEnd()
+    }
+
+    /**
+     * Twice a second while playing, near the end of an episode with a successor and autoplay on:
+     * the card comes up and counts the remaining seconds down.
+     */
+    private fun watchForTheEnd() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                val autoplay = runCatching { settings.autoplayNextNow() }.getOrDefault(true)
+                if (!autoplay) return@repeatOnLifecycle
+                while (true) {
+                    delay(500)
+                    val exo = player ?: continue
+                    val next = _episodes.value.next ?: continue
+                    val duration = exo.duration
+                    if (duration <= 0 || nextUpDismissed || locked || inPictureInPicture) continue
+                    val left = duration - exo.currentPosition
+                    if (left in 1..NEXT_UP_LEAD_MS && statusOverlay.visibility != View.VISIBLE) {
+                        val code = MediaName.parse(next.fileName.ifBlank { next.title }).episodeCode
+                        val label = code ?: next.title
+                        nextUpText?.text = "Next: $label\nStarting in ${(left + 999) / 1000} s"
+                        if (nextUpCard?.visibility != View.VISIBLE) {
+                            nextUpCard?.visibility = View.VISIBLE
+                            nextUpShown = true
+                        }
+                    } else if (left > NEXT_UP_LEAD_MS && nextUpCard?.visibility == View.VISIBLE) {
+                        // Seeked back out of the last half minute: the offer goes, and comes back.
+                        hideNextUp()
+                        nextUpShown = false
+                    }
+                }
+            }
+        }
+    }
+
+    private fun hideNextUp() {
+        nextUpCard?.visibility = View.GONE
+    }
+
+    private fun isOnNextUpCard(rawX: Float, rawY: Float): Boolean {
+        val card = nextUpCard ?: return false
+        if (card.visibility != View.VISIBLE) return false
+        val at = IntArray(2)
+        card.getLocationInWindow(at)
+        return rawX >= at[0] && rawX < at[0] + card.width && rawY >= at[1] && rawY < at[1] + card.height
     }
 
     /** The transport row coming or going; the chips and the system bars ride with it. */
@@ -2514,7 +2930,24 @@ class PlayerActivity : FragmentActivity() {
         private const val BACK_BUFFER_MS = 10_000
         private const val END_GUARD_MS = 1_000L
         /** What a held finger runs the picture at, the same figure every player uses for it. */
-        private const val HOLD_SPEED = 2f
+        /** The phone's top bar height, which the corner chips sit under. */
+        private const val TOP_BAR_DP = 56
+
+        /** How long before the end the "Next episode" card comes up. */
+        private const val NEXT_UP_LEAD_MS = 30_000L
+        private const val NEXT_UP_MARGIN_PX = 48
+        private const val NEXT_UP_BOTTOM_PX = 220
+
+        /** How long the unlock pill stays up after a tap on the locked screen. */
+        private const val UNLOCK_PILL_MS = 2_500L
+
+        private const val MENU_LOCK = 1
+        private const val MENU_PIP = 2
+        private const val MENU_SPEED = 3
+        private const val MENU_START_OVER = 4
+        private const val MENU_OPEN_WITH = 5
+        private const val MENU_DETAILS = 6
+        private const val MENU_SPEED_BASE = 100
 
         private const val RESUME_TICK_MS = 10_000L
 

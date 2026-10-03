@@ -3,6 +3,7 @@ package com.tmplayer.player
 import android.annotation.SuppressLint
 import android.content.Context
 import android.media.AudioManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.GestureDetector
 import android.view.MotionEvent
@@ -14,24 +15,33 @@ import kotlin.math.roundToInt
 /**
  * The gestures a phone viewer expects from a video player, and nothing else.
  *
- * A remote has buttons for all of this, so none of it exists on the TV: tap to raise the controls,
- * double tap the sides to jump, drag the left half for brightness, drag the right half for volume.
- * Nothing is carried between one drag and the next beyond the drag in progress.
+ * A remote has buttons for all of this, so none of it exists on the TV. On a phone: a tap raises
+ * the controls (or plays and pauses, if the viewer chose that); a double tap on a side jumps, and
+ * every further tap on the same side adds another jump with a running total; a double tap in the
+ * middle plays and pauses; a held finger plays fast until it lifts; a sideways drag scrubs; a
+ * vertical drag on the left is brightness and on the right volume; a pinch steps the fitting.
  *
  * Fed from the activity's own [android.app.Activity.dispatchTouchEvent] rather than attached to
  * the video view, because once the controller is up its buttons and scrub bar are the views under
- * the finger and the video view sees nothing.
+ * the finger and the video view sees nothing. A touch that lands on the controls themselves is
+ * left to them entirely ([isOnChrome]): before that rule a press on a button also counted as a tap
+ * on the picture, and the row folded away a moment after the press.
  *
  * While the controls are down the activity hands every touch here and to nowhere else, which is
  * what stops Media3's own view treating a brightness drag or a hold as a reason to throw the whole
- * transport row over the picture. Raising the row is [onTapControls]'s job and nothing else's.
+ * transport row over the picture.
  */
 class PlayerGestures(
     context: Context,
     private val window: Window,
     private val onSkip: (Long) -> Unit,
-    /** The transient figure a gesture leaves behind, and which side of the picture it belongs on. */
-    private val onFeedback: (String, Int) -> Unit,
+    /** One more double tap in a run: the side, the run's total so far, and where the finger was. */
+    private val onSeekStep: (TapZone, Long, Float, Float) -> Unit = { _, _, _, _ -> },
+    /** A vertical drag's level, 0 to 1, on the left (brightness) or the right (volume). */
+    private val onLevel: (left: Boolean, fraction: Float, brightness: Boolean) -> Unit = { _, _, _ -> },
+    /** A sideways drag in progress: how far it has moved, where it would land, and the length. */
+    private val onScrub: (deltaMs: Long, targetMs: Long, durationMs: Long) -> Unit = { _, _, _ -> },
+    private val onScrubEnd: () -> Unit = {},
     private val onPinch: (expanding: Boolean) -> Unit = {},
     /** Where the video is now and how long it is, for the drag that scrubs. */
     private val positionMs: () -> Long = { 0L },
@@ -39,18 +49,28 @@ class PlayerGestures(
     private val onSeekTo: (Long) -> Unit = {},
     /** Held down for a fast-forward that lasts as long as the finger does. */
     private val onHold: (holding: Boolean) -> Unit = {},
-    /** A single tap on the picture, which is the only thing that raises or drops the controls. */
+    /** A single tap on the picture, which raises or drops the controls. */
     private val onTapControls: () -> Unit = {},
-    /** A double tap on the middle of the picture. */
-    private val onTogglePlay: () -> Unit = {},
+    /** Play or pause from the picture: a double tap in the middle, or a tap under that setting. */
+    private val onTogglePlay: (fromSingleTap: Boolean) -> Unit = {},
+    /** True when a touch at these window coordinates lands on the controls, not the picture. */
+    private val isOnChrome: (Float, Float) -> Boolean = { _, _ -> false },
+    /**
+     * The left and right system gesture insets in pixels: a sideways drag that starts inside one is
+     * the system's back gesture, not a scrub.
+     */
+    private val systemEdges: () -> Pair<Int, Int> = { 0 to 0 },
 ) {
 
+    /** The viewer's settings for all of this; replaced when they are read off disk. */
+    var prefs = TouchPrefs()
+
     /**
-     * True while the transport row is up, in which case vertical drags are left alone.
+     * True while the transport row is up, in which case drags are left alone.
      *
      * A thumb on the scrub bar rarely travels in a straight line, and stealing that as a volume
-     * change would make the one control everybody uses unreliable. Double taps and pinches still
-     * work, since neither collides.
+     * change would make the one control everybody uses unreliable. Taps, double taps, holds and
+     * pinches on the bare picture still work, since none of them collides.
      */
     var controlsVisible = false
 
@@ -69,6 +89,12 @@ class PlayerGestures(
     /** True between a long press and the finger lifting: the hold-to-speed-up gesture. */
     private var holding = false
 
+    /** True for the whole of a touch that began on the controls; the picture ignores it. */
+    private var onChrome = false
+
+    /** The run of double taps in progress, for the "+20 seconds" total. */
+    private val counter = SeekCounter()
+
     private var viewWidth = 0
     private var viewHeight = 0
 
@@ -85,38 +111,47 @@ class PlayerGestures(
              * later and wonder about.
              */
             override fun onLongPress(event: MotionEvent) {
-                if (controlsVisible || scaling || dragKind != DRAG_NONE) return
+                if (prefs.holdSpeed <= 0f || scaling || dragKind != DRAG_NONE) return
                 holding = true
                 onHold(true)
             }
 
             /**
-             * The one gesture that raises the controls, and the only one.
-             *
-             * Confirmed rather than immediate, because the sides of the picture belong to the
-             * double tap: acting on the first of the two would flash the transport row over every
-             * seek.
+             * The third and later taps of a run. The detector reports a double tap only for the
+             * second tap of each pair, so a tap that lands while a run is live, on the same side,
+             * is counted here, the moment the finger lifts.
+             */
+            override fun onSingleTapUp(event: MotionEvent): Boolean {
+                val now = SystemClock.uptimeMillis()
+                val zone = TapZone.of(event.x, viewWidth)
+                if (zone != TapZone.Centre && counter.isLive(now) && counter.zone == zone) {
+                    step(zone, event, now)
+                }
+                return true
+            }
+
+            /**
+             * The single tap: confirmed rather than immediate, because the sides of the picture
+             * belong to the double tap, and acting on the first of the two would flash the
+             * transport row over every seek. Ignored while a run of double taps is live, so the
+             * last tap of a run cannot also raise the row.
              */
             override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
                 if (scaling || holding || dragKind != DRAG_NONE) return false
-                onTapControls()
+                if (counter.isLive(SystemClock.uptimeMillis())) return true
+                if (prefs.tapPlaysPauses) onTogglePlay(true) else onTapControls()
                 return true
             }
 
             override fun onDoubleTap(event: MotionEvent): Boolean {
-                val third = viewWidth / 3f
-                if (third <= 0f) return false
-                when {
-                    event.x < third -> {
-                        onSkip(-Skip.BACK_MS)
-                        onFeedback("◀◀   ${Skip.BACK_MS / 1000} s", SIDE_LEFT)
+                if (viewWidth <= 0) return false
+                val now = SystemClock.uptimeMillis()
+                when (val zone = TapZone.of(event.x, viewWidth)) {
+                    TapZone.Centre -> {
+                        counter.reset()
+                        onTogglePlay(false)
                     }
-                    event.x > viewWidth - third -> {
-                        onSkip(Skip.FORWARD_MS)
-                        onFeedback("${Skip.FORWARD_MS / 1000} s   ▶▶", SIDE_RIGHT)
-                    }
-                    // The middle third plays and pauses.
-                    else -> onTogglePlay()
+                    else -> step(zone, event, now)
                 }
                 return true
             }
@@ -129,7 +164,7 @@ class PlayerGestures(
             ): Boolean {
                 val from = start ?: return false
                 if (viewHeight <= 0) return false
-                if (controlsVisible || scaling) return false
+                if (controlsVisible || scaling || holding) return false
                 if (dragKind == DRAG_NONE && !begin(from, event)) return false
 
                 // Measured from where the finger went down rather than summed step by step, so a
@@ -148,6 +183,14 @@ class PlayerGestures(
             }
         },
     )
+
+    /** One jump of a double-tap run, and the total it has reached. */
+    private fun step(zone: TapZone, event: MotionEvent, now: Long) {
+        val steps = counter.tap(zone, now)
+        val jump = prefs.doubleTapMs
+        onSkip(if (zone == TapZone.Left) -jump else jump)
+        onSeekStep(zone, steps * jump / 1000, event.x, event.y)
+    }
 
     /** True between the first and last finger of a pinch, so no drag is read out of it. */
     private var scaling = false
@@ -194,11 +237,19 @@ class PlayerGestures(
     fun onTouchEvent(event: MotionEvent, width: Int, height: Int): Boolean {
         viewWidth = width
         viewHeight = height
-        scaleDetector.onTouchEvent(event)
-        detector.onTouchEvent(event)
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            onChrome = isOnChrome(event.rawX, event.rawY)
+        }
         val finished = event.actionMasked == MotionEvent.ACTION_UP ||
             event.actionMasked == MotionEvent.ACTION_CANCEL
+        if (onChrome) {
+            if (finished) onChrome = false
+            return false
+        }
+        scaleDetector.onTouchEvent(event)
+        detector.onTouchEvent(event)
         if (finished) {
+            if (dragKind == DRAG_SEEK) onScrubEnd()
             if (dragKind == DRAG_SEEK && seekTarget >= 0) onSeekTo(seekTarget)
             if (holding) {
                 holding = false
@@ -231,7 +282,11 @@ class PlayerGestures(
         if (abs(travelY) <= abs(travelX) * VERTICAL_RATIO) {
             // Sideways: scrubbing. The double tap moves in fixed jumps and the scrub bar needs the
             // controls up first, so this is the only way to travel a few minutes through a video
-            // with the picture still fully visible.
+            // with the picture still fully visible. Not from inside the system's edge strips,
+            // where the same movement is the back gesture.
+            if (!prefs.seekGesture) return false
+            val (leftEdge, rightEdge) = systemEdges()
+            if (start.x < leftEdge || start.x > viewWidth - rightEdge) return false
             val length = durationMs()
             if (length <= 0) return false
             dragKind = DRAG_SEEK
@@ -243,10 +298,12 @@ class PlayerGestures(
         // the picture from changing whichever of the two it happened to land a pixel nearer.
         when {
             start.x < viewWidth * LEFT_EDGE -> {
+                if (!prefs.brightnessGesture) return false
                 dragKind = DRAG_BRIGHTNESS
                 dragFrom = currentBrightness()
             }
             start.x > viewWidth * RIGHT_EDGE -> {
+                if (!prefs.volumeGesture) return false
                 dragKind = DRAG_VOLUME
                 dragFrom = currentVolume()
             }
@@ -268,22 +325,7 @@ class PlayerGestures(
         val delta = (travelPx / viewWidth * SEEK_RANGE_MS).toLong()
         val target = (dragFromMs + delta).coerceIn(0L, length)
         seekTarget = target
-        val sign = if (target >= dragFromMs) "+" else "-"
-        val moved = abs(target - dragFromMs) / 1000
-        onFeedback("${clock(target)}   $sign${moved}s", SIDE_CENTRE)
-    }
-
-    /** Milliseconds as a clock, with the hour only where there is one. */
-    private fun clock(ms: Long): String {
-        val total = ms / 1000
-        val hours = total / 3600
-        val minutes = (total % 3600) / 60
-        val seconds = total % 60
-        return if (hours > 0) {
-            "%d:%02d:%02d".format(hours, minutes, seconds)
-        } else {
-            "%d:%02d".format(minutes, seconds)
-        }
+        onScrub(target - dragFromMs, target, length)
     }
 
     private fun currentBrightness(): Float {
@@ -303,7 +345,7 @@ class PlayerGestures(
         // made it black is a phone that looks broken.
         val level = value.coerceIn(MIN_BRIGHTNESS, 1f)
         window.attributes = window.attributes.also { it.screenBrightness = level }
-        onFeedback("☀  ${(level * 100).roundToInt()}%", SIDE_LEFT)
+        onLevel(true, level, true)
     }
 
     private fun currentVolume(): Float {
@@ -317,7 +359,7 @@ class PlayerGestures(
         if (max <= 0) return
         val steps = (value.coerceIn(0f, 1f) * max).roundToInt()
         audio.setStreamVolume(AudioManager.STREAM_MUSIC, steps, 0)
-        onFeedback("♪  ${(steps * 100) / max}%", SIDE_RIGHT)
+        onLevel(false, steps / max.toFloat(), false)
     }
 
     companion object {

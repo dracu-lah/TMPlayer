@@ -22,6 +22,12 @@
 
   One thing floats outside the bottom cluster: the wall clock in the top left corner. The top
   right belongs to the status pill.
+
+  A phone gets three more pieces, all gone on a television: a top bar (back, title, clock, the
+  overflow menu), a centre cluster (previous, back, play or pause, forward, next) of the kind every
+  phone player draws, and an elapsed and total line over the bar. Those take the transport buttons
+  and the time text out of the bottom row, which is what lets the row fit a phone held upright
+  without scrolling. PlayerControls.kt decides which pieces a device shows.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -58,6 +64,215 @@
         android:textColor="#E6FFFFFF"
         android:textSize="15sp" />
 
+    <!-- Phone only: an even dim under the centre cluster, so white glyphs read on a bright frame. -->
+    <View
+        android:id="@+id/controls_tint"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#40000000"
+        android:visibility="gone" />
+
+    <!-- Phone only. Padded by the status bar and cutout insets from code. -->
+    <LinearLayout
+        android:id="@+id/controls_topbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:gravity="center_vertical"
+        android:minHeight="56dp"
+        android:orientation="horizontal"
+        android:paddingLeft="4dp"
+        android:paddingRight="4dp"
+        android:visibility="gone">
+
+        <ImageButton
+            android:id="@+id/control_back"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_control_button"
+            android:contentDescription="Back"
+            android:padding="12dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_arrow_back"
+            android:tint="@color/player_control_icon" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/topbar_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="#FFFFFFFF"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/topbar_subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="#CCFFFFFF"
+                android:textSize="13sp"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/topbar_clock"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="4dp"
+            android:textColor="#E6FFFFFF"
+            android:textSize="14sp" />
+
+        <ImageButton
+            android:id="@+id/control_more"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_control_button"
+            android:contentDescription="More options"
+            android:padding="12dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_more_vert"
+            android:tint="@color/player_control_icon" />
+    </LinearLayout>
+
+    <!--
+      Phone only: the big transport in the middle of the picture, where a thumb expects it. The
+      spinner sits inside the play disc and takes its place while the video is buffering, so the
+      middle of the screen always says what the video is doing.
+    -->
+    <LinearLayout
+        android:id="@+id/controls_center"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <ImageButton
+            android:id="@+id/center_previous"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/bg_control_button"
+            android:contentDescription="Previous episode"
+            android:padding="10dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_player_previous"
+            android:tint="@color/player_control_icon"
+            android:visibility="invisible" />
+
+        <FrameLayout
+            android:id="@+id/center_rewind"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:background="@drawable/bg_control_button"
+            android:clickable="true"
+            android:contentDescription="Back 10 seconds"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_player_rewind"
+                android:tint="#FFFFFFFF" />
+
+            <TextView
+                android:id="@+id/center_rewind_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:text="10"
+                android:textColor="#FFFFFFFF"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:translationY="1dp" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/center_play_pause"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:background="@drawable/bg_center_play"
+            android:clickable="true"
+            android:contentDescription="Pause"
+            android:focusable="true">
+
+            <com.tmplayer.player.PlayPauseIcon
+                android:id="@+id/center_play_icon"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no" />
+
+            <ProgressBar
+                android:id="@+id/center_buffering"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_gravity="center"
+                android:indeterminateTint="#FFFFFFFF"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/center_forward"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:background="@drawable/bg_control_button"
+            android:clickable="true"
+            android:contentDescription="Forward 10 seconds"
+            android:focusable="true">
+
+            <ImageView
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_player_forward"
+                android:tint="#FFFFFFFF" />
+
+            <TextView
+                android:id="@+id/center_forward_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:text="10"
+                android:textColor="#FFFFFFFF"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:translationY="1dp" />
+        </FrameLayout>
+
+        <ImageButton
+            android:id="@+id/center_next"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/bg_control_button"
+            android:contentDescription="Next episode"
+            android:padding="10dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_player_next"
+            android:tint="@color/player_control_icon"
+            android:visibility="invisible" />
+    </LinearLayout>
+
     <LinearLayout
         android:id="@+id/controls_cluster"
         android:layout_width="match_parent"
@@ -89,11 +304,42 @@
             android:textSize="14sp"
             android:visibility="gone" />
 
+        <!-- Phone only: elapsed on the left, total on the right; a tap on the total flips it to
+             the time remaining. -->
+        <LinearLayout
+            android:id="@+id/controls_times"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/times_position"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="#E6FFFFFF"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/times_duration"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="?android:attr/selectableItemBackground"
+                android:contentDescription="Show the time remaining"
+                android:minWidth="48dp"
+                android:gravity="end"
+                android:paddingStart="8dp"
+                android:textColor="#E6FFFFFF"
+                android:textSize="13sp" />
+        </LinearLayout>
+
         <androidx.media3.ui.DefaultTimeBar
             android:id="@+id/controls_timebar"
             android:layout_width="match_parent"
-            android:layout_height="26dp"
-            android:layout_marginTop="10dp"
+            android:layout_height="@dimen/player_timebar_touch"
+            android:layout_marginTop="@dimen/player_timebar_gap"
             android:background="@drawable/bg_timebar_focus"
             android:focusable="true"
             android:nextFocusDown="@+id/control_play_pause"
@@ -103,7 +349,7 @@
             app:scrubber_color="@color/accent"
             app:scrubber_dragged_size="18dp"
             app:scrubber_enabled_size="12dp"
-            app:touch_target_height="26dp"
+            app:touch_target_height="@dimen/player_timebar_touch"
             app:unplayed_color="#40FFFFFF" />
 
         <LinearLayout
@@ -114,9 +360,9 @@
             android:orientation="horizontal">
 
             <!--
-              Scrolls only when it must. A television and a phone held sideways fit the whole row;
-              a phone held upright scrolls it, which beats shrinking the buttons below what a
-              thumb can hit.
+              Scrolls only when it must. A television fits the whole row. A phone moves its
+              transport into the centre cluster and keeps five buttons here, which fit a 360dp
+              screen held upright; the scroll is only a safety net for something narrower.
             -->
             <HorizontalScrollView
                 android:layout_width="0dp"
@@ -164,6 +410,8 @@
                             android:tint="@color/player_control_icon" />
 
                         <TextView
+                            android:id="@+id/control_rewind_label"
+                           
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_gravity="center"
@@ -197,6 +445,8 @@
                             android:tint="@color/player_control_icon" />
 
                         <TextView
+                            android:id="@+id/control_forward_label"
+                           
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_gravity="center"
@@ -300,6 +550,34 @@
                         android:padding="12dp"
                         android:scaleType="fitCenter"
                         android:src="@drawable/ic_rotate_landscape"
+                        android:tint="@color/player_control_icon"
+                        android:visibility="gone" />
+
+                    <!-- Phone only, and only on a row wide enough to hold them (a phone held
+                         sideways). Upright, both live in the overflow menu. -->
+                    <ImageButton
+                        android:id="@+id/control_lock"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_control_button"
+                        android:contentDescription="Lock the screen"
+                        android:padding="12dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_lock"
+                        android:tint="@color/player_control_icon"
+                        android:visibility="gone" />
+
+                    <ImageButton
+                        android:id="@+id/control_pip"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_control_button"
+                        android:contentDescription="Picture in picture"
+                        android:padding="12dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_pip"
                         android:tint="@color/player_control_icon"
                         android:visibility="gone" />
                 </LinearLayout>

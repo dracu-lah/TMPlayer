@@ -12,4 +12,7 @@
     <dimen name="player_title_size">26sp</dimen>
     <dimen name="player_chip_margin">32dp</dimen>
     <dimen name="player_subtitle_bottom">48dp</dimen>
+    <dimen name="player_timebar_touch">26dp</dimen>
+    <!-- Space over the scrub bar. A phone's 48dp touch strip already carries its own air. -->
+    <dimen name="player_timebar_gap">10dp</dimen>
 </resources>

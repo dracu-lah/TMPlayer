@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.tmplayer.player.PlaybackSpeed
+import com.tmplayer.player.TouchPrefs
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
@@ -60,6 +61,17 @@ private val CACHED_VIDEO = stringPreferencesKey("cached_video")
  */
 private val DOWNLOAD_QUEUE = stringPreferencesKey("download_queue")
 private val SCREEN_ORIENTATION = stringPreferencesKey("screen_orientation")
+
+// The phone player's touch settings. See [TouchPrefs].
+private val TAP_PLAYS_PAUSES = booleanPreferencesKey("player_tap_plays_pauses")
+private val DOUBLE_TAP_MS = longPreferencesKey("double_tap_ms")
+private val HOLD_SPEED = floatPreferencesKey("hold_speed")
+private val CONTROLS_TIMEOUT_MS = longPreferencesKey("controls_timeout_ms")
+private val GESTURE_SEEK = booleanPreferencesKey("gesture_seek")
+private val GESTURE_BRIGHTNESS = booleanPreferencesKey("gesture_brightness")
+private val GESTURE_VOLUME = booleanPreferencesKey("gesture_volume")
+private val PLAYER_HAPTICS = booleanPreferencesKey("player_haptics")
+private val SHOW_REMAINING = booleanPreferencesKey("show_remaining_time")
 
 /**
  * One series, as a key.
@@ -385,6 +397,44 @@ class SettingsStore(private val context: Context) {
     suspend fun setScreenOrientation(name: String) {
         context.prefs.edit { it[SCREEN_ORIENTATION] = name }
     }
+
+    // ---- the phone player's touch settings -------------------------------------------------
+
+    /**
+     * How the phone's player answers a thumb: the tap, the double tap, the hold, the swipes, how
+     * long the controls stay up, and whether the total reads as time left. One value rather than
+     * nine flows, because the player reads all of it at once and Settings edits it as a set.
+     */
+    val touchPrefs: Flow<TouchPrefs> = read(::touchPrefsOf)
+
+    suspend fun touchPrefsNow(): TouchPrefs = touchPrefsOf(context.prefs.data.first())
+
+    suspend fun updateTouchPrefs(change: (TouchPrefs) -> TouchPrefs) {
+        context.prefs.edit { prefs ->
+            val next = change(touchPrefsOf(prefs))
+            prefs[TAP_PLAYS_PAUSES] = next.tapPlaysPauses
+            prefs[DOUBLE_TAP_MS] = TouchPrefs.sanitiseDoubleTap(next.doubleTapMs)
+            prefs[HOLD_SPEED] = TouchPrefs.sanitiseHold(next.holdSpeed)
+            prefs[CONTROLS_TIMEOUT_MS] = TouchPrefs.sanitiseTimeout(next.controlsTimeoutMs)
+            prefs[GESTURE_SEEK] = next.seekGesture
+            prefs[GESTURE_BRIGHTNESS] = next.brightnessGesture
+            prefs[GESTURE_VOLUME] = next.volumeGesture
+            prefs[PLAYER_HAPTICS] = next.haptics
+            prefs[SHOW_REMAINING] = next.showRemaining
+        }
+    }
+
+    private fun touchPrefsOf(prefs: Preferences) = TouchPrefs(
+        tapPlaysPauses = prefs[TAP_PLAYS_PAUSES] ?: false,
+        doubleTapMs = TouchPrefs.sanitiseDoubleTap(prefs[DOUBLE_TAP_MS]),
+        holdSpeed = TouchPrefs.sanitiseHold(prefs[HOLD_SPEED]),
+        controlsTimeoutMs = TouchPrefs.sanitiseTimeout(prefs[CONTROLS_TIMEOUT_MS]),
+        seekGesture = prefs[GESTURE_SEEK] ?: true,
+        brightnessGesture = prefs[GESTURE_BRIGHTNESS] ?: true,
+        volumeGesture = prefs[GESTURE_VOLUME] ?: true,
+        haptics = prefs[PLAYER_HAPTICS] ?: true,
+        showRemaining = prefs[SHOW_REMAINING] ?: false,
+    )
 
     // ---- tracks, per series -----------------------------------------------------------------
 
