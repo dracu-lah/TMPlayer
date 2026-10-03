@@ -1,0 +1,39 @@
+# Maintainer: dracu-lah <noreply@github.com>
+#
+# Arch Linux package over the release tarball. Kept in the repository only; it is not published
+# to the AUR. To build it locally:
+#
+#   cd desktop/packaging/aur && updpkgsums && makepkg -si
+#
+# On each release, bump pkgver, reset pkgrel to 1, run updpkgsums (or paste the tarball's line
+# from SHA256SUMS-<version>.txt) and regenerate .SRCINFO with `makepkg --printsrcinfo > .SRCINFO`.
+pkgname=tmplayer-bin
+_appid=io.github.dracu_lah.TMPlayer
+pkgver=1.18.0
+pkgrel=1
+pkgdesc="Watch the videos in your Telegram chats while they download (unofficial client)"
+arch=('x86_64')
+url="https://tmplayer.org"
+license=('GPL-3.0-or-later')
+provides=('tmplayer')
+conflicts=('tmplayer')
+# The bundled JVM, TDLib and libmpv need these from the system.
+depends=('glibc>=2.38' 'gcc-libs' 'openssl' 'zlib' 'alsa-lib' 'libpulse' 'libglvnd'
+         'vulkan-icd-loader' 'libx11' 'libxext' 'libxrender' 'libxtst' 'libxi' 'fontconfig'
+         'hicolor-icon-theme')
+# Prebuilt and already stripped; stripping would also break libskiko's checksum.
+options=('!strip' '!debug')
+source=("https://github.com/dracu-lah/TMPlayer/releases/download/v${pkgver}/TMPlayer-${pkgver}-linux-x64.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+  cd "TMPlayer-${pkgver}"
+  install -dm755 "${pkgdir}/opt/tmplayer"
+  cp -a bin lib "${pkgdir}/opt/tmplayer/"
+  install -dm755 "${pkgdir}/usr/bin"
+  ln -s /opt/tmplayer/bin/TMPlayer "${pkgdir}/usr/bin/tmplayer"
+  install -Dm644 "share/applications/${_appid}.desktop" "${pkgdir}/usr/share/applications/${_appid}.desktop"
+  install -Dm644 "share/metainfo/${_appid}.metainfo.xml" "${pkgdir}/usr/share/metainfo/${_appid}.metainfo.xml"
+  cp -a share/icons "${pkgdir}/usr/share/"
+  install -Dm644 share/doc/tmplayer/copyright "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

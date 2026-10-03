@@ -26,8 +26,13 @@ import com.tmplayer.ui.theme.TmMaterialTheme
 import kotlinx.coroutines.launch
 import org.jetbrains.skiko.SystemTheme
 import org.jetbrains.skiko.currentSystemTheme
+import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
+    // Loads every native library, reports, exits: no window, no second instance check.
+    args.firstOrNull(SelfTest::matches)?.let { exitProcess(SelfTest.run(it)) }
+    // TDLib's Windows DLL needs the C++ runtime; take the bundled JVM's copy (see WindowsRuntime).
+    WindowsRuntime.preload()
     // A second launch hands its arguments (later, tg: links) to the first and leaves.
     var raise: () -> Unit = {}
     if (!SingleInstance.acquire(args.toList()) { java.awt.EventQueue.invokeLater { raise() } }) return

@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=TMPlayer
+GenericName=Video Player
+Comment=Watch the videos in your Telegram chats while they download
+Exec=tmplayer
+Icon=io.github.dracu_lah.TMPlayer
+Terminal=false
+Categories=AudioVideo;Video;Player;
+Keywords=Telegram;Video;Player;Stream;Movie;
+# The AWT window class, which Java derives from the main class: it is what lets the dock and the
+# task bar group the running window under this launcher.
+StartupWMClass=com-tmplayer-desktop-MainKt
+# AWT never completes a startup notification, so asking for one leaves a busy cursor spinning.
+StartupNotify=false

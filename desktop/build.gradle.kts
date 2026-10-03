@@ -1,9 +1,16 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import java.util.Properties
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 
 // TMPlayer for Windows, Linux and macOS (Part B of the 2026-10-03 plan): a Compose Desktop front
-// end over :core, playing through libmpv (mediamp). Packaging for releases goes through Conveyor
-// later; the Compose plugin's own installers stay working for local builds.
+// end over :core, playing through libmpv (mediamp).
+//
+// Release packaging: the MSI comes straight from the Compose plugin (jpackage). The Linux packages
+// (deb, rpm, AppImage, Flatpak, tarball) are built by desktop/packaging/linux/package.sh over
+// createDistributable's app image, because jpackage's own .desktop file cannot carry
+// StartupWMClass or the full category list. The plugin's deb and rpm still work for local builds.
 
 plugins {
     alias(libs.plugins.kotlin.jvm)
@@ -13,7 +20,10 @@ plugins {
 
 kotlin { jvmToolchain(21) }
 
-val desktopVersion: String = providers.gradleProperty("desktopVersion").getOrElse("2.0.0-alpha.1")
+// The release passes the tag's x.y.z (-PdesktopVersion=1.18.0). Anything else is a development
+// build, numbered below every release so that its MSI never blocks the upgrade to a real one.
+val desktopVersion: String = providers.gradleProperty("desktopVersion").getOrElse("1.0.0-dev")
+val packagingDir = layout.projectDirectory.dir("packaging")
 
 // The same local.properties the Android build reads, for the same Telegram API credentials.
 val localProps = Properties().apply {
@@ -54,6 +64,59 @@ val mpvRuntime = when {
     hostOs.contains("mac") -> if (hostArm) libs.mediamp.runtime.macos.arm64 else libs.mediamp.runtime.macos.x64
     else -> libs.mediamp.runtime.linux.x64
 }
+
+// The tdl-coroutines jar carries TDLib for six OS and CPU pairs (about 330 MB unpacked, 109 MB as
+// a jar). Each installer only ever loads its own, so the runtime classpath gets a copy of the jar
+// with the other five removed: about 85 MB off every package. The self-test proves the remaining
+// one still loads.
+val tdlibKeep = when {
+    hostOs.contains("win") -> "windows/x64/"
+    hostOs.contains("mac") -> if (hostArm) "macos/arm64/" else "macos/x64/"
+    else -> if (hostArm) "linux/arm64/" else "linux/x64/"
+}
+val tdlibStripped: Attribute<Boolean> = Attribute.of("com.tmplayer.tdlibStripped", Boolean::class.javaObjectType)
+
+abstract class StripForeignTdlib : TransformAction<StripForeignTdlib.Params> {
+    interface Params : TransformParameters {
+        @get:Input
+        val keep: Property<String>
+    }
+
+    @get:InputArtifact
+    @get:PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract val input: Provider<FileSystemLocation>
+
+    override fun transform(outputs: TransformOutputs) {
+        val jar = input.get().asFile
+        if (!jar.name.startsWith("tdl-coroutines-jvm")) {
+            outputs.file(input)
+            return
+        }
+        val keep = parameters.keep.get()
+        val native = Regex("^(linux|macos|windows)/")
+        ZipFile(jar).use { zin ->
+            ZipOutputStream(outputs.file(jar.name).outputStream().buffered()).use { zout ->
+                for (entry in zin.entries()) {
+                    if (native.containsMatchIn(entry.name) && !entry.isDirectory && !entry.name.startsWith(keep)) continue
+                    zout.putNextEntry(ZipEntry(entry.name).apply { time = entry.time })
+                    zin.getInputStream(entry).use { it.copyTo(zout) }
+                    zout.closeEntry()
+                }
+            }
+        }
+    }
+}
+
+dependencies {
+    attributesSchema { attribute(tdlibStripped) }
+    artifactTypes.getByName("jar") { attributes.attribute(tdlibStripped, false) }
+    registerTransform(StripForeignTdlib::class) {
+        from.attribute(tdlibStripped, false).attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "jar")
+        to.attribute(tdlibStripped, true).attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "jar")
+        parameters.keep.set(tdlibKeep)
+    }
+}
+configurations.named("runtimeClasspath") { attributes.attribute(tdlibStripped, true) }
 
 dependencies {
     implementation(project(":core"))
@@ -103,15 +166,34 @@ compose.desktop {
             packageVersion = desktopVersion.substringBefore('-')
             vendor = "TMPlayer"
             description = "Unofficial Telegram media player"
+            copyright = "GPL-3.0-or-later"
             licenseFile.set(rootProject.file("LICENSE"))
             modules("java.naming", "java.sql", "jdk.unsupported", "java.management")
-            linux { menuGroup = "AudioVideo" }
+            linux {
+                packageName = "tmplayer"
+                iconFile.set(packagingDir.file("icons/tmplayer.png"))
+                menuGroup = "AudioVideo;Video;Player;"
+                appCategory = "video"
+                debMaintainer = "TMPlayer <noreply@github.com>"
+                rpmLicenseType = "GPLv3+"
+                shortcut = true
+            }
             windows {
+                iconFile.set(packagingDir.file("icons/tmplayer.ico"))
+                // Start menu folder, desktop shortcut, installed under %LOCALAPPDATA% without an
+                // administrator prompt. The upgrade code never changes: it is what lets a newer
+                // MSI replace an older one instead of installing beside it.
                 menu = true
+                menuGroup = "TMPlayer"
+                shortcut = true
                 perUserInstall = true
+                dirChooser = false
                 upgradeUuid = "6f1d3c0e-2b8a-4b7e-9d2c-7a1e5f4c3b21"
             }
-            macOS { bundleID = "com.tmplayer.desktop" }
+            macOS {
+                bundleID = "com.tmplayer.desktop"
+                iconFile.set(packagingDir.file("icons/tmplayer.icns"))
+            }
         }
     }
 }

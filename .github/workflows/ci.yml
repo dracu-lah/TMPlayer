@@ -75,24 +75,96 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-  # The desktop app on the OS it is packaged for: the Compose plugin builds installers only on the
-  # matching host. Unsigned; signing and the release installers come with Conveyor (Phase 2).
-  # This is where Windows and macOS are compiled, tested and packaged at all, since the developer
-  # has only a Linux machine.
-  desktop:
-    name: Desktop (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            package: packageDeb createDistributable
-          - os: windows-latest
-            package: packageMsi
-          - os: macos-latest
-            package: packageDmg
+  # The desktop app, packaged exactly as a release packages it (the same composite actions under
+  # .github/actions) and self-tested from every package, so a broken installer shows up on the
+  # push that broke it rather than on release day. No credentials: the app builds and loads its
+  # natives without them. This is where Windows and macOS are compiled, tested and packaged at
+  # all, since the developer has only a Linux machine.
+  #
+  # Ubuntu 24.04 rather than ubuntu-latest: the bundled TDLib and libmpv need glibc 2.38, so the
+  # runner must have at least that to run the self-test, and a pinned image keeps the result the
+  # same when "latest" moves.
+  desktop-linux:
+    name: Desktop (Linux)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
 
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Package and self-test
+        uses: ./.github/actions/desktop-linux
+        with:
+          version: 1.0.1-ci.${{ github.run_number }}
+
+      - name: Upload Linux packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: tmplayer-desktop-linux
+          path: dist/*
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Publish desktop test report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-test-results-linux
+          path: desktop/build/reports/tests/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  desktop-windows:
+    name: Desktop (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      # 1.0.0 installed first, then this build's 1.0.1 over it: the upgrade must replace it.
+      - name: Package, upgrade and self-test
+        uses: ./.github/actions/desktop-windows
+        with:
+          version: 1.0.1-ci.${{ github.run_number }}
+          upgrade-from: 1.0.0
+
+      - name: Upload Windows packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: tmplayer-desktop-windows
+          path: dist/*
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Publish desktop test report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-test-results-windows
+          path: desktop/build/reports/tests/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # macOS is not released (it would ship unsigned, which macOS 15 and later refuse to open without
+  # a trip to Privacy and Security), but it keeps compiling, testing and packaging here.
+  desktop-macos:
+    name: Desktop (macOS)
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
 
@@ -108,26 +180,17 @@ jobs:
       - name: Run desktop tests
         run: ./gradlew :desktop:test
 
-      - name: Package
-        shell: bash
-        run: |
-          tasks=""
-          for t in ${{ matrix.package }}; do tasks="$tasks :desktop:$t"; done
-          ./gradlew $tasks
+      - name: Package the DMG and the app
+        run: ./gradlew :desktop:packageDmg :desktop:createDistributable
 
-      - name: Tarball the Linux app image
-        if: runner.os == 'Linux'
-        run: tar -C desktop/build/compose/binaries/main/app -czf desktop/build/compose/binaries/main/TMPlayer-linux-x64.tar.gz TMPlayer
+      - name: Self-test the app
+        run: desktop/build/compose/binaries/main/app/TMPlayer.app/Contents/MacOS/TMPlayer --self-test
 
-      - name: Upload desktop packages
+      - name: Upload the DMG
         uses: actions/upload-artifact@v7
         with:
-          name: tmplayer-desktop-${{ runner.os }}
-          path: |
-            desktop/build/compose/binaries/main/deb/*.deb
-            desktop/build/compose/binaries/main/*.tar.gz
-            desktop/build/compose/binaries/main/msi/*.msi
-            desktop/build/compose/binaries/main/dmg/*.dmg
+          name: tmplayer-desktop-macos
+          path: desktop/build/compose/binaries/main/dmg/*.dmg
           retention-days: 14
           if-no-files-found: error
 
@@ -135,7 +198,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: desktop-test-results-${{ runner.os }}
+          name: desktop-test-results-macos
           path: desktop/build/reports/tests/
           retention-days: 14
           if-no-files-found: ignore
