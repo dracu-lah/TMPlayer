@@ -72,17 +72,11 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
 
 /**
  * Everything this app knows about the account that is leaving goes, except the downloads that
- * have a file of their own, which are written back after the wipe unless [deleteDownloads].
+ * have a file of their own, which stay in the index unless [deleteDownloads].
  */
 internal suspend fun signOut(settings: SettingsStore, deleteDownloads: Boolean) {
     val downloads = runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
     if (deleteDownloads) downloads.forEach { runCatching { DownloadIndex.delete(settings, it) } }
     runCatching { Td.clearMediaCache() }
-    runCatching { settings.clearEverything() }
-    if (!deleteDownloads) {
-        // Oldest first, so the list keeps its order: each write is stamped with the time.
-        downloads.filter { it.localPath != null }.sortedBy { it.updatedAt }.forEach { record ->
-            runCatching { settings.noteDownload(record.toMediaItem(), record.chatTitle, record.localPath) }
-        }
-    }
+    runCatching { settings.clearEverything(keepDownloads = !deleteDownloads) }
 }

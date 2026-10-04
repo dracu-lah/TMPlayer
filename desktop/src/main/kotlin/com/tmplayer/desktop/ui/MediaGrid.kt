@@ -131,7 +131,7 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
             Centred { CircularProgressIndicator() }
             return@Column
         }
-        val model = rememberViewModel(Triple(chat.id, min, max)) { MediaListViewModel(chat.id, min, max) }
+        val model = rememberViewModel(Triple(chat.id, min, max)) { MediaListViewModel(chat.id, min, max) { DownloadIndex.presentIds(state.settings) } }
         val ui by model.state.collectAsState()
         var query by remember(chat.id) { mutableStateOf("") }
         // The grid's keyboard focus, once the grid exists; the search field's Down arrow enters it.

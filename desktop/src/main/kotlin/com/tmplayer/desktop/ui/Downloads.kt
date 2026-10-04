@@ -265,6 +265,26 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
 
 private val ResumeRecord.key: String get() = "$chatId:$messageId"
 
+/** How many downloads are coming down or moving, for the badge on the side bar and the rail. */
+@Composable
+internal fun rememberDownloadsInFlight(): Int {
+    val active by OfflineDownloads.active.collectAsState()
+    return active.values.count { it.busy }
+}
+
+/**
+ * A toast in the window for every download that lands in the Downloads folder (B7): the one
+ * signal that is never lost, whatever the OS shows or does not.
+ */
+@Composable
+internal fun DownloadToasts(state: ShellState) {
+    val toast = rememberToast()
+    val runner = state.downloads as? com.tmplayer.desktop.DesktopDownloadRunner ?: return
+    LaunchedEffect(runner) {
+        runner.finished.collect { toast("Downloaded: ${it.title}") }
+    }
+}
+
 @Composable
 private fun Section(title: String) {
     Text(

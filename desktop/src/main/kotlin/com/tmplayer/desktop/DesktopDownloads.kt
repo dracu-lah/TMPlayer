@@ -154,19 +154,17 @@ class DesktopDownloadRunner(
 
     /**
      * Brings back what an earlier run left: [OfflineDownloads.restore] for the unfinished part,
-     * paused, and the move for every video the last run finished fetching but had not got into
-     * Downloads when it ended. Those are complete, so restore drops them from the queue; without
-     * this they would sit in the cache with nothing claiming them until a sweep took them.
+     * paused, and then the move for every video the last run finished fetching but had not got
+     * into Downloads when it ended. Restore brings those back paused like the rest; a move needs no
+     * connection and fetches nothing, so it is carried on at once rather than left for a Resume
+     * nobody would think to press on a finished video.
      */
     suspend fun restore() {
-        val stored = runCatching { settings.downloadQueueNow() }.getOrDefault(emptyList())
         OfflineDownloads.restore(settings)
-        for (request in stored) {
-            if (OfflineDownloads.active.value.containsKey(request.fileId)) continue
-            val id = runCatching { Td.currentFileId(request.chatId, request.messageId, request.fileId) }
-                .getOrDefault(request.fileId)
-            if (runCatching { Td.localFileAvailability(id) }.getOrNull() == LocalFileAvailability.Complete) {
-                download(request.copy(fileId = id))
+        for (row in OfflineDownloads.ordered) {
+            if (row.busy) continue
+            if (runCatching { Td.localFileAvailability(row.fileId) }.getOrNull() == LocalFileAvailability.Complete) {
+                OfflineDownloads.resume(this, row.fileId)
             }
         }
     }

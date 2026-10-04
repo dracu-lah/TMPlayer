@@ -85,6 +85,14 @@ object DownloadIndex {
         true
     }
 
+    /** The [MediaItem.id]s of every download whole in the folder, for the grid's Downloaded badge. */
+    suspend fun presentIds(settings: SettingsStore): Set<String> = withContext(Dispatchers.IO) {
+        runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
+            .filter { state(it) == FileState.Present }
+            .map { "${it.chatId}:${it.messageId}" }
+            .toSet()
+    }
+
     /** What the downloads with a file of their own take on disk, measured rather than recorded. */
     fun bytesOnDisk(records: List<ResumeRecord>): Long =
         records.sumOf { r -> r.localPath?.let(::File)?.takeIf { it.isFile }?.length() ?: 0L }

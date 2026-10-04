@@ -134,6 +134,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     }
     val update = rememberNavUpdate(state)
     UpdatePopupTrigger(state, update)
+    DownloadToasts(state)
 
     BackHandler(enabled = state.openChat != null) { state.closeChat() }
     BackHandler(enabled = state.openChat == null && state.destination != Destination.Chats) {
@@ -202,10 +203,16 @@ internal fun Sidebar(state: ShellState, update: NavUpdate? = null) {
             Text("TMPlayer", style = MaterialTheme.typography.titleMedium)
         }
         Spacer(Modifier.height(8.dp))
+        val inFlight = rememberDownloadsInFlight()
         Destination.entries.forEach { destination ->
             NavigationDrawerItem(
                 label = { Text(destination.label) },
                 icon = { Icon(destination.icon(), contentDescription = null) },
+                badge = if (destination == Destination.Downloads && inFlight > 0) {
+                    { Text(inFlight.toString()) }
+                } else {
+                    null
+                },
                 selected = state.destination == destination,
                 onClick = { state.go(destination) },
             )
@@ -236,11 +243,20 @@ private fun Rail(state: ShellState, update: NavUpdate?) {
             contentDescription = null,
             modifier = Modifier.padding(vertical = 12.dp).size(28.dp),
         )
+        val inFlight = rememberDownloadsInFlight()
         Destination.entries.forEach { destination ->
             NavigationRailItem(
                 selected = state.destination == destination,
                 onClick = { state.go(destination) },
-                icon = { Icon(destination.icon(), contentDescription = destination.label) },
+                icon = {
+                    if (destination == Destination.Downloads && inFlight > 0) {
+                        BadgedBox(badge = { Badge { Text(inFlight.toString()) } }) {
+                            Icon(destination.icon(), contentDescription = "${destination.label}, $inFlight in progress")
+                        }
+                    } else {
+                        Icon(destination.icon(), contentDescription = destination.label)
+                    }
+                },
                 label = { Text(destination.label.substringBefore(' ')) },
             )
         }
