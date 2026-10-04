@@ -442,6 +442,11 @@ data class MediaListState(
     val sponsored: SponsoredBatch? = null,
     val loadingMore: Boolean = false,
     val endReached: Boolean = false,
+    /**
+     * How many videos the size limits have kept out of this listing so far. The grid says so,
+     * because a missing episode with no explanation reads as TMPlayer losing it.
+     */
+    val hiddenBySize: Int = 0,
 )
 
 /**
@@ -463,6 +468,9 @@ class MediaListViewModel(
 
     /** What the viewer typed. Kept whole, because it is what results are ranked against. */
     private var query = ""
+
+    /** Videos [keep] has turned away since the listing last started over. */
+    private var hiddenBySize = 0
 
     /**
      * What Telegram is actually being asked for, which is not always [query].
@@ -497,6 +505,7 @@ class MediaListViewModel(
         val previous = if (preserveContent) (_state.value as? UiState.Content)?.value else null
         val previousCursors = cursors
         cursors = MediaCursors()
+        hiddenBySize = 0
         val searching = query.isNotBlank()
         if (previous == null) {
             _state.value = UiState.Loading(if (searching) "Searching…" else "Finding videos…")
@@ -535,6 +544,7 @@ class MediaListViewModel(
                                 items = page.items,
                                 sponsored = sponsored,
                                 endReached = page.endReached,
+                                hiddenBySize = hiddenBySize,
                             ),
                         )
                     }
@@ -594,9 +604,12 @@ class MediaListViewModel(
      * without this the viewer would see a listing that has very little to do with their query.
      */
     private fun keep(items: List<MediaItem>): List<MediaItem> {
+        // A search names the video the viewer is after, so the size limits stand aside for it: an
+        // episode a little smaller than its neighbours is exactly the one a viewer goes looking for.
+        if (query.isNotBlank()) return Fuzzy.rank(items, query) { it.fileName.ifBlank { it.title } }
         val sized = items.filter(::withinSizeLimits)
-        if (query.isBlank()) return sized
-        return Fuzzy.rank(sized, query) { it.fileName.ifBlank { it.title } }
+        hiddenBySize += items.size - sized.size
+        return sized
     }
 
     /** Downloaded videos told apart from cached ones, when the platform keeps an index. */
@@ -817,6 +830,7 @@ class MediaListViewModel(
                     // Leaving the listing open means scrolling on retries it, rather than a single
                     // dropped connection cutting the chat short for as long as it stays open.
                     endReached = reachedEnd,
+                    hiddenBySize = hiddenBySize,
                 ),
             )
         }
