@@ -1,5 +1,7 @@
 package com.tmplayer.desktop.player
 
+import androidx.compose.ui.input.key.Key
+import com.tmplayer.desktop.os.MediaKeyEcho
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
@@ -512,6 +514,9 @@ fun PlayerScreen(
                     val action = PlayerKeys.actionFor(press, context) ?: return@onPreviewKeyEvent false
                     // Over the loading and error sheets only the way out works.
                     if (phase != Phase.Playing && action !in OUTSIDE_PLAYBACK) return@onPreviewKeyEvent false
+                    // The same key may already have reached the player through the media session.
+                    val playKey = event.key == Key.MediaPlayPause || event.key == Key.MediaPlay || event.key == Key.MediaPause
+                    if (playKey && !MediaKeyEcho.claim(MediaKeyEcho.Source.Keyboard)) return@onPreviewKeyEvent true
                     dispatchNow(action)
                     true
                 }

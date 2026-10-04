@@ -11,6 +11,7 @@ import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaName
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.desktop.os.KeepAwake
+import com.tmplayer.desktop.os.MediaKeyEcho
 import com.tmplayer.desktop.os.MediaSession
 import com.tmplayer.desktop.os.MediaSessionCallbacks
 import com.tmplayer.desktop.player.PlaybackEngine
@@ -51,10 +52,14 @@ fun PlayerHost(
     val session = remember {
         // Called on a D-Bus or SMTC thread; the engine wants the Swing one.
         fun onEdt(action: (PlaybackEngine) -> Unit) = SwingUtilities.invokeLater { engine?.let(action) }
+        // A media key can also reach the focused window as a key press; see [MediaKeyEcho].
+        fun playPause(action: (PlaybackEngine) -> Unit) {
+            if (MediaKeyEcho.claim(MediaKeyEcho.Source.Session)) onEdt(action)
+        }
         MediaSession.create(object : MediaSessionCallbacks {
-            override fun onPlay() = onEdt { it.play() }
-            override fun onPause() = onEdt { it.pause() }
-            override fun onPlayPause() = onEdt { it.togglePlay() }
+            override fun onPlay() = playPause { it.play() }
+            override fun onPause() = playPause { it.pause() }
+            override fun onPlayPause() = playPause { it.togglePlay() }
             override fun onStop() = SwingUtilities.invokeLater(onClose)
             override fun onSeekBy(offsetMs: Long) = onEdt { it.seekBy(offsetMs) }
             override fun onSeekTo(positionMs: Long) = onEdt { it.seekTo(positionMs) }
