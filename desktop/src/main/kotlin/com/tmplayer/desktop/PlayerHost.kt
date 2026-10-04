@@ -29,7 +29,8 @@ private const val MINI_AFTER_FULLSCREEN_MS = 500L
 
 /**
  * The player as the shell shows it, tied to the OS: the screen stays awake while a video plays,
- * and the desktop's media controls (MPRIS on Linux) see the title and drive the engine.
+ * and the desktop's media controls (MPRIS on Linux, SMTC on Windows) see the title and drive the
+ * engine.
  */
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
@@ -46,8 +47,9 @@ fun PlayerHost(
     var engine by remember { mutableStateOf<PlaybackEngine?>(null) }
     var playing by remember { mutableStateOf<MediaItem>(request.item) }
     val keepAwake = remember { KeepAwake.create() }
+    val awtWindow = LocalAwtWindow.current as? java.awt.Frame
     val session = remember {
-        // Called on a D-Bus thread; the engine wants the Swing one.
+        // Called on a D-Bus or SMTC thread; the engine wants the Swing one.
         fun onEdt(action: (PlaybackEngine) -> Unit) = SwingUtilities.invokeLater { engine?.let(action) }
         MediaSession.create(object : MediaSessionCallbacks {
             override fun onPlay() = onEdt { it.play() }
@@ -57,7 +59,7 @@ fun PlayerHost(
             override fun onSeekBy(offsetMs: Long) = onEdt { it.seekBy(offsetMs) }
             override fun onSeekTo(positionMs: Long) = onEdt { it.seekTo(positionMs) }
             override fun onRaise() = SwingUtilities.invokeLater(onRaise)
-        })
+        }, awtWindow)
     }
     DisposableEffect(Unit) {
         onDispose {
@@ -67,7 +69,6 @@ fun PlayerHost(
     }
 
     // The mini player shrinks this window; whatever closes the player puts it back.
-    val awtWindow = LocalAwtWindow.current as? java.awt.Frame
     val mini = remember(awtWindow) { awtWindow?.let(::MiniPlayerWindow) }
     DisposableEffect(mini) { onDispose { mini?.leave() } }
     val scope = rememberCoroutineScope()

@@ -467,8 +467,10 @@ None of them fire while a search field has focus.
 
 Right click the picture for the player's menu: audio, subtitles, speed, picture shape and the
 rest. In the grid, **/** or **Ctrl+F** searches and **Ctrl+,** opens Settings. The media keys on
-a keyboard work while the window has focus, and on Linux the desktop's own media controls drive it
-through MPRIS.
+a keyboard work while the window has focus. On Linux the desktop's own media controls drive it
+through MPRIS; on Windows the video's title shows in the media flyout by the volume control (and on
+the lock screen), whose play, pause and stop buttons, like the media keys, reach the player even
+when another window has focus.
 
 ## Troubleshooting on a computer
 

@@ -125,7 +125,8 @@ fullscreen, the wheel sets the volume. The whole table is in
 [INSTALL.md](../INSTALL.md#using-the-keyboard-and-mouse).
 
 **Behaves like a desktop app.** Keeps the screen awake while a video plays, answers the media keys
-(and on Linux the desktop's own media controls, through MPRIS), remembers its window size and
+(and the desktop's own media controls: MPRIS on Linux, the media flyout by the volume control on
+Windows), remembers its window size and
 place, and opening it a second time brings the first window forward. Downloads stay on the
 computer until you remove them, on their own page.
 

@@ -1013,11 +1013,12 @@ Each has a recommendation; the plan proceeds on the recommendation unless told o
 
 # Part F: delivery and status
 
-Status on 2026-10-04 (release 1.20.0): everything below is implemented except the three
-unticked items. The Android storage volume chooser was left out because FileProvider cannot serve
-files on removable volumes, so Share and Open in another app would break there. SMTC and the TV
-QR code were not started. Nothing was run on Windows hardware or on the phone and TV for this
-release. The Windows CI step covers the fullscreen round trip.
+Status on 2026-10-04 (release 1.20.0): everything below is implemented except the unticked
+items. The Android storage volume chooser was left out because FileProvider cannot serve files on
+removable volumes, so Share and Open in another app would break there. The TV QR code was not
+started. SMTC landed after 1.20.0 (see its line below), untried on real Windows. Nothing was run
+on Windows hardware or on the phone and TV for this release. The Windows CI step covers the
+fullscreen round trip.
 
 Phases are ordered so each ships on its own. Effort is for one developer with the devices the
 memory lists (a Linux desk, the POCO phone, the TV stick; no Windows machine).
@@ -1091,7 +1092,15 @@ memory lists (a Linux desk, the POCO phone, the TV stick; no Windows machine).
       timeout on TV and desktop
 - [x] D3: Copy link, external subtitles, Play from start on the phone
 - [ ] B2.2: Android storage volume chooser (internal, SD card, USB) with the same relocation flow
-- [ ] D1: SMTC spike (JNA COM `ISystemMediaTransportControlsInterop`), then SMTC
+- [x] D1: SMTC spike (JNA COM `ISystemMediaTransportControlsInterop`), then SMTC. Done as
+      `os/Smtc.kt`: `GetForWindow` on the app's HWND, IsEnabled, Play, Pause, Stop, Next and
+      Previous, PlaybackStatus, a hand written ButtonPressed handler, DisplayUpdater with
+      Type=Video and the title; seeking from the flyout is not wired. Any failure falls back to
+      `NoMediaSession` and logs once. GUIDs and vtable slots checked against the SDK IDL (Wine's
+      copy), the handler IID against the WinRT derivation in a unit test. **Not run on real
+      Windows**: it compiles and its pure parts are tested on Linux, and CI's Windows job runs
+      `SmtcWindowsSmokeTest` on a hidden window and reports "live" or "fell back" as a notice;
+      the flyout and the media keys still want a check by hand on Windows 10 and 11
 - [x] D5: documentation corrections
 
 ## Not scheduled, with the reason

@@ -143,6 +143,26 @@ jobs:
           version: 1.0.1-ci.${{ github.run_number }}
           upgrade-from: 1.0.0
 
+      # SMTC (media keys and the now playing flyout) has never run on a Windows machine the
+      # developer can see, so this is where it is checked. The desktop tests above already ran
+      # SmtcWindowsSmokeTest, which binds SMTC to a hidden native window, drives a session through
+      # update, clear and release, and fails if any of it throws. This step makes sure it really
+      # ran (not skipped) and lifts its "smtc: ..." line, live or fell back, into a notice.
+      - name: SMTC smoke test result
+        shell: pwsh
+        run: |
+          $xml = "desktop/build/test-results/test/TEST-com.tmplayer.desktop.os.SmtcWindowsSmokeTest.xml"
+          if (-not (Test-Path $xml)) { throw "SmtcWindowsSmokeTest did not run" }
+          [xml]$doc = Get-Content $xml
+          $suite = $doc.testsuite
+          if ([int]$suite.skipped -ne 0) { throw "SmtcWindowsSmokeTest was skipped on Windows" }
+          if ([int]$suite.failures -ne 0 -or [int]$suite.errors -ne 0) { throw "SmtcWindowsSmokeTest failed" }
+          $out = "$($doc.SelectSingleNode('//system-out').InnerText)`n$($doc.SelectSingleNode('//system-err').InnerText)"
+          $out -split "`n" | Where-Object { $_ -match 'smtc|Smtc' } | Write-Host
+          $line = ($out -split "`n" | Where-Object { $_ -match '^smtc: ' } | Select-Object -First 1)
+          if (-not $line) { throw "SmtcWindowsSmokeTest printed no 'smtc:' line" }
+          Write-Host "::notice title=SMTC::$($line.Trim())"
+
       # The fullscreen round trip that left a maximized window under the taskbar. The dev
       # harness plays a generated clip, goes fullscreen and back, and prints where the window
       # landed: the frame, its client area, the monitor's work area, Compose's placement and AWT's

@@ -1,14 +1,15 @@
 package com.tmplayer.desktop.os
 
 import com.tmplayer.platform.Logger
+import java.awt.Frame
 
 /**
  * What the OS's media controls (keyboard media keys, the GNOME and KDE media widgets, headset
  * buttons) ask the player to do. Every method has a default that ignores the request, so a player
  * implements only what it supports.
  *
- * These arrive on the OS integration's own thread (on Linux, a dbus-java worker), never on the UI
- * thread; hop over before touching Compose state.
+ * These arrive on the OS integration's own thread (on Linux, a dbus-java worker; on Windows, a
+ * thread SMTC calls in on), never on the UI thread; hop over before touching Compose state.
  */
 interface MediaSessionCallbacks {
     fun onPlay() {}
@@ -36,8 +37,8 @@ interface MediaSessionCallbacks {
  * position that steady playback cannot explain is reported as a seek. [clear] says nothing is
  * playing (the player closed but the app stays open), [release] removes the entry for good.
  *
- * Linux has MPRIS 2 ([MprisMediaSession]); Windows (SMTC) and macOS (Now Playing) are phase 3, and
- * until then [create] returns [NoMediaSession] there.
+ * Linux has MPRIS 2 ([MprisMediaSession]), Windows has SMTC ([SmtcMediaSession]). macOS (Now
+ * Playing) is not built, and [create] returns [NoMediaSession] there.
  */
 interface MediaSession {
 
@@ -56,16 +57,24 @@ interface MediaSession {
     fun release()
 
     companion object {
-        fun create(callbacks: MediaSessionCallbacks): MediaSession = when {
+        /**
+         * The session for this OS. [window] is the app's frame, which Windows ties SMTC to; it
+         * must already have its native window. Anything that goes wrong gives [NoMediaSession]:
+         * the player never depends on the OS taking part.
+         */
+        fun create(callbacks: MediaSessionCallbacks, window: Frame? = null): MediaSession = when {
             OsInfo.isLinux -> runCatching { MprisMediaSession.start(callbacks) }
                 .onFailure { Logger.w("MediaSession", "MPRIS unavailable: ${it.message}") }
                 .getOrDefault(NoMediaSession)
+            OsInfo.isWindows && window != null -> runCatching { SmtcMediaSession.start(window, callbacks) }
+                .onFailure { Logger.w("MediaSession", "SMTC unavailable: ${it.message}") }
+                .getOrNull() ?: NoMediaSession
             else -> NoMediaSession
         }
     }
 }
 
-/** Windows and macOS until phase 3, and Linux without a session bus. */
+/** macOS, Linux without a session bus, and Windows when SMTC cannot be reached. */
 object NoMediaSession : MediaSession {
     override fun update(
         title: String,
