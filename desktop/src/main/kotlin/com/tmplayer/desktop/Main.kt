@@ -20,6 +20,7 @@ import com.tmplayer.data.Td
 import com.tmplayer.data.ThemeChoice
 import com.tmplayer.desktop.os.AppExit
 import com.tmplayer.desktop.os.NativeFullscreen
+import com.tmplayer.desktop.os.NonReparentingWm
 import com.tmplayer.desktop.os.NativeInventory
 import com.tmplayer.desktop.os.SingleInstance
 import com.tmplayer.desktop.os.WindowMemory
@@ -40,6 +41,8 @@ private const val QUIT_GRACE_MS = 3_000L
 fun main(args: Array<String>) {
     // Loads every native library, reports, exits: no window, no second instance check.
     args.firstOrNull(SelfTest::matches)?.let { exitProcess(SelfTest.run(it)) }
+    // Before the first window: sway and its kind never reparent, which AWT has to be told.
+    NonReparentingWm.applyIfNeeded()
     // TDLib's Windows DLL needs the C++ runtime; take the bundled JVM's copy (see WindowsRuntime).
     WindowsRuntime.preload()
     // A second launch hands its arguments (later, tg: links) to the first and leaves.
@@ -54,7 +57,9 @@ fun main(args: Array<String>) {
         Td.awaitAuthorizedSession()
         OfflineDownloads.restore(settings)
     }
-    application {
+    // Compose would end the process itself once the last window closes, with System.exit, which on
+    // Linux can hang for good (see AppExit). It returns here instead, and AppExit ends it.
+    application(exitProcessOnExit = false) {
         val windowState = remember { WindowMemory.load() }
         LaunchedEffect(windowState) { WindowMemory.follow(windowState) }
         val shell = remember { ShellState(settings, DesktopServices.downloads) }

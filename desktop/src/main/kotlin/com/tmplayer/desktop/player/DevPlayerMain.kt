@@ -16,6 +16,8 @@ import androidx.compose.ui.window.rememberWindowState
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.desktop.DesktopPrefs
 import com.tmplayer.desktop.os.MiniPlayerWindow
+import com.tmplayer.desktop.os.NativeFullscreen
+import com.tmplayer.desktop.os.NonReparentingWm
 import kotlinx.coroutines.delay
 import java.io.File
 import kotlin.system.exitProcess
@@ -37,6 +39,7 @@ import kotlin.system.exitProcess
  * - `--details` opens the Playback details panel from the start.
  * - `--mini-after <ms>` turns the mini player on, prints the window's bounds, and off again a second later.
  * - `--sub <file>` loads a subtitle file once playing, as dropping it on the picture does.
+ * - `--fullscreen-after <ms>` goes fullscreen, prints the window's bounds, and back a second later.
  * - `--quit-after <ms>` closes the window, so a scripted run ends on its own.
  */
 fun main(argv: Array<String>) {
@@ -61,14 +64,19 @@ fun main(argv: Array<String>) {
     val quitAfter = value("--quit-after")?.toLongOrNull()
     val sub = value("--sub")
     val miniAfter = value("--mini-after")?.toLongOrNull()
+    val fullscreenAfter = value("--fullscreen-after")?.toLongOrNull()
 
+    NonReparentingWm.applyIfNeeded()
     application {
         val state = rememberWindowState(size = DpSize(w.dp, h.dp))
         var fullscreen by remember { mutableStateOf(false) }
-        LaunchedEffect(fullscreen) {
-            state.placement = if (fullscreen) WindowPlacement.Fullscreen else WindowPlacement.Floating
-        }
         Window(onCloseRequest = ::exitApplication, state = state, title = "TMPlayer player (dev): ${file.name}") {
+            // The same way in as the app's window takes (see Main.kt).
+            val native = remember(window) { NativeFullscreen(window) }
+            LaunchedEffect(fullscreen) {
+                if (native.set(fullscreen)) return@LaunchedEffect
+                state.placement = if (fullscreen) WindowPlacement.Fullscreen else WindowPlacement.Floating
+            }
             val media = remember { LocalPlayerMedia(file, rate, settingsDir) }
             var engine by remember { mutableStateOf<PlaybackEngine?>(null) }
             val mini = remember { MiniPlayerWindow(window) }
@@ -109,6 +117,15 @@ fun main(argv: Array<String>) {
                     mini.leave()
                     delay(500)
                     println("dev: back ${window.bounds} on top ${window.isAlwaysOnTop}")
+                }
+                if (fullscreenAfter != null) {
+                    at(fullscreenAfter)
+                    fullscreen = true
+                    delay(1_000)
+                    println("dev: fullscreen ${window.bounds}")
+                    fullscreen = false
+                    delay(1_000)
+                    println("dev: back ${window.bounds}")
                 }
                 if (seekAfter != null && seekTo != null) {
                     at(seekAfter)
