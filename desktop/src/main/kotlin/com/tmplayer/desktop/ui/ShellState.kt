@@ -23,6 +23,7 @@ import com.tmplayer.desktop.DesktopPrefs
 import com.tmplayer.desktop.DesktopServices
 import com.tmplayer.desktop.DesktopUpdates
 import com.tmplayer.desktop.DesktopWatchCache
+import com.tmplayer.desktop.SelfUpdate
 import com.tmplayer.ui.nav.BackStack
 import com.tmplayer.ui.nav.isBackKey
 
@@ -31,9 +32,10 @@ class DesktopExtras(
     val prefs: DesktopPrefs,
     val updates: DesktopUpdates?,
     val watchCache: DesktopWatchCache?,
+    val selfUpdate: SelfUpdate? = null,
 ) {
     companion object {
-        fun live() = DesktopExtras(DesktopServices.prefs, DesktopServices.updates, DesktopServices.watchCache)
+        fun live() = DesktopExtras(DesktopServices.prefs, DesktopServices.updates, DesktopServices.watchCache, DesktopServices.selfUpdate)
     }
 }
 

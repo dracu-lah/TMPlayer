@@ -46,6 +46,10 @@ import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.AuthState
 import com.tmplayer.desktop.BuildInfo
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import com.tmplayer.desktop.InstallKind
+import com.tmplayer.desktop.UpdateProgress
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.desktop.os.OpenExternal
 import kotlinx.coroutines.delay
@@ -160,13 +164,24 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         val updates = state.extras.updates
         val release = updates?.available?.collectAsState()?.value
         if (release != null && state.nowPlaying == null) {
+            val selfUpdate = state.extras.selfUpdate
+            val progress = selfUpdate?.progress?.collectAsState()?.value ?: UpdateProgress.Idle
+            val scope = rememberCoroutineScope()
             UpdateNotice(
                 release = release,
+                canUpdate = selfUpdate?.canUpdateTo(release) == true,
+                kind = selfUpdate?.kind ?: InstallKind.Manual,
+                progress = progress,
+                onUpdate = { scope.launch { selfUpdate?.update(release) } },
+                onRestart = { selfUpdate?.restart() },
                 onDownload = {
                     OpenExternal.browse(release.pageUrl)
                     updates.dismiss()
                 },
-                onDismiss = updates::dismiss,
+                onDismiss = {
+                    selfUpdate?.reset()
+                    updates.dismiss()
+                },
                 modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
             )
         }

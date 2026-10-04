@@ -12,7 +12,13 @@ import java.net.URI
 import java.util.Locale
 
 /** The newest release on GitHub, as much of it as the notice needs. */
-data class LatestRelease(val version: String, val pageUrl: String, val assetNames: List<String>)
+data class LatestRelease(
+    val version: String,
+    val pageUrl: String,
+    val assetNames: List<String>,
+    /** Asset name to its download link, for [SelfUpdate]. */
+    val assetUrls: Map<String, String> = emptyMap(),
+)
 
 /**
  * Tells the viewer, once, that a newer TMPlayer is out (B1.4: the in app button opens the
@@ -137,10 +143,11 @@ class DesktopUpdates(
         /** The tag and the asset names, read off the API's answer without a JSON library. */
         internal fun parse(json: String): LatestRelease? {
             val tag = Regex("\"tag_name\"\\s*:\\s*\"([^\"]+)\"").find(json)?.groupValues?.get(1) ?: return null
-            val assets = Regex("\"browser_download_url\"\\s*:\\s*\"([^\"]+)\"").findAll(json)
-                .map { it.groupValues[1].substringAfterLast('/') }
+            val urls = Regex("\"browser_download_url\"\\s*:\\s*\"([^\"]+)\"").findAll(json)
+                .map { it.groupValues[1] }
                 .toList()
-            return LatestRelease(tag.removePrefix("v"), "$RELEASES_PAGE/tag/$tag", assets)
+            val assets = urls.map { it.substringAfterLast('/') }
+            return LatestRelease(tag.removePrefix("v"), "$RELEASES_PAGE/tag/$tag", assets, assets.zip(urls).toMap())
         }
 
         private suspend fun fetchLatest(): LatestRelease? = withContext(Dispatchers.IO) {

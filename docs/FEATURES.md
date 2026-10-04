@@ -126,12 +126,15 @@ place, and opening it a second time brings the first window forward. Downloads s
 computer until you remove them, on their own page.
 
 **Mini player and shortcuts.** Ctrl+P shrinks the window to a small always on top picture in a
-corner of the screen and brings it back; `?` lists every key. Once a day it checks for a newer
-release and says so in a corner of the window (Settings can turn that off).
+corner of the screen and brings it back; `?` lists every key.
 
-**What it does not do yet.** No voice search (there is no portable speech API) and no self
-update: the notice opens the download page, and a newer release installs over the old one. Windows builds are not signed yet,
-so SmartScreen warns the first time.
+**Updates itself.** Once a day it checks for a newer release and says so in a corner of the window
+(Settings can turn that off). Update now downloads the package that matches the install (MSI,
+portable zip, AppImage, deb or rpm), checks it against the release checksums, installs it and
+restarts. The deb and rpm ask for your password; the Flatpak and the tarball open the release page.
+
+**What it does not do yet.** No voice search (there is no portable speech API). Windows builds are
+not signed yet, so SmartScreen warns the first time.
 
 ## What it is not
 

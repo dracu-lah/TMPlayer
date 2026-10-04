@@ -25,4 +25,7 @@ object DesktopServices {
 
     /** The once a day "a newer version is out" check. */
     val updates: DesktopUpdates by lazy { DesktopUpdates(prefs) }
+
+    /** Fetches and installs a release over this copy, where the way it was installed allows. */
+    val selfUpdate: SelfUpdate by lazy { SelfUpdate() }
 }

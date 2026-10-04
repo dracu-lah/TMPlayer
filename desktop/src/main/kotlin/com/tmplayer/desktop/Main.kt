@@ -78,6 +78,7 @@ fun main(args: Array<String>) {
             onKeyEvent = shell::onKey,
         ) {
             window.minimumSize = java.awt.Dimension(960, 600)
+            DesktopServices.selfUpdate.quit = quit
             // Fullscreen is the shell's to ask for and the window's to do. The window system is
             // asked directly where it can be (see NativeFullscreen); elsewhere Compose's placement
             // does it, and leaving goes back to whatever the window was before.

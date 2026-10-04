@@ -254,6 +254,26 @@ You land on your chats. The sidebar has Chats, Favourites, Continue, Downloads a
 chat for its videos, hover a tile for its Play button, or right click it to play from the start,
 download it or copy its Telegram link.
 
+## Updating on a computer
+
+Once a day TMPlayer asks GitHub for a newer release (Settings, Updates turns that off or checks
+now). When one is out, a notice appears in the corner of the window:
+
+| Installed from | What **Update now** does |
+|---|---|
+| Windows installer (MSI) | Downloads the new MSI, closes, installs it without an administrator prompt, and opens again |
+| Windows portable zip | Unpacks the new version beside the folder, closes, swaps the folders, and opens again |
+| AppImage | Replaces the AppImage file in place; **Restart now** runs the new one |
+| deb or rpm | Installs the package with `pkexec`, so your system asks for your password; then **Restart now** |
+| Flatpak, tarball | **Download** opens the release page; install the new file over the old one |
+
+Every download is checked against the release's `SHA256SUMS` before anything is installed, and
+nothing happens until you press the button. Your sign in, downloads and settings stay.
+
+The deb and rpm route needs a polkit agent for the password prompt. Full desktops (GNOME, KDE,
+Xfce, Cinnamon) run one; on sway or another bare compositor, start one (for example
+`lxpolkit` or `polkit-gnome-authentication-agent-1`) or install the package by hand.
+
 ## Putting it on the desktop, in the menu and on the taskbar
 
 ### Windows

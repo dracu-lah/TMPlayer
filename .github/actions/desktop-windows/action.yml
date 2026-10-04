@@ -43,6 +43,8 @@ runs:
         [ ${#msis[@]} -eq 1 ] || { echo "::error::expected one MSI, found ${msis[*]}"; exit 1; }
         cp "${msis[0]}" "dist/TMPlayer-$V-windows-x64.msi"
         # The zip holds one TMPlayer folder; TMPlayer.exe inside it runs from wherever it lands.
+        # portable.txt tells the in-app updater this copy is the zip, not the MSI.
+        echo "Unpacked from the portable zip. The in-app updater replaces this folder." > desktop/build/compose/binaries/main/app/TMPlayer/portable.txt
         (cd desktop/build/compose/binaries/main/app && 7z a -tzip -mx=7 "$GITHUB_WORKSPACE/dist/TMPlayer-$V-windows-x64-portable.zip" TMPlayer > /dev/null)
         ls -la dist
 

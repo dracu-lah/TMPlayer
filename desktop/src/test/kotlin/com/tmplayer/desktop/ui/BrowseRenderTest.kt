@@ -128,6 +128,11 @@ class BrowseRenderTest {
                 SettingsPage(shell, "2.0.0")
                 UpdateNotice(
                     LatestRelease("2.0.1", "https://github.com/dracu-lah/TMPlayer/releases/tag/v2.0.1", listOf("TMPlayer.msi")),
+                    canUpdate = true,
+                    kind = com.tmplayer.desktop.InstallKind.WindowsMsi,
+                    progress = com.tmplayer.desktop.UpdateProgress.Downloading(0.42f),
+                    onUpdate = {},
+                    onRestart = {},
                     onDownload = {},
                     onDismiss = {},
                     modifier = Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(24.dp),
