@@ -37,6 +37,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import com.tmplayer.player.TouchPrefs
+import com.tmplayer.player.AudioDownmix
+import com.tmplayer.R
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -171,6 +174,7 @@ fun SettingsScreen(
     val autoplayNext by settings.autoplayNext.collectAsStateWithLifecycle(initialValue = true)
     val wifiOnly by settings.wifiOnlyDownloads.collectAsStateWithLifecycle(initialValue = false)
     val touchPrefs by settings.touchPrefs.collectAsStateWithLifecycle(initialValue = TouchPrefs())
+    val downmixChoice by settings.downmixChoice.collectAsStateWithLifecycle(initialValue = null)
     val history by settings.continueWatching.collectAsStateWithLifecycle(initialValue = emptyList())
     val favorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
     val lastChatId by settings.lastChatId.collectAsStateWithLifecycle(initialValue = 0L)
@@ -501,6 +505,43 @@ fun SettingsScreen(
                 },
             )
         }
+        // On both devices, defaulting the way each always has: a phone folds surround to stereo
+        // for its speaker and headphones, a television passes it to whatever is wired up. The
+        // switch is for the exceptions, a soundbar that cannot take the film's track or a phone
+        // plugged into a receiver. Read when a video opens, so it applies from the next one.
+        item {
+            val downmix = AudioDownmix.wanted(downmixChoice, television = !touch)
+            ToggleRow(
+                title = "Downmix to stereo",
+                subtitle = if (downmix) {
+                    "Surround sound is folded into two channels"
+                } else {
+                    "Off: surround sound goes out as it is"
+                },
+                icon = ImageVector.vectorResource(R.drawable.ic_audio_language),
+                checked = downmix,
+                onToggle = { scope.launch { settings.setDownmix(!downmix) } },
+            )
+        }
+        // The one player timing that means the same with a remote as with a thumb.
+        item {
+            val choices = TouchPrefs.TIMEOUT_CHOICES_MS
+            StepperRow(
+                title = "Hide the controls after",
+                subtitle = "While playing; a paused video keeps them up",
+                value = TouchPrefs.timeoutLabel(touchPrefs.controlsTimeoutMs),
+                icon = TmIcons.Clock,
+                canDecrease = touchPrefs.controlsTimeoutMs != choices.first(),
+                canIncrease = touchPrefs.controlsTimeoutMs != choices.last(),
+                onStep = { direction ->
+                    scope.launch {
+                        settings.updateTouchPrefs {
+                            it.copy(controlsTimeoutMs = TouchPrefs.step(choices, it.controlsTimeoutMs, direction))
+                        }
+                    }
+                },
+            )
+        }
         // A phone's row only. A television is on the wall and a stick is behind it, both plugged
         // into a network that is Wi-Fi or a cable and never a data allowance somebody pays for by
         // the gigabyte, so on a TV this asks the viewer to rule out something that cannot happen.
@@ -565,22 +606,6 @@ fun SettingsScreen(
                     canIncrease = touchPrefs.holdSpeed != choices.last(),
                     onStep = { direction ->
                         update { it.copy(holdSpeed = TouchPrefs.step(choices, it.holdSpeed, direction)) }
-                    },
-                )
-            }
-            item {
-                val choices = TouchPrefs.TIMEOUT_CHOICES_MS
-                StepperRow(
-                    title = "Hide the controls after",
-                    subtitle = "While playing; a paused video keeps them up",
-                    value = TouchPrefs.timeoutLabel(touchPrefs.controlsTimeoutMs),
-                    icon = TmIcons.Clock,
-                    canDecrease = touchPrefs.controlsTimeoutMs != choices.first(),
-                    canIncrease = touchPrefs.controlsTimeoutMs != choices.last(),
-                    onStep = { direction ->
-                        update {
-                            it.copy(controlsTimeoutMs = TouchPrefs.step(choices, it.controlsTimeoutMs, direction))
-                        }
                     },
                 )
             }

@@ -54,8 +54,18 @@ object AudioDownmix {
      * demonstrably works, over HDMI to whatever is wired up, so that is the case that keeps its
      * channels.
      */
-    fun folds(television: Boolean): List<Fold> {
-        if (television) return emptyList()
+    fun folds(television: Boolean): List<Fold> = if (television) emptyList() else stereoFolds()
+
+    /**
+     * Whether to fold at all: the viewer's own answer from Settings when there is one, and
+     * otherwise the device's default, for the reason [folds] gives: a phone folds, a television
+     * keeps its channels. A soundbar that cannot take what the film carries, or a phone wired to
+     * a receiver, is why the answer is the viewer's to change.
+     */
+    fun wanted(choice: Boolean?, television: Boolean): Boolean = choice ?: !television
+
+    /** Every matrix of the stereo fold, for a player that [wanted] one. */
+    fun stereoFolds(): List<Fold> {
         return (1..MAX_LAYOUT).map { channels ->
             when {
                 channels <= STEREO -> Fold.Untouched(channels)

@@ -55,12 +55,15 @@ class PlayerControls(
     private val onCycleScale: () -> Unit,
     private val onCycleOrientation: () -> Unit,
     private val onPlayEpisode: (MediaItem) -> Unit,
-    /** Phone only: the top bar's back arrow, its overflow button, the lock and the PiP buttons. */
+    /**
+     * The phone's top bar back arrow and lock button; the overflow (the phone's top bar, the end of
+     * the television's row) and picture in picture, on both.
+     */
     private val onBack: () -> Unit = {},
     private val onMore: (anchor: View) -> Unit = {},
     private val onLock: () -> Unit = {},
     private val onPictureInPicture: () -> Unit = {},
-    /** Phone only: the total on the times line was tapped to flip between total and remaining. */
+    /** The total was flipped between total and remaining: a tap on a phone, OK on a television. */
     private val onRemainingToggled: (Boolean) -> Unit = {},
 ) {
 
@@ -137,7 +140,7 @@ class PlayerControls(
         wire(root.findViewById(R.id.control_scale)) { onCycleScale() }
         wire(rotate) { onCycleOrientation() }
         rotate.visibility = if (isTv) View.GONE else View.VISIBLE
-        if (!isTv) setUpPhone(root)
+        if (!isTv) setUpPhone(root) else setUpTv(root)
 
         // A press of D-pad left or right on the bar steps the position by this much: coarser than
         // the bare-picture arrow jumps on purpose, because opening the row to scrub is travelling,
@@ -232,6 +235,25 @@ class PlayerControls(
         nameButtons(root)
     }
 
+    /**
+     * The television's additions to its one row: More at the end of it, picture in picture where
+     * the device has it, and the time readout made something OK can land on and press, which flips
+     * the total to the time left the way a tap on the phone's total does.
+     */
+    private fun setUpTv(root: View) {
+        val more = root.findViewById<View>(R.id.control_tv_more)
+        more.visibility = View.VISIBLE
+        wire(more) { onMore(more) }
+        wire(pip) { onPictureInPicture() }
+        timeText.isFocusable = true
+        timeText.isClickable = true
+        timeText.setBackgroundResource(R.drawable.bg_timebar_focus)
+        wire(timeText) {
+            showRemaining = !showRemaining
+            onRemainingToggled(showRemaining)
+        }
+    }
+
     private fun nameButtons(view: View) {
         if (view.isClickable && !view.contentDescription.isNullOrEmpty()) {
             view.tooltipText = view.contentDescription
@@ -251,8 +273,15 @@ class PlayerControls(
         if (!isTv) view.tooltipText = text
     }
 
-    /** Whether this phone can do picture in picture at all; the PiP button is hidden if not. */
+    /**
+     * Whether this device can do picture in picture at all; the PiP button is hidden if not. A
+     * television's row has no width rule, so there the answer alone decides.
+     */
     var pictureInPictureAvailable = true
+        set(value) {
+            field = value
+            if (isTv) pip.visibility = if (value) View.VISIBLE else View.GONE
+        }
 
     /** What the jump buttons say and do. The phone's follow the double tap setting. */
     private var skipBackMs = Skip.BACK_MS
@@ -466,7 +495,12 @@ class PlayerControls(
         val exo = player() ?: return
         val duration = exo.duration.takeIf { it > 0 } ?: 0L
         if (isTv) {
-            time.text = "${StreamStats.formatClock(position)} / ${StreamStats.formatClock(duration)}"
+            val end = if (showRemaining && duration > 0) {
+                "-" + StreamStats.formatClock((duration - position).coerceAtLeast(0))
+            } else {
+                StreamStats.formatClock(duration)
+            }
+            time.text = "${StreamStats.formatClock(position)} / $end"
             return
         }
         timesPosition.text = StreamStats.formatClock(position)

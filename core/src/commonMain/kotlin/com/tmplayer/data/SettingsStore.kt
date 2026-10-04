@@ -27,6 +27,7 @@ private val OVERVIEW_SEEN = booleanPreferencesKey("overview_seen")
 private val OPEN_LAST_CHAT = booleanPreferencesKey("open_last_chat")
 private val DOWNLOAD_FIRST = booleanPreferencesKey("download_before_playing")
 private val AUTOPLAY_NEXT = booleanPreferencesKey("autoplay_next")
+private val DOWNMIX_STEREO = booleanPreferencesKey("downmix_stereo")
 private val WIFI_ONLY = booleanPreferencesKey("wifi_only_downloads")
 private val CRASH_REPORTS = booleanPreferencesKey("crash_reports")
 private val PLAYBACK_SPEED = floatPreferencesKey("playback_speed")
@@ -246,6 +247,20 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
     /** Read once at the start of playback, where a flow that has not emitted yet would lie. */
     suspend fun downloadBeforePlayingNow(): Boolean =
         prefs.data.first()[DOWNLOAD_FIRST] ?: false
+
+    /**
+     * Whether the soundtrack is folded down to stereo, as the viewer set it, or null while they
+     * have not said. Null is an answer of its own: the default differs by device, on for a phone
+     * and off for a television, and [com.tmplayer.player.AudioDownmix.wanted] settles it.
+     */
+    val downmixChoice: Flow<Boolean?> = read { it[DOWNMIX_STEREO] }
+
+    suspend fun setDownmix(value: Boolean) {
+        prefs.edit { it[DOWNMIX_STEREO] = value }
+    }
+
+    /** Read before the player is built, because the fold is fixed into its audio sink. */
+    suspend fun downmixChoiceNow(): Boolean? = prefs.data.first()[DOWNMIX_STEREO]
 
     // ---- the watch cache ---------------------------------------------------------------------
 

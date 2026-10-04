@@ -3,8 +3,9 @@ package com.tmplayer.player
 /**
  * How the phone's player answers a thumb, as the viewer has set it in Settings.
  *
- * Read once when the player opens. None of it applies to a television, whose remote has buttons
- * for all of this and whose key model ([Skip]) is settled separately.
+ * Read once when the player opens. Two of these apply to a television as well: how long the
+ * controls stay up, and whether the time readout shows what is left. The rest do not; its remote
+ * has buttons for them, and its key model ([Skip]) is settled separately.
  */
 data class TouchPrefs(
     /** A single tap on the picture plays or pauses, instead of raising the controls. */

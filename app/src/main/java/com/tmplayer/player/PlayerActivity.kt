@@ -40,6 +40,7 @@ import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.ChannelMixingAudioProcessor
 import androidx.media3.common.audio.ChannelMixingMatrix
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -63,6 +64,7 @@ import com.tmplayer.data.ChatRepository
 import com.tmplayer.data.Failures
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaName
+import com.tmplayer.data.MessageLink
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.LocalFileAvailability
@@ -155,6 +157,15 @@ class PlayerActivity : FragmentActivity() {
 
     /** The transport overlay, one design on every device. Built in [onCreate], lives as long. */
     private var controls: PlayerControls? = null
+
+    /** The television's More menu, the phone's overflow in its own form. Null on a phone. */
+    private var tvMenu: PlayerTvMenu? = null
+
+    /** Subtitle files loaded from the phone; a field because its picker registers before start. */
+    private val subtitleFiles = SubtitleFiles(this, { player }, { showGestureFeedback(it) })
+
+    /** The viewer's Downmix to stereo answer, or null for the device default. See [AudioDownmix.wanted]. */
+    private var downmixChoice: Boolean? = null
 
     /**
      * Which way up the picture is held, and whether the viewer has said so themselves.
@@ -375,10 +386,22 @@ class PlayerActivity : FragmentActivity() {
         if (!FormFactor.isTv(this)) {
             feedback = PlayerFeedback(findViewById(R.id.player_root), findViewById(R.id.overlay_container))
             buildNextUpCard()
-            lifecycleScope.launch {
-                touchPrefs = runCatching { settings.touchPrefsNow() }.getOrDefault(TouchPrefs())
-                applyTouchPrefs()
-            }
+        } else {
+            tvMenu = PlayerTvMenu(
+                activity = this,
+                root = findViewById(R.id.player_root),
+                title = { mediaTitle },
+                pictureInPicture = { packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE) },
+                speed = { playbackSpeed },
+                onEntry = ::onTvMenuEntry,
+                onSpeed = ::setSpeed,
+                onClosed = { controls?.show(); controls?.focusRow() },
+            )
+        }
+        // On a television too: the controls timeout and the remaining time readout apply there.
+        lifecycleScope.launch {
+            touchPrefs = runCatching { settings.touchPrefsNow() }.getOrDefault(TouchPrefs())
+            applyTouchPrefs()
         }
         renderControlsTitle()
         renderOrientationButton()
@@ -461,6 +484,7 @@ class PlayerActivity : FragmentActivity() {
             // the wrong language.
             tracks = runCatching { settings.trackChoice(seriesKey) }
                 .getOrDefault(TrackChoice())
+            downmixChoice = runCatching { settings.downmixChoiceNow() }.getOrNull()
             if (!session.isCurrent()) return@launch
             startPlayback(session.client)
         }
@@ -470,7 +494,7 @@ class PlayerActivity : FragmentActivity() {
     private fun startPlayback(client: TdlClient) {
         val exo = buildPlayer(client).also { built ->
             built.addListener(playerListener)
-            built.setMediaItem(Media3Item.fromUri(tdFileUri(fileId)))
+            built.setMediaItem(subtitleFiles.item(tdFileUri(fileId)))
             if (resumeMs > 0) built.seekTo(resumeMs)
             built.prepare()
             built.playWhenReady = true
@@ -987,7 +1011,11 @@ class PlayerActivity : FragmentActivity() {
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean,
             ): AudioSink {
-                val folds = AudioDownmix.folds(FormFactor.isTv(context))
+                val folds = if (AudioDownmix.wanted(downmixChoice, FormFactor.isTv(context))) {
+                    AudioDownmix.stereoFolds()
+                } else {
+                    emptyList()
+                }
                 val processors = if (folds.isEmpty()) {
                     emptyArray()
                 } else {
@@ -1100,7 +1128,11 @@ class PlayerActivity : FragmentActivity() {
         return ExoPlayer.Builder(this, renderers)
             .setLoadControl(loadControl)
             .setTrackSelector(trackSelector)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(TdDataSource.Factory(client), extractors))
+            // tdfile:// goes to TDLib; DefaultDataSource sends file:// (a subtitle file loaded from
+            // the phone, copied into the cache) to the disk and passes every other scheme down.
+            .setMediaSourceFactory(
+                DefaultMediaSourceFactory(DefaultDataSource.Factory(this, TdDataSource.Factory(client)), extractors),
+            )
             .setSeekBackIncrementMs(Skip.BACK_MS)
             .setSeekForwardIncrementMs(Skip.FORWARD_MS)
             .build()
@@ -1183,6 +1215,7 @@ class PlayerActivity : FragmentActivity() {
          */
         override fun onTracksChanged(tracks: Tracks) {
             rememberTracks(tracks)
+            subtitleFiles.onTracksChanged(tracks)
         }
 
         override fun onVideoSizeChanged(size: VideoSize) {
@@ -2008,7 +2041,6 @@ class PlayerActivity : FragmentActivity() {
      * the viewer goes home while something plays, never over a paused video or a status sheet.
      */
     private fun updatePictureInPictureParams() {
-        if (FormFactor.isTv(this)) return
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) return
         if (!packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) return
         runCatching { setPictureInPictureParams(pictureInPictureParams()) }
@@ -2017,7 +2049,10 @@ class PlayerActivity : FragmentActivity() {
     private fun pictureInPictureParams(): PictureInPictureParams {
         val builder = PictureInPictureParams.Builder()
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            val autoEnter = player?.isPlaying == true &&
+            // Never on a television: Home there means leaving the film (Decision E10), and the
+            // corner window is only for a viewer who asked for it from the row or More.
+            val autoEnter = !FormFactor.isTv(this) &&
+                player?.isPlaying == true &&
                 statusOverlay.visibility != View.VISIBLE &&
                 !locked
             builder.setAutoEnterEnabled(autoEnter)
@@ -2065,7 +2100,7 @@ class PlayerActivity : FragmentActivity() {
         feedback?.hapticsEnabled = touchPrefs.haptics
         controls?.timeoutMs = touchPrefs.controlsTimeoutMs
         controls?.showRemaining = touchPrefs.showRemaining
-        controls?.setSkip(touchPrefs.doubleTapMs, touchPrefs.doubleTapMs)
+        if (!FormFactor.isTv(this)) controls?.setSkip(touchPrefs.doubleTapMs, touchPrefs.doubleTapMs)
     }
 
     /** The left and right system gesture strips, in pixels, for the scrub's edge rule. */
@@ -2080,6 +2115,7 @@ class PlayerActivity : FragmentActivity() {
      * handover to another app, which used to be reachable only through a held key.
      */
     private fun showOverflow(anchor: View) {
+        tvMenu?.let { it.open(); return }
         val menu = android.widget.PopupMenu(this, anchor, Gravity.END)
         val items = menu.menu
         items.add(0, MENU_LOCK, 0, "Lock the screen")
@@ -2096,8 +2132,12 @@ class PlayerActivity : FragmentActivity() {
         items.add(0, MENU_START_OVER, 3, "Start over")
         items.add(0, MENU_OPEN_WITH, 4, "Open in another app")
         items.add(0, MENU_DETAILS, 5, "Playback details")
+        items.add(0, MENU_SUBTITLE_FILE, 6, "Load a subtitle file")
+        if (chatId != 0L && messageId != 0L) items.add(0, MENU_COPY_LINK, 7, "Copy Telegram link")
         menu.setOnMenuItemClickListener { item ->
             when (item.itemId) {
+                MENU_SUBTITLE_FILE -> subtitleFiles.pick()
+                MENU_COPY_LINK -> lifecycleScope.launch { MessageLink.copy(this@PlayerActivity, chatId, messageId) }
                 MENU_LOCK -> lockScreen()
                 MENU_PIP -> enterPictureInPictureNow()
                 MENU_START_OVER -> startOver()
@@ -2111,6 +2151,18 @@ class PlayerActivity : FragmentActivity() {
         }
         menu.setOnDismissListener { controls?.poke() }
         menu.show()
+    }
+
+    /** What a line of the television's More menu does. */
+    private fun onTvMenuEntry(entry: PlayerMenuEntry) {
+        when (entry) {
+            PlayerMenuEntry.PlaybackDetails -> showPlaybackDetails()
+            PlayerMenuEntry.StartOver -> startOver()
+            PlayerMenuEntry.PictureInPicture -> enterPictureInPictureNow()
+            PlayerMenuEntry.OpenInAnotherApp -> openInAnotherApp()
+            // Pages of the menu itself, opened there.
+            PlayerMenuEntry.Speed, PlayerMenuEntry.RemoteKeys -> Unit
+        }
     }
 
     private fun setSpeed(value: Float) {
@@ -2978,6 +3030,8 @@ class PlayerActivity : FragmentActivity() {
         private const val MENU_START_OVER = 4
         private const val MENU_OPEN_WITH = 5
         private const val MENU_DETAILS = 6
+        private const val MENU_SUBTITLE_FILE = 7
+        private const val MENU_COPY_LINK = 8
         private const val MENU_SPEED_BASE = 100
 
         private const val RESUME_TICK_MS = 10_000L

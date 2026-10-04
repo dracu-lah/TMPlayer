@@ -70,4 +70,17 @@ class AudioDownmixTest {
     fun `a television keeps the processor out of the chain`() {
         assertEquals(emptyList<AudioDownmix.Fold>(), AudioDownmix.folds(television = true))
     }
+
+    @Test
+    fun `with no choice made the device decides, and a choice beats the device`() {
+        assertEquals(true, AudioDownmix.wanted(choice = null, television = false))
+        assertEquals(false, AudioDownmix.wanted(choice = null, television = true))
+        assertEquals(true, AudioDownmix.wanted(choice = true, television = true))
+        assertEquals(false, AudioDownmix.wanted(choice = false, television = false))
+    }
+
+    @Test
+    fun `the stereo fold is the phone's fold`() {
+        assertEquals(AudioDownmix.folds(television = false), AudioDownmix.stereoFolds())
+    }
 }
