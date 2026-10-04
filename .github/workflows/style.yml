@@ -1,0 +1,33 @@
+name: Style
+
+# The house style check, on every push and pull request whatever it touches. Split out of CI so a
+# site or docs only change, which skips the full build, is still checked: those are exactly the
+# files where a pasted dash turns up. It needs no JDK and finishes in seconds.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  dashes:
+    name: No em or en dashes
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # House style: no em or en dashes in tracked files. They are awkward to type consistently
+      # and they arrive invisibly on copy-paste, so the build rejects them rather than leaving it
+      # to review. Use a comma, a colon or two sentences.
+      - name: Check tracked files
+        # The codepoints are written as escapes rather than as the characters themselves, so
+        # this check does not match its own source and report a false positive.
+        run: |
+          if git ls-files -z | xargs -0 grep -InIP '[\x{2012}-\x{2015}]'; then
+            echo "::error::Found an em or en dash. Replace it with ordinary punctuation."
+            exit 1
+          fi
+          echo "Clean: no em or en dashes in tracked files."
+
