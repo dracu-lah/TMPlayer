@@ -1,60 +1,30 @@
 {
   "schema": 1,
-  "version": "1.21.0",
-  "versionCode": 12100,
-  "published": "2026-10-04T12:10:55Z",
-  "releaseUrl": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.21.0",
-  "notes": "release: 1.21.0 Finished episodes now get a tick, and any video can be marked as watched or unwatched by hand. A new Watched tab lists what you have finished. Searching a chat now finds videos outside the size limits, and the grid says how many videos the limits are hiding. On a TV, the release page opens as a QR code. On Windows, the media keys and the media flyout control the player.",
+  "version": "1.22.0",
+  "versionCode": 12200,
+  "published": "2026-10-04T23:40:36Z",
+  "releaseUrl": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.22.0",
+  "notes": "release: 1.22.0 Smaller downloads. The Android APK is about half its old size, and the Windows and Linux packages are a third to almost two thirds smaller. The Linux tarball is now a .tar.xz.",
   "assets": {
     "android-universal": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.21.0/TMPlayer-1.21.0-universal.apk",
-      "sha256": "f4fca9f887dfc8e974587c59af227f223f8f6214196d27263212e821924cf728",
-      "size": 52466949
-    },
-    "android-arm64-v8a": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.21.0/TMPlayer-1.21.0-arm64-v8a.apk",
-      "sha256": "270958f032f57c2ef96427e1f6ebf284c76a583f85ecf31dcf6ca235cbb9af4b",
-      "size": 31921894
-    },
-    "android-armeabi-v7a": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.21.0/TMPlayer-1.21.0-armeabi-v7a.apk",
-      "sha256": "5c0f643073cfa8b719776fe8c9d94e9529c86feda73bbf262b3fff2d5ee41ae9",
-      "size": 24875670
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.22.0/TMPlayer-1.22.0-universal.apk",
+      "sha256": "5c6a01bdf3e635853e4daf9ac1aa019d477ac1f9c555945e940196ba3e4212e9",
+      "size": 26696817
     },
     "windows-x64-msi": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.21.0/TMPlayer-1.21.0-windows-x64.msi",
-      "sha256": "01710c11e85708af43ca9bbfcb319b42da6b9d1e855ba0db518cbacb859622da",
-      "size": 156601045
-    },
-    "windows-x64-portable": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.21.0/TMPlayer-1.21.0-windows-x64-portable.zip",
-      "sha256": "e122bbc5ee834dcc82361a501be3ec00de55939d55a5651cf52f5a2e5090b61c",
-      "size": 153748002
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.22.0/TMPlayer-1.22.0-windows-x64.msi",
+      "sha256": "5a36263b35348ef67d6347452f30c10d05c5653899f1e37f9a4506dd0b8abd78",
+      "size": 92693588
     },
     "linux-x64-appimage": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.21.0/TMPlayer-1.21.0-x86_64.AppImage",
-      "sha256": "ef6f70c3f22ff6eb8c81299237a4c917cd095bdd49c08bbf77d876ec8c5371fe",
-      "size": 173656568
-    },
-    "linux-x64-deb": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.21.0/tmplayer_1.21.0_amd64.deb",
-      "sha256": "b2a1159e0fe36bca528c3b68eb85dfe53b39faeb0c451cb1f350d0bfbf7e2b07",
-      "size": 154662378
-    },
-    "linux-x64-rpm": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.21.0/tmplayer-1.21.0.x86_64.rpm",
-      "sha256": "944e6329cb58aea89eca795b9b721fa23048fd5cf7e6978edd1f98346030e442",
-      "size": 163040536
-    },
-    "linux-x64-flatpak": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.21.0/TMPlayer-1.21.0.flatpak",
-      "sha256": "4bd8961c005bdd6a3a1c8322710b03fdff76a22882a05bf0f2fb75ab201cd586",
-      "size": 144810208
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.22.0/TMPlayer-1.22.0-x86_64.AppImage",
+      "sha256": "89faf60dbcdae1e57285c94c801e3349da32760c414c89fa18425675d112764c",
+      "size": 89278968
     },
     "linux-x64-tarball": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.21.0/TMPlayer-1.21.0-linux-x64.tar.gz",
-      "sha256": "58e4cbb4cfabba30fb2f224d430a03fb42ba3f3423894cd88fd46c57bb87a035",
-      "size": 176926086
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.22.0/TMPlayer-1.22.0-linux-x64.tar.xz",
+      "sha256": "b43670b73ad9164a50efc770019cbf62913f821fd3642ea1ce41ac8bfb30d561",
+      "size": 63189176
     }
   }
 }
