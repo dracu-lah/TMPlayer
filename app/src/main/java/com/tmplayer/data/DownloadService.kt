@@ -734,7 +734,7 @@ class DownloadService : Service() {
                     downloadedBytes = 0,
                     totalBytes = asked.sizeBytes,
                     stage = OfflineDownloads.Stage.Failed,
-                    failure = OfflineDownloads.REFUSED,
+                    failure = AndroidDownloadRunner.REFUSED,
                     order = OfflineDownloads.nextOrder(),
                 ),
             )
@@ -745,7 +745,7 @@ class DownloadService : Service() {
                 OfflineDownloads.stage(
                     it.fileId,
                     OfflineDownloads.Stage.Failed,
-                    OfflineDownloads.REFUSED,
+                    AndroidDownloadRunner.REFUSED,
                 )
             }
         persist()
@@ -801,6 +801,8 @@ class DownloadService : Service() {
                 OfflineDownloads.Stage.Paused -> "Paused"
                 OfflineDownloads.Stage.Offline -> "Waiting for a connection"
                 OfflineDownloads.Stage.NoWifi -> "Waiting for Wi-Fi"
+                OfflineDownloads.Stage.Moving ->
+                    if (row.heldByPlayer) "Finishes when playback stops" else "Moving into Downloads"
                 OfflineDownloads.Stage.Failed -> continue
             }
             if (lines[row.fileId] == line) continue

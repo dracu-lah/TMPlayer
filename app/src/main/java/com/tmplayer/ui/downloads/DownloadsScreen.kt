@@ -1031,6 +1031,8 @@ private fun ActiveDownloadCard(
             fraction?.let(StreamStats::formatPercent),
             size,
         ).joinToString(DOT)
+        OfflineDownloads.Stage.Moving ->
+            if (progress.heldByPlayer) "Finishes when playback stops" else "Moving into Downloads"
         OfflineDownloads.Stage.Running -> listOfNotNull(
             fraction?.let(StreamStats::formatPercent),
             size,
@@ -1093,6 +1095,8 @@ private fun ActiveDownloadCard(
                     PrimaryAction("Pause", TmIcons.Pause, onPause)
                 // Nothing to pause that has not started. Cancel below fills the row on its own.
                 OfflineDownloads.Stage.Queued -> Unit
+                // Fetched already; the move is short, and stopping it half way gains nothing.
+                OfflineDownloads.Stage.Moving -> Unit
             }
             SecondaryAction(
                 label = if (failed) "Dismiss" else "Cancel",

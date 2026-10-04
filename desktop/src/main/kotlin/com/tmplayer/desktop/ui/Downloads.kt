@@ -146,6 +146,8 @@ private fun ActiveRow(state: ShellState, row: OfflineDownloads.Progress) {
         OfflineDownloads.Stage.Paused -> "Paused at ${StreamStats.formatBytes(row.downloadedBytes)}"
         OfflineDownloads.Stage.Offline -> "Waiting for a connection"
         OfflineDownloads.Stage.NoWifi -> "Waiting for Wi-Fi"
+        OfflineDownloads.Stage.Moving ->
+            if (row.heldByPlayer) "Finishes when playback stops" else "Moving into Downloads"
         OfflineDownloads.Stage.Failed -> row.failure ?: "Stopped"
     }
     Row(

@@ -52,6 +52,16 @@ object OfflineDownloads {
 
         /** Stopped by something that went wrong. Resumable in exactly the same way as paused. */
         Failed,
+
+        /**
+         * Fetched in full, and now being moved out of TDLib's cache into the Downloads folder.
+         *
+         * A rename on one drive, over as soon as it starts; a copy across drives, with its own
+         * progress in [Progress.movedBytes]. When a player has the file open the move waits for it
+         * to close, and [Progress.heldByPlayer] says so, because moving a file out from under a
+         * player loses the video on screen and on Windows is refused outright.
+         */
+        Moving,
     }
 
     /** How far a file has come, and everything needed to ask for the rest of it again. */
@@ -67,12 +77,24 @@ object OfflineDownloads {
         val sampledAtMs: Long = 0,
         /** When it was asked for, counting from the start of the queue: the order rows are drawn in. */
         val order: Long = 0,
+        /** While [stage] is [Stage.Moving], how much of the file is in the Downloads folder so far. */
+        val movedBytes: Long = 0,
+        /** While [stage] is [Stage.Moving], whether the move is waiting for a player to let go. */
+        val heldByPlayer: Boolean = false,
     ) {
         val fileId: Int get() = request.fileId
         val title: String get() = request.title
 
         val fraction: Float?
             get() = if (totalBytes > 0) (downloadedBytes.toFloat() / totalBytes).coerceIn(0f, 1f) else null
+
+        /** How far the move into Downloads has come, or null outside [Stage.Moving] or with no size. */
+        val moveFraction: Float?
+            get() = if (stage == Stage.Moving && totalBytes > 0) {
+                (movedBytes.toFloat() / totalBytes).coerceIn(0f, 1f)
+            } else {
+                null
+            }
 
         /** Seconds still to wait, or `null` while the rate is too slow or too new to mean anything. */
         val remainingSeconds: Long?
@@ -88,7 +110,7 @@ object OfflineDownloads {
          */
         val busy: Boolean
             get() = stage == Stage.Running || stage == Stage.Queued ||
-                stage == Stage.Offline || stage == Stage.NoWifi
+                stage == Stage.Offline || stage == Stage.NoWifi || stage == Stage.Moving
     }
 
     private val _active = MutableStateFlow<Map<Int, Progress>>(emptyMap())
@@ -127,7 +149,7 @@ object OfflineDownloads {
             runner.download(request)
         }.onFailure {
             Logger.w(TAG, "Could not start the download service", it)
-            refused(request)
+            refused(request, runner.refusal)
         }
     }
 
@@ -137,7 +159,7 @@ object OfflineDownloads {
      * A failed row is not a fix for the refusal, but it is the difference between a button that
      * appears to do nothing and a video that says what happened and offers Try again.
      */
-    private fun refused(request: DownloadRequest) {
+    private fun refused(request: DownloadRequest, refusal: String) {
         val existing = _active.value[request.fileId]
         val row = existing ?: Progress(
             request = request,
@@ -146,7 +168,7 @@ object OfflineDownloads {
             stage = Stage.Failed,
             order = nextOrder(),
         )
-        note(row.copy(stage = Stage.Failed, failure = REFUSED, bytesPerSecond = 0))
+        note(row.copy(stage = Stage.Failed, failure = refusal, bytesPerSecond = 0))
     }
 
     /** The place a new row takes at the end of the list, when the service is not there to say. */
@@ -264,6 +286,7 @@ object OfflineDownloads {
                     // on a paused row reads as though it were still coming down.
                     bytesPerSecond = if (stage == Stage.Running) previous.bytesPerSecond else 0,
                     sampledAtMs = if (stage == Stage.Running) previous.sampledAtMs else 0,
+                    heldByPlayer = stage == Stage.Moving && previous.heldByPlayer,
                 )
                 )
         }
@@ -309,6 +332,32 @@ object OfflineDownloads {
         }
     }
 
+    /**
+     * Puts a fully fetched file into [Stage.Moving], or reports how far its move has come.
+     *
+     * Called by the runner from the moment TDLib says the file is complete until it is in the
+     * Downloads folder: once with [heldByPlayer] while a player has it open, then as the bytes
+     * land. [downloadedBytes][Progress.downloadedBytes] is set to the whole size, since the
+     * fetching part is over whatever the move does. Absent ids are ignored, as in [stage].
+     */
+    fun moving(fileId: Int, movedBytes: Long = 0, heldByPlayer: Boolean = false) {
+        _active.update { map ->
+            val previous = map[fileId] ?: return@update map
+            val total = previous.totalBytes.takeIf { it > 0 } ?: previous.downloadedBytes
+            map + (
+                fileId to previous.copy(
+                    stage = Stage.Moving,
+                    failure = null,
+                    downloadedBytes = maxOf(previous.downloadedBytes, total),
+                    movedBytes = movedBytes.coerceAtLeast(0),
+                    heldByPlayer = heldByPlayer,
+                    bytesPerSecond = 0,
+                    sampledAtMs = 0,
+                )
+                )
+        }
+    }
+
     fun forget(fileId: Int) {
         _active.update { it - fileId }
     }
@@ -317,15 +366,6 @@ object OfflineDownloads {
     const val EVERYTHING = 0
 
     private const val TAG = "OfflineDownloads"
-
-    /**
-     * What a row says when Android refused to start the service that would have fetched it.
-     *
-     * Android 14 refuses a foreground service started from the background, and Android 15 refuses
-     * a data sync one whose day's budget has been spent. Neither is something the app can argue
-     * with, and both are answered by opening the app and asking again, so that is what it says.
-     */
-    const val REFUSED = "Android would not start this download. Open TMPlayer and press Try again."
 
     /** Shorter than this and the clock, not the network, is what is being measured. */
     private const val MIN_SAMPLE_MS = 500L
@@ -342,6 +382,14 @@ object OfflineDownloads {
  * row as failed or does the cancel or pause itself, so a press is never silently lost.
  */
 interface DownloadRunner {
+    /**
+     * What a row says when this runner could not be started at all.
+     *
+     * The platform's to word, since only it knows why that happens and what helps: on Android it
+     * is the system refusing a foreground service, and the answer is opening the app again.
+     */
+    val refusal: String get() = REFUSED_ANYWHERE
+
     /** Queues [request]. Asking for a file that is already queued or running does nothing. */
     fun download(request: DownloadRequest)
 
@@ -350,4 +398,9 @@ interface DownloadRunner {
 
     /** Holds [fileId], or everything when it is [OfflineDownloads.EVERYTHING], where it is. */
     fun pause(fileId: Int)
+
+    companion object {
+        /** The fallback for a runner that has nothing more particular to say. */
+        const val REFUSED_ANYWHERE = "This download could not start. Press Try again."
+    }
 }
