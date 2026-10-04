@@ -46,7 +46,7 @@ class MiniPlayerWindow(private val window: Frame) {
     fun enter() {
         if (active) return
         saved = Saved(window.bounds, window.extendedState, window.isAlwaysOnTop, window.minimumSize)
-        WindowMemory.freeze(true)
+        WindowMemory.freeze(WindowMemory.Hold.MiniPlayer, true)
         if (window.extendedState and Frame.MAXIMIZED_BOTH != 0) window.extendedState = Frame.NORMAL
         window.minimumSize = Dimension(320, 180)
         val spot = MiniGeometry.place(usableArea())
@@ -61,7 +61,7 @@ class MiniPlayerWindow(private val window: Frame) {
         window.minimumSize = s.minimum
         window.bounds = s.bounds
         if (s.state != window.extendedState) window.extendedState = s.state
-        WindowMemory.freeze(false)
+        WindowMemory.freeze(WindowMemory.Hold.MiniPlayer, false)
     }
 
     private fun usableArea(): Bounds {

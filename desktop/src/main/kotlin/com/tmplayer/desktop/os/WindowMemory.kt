@@ -146,9 +146,18 @@ object WindowMemory {
 
     fun save(state: WindowState) = store.save(state)
 
-    /** While on, window changes are not remembered (the mini player is not the window's size). */
-    fun freeze(on: Boolean) {
-        store.frozen = on
+    /** What can hold the window at a size that is not its own. */
+    enum class Hold { MiniPlayer, Fullscreen }
+
+    private val holds = java.util.concurrent.ConcurrentHashMap.newKeySet<Hold>()
+
+    /**
+     * While any [Hold] is on, window changes are not remembered: neither the mini player nor a
+     * fullscreen the window system did behind Compose's back is the window's own size.
+     */
+    fun freeze(hold: Hold, on: Boolean) {
+        if (on) holds.add(hold) else holds.remove(hold)
+        store.frozen = holds.isNotEmpty()
     }
 
     /** Watches [state] until cancelled, keeping the floating bounds current. */

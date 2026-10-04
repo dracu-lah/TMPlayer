@@ -40,6 +40,12 @@ object SingleInstance {
         if (first) held = lock
         return first
     }
+
+    /** Lets go of the lock and removes the socket, on the way out. */
+    fun close() {
+        held?.close()
+        held = null
+    }
 }
 
 /**
