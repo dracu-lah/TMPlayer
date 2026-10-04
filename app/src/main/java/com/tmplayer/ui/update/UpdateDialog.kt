@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,8 +29,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -79,6 +83,7 @@ import com.tmplayer.ui.components.paneAction
  * It closes itself once the installer is on screen, since what happens next is the system's
  * business.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun UpdateDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
@@ -127,13 +132,24 @@ fun UpdateDialog(onDismiss: () -> Unit) {
         onDismiss()
     }
 
+    // The release page is where a failed install is finished by hand, and where the whole of the
+    // notes live. A phone opens it in the browser; a TV, which has none, shows it as a QR code.
+    var qrUrl by remember { mutableStateOf<String?>(null) }
+    val releasePage: () -> Unit = {
+        val url = releasePageUrl(release)
+        if (!openReleasePage(context, url)) qrUrl = url
+    }
+    // Offered where the popup has nothing else to do: after a failure, and when there is no update.
+    val showReleasePage = state is UpdateState.Failed || state is UpdateState.Idle
+    qrUrl?.let { ReleasePageQrDialog(it, onClose = { qrUrl = null }) }
+
     // Handing over to the installer is the end of this dialog's job.
     LaunchedEffect(state) {
         if (state is UpdateState.Ready) onDismiss()
     }
 
     if (touch) {
-        TouchUpdateDialog(state, offer, primary, later, skip, onDismiss)
+        TouchUpdateDialog(state, offer, primary, later, skip, onDismiss, releasePage.takeIf { showReleasePage })
         return
     }
 
@@ -190,8 +206,11 @@ fun UpdateDialog(onDismiss: () -> Unit) {
 
                 Spacer(Modifier.height(10.dp))
                 // A remote steps along a row; nothing here while the download runs, so a stray
-                // press cannot abandon it.
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // press cannot abandon it. Four buttons are wider than the panel, so the row wraps.
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                     when {
                         state is UpdateState.Downloading -> Unit
                         offer != null -> {
@@ -200,6 +219,11 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                                 enabled = offer.allowed.not() || !offer.waitsForWifi,
                                 modifier = Modifier.focusRequester(confirm).paneAction(),
                             ) { Text(primaryLabel(state, offer)) }
+                            if (showReleasePage) {
+                                TmSecondaryButton(onClick = releasePage, modifier = Modifier.paneAction()) {
+                                    Text(RELEASE_PAGE)
+                                }
+                            }
                             TmSecondaryButton(onClick = later, modifier = Modifier.paneAction()) {
                                 Text(UpdateWords.LATER)
                             }
@@ -216,6 +240,11 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                                 busyLabel = "Checking…",
                                 modifier = Modifier.focusRequester(confirm).paneAction(),
                             ) { Text("Check again") }
+                            if (showReleasePage) {
+                                TmSecondaryButton(onClick = releasePage, modifier = Modifier.paneAction()) {
+                                    Text(RELEASE_PAGE)
+                                }
+                            }
                             TmSecondaryButton(onClick = onDismiss, modifier = Modifier.paneAction()) {
                                 Text("Close")
                             }
@@ -240,6 +269,9 @@ private class Offer(
     val onMobileData: Boolean,
 )
 
+/** The button that opens the release page, or on a TV shows it as a QR code. */
+private const val RELEASE_PAGE = "Release page"
+
 /** As wide as this dialog ever gets, on any screen. */
 private val PANEL_MAX = 620.dp
 
@@ -256,6 +288,7 @@ private fun TouchUpdateDialog(
     onLater: () -> Unit,
     onSkip: () -> Unit,
     onDismiss: () -> Unit,
+    onReleasePage: (() -> Unit)?,
 ) {
     val downloading = state as? UpdateState.Downloading
     AlertDialog(
@@ -281,6 +314,10 @@ private fun TouchUpdateDialog(
                     } else {
                         LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     }
+                }
+                // Under the words rather than in the button row, which is already three wide.
+                if (onReleasePage != null) {
+                    TextButton(onClick = onReleasePage) { M3Text("Open the release page") }
                 }
             }
         },

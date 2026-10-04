@@ -1077,7 +1077,8 @@ memory lists (a Linux desk, the POCO phone, the TV stick; no Windows machine).
 - [x] D1: desktop Storage card, confirmations, Clear everything except downloads, Reset, Forget
       last chat, Privacy and Lawful use rows, offline banner, prune history, Downloads page multi
       select and Delete all, "Download the whole video first" wired
-- [ ] C5: TV release page as a QR code; note on `PackageInstaller`
+- [x] C5: TV release page as a QR code; note on `PackageInstaller`
+      (update popup's Release page button: QR pane on TV, browser on phone; `PackageInstaller` stays a note)
 - [x] Docs: INSTALL.md storage section (where files live per OS, how to move them, what the
       cache is), FEATURES.md, site features page
 
