@@ -46,6 +46,7 @@ import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.AuthState
 import com.tmplayer.desktop.BuildInfo
+import com.tmplayer.desktop.DesktopConnectivity
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import com.tmplayer.desktop.InstallKind
@@ -60,6 +61,7 @@ import com.tmplayer.ui.browse.ChatListViewModel
 import com.tmplayer.ui.components.AppLogo
 import com.tmplayer.ui.components.LocalToastHost
 import com.tmplayer.ui.components.TmIcons
+import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.nav.BackHandler
 import com.tmplayer.ui.nav.LocalBackStack
 import com.tmplayer.ui.theme.Tone
@@ -133,6 +135,32 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         runCatching { state.extras.watchCache?.sweep() }
     }
     LaunchedEffect(Unit) { runCatching { state.extras.updates?.checkIfDue() } }
+    // Half watched entries that can no longer become a card are swept once per sign in, as on the
+    // phone. Left alone they are invisible: the page skips them, so nothing can ever clear them.
+    val toast = rememberToast()
+    LaunchedEffect(Unit) {
+        val removed = runCatching { state.settings.pruneBrokenHistory() }.getOrDefault(0)
+        if (removed > 0) {
+            toast(
+                if (removed == 1) {
+                    "Removed a video TMPlayer can no longer open from Continue watching"
+                } else {
+                    "Removed $removed videos TMPlayer can no longer open from Continue watching"
+                },
+            )
+        }
+    }
+
+    // The offline pill, and the refresh once both the network and Telegram are back.
+    val browseScope = rememberCoroutineScope()
+    LaunchedEffect(Unit) { DesktopConnectivity.start() }
+    val network by DesktopConnectivity.status.collectAsState()
+    val telegramConnected by Td.connected.collectAsState()
+    val connection = rememberConnectionNotice(network, telegramConnected) {
+        chats.load()
+        browseScope.launch { runCatching { state.extras.updates?.checkIfDue() } }
+        toast("Back online. Library updated.")
+    }
 
     BackHandler(enabled = state.openChat != null) { state.closeChat() }
     BackHandler(enabled = state.openChat == null && state.destination != Destination.Chats) {
@@ -160,6 +188,8 @@ private fun Browse(state: ShellState, player: PlayerContent) {
                 }
             }
         }
+
+        ConnectionBanner(connection, Modifier.align(Alignment.TopCenter).padding(top = 12.dp))
 
         val updates = state.extras.updates
         val release = updates?.available?.collectAsState()?.value
