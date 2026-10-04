@@ -1,5 +1,10 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import java.io.File
+import java.io.IOException
+import java.nio.file.Files
 import java.util.Properties
+import java.util.zip.CRC32
+import java.util.zip.Deflater
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
@@ -65,21 +70,32 @@ val mpvRuntime = when {
     else -> libs.mediamp.runtime.linux.x64
 }
 
-// The tdl-coroutines jar carries TDLib for six OS and CPU pairs (about 330 MB unpacked, 109 MB as
-// a jar). Each installer only ever loads its own, so the runtime classpath gets a copy of the jar
-// with the other five removed: about 85 MB off every package. The self-test proves the remaining
-// one still loads.
+// Every package is xz, LZMA or cab compressed on the outside, which cannot squeeze a jar that is
+// already deflated inside. So each external runtime jar is rewritten with its entries stored, and
+// the outer compressor then sees the raw bytes: the Linux tarball drops from 176 MB to about 77 MB.
+// The same pass also does two things to specific jars:
+//  - tdl-coroutines carries TDLib for six OS and CPU pairs (about 330 MB unpacked). Each installer
+//    only ever loads its own, so the other five are removed: about 85 MB off every package.
+//  - On a Linux host, the ELF .so entries (libtdjsonjava, libmpv and FFmpeg) are stripped of
+//    symbols that nothing reads at runtime. Windows DLLs and macOS dylibs are left alone.
+// A signed jar (META-INF/*.SF) is only ever stored, never changed, so its signature stays valid.
+// The transform runs per host OS, since the kept TDLib and the strip step both depend on it, and
+// the installers are built on the matching host. The self-test proves the TDLib that remains loads.
 val tdlibKeep = when {
     hostOs.contains("win") -> "windows/x64/"
     hostOs.contains("mac") -> if (hostArm) "macos/arm64/" else "macos/x64/"
     else -> if (hostArm) "linux/arm64/" else "linux/x64/"
 }
-val tdlibStripped: Attribute<Boolean> = Attribute.of("com.tmplayer.tdlibStripped", Boolean::class.javaObjectType)
+// The name is the transform's cache identity: change it whenever the transform's output changes.
+val jarsStored: Attribute<Boolean> = Attribute.of("com.tmplayer.jarsStoredV2", Boolean::class.javaObjectType)
 
-abstract class StripForeignTdlib : TransformAction<StripForeignTdlib.Params> {
+abstract class StoreRuntimeJars : TransformAction<StoreRuntimeJars.Params> {
     interface Params : TransformParameters {
         @get:Input
         val keep: Property<String>
+
+        @get:Input
+        val stripElf: Property<Boolean>
     }
 
     @get:InputArtifact
@@ -88,35 +104,94 @@ abstract class StripForeignTdlib : TransformAction<StripForeignTdlib.Params> {
 
     override fun transform(outputs: TransformOutputs) {
         val jar = input.get().asFile
-        if (!jar.name.startsWith("tdl-coroutines-jvm")) {
+        if (!jar.name.endsWith(".jar")) {
             outputs.file(input)
             return
         }
+        val tdlib = jar.name.startsWith("tdl-coroutines-jvm")
         val keep = parameters.keep.get()
         val native = Regex("^(linux|macos|windows)/")
-        ZipFile(jar).use { zin ->
-            ZipOutputStream(outputs.file(jar.name).outputStream().buffered()).use { zout ->
-                for (entry in zin.entries()) {
-                    if (native.containsMatchIn(entry.name) && !entry.isDirectory && !entry.name.startsWith(keep)) continue
-                    zout.putNextEntry(ZipEntry(entry.name).apply { time = entry.time })
-                    zin.getInputStream(entry).use { it.copyTo(zout) }
-                    zout.closeEntry()
+        val strip = parameters.stripElf.get()
+        val tmp = Files.createTempDirectory("tmplayer-jar").toFile()
+        try {
+            ZipFile(jar).use { zin ->
+                val signed = zin.entries().asSequence().any {
+                    it.name.startsWith("META-INF/") && it.name.endsWith(".SF")
+                }
+                ZipOutputStream(outputs.file(jar.name).outputStream().buffered()).use { zout ->
+                    zout.setLevel(Deflater.NO_COMPRESSION)
+                    // The same library appears under several names in a jar, so strip each once.
+                    val stripped = HashMap<Long, ByteArray>()
+                    for (entry in zin.entries()) {
+                        if (tdlib && native.containsMatchIn(entry.name) && !entry.isDirectory && !entry.name.startsWith(keep)) continue
+                        var bytes = if (entry.isDirectory) ByteArray(0) else zin.getInputStream(entry).use { it.readBytes() }
+                        if (strip && !signed && !entry.isDirectory && bytes.size > 4 &&
+                            bytes[0] == 0x7f.toByte() && bytes[1] == 'E'.code.toByte() &&
+                            bytes[2] == 'L'.code.toByte() && bytes[3] == 'F'.code.toByte()
+                        ) {
+                            val key = entry.crc * 31 + bytes.size
+                            bytes = stripped.getOrPut(key) { stripElf(bytes, tmp) }
+                        }
+                        val crc = CRC32().apply { update(bytes) }
+                        zout.putNextEntry(
+                            ZipEntry(entry.name).apply {
+                                time = entry.time
+                                if (!entry.isDirectory) {
+                                    method = ZipEntry.STORED
+                                    size = bytes.size.toLong()
+                                    compressedSize = bytes.size.toLong()
+                                    this.crc = crc.value
+                                } else {
+                                    method = ZipEntry.STORED
+                                    size = 0
+                                    compressedSize = 0
+                                    this.crc = 0
+                                }
+                            },
+                        )
+                        zout.write(bytes)
+                        zout.closeEntry()
+                    }
                 }
             }
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
+    /** Runs `strip --strip-unneeded` over a copy, and keeps the original if strip is missing or fails. */
+    private fun stripElf(bytes: ByteArray, dir: File): ByteArray {
+        val f = File(dir, "lib.so")
+        f.writeBytes(bytes)
+        return try {
+            val p = ProcessBuilder("strip", "--strip-unneeded", f.path).redirectErrorStream(true).start()
+            p.inputStream.readBytes()
+            if (p.waitFor() == 0 && f.length() in 1 until bytes.size.toLong()) f.readBytes() else bytes
+        } catch (e: IOException) {
+            bytes
         }
     }
 }
 
 dependencies {
-    attributesSchema { attribute(tdlibStripped) }
-    artifactTypes.getByName("jar") { attributes.attribute(tdlibStripped, false) }
-    registerTransform(StripForeignTdlib::class) {
-        from.attribute(tdlibStripped, false).attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "jar")
-        to.attribute(tdlibStripped, true).attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "jar")
+    attributesSchema { attribute(jarsStored) }
+    artifactTypes.getByName("jar") { attributes.attribute(jarsStored, false) }
+    registerTransform(StoreRuntimeJars::class) {
+        from.attribute(jarsStored, false).attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "jar")
+        to.attribute(jarsStored, true).attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "jar")
         parameters.keep.set(tdlibKeep)
+        parameters.stripElf.set(!hostOs.contains("win") && !hostOs.contains("mac"))
     }
 }
-configurations.named("runtimeClasspath") { attributes.attribute(tdlibStripped, true) }
+configurations.named("runtimeClasspath") {
+    attributes.attribute(jarsStored, true)
+    // The extended icon set (38 MB) only arrives through mediamp, which never touches it. The app
+    // draws from material-icons-core and TmIcons.
+    exclude(group = "org.jetbrains.compose.material", module = "material-icons-extended")
+    exclude(group = "org.jetbrains.compose.material", module = "material-icons-extended-desktop")
+    exclude(group = "androidx.compose.material", module = "material-icons-extended")
+    exclude(group = "androidx.compose.material", module = "material-icons-extended-desktop")
+}
 
 dependencies {
     implementation(project(":core"))

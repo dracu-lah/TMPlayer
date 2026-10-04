@@ -23,7 +23,7 @@ runs on. For a tag `v<v>` the assets are:
 | --- | --- |
 | `TMPlayer-<v>-universal.apk` | Linux, signed with the release key |
 | `TMPlayer-<v>-windows-x64.msi` | Windows, unsigned |
-| `TMPlayer-<v>-x86_64.AppImage`, `TMPlayer-<v>-linux-x64.tar.gz` | Linux, wrapped from the app folder by `desktop/packaging/linux/package.sh`; the tarball is what the AUR PKGBUILD builds from |
+| `TMPlayer-<v>-x86_64.AppImage`, `TMPlayer-<v>-linux-x64.tar.xz` | Linux, wrapped from the app folder by `desktop/packaging/linux/package.sh`; the tarball is what the AUR PKGBUILD builds from |
 
 Nothing else is attached. GitHub adds the source archives of the tagged tree by itself and shows
 each file's SHA-256 beside it, so there is no checksum file. The release notes link to the

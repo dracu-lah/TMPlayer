@@ -31,7 +31,7 @@ ASSETS = {
     "android-universal": "TMPlayer-{v}-universal.apk",
     "windows-x64-msi": "TMPlayer-{v}-windows-x64.msi",
     "linux-x64-appimage": "TMPlayer-{v}-x86_64.AppImage",
-    "linux-x64-tarball": "TMPlayer-{v}-linux-x64.tar.gz",
+    "linux-x64-tarball": "TMPlayer-{v}-linux-x64.tar.xz",
 }
 
 DEFAULT_NOTES = "Fixes and improvements. The release page lists everything that changed."

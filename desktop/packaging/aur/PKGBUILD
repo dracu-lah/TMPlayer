@@ -23,7 +23,7 @@ depends=('glibc>=2.38' 'gcc-libs' 'openssl' 'zlib' 'alsa-lib' 'libpulse' 'libglv
          'hicolor-icon-theme')
 # Prebuilt and already stripped; stripping would also break libskiko's checksum.
 options=('!strip' '!debug')
-source=("https://github.com/dracu-lah/TMPlayer/releases/download/v${pkgver}/TMPlayer-${pkgver}-linux-x64.tar.gz")
+source=("https://github.com/dracu-lah/TMPlayer/releases/download/v${pkgver}/TMPlayer-${pkgver}-linux-x64.tar.xz")
 sha256sums=('6fcefec640898dd8503a3d18acc400eb8be9a632cc44775914f54850e7c58e07')
 
 package() {

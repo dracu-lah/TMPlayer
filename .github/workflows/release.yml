@@ -287,7 +287,7 @@ jobs:
             "TMPlayer-$VERSION-universal.apk" \
             "TMPlayer-$VERSION-windows-x64.msi" \
             "TMPlayer-$VERSION-x86_64.AppImage" \
-            "TMPlayer-$VERSION-linux-x64.tar.gz"; do
+            "TMPlayer-$VERSION-linux-x64.tar.xz"; do
             if [ ! -s "dist/$f" ]; then
               echo "::error::dist/$f is missing"
               exit 1
@@ -297,7 +297,7 @@ jobs:
           for path in dist/*; do
             case "${path#dist/}" in
               "TMPlayer-$VERSION-universal.apk" | "TMPlayer-$VERSION-windows-x64.msi" | \
-                "TMPlayer-$VERSION-x86_64.AppImage" | "TMPlayer-$VERSION-linux-x64.tar.gz") ;;
+                "TMPlayer-$VERSION-x86_64.AppImage" | "TMPlayer-$VERSION-linux-x64.tar.xz") ;;
               *) echo "::error::$path is not one of the release's files"; exit 1 ;;
             esac
           done
@@ -351,7 +351,7 @@ jobs:
             | Android TV, sticks and phones | `TMPlayer-${{ needs.version.outputs.name }}-universal.apk` |
             | Windows 10 and 11, 64-bit | `TMPlayer-${{ needs.version.outputs.name }}-windows-x64.msi` |
             | Linux, glibc 2.38 or newer | `TMPlayer-${{ needs.version.outputs.name }}-x86_64.AppImage` |
-            | Arch Linux | [the PKGBUILD](https://github.com/${{ github.repository }}/tree/${{ github.ref_name }}/desktop/packaging/aur), from `TMPlayer-${{ needs.version.outputs.name }}-linux-x64.tar.gz` |
+            | Arch Linux | [the PKGBUILD](https://github.com/${{ github.repository }}/tree/${{ github.ref_name }}/desktop/packaging/aur), from `TMPlayer-${{ needs.version.outputs.name }}-linux-x64.tar.xz` |
 
             Installed copies update themselves. [How to install](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/INSTALL.md) · [Moving from the deb, rpm, Flatpak or Windows zip](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/INSTALL.md#moving-from-a-format-that-is-no-longer-published) · [GPL-3.0](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/LICENSE) · [Third party notices](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/THIRD_PARTY_NOTICES.md) · [nextlib source](https://github.com/${{ github.repository }}/releases/download/v1.21.0/nextlib-corresponding-source-1.21.0.tar.gz)
 

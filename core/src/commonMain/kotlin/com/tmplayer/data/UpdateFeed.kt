@@ -172,7 +172,7 @@ object UpdateFeed {
             name.endsWith("_amd64.deb") -> "linux-x64-deb"
             name.endsWith(".x86_64.rpm") -> "linux-x64-rpm"
             name.endsWith(".flatpak") -> "linux-x64-flatpak"
-            name.endsWith("-linux-x64.tar.gz") -> "linux-x64-tarball"
+            name.endsWith("-linux-x64.tar.gz") || name.endsWith("-linux-x64.tar.xz") -> "linux-x64-tarball"
             else -> null
         }
     }

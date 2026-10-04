@@ -102,6 +102,7 @@ class UpdateFeedTest {
             "tmplayer-$v.x86_64.rpm" to "linux-x64-rpm",
             "TMPlayer-$v.flatpak" to "linux-x64-flatpak",
             "TMPlayer-$v-linux-x64.tar.gz" to "linux-x64-tarball",
+            "TMPlayer-$v-linux-x64.tar.xz" to "linux-x64-tarball",
             "TMPlayer-$v-source.tar.gz" to null,
             "mapping-$v.txt" to null,
         ).forEach { (name, key) -> assertEquals(name, key, UpdateFeed.keyFor(name)) }

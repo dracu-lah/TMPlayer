@@ -155,7 +155,7 @@ Every file is on the same GitHub release as the APK:
 | --- | --- |
 | `TMPlayer-<version>-windows-x64.msi` | Windows installer, per user, no administrator needed |
 | `TMPlayer-<version>-x86_64.AppImage` | Linux, any distribution, one file |
-| `TMPlayer-<version>-linux-x64.tar.gz` | The plain app folder, which the Arch PKGBUILD builds from |
+| `TMPlayer-<version>-linux-x64.tar.xz` | The plain app folder, which the Arch PKGBUILD builds from |
 
 Releases up to 1.21.0 also carried a Windows portable zip, a deb, an rpm and a Flatpak. Those are
 no longer built; see [Moving from a format that is no longer published](#moving-from-a-format-that-is-no-longer-published).
@@ -190,7 +190,7 @@ chmod +x TMPlayer-<version>-x86_64.AppImage
 Or tick *Allow executing file as program* in the file's properties and double click it.
 
 **Arch Linux.** A PKGBUILD for the AUR lives in [desktop/packaging/aur](desktop/packaging/aur): build it with
-`makepkg -si` from that folder. It builds from the release's `linux-x64.tar.gz`. The AppImage also
+`makepkg -si` from that folder. It builds from the release's `linux-x64.tar.xz`. The AppImage also
 runs on Arch as it is.
 
 To upgrade, the AppImage updates itself from inside the app (see below), or you replace the file

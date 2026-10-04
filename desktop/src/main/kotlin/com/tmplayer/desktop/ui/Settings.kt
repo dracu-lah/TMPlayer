@@ -15,7 +15,6 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.SizeFilter
+import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.desktop.DesktopSettings
 import com.tmplayer.data.ThemeChoice
 import com.tmplayer.data.UpdateState
@@ -368,7 +368,7 @@ private fun Toggle(title: String, detail: String, checked: Boolean, onChange: (B
 @Composable
 internal fun Stepper(onLess: () -> Unit, onMore: () -> Unit) {
     Row {
-        IconButton(onClick = onLess) { Icon(Icons.Filled.Remove, contentDescription = "Less") }
+        IconButton(onClick = onLess) { Icon(TmIcons.Remove, contentDescription = "Less") }
         IconButton(onClick = onMore) { Icon(Icons.Filled.Add, contentDescription = "More") }
     }
 }

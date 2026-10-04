@@ -60,7 +60,7 @@ runs:
       shell: bash
       run: |
         mkdir -p "$RUNNER_TEMP/tar"
-        tar -C "$RUNNER_TEMP/tar" -xzf "dist/TMPlayer-${{ inputs.version }}-linux-x64.tar.gz"
+        tar -C "$RUNNER_TEMP/tar" -xJf "dist/TMPlayer-${{ inputs.version }}-linux-x64.tar.xz"
         "$RUNNER_TEMP/tar/TMPlayer-${{ inputs.version }}/bin/TMPlayer" --self-test
 
     - name: Self-test the AppImage

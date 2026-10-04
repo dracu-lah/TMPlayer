@@ -21,6 +21,9 @@ import androidx.compose.ui.unit.dp
  */
 object TmIcons {
 
+    /** A minus sign, for the stepper buttons. */
+    val Remove: ImageVector by lazy { icon("Remove", "M19,13H5V11H19V13Z") }
+
     /** Wi-Fi with a slash, for the passive offline status chip. */
     val WifiOff: ImageVector by lazy {
         icon("WifiOff") {

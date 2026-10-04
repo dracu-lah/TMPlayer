@@ -92,7 +92,7 @@ class SelfUpdateTest {
             "TMPlayer-1.22.0-universal.apk",
             "TMPlayer-1.22.0-windows-x64.msi",
             "TMPlayer-1.22.0-x86_64.AppImage",
-            "TMPlayer-1.22.0-linux-x64.tar.gz",
+            "TMPlayer-1.22.0-linux-x64.tar.xz",
         ).associate { name -> UpdateFeed.keyFor(name)!! to ReleaseAsset("https://x/$name", sha256 = "a".repeat(64)) },
     )
 

@@ -109,13 +109,12 @@ android {
 
     packaging {
         jniLibs {
-            // The modern default, written down because it is the answer to "how big is it after
-            // it is installed": the .so files are stored uncompressed and mapped straight out of
-            // the APK, so there is one copy on the device rather than a compressed one in the APK
-            // and an extracted one beside it. It makes the download larger than a zipped-up APK
-            // would be and the installation considerably smaller, which is the right way round
-            // for a 20 MB library that is most of the app.
-            useLegacyPackaging = false
+            // Compressed in the APK and extracted at install. TDLib and FFmpeg for two ABIs are
+            // almost all of the universal APK, and stored uncompressed they made it a 52 MB
+            // download; deflated it is about half that. The cost is a second, extracted copy on
+            // the device, which every phone and TV we target can afford more easily than a
+            // download twice the size.
+            useLegacyPackaging = true
         }
         resources.excludes += setOf("META-INF/*.version", "kotlin/**", "DebugProbesKt.bin")
     }

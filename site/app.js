@@ -35,7 +35,7 @@
     { id: 'linux-rpm', label: 'rpm', test: /\.x86_64\.rpm$/i },
     { id: 'linux-appimage', label: 'AppImage', test: /\.appimage$/i },
     { id: 'linux-flatpak', label: 'Flatpak', test: /\.flatpak$/i },
-    { id: 'linux-tar', label: 'Linux tarball', test: /linux-x64\.tar\.gz$/i },
+    { id: 'linux-tar', label: 'Linux tarball', test: /linux-x64\.tar\.(gz|xz)$/i },
     { id: 'sums', label: 'Checksums', test: /^sha256sums/i, quiet: true }
   ];
 
