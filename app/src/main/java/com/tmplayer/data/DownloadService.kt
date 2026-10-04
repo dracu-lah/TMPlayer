@@ -13,6 +13,7 @@ import android.os.IBinder
 import android.util.Log
 import com.tmplayer.MainActivity
 import com.tmplayer.R
+import com.tmplayer.platform.TransferNotifier
 import com.tmplayer.player.StreamStats
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -59,6 +60,14 @@ class DownloadService : Service() {
     private val requests = LinkedHashMap<Int, DownloadRequest>()
     private val waiting = ArrayDeque<Int>()
     private val running = LinkedHashMap<Int, Job>()
+
+    /**
+     * Finished videos waiting for a player to let go of them before they can move into Downloads.
+     *
+     * Kept out of [running] on purpose: a viewer watching the one video they also asked to keep
+     * must not hold up the rest of the queue for the length of a film. Guarded by [lock] too.
+     */
+    private val heldMoves = LinkedHashMap<Int, Job>()
 
     /** Counts requests in, so a row keeps the place in the list it was given when it was asked for. */
     private var arrivals = 0L
@@ -188,10 +197,12 @@ class DownloadService : Service() {
         // Whatever was moving has stopped moving, and the rows have to say so: a service torn down
         // by the system leaving rows reading "downloading" is the one lie this screen can tell.
         val stopped = synchronized(lock) {
-            val ids = running.keys.toList() + waiting.toList()
+            val ids = running.keys.toList() + waiting.toList() + heldMoves.keys.toList()
             running.values.forEach { it.cancel() }
+            heldMoves.values.forEach { it.cancel() }
             running.clear()
             waiting.clear()
+            heldMoves.clear()
             ids
         }
         stopped.forEach { OfflineDownloads.stage(it, OfflineDownloads.Stage.Paused) }
@@ -253,6 +264,7 @@ class DownloadService : Service() {
             val job = synchronized(lock) {
                 requests.remove(id)
                 waiting.remove(id)
+                heldMoves.remove(id)?.cancel()
                 running.remove(id)
             }
             job?.cancel()
@@ -275,6 +287,9 @@ class DownloadService : Service() {
         held.forEach { id ->
             val job = synchronized(lock) {
                 waiting.remove(id)
+                // A move waiting on the player is let go as well: Resume finds the file whole and
+                // goes straight back to waiting for it, so nothing is lost by stopping.
+                heldMoves.remove(id)?.cancel()
                 running.remove(id)
             }
             job?.cancel()
@@ -297,7 +312,7 @@ class DownloadService : Service() {
                     it.stage == OfflineDownloads.Stage.Queued ||
                     // The other waiting state: cellular coming back after a tunnel, with Wi-Fi only
                     // on, moves a row from one kind of waiting to the other rather than starting it.
-                    (it.busy && it.stage != reason)
+                    (it.busy && it.stage != reason && it.stage != OfflineDownloads.Stage.Moving)
             }
             .map { it.fileId }
         if (moving.isEmpty()) return
@@ -404,13 +419,19 @@ class DownloadService : Service() {
         // the queue: the viewer played it while it waited, or an earlier attempt had all but the
         // last block. Asking TDLib for a file it already has is a round trip to be told nothing,
         // and the row belongs in the finished list either way.
-        if (Td.localFileAvailability(request.fileId) == LocalFileAvailability.Complete) {
+        //
+        // In Downloads already, which is the other way a video can be here in full: the file in
+        // the folder is the download, and TDLib, which let go of it, would fetch it all again.
+        if (LocalDownloads.fileFor(SettingsStore(applicationContext), request.chatId, request.messageId) != null) {
             withContext(NonCancellable) {
-                SettingsStore(applicationContext).noteDownload(request.item(), request.chatTitle)
                 synchronized(lock) { requests.remove(request.fileId) }
                 OfflineDownloads.forget(request.fileId)
                 persistNow()
             }
+            return@coroutineScope
+        }
+        if (Td.localFileAvailability(request.fileId) == LocalFileAvailability.Complete) {
+            finishOrHold(request)
             return@coroutineScope
         }
 
@@ -527,7 +548,7 @@ class DownloadService : Service() {
         // are the lines that decide what the row says and whether the video is listed as
         // downloaded. A pause arriving in the same instant the last byte did would otherwise leave
         // a complete file on the disk with nothing anywhere claiming it.
-        withContext(NonCancellable) {
+        val finished = withContext(NonCancellable) {
             val complete = Td.localFileAvailability(request.fileId) == LocalFileAvailability.Complete
             val landed = Td.localDownloadedBytes(request.fileId)
             if (error != null || !complete) {
@@ -559,17 +580,79 @@ class DownloadService : Service() {
                         notifier().notify(request.fileId.notificationId(), failedNotification(request))
                     }
                 }
-            } else {
-                // Only a finished file is written to the Downloads list. Half a video is not
-                // something to offer somebody on a train as though it were there.
-                SettingsStore(applicationContext).noteDownload(request.item(), request.chatTitle)
-                synchronized(lock) { requests.remove(request.fileId) }
-                OfflineDownloads.forget(request.fileId)
-                notifier().notify(request.fileId.notificationId(), doneNotification(request))
             }
             persistNow()
+            error == null && complete
         }
+        // Only a finished file goes into Downloads. Half a video is not something to offer
+        // somebody on a train as though it were there. Uncancellable for the same reason as the
+        // block above: a finished file with no move under way is a file nothing claims.
+        if (finished) withContext(NonCancellable) { finishOrHold(request) }
     }
+
+    /**
+     * Moves a finished file into Downloads: now, or once the player watching it lets go.
+     *
+     * Waiting is done off the queue's slot, in [heldMoves], so the next video starts downloading
+     * while the viewer finishes watching this one. The row says "Finishes when playback stops"
+     * meanwhile, and the service stays up for it.
+     */
+    private suspend fun finishOrHold(request: DownloadRequest) {
+        val id = request.fileId
+        if (!WatchCache.isPlaying(id)) {
+            withContext(NonCancellable) { finishNow(request) }
+            return
+        }
+        OfflineDownloads.moving(id, heldByPlayer = true)
+        synchronized(lock) {
+            if (heldMoves.containsKey(id)) return
+            heldMoves[id] = scope.launch {
+                try {
+                    // Cancellable while it only waits: Pause and Cancel reach it here.
+                    while (WatchCache.isPlaying(id)) delay(DownloadFinisher.POLL_MS)
+                    withContext(NonCancellable) { finishNow(request) }
+                } finally {
+                    synchronized(lock) { heldMoves.remove(id) }
+                    refresh()
+                    pump()
+                }
+            }
+        }
+        refresh()
+    }
+
+    /** The move itself, through [DownloadFinisher], and what the row and the shade say after. */
+    private suspend fun finishNow(request: DownloadRequest) {
+        val id = request.fileId
+        val outcome = DownloadFinisher(
+            settings = SettingsStore(applicationContext),
+            downloadsDir = { AndroidPaths(applicationContext).downloadsDir },
+        ).finish(request, onProgress = { _, _ -> refresh() })
+        when (outcome) {
+            is DownloadFinisher.Outcome.Moved -> {
+                synchronized(lock) { requests.remove(id) }
+                OfflineDownloads.forget(id)
+                lines.remove(id)
+                runCatching { notifier().cancel(id.notificationId()) }
+                // A new notification, not the progress one updated: it pops even for a viewer
+                // who swiped the progress away, and pressing it opens the Downloads screen.
+                transfers.complete(id.toLong(), request.title, DONE_TEXT, TransferNotifier.OpenTarget.DownloadsScreen)
+            }
+            is DownloadFinisher.Outcome.Failed -> {
+                Log.w(TAG, "Could not move ${request.title} into Downloads: ${outcome.reason}")
+                OfflineDownloads.active.value[id]?.let { row ->
+                    OfflineDownloads.note(
+                        row.copy(stage = OfflineDownloads.Stage.Failed, failure = outcome.reason, heldByPlayer = false),
+                    )
+                }
+                runCatching { notifier().notify(id.notificationId(), failedNotification(request)) }
+            }
+        }
+        persistNow()
+    }
+
+    /** Completions, through the one Android notifier, which also tells the window for its toast. */
+    private val transfers by lazy { AndroidTransferNotifier(applicationContext) }
 
     /**
      * Asks Telegram for the video's message again, and moves the row onto the id it hands back.
@@ -679,6 +762,11 @@ class DownloadService : Service() {
     private fun stopWhenIdle() {
         synchronized(lock) {
             if (running.isNotEmpty() || waiting.isNotEmpty()) return
+        }
+        // A video waiting for the player to let go is still this service's to move.
+        if (synchronized(lock) { heldMoves.isNotEmpty() }) {
+            refresh()
+            return
         }
         val waitingOnTheWorld = OfflineDownloads.active.value.values.any {
             it.stage == OfflineDownloads.Stage.Offline || it.stage == OfflineDownloads.Stage.NoWifi
@@ -883,7 +971,19 @@ class DownloadService : Service() {
         val paused = rows.count { it.stage == OfflineDownloads.Stage.Paused }
         val offline = rows.count { it.stage == OfflineDownloads.Stage.Offline }
         val noWifi = rows.count { it.stage == OfflineDownloads.Stage.NoWifi }
+        val moving = rows.count { it.stage == OfflineDownloads.Stage.Moving }
         val builder = builder().setOngoing(true).setGroup(GROUP).setGroupSummary(true)
+
+        if (current == null && moving > 0 && queued == 0) {
+            // Fetched, and waiting for the player or being moved: the last stage of the queue.
+            val waitingForPlayer = rows.any { it.stage == OfflineDownloads.Stage.Moving && it.heldByPlayer }
+            return builder
+                .setContentTitle(if (moving == 1) "Saving to Downloads" else "Saving $moving videos to Downloads")
+                .setContentText(if (waitingForPlayer) "Finishes when playback stops" else "Moving into Downloads")
+                .setProgress(0, 0, !waitingForPlayer)
+                .addAction(cancelAction(rows.size))
+                .build()
+        }
 
         if (current == null) {
             // Nothing moving. Either the signal went, which the service deliberately stays alive
@@ -1015,12 +1115,6 @@ class DownloadService : Service() {
         ).build()
     }
 
-    private fun doneNotification(request: DownloadRequest): Notification = builder()
-        .setContentTitle(request.title)
-        .setContentText("Downloaded. It plays without a connection.")
-        .setAutoCancel(true)
-        .build()
-
     private fun failedNotification(request: DownloadRequest): Notification = builder()
         .setContentTitle(request.title)
         .setContentText(FAILED_TEXT)
@@ -1037,33 +1131,13 @@ class DownloadService : Service() {
      * Where pressing the notification goes: the Downloads screen, which is what it is about, rather
      * than wherever the viewer last was.
      */
-    private fun openApp(): PendingIntent {
-        val intent = Intent(this, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_DOWNLOADS)
-        return PendingIntent.getActivity(
-            this,
-            OPEN_REQUEST_CODE,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-    }
+    private fun openApp(): PendingIntent = AndroidTransferNotifier.openDownloads(this)
 
     private fun notifier(): NotificationManager =
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-    private fun channel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Downloads",
-            // Low: a progress bar that pings and vibrates every time it moves is not information.
-            NotificationManager.IMPORTANCE_LOW,
-        ).apply {
-            description = "Videos being kept for watching without a connection"
-            setShowBadge(false)
-        }
-        notifier().createNotificationChannel(channel)
-    }
+    /** One channel for these and for [AndroidTransferNotifier]'s, so one switch covers both. */
+    private fun channel() = AndroidTransferNotifier.ensureChannel(this)
 
     private fun bytes(value: Long): String = StreamStats.formatBytes(value)
 
@@ -1088,7 +1162,7 @@ class DownloadService : Service() {
         const val EXTRA_FILE_NAME = "fileName"
 
         private const val TAG = "DownloadService"
-        private const val CHANNEL_ID = "downloads"
+        private const val CHANNEL_ID = AndroidTransferNotifier.CHANNEL_ID
 
         /** Ties the per-video notifications to the summary, so the shade shows one entry. */
         private const val GROUP = "com.tmplayer.downloads"
@@ -1125,11 +1199,11 @@ class DownloadService : Service() {
         /** The file id the notification's buttons carry, since no real file has it. */
         private const val EVERYTHING = 0
 
-        /** Kept clear of the action buttons' codes, which are their action strings' hashes. */
-        private const val OPEN_REQUEST_CODE = 1
-
         private const val DOT = "  ·  "
 
         private const val FAILED_TEXT = "The download did not finish. Try again."
+
+        /** What a finished download's notification says under its title. */
+        private const val DONE_TEXT = "Downloaded. It is in Downloads and plays without a connection."
     }
 }

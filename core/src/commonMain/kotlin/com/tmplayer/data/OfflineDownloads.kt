@@ -237,11 +237,15 @@ object OfflineDownloads {
         if (stored.isEmpty()) return
         var order = 0L
         val restored = stored.mapNotNull { request ->
-            // A file the last run finished, or that has since been deleted, is not a download to
-            // offer resuming: the queue is written before the work, so it outlives its own entries.
+            // A file the last run finished and recorded is not a download to offer resuming: the
+            // queue is written before the work, so it outlives its own entries. One that finished
+            // without a record is different: it was fetched and never moved into Downloads, and
+            // Resume is what moves it.
             val availability = runCatching { Td.localFileAvailability(request.fileId) }
                 .getOrDefault(LocalFileAvailability.Missing)
-            if (availability == LocalFileAvailability.Complete) return@mapNotNull null
+            val record = runCatching { settings.downloadRecord(request.chatId, request.messageId) }.getOrNull()
+            if (record?.localPath != null) return@mapNotNull null
+            if (availability == LocalFileAvailability.Complete && record != null) return@mapNotNull null
             val done = runCatching { Td.localDownloadedBytes(request.fileId) }.getOrDefault(0L)
             request.fileId to Progress(
                 request = request,

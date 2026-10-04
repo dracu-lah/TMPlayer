@@ -75,7 +75,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
+import com.tmplayer.data.LegacyDownloads
+import com.tmplayer.data.LocalDownloads
 import com.tmplayer.data.LocalFileAvailability
+import com.tmplayer.data.start
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.cancel
@@ -107,9 +110,11 @@ import kotlinx.coroutines.launch
  * [totalBytes] is what it wanted, kept beside it so a part-loaded row can say "710 MB of 1.4 GB"
  * instead of leaving the viewer to wonder why the figures on this screen do not add up.
  *
- * Every row is a download the viewer asked for by name. Videos left behind by playing something are
- * the cache, not downloads, and are never listed here: they belong with the other reclaimable space
- * on the Settings screen. Mixing the two would have one button deleting two different things.
+ * Downloads and cached videos are both rows, in different tabs, and [cached] says which: a
+ * download is in the Downloads folder until the viewer deletes it, and a cached video is what
+ * playing left behind, which the next play may take. [state] is where a download's file stands
+ * against the index; [fileId] is the TDLib id resolved against this session, for the rows TDLib
+ * still holds.
  */
 private data class DownloadRow(
     val key: String,
@@ -120,9 +125,15 @@ private data class DownloadRow(
     val record: ResumeRecord,
     val chatTitle: String = "",
     val durationSec: Int = 0,
+    val state: LocalDownloads.FileState = LocalDownloads.FileState.Present,
+    val cached: Boolean = false,
+    val fileId: Int = record.fileId,
 ) {
     /** Part loaded and not being fetched by anything: bytes sitting there for no one. */
     val partial: Boolean get() = !complete && bytes > 0
+
+    /** Recorded as a download, with nothing left of it on the disk. */
+    val missing: Boolean get() = !cached && state == LocalDownloads.FileState.Missing
 }
 
 /**
@@ -145,6 +156,8 @@ private data class DownloadRow(
 fun DownloadsScreen(
     onPlay: (ResumeRecord) -> Unit,
     onBack: () -> Unit,
+    /** Opens on the cached videos rather than the downloads, for Settings' Cached videos row. */
+    openOnCached: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -170,6 +183,7 @@ fun DownloadsScreen(
     val cached by settings.cachedVideos.collectAsStateWithLifecycle(initialValue = emptyList())
 
     var rows by remember { mutableStateOf<List<DownloadRow>>(emptyList()) }
+    var cachedRows by remember { mutableStateOf<List<DownloadRow>>(emptyList()) }
     // Empty until the first measurement lands, never read during composition: reading the disk is
     // a blocking statvfs().
     var disk by remember { mutableStateOf(DiskInfo.EMPTY) }
@@ -188,8 +202,8 @@ fun DownloadsScreen(
     var picking by remember { mutableStateOf(false) }
     // Which tab is up. Opens on whichever has something in it: somebody who just queued three
     // videos wants the queue, and somebody opening this on a quiet phone wants what they have.
-    var tab by rememberSaveable { mutableStateOf(COMPLETED) }
-    var landedOnATab by rememberSaveable { mutableStateOf(false) }
+    var tab by rememberSaveable { mutableStateOf(if (openOnCached) CACHED else COMPLETED) }
+    var landedOnATab by rememberSaveable { mutableStateOf(openOnCached) }
     LaunchedEffect(active.isNotEmpty()) {
         if (landedOnATab) return@LaunchedEffect
         if (active.isNotEmpty()) tab = ONGOING
@@ -225,17 +239,59 @@ fun DownloadsScreen(
      * gigabyte, and hiding it hides exactly the space the viewer came here looking for.
      */
     suspend fun measure(record: ResumeRecord): DownloadRow? {
-        // Against this session's id, not the one saved with the row. A saved id stops resolving
-        // after a restart, and a row measured from it reads as zero bytes and disappears.
+        val row = DownloadRow(
+            key = "kept_${record.chatId}_${record.messageId}",
+            title = record.title,
+            bytes = 0,
+            totalBytes = record.sizeBytes,
+            complete = false,
+            record = record,
+            chatTitle = record.chatTitle,
+            durationSec = record.durationSec,
+        )
+        // The index first: a download with a path is a file in the Downloads folder, measured on
+        // the disk, and TDLib knows nothing about it any more.
+        when (val state = LocalDownloads.stateOf(record)) {
+            LocalDownloads.FileState.Present -> {
+                val bytes = java.io.File(record.localPath!!).length()
+                return row.copy(bytes = bytes, complete = true, state = state)
+            }
+            LocalDownloads.FileState.Missing -> return row.copy(state = state)
+            LocalDownloads.FileState.Legacy -> Unit
+        }
+        // From before downloads had a folder: still in TDLib's cache, asked of TDLib. Against
+        // this session's id, not the one saved with the row, which stops resolving after a restart.
+        val fileId = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }
+            .getOrDefault(record.fileId)
+        val bytes = runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
+        val availability = runCatching { Td.localFileAvailability(fileId) }
+            .getOrDefault(LocalFileAvailability.Missing)
+        // Nothing left of it: said, not hidden, so the viewer learns something took it.
+        if (bytes <= 0 || availability == LocalFileAvailability.Missing) {
+            return row.copy(state = LocalDownloads.FileState.Missing, fileId = fileId)
+        }
+        return row.copy(
+            bytes = bytes,
+            complete = availability == LocalFileAvailability.Complete,
+            state = LocalDownloads.FileState.Legacy,
+            fileId = fileId,
+        )
+    }
+
+    /**
+     * A video playing left behind, measured through TDLib, or null when nothing of it is left.
+     * One that is also a download is the download's, and is listed there instead.
+     */
+    suspend fun measureCached(record: ResumeRecord, downloaded: Set<Pair<Long, Long>>): DownloadRow? {
+        if ((record.chatId to record.messageId) in downloaded) return null
         val fileId = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }
             .getOrDefault(record.fileId)
         val bytes = runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
         if (bytes <= 0) return null
         val availability = runCatching { Td.localFileAvailability(fileId) }
             .getOrDefault(LocalFileAvailability.Missing)
-        if (availability == LocalFileAvailability.Missing) return null
         return DownloadRow(
-            key = "kept_${record.chatId}_${record.messageId}",
+            key = "cached_${record.chatId}_${record.messageId}",
             title = record.title,
             bytes = bytes,
             totalBytes = record.sizeBytes,
@@ -243,6 +299,8 @@ fun DownloadsScreen(
             record = record,
             chatTitle = record.chatTitle,
             durationSec = record.durationSec,
+            cached = true,
+            fileId = fileId,
         )
     }
 
@@ -259,6 +317,7 @@ fun DownloadsScreen(
     suspend fun refresh(known: List<ResumeRecord>) {
         data class Measured(
             val rows: List<DownloadRow>,
+            val cached: List<DownloadRow>,
             val split: StorageSplit,
             val disk: DiskInfo,
         )
@@ -273,11 +332,17 @@ fun DownloadsScreen(
                 .map { async { measure(it) } }
                 .awaitAll()
                 .filterNotNull()
+            val downloadedMessages = known.map { it.chatId to it.messageId }.toSet()
+            val cachedNow = runCatching { settings.cachedVideosNow() }.getOrDefault(emptyList())
+                .map { async { measureCached(it, downloadedMessages) } }
+                .awaitAll()
+                .filterNotNull()
 
-            Measured(keptRows, measuredSplit, readDisk)
+            Measured(keptRows, cachedNow, measuredSplit, readDisk)
         }
 
         rows = measured.rows
+        cachedRows = measured.cached
         split = measured.split
         disk = measured.disk
         counted = true
@@ -290,8 +355,10 @@ fun DownloadsScreen(
     fun share(these: List<DownloadRow>) {
         scope.launch {
             val files = these.mapNotNull { row ->
-                val record = row.record ?: return@mapNotNull null
-                val path = runCatching { Td.localFilePath(record.fileId) }.getOrNull()
+                val record = row.record
+                // The download's own file when it has one; otherwise TDLib's, through the id this
+                // session knows it by rather than the one saved with the row.
+                val path = LocalDownloads.shareablePath(settings, record.chatId, record.messageId, row.fileId)
                 path?.let { it to record.title }
             }
             val intent = ShareMedia.intentFor(context, files)
@@ -316,6 +383,11 @@ fun DownloadsScreen(
      */
     suspend fun removeOne(row: DownloadRow): Unit = withContext(Dispatchers.IO) {
         val record = row.record
+        // A download in the folder is deleted there, through the index; TDLib does not have it.
+        if (!row.cached && record.localPath != null) {
+            LocalDownloads.delete(settings, record)
+            return@withContext
+        }
         // The same resolution [measure] reads with: the saved id stops answering after a restart,
         // and a delete through it removes nothing while the row still leaves the list.
         val fileId = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }
@@ -323,12 +395,35 @@ fun DownloadsScreen(
         runCatching { Td.deleteFile(fileId) }
         val left = runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
         if (left > 0) return@withContext
-        settings.forgetDownload(record.chatId, record.messageId)
+        if (row.cached) {
+            settings.forgetCachedVideo(record.chatId, record.messageId)
+        } else {
+            settings.forgetDownload(record.chatId, record.messageId)
+        }
+    }
+
+    /**
+     * Puts a video into the download queue: a cached one, which moves into Downloads straight away,
+     * or a part downloaded one, which finishes and then moves.
+     */
+    fun saveToDownloads(row: DownloadRow) {
+        OfflineDownloads.start(context, row.record.toMediaItem().copy(fileId = row.fileId), row.chatTitle)
+        toast(if (row.cached) "Saving ${row.title} to Downloads" else "Resuming ${row.title}")
+        if (row.cached) tab = ONGOING
     }
 
     fun delete(row: DownloadRow) {
         scope.launch {
             removeOne(row)
+            refresh(history)
+        }
+    }
+
+    /** A row whose file is gone: there is nothing to confirm deleting, only a record to drop. */
+    fun removeMissing(row: DownloadRow) {
+        scope.launch {
+            withContext(Dispatchers.IO) { settings.forgetDownload(row.record.chatId, row.record.messageId) }
+            toast("Removed ${row.title} from Downloads")
             refresh(history)
         }
     }
@@ -424,7 +519,7 @@ fun DownloadsScreen(
                     interactionSource = ongoingFocus,
                     modifier = Modifier.tvFocusRing(ongoingFocus, RectangleShape),
                     text = {
-                        Text(if (active.isEmpty()) "Ongoing" else "Ongoing (${active.size})")
+                        Text(if (active.isEmpty()) "Downloading" else "Downloading (${active.size})")
                     },
                 )
                 val completedFocus = remember { MutableInteractionSource() }
@@ -434,7 +529,21 @@ fun DownloadsScreen(
                     interactionSource = completedFocus,
                     modifier = Modifier.tvFocusRing(completedFocus, RectangleShape),
                     text = {
-                        Text(if (rows.isEmpty()) "Completed" else "Completed (${rows.size})")
+                        Text(if (rows.isEmpty()) "Downloaded" else "Downloaded (${rows.size})")
+                    },
+                )
+                val cachedFocus = remember { MutableInteractionSource() }
+                Tab(
+                    selected = tab == CACHED,
+                    onClick = { tab = CACHED },
+                    interactionSource = cachedFocus,
+                    modifier = Modifier.tvFocusRing(cachedFocus, RectangleShape),
+                    text = {
+                        Text(
+                            if (cachedRows.isEmpty()) "Cached from playback" else "Cached from playback (${cachedRows.size})",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     },
                 )
             }
@@ -485,8 +594,42 @@ fun DownloadsScreen(
                             // inside a LazyColumn that is nothing, so it would collapse to a line.
                             Box(Modifier.fillParentMaxHeight(0.7f)) {
                                 BigEmpty(
-                                    "Nothing downloading. Tick videos in a chat and they queue up " +
-                                        "here, one at a time.",
+                                    "Nothing downloading. Choose Download on a video and it " +
+                                        "queues here.",
+                                    icon = TmIcons.Download,
+                                )
+                            }
+                        }
+                    }
+                    return@LazyColumn
+                }
+
+                if (tab == CACHED) {
+                    item {
+                        Text(
+                            "Played recently. The next video you play replaces it.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp),
+                        )
+                    }
+                    items(cachedRows, key = { it.key }) { row ->
+                        DownloadCard(
+                            row = row,
+                            picking = false,
+                            checked = false,
+                            onPlay = { onPlay(row.record) },
+                            onShare = { saveToDownloads(row) },
+                            onDelete = { confirmingDelete = row },
+                            onToggle = {},
+                            onHold = null,
+                        )
+                    }
+                    if (counted && cachedRows.isEmpty()) {
+                        item {
+                            Box(Modifier.fillParentMaxHeight(0.6f)) {
+                                BigEmpty(
+                                    "Nothing cached. Playing a video keeps it here until the next one.",
                                     icon = TmIcons.Download,
                                 )
                             }
@@ -507,9 +650,12 @@ fun DownloadsScreen(
                         row = row,
                         picking = picking,
                         checked = row.key in picked,
-                        onPlay = { row.record?.let(onPlay) },
+                        onPlay = {
+                            // A part downloaded one carries on downloading; anything else plays.
+                            if (row.partial) saveToDownloads(row) else onPlay(row.record)
+                        },
                         onShare = { share(listOf(row)) },
-                        onDelete = { confirmingDelete = row },
+                        onDelete = { if (row.missing) removeMissing(row) else confirmingDelete = row },
                         onToggle = {
                             picked = if (row.key in picked) picked - row.key else picked + row.key
                         },
@@ -525,8 +671,8 @@ fun DownloadsScreen(
                     item {
                         Box(Modifier.fillParentMaxHeight(0.6f)) {
                             BigEmpty(
-                                "Nothing downloaded yet. Videos you keep are held here until " +
-                                    "you delete them.",
+                                "Nothing downloaded yet. Downloads are kept in " +
+                                    "${LegacyDownloads.FOLDER} until you delete them.",
                                 icon = TmIcons.Download,
                             )
                         }
@@ -540,12 +686,13 @@ fun DownloadsScreen(
         AlertDialog(
             onDismissRequest = { confirmingDelete = null },
             title = {
-                Text("Delete this download?")
+                Text(if (row.cached) "Delete this cached video?" else "Delete this download?")
             },
             text = {
                 Text(
                     "\"${row.title}\" frees ${StreamStats.formatBytes(row.bytes)}. Nothing " +
-                        "is removed from Telegram, so you can download it again.",
+                        "is removed from Telegram, so you can " +
+                        (if (row.cached) "play it again." else "download it again."),
                 )
             },
             confirmButton = {
@@ -738,7 +885,7 @@ private fun StorageSummary(
     ) {
         Column(Modifier.padding(16.dp)) {
             Text(
-                "${StreamStats.formatBytes(split.downloadBytes)} in downloads",
+                "${StreamStats.formatBytes(split.downloadBytes)} in Downloads",
                 style = MaterialTheme.typography.titleMedium,
             )
             Spacer(Modifier.height(6.dp))
@@ -753,9 +900,9 @@ private fun StorageSummary(
             if (split.cachedBytes > 0 || split.otherBytes > 0) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "TMPlayer is also holding " +
-                        StreamStats.formatBytes(split.cachedBytes + split.otherBytes) +
-                        " of playback cache and previews. Clear it in Settings.",
+                    "TMPlayer also has " + StreamStats.formatBytes(split.cachedBytes) + " cached and " +
+                        StreamStats.formatBytes(split.otherBytes) + " of pictures and previews. " +
+                        "Clear them in Settings.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -924,7 +1071,7 @@ private fun DownloadCard(
     onShare: () -> Unit,
     onDelete: () -> Unit,
     onToggle: () -> Unit,
-    onHold: () -> Unit,
+    onHold: (() -> Unit)?,
 ) {
     val details = listOfNotNull(
         // A part-loaded video says both figures: "710 MB" alone reads as the size of the video,
@@ -939,6 +1086,7 @@ private fun DownloadCard(
         // A part-loaded file still occupies its bytes, and that is the row a viewer looking for
         // space is most likely to want gone.
         if (row.partial) "Part downloaded" else null,
+        if (row.missing) "File missing" else null,
     ).joinToString(DOT)
 
     RowCard(
@@ -974,9 +1122,25 @@ private fun DownloadCard(
         // is a mistake waiting to be made.
         if (!picking) {
             CardActions {
-                PrimaryAction("Watch", Icons.Filled.PlayArrow, onPlay)
-                SecondaryAction("Share", TmIcons.Share, onShare)
-                IconOnlyAction("Delete", Icons.Filled.Delete, onDelete, danger = true)
+                when {
+                    // Something took the file. The record is all that is left to deal with.
+                    row.missing -> SecondaryAction("Remove", Icons.Filled.Delete, onDelete, danger = true)
+                    row.cached -> {
+                        PrimaryAction("Watch", Icons.Filled.PlayArrow, onPlay)
+                        // The share slot's place: what a cached video wants is keeping.
+                        SecondaryAction("Save to Downloads", TmIcons.Download, onShare)
+                        IconOnlyAction("Delete", Icons.Filled.Delete, onDelete, danger = true)
+                    }
+                    row.partial -> {
+                        PrimaryAction("Resume", Icons.Filled.Refresh, onPlay)
+                        IconOnlyAction("Delete", Icons.Filled.Delete, onDelete, danger = true)
+                    }
+                    else -> {
+                        PrimaryAction("Watch", Icons.Filled.PlayArrow, onPlay)
+                        SecondaryAction("Share", TmIcons.Share, onShare)
+                        IconOnlyAction("Delete", Icons.Filled.Delete, onDelete, danger = true)
+                    }
+                }
             }
         }
     }
@@ -1108,9 +1272,10 @@ private fun ActiveDownloadCard(
     }
 }
 
-/** The two tabs, as indices, because that is what [TabRow] counts in. */
+/** The three tabs, as indices, because that is what [TabRow] counts in. */
 private const val ONGOING = 0
 private const val COMPLETED = 1
+private const val CACHED = 2
 
 /** "1 download", "3 downloads": counted, so a dialog does not have to say "download(s)". */
 private fun Int.videos(noun: String): String =

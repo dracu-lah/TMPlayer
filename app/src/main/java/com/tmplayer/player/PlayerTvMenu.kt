@@ -46,6 +46,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.R
 import com.tmplayer.ui.components.MenuAction
+import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.PhonePad
 import com.tmplayer.ui.components.TvMenu
 import com.tmplayer.ui.theme.Corner
@@ -70,6 +71,8 @@ class PlayerTvMenu(
     private val title: () -> String,
     private val pictureInPicture: () -> Boolean,
     private val speed: () -> Float,
+    /** Whether Save to Downloads is offered, asked each time the menu opens. */
+    private val saveToDownloads: () -> Boolean = { false },
     private val onEntry: (PlayerMenuEntry) -> Unit,
     private val onSpeed: (Float) -> Unit,
     private val onClosed: () -> Unit,
@@ -105,7 +108,7 @@ class PlayerTvMenu(
             Page.Main -> TvMenu(
                 title = "More",
                 subtitle = title().ifBlank { null },
-                actions = PlayerMenu.tvEntries(pictureInPicture()).map { action(it) },
+                actions = PlayerMenu.tvEntries(pictureInPicture(), saveToDownloads()).map { action(it) },
                 onDismiss = ::close,
             )
             Page.Speed -> TvMenu(
@@ -136,6 +139,11 @@ class PlayerTvMenu(
             icon = ImageVector.vectorResource(R.drawable.ic_speed),
             detail = PlaybackSpeed.label(speed()),
         ) { page.value = Page.Speed }
+        PlayerMenuEntry.SaveToDownloads -> MenuAction(
+            label = "Save to Downloads",
+            icon = TmIcons.Download,
+            detail = "Kept until you delete it",
+        ) { choose(entry) }
         PlayerMenuEntry.PictureInPicture ->
             MenuAction("Picture in picture", ImageVector.vectorResource(R.drawable.ic_pip)) { choose(entry) }
         PlayerMenuEntry.OpenInAnotherApp ->

@@ -116,16 +116,27 @@ You land on your chat list. Open any chat to see only its playable videos, and p
 | **Pinch** | Fit, fill or stretch the picture |
 | **Tap the total time** | Show the time remaining instead |
 | **Hold a button** | Show its name |
-| **⋮ menu** | Lock the screen, picture in picture, speed, start over, open in another app, details |
+| **⋮ menu** | Lock the screen, picture in picture, speed, start over, open in another app, details, save to Downloads |
 
 The jump length, the hold speed, how long the controls stay up, each drag and the vibration are
 all in Settings, Player.
 
 ## Storage
 
-Telegram keeps what it has streamed so re-watching is instant. TMPlayer caps that at **1 GB**
-and trims it after every video. Change the cap or clear it now under **Settings** on the chat
-list screen. Worth doing on an 8 GB stick if you keep other apps installed.
+TMPlayer keeps two kinds of video on the device, and keeps them apart.
+
+- **Cached**: the video you last played, so playing it again needs no download. One at a time:
+  starting another video replaces it, without asking. Thumbnails and previews are cached too.
+- **Downloads**: videos you chose to keep, with **Download** or **Save to Downloads**. They live
+  in TMPlayer's own Downloads folder, play without a connection, and stay until you delete them.
+  A finished download moves out of the cache into that folder; if you are watching it at the
+  time, the move waits until you stop.
+
+A cached video can become a download at any time: **Save to Downloads** in the tile's menu, the
+player's menu, or the **Cached from playback** tab of the Downloads screen. **Settings, Storage**
+shows what each kind takes, lists the cached videos, and clears the cache, the pictures and
+previews, or both, without touching your downloads. Signing out keeps your downloads unless you
+tick **Also delete my downloads**.
 
 ## Troubleshooting
 

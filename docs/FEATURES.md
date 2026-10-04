@@ -42,11 +42,13 @@ that off.
 watching to forget one, or clear the whole list at once from its heading or from Settings.
 Starring a chat keeps it in Favourites, and the chat you last watched from reopens on launch.
 
-**Keeps one video on the device.** An 8 GB stick has no room to keep everything. TMPlayer caches the video you
-are watching and clears the previous one, telling you exactly how much space that freed. A setting
-turns that into a question first, for anyone who would rather be asked. Coming back to a video you
-stopped half way through keeps the half already on disk instead of starting the download again, and
-backing out of one stops the download rather than leaving it running in the background.
+**Caches one video, keeps every download.** An 8 GB stick has no room to keep everything. TMPlayer
+caches the video you are watching and clears the previous one when you play the next, without
+asking. Videos you download, or save to Downloads from the cache, the player or the Downloads
+screen, move into TMPlayer's own Downloads folder and stay until you delete them; the cache never
+touches them. Coming back to a video you stopped half way through keeps the half already on disk
+instead of starting the download again, and backing out of one stops the download rather than
+leaving it running in the background.
 
 **Is a phone app on a phone.** The same library, drawn the way Android draws things in the hand:
 a Material 3 type scale, full-bleed chat rows, search that expands into the app bar, actions as

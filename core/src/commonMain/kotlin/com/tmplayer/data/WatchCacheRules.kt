@@ -220,7 +220,10 @@ class WatchCacheRules(
      */
     suspend fun sweep(): Long = withContext(Dispatchers.IO) {
         val capped = (rule() as? CacheRule.UnderCap)?.let { evictOverCap(it.capBytes) } ?: 0L
-        val records = runCatching { settings.downloadHistory.first() }.getOrDefault(emptyList()) +
+        // A download with a path is in the Downloads folder, not in TDLib's: TDLib was told to let
+        // go of it, so it has no path to give, and asking would make the sweep give up every time.
+        val records = runCatching { settings.downloadHistory.first() }.getOrDefault(emptyList())
+            .filter { it.localPath == null } +
             runCatching { settings.cachedVideosNow() }.getOrDefault(emptyList())
         // Resolved against this session. A saved id that no longer resolves would leave the video
         // it names unaccounted for, and an unaccounted video is what this deletes.

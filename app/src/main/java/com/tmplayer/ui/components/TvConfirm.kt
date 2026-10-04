@@ -60,6 +60,8 @@ fun TvConfirm(
     cancelLabel: String = "Cancel",
     destructive: Boolean = true,
     icon: ImageVector = if (destructive) Icons.Default.Warning else Icons.Default.Info,
+    /** Drawn under the message and detail, for a choice that belongs to the question, such as a tick box. */
+    extra: (@Composable () -> Unit)? = null,
 ) {
     val cancelFocus = remember { FocusRequester() }
     val touch = isTouch()
@@ -94,6 +96,7 @@ fun TvConfirm(
                             color = M3MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    extra?.invoke()
                 }
             },
             // A press that cannot be taken back stays a text button in the error colour: filling
@@ -160,6 +163,7 @@ fun TvConfirm(
                 if (detail != null) {
                     Text(detail, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
                 }
+                extra?.invoke()
 
                 // Cancel is the quiet one and confirm the loud one, stated by which button is used
                 // rather than by a colour table each caller passes in.

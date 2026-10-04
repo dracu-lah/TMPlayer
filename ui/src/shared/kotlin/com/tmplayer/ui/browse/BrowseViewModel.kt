@@ -444,10 +444,16 @@ data class MediaListState(
     val endReached: Boolean = false,
 )
 
+/**
+ * @param downloadedIds the ids ([MediaItem.id]) of the videos whose file is in the Downloads
+ *   folder, asked as each page lands so their tiles say Downloaded rather than Cached. Null where
+ *   the platform has no such index yet, and then TDLib's answer is the only one.
+ */
 class MediaListViewModel(
     private val chatId: Long,
     private val minSizeBytes: Long,
     private val maxSizeBytes: Long,
+    private val downloadedIds: (suspend () -> Set<String>)? = null,
 ) : ViewModel() {
 
     private var cursors = MediaCursors()
@@ -504,7 +510,7 @@ class MediaListViewModel(
             runCatching { firstPage(repository) }
                 .onSuccess { rawPage ->
                     if (!session.isCurrent()) return@onSuccess
-                    val page = rawPage.copy(items = keep(rawPage.items))
+                    val page = rawPage.copy(items = marked(keep(rawPage.items)))
                     cursors = page.cursors
                     // A first page can come back empty while older pages still hold videos: a chat
                     // whose newest forty files are all outside the size limits, most often.
@@ -591,6 +597,14 @@ class MediaListViewModel(
         val sized = items.filter(::withinSizeLimits)
         if (query.isBlank()) return sized
         return Fuzzy.rank(sized, query) { it.fileName.ifBlank { it.title } }
+    }
+
+    /** Downloaded videos told apart from cached ones, when the platform keeps an index. */
+    private suspend fun marked(items: List<MediaItem>): List<MediaItem> {
+        val lookup = downloadedIds ?: return items
+        val downloaded = runCatching { lookup() }.getOrDefault(emptySet())
+        if (downloaded.isEmpty()) return items
+        return items.map { if (it.id in downloaded) it.withLocality(MediaItem.Locality.Downloaded) else it }
     }
 
     /** Sponsored content never blocks or replaces the ordinary media result. */
@@ -704,13 +718,19 @@ class MediaListViewModel(
         availabilityJob = viewModelScope.launch {
             val session = Td.awaitAuthorizedSession()
             var changed = false
+            val downloaded = downloadedIds?.let { runCatching { it() }.getOrNull() }.orEmpty()
             val updated = current.items.map { item ->
-                val onDevice = Td.localFileAvailability(item.fileId) == LocalFileAvailability.Complete
-                if (onDevice == item.onDevice) {
+                val locality = when {
+                    item.id in downloaded -> MediaItem.Locality.Downloaded
+                    Td.localFileAvailability(item.fileId) == LocalFileAvailability.Complete ->
+                        MediaItem.Locality.Cached
+                    else -> MediaItem.Locality.Remote
+                }
+                if (locality == item.locality) {
                     item
                 } else {
                     changed = true
-                    item.copy(onDevice = onDevice)
+                    item.withLocality(locality)
                 }
             }
             // No revision counter needed: MediaItem compares by value, so a list whose badges
@@ -770,7 +790,7 @@ class MediaListViewModel(
         ) {
             runCatching { repository.mediaPage(chatId, cursors, serverQuery) }
                 .onSuccess { rawPage ->
-                    val page = rawPage.copy(items = keep(rawPage.items))
+                    val page = rawPage.copy(items = marked(keep(rawPage.items)))
                     cursors = page.cursors
                     items = (items + page.items).distinctBy { it.messageId }
                     reachedEnd = page.endReached

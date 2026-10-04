@@ -25,7 +25,7 @@ object ExternalPlayer {
 
     private const val TAG = "ExternalPlayer"
 
-    /** The authority the manifest declares, scoped to TDLib's own media directory. */
+    /** The authority the manifest declares, scoped to TDLib's cache and the Downloads folder. */
     private const val AUTHORITY_SUFFIX = ".updates"
 
     /** What another app would actually get if it were handed this file right now. */
@@ -129,6 +129,22 @@ object ExternalPlayer {
             // The chooser may be started from a context that is not an activity, and the read
             // grant has to survive being handed on to whichever app is picked.
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+    }
+
+    /**
+     * The handover for a download, whose file is in the Downloads folder and whole: no TDLib, and
+     * nothing to warn about.
+     */
+    fun handOverFile(context: Context, path: String, title: String, mimeType: String = "video/*"): Handoff {
+        val chooser = chooserFor(context, path, title, mimeType)
+            ?: return Handoff.Refused("That video can't be handed to another app.")
+        return runCatching {
+            context.startActivity(chooser)
+            Handoff.Started(caution = null)
+        }.getOrElse {
+            Log.w(TAG, "Nothing took the video", it)
+            Handoff.Refused("Nothing on this device opens that.")
         }
     }
 

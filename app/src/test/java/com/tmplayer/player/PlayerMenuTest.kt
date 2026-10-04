@@ -15,24 +15,34 @@ class PlayerMenuTest {
                 PlayerMenuEntry.PlaybackDetails,
                 PlayerMenuEntry.StartOver,
                 PlayerMenuEntry.Speed,
+                PlayerMenuEntry.SaveToDownloads,
                 PlayerMenuEntry.PictureInPicture,
                 PlayerMenuEntry.OpenInAnotherApp,
                 PlayerMenuEntry.RemoteKeys,
             ),
-            PlayerMenu.tvEntries(pictureInPicture = true),
+            PlayerMenu.tvEntries(pictureInPicture = true, saveToDownloads = true),
         )
     }
 
     @Test
+    fun `save to downloads is only offered for a video that is not a download already`() {
+        assertFalse(PlayerMenuEntry.SaveToDownloads in PlayerMenu.tvEntries(pictureInPicture = true))
+        assertTrue(PlayerMenuEntry.SaveToDownloads in PlayerMenu.tvEntries(pictureInPicture = true, saveToDownloads = true))
+    }
+
+    @Test
     fun `picture in picture is only offered where the device can do it`() {
-        val entries = PlayerMenu.tvEntries(pictureInPicture = false)
+        val entries = PlayerMenu.tvEntries(pictureInPicture = false, saveToDownloads = true)
         assertFalse(PlayerMenuEntry.PictureInPicture in entries)
         assertEquals(PlayerMenuEntry.entries.size - 1, entries.size)
     }
 
     @Test
     fun `every entry is reachable on a device with picture in picture`() {
-        assertEquals(PlayerMenuEntry.entries.toSet(), PlayerMenu.tvEntries(pictureInPicture = true).toSet())
+        assertEquals(
+            PlayerMenuEntry.entries.toSet(),
+            PlayerMenu.tvEntries(pictureInPicture = true, saveToDownloads = true).toSet(),
+        )
     }
 
     @Test

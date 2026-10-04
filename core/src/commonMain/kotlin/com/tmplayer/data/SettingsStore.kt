@@ -171,14 +171,33 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
      * neither is about the account: the light or dark choice, and whether colours come from the
      * wallpaper. Those describe the phone, not the Telegram account signed into it, and flipping
      * the app to dark halfway through signing out reads as a fault rather than as privacy.
+     *
+     * With [keepDownloads], the records of downloads in the Downloads folder survive too, with the
+     * flag saying the old ones were moved there: those files are the viewer's and outlive the
+     * account, and a file with no record is one nothing in the app can play or delete. A download
+     * still in TDLib's cache has no path and goes, since signing out empties that cache anyway.
      */
-    suspend fun clearEverything() {
+    suspend fun clearEverything(keepDownloads: Boolean = false) {
         prefs.edit { prefs ->
             val theme = prefs[THEME_CHOICE]
             val dynamic = prefs[DYNAMIC_COLOUR]
+            val migrated = prefs[DOWNLOADS_MIGRATED]
+            val kept = if (keepDownloads) {
+                prefs.asMap().mapNotNull { (key, value) ->
+                    val ids = key.name.removePrefixOrNull("dl_") ?: return@mapNotNull null
+                    val record = decodeDownload(prefs, ids, value as? String) ?: return@mapNotNull null
+                    if (record.localPath == null) null else Pair(stringPreferencesKey(key.name), value as String)
+                }
+            } else {
+                emptyList()
+            }
             prefs.clear()
             theme?.let { prefs[THEME_CHOICE] = it }
             dynamic?.let { prefs[DYNAMIC_COLOUR] = it }
+            if (keepDownloads) {
+                for ((key, value) in kept) prefs[key] = value
+                migrated?.let { prefs[DOWNLOADS_MIGRATED] = it }
+            }
         }
     }
 

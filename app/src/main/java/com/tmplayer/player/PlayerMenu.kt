@@ -11,6 +11,7 @@ enum class PlayerMenuEntry {
     PlaybackDetails,
     StartOver,
     Speed,
+    SaveToDownloads,
     PictureInPicture,
     OpenInAnotherApp,
     RemoteKeys,
@@ -26,14 +27,14 @@ object PlayerMenu {
      * 8.0, but not every stick ships the feature), because a line that does nothing when chosen is
      * worse than no line.
      *
-     * Save to Downloads joins this list when the storage work lands: it belongs between Speed and
-     * Picture in picture, as one more `add` guarded by whether the video is a cached one.
+     * [saveToDownloads] is whether the video can still become a download: not one already in
+     * Downloads or in the queue, which would make the line a press that does nothing.
      */
-    fun tvEntries(pictureInPicture: Boolean): List<PlayerMenuEntry> = buildList {
+    fun tvEntries(pictureInPicture: Boolean, saveToDownloads: Boolean = false): List<PlayerMenuEntry> = buildList {
         add(PlayerMenuEntry.PlaybackDetails)
         add(PlayerMenuEntry.StartOver)
         add(PlayerMenuEntry.Speed)
-        // Hook: Save to Downloads goes here.
+        if (saveToDownloads) add(PlayerMenuEntry.SaveToDownloads)
         if (pictureInPicture) add(PlayerMenuEntry.PictureInPicture)
         add(PlayerMenuEntry.OpenInAnotherApp)
         add(PlayerMenuEntry.RemoteKeys)
