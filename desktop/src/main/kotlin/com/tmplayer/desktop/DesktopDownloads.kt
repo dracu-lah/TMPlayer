@@ -1,6 +1,8 @@
 package com.tmplayer.desktop
 
 import com.tmplayer.data.CacheShelf
+import com.tmplayer.data.Connectivity
+import com.tmplayer.data.NetworkStatus
 import com.tmplayer.data.DiskInfo
 import com.tmplayer.data.DownloadFiles
 import com.tmplayer.data.DownloadRequest
@@ -60,7 +62,24 @@ class DesktopDownloadRunner(
     private val isOpen: (Int) -> Boolean = ActiveStreams::isOpen,
     private val cacheDisk: () -> DiskInfo = { DesktopPaths.disk() },
     private val downloadsDisk: (File) -> DiskInfo = { DiskInfo.of(it) },
+    private val connectivity: Connectivity? = null,
 ) : DownloadRunner {
+
+    /** Puts a held row back on the queue in its place. */
+    private fun requeue(fileId: Int) {
+        synchronized(lock) {
+            if (!requests.containsKey(fileId)) {
+                OfflineDownloads.active.value[fileId]?.let { requests[fileId] = it.request } ?: return
+            }
+            if (running.containsKey(fileId) || waiting.contains(fileId)) return
+            waiting.addLast(fileId)
+        }
+        OfflineDownloads.stage(fileId, OfflineDownloads.Stage.Queued)
+        pump()
+    }
+
+    /** The network is known to be down, so a stop is a wait rather than a failure. */
+    private fun offline(): Boolean = connectivity?.status?.value == NetworkStatus.Offline
 
     /** Where progress and completion are shown outside the window. Set once the window exists. */
     @Volatile
@@ -87,6 +106,20 @@ class DesktopDownloadRunner(
     private val resourced = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
     private var arrivals = 0L
     private val persistLock = Mutex()
+
+    init {
+        // A download that stopped because the network did waits rather than failing, and goes
+        // back on the queue by itself when the network returns: nobody asked for it to stop.
+        connectivity?.let { net ->
+            scope.launch {
+                net.status.collect { status ->
+                    if (status == NetworkStatus.Online) {
+                        OfflineDownloads.ordered.filter { it.stage == OfflineDownloads.Stage.Offline }.forEach { requeue(it.fileId) }
+                    }
+                }
+            }
+        }
+    }
 
     override fun download(request: DownloadRequest) {
         val known = OfflineDownloads.active.value[request.fileId]
@@ -223,10 +256,14 @@ class DesktopDownloadRunner(
             return@coroutineScope
         }
 
-        val session = Td.awaitConnectedSessionOrNull(CONNECT_WAIT_MS)
+        val session = if (offline()) null else Td.awaitConnectedSessionOrNull(CONNECT_WAIT_MS)
         if (session == null) {
             withContext(NonCancellable) {
-                fail(request, Td.localDownloadedBytes(request.fileId), Failures.OFFLINE)
+                if (offline()) {
+                    hold(request)
+                } else {
+                    fail(request, Td.localDownloadedBytes(request.fileId), Failures.OFFLINE)
+                }
             }
             return@coroutineScope
         }
@@ -284,6 +321,8 @@ class DesktopDownloadRunner(
             if (error == null && complete) {
                 notifier.cancel(request.fileId.toLong())
                 startMove(request)
+            } else if (offline()) {
+                hold(request)
             } else {
                 Logger.w(TAG, "Download of ${request.title} did not finish: ${error ?: "incomplete"}")
                 fail(
@@ -421,6 +460,17 @@ class DesktopDownloadRunner(
             )
             _finished.tryEmit(Finished(request.title, target))
         }
+    }
+
+    /** Holds a running row until the network is back, keeping what landed. */
+    private suspend fun hold(request: DownloadRequest) {
+        val row = OfflineDownloads.active.value[request.fileId] ?: return
+        if (row.stage != OfflineDownloads.Stage.Running) return
+        OfflineDownloads.note(
+            row.copy(downloadedBytes = Td.localDownloadedBytes(request.fileId), stage = OfflineDownloads.Stage.Offline, bytesPerSecond = 0),
+        )
+        notifier.cancel(request.fileId.toLong())
+        persistNow()
     }
 
     /** Writes a failure only while this runner still owns the row: a pause or cancel may have won. */

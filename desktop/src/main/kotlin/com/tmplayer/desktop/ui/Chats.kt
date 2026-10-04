@@ -27,15 +27,20 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -50,8 +55,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.ChatSummary
@@ -154,6 +166,26 @@ fun ChatsPage(state: ShellState, model: ChatListViewModel, favouritesOnly: Boole
                     nav = nav,
                     onOpen = state::openChat,
                     onStar = { chat -> scope.launch { state.settings.toggleFavorite(chat.id) } },
+                    // Each says out loud what it did, as on the phone: the row has already moved
+                    // by the time the toast shows, and a row moving on its own explains nothing.
+                    actions = ChatRowActions(
+                        onTogglePinned = { chat ->
+                            model.setPinned(chat, !chat.isPinned) { toast(it) }
+                            toast(if (chat.isPinned) "${chat.title} unpinned" else "${chat.title} pinned to the top")
+                        },
+                        onToggleMuted = { chat ->
+                            model.setMuted(chat, !chat.isMuted) { toast(it) }
+                            toast(if (chat.isMuted) "${chat.title} unmuted" else "${chat.title} muted")
+                        },
+                        onToggleArchived = { chat ->
+                            model.setArchived(chat, !chat.isArchived) { toast(it) }
+                            toast(if (chat.isArchived) "${chat.title} moved out of the archive" else "${chat.title} archived")
+                        },
+                        onMarkRead = { chat ->
+                            model.markRead(chat) { toast(it) }
+                            toast("${chat.title} marked as read")
+                        },
+                    ),
                 )
             }
         }
@@ -161,9 +193,22 @@ fun ChatsPage(state: ShellState, model: ChatListViewModel, favouritesOnly: Boole
 }
 
 /**
+ * What a chat row can do besides open and star: the four that change the chat in Telegram itself,
+ * on every device, which the phone and TV keep behind a long press. Each is handed the row as it
+ * was drawn, so a toggle reads its current state off it.
+ */
+internal class ChatRowActions(
+    val onTogglePinned: (ChatSummary) -> Unit = {},
+    val onToggleMuted: (ChatSummary) -> Unit = {},
+    val onToggleArchived: (ChatSummary) -> Unit = {},
+    val onMarkRead: (ChatSummary) -> Unit = {},
+)
+
+/**
  * The rows themselves, with a scrollbar and the keyboard of [KeyboardNav]: Up and Down a row,
- * Home and End, Page Up and Page Down, Enter opens, S stars. Split from [ChatsPage] so the UI tests
- * can drive it without TDLib.
+ * Home and End, Page Up and Page Down, Enter opens, S stars, P pins, M mutes, A archives, R marks
+ * read, and the menu key or Shift+F10 opens the row's menu (as a right click does). Split from
+ * [ChatsPage] so the UI tests can drive it without TDLib.
  */
 @Composable
 internal fun ChatList(
@@ -173,6 +218,7 @@ internal fun ChatList(
     nav: KeyboardNav,
     onOpen: (ChatSummary) -> Unit,
     onStar: (ChatSummary) -> Unit,
+    actions: ChatRowActions = ChatRowActions(),
 ) {
     Box(Modifier.fillMaxSize()) {
         val count by rememberUpdatedState(chats.size)
@@ -188,6 +234,7 @@ internal fun ChatList(
                     modifier = Modifier.navCell(nav, index),
                     onOpen = { onOpen(chat) },
                     onStar = { onStar(chat) },
+                    actions = actions,
                 )
             }
         }
@@ -198,7 +245,7 @@ internal fun ChatList(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
 internal fun ChatRow(
     chat: ChatSummary,
@@ -206,24 +253,43 @@ internal fun ChatRow(
     onOpen: () -> Unit,
     onStar: () -> Unit,
     modifier: Modifier = Modifier,
+    actions: ChatRowActions = ChatRowActions(),
 ) {
     var focused by remember { mutableStateOf(false) }
+    var menu by remember { mutableStateOf(false) }
     Row(
         Modifier
             .fillMaxWidth()
             .widthIn(max = 960.dp)
             .clip(MaterialTheme.shapes.medium)
             .then(if (focused) Modifier.border(2.dp, Tone.accent, MaterialTheme.shapes.medium) else Modifier)
+            .onPointerEvent(PointerEventType.Press) { event ->
+                val macContext = CHATS_ON_MAC && event.keyboardModifiers.isCtrlPressed && event.buttons.isPrimaryPressed
+                if (event.buttons.isSecondaryPressed || macContext) menu = true
+            }
             .then(modifier)
             .onFocusChanged { focused = it.isFocused }
             .onPreviewKeyEvent { event ->
-                // Enter opens (the click); S stars, the one other thing a row does.
-                if (event.type == KeyEventType.KeyDown && event.key == Key.S && !event.isCtrlPressed && !event.isMetaPressed && !event.isAltPressed) {
-                    onStar()
-                    true
-                } else {
-                    false
+                // Enter opens (the click). The letters are the row's menu, one key each.
+                if (GridNav.isMenuKey(event)) {
+                    menu = true
+                    return@onPreviewKeyEvent true
                 }
+                if (event.type != KeyEventType.KeyDown || event.isCtrlPressed || event.isMetaPressed ||
+                    event.isAltPressed || event.isShiftPressed
+                ) {
+                    return@onPreviewKeyEvent false
+                }
+                when (event.key) {
+                    Key.S -> onStar()
+                    Key.P -> actions.onTogglePinned(chat)
+                    Key.M -> actions.onToggleMuted(chat)
+                    Key.A -> actions.onToggleArchived(chat)
+                    // Nothing to clear is not an error, and the key is still this row's.
+                    Key.R -> if (chat.unreadCount > 0) actions.onMarkRead(chat)
+                    else -> return@onPreviewKeyEvent false
+                }
+                true
             }
             .clickable(onClick = onOpen)
             .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -264,5 +330,62 @@ internal fun ChatRow(
                 tint = if (favourite) Tone.caution else Tone.muted,
             )
         }
+        Box {
+            ChatRowMenu(chat, favourite, menu, onDismiss = { menu = false }, onOpen, onStar, actions)
+        }
     }
 }
+
+/**
+ * The row's menu, the phone's long press menu with the key for each entry beside it. The star is
+ * private to this computer; everything under it changes the chat in Telegram, on every device.
+ */
+@Composable
+private fun ChatRowMenu(
+    chat: ChatSummary,
+    favourite: Boolean,
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    onOpen: () -> Unit,
+    onStar: () -> Unit,
+    actions: ChatRowActions,
+) {
+    @Composable
+    fun entry(label: String, key: String?, icon: ImageVector, action: () -> Unit) {
+        DropdownMenuItem(
+            text = { Text(label) },
+            leadingIcon = { Icon(icon, contentDescription = null) },
+            trailingIcon = key?.let { { Text(it, color = Tone.muted, style = MaterialTheme.typography.labelMedium) } },
+            onClick = {
+                onDismiss()
+                action()
+            },
+        )
+    }
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        entry("Open", "Enter", TmIcons.Folder, onOpen)
+        entry(
+            if (favourite) "Remove from favourites" else "Add to favourites",
+            "S",
+            if (favourite) Icons.Filled.Star else TmIcons.StarOutline,
+            onStar,
+        )
+        HorizontalDivider()
+        entry(if (chat.isPinned) "Unpin" else "Pin to the top", "P", TmIcons.Pin) { actions.onTogglePinned(chat) }
+        entry(
+            if (chat.isMuted) "Unmute" else "Mute",
+            "M",
+            if (chat.isMuted) TmIcons.Bell else TmIcons.BellOff,
+        ) { actions.onToggleMuted(chat) }
+        if (chat.unreadCount > 0) {
+            entry("Mark as read", "R", Icons.Filled.Check) { actions.onMarkRead(chat) }
+        }
+        entry(
+            if (chat.isArchived) "Move out of the archive" else "Archive",
+            "A",
+            TmIcons.Archive,
+        ) { actions.onToggleArchived(chat) }
+    }
+}
+
+private val CHATS_ON_MAC = System.getProperty("os.name").orEmpty().lowercase().contains("mac")

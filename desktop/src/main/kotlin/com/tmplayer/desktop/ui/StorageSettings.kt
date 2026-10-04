@@ -169,75 +169,63 @@ internal fun StorageGroup(state: ShellState) {
             text = { Text(d.reason) },
             confirmButton = { TextButton(onClick = { dialog = null }) { Text("OK") } },
         )
-        is StorageDialog.Confirm -> AlertDialog(
-            onDismissRequest = { dialog = null },
-            title = { Text(d.title) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(d.body)
-                    d.warning?.let { Text(it, color = Tone.caution) }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    dialog = null
-                    busy = "Clearing the cache and restarting Telegram"
-                    scope.launch {
-                        val outcome = runCatching { DesktopStorage.relocation.move(d.root) }
-                        busy = null
-                        refresh++
-                        outcome.onSuccess { toast(it.message) }.onFailure { toast("The move stopped: ${it.message}") }
-                        if (d.adopt && outcome.isSuccess) {
-                            val found = DownloadIndex.scan(settings)
-                            if (found.isNotEmpty()) {
-                                toast("${found.size} files there are not in TMPlayer's list. Keep or delete them in Downloads")
-                            }
+        is StorageDialog.Confirm -> ConfirmDialog(
+            title = d.title,
+            message = d.body,
+            detail = d.warning,
+            confirmLabel = if (d.adopt) "Use what is already there" else "Move",
+            destructive = false,
+            onDismiss = { dialog = null },
+            onConfirm = {
+                dialog = null
+                busy = "Clearing the cache and restarting Telegram"
+                scope.launch {
+                    val outcome = runCatching { DesktopStorage.relocation.move(d.root) }
+                    busy = null
+                    refresh++
+                    outcome.onSuccess { toast(it.message) }.onFailure { toast("The move stopped: ${it.message}") }
+                    if (d.adopt && outcome.isSuccess) {
+                        val found = DownloadIndex.scan(settings)
+                        if (found.isNotEmpty()) {
+                            toast("${found.size} files there are not in TMPlayer's list. Keep or delete them in Downloads")
                         }
                     }
-                }) { Text(if (d.adopt) "Use what is already there" else "Move") }
+                }
             },
-            dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
         )
-        StorageDialog.ClearCache -> AlertDialog(
-            onDismissRequest = { dialog = null },
-            title = { Text("Clear the cache?") },
-            text = { Text("Deletes every cached video. Downloads are not touched, and nothing is removed from Telegram.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    dialog = null
-                    scope.launch {
-                        val freed = runCatching { state.extras.watchCache?.clearAll() ?: 0L }.getOrDefault(0L)
-                        refresh++
-                        toast(if (freed > 0) "${StorageRelocationPlan.size(freed)} freed" else "No cached videos to clear")
-                    }
-                }) { Text("Clear", color = Tone.danger) }
+        StorageDialog.ClearCache -> ConfirmDialog(
+            title = "Clear the cache?",
+            message = "Deletes every cached video. Opening one of them again streams it again.",
+            detail = "Downloads are not touched, and nothing is removed from Telegram.",
+            confirmLabel = "Clear",
+            onDismiss = { dialog = null },
+            onConfirm = {
+                dialog = null
+                scope.launch {
+                    val freed = runCatching { state.extras.watchCache?.clearAll() ?: 0L }.getOrDefault(0L)
+                    refresh++
+                    toast(if (freed > 0) "${StorageRelocationPlan.size(freed)} freed" else "No cached videos to clear")
+                }
             },
-            dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
         )
-        StorageDialog.ClearAllButDownloads -> AlertDialog(
-            onDismissRequest = { dialog = null },
-            title = { Text("Clear everything except downloads?") },
-            text = {
-                Text(
-                    "Cached videos, pictures and previews all go; TMPlayer fetches them again as you browse. " +
-                        "Downloads are not touched.",
-                )
+        StorageDialog.ClearAllButDownloads -> ConfirmDialog(
+            title = "Clear everything except downloads?",
+            message = "Cached videos, pictures and previews all go; TMPlayer fetches them again as you browse.",
+            detail = "Downloads are not touched.",
+            confirmLabel = "Clear",
+            onDismiss = { dialog = null },
+            onConfirm = {
+                dialog = null
+                scope.launch {
+                    runCatching { state.extras.watchCache?.clearAll() }
+                    // TDLib's own clear takes everything in its directory, which is safe only
+                    // once no download is left in there from before they had a folder.
+                    val migrated = runCatching { settings.downloadsMigratedNow() }.getOrDefault(false)
+                    if (migrated) runCatching { Td.clearEverythingCached() } else runCatching { Td.clearPicturesAndPreviews() }
+                    refresh++
+                    toast("Cleared. Downloads are as they were")
+                }
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    dialog = null
-                    scope.launch {
-                        runCatching { state.extras.watchCache?.clearAll() }
-                        // TDLib's own clear takes everything in its directory, which is safe only
-                        // once no download is left in there from before they had a folder.
-                        val migrated = runCatching { settings.downloadsMigratedNow() }.getOrDefault(false)
-                        if (migrated) runCatching { Td.clearEverythingCached() } else runCatching { Td.clearPicturesAndPreviews() }
-                        refresh++
-                        toast("Cleared. Downloads are as they were")
-                    }
-                }) { Text("Clear", color = Tone.danger) }
-            },
-            dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
         )
     }
 }

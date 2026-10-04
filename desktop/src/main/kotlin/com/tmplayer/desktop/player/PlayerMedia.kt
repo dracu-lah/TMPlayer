@@ -4,6 +4,8 @@ import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.ChatRepository
 import com.tmplayer.data.DownloadRunner
 import com.tmplayer.desktop.DesktopPaths
+import com.tmplayer.data.Failures
+import com.tmplayer.data.errorMessage
 import com.tmplayer.desktop.DesktopServices
 import com.tmplayer.desktop.DesktopWatchCache
 import com.tmplayer.desktop.DownloadIndex
@@ -17,10 +19,14 @@ import com.tmplayer.data.Td
 import com.tmplayer.data.valueOrNull
 import com.tmplayer.platform.Logger
 import dev.g000sha256.tdl.dto.OptionValueString
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,6 +35,7 @@ import kotlinx.coroutines.launch
 import org.openani.mediamp.source.MediaData
 import org.openani.mediamp.source.UriMediaData
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 
 /** The episodes either side of the one playing, nulls where there are none. */
@@ -72,7 +79,15 @@ interface PlayerMedia {
      * TDLib's complete copy. Null while any of it is still to come.
      */
     suspend fun localFile(): java.io.File? = null
+
+    /**
+     * What [open] is doing while it takes its time, for the loading screen ("Downloading the
+     * whole video: 42 %"); null when there is nothing to say beyond the screen's own words.
+     */
+    val preparing: StateFlow<String?> get() = NOTHING_TO_SAY
 }
+
+private val NOTHING_TO_SAY: StateFlow<String?> = MutableStateFlow(null)
 
 /** Which Telegram files a player currently has open, so a late cancel never stops a new playback. */
 internal object ActiveStreams {
@@ -85,12 +100,16 @@ internal object ActiveStreams {
 
 private val background = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-/** A video in a Telegram chat, streamed through TDLib. */
+/**
+ * A video in a Telegram chat, streamed through TDLib, or fetched whole first when [downloadFirst]
+ * (Settings, "Download the whole video first") says so.
+ */
 class TelegramPlayerMedia(
     override val item: MediaItem,
     override val chatTitle: String = "",
     private val downloads: DownloadRunner? = null,
     private val cache: DesktopWatchCache? = null,
+    private val downloadFirst: suspend () -> Boolean = { DesktopServices.settings.downloadBeforePlayingNow() },
     /** The download of a message, from the index, when it is whole in the Downloads folder. */
     private val indexed: suspend (chatId: Long, messageId: Long) -> File? = { chatId, messageId ->
         DownloadIndex.fileFor(DesktopServices.settings, chatId, messageId)
@@ -131,6 +150,11 @@ class TelegramPlayerMedia(
         // The player claims the cache for every video it opens (the phone's rule): this one is
         // the cached video now, and the one before it goes, unless either is a download.
         cache?.let { c -> background.launch { runCatching { c.claim(item, chatTitle, fileId) } } }
+        if (Td.localFileAvailability(fileId) != LocalFileAvailability.Complete &&
+            runCatching { downloadFirst() }.getOrDefault(false)
+        ) {
+            fetchWhole(fileId)
+        }
         // A finished file plays straight off the disk, through mpv's own file reader.
         if (Td.localFileAvailability(fileId) == LocalFileAvailability.Complete) {
             Td.localFilePath(fileId)?.let { path ->
@@ -150,6 +174,44 @@ class TelegramPlayerMedia(
             prefetchTail = TailPrefetch.wanted(name, item.mimeType),
             onClose = { stopDownload(fileId) },
         )
+    }
+
+    private val _preparing = MutableStateFlow<String?>(null)
+    override val preparing: StateFlow<String?> = _preparing.asStateFlow()
+
+    /**
+     * The whole file, before a frame plays, as Android's `fetchWholeFilm` does: one synchronous
+     * TDLib download, its progress on the loading screen. Back on that screen cancels this
+     * coroutine, and with it the download, unless the viewer is also keeping the file.
+     */
+    private suspend fun fetchWhole(fileId: Int) = coroutineScope {
+        val progress = launch {
+            _downloaded.collect { f ->
+                _preparing.value = "Downloading the whole video" + (f?.let { ": ${(it * 100).toInt()} %" } ?: "")
+            }
+        }
+        try {
+            val session = Td.awaitConnectedSession()
+            val result = session.client.downloadFile(
+                fileId = fileId,
+                priority = WHOLE_FILE_PRIORITY,
+                offset = 0,
+                limit = 0,
+                synchronous = true,
+            )
+            result.errorMessage?.let { throw IOException(Failures.humanise(it)) }
+            if (Td.localFileAvailability(fileId) != LocalFileAvailability.Complete) {
+                throw IOException("The download did not finish. Check the connection and try again.")
+            }
+        } catch (cancelled: CancellationException) {
+            withContext(NonCancellable) {
+                if (!OfflineDownloads.isDownloading(fileId)) runCatching { Td.cancelDownload(fileId) }
+            }
+            throw cancelled
+        } finally {
+            progress.cancel()
+            _preparing.value = null
+        }
     }
 
     private fun watchDownload(fileId: Int) {
@@ -196,7 +258,8 @@ class TelegramPlayerMedia(
         return episodesAmong(name, candidates)
     }
 
-    override fun episode(other: MediaItem): PlayerMedia = TelegramPlayerMedia(other, chatTitle, downloads, cache, indexed)
+    override fun episode(other: MediaItem): PlayerMedia =
+        TelegramPlayerMedia(other, chatTitle, downloads, cache, downloadFirst, indexed)
 
     override suspend fun messageLink(): String? = runCatching {
         Td.client.getMessageLink(item.chatId, item.messageId, 0, 0, "", false, false).valueOrNull?.link
@@ -272,6 +335,9 @@ class TelegramPlayerMedia(
 
     private companion object {
         const val TAG = "TelegramPlayerMedia"
+
+        /** Android's player asks for the whole film at the same priority. */
+        const val WHOLE_FILE_PRIORITY = 32
     }
 }
 

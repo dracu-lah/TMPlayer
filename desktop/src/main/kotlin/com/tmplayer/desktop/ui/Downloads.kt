@@ -239,26 +239,20 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
 
     confirm?.let { doomed ->
         val one = doomed.size == 1
-        AlertDialog(
-            onDismissRequest = { confirm = null },
-            title = { Text(if (one) "Delete this download?" else "Delete ${doomed.size} downloads?") },
-            text = {
-                Text(
-                    (if (one) "${doomed.first().title} is deleted from this computer. " else "The files are deleted from this computer. ") +
-                        "The videos stay on Telegram, to play or download again.",
-                )
+        ConfirmDialog(
+            title = if (one) "Delete this download?" else "Delete ${doomed.size} downloads?",
+            message = if (one) "${doomed.first().title} is deleted from this computer." else "The files are deleted from this computer.",
+            detail = "The videos stay on Telegram, to play or download again.",
+            confirmLabel = "Delete",
+            onDismiss = { confirm = null },
+            onConfirm = {
+                confirm = null
+                picked = picked - doomed.map { it.key }.toSet()
+                scope.launch {
+                    val locked = doomed.count { !DownloadIndex.delete(state.settings, it) }
+                    if (locked > 0) toast(if (locked == 1) "One file is in use and was not deleted" else "$locked files are in use and were not deleted")
+                }
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirm = null
-                    picked = picked - doomed.map { it.key }.toSet()
-                    scope.launch {
-                        val locked = doomed.count { !DownloadIndex.delete(state.settings, it) }
-                        if (locked > 0) toast(if (locked == 1) "One file is in use and was not deleted" else "$locked files are in use and were not deleted")
-                    }
-                }) { Text("Delete", color = Tone.danger) }
-            },
-            dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } },
         )
     }
 }

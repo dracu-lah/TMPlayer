@@ -15,7 +15,7 @@ object DesktopServices {
         SettingsStore(SettingsStore.openDataStore(DesktopPaths.settingsFile))
     }
 
-    val downloads: DesktopDownloadRunner by lazy { DesktopDownloadRunner(settings) }
+    val downloads: DesktopDownloadRunner by lazy { DesktopDownloadRunner(settings, connectivity = DesktopConnectivity) }
 
     /** Volume, decoder, wheel and update choices: the settings the phone does not have. */
     /**

@@ -44,6 +44,8 @@ import com.tmplayer.data.UpdateState
 import com.tmplayer.data.UpdateWords
 import com.tmplayer.data.Updates
 import com.tmplayer.data.release
+import com.tmplayer.desktop.os.OpenExternal
+import com.tmplayer.player.TouchPrefs
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.launch
@@ -68,6 +70,11 @@ fun SettingsPage(state: ShellState, version: String = "") {
     val notifyUpdates by settings.updateNotify.collectAsState(initial = true)
     val updateState by Updates.state.collectAsState()
     var confirmSignOut by remember { mutableStateOf(false) }
+    var confirm by remember { mutableStateOf<Confirm?>(null) }
+    val touchPrefs by settings.touchPrefs.collectAsState(initial = TouchPrefs())
+    val lastChatId by settings.lastChatId.collectAsState(initial = 0L)
+    val history by settings.continueWatching.collectAsState(initial = emptyList())
+    val favourites by settings.favorites.collectAsState(initial = emptySet())
 
     val scroll = rememberScrollState()
     Box(Modifier.fillMaxSize()) {
@@ -97,6 +104,16 @@ fun SettingsPage(state: ShellState, version: String = "") {
                 Toggle("Download the whole video first", "Wait for the file instead of streaming it", downloadFirst) {
                     scope.launch { settings.setDownloadBeforePlaying(it) }
                 }
+                Setting(
+                    "Hide the controls after",
+                    "${TouchPrefs.timeoutLabel(touchPrefs.controlsTimeoutMs)} without the mouse moving. A paused video keeps them up",
+                ) {
+                    val choices = TouchPrefs.TIMEOUT_CHOICES_MS
+                    Stepper(
+                        onLess = { scope.launch { settings.updateTouchPrefs { it.copy(controlsTimeoutMs = TouchPrefs.step(choices, it.controlsTimeoutMs, -1)) } } },
+                        onMore = { scope.launch { settings.updateTouchPrefs { it.copy(controlsTimeoutMs = TouchPrefs.step(choices, it.controlsTimeoutMs, 1)) } } },
+                    )
+                }
 
                 Toggle(
                     "Mouse wheel seeks",
@@ -119,6 +136,17 @@ fun SettingsPage(state: ShellState, version: String = "") {
                 Group("Library")
                 Toggle("Open the last chat on launch", "Start where you left off rather than on the chat list", openLast) {
                     scope.launch { settings.setOpenLastChat(it) }
+                }
+                if (openLast && lastChatId != 0L) {
+                    Setting("Forget the last chat", "Start at the chat list again until you open another chat") {
+                        OutlinedButton(onClick = {
+                            scope.launch {
+                                settings.forgetLastChat()
+                                // The row goes away on success, so the toast is the only sign.
+                                toast("TMPlayer will start at the chat list")
+                            }
+                        }) { Text("Forget") }
+                    }
                 }
                 Setting("Smallest video shown", SizeFilter.label(minSize)) {
                     Stepper(
@@ -148,17 +176,43 @@ fun SettingsPage(state: ShellState, version: String = "") {
                 Group("History")
                 Setting("Continue watching", "Forget where every video was stopped") {
                     OutlinedButton(onClick = {
-                        scope.launch {
-                            settings.clearWatchHistory()
-                            toast("Continue watching cleared")
+                        if (history.isEmpty()) {
+                            toast("Nothing in Continue watching")
+                            return@OutlinedButton
+                        }
+                        confirm = Confirm(
+                            title = "Clear Continue watching?",
+                            message = "Every video you have part watched is forgotten, and the page empties.",
+                            detail = "Nothing is deleted from Telegram; each video stays in the chat it came from.",
+                        ) {
+                            scope.launch {
+                                val count = history.size
+                                settings.clearWatchHistory()
+                                toast(if (count == 1) "Continue watching cleared" else "$count videos forgotten")
+                            }
                         }
                     }) { Text("Clear") }
                 }
                 Setting("Favourites", "Take the star off every chat") {
                     OutlinedButton(onClick = {
-                        scope.launch {
-                            settings.clearFavorites()
-                            toast("Favourites cleared")
+                        if (favourites.isEmpty()) {
+                            toast("No chats are starred")
+                            return@OutlinedButton
+                        }
+                        confirm = Confirm(
+                            title = "Clear favourites?",
+                            message = if (favourites.size == 1) {
+                                "The one starred chat loses its star and Favourites empties."
+                            } else {
+                                "All ${favourites.size} chats lose their star and Favourites empties."
+                            },
+                            detail = "The chats themselves stay where they are, in the chat list.",
+                        ) {
+                            scope.launch {
+                                val count = favourites.size
+                                settings.clearFavorites()
+                                toast(if (count == 1) "Favourite cleared" else "$count favourites cleared")
+                            }
                         }
                     }) { Text("Clear") }
                 }
@@ -198,17 +252,54 @@ fun SettingsPage(state: ShellState, version: String = "") {
                     }
                 }
 
+                Group("Help")
+                Setting("Privacy", "What stays on this computer and which services TMPlayer contacts") {
+                    OutlinedButton(onClick = { OpenExternal.browse(PRIVACY_URL) }) { Text("Open") }
+                }
+                Setting("Lawful use", "Use TMPlayer only with media you may access") {
+                    OutlinedButton(onClick = { OpenExternal.browse(LEGAL_URL) }) { Text("Open") }
+                }
+
                 Group("Account")
                 Setting("Sign out of Telegram", "Favourites and history go with it. Downloads stay unless you say otherwise") {
                     OutlinedButton(onClick = { confirmSignOut = true }) { Text("Sign out", color = Tone.danger) }
                 }
+                Text(
+                    "TMPlayer talks directly to Telegram for your chats and videos, and to GitHub " +
+                        "to see whether a newer version is out. It has no developer run server, " +
+                        "analytics or advertising SDK.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Tone.muted,
+                    modifier = Modifier.padding(top = 20.dp, bottom = 24.dp),
+                )
             }
         }
         VerticalScrollbar(rememberScrollbarAdapter(scroll), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
     }
 
     if (confirmSignOut) SignOutDialog(state, onDismiss = { confirmSignOut = false })
+
+    confirm?.let { asked ->
+        ConfirmDialog(
+            title = asked.title,
+            message = asked.message,
+            detail = asked.detail,
+            confirmLabel = "Clear",
+            onConfirm = {
+                confirm = null
+                asked.action()
+            },
+            onDismiss = { confirm = null },
+        )
+    }
 }
+
+/** A clear waiting on its yes: what the prompt says, and what happens on Clear. */
+private class Confirm(val title: String, val message: String, val detail: String?, val action: () -> Unit)
+
+// The same pages the Android app opens from its Help group.
+private const val PRIVACY_URL = "https://tmplayer.org/privacy"
+private const val LEGAL_URL = "https://tmplayer.org/legal"
 
 @Composable
 internal fun Group(title: String) {

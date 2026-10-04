@@ -31,6 +31,7 @@ import com.tmplayer.desktop.DesktopPrefs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -41,7 +42,7 @@ import java.nio.file.Files
 /**
  * B2.3, the player's mouse, driven through the real [PlayerScreen] with a fake engine in place of
  * libmpv: click to play or pause after the double click window, double click fullscreen, the wheel,
- * the controls showing on movement and hiding after three seconds, the timebar's hover time and
+ * the controls showing on movement and hiding after the set time, the timebar's hover time and
  * drag, the volume slider on hover, and the right click menu.
  */
 @OptIn(ExperimentalTestApi::class)
@@ -117,7 +118,25 @@ class PlayerMouseTest {
     }
 
     @Test
-    fun `controls hide three seconds after the last movement and come back on a move`() = runComposeUiTest {
+    fun `controls hide after the set time, and never when that is Never`() = runComposeUiTest {
+        runBlocking { settings.updateTouchPrefs { it.copy(controlsTimeoutMs = 2_000L) } }
+        open()
+        mainClock.autoAdvance = false
+        onNodeWithTag("video").performMouseInput { moveTo(onPicture) }
+        mainClock.advanceTimeBy(1_000)
+        onNode(hasContentDescription("More")).assertExists()
+        mainClock.advanceTimeBy(1_500)
+        onNode(hasContentDescription("More")).assertDoesNotExist()
+
+        runBlocking { settings.updateTouchPrefs { it.copy(controlsTimeoutMs = 0L) } }
+        mainClock.advanceTimeBy(100)
+        onNodeWithTag("video").performMouseInput { moveTo(onPicture + Offset(40f, 0f)) }
+        mainClock.advanceTimeBy(10_000)
+        onNode(hasContentDescription("More")).assertExists()
+    }
+
+    @Test
+    fun `controls hide after the default time since the last movement and come back on a move`() = runComposeUiTest {
         open()
         mainClock.autoAdvance = false
         onNodeWithTag("video").performMouseInput { moveTo(onPicture) }
