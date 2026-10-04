@@ -84,6 +84,50 @@ class SelfUpdateTest {
         assertFalse(SelfUpdate(InstallKind.Deb).canUpdateTo(hashed))
     }
 
+    /** A release as CI publishes them now: the MSI, the AppImage and the tarball, nothing else. */
+    private val minimal = Release(
+        version = "1.22.0",
+        pageUrl = "page",
+        assets = listOf(
+            "TMPlayer-1.22.0-universal.apk",
+            "TMPlayer-1.22.0-windows-x64.msi",
+            "TMPlayer-1.22.0-x86_64.AppImage",
+            "TMPlayer-1.22.0-linux-x64.tar.gz",
+        ).associate { name -> UpdateFeed.keyFor(name)!! to ReleaseAsset("https://x/$name", sha256 = "a".repeat(64)) },
+    )
+
+    @Test
+    fun `the retired formats are told where to go instead of failing`() {
+        for (kind in listOf(InstallKind.WindowsPortable, InstallKind.Deb, InstallKind.Rpm)) {
+            assertFalse(kind.name, SelfUpdate(kind).canUpdateTo(minimal))
+        }
+        val portable = SelfUpdate.retiredLine(InstallKind.WindowsPortable, minimal)!!
+        assertTrue(portable, "portable zip is no longer published" in portable && "Windows installer" in portable)
+        assertTrue("carry over" in portable)
+        for (kind in listOf(InstallKind.Deb, InstallKind.Rpm)) {
+            val line = SelfUpdate.retiredLine(kind, minimal)!!
+            assertTrue(line, "${kind.label} is no longer published" in line && "AppImage" in line && "carry over" in line)
+        }
+        val flatpak = SelfUpdate.retiredLine(InstallKind.Flatpak, minimal)!!
+        assertTrue(flatpak, "Flatpak is no longer published" in flatpak && "AppImage" in flatpak && "sign in again" in flatpak)
+        // The popup's line is the same sentence, with the release page button under it.
+        assertEquals(portable, com.tmplayer.desktop.ui.updateLine(InstallKind.WindowsPortable, false, UpdateProgress.Idle, minimal))
+    }
+
+    @Test
+    fun `the formats still published say nothing about moving`() {
+        assertTrue(SelfUpdate(InstallKind.WindowsMsi).canUpdateTo(minimal))
+        assertTrue(SelfUpdate(InstallKind.AppImage).canUpdateTo(minimal))
+        for (kind in listOf(InstallKind.WindowsMsi, InstallKind.AppImage, InstallKind.Manual)) {
+            assertNull(kind.name, SelfUpdate.retiredLine(kind, minimal))
+        }
+        // An older release that still carries them: no notice, the old update path.
+        val old = release.copy(assets = release.assets + ("linux-x64-flatpak" to ReleaseAsset("https://x/TMPlayer-1.19.0.flatpak")))
+        for (kind in InstallKind.entries) assertNull(kind.name, SelfUpdate.retiredLine(kind, old))
+        assertTrue(SelfUpdate(InstallKind.Deb).canUpdateTo(release))
+        assertTrue(SelfUpdate(InstallKind.WindowsPortable).canUpdateTo(release))
+    }
+
     @Test
     fun `reads sha256sum output`() {
         val hash = "a".repeat(64)

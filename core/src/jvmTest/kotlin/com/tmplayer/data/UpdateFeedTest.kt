@@ -171,6 +171,17 @@ class UpdateFeedTest {
         assertTrue(UpdateFeed.hasDesktopPackage(release("linux-x64-tarball"), "linux"))
     }
 
+    @Test
+    fun `the minimal release still reaches every device`() {
+        // What CI publishes since 1.21.0: one APK, the MSI, the AppImage and the tarball.
+        val r = release("android-universal", "windows-x64-msi", "linux-x64-appimage", "linux-x64-tarball")
+        for (abis in listOf(listOf("armeabi-v7a"), listOf("arm64-v8a", "armeabi-v7a"), listOf("x86_64"))) {
+            assertEquals("https://x/android-universal", UpdateFeed.androidAsset(r, abis)?.url)
+        }
+        assertTrue(UpdateFeed.hasDesktopPackage(r, "windows"))
+        assertTrue(UpdateFeed.hasDesktopPackage(r, "linux"))
+    }
+
     // ---- order ------------------------------------------------------------------------------
 
     @Test

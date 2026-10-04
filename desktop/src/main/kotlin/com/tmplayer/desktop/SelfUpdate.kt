@@ -19,17 +19,21 @@ import java.util.concurrent.TimeUnit
 /**
  * How this copy of TMPlayer got onto the computer, which decides how it can update itself.
  *
- * [canSelfUpdate] is false where something else owns the update (Flathub and the software centre
- * for the Flatpak, an AUR helper for the Arch package) or where there is no package to install over
- * (the plain tarball, a development run): those keep the "open the release page" notice.
+ * [canSelfUpdate] is false where something else owns the update (an AUR helper for the Arch
+ * package) or where there is no package to install over (the Flatpak bundle, the plain tarball, a
+ * development run): those keep the "open the release page" notice.
+ *
+ * [movesTo] is set for the formats releases no longer carry (the portable zip, the deb, the rpm
+ * and the Flatpak, dropped after 1.21.0): the download to take instead, once a release without
+ * this one comes out. See [SelfUpdate.retiredLine].
  */
-enum class InstallKind(val canSelfUpdate: Boolean, val label: String) {
+enum class InstallKind(val canSelfUpdate: Boolean, val label: String, val movesTo: String? = null) {
     WindowsMsi(true, "Windows installer"),
-    WindowsPortable(true, "portable zip"),
+    WindowsPortable(true, "portable zip", movesTo = "Windows installer (the .msi)"),
     AppImage(true, "AppImage"),
-    Deb(true, "deb package"),
-    Rpm(true, "rpm package"),
-    Flatpak(false, "Flatpak"),
+    Deb(true, "deb package", movesTo = "AppImage"),
+    Rpm(true, "rpm package", movesTo = "AppImage"),
+    Flatpak(false, "Flatpak", movesTo = "AppImage"),
     Manual(false, "manual install"),
 }
 
@@ -59,6 +63,9 @@ sealed interface UpdateProgress {
  * - **AppImage**: the new file replaces the old one straight away (the running copy keeps its
  *   mount), and a restart runs it.
  * - **deb, rpm**: installed with `pkexec`, so the system asks for the password, then a restart.
+ *
+ * The portable zip, deb and rpm paths only run against a release that still carries those files
+ * (1.21.0 and older). Later releases do not, and the popup says so ([retiredLine]) instead.
  *
  * Every download is checked against its SHA-256 before anything is installed, from the update feed
  * or, failing that, the release's `SHA256SUMS`: the packages are not code signed, so the checksum
@@ -114,7 +121,8 @@ class SelfUpdate(
     }
 
     private fun run(release: Release) {
-        val asset = assetFor(kind)?.let(release.assets::get) ?: error("This release has no ${kind.label}.")
+        val asset = assetFor(kind)?.let(release.assets::get)
+            ?: error(retiredLine(kind, release) ?: "This release has no ${kind.label}.")
         val assetName = asset.name
 
         workDir.mkdirs()
@@ -339,7 +347,11 @@ class SelfUpdate(
             p.waitFor(5, TimeUnit.SECONDS) && p.exitValue() == 0
         }.getOrDefault(false)
 
-        /** The update feed's key for the package [kind] installs from (see `site/latest.json`). */
+        /**
+         * The update feed's key for the package [kind] installs from (see `site/latest.json`).
+         * The portable zip, deb and rpm keys stay so a release that still carries them (1.21.0
+         * and older) works as before; newer releases simply have no such key.
+         */
         fun assetFor(kind: InstallKind): String? = when (kind) {
             InstallKind.WindowsMsi -> "windows-x64-msi"
             InstallKind.WindowsPortable -> "windows-x64-portable"
@@ -347,6 +359,34 @@ class SelfUpdate(
             InstallKind.Deb -> "linux-x64-deb"
             InstallKind.Rpm -> "linux-x64-rpm"
             else -> null
+        }
+
+        /** The feed key that says [release] still publishes [kind]'s format, whether or not it self updates. */
+        private fun publishedKey(kind: InstallKind): String? =
+            if (kind == InstallKind.Flatpak) "linux-x64-flatpak" else assetFor(kind)
+
+        /**
+         * What the update popup says instead of offering an update when [release] no longer
+         * carries this install's format at all: which download replaces it, and whether the
+         * viewer's sign in and settings come along. Null when the format is still published (or
+         * was never retired), so the ordinary lines apply.
+         *
+         * The portable zip, deb and rpm keep their data in the same per user folders the MSI and
+         * the AppImage use, so moving over keeps everything. The Flatpak's sandbox keeps its data
+         * under ~/.var/app, which an AppImage does not look in.
+         */
+        fun retiredLine(kind: InstallKind, release: Release): String? {
+            val next = kind.movesTo ?: return null
+            if (publishedKey(kind)?.let(release.assets::containsKey) == true) return null
+            val what = "The ${kind.label} is no longer published, so this copy cannot update itself."
+            return when (kind) {
+                InstallKind.WindowsPortable ->
+                    "$what Take the $next from the release page and delete this folder. Your sign in and settings carry over."
+                InstallKind.Deb, InstallKind.Rpm ->
+                    "$what Remove it with your package manager, then take the $next from the release page. Your sign in and settings carry over."
+                else ->
+                    "$what Take the $next from the release page. It keeps its data outside the Flatpak, so you sign in again there; INSTALL.md says how to bring your settings."
+            }
         }
 
         /** The hash `sha256sum` wrote for [name] ("<hash>  <name>", or "<hash> *<name>" in binary mode). */

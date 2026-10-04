@@ -211,12 +211,12 @@ internal fun updateLine(kind: InstallKind, canUpdate: Boolean, progress: UpdateP
         UpdateProgress.Installing -> "Installing. Your system will ask for your password."
         is UpdateProgress.Ready -> "Ready. TMPlayer restarts to finish."
         is UpdateProgress.Failed -> progress.message
-        UpdateProgress.Idle -> when {
+        UpdateProgress.Idle -> SelfUpdate.retiredLine(kind, release) ?: when {
             canUpdate && (kind == InstallKind.Deb || kind == InstallKind.Rpm) ->
                 "The update downloads from GitHub, is checked, and TMPlayer restarts when it is done. " +
                     "Your system will ask for your password."
             canUpdate -> "The update downloads from GitHub, is checked, and TMPlayer restarts when it is done."
-            kind == InstallKind.Flatpak -> "Flatpak updates come through your software centre or \"flatpak update\"."
+            kind == InstallKind.Flatpak -> "Download the new Flatpak from the release page and install it over this one."
             else -> "Download it from the release page and replace the old files."
         }
     }
