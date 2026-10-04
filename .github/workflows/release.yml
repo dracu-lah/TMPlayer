@@ -10,9 +10,10 @@ name: Release
 #
 # One tag makes one GitHub release with a deliberately short list in it: the universal Android
 # APK, the Windows MSI, the Linux AppImage and the Linux tarball (which the AUR PKGBUILD builds
-# from), plus the licence material and one checksum file. Each platform builds in its own job; the
-# last job gathers them, writes the checksums and publishes. GitHub attaches the source archives
-# to every release by itself.
+# from), and nothing else. Each platform builds in its own job; the last job gathers them and
+# publishes. GitHub attaches the source archives to every release by itself and shows each file's
+# SHA-256 beside it, so the licence, the notices and the nextlib source are links in the notes and
+# there is no checksum file.
 on:
   push:
     tags: ["v*"]
@@ -302,47 +303,23 @@ jobs:
           done
           ls -la dist
 
-      # The TMPlayer source itself is the tag's tree and the source archives GitHub attaches to
-      # every release. What GitHub cannot attach is the corresponding source of the bundled GPL
-      # media extension, so that is built here.
-      - name: Package GPL source and notices
+      # The TMPlayer source is the tag's tree and the archives GitHub attaches. The corresponding
+      # source of the bundled GPL media extension does not change while its version does not, so
+      # it is not rebuilt and attached to every release: the notes link to the archive that went
+      # up with 1.21.0, which GPL-3.0 section 6(d) allows as long as that link keeps working.
+      # A nextlib bump makes that archive the wrong one, so the release stops here until a new
+      # archive is up and LINKED, NEXTLIB_SOURCE and the link in the notes all point at it.
+      - name: Check the nextlib source link still matches
         run: |
-          VERSION="${{ needs.version.outputs.name }}"
-          git clone --depth 1 --branch v1.10.1-0.13.0 \
-            https://github.com/anilbeesetti/nextlib.git \
-            "nextlib-1.10.1-0.13.0"
-          test "$(git -C nextlib-1.10.1-0.13.0 rev-parse HEAD)" = \
-            "773c841f86d9775abd0fe18c1fd0f84e00e355c8"
-          rm -rf nextlib-1.10.1-0.13.0/.git
-          mkdir -p nextlib-1.10.1-0.13.0/upstream-sources
-          curl --fail --location --retry 3 \
-            https://ffmpeg.org/releases/ffmpeg-6.0.tar.gz \
-            --output nextlib-1.10.1-0.13.0/upstream-sources/ffmpeg-6.0.tar.gz
-          curl --fail --location --retry 3 \
-            https://github.com/webmproject/libvpx/archive/refs/tags/v1.13.0.tar.gz \
-            --output nextlib-1.10.1-0.13.0/upstream-sources/libvpx-1.13.0.tar.gz
-          curl --fail --location --retry 3 \
-            https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v3.4.1.tar.gz \
-            --output nextlib-1.10.1-0.13.0/upstream-sources/mbedtls-3.4.1.tar.gz
-          sha256sum nextlib-1.10.1-0.13.0/upstream-sources/*.tar.gz \
-            > nextlib-1.10.1-0.13.0/upstream-sources/SHA256SUMS
-          tar -czf "dist/nextlib-corresponding-source-$VERSION.tar.gz" \
-            nextlib-1.10.1-0.13.0
-
-          cp LICENSE "dist/LICENSE-GPL-3.0.txt"
-          cp THIRD_PARTY_NOTICES.md "dist/THIRD_PARTY_NOTICES.md"
-          test -s "dist/nextlib-corresponding-source-$VERSION.tar.gz"
-          test -s "dist/LICENSE-GPL-3.0.txt"
-          test -s "dist/THIRD_PARTY_NOTICES.md"
-
-      # Sideloading and installing by hand is a copy-and-paste business and a truncated download
-      # looks like a broken app, so publish one file people can check any download against.
-      - name: Write the checksums
-        run: |
-          VERSION="${{ needs.version.outputs.name }}"
-          ( cd dist && sha256sum -- * > "../SHA256SUMS-$VERSION.txt" )
-          mv "SHA256SUMS-$VERSION.txt" dist/
-          cat "dist/SHA256SUMS-$VERSION.txt"
+          LINKED="1.10.1-0.13.0"
+          USED="$(sed -n 's/^nextlib = "\(.*\)"$/\1/p' gradle/libs.versions.toml)"
+          if [ "$USED" != "$LINKED" ]; then
+            echo "::error::nextlib is $USED but the release notes link the source of $LINKED. Attach a corresponding source archive for $USED and update LINKED, NEXTLIB_SOURCE and the notes link in release.yml."
+            exit 1
+          fi
+          curl --fail --silent --show-error --head --location --max-time 60 "$NEXTLIB_SOURCE" > /dev/null
+        env:
+          NEXTLIB_SOURCE: https://github.com/${{ github.repository }}/releases/download/v1.21.0/nextlib-corresponding-source-1.21.0.tar.gz
 
       # The update feed every installed copy reads (C1 of the storage and updates plan). Written
       # here, from the files about to go up, so each package's size and SHA-256 are the published
@@ -369,30 +346,14 @@ jobs:
           make_latest: "true"
           generate_release_notes: true
           body: |
-            ## Downloads
-
             | Platform | File |
             | --- | --- |
             | Android TV, sticks and phones | `TMPlayer-${{ needs.version.outputs.name }}-universal.apk` |
             | Windows 10 and 11, 64-bit | `TMPlayer-${{ needs.version.outputs.name }}-windows-x64.msi` |
-            | Linux, glibc 2.38 or newer (Ubuntu 24.04, Debian 13, Fedora 39 and later) | `TMPlayer-${{ needs.version.outputs.name }}-x86_64.AppImage` |
-            | Arch Linux | the PKGBUILD in [`desktop/packaging/aur`](https://github.com/${{ github.repository }}/tree/${{ github.ref_name }}/desktop/packaging/aur), built from `TMPlayer-${{ needs.version.outputs.name }}-linux-x64.tar.gz` |
+            | Linux, glibc 2.38 or newer | `TMPlayer-${{ needs.version.outputs.name }}-x86_64.AppImage` |
+            | Arch Linux | [the PKGBUILD](https://github.com/${{ github.repository }}/tree/${{ github.ref_name }}/desktop/packaging/aur), from `TMPlayer-${{ needs.version.outputs.name }}-linux-x64.tar.gz` |
 
-            The deb, rpm, Flatpak and Windows portable zip are no longer built. On Linux take the AppImage, on Windows the MSI.
-
-            ## Install
-
-            **Android.** Sideload the APK with the Downloader app on a TV, or `adb install TMPlayer-${{ needs.version.outputs.name }}-universal.apk`. [INSTALL.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/INSTALL.md) has step by step guides and the remote control keys.
-
-            **Windows.** Run the MSI. It installs for your user only. It is not code signed yet, so SmartScreen warns: click **More info**, then **Run anyway**.
-
-            **Linux.** `chmod +x TMPlayer-${{ needs.version.outputs.name }}-x86_64.AppImage` and run it. If it complains about FUSE, install `libfuse2` or run it with `--appimage-extract-and-run`.
-
-            Installed copies update themselves from inside the app. Check any download against `SHA256SUMS-${{ needs.version.outputs.name }}.txt`.
-
-            ## Licence and source
-
-            GPL-3.0. The source is the [tree for this release](https://github.com/${{ github.repository }}/tree/${{ github.ref_name }}) and the source code archives below; `nextlib-corresponding-source-${{ needs.version.outputs.name }}.tar.gz` covers the bundled media extension.
+            Installed copies update themselves. [How to install](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/INSTALL.md) · [Moving from the deb, rpm, Flatpak or Windows zip](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/INSTALL.md#moving-from-a-format-that-is-no-longer-published) · [GPL-3.0](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/LICENSE) · [Third party notices](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/THIRD_PARTY_NOTICES.md) · [nextlib source](https://github.com/${{ github.repository }}/releases/download/v1.21.0/nextlib-corresponding-source-1.21.0.tar.gz)
 
       # tmplayer.org is deployed by Vercel's git integration from main, with no build step and no
       # deploy hook, so a commit to main is the one way the site learns of the release: Vercel

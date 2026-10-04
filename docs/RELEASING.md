@@ -24,12 +24,17 @@ runs on. For a tag `v<v>` the assets are:
 | `TMPlayer-<v>-universal.apk` | Linux, signed with the release key |
 | `TMPlayer-<v>-windows-x64.msi` | Windows, unsigned |
 | `TMPlayer-<v>-x86_64.AppImage`, `TMPlayer-<v>-linux-x64.tar.gz` | Linux, wrapped from the app folder by `desktop/packaging/linux/package.sh`; the tarball is what the AUR PKGBUILD builds from |
-| `nextlib-corresponding-source-<v>.tar.gz`, `LICENSE-GPL-3.0.txt`, `THIRD_PARTY_NOTICES.md` | the publish job, for the GPL |
-| `SHA256SUMS-<v>.txt` | over every file above |
 
-GitHub attaches the source archives of the tagged tree to every release by itself. Up to 1.21.0 a
-release also carried per-ABI APKs, a Windows portable zip, a deb, an rpm, a Flatpak, a TMPlayer
-source tarball and the R8 mapping; none of those are built any more.
+Nothing else is attached. GitHub adds the source archives of the tagged tree by itself and shows
+each file's SHA-256 beside it, so there is no checksum file. The release notes link to the
+licence, `THIRD_PARTY_NOTICES.md` and the nextlib corresponding source instead of carrying them.
+That source archive went up once, with 1.21.0, and is the same for every release while nextlib
+stays at 1.10.1-0.13.0; the publish job fails if `gradle/libs.versions.toml` moves nextlib on, so
+a bump comes with a new archive and new links in `release.yml`.
+
+Up to 1.21.0 a release also carried per-ABI APKs, a Windows portable zip, a deb, an rpm, a
+Flatpak, a TMPlayer source tarball, the R8 mapping, the licence files, the nextlib source and
+`SHA256SUMS`; none of those are attached any more.
 
 The R8 mapping, which turns a stack trace from the released APK back into readable names, is kept
 as a workflow artifact named `mapping-<v>` on the release run, for 90 days. Download it from

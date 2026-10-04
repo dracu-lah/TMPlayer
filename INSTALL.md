@@ -24,8 +24,8 @@ Download `TMPlayer-<version>-universal.apk` from the Releases page. It contains 
 for every supported Android TV architecture, so the same file works on older sticks, newer 64-bit
 boxes and the Android TV emulator. If you are not sure, this is the file to take.
 
-Each release also carries `SHA256SUMS-<version>.txt`. Check a download against it with
-`sha256sum -c` if you care to; a truncated transfer otherwise looks like a broken app.
+The release page shows each file's SHA-256 beside it. Compare it with `sha256sum` if you care
+to; a truncated transfer otherwise looks like a broken app.
 
 ## 2. Turn on debugging (once)
 
@@ -156,13 +156,12 @@ Every file is on the same GitHub release as the APK:
 | `TMPlayer-<version>-windows-x64.msi` | Windows installer, per user, no administrator needed |
 | `TMPlayer-<version>-x86_64.AppImage` | Linux, any distribution, one file |
 | `TMPlayer-<version>-linux-x64.tar.gz` | The plain app folder, which the Arch PKGBUILD builds from |
-| `SHA256SUMS-<version>.txt` | Checksums for all of the above |
 
 Releases up to 1.21.0 also carried a Windows portable zip, a deb, an rpm and a Flatpak. Those are
 no longer built; see [Moving from a format that is no longer published](#moving-from-a-format-that-is-no-longer-published).
 
-Check a download with `sha256sum -c --ignore-missing SHA256SUMS-<version>.txt` in the folder that
-holds both (on Windows, `Get-FileHash <file>` in PowerShell and compare by eye).
+The release page shows each file's SHA-256 beside it. Check a download with `sha256sum <file>`
+(on Windows, `Get-FileHash <file>` in PowerShell) and compare by eye.
 
 ## Windows
 

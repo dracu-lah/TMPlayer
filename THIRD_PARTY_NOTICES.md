@@ -21,8 +21,9 @@ upstream sources:
 - Mbed TLS 3.4.1: Apache-2.0 selected from its dual licence:
   <https://github.com/Mbed-TLS/mbedtls/tree/v3.4.1>
 
-Each TMPlayer release includes a `nextlib-corresponding-source-<version>.tar.gz` archive containing
-the exact NextLib source and build scripts plus the three upstream source archives above.
+The corresponding source is one archive, linked from every TMPlayer release's notes:
+<https://github.com/dracu-lah/TMPlayer/releases/download/v1.21.0/nextlib-corresponding-source-1.21.0.tar.gz>. It holds the exact NextLib 1.10.1-0.13.0 source and build scripts plus the three upstream
+source archives above, and stays the right archive for as long as TMPlayer bundles that version.
 
 ## Telegram client stack
 
