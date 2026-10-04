@@ -61,7 +61,7 @@ internal fun StorageGroup(state: ShellState) {
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
     val desktop by state.extras.prefs.state.collectAsState()
-    val moving by DesktopStorage.relocation.moving.collectAsState()
+    val moving by DesktopStorage.relocationProgress.collectAsState()
     var refresh by remember { mutableIntStateOf(0) }
     var figures by remember { mutableStateOf<StorageFigures?>(null) }
     var dialog by remember { mutableStateOf<StorageDialog?>(null) }

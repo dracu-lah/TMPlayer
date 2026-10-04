@@ -18,7 +18,7 @@ class NativeInventoryTest {
         assertTrue(tdlib, tdlib.contains("tdl-coroutines"))
         val mpv = lines.single { it.startsWith("mpv runtime:") }
         assertTrue(mpv, mpv.contains("mediamp-mpv-runtime-${OsInfo.osTag}-${OsInfo.archTag}"))
-        assertTrue(lines.single { it.startsWith("jna:") }.startsWith("jna: 5.16.0 from "))
+        assertTrue(lines.single { it.startsWith("jna:") }.startsWith("jna: 5.19.1 from "))
         assertTrue(lines.single { it.startsWith("mpv runtime dir:") }.contains("no libmpv"))
     }
 }

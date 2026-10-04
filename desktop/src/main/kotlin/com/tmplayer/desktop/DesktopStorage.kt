@@ -42,8 +42,14 @@ object DesktopStorage {
         DownloadMigration(DesktopServices.settings, notifier = { notifier })
     }
 
+    /**
+     * How far a storage move has got, held here rather than in [relocation] so a screen can watch
+     * it without opening the services a move needs.
+     */
+    val relocationProgress = kotlinx.coroutines.flow.MutableStateFlow<StorageRelocation.Moving?>(null)
+
     val relocation: StorageRelocation by lazy {
-        StorageRelocation(DesktopServices.settings, DesktopServices.prefs, LiveHost, notifier = { notifier })
+        StorageRelocation(DesktopServices.settings, DesktopServices.prefs, LiveHost, notifier = { notifier }, _moving = relocationProgress)
     }
 
     /** True while a storage move runs: the sweep must not judge a cache that is being replaced. */

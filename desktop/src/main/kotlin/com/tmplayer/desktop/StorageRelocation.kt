@@ -46,6 +46,7 @@ class StorageRelocation(
     private val host: Host,
     private val layout: (File?) -> StorageLayout = { DesktopPaths.layout(it) },
     private val notifier: () -> TransferNotifier = { NoTransferNotifier },
+    private val _moving: MutableStateFlow<Moving?> = MutableStateFlow(null),
 ) {
     /** The running app, as a move needs it. */
     interface Host {
@@ -79,8 +80,6 @@ class StorageRelocation(
 
     /** A move in progress: bytes of downloads in place so far, of all there are. */
     data class Moving(val doneBytes: Long, val totalBytes: Long)
-
-    private val _moving = MutableStateFlow<Moving?>(null)
 
     /** Non null while downloads are moving, for the Settings row's progress. */
     val moving: StateFlow<Moving?> = _moving.asStateFlow()

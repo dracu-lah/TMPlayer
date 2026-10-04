@@ -163,13 +163,14 @@ class PlayerMouseTest {
     }
 
     @Test
-    fun `right click opens the menu with copy link and download`() = runComposeUiTest {
+    fun `right click opens the menu with copy link, save to downloads and open in another app`() = runComposeUiTest {
         open()
         onNodeWithTag("video").performMouseInput { rightClick(onPicture) }
         waitForIdle()
         onNodeWithText("Playback details").assertExists()
         onNodeWithText("Copy link").assertExists()
-        onNodeWithText("Download").performClick()
+        onNodeWithText("Open in another app").assertExists()
+        onNodeWithText("Save to Downloads").performClick()
         waitForIdle()
         assertEquals(1, media.downloads)
         onNodeWithTag("video").performMouseInput { rightClick(onPicture) }

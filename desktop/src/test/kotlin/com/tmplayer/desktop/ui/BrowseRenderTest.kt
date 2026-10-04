@@ -123,6 +123,34 @@ class BrowseRenderTest {
     }
 
     @Test
+    fun downloadsPage() = kotlinx.coroutines.runBlocking {
+        val folder = dir.resolve("Downloads/TMPlayer").apply { mkdirs() }
+        fun item(id: Long, title: String, size: Long) = MediaItem(
+            chatId = 2, messageId = id, fileId = id.toInt(), title = title, sizeBytes = size, durationSec = 0,
+            mimeType = "video/x-matroska", thumbnailFileId = 0, miniThumbnail = null, date = 0,
+        )
+        val kept = folder.resolve("Night Train (2019) 1080p.mkv").apply { writeBytes(ByteArray(2048)) }
+        settings.noteDownload(item(11, "Night Train (2019) 1080p", 2048), "Film Club", kept.absolutePath)
+        settings.noteDownload(item(12, "The Long Road S01E01", 4096), "Film Club", folder.resolve("gone.mkv").absolutePath)
+        settings.rememberCachedVideo(item(13, "Harbour Lights S02E05", 900L * 1024 * 1024), "Weekend series")
+        com.tmplayer.data.OfflineDownloads.note(
+            com.tmplayer.data.OfflineDownloads.Progress(
+                request = DownloadRequest.from(item(14, "Mountains, a film", 1_500L * 1024 * 1024), "Documentaries"),
+                downloadedBytes = 600L * 1024 * 1024,
+                totalBytes = 1_500L * 1024 * 1024,
+                stage = com.tmplayer.data.OfflineDownloads.Stage.Running,
+                bytesPerSecond = 3_000_000,
+            ),
+        )
+        try {
+            val png = render { DownloadsPage(shell, folder) }
+            save("downloads.png", png)
+        } finally {
+            com.tmplayer.data.OfflineDownloads.forget(14)
+        }
+    }
+
+    @Test
     fun settingsAndUpdatePopup() {
         val release = Release(
             version = "2.0.1",

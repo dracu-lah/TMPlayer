@@ -156,7 +156,7 @@ object DownloadIndex {
     fun itemFor(file: File) = MediaItem(
         chatId = 0L,
         messageId = file.absolutePath.hashCode().toLong() and 0x7FFFFFFFL,
-        fileId = 0,
+        fileId = ADOPTED_FILE_ID,
         title = file.name,
         sizeBytes = file.length(),
         durationSec = 0,
@@ -167,6 +167,12 @@ object DownloadIndex {
         fileName = file.name,
         onDevice = true,
     )
+
+    /**
+     * The file id written for a kept file of no chat. The index refuses a record without a positive
+     * id, and TDLib, counting up from one, never hands out this one.
+     */
+    const val ADOPTED_FILE_ID = Int.MAX_VALUE
 
     private fun canonical(path: String): String = runCatching { File(path).canonicalPath }.getOrDefault(path)
 
