@@ -135,6 +135,7 @@ import com.tmplayer.data.CardLayout
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaItem
+import com.tmplayer.data.LocalDownloads
 import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.cancel
 import com.tmplayer.data.start
@@ -159,6 +160,7 @@ import com.tmplayer.ui.components.StateScaffold
 import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvSearchField
+import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.TvMenu
 import com.tmplayer.ui.components.rememberVoiceSearch
 import com.tmplayer.ui.theme.Caution
@@ -168,7 +170,9 @@ import com.tmplayer.ui.theme.focusRing
 import com.tmplayer.ui.theme.Tv
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -182,9 +186,11 @@ private class MediaListViewModelFactory(
     private val chatId: Long,
     private val minSize: Long,
     private val maxSize: Long,
+    private val settings: SettingsStore,
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        MediaListViewModel(chatId, minSize, maxSize) as T
+        // The download index, so a downloaded video's tile says Downloaded rather than Cached.
+        MediaListViewModel(chatId, minSize, maxSize) { LocalDownloads.presentIds(settings) } as T
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -224,8 +230,13 @@ fun MediaGridScreen(
     val viewModel: MediaListViewModel = viewModel(
         viewModelStoreOwner = owner,
         key = "media-$chatId-$minSizeBytes-$maxSizeBytes",
-        factory = MediaListViewModelFactory(chatId, minSizeBytes, maxSizeBytes),
+        factory = MediaListViewModelFactory(chatId, minSizeBytes, maxSizeBytes, SettingsStore(context)),
     )
+    // A download leaving the queue has usually just landed in Downloads, so the tiles are asked
+    // again: the badge on it moves from the queue's figure to Downloaded.
+    val queueSize by remember { OfflineDownloads.active.map { it.size }.distinctUntilChanged() }
+        .collectAsStateWithLifecycle(initialValue = 0)
+    LaunchedEffect(queueSize) { viewModel.refreshLocalAvailability() }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
     var query by remember { mutableStateOf("") }
@@ -308,7 +319,7 @@ fun MediaGridScreen(
 
     val refresh = {
         viewModel.load()
-        if (offline) onOfflineAction("You're offline. Showing saved videos.")
+        if (offline) onOfflineAction("You're offline. Showing what was loaded before.")
     }
 
     // Whichever video a long press is asking about, and nothing while none is.
@@ -338,6 +349,66 @@ fun MediaGridScreen(
     BackHandler(enabled = selecting) { leaveSelection() }
 
     /**
+     * The videos that need fetching, planned against the disk: which fit, and what the watch cache
+     * gives up to make room. Returns the ones to queue and what to tell the viewer.
+     */
+    suspend fun planDownloads(chosen: List<MediaItem>): Pair<List<MediaItem>, String> {
+        if (chosen.isEmpty()) return emptyList<MediaItem>() to ""
+        return run {
+            // Only the watch cache is on offer here. A video left behind by a press of Play
+            // should not be the reason a video somebody ticked is refused; the videos they
+            // downloaded on purpose are not touched either way.
+            val cachedRecords = runCatching { settings.cachedVideosNow() }
+                .getOrDefault(emptyList())
+            // Measured and later deleted through the id the message answers with now, not the
+            // one saved with the record: a saved id from an earlier session measures as zero
+            // and deletes nothing. See [WatchCache.evictAllBut].
+            val owned = cachedRecords.mapNotNull { record ->
+                val fileId = runCatching {
+                    Td.currentFileId(record.chatId, record.messageId, record.fileId)
+                }.getOrDefault(record.fileId)
+                val bytes = runCatching { Td.localDownloadedBytes(fileId) }
+                    .getOrDefault(0L)
+                if (bytes <= 0) null else CacheShelf.Held(fileId, bytes, record.updatedAt) to record
+            }
+            val cached = owned.map { it.first }
+            val owners = owned.associate { it.first.fileId to it.second }
+            val coming = OfflineDownloads.active.value
+            val candidates = chosen.map { item ->
+                CacheShelf.Candidate(
+                    fileId = item.fileId,
+                    sizeBytes = item.sizeBytes,
+                    partialBytes = runCatching { Td.localDownloadedBytes(item.fileId) }
+                        .getOrDefault(0L),
+                    alreadyHere = coming.containsKey(item.fileId) ||
+                        runCatching { Td.isFileCached(item.fileId) }.getOrDefault(false),
+                )
+            }
+            // The disk decides here, and nothing else. Ticking three videos is a viewer asking
+            // for three videos, so all three go on the queue and the only thing that can turn
+            // one away is there being no room for it.
+            val batch = CacheShelf.planBatch(
+                candidates = candidates,
+                cached = cached,
+                freeBytes = DiskSpace.read(context).freeBytes,
+            )
+            // Spent before the first byte is fetched, so the room the plan counted on is
+            // actually there by the time the queue starts.
+            if (batch.reclaimFileIds.isNotEmpty()) {
+                for (fileId in batch.reclaimFileIds) {
+                    runCatching { Td.deleteFile(fileId) }
+                    val record = owners[fileId] ?: continue
+                    val left = runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
+                    if (left <= 0) {
+                        runCatching { settings.forgetCachedVideo(record.chatId, record.messageId) }
+                    }
+                }
+            }
+            batch.fits.map { chosen[it] } to batchMessage(batch, chosen.size)
+        }
+    }
+
+    /**
      * Queues videos, having first asked the disk whether they fit.
      *
      * Takes the list rather than reading the selection, because the long-press menu's "Download
@@ -357,56 +428,22 @@ fun MediaGridScreen(
             // with a TDLib round trip each, a statvfs() for the free space and a stat() per ticked
             // video, which on the drawing thread would freeze the listing for its whole length.
             val (taken, message) = withContext(Dispatchers.Default) {
-                // Only the watch cache is on offer here. A video left behind by a press of Play
-                // should not be the reason a video somebody ticked is refused; the videos they
-                // downloaded on purpose are not touched either way.
-                val cachedRecords = runCatching { settings.cachedVideosNow() }
-                    .getOrDefault(emptyList())
-                // Measured and later deleted through the id the message answers with now, not the
-                // one saved with the record: a saved id from an earlier session measures as zero
-                // and deletes nothing. See [WatchCache.evictAllBut].
-                val owned = cachedRecords.mapNotNull { record ->
-                    val fileId = runCatching {
-                        Td.currentFileId(record.chatId, record.messageId, record.fileId)
-                    }.getOrDefault(record.fileId)
-                    val bytes = runCatching { Td.localDownloadedBytes(fileId) }
-                        .getOrDefault(0L)
-                    if (bytes <= 0) null else CacheShelf.Held(fileId, bytes, record.updatedAt) to record
-                }
-                val cached = owned.map { it.first }
-                val owners = owned.associate { it.first.fileId to it.second }
+                // Already in Downloads: nothing to do. Whole in the cache: straight to the queue,
+                // which moves it into Downloads without fetching a byte, so the disk has no say.
+                val inDownloads = LocalDownloads.presentIds(settings)
                 val coming = OfflineDownloads.active.value
-                val candidates = chosen.map { item ->
-                    CacheShelf.Candidate(
-                        fileId = item.fileId,
-                        sizeBytes = item.sizeBytes,
-                        partialBytes = runCatching { Td.localDownloadedBytes(item.fileId) }
-                            .getOrDefault(0L),
-                        alreadyHere = coming.containsKey(item.fileId) ||
-                            runCatching { Td.isFileCached(item.fileId) }.getOrDefault(false),
-                    )
+                val (wholeHere, toPlan) = chosen
+                    .filter { it.id !in inDownloads && !coming.containsKey(it.fileId) }
+                    .partition { runCatching { Td.isFileCached(it.fileId) }.getOrDefault(false) }
+                val (planTaken, planMessage) = planDownloads(toPlan)
+                val all = wholeHere + planTaken
+                all to when {
+                    all.isEmpty() && toPlan.isEmpty() && chosen.size == 1 -> "That video is in Downloads already."
+                    all.isEmpty() && toPlan.isEmpty() -> "Those videos are already downloading or in Downloads."
+                    toPlan.isEmpty() && all.size == 1 -> "Saving to Downloads."
+                    toPlan.isEmpty() -> "Saving ${all.size} videos to Downloads."
+                    else -> planMessage
                 }
-                // The disk decides here, and nothing else. Ticking three videos is a viewer asking
-                // for three videos, so all three go on the queue and the only thing that can turn
-                // one away is there being no room for it.
-                val batch = CacheShelf.planBatch(
-                    candidates = candidates,
-                    cached = cached,
-                    freeBytes = DiskSpace.read(context).freeBytes,
-                )
-                // Spent before the first byte is fetched, so the room the plan counted on is
-                // actually there by the time the queue starts.
-                if (batch.reclaimFileIds.isNotEmpty()) {
-                    for (fileId in batch.reclaimFileIds) {
-                        runCatching { Td.deleteFile(fileId) }
-                        val record = owners[fileId] ?: continue
-                        val left = runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
-                        if (left <= 0) {
-                            runCatching { settings.forgetCachedVideo(record.chatId, record.messageId) }
-                        }
-                    }
-                }
-                batch.fits.map { chosen[it] } to batchMessage(batch, chosen.size)
             }
             taken.forEach { OfflineDownloads.start(context, it, chatTitle) }
             onOfflineAction(message)
@@ -591,6 +628,7 @@ fun MediaGridScreen(
                             selecting = true
                         },
                         onDownloadForLater = { downloadThese(listOf(item)) },
+                        onRemoved = viewModel::refreshLocalAvailability,
                         onDismiss = { showingDetailsOf = null },
                     )
                 }
@@ -1668,7 +1706,7 @@ private fun MediaArt(
         }
         val waiting = coming
         if (waiting != null) {
-            // Takes the "Saved" badge's corner, and takes precedence over it: a video being
+            // Takes the Downloaded or Cached badge's corner, and takes precedence over it: a video being
             // fetched is the more urgent fact, and both in one corner would overlap. Every ticked
             // video says on its own tile where in the queue it is.
             Text(
@@ -1700,8 +1738,9 @@ private fun MediaArt(
             )
         } else if (item.onDevice) {
             Text(
-                // Not "On this TV": the same badge is drawn on a phone.
-                "Saved",
+                // Two words for two kinds of copy: one the viewer kept, and one playing left
+                // behind that the next play may take.
+                if (item.locality == MediaItem.Locality.Downloaded) "Downloaded" else "Cached",
                 style = tagStyle,
                 // The one badge here that is the app speaking rather than a fact about the picture,
                 // so it takes the theme's own colour instead of the plain black plate the tags use.
@@ -1873,16 +1912,48 @@ private fun MediaActionsSheet(
     onPlay: () -> Unit,
     onSelectVideos: () -> Unit,
     onDownloadForLater: () -> Unit,
+    /** A download was removed from here, so the tile's badge is out of date. */
+    onRemoved: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val downloads by OfflineDownloads.active.collectAsStateWithLifecycle()
     val downloading = downloads[item.fileId]
+    val settings = remember(context) { SettingsStore(context) }
 
-    // Asked once, when the sheet opens: whether the file is already here decides half the menu.
-    val onDisk by produceState(initialValue = false, item.fileId, downloading) {
+    // Asked once, when the sheet opens: which kind of copy is here decides half the menu. The
+    // download index first, since TDLib let go of a download's file when it moved.
+    val inDownloads by produceState(initialValue = item.locality == MediaItem.Locality.Downloaded, item.id, downloading) {
+        value = LocalDownloads.fileFor(settings, item.chatId, item.messageId) != null
+    }
+    val cachedHere by produceState(initialValue = false, item.fileId, downloading) {
         value = runCatching { Td.isFileCached(item.fileId) }.getOrDefault(false)
+    }
+    val onDisk = inDownloads || cachedHere
+    var confirmingRemove by remember { mutableStateOf(false) }
+    if (confirmingRemove) {
+        TvConfirm(
+            title = "Remove from Downloads?",
+            message = "\"${item.title}\" is deleted from this device. Nothing is removed from " +
+                "Telegram, so you can download it again.",
+            confirmLabel = "Remove",
+            onConfirm = {
+                scope.launch {
+                    val record = settings.downloadRecord(item.chatId, item.messageId)
+                    val removed = record != null && LocalDownloads.delete(settings, record)
+                    Toast.makeText(
+                        context,
+                        if (removed) "Removed from Downloads" else "That download could not be deleted.",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    onRemoved()
+                    onDismiss()
+                }
+            },
+            onDismiss = onDismiss,
+        )
+        return
     }
 
     val resume = watched
@@ -1948,19 +2019,39 @@ private fun MediaActionsSheet(
                     },
                 ),
             )
-            onDisk -> add(
+            inDownloads -> {
+                add(
+                    MenuAction(
+                        label = "In Downloads",
+                        icon = TmIcons.Download,
+                        detail = "Plays without a connection",
+                        onSelect = { onDismiss() },
+                    ),
+                )
+                add(
+                    MenuAction(
+                        label = "Remove from Downloads",
+                        icon = Icons.Filled.Close,
+                        onSelect = { confirmingRemove = true },
+                    ),
+                )
+            }
+            cachedHere -> add(
                 MenuAction(
-                    label = "Downloaded",
+                    label = "Save to Downloads",
                     icon = TmIcons.Download,
-                    detail = "Here already, no signal needed",
-                    onSelect = { onDismiss() },
+                    detail = "Kept until you delete it, not replaced by the next video",
+                    onSelect = {
+                        onDownloadForLater()
+                        onDismiss()
+                    },
                 ),
             )
             else -> add(
                 MenuAction(
-                    label = "Download for later",
+                    label = "Download",
                     icon = TmIcons.Download,
-                    detail = "Kept here, no signal needed",
+                    detail = "Kept in Downloads, no signal needed",
                     onSelect = {
                         // Through the same planner the multi-select uses, which asks the disk
                         // first and spends the watch cache if that is what makes room.
@@ -2042,8 +2133,8 @@ private fun batchMessage(batch: CacheShelf.Batch, wanted: Int): String {
     // been handed over, so there is genuinely nothing left to give.
     val noRoom = "There is no more room on this device."
     return when {
-        needed == 0 && wanted == 1 -> "That video is on this device already."
-        needed == 0 -> "Those videos are already downloading or downloaded."
+        needed == 0 && wanted == 1 -> "That video is in Downloads already."
+        needed == 0 -> "Those videos are already downloading or in Downloads."
         taken == 0 -> "None of them will fit. $noRoom"
         taken < needed -> "Queued $taken of $needed. $noRoom"
         taken == 1 -> "Downloading 1 video."
@@ -2094,7 +2185,7 @@ private const val NOTIFICATION_REQUEST = 7301
  * this app runs on. The grant is read-only and lasts as long as the other app's task.
  */
 private suspend fun shareVideo(context: Context, item: MediaItem, send: Boolean) {
-    val path = Td.localFilePath(item.fileId)
+    val path = LocalDownloads.shareablePath(SettingsStore(context), item.chatId, item.messageId, item.fileId)
     if (path.isNullOrBlank()) {
         // Not a state the menu should be able to reach, since these two entries only appear for a
         // file already on the phone. Said out loud anyway: silence here is indistinguishable from

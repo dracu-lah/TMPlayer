@@ -6,6 +6,9 @@ import android.os.Build
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Checkbox
+import com.tmplayer.data.LocalDownloads
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
@@ -161,6 +164,8 @@ fun SettingsScreen(
     onLoggedOut: () -> Unit,
     /** Leaving Settings. On a phone this is the app bar's arrow as well as the hardware key. */
     onBack: () -> Unit = {},
+    /** The Cached videos row: the list of them, with Save to Downloads and Delete on each. */
+    onOpenCachedVideos: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -207,6 +212,9 @@ fun SettingsScreen(
     var disk by remember { mutableStateOf(DiskInfo.EMPTY) }
     var busy by remember { mutableStateOf<String?>(null) }
     var prompt by remember { mutableStateOf<Prompt?>(null) }
+    // The sign out dialog's tick box. Off every time the dialog opens: downloads are the viewer's
+    // files, and losing them has to be asked for each time rather than remembered.
+    var alsoDeleteDownloads by remember { mutableStateOf(false) }
     // Which end of the range the D-pad is currently moving.
     var editingUpper by remember { mutableStateOf(false) }
     // Where focus lands, and where it is sent back to after a reset: the first control on the
@@ -660,23 +668,32 @@ fun SettingsScreen(
                 totalBytes = disk.totalBytes,
             )
         }
-        // The one video watching leaves behind, named and measured, with the way to be rid of it.
-        // A row rather than a setting: the cache is one video on every device and the next press
-        // of Play replaces it, so the only useful choice is to get the space back now.
+        // The videos watching left behind, named and measured, each with Save to Downloads and
+        // Delete: the row opens the list of them, which is the Downloads screen's third tab.
         item {
             val held = cached.firstOrNull()
             ActionRow(
-                title = "Clear cache",
+                title = "Cached videos",
                 subtitle = when {
-                    split.cachedBytes <= 0 -> "Nothing cached. Playing a video keeps a copy here."
+                    split.cachedBytes <= 0 -> "Nothing cached. Playing a video keeps it here until the next one."
                     // More than one means episodes an older version of the app left behind, so
                     // the count is quoted rather than claiming "1 video" beside two gigabytes.
                     split.cachedCount > 1 ->
-                        "${split.cachedCount} videos · ${StreamStats.formatBytes(split.cachedBytes)}"
-                    held != null -> "\"${held.title}\" · ${StreamStats.formatBytes(split.cachedBytes)}"
+                        "${split.cachedCount} videos, ${StreamStats.formatBytes(split.cachedBytes)}"
+                    held != null -> "\"${held.title}\", ${StreamStats.formatBytes(split.cachedBytes)}"
                     else -> StreamStats.formatBytes(split.cachedBytes)
                 },
                 icon = TmIcons.Download,
+                onClick = onOpenCachedVideos,
+            )
+        }
+        // The space back now, without choosing: the cache is one video and the next press of
+        // Play replaces it anyway.
+        item {
+            ActionRow(
+                title = "Clear cache",
+                subtitle = "Deletes every cached video. Downloads are not touched.",
+                icon = Icons.Filled.Delete,
                 onClick = {
                     // Nothing to delete is not a dialog. The row stays focusable and in the same
                     // place every time, and says so instead.
@@ -930,13 +947,13 @@ fun SettingsScreen(
 
     when (prompt) {
         Prompt.ClearCache -> TvConfirm(
-            title = if (split.cachedCount > 1) "Clear ${split.cachedCount} cached videos?" else
-                "Clear the cached video?",
-            message = "This frees up ${StreamStats.formatBytes(split.cachedBytes)}. Opening them again " +
-                "downloads them again.",
+            title = "Clear the cache?",
+            message = (if (split.cachedCount > 1) "This deletes ${split.cachedCount} cached videos and " else "This ") +
+                "frees ${StreamStats.formatBytes(split.cachedBytes)}. Playing them again downloads " +
+                "them again.",
             // Says what it will not touch, so it cannot be mistaken for the clear-everything row
             // a little further down.
-            detail = "Videos you downloaded on purpose stay where they are.",
+            detail = "Your downloads are not touched.",
             confirmLabel = "Clear",
             onConfirm = {
                 prompt = null
@@ -1034,27 +1051,48 @@ fun SettingsScreen(
 
         Prompt.SignOut -> TvConfirm(
             title = "Sign out of Telegram?",
-            message = "You'll be signed out and taken back to the sign-in screen. The downloaded " +
-                "video, your favourites and everything you were part-way through go with it.",
+            message = "You'll be signed out and taken back to the sign-in screen. The cache, your " +
+                "favourites and everything you were part-way through go with it.",
+            detail = if (split.downloadBytes > 0) "Your downloads stay unless you tick the box." else null,
             confirmLabel = "Sign out",
+            extra = if (split.downloadBytes > 0) {
+                {
+                    TickRow(
+                        label = "Also delete my downloads (${StreamStats.formatBytes(split.downloadBytes)})",
+                        checked = alsoDeleteDownloads,
+                        onToggle = { alsoDeleteDownloads = !alsoDeleteDownloads },
+                    )
+                }
+            } else {
+                null
+            },
             onConfirm = {
                 prompt = null
+                val deleteDownloads = alsoDeleteDownloads
+                alsoDeleteDownloads = false
                 scope.launch {
                     busy = "Signing out…"
-                    // Everything this app knows is about the account that is leaving, so it all
-                    // goes: the video on disk and every preference. TDLib clears its own database
-                    // as it logs out.
+                    // Everything this app knows about the account that is leaving goes: the
+                    // cache and every preference. TDLib clears its own database as it logs out.
+                    // The downloads are files in their own folder and stay, with their records,
+                    // unless the box was ticked: they are the viewer's, not the account's.
                     runCatching { Td.clearMediaCache() }
+                    if (deleteDownloads) {
+                        withContext(Dispatchers.IO) { runCatching { LocalDownloads.deleteAll(settings) } }
+                    }
                     // Consent goes out with the preferences, so the SDK is shut down here rather
                     // than left running until the next launch: somebody handing the television on
                     // must not leave a reporter switched on behind them.
                     runCatching { CrashReports.stop() }
-                    runCatching { settings.clearEverything() }
+                    runCatching { settings.clearEverything(keepDownloads = !deleteDownloads) }
                     Td.logOut()
                     onLoggedOut()
                 }
             },
-            onDismiss = { prompt = null },
+            onDismiss = {
+                prompt = null
+                alsoDeleteDownloads = false
+            },
         )
 
         null -> Unit
@@ -1553,7 +1591,15 @@ private fun StorageCard(
         }
         Spacer(Modifier.height(if (touch) 12.dp else 16.dp))
         Text(
-            "TMPlayer has ${StreamStats.formatBytes(cacheBytes)} saved.",
+            if (measured) {
+                listOf(
+                    "${StreamStats.formatBytes(split.downloadBytes)} in Downloads",
+                    "${StreamStats.formatBytes(split.cachedBytes)} cached",
+                    "${StreamStats.formatBytes(split.otherBytes)} pictures and previews",
+                ).joinToString("  ·  ")
+            } else {
+                "TMPlayer is using ${StreamStats.formatBytes(cacheBytes)}."
+            },
             style = if (touch) {
                 MaterialTheme.typography.bodyMedium
             } else {
@@ -1569,7 +1615,7 @@ private fun StorageCard(
                 StorageLegend("Downloads", split.downloadBytes, videoBand)
             }
             if (split.cachedBytes > 0) {
-                StorageLegend("Cached from playback", split.cachedBytes, pictureBand)
+                StorageLegend("Cached", split.cachedBytes, pictureBand)
             }
             if (split.otherBytes > 0) {
                 StorageLegend("Pictures and previews", split.otherBytes, otherBand)
@@ -1580,17 +1626,46 @@ private fun StorageCard(
             // The two devices keep different bargains, so the wording has to name the one in
             // hand: a phone also holds downloads the viewer deletes themselves.
             if (touch) {
-                "Playing a video leaves a copy behind, and the next one you play replaces it. " +
-                    "Downloads are yours and stay until you delete them, which you can do from " +
-                    "the Downloads screen."
+                "Playing a video caches it, and the next one you play replaces it. Downloads " +
+                    "stay until you delete them, which you can do from the Downloads screen."
             } else {
-                "One video is kept at a time; starting another replaces it. Deleting takes the " +
-                    "video and leaves the pictures."
+                "One video is cached at a time; playing another replaces it. Downloads stay " +
+                    "until you delete them."
             },
             style = MaterialTheme.typography.bodyMedium,
             color = Tone.muted,
         )
     }
+    }
+}
+
+/**
+ * A tick box with its words, for a choice inside a dialog. The whole row is the target, so a
+ * thumb need not find the box and a remote can land on it; on a television it wears the focus
+ * ring the rest of the app's controls do.
+ */
+@Composable
+private fun TickRow(label: String, checked: Boolean, onToggle: () -> Unit) {
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusedAsState()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(Corner.Small))
+            .focusRing(focused, RoundedCornerShape(Corner.Small))
+            .toggleable(
+                value = checked,
+                interactionSource = interactions,
+                indication = LocalIndication.current,
+                role = Role.Checkbox,
+                onValueChange = { onToggle() },
+            )
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = checked, onCheckedChange = null)
+        Spacer(Modifier.width(8.dp))
+        M3Text(label, style = M3Theme.typography.bodyMedium, color = Tone.text)
     }
 }
 

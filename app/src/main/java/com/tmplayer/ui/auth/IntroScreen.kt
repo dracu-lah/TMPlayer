@@ -151,13 +151,13 @@ private fun ColumnScope.Intro(touch: Boolean, focus: FocusRequester, onContinue:
     Point(
         touch,
         Icons.Filled.Star,
-        if (touch) "One video on this device at a time" else "One video on this TV at a time",
+        if (touch) "One cached video on this device" else "One cached video on this TV",
         if (touch) {
-            "TMPlayer saves the video you're watching and deletes it when you start the next " +
-                "one, so this phone doesn't fill up. It always asks you first."
+            "TMPlayer caches the video you're watching and deletes it when you play the next " +
+                "one, so this phone doesn't fill up. Videos you download stay until you delete them."
         } else {
-            "TMPlayer saves the video you're watching and deletes it when you start the " +
-                "next one, so this TV doesn't fill up. It always asks you first."
+            "TMPlayer caches the video you're watching and deletes it when you play the " +
+                "next one, so this TV doesn't fill up. Videos you download stay until you delete them."
         },
     )
 
