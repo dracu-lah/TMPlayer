@@ -61,13 +61,14 @@ cross compilation, which is why the release builds each one on its own runner.
 
 ```bash
 ./gradlew :desktop:packageDistributionForCurrentOS   # whatever this OS makes
-./gradlew :desktop:packageMsi                        # Windows
+./gradlew :desktop:packageReleaseMsi                 # Windows, ProGuard shrunk
 ./gradlew :desktop:packageDeb :desktop:packageRpm    # Linux, for local use; releases ship the AppImage
-./gradlew :desktop:createDistributable               # the plain app folder, no installer
+./gradlew :desktop:createReleaseDistributable        # the plain app folder, no installer, shrunk
 ```
 
-They land under `desktop/build/compose/binaries/main/`. The AppImage and the Linux tarball
-are wrapped from the `createDistributable` folder by the release workflow, with
+The release tasks run ProGuard and land under `desktop/build/compose/binaries/main-release/`
+(the plain `package*` and `createDistributable` tasks skip it and use `binaries/main/`). The AppImage and the Linux tarball
+are wrapped from the `createReleaseDistributable` folder by the release workflow, with
 `desktop/packaging/linux/package.sh`. The libmpv runtime pulled in is the one for
 the host only, since each is 30 to 75 MB and the other systems' would never load.
 

@@ -2,6 +2,7 @@ import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.Properties
 import java.util.zip.CRC32
 import java.util.zip.Deflater
@@ -191,6 +192,19 @@ configurations.named("runtimeClasspath") {
     exclude(group = "org.jetbrains.compose.material", module = "material-icons-extended-desktop")
     exclude(group = "androidx.compose.material", module = "material-icons-extended")
     exclude(group = "androidx.compose.material", module = "material-icons-extended-desktop")
+    // mediamp's published desktop modules also list Compose's UI test kit as a runtime dependency,
+    // which drags JUnit, Hamcrest and kotlinx-coroutines-test into the package. None of its classes
+    // reference them, and coroutines-test registers a ServiceLoader handler that, once ProGuard has
+    // removed its class, kills the app on the first uncaught coroutine error. The tests resolve
+    // their own copies through testRuntimeClasspath.
+    exclude(group = "org.jetbrains.compose.ui", module = "ui-test")
+    exclude(group = "org.jetbrains.compose.ui", module = "ui-test-desktop")
+    exclude(group = "org.jetbrains.compose.ui", module = "ui-test-junit4")
+    exclude(group = "org.jetbrains.compose.ui", module = "ui-test-junit4-desktop")
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-test")
+    exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-test-jvm")
+    exclude(group = "junit", module = "junit")
+    exclude(group = "org.hamcrest")
 }
 
 dependencies {
@@ -231,10 +245,49 @@ tasks.register<JavaExec>("runPlayerDev") {
     jvmArgs("-Dsun.java2d.uiScale.enabled=true")
 }
 
+// ProGuard writes every jar it produces deflated again, which would undo StoreRuntimeJars for the
+// release image. So each output jar is rewritten with its entries stored, as the transform does.
+tasks.matching { it.name == "proguardReleaseJars" }.configureEach {
+    doLast {
+        outputs.files.asFileTree.matching { include("**/*.jar") }.forEach { jar ->
+            val tmp = File(jar.path + ".stored")
+            ZipFile(jar).use { zin ->
+                ZipOutputStream(tmp.outputStream().buffered()).use { zout ->
+                    for (entry in zin.entries()) {
+                        val bytes = if (entry.isDirectory) ByteArray(0) else zin.getInputStream(entry).use { it.readBytes() }
+                        zout.putNextEntry(
+                            ZipEntry(entry.name).apply {
+                                time = entry.time
+                                method = ZipEntry.STORED
+                                size = bytes.size.toLong()
+                                compressedSize = bytes.size.toLong()
+                                crc = CRC32().apply { update(bytes) }.value
+                            },
+                        )
+                        zout.write(bytes)
+                        zout.closeEntry()
+                    }
+                }
+            }
+            Files.move(tmp.toPath(), jar.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
+}
+
 compose.desktop {
     application {
         mainClass = "com.tmplayer.desktop.MainKt"
         jvmArgs += listOf("-Dsun.java2d.uiScale.enabled=true")
+        // The release image (createReleaseDistributable, packageReleaseMsi) runs ProGuard over the
+        // classpath to drop code nothing reaches: Compose, Material, coroutines and the big
+        // libraries are mostly unused. Names are kept and optimisation is off, because the risk is in
+        // reflection and JNI, not in size. desktop/proguard-rules.pro says what must survive.
+        buildTypes.release.proguard {
+            isEnabled.set(true)
+            obfuscate.set(false)
+            optimize.set(false)
+            configurationFiles.from(project.file("proguard-rules.pro"))
+        }
         nativeDistributions {
             targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg)
             packageName = "TMPlayer"
@@ -244,7 +297,12 @@ compose.desktop {
             description = "Unofficial Telegram media player"
             copyright = "GPL-3.0-or-later"
             licenseFile.set(rootProject.file("LICENSE"))
-            modules("java.naming", "java.sql", "jdk.unsupported", "java.management")
+            // What the runtime reaches beyond the modules Compose already adds. Evidence is jdeps
+            // over the release image's jars plus suggestRuntimeModules: jdk.security.auth is dbus-java's
+            // UnixSystem credentials, jdk.net its unix socket options, jdk.unsupported the protobuf
+            // Unsafe in datastore. Nothing references java.sql or java.management, and java.naming
+            // still arrives on its own because jdk.security.auth requires it.
+            modules("jdk.unsupported", "jdk.security.auth", "jdk.net")
             linux {
                 packageName = "tmplayer"
                 iconFile.set(packagingDir.file("icons/tmplayer.png"))
@@ -272,4 +330,22 @@ compose.desktop {
             }
         }
     }
+}
+
+// Windows MSI cab compression. The jars inside the app image are stored uncompressed, so the
+// cabinet inside the MSI is the only place the bytes get squeezed. jpackage's own main.wxs has no
+// CompressionLevel on its Media element, which leaves WiX at the mszip default, and jpackage
+// offers no hook to change it. Its --resource-dir does let a main.wxs of our own replace the
+// built-in one, and Compose passes extra arguments through freeArgs after its own, so desktop/packaging/windows/main.wxs is the stock file for the JDK we build
+// with plus CompressionLevel="high" (LZX). Only the MSI tasks get it, and only on a Windows
+// host, because that is the only place the WiX step runs.
+if (org.gradle.internal.os.OperatingSystem.current().isWindows) {
+    tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask>()
+        .matching { it.targetFormat == TargetFormat.Msi }
+        .configureEach {
+            freeArgs.addAll(
+                "--resource-dir",
+                layout.projectDirectory.dir("packaging/windows").asFile.absolutePath,
+            )
+        }
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Builds the Linux release packages from the app image that `:desktop:createDistributable` makes.
+# Builds the Linux release packages from the app image that `:desktop:createReleaseDistributable` makes.
 #
-#   ./gradlew :desktop:createDistributable -PdesktopVersion=1.18.0
+#   ./gradlew :desktop:createReleaseDistributable -PdesktopVersion=1.18.0
 #   desktop/packaging/linux/package.sh 1.18.0 [tar] [appimage]
 #
 # With no format named it builds both into desktop/build/packages (OUT overrides):
@@ -33,13 +33,13 @@ done
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../../.." && pwd)"
-app="${APP_IMAGE:-$root/desktop/build/compose/binaries/main/app/TMPlayer}"
+app="${APP_IMAGE:-$root/desktop/build/compose/binaries/main-release/app/TMPlayer}"
 out="${OUT:-$root/desktop/build/packages}"
 work="${WORK:-$root/desktop/build/packaging-work}"
 id="io.github.dracu_lah.TMPlayer"
 icons="$root/desktop/packaging/icons"
 
-[ -x "$app/bin/TMPlayer" ] || { echo "no app image at $app; run :desktop:createDistributable first" >&2; exit 1; }
+[ -x "$app/bin/TMPlayer" ] || { echo "no app image at $app; run :desktop:createReleaseDistributable first" >&2; exit 1; }
 release_date="$(git -C "$root" log -1 --format=%cs 2>/dev/null || date -u +%F)"
 
 rm -rf "$work"

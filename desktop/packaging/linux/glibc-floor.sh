@@ -3,7 +3,7 @@
 # including the ones packed inside jars (TDLib, libmpv and FFmpeg, skiko, JNA), and fails if
 # either is newer than the floor the downloads promise (package.sh, the PKGBUILD, the release notes).
 #
-#   desktop/packaging/linux/glibc-floor.sh desktop/build/compose/binaries/main/app/TMPlayer
+#   desktop/packaging/linux/glibc-floor.sh desktop/build/compose/binaries/main-release/app/TMPlayer
 set -euo pipefail
 
 app="${1:?usage: glibc-floor.sh <app image dir>}"

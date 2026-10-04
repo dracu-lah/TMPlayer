@@ -28,17 +28,17 @@ runs:
 
     - name: Build the app image
       shell: bash
-      run: ./gradlew :desktop:createDistributable -PdesktopVersion=${{ inputs.version }}
+      run: ./gradlew :desktop:createReleaseDistributable -PdesktopVersion=${{ inputs.version }}
 
     - name: Self-test the app image
       shell: bash
-      run: desktop/build/compose/binaries/main/app/TMPlayer/bin/TMPlayer --self-test
+      run: desktop/build/compose/binaries/main-release/app/TMPlayer/bin/TMPlayer --self-test
 
     # Raises the alarm if a dependency bump ships a native that needs a newer glibc than the
     # downloads promise (2.38, from the TDLib and libmpv builds).
     - name: Check the glibc floor
       shell: bash
-      run: desktop/packaging/linux/glibc-floor.sh desktop/build/compose/binaries/main/app/TMPlayer
+      run: desktop/packaging/linux/glibc-floor.sh desktop/build/compose/binaries/main-release/app/TMPlayer
 
     - name: Fetch appimagetool
       shell: bash

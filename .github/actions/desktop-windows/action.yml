@@ -26,20 +26,20 @@ runs:
       if: inputs.upgrade-from != ''
       shell: bash
       run: |
-        ./gradlew :desktop:packageMsi -PdesktopVersion=${{ inputs.upgrade-from }}
+        ./gradlew :desktop:packageReleaseMsi -PdesktopVersion=${{ inputs.upgrade-from }}
         mkdir -p "$RUNNER_TEMP/old"
-        mv desktop/build/compose/binaries/main/msi/*.msi "$RUNNER_TEMP/old/old.msi"
+        mv desktop/build/compose/binaries/main-release/msi/*.msi "$RUNNER_TEMP/old/old.msi"
 
     - name: Build the MSI and the app image
       shell: bash
-      run: ./gradlew :desktop:packageMsi :desktop:createDistributable -PdesktopVersion=${{ inputs.version }}
+      run: ./gradlew :desktop:packageReleaseMsi :desktop:createReleaseDistributable -PdesktopVersion=${{ inputs.version }}
 
     - name: Name the MSI
       shell: bash
       run: |
         V="${{ inputs.version }}"
         mkdir -p dist
-        msis=(desktop/build/compose/binaries/main/msi/*.msi)
+        msis=(desktop/build/compose/binaries/main-release/msi/*.msi)
         [ ${#msis[@]} -eq 1 ] || { echo "::error::expected one MSI, found ${msis[*]}"; exit 1; }
         cp "${msis[0]}" "dist/TMPlayer-$V-windows-x64.msi"
         ls -la dist
@@ -49,7 +49,7 @@ runs:
       run: |
         # TDLib imports MSVCP140, VCRUNTIME140 and VCRUNTIME140_1; the app loads the JVM's copies
         # (WindowsRuntime in SelfTest.kt), so they must be in the bundled runtime.
-        $bin = "desktop/build/compose/binaries/main/app/TMPlayer/runtime/bin"
+        $bin = "desktop/build/compose/binaries/main-release/app/TMPlayer/runtime/bin"
         foreach ($dll in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
           if (-not (Test-Path (Join-Path $bin $dll))) { Write-Error "$dll is missing from $bin" }
         }
