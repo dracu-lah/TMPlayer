@@ -313,7 +313,7 @@ class SelfUpdate(
             "linux" -> when {
                 flatpakInfo || env.containsKey("FLATPAK_ID") -> InstallKind.Flatpak
                 env["APPIMAGE"].isNullOrBlank().not() -> InstallKind.AppImage
-                launcher == null || !launcher.path.startsWith("/opt/tmplayer/") -> InstallKind.Manual
+                launcher == null || !launcher.invariantSeparatorsPath.startsWith("/opt/tmplayer/") -> InstallKind.Manual
                 dpkgOwns -> InstallKind.Deb
                 rpmOwns() -> InstallKind.Rpm
                 else -> InstallKind.Manual
