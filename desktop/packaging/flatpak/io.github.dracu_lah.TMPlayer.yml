@@ -20,7 +20,10 @@ finish-args:
   - --socket=pulseaudio
   # libmpv's GL and Vulkan output, and VA-API decoding.
   - --device=dri
-  - --filesystem=xdg-download
+  # Downloads go in <Downloads>/TMPlayer, which the app creates, hence :create.
+  - --filesystem=xdg-download:create
+  # Download progress and completion notifications.
+  - --talk-name=org.freedesktop.Notifications
   # Keeping the screen awake while a video plays (os/LinuxKeepAwake.kt).
   - --talk-name=org.freedesktop.ScreenSaver
   - --talk-name=org.freedesktop.PowerManagement

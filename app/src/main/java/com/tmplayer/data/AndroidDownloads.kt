@@ -48,6 +48,8 @@ fun DownloadRequest.Companion.from(intent: Intent): DownloadRequest? {
  */
 class AndroidDownloadRunner(private val context: Context) : DownloadRunner {
 
+    override val refusal: String get() = REFUSED
+
     override fun download(request: DownloadRequest) {
         // A foreground service, so it keeps going with the app closed. Android requires the
         // notification within a few seconds of this call, which the service posts first thing.
@@ -64,6 +66,18 @@ class AndroidDownloadRunner(private val context: Context) : DownloadRunner {
             putExtra(DownloadService.EXTRA_FILE_ID, fileId)
         }
         context.startForegroundService(intent)
+    }
+
+    companion object {
+        /**
+         * What a row says when Android refused to start the service that would have fetched it.
+         *
+         * Android 14 refuses a foreground service started from the background, and Android 15
+         * refuses a data sync one whose day's budget has been spent. Neither is something the app
+         * can argue with, and both are answered by opening the app and asking again, so that is
+         * what it says.
+         */
+        const val REFUSED = "Android would not start this download. Open TMPlayer and press Try again."
     }
 }
 

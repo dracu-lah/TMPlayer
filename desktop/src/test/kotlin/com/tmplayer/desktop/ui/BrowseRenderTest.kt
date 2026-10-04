@@ -64,7 +64,7 @@ class BrowseRenderTest {
             DesktopExtras(
                 prefs = prefs,
                 updates = UpdateScheduler(settings.updatePrefs, check = { _, _ -> false }, onSkip = {}),
-                watchCache = DesktopWatchCache(settings, dir.resolve("tdlib-files")),
+                watchCache = DesktopWatchCache(settings, { dir.resolve("cache") }),
             )
         },
     )

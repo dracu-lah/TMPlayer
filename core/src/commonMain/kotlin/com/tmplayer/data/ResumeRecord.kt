@@ -18,6 +18,13 @@ data class ResumeRecord(
     val positionMs: Long,
     val durationMs: Long,
     val updatedAt: Long,
+    /**
+     * Where the file is, for a download that has been moved into TMPlayer's own Downloads folder.
+     *
+     * Null for everything else: a resume or cached record, and a download recorded before
+     * downloads had a folder of their own, whose file is still wherever TDLib's cache put it.
+     */
+    val localPath: String? = null,
 ) {
     val fraction: Float
         get() = if (durationMs <= 0) 0f else (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)
@@ -48,6 +55,9 @@ data class ResumeRecord(
         private const val SEP = ''
         private const val FIELDS = 6
 
+        /** The same line with a path on the end, written for a download that has a file of its own. */
+        private const val FIELDS_WITH_PATH = 7
+
         fun encode(
             fileId: Int,
             title: String,
@@ -55,13 +65,17 @@ data class ResumeRecord(
             sizeBytes: Long,
             durationSec: Int,
             updatedAt: Long,
-        ): String = listOf(
+            localPath: String? = null,
+        ): String = listOfNotNull(
             fileId.toString(),
             title.replace(SEP, ' '),
             chatTitle.replace(SEP, ' '),
             sizeBytes.toString(),
             durationSec.toString(),
             updatedAt.toString(),
+            // Appended rather than slotted in, so a line without one is exactly what older builds
+            // wrote and read, and a line with one is still read field for field up to here.
+            localPath?.takeIf { it.isNotBlank() }?.replace(SEP, ' '),
         ).joinToString(SEP.toString())
 
         /**
@@ -92,7 +106,7 @@ data class ResumeRecord(
             val messageId = ids[1].toLongOrNull() ?: return null
 
             val parts = encoded.split(SEP)
-            if (parts.size != FIELDS) return null
+            if (parts.size != FIELDS && parts.size != FIELDS_WITH_PATH) return null
             val fileId = parts[0].toIntOrNull() ?: return null
             if (fileId <= 0) return null
             val title = parts[1]
@@ -109,6 +123,7 @@ data class ResumeRecord(
                 positionMs = positionMs,
                 durationMs = durationMs,
                 updatedAt = parts[5].toLongOrNull() ?: 0L,
+                localPath = parts.getOrNull(6)?.takeIf { it.isNotBlank() },
             )
         }
     }

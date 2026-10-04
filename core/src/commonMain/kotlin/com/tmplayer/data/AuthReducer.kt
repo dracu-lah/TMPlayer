@@ -115,6 +115,15 @@ sealed interface AuthAction {
     data object SendParameters : AuthAction
     data object RequestQrCode : AuthAction
     data object RecreateClient : AuthAction
+
+    /**
+     * Close this client on purpose so a new one starts, as when TDLib's files directory moves.
+     *
+     * TDLib reads its directories once, in its parameters, and has no call to change them. The
+     * session is kept: it lives in the database directory, which does not move, so the new client
+     * goes through [AuthState.Connecting] back to [AuthState.Ready] without a sign in.
+     */
+    data object Close : AuthAction
     data object OnReady : AuthAction
     data object None : AuthAction
 }
@@ -177,6 +186,14 @@ object AuthReducer {
 
         else -> AuthStep(AuthState.Connecting, AuthAction.None)
     }
+
+    /**
+     * The app, not TDLib, asking for the client to be replaced: show Connecting and close it.
+     *
+     * TDLib then passes through Closing to Closed, which [reduce] already answers with
+     * [AuthAction.RecreateClient]; that is what starts the replacement.
+     */
+    fun close(): AuthStep = AuthStep(AuthState.Connecting, AuthAction.Close)
 
     /** Everything the code screen needs, lifted out of TDLib's DTO in one place. */
     fun codeState(info: AuthenticationCodeInfo, wrong: Boolean = false): AuthState.Code =

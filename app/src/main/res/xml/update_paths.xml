@@ -5,11 +5,24 @@
         name="updates"
         path="updates/" />
     <!--
-      A downloaded video, for the Share sheet and for opening it in another player. Scoped to
-      TDLib's own files directory rather than to all of files/, so a share can only ever hand out
-      media: the TDLib database sits next door and is nobody else's business.
+      A cached video, for the Share sheet and for opening it in another player. Scoped to TDLib's
+      own files directory rather than to all of files/, so a share can only ever hand out media:
+      the TDLib database sits next door and is nobody else's business. FileProvider compares
+      resolved paths, so a path TDLib still spells with the directory's old name, tdlib-files,
+      which is now a link to cache, is served from here too.
     -->
     <files-path
         name="media"
+        path="cache/" />
+    <!--
+      The same directory under its old name, for an install where it could not be renamed (see
+      CacheDirRename) and is still a real directory called tdlib-files.
+    -->
+    <files-path
+        name="media_legacy"
         path="tdlib-files/" />
+    <!-- A downloaded video, in TMPlayer's own Downloads folder. -->
+    <files-path
+        name="downloads"
+        path="downloads/" />
 </paths>

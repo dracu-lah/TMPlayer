@@ -1679,6 +1679,7 @@ private fun MediaArt(
                     OfflineDownloads.Stage.Paused -> "Paused"
                     OfflineDownloads.Stage.Offline -> "Waiting"
                     OfflineDownloads.Stage.NoWifi -> "Wi-Fi"
+                    OfflineDownloads.Stage.Moving -> "Moving"
                     OfflineDownloads.Stage.Failed -> "Failed"
                 },
                 style = tagStyle,
@@ -1930,6 +1931,7 @@ private fun MediaActionsSheet(
                         OfflineDownloads.Stage.Failed -> "Remove the failed download"
                         OfflineDownloads.Stage.Offline -> "Stop waiting for a connection"
                         OfflineDownloads.Stage.NoWifi -> "Stop waiting for Wi-Fi"
+                        OfflineDownloads.Stage.Moving -> "Stop the download"
                         OfflineDownloads.Stage.Running -> "Stop the download"
                     },
                     icon = Icons.Filled.Close,

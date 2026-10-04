@@ -1,5 +1,6 @@
 package com.tmplayer.desktop
 
+import com.tmplayer.data.CacheRule
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.UpdateScheduler
 
@@ -17,12 +18,20 @@ object DesktopServices {
     val downloads: DesktopDownloadRunner by lazy { DesktopDownloadRunner(settings) }
 
     /** Volume, decoder, wheel and update choices: the settings the phone does not have. */
-    /** What streaming leaves on the disk: claimed by the player, swept at launch. */
+    /**
+     * What streaming leaves on the disk: claimed by the player, swept at launch, kept under the
+     * cache limit with the least recently played going first.
+     */
     val watchCache: DesktopWatchCache by lazy {
-        DesktopWatchCache(settings, DesktopPaths.filesDir, playing = { com.tmplayer.desktop.player.ActiveStreams.openIds() })
+        DesktopWatchCache(
+            settings = settings,
+            filesRoot = { DesktopPaths.filesDir },
+            playing = { com.tmplayer.desktop.player.ActiveStreams.openIds() },
+            rule = { CacheRule.UnderCap(prefs.now.cacheLimitBytes) },
+        )
     }
 
-    val prefs: DesktopPrefs by lazy { DesktopPrefs(java.io.File(DesktopPaths.configDir, "desktop.properties")) }
+    val prefs: DesktopPrefs by lazy { DesktopPrefs(DesktopPaths.prefsFile) }
 
     /** When to ask whether a newer version is out, and the popup's once per version memory. */
     val updates: UpdateScheduler by lazy { UpdateScheduler(settings.updatePrefs) }
