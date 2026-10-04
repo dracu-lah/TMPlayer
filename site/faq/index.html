@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TMPlayer questions: what this Telegram media player does and does not do</title>
-<meta name="description" content="Answers about TMPlayer: whether you wait for the download, whether a server or bot is involved, which file to get, whether there is a Windows, Linux or Mac version, whether it can read your messages, and what it is deliberately not.">
+<title>TMPlayer FAQ: Telegram video player questions answered</title>
+<meta name="description" content="Answers about TMPlayer: streaming without waiting, no server or bot, which file to download, Windows and Linux versions, privacy and what it will not do.">
 <link rel="canonical" href="https://tmplayer.org/faq/">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta name="author" content="dracu-lah">
@@ -14,8 +14,8 @@
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="TMPlayer">
-<meta property="og:title" content="TMPlayer questions: what this Telegram media player does and does not do">
-<meta property="og:description" content="Answers about TMPlayer: whether you wait for the download, whether a server or bot is involved, which file to get, whether there is a Windows, Linux or Mac version, whether it can read your messages, and what it is deliberately not.">
+<meta property="og:title" content="TMPlayer FAQ: Telegram video player questions answered">
+<meta property="og:description" content="Answers about TMPlayer: streaming without waiting, no server or bot, which file to download, Windows and Linux versions, privacy and what it will not do.">
 <meta property="og:url" content="https://tmplayer.org/faq/">
 <meta property="og:image" content="https://tmplayer.org/og.png">
 <meta property="og:image:type" content="image/png">
@@ -24,8 +24,8 @@
 <meta property="og:locale" content="en_GB">
 
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="TMPlayer questions: what this Telegram media player does and does not do">
-<meta name="twitter:description" content="Answers about TMPlayer: whether you wait for the download, whether a server or bot is involved, which file to get, whether there is a Windows, Linux or Mac version, whether it can read your messages, and what it is deliberately not.">
+<meta name="twitter:title" content="TMPlayer FAQ: Telegram video player questions answered">
+<meta name="twitter:description" content="Answers about TMPlayer: streaming without waiting, no server or bot, which file to download, Windows and Linux versions, privacy and what it will not do.">
 <meta name="twitter:image" content="https://tmplayer.org/og.png">
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -89,7 +89,7 @@
       "name": "Is there a server or a bot involved?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Neither. The app talks to Telegram directly, signed in as you through Telegram's own official library. Nothing passes through anything of mine."
+        "text": "Neither. The app talks to Telegram directly through Telegram's official library. Nothing passes through anything of mine."
       }
     },
     {
@@ -97,7 +97,7 @@
       "name": "Which file do I download?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "On an Android television or phone, the universal APK: the same file works on every supported device, 32-bit and 64-bit. On Windows, the MSI installer, or the portable zip if you would rather install nothing. On Linux, the deb or rpm package your distribution uses, or the AppImage, Flatpak or tarball, which run anywhere. The download page puts your own system first."
+        "text": "Android TV or phone: the universal APK. Windows: the MSI installer or the portable zip. Linux: deb, rpm, AppImage, Flatpak or tarball. The download page shows yours first."
       }
     },
     {
@@ -105,7 +105,7 @@
       "name": "Is there a Windows, Linux or Mac version?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes for Windows and Linux, from the same release as the Android app: an installer and a portable zip for Windows 10 and 11, and deb, rpm, AppImage, Flatpak and a tarball for 64-bit Linux, with a recipe for Arch. It signs in with the same QR code and plays through mpv. A macOS version is planned for later. There is no iPhone or iPad version."
+        "text": "Yes for Windows 10 and 11 and 64-bit Linux, from the same release, played through mpv. macOS is planned for later. There is no iPhone or iPad version."
       }
     },
     {
@@ -129,7 +129,7 @@
       "name": "How much storage does it need?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "One video at a time. When you start a new one the previous is cleared and the app tells you how much that freed, so an 8 GB TV stick is enough. Resuming a video you stopped half way through keeps the part already on disk."
+        "text": "One video at a time. The previous one is cleared when you start a new one, so an 8 GB TV stick is enough."
       }
     },
     {
@@ -145,7 +145,7 @@
       "name": "How does it update if it is not in the Play Store?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "On Android the app checks GitHub for a newer release and offers to install it, and nothing is downloaded until you say yes. On a computer, download the newer file and install it over the old one: the MSI, deb, rpm and Flatpak upgrade in place and keep your sign-in."
+        "text": "On Android it checks GitHub and asks before installing a newer release. On a computer, install the newer file over the old one. The MSI, deb, rpm and Flatpak keep your sign-in."
       }
     },
     {
@@ -232,7 +232,7 @@
     <div class="wrap page-head-wrap">
       <p class="crumbs"><a href="/">Home</a><span aria-hidden="true">/</span>Questions</p>
       <h1>Questions, <em>and the honest answers</em></h1>
-      <p class="page-lede">Including the ones that are really about trust rather than about the app. A player that signs into your Telegram account should be able to answer those first.</p>
+      <p class="page-lede">Including the ones about trust, which a player that signs into Telegram should answer first.</p>
       <div class="page-actions">
         <a class="btn btn-filled" href="/download/">
           <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.4l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg>
@@ -250,7 +250,7 @@
       <div class="section-head" data-reveal>
         <div class="section-title">
           <h2 id="faq-h">Common questions</h2>
-          <p class="section-sub">Every row is closed to start with. Ten questions are short enough to scan as ten headings, and opening one on load would only tell you which answer I think you wanted.</p>
+          <p class="section-sub">Ten short questions. Open the one you need.</p>
         </div>
       </div>
 
@@ -270,21 +270,21 @@
             <span class="faq-q">Is there a server or a bot involved?</span>
             <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
           </summary>
-          <div class="faq-body"><p>Neither. The app talks to Telegram directly, signed in as you through Telegram's own official library. Nothing passes through anything of mine.</p></div>
+          <div class="faq-body"><p>Neither. The app talks to Telegram directly through Telegram's official library. Nothing passes through anything of mine.</p></div>
         </details>
         <details class="faq-item" name="faq">
           <summary>
             <span class="faq-q">Which file do I download?</span>
             <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
           </summary>
-          <div class="faq-body"><p>On an Android television or phone, the universal APK: the same file works on every supported device, 32-bit and 64-bit. On Windows, the MSI installer, or the portable zip if you would rather install nothing. On Linux, the deb or rpm package your distribution uses, or the AppImage, Flatpak or tarball, which run anywhere. <a href="/download/">The download page</a> puts your own system first.</p></div>
+          <div class="faq-body"><p>Android TV or phone: the universal APK. Windows: the MSI installer or the portable zip. Linux: deb, rpm, AppImage, Flatpak or tarball. <a href="/download/">The download page</a> shows yours first.</p></div>
         </details>
         <details class="faq-item" name="faq" id="desktop">
           <summary>
             <span class="faq-q">Is there a Windows, Linux or Mac version?</span>
             <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
           </summary>
-          <div class="faq-body"><p>Yes for Windows and Linux, from the same release as the Android app: an installer and a portable zip for Windows 10 and 11, and deb, rpm, AppImage, Flatpak and a tarball for 64-bit Linux, with a recipe for Arch. It signs in with the same QR code and plays through mpv, with the keyboard shortcuts you know from YouTube. A macOS version is planned for later. There is no iPhone or iPad version. <a href="/download/">Get it from the download page</a>.</p></div>
+          <div class="faq-body"><p>Yes for Windows 10 and 11 and 64-bit Linux, from the same release, played through mpv. macOS is planned for later. There is no iPhone or iPad version. <a href="/download/">Get it here</a>.</p></div>
         </details>
         <details class="faq-item" name="faq">
           <summary>
@@ -305,7 +305,7 @@
             <span class="faq-q">How much storage does it need?</span>
             <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
           </summary>
-          <div class="faq-body"><p>One video at a time. When you start a new one the previous is cleared and the app tells you how much that freed, so an 8 GB TV stick is enough. Resuming a video you stopped half way through keeps the part already on disk.</p></div>
+          <div class="faq-body"><p>One video at a time. The previous one is cleared when you start a new one, so an 8 GB TV stick is enough.</p></div>
         </details>
         <details class="faq-item" name="faq">
           <summary>
@@ -319,7 +319,7 @@
             <span class="faq-q">How does it update if it is not in the Play Store?</span>
             <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
           </summary>
-          <div class="faq-body"><p>On Android the app checks GitHub for a newer release and offers to install it, and nothing is downloaded until you say yes. On a computer, download the newer file and install it over the old one: the MSI, deb, rpm and Flatpak upgrade in place and keep your sign-in.</p></div>
+          <div class="faq-body"><p>On Android it checks GitHub and asks before installing a newer release. On a computer, install the newer file over the old one. The MSI, deb, rpm and Flatpak keep your sign-in.</p></div>
         </details>
         <details class="faq-item" name="faq">
           <summary>
@@ -338,7 +338,7 @@
     <div class="wrap">
       <div class="section-head" data-reveal>
         <div class="section-title">
-          <h2 id="about-h">Be clear about what this is</h2>
+          <h2 id="about-h">What it is, and what it is not</h2>
           <p class="section-sub">A player pointed at an account you already have.</p>
         </div>
       </div>
@@ -353,7 +353,7 @@
           </h3>
           <ul class="ticks">
             <li>A player for <strong>your own</strong> Telegram account, signed in through Telegram's own official library.</li>
-            <li>A way to watch videos in the chats and channels <strong>you have already joined</strong>, without waiting for the whole file or moving it off a phone first.</li>
+            <li>A way to watch videos from chats <strong>you have already joined</strong>, without waiting for the whole file.</li>
             <li>Free and open source. You can read every line and build it yourself.</li>
           </ul>
         </div>
@@ -365,14 +365,14 @@
             What it is not
           </h3>
           <ul class="crosses">
-            <li>Not a media service or channel directory. It hosts, uploads, sells and recommends nothing. There is no server and no bot.</li>
+            <li>Not a media service or channel directory. No hosting, no recommendations, no server, no bot.</li>
             <li>Not a Telegram app. You cannot read messages, reply, or send anything.</li>
-            <li>Not affiliated with, endorsed by, or connected to Telegram FZ-LLC. What you watch, and where it came from, is your responsibility.</li>
+            <li>Not affiliated with Telegram FZ-LLC. What you watch is your responsibility.</li>
           </ul>
         </div>
       </div>
 
-      <p class="muted small section-note" data-reveal>The <a href="/privacy">privacy page</a> says exactly what stays on the device and which services the app contacts. <a href="/legal">Lawful use</a> says the rest.</p>
+      <p class="muted small section-note" data-reveal>The <a href="/privacy">privacy page</a> lists what stays on the device. <a href="/legal">Lawful use</a> covers the rest.</p>
     </div>
   </section>
 
@@ -382,7 +382,7 @@
     <div class="wrap">
       <div class="support" data-reveal>
         <h2 id="support-h">Star it if it helped</h2>
-        <p>Nothing here asks you for money, an account or an email address. A star is the only thing the project ever asks for, and it is what carries it to the next person.</p>
+        <p>No money, no account, no email. A star is all the project asks for.</p>
         <div class="support-actions">
           <a class="btn btn-filled" href="https://github.com/dracu-lah/TMPlayer" rel="noopener">
             <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg>
