@@ -20,7 +20,10 @@
 
   /* Every file a release can carry, matched loosely on the end of its name so a
      version in the middle never matters. The label is what the previous
-     releases list calls it. Older releases had x86_64 APKs, so that stays. */
+     releases list calls it. A release now carries the universal APK, the MSI,
+     the AppImage and the tarball; the other kinds stay only so the previous
+     releases list still names the files older releases had (x86_64 and per-ABI
+     APKs, the Windows zip, the deb, the rpm and the Flatpak). */
   var KINDS = [
     { id: 'apk-universal', label: 'Universal APK', test: /universal\.apk$/i },
     { id: 'apk-arm64', label: 'arm64-v8a', test: /arm64-v8a\.apk$/i },
@@ -103,25 +106,11 @@
     return null;
   }
 
-  /* Which Linux row the button should point at. Most browsers say only "Linux",
-     and a few still name the distribution; with nothing to go on the AppImage
-     is the one that runs everywhere. */
-  function linuxFlavour() {
-    var ua = String((window.navigator && window.navigator.userAgent) || '');
-    if (/Ubuntu|Debian|Mint|Pop!?_?OS|elementary/i.test(ua)) { return 'deb'; }
-    if (/Fedora|Red Hat|CentOS|Rocky|Alma|SUSE/i.test(ua)) { return 'rpm'; }
-    return 'any';
-  }
-
   var os = detectOs();
 
   function primaryRow(osId) {
     var card = document.getElementById(osId);
     if (!card || !card.querySelector) { return null; }
-    if (osId === 'linux') {
-      var flavour = card.querySelector('[data-distro="' + linuxFlavour() + '"]');
-      if (flavour) { return flavour; }
-    }
     return card.querySelector('[data-primary]');
   }
 
@@ -215,7 +204,7 @@
   }
 
   /* The files a person installs: APKs and desktop packages, not the checksums,
-     the source archive or the R8 mapping. */
+     the licence files or the source archives. */
   function appAssets(release) {
     return ((release && release.assets) || []).filter(function (a) {
       var kind = kindOf(a);
@@ -305,7 +294,7 @@
         android: 'apk-universal',
         'android-tv': 'apk-universal',
         windows: 'win-msi',
-        linux: { deb: 'linux-deb', rpm: 'linux-rpm', any: 'linux-appimage' }[linuxFlavour()]
+        linux: 'linux-appimage'
       }[os];
     }
 

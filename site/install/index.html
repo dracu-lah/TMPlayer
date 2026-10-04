@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>How to install TMPlayer on Android TV, Windows and Linux</title>
-<meta name="description" content="Install the TMPlayer Telegram video player: sideload the APK on Android TV or a phone, get past SmartScreen on Windows, or use a deb, rpm, AppImage or Flatpak.">
+<meta name="description" content="Install the TMPlayer Telegram video player: sideload the APK on Android TV or a phone, get past SmartScreen on Windows, or run the AppImage on Linux.">
 <link rel="canonical" href="https://tmplayer.org/install/">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta name="author" content="dracu-lah">
@@ -15,7 +15,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="TMPlayer">
 <meta property="og:title" content="How to install TMPlayer on Android TV, Windows and Linux">
-<meta property="og:description" content="Install the TMPlayer Telegram video player: sideload the APK on Android TV or a phone, get past SmartScreen on Windows, or use a deb, rpm, AppImage or Flatpak.">
+<meta property="og:description" content="Install the TMPlayer Telegram video player: sideload the APK on Android TV or a phone, get past SmartScreen on Windows, or run the AppImage on Linux.">
 <meta property="og:url" content="https://tmplayer.org/install/">
 <meta property="og:image" content="https://tmplayer.org/og.png">
 <meta property="og:image:type" content="image/png">
@@ -25,7 +25,7 @@
 
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="How to install TMPlayer on Android TV, Windows and Linux">
-<meta name="twitter:description" content="Install the TMPlayer Telegram video player: sideload the APK on Android TV or a phone, get past SmartScreen on Windows, or use a deb, rpm, AppImage or Flatpak.">
+<meta name="twitter:description" content="Install the TMPlayer Telegram video player: sideload the APK on Android TV or a phone, get past SmartScreen on Windows, or run the AppImage on Linux.">
 <meta name="twitter:image" content="https://tmplayer.org/og.png">
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -269,7 +269,7 @@ adb install TMPlayer-&lt;version&gt;-universal.apk</code></pre>
         <ol class="steps">
           <li id="win-1">
             <h3>Download the installer</h3>
-            <p>Take <code>TMPlayer-&lt;version&gt;-windows-x64.msi</code> from <a href="/download/#windows">the download page</a>, or the portable zip if you would rather install nothing.</p>
+            <p>Take <code>TMPlayer-&lt;version&gt;-windows-x64.msi</code> from <a href="/download/#windows">the download page</a>. The portable zip is no longer published: if you used it, delete its folder and install the MSI. Your sign-in and settings live in your user profile, not in that folder, so they carry over.</p>
           </li>
           <li id="win-2">
             <h3>Get past SmartScreen</h3>
@@ -295,27 +295,12 @@ adb install TMPlayer-&lt;version&gt;-universal.apk</code></pre>
       <div class="section-head" data-reveal>
         <div class="section-title">
           <h2 id="linux-h">On Linux</h2>
-          <p class="section-sub">64-bit x86. Every format is the same app, so pick the one you like, then sign in with the QR code.</p>
+          <p class="section-sub">64-bit x86, with glibc 2.38 or newer: Ubuntu 24.04, Debian 13, Fedora 39 and later. Then sign in with the QR code.</p>
         </div>
       </div>
 
       <div class="section-body" data-reveal>
         <div class="formats">
-          <div class="format">
-            <h3>Debian, Ubuntu, Mint and relatives</h3>
-            <pre class="code"><code>sudo apt install ./tmplayer_&lt;version&gt;_amd64.deb</code></pre>
-          </div>
-          <div class="format">
-            <h3>Fedora, RHEL and rebuilds</h3>
-            <pre class="code"><code>sudo dnf install ./tmplayer-&lt;version&gt;.x86_64.rpm</code></pre>
-            <p>openSUSE: <code>sudo zypper install --allow-unsigned-rpm ./tmplayer-&lt;version&gt;.x86_64.rpm</code></p>
-          </div>
-          <div class="format">
-            <h3>Flatpak, on any distribution</h3>
-            <pre class="code"><code>flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-flatpak install --user ./TMPlayer-&lt;version&gt;.flatpak</code></pre>
-            <p>The first line adds Flathub for the <code>org.freedesktop.Platform</code> runtime, if it is missing.</p>
-          </div>
           <div class="format">
             <h3>AppImage, on any distribution</h3>
             <pre class="code"><code>chmod +x TMPlayer-&lt;version&gt;-x86_64.AppImage
@@ -323,17 +308,15 @@ flatpak install --user ./TMPlayer-&lt;version&gt;.flatpak</code></pre>
             <p>Or tick <em>Allow executing file as program</em> in the file's properties and double click it.</p>
           </div>
           <div class="format">
-            <h3>Tarball, on any distribution</h3>
-            <pre class="code"><code>mkdir -p ~/.local/opt
-tar xzf TMPlayer-&lt;version&gt;-linux-x64.tar.gz -C ~/.local/opt
-~/.local/opt/TMPlayer/bin/TMPlayer</code></pre>
+            <h3>Arch Linux</h3>
+            <p>Build the package from the recipe in <a href="https://github.com/dracu-lah/TMPlayer/tree/main/desktop/packaging/aur" rel="noopener"><code>desktop/packaging/aur</code></a> with <code>makepkg -si</code>, or use the AppImage.</p>
           </div>
           <div class="format">
-            <h3>Arch Linux</h3>
-            <p>Build the package from the recipe in <a href="https://github.com/dracu-lah/TMPlayer/tree/main/desktop/packaging/aur" rel="noopener"><code>desktop/packaging/aur</code></a> with <code>makepkg -si</code>, or use the AppImage or the Flatpak.</p>
+            <h3>Moving from the deb, rpm or Flatpak</h3>
+            <p>These are no longer published. Remove the old one (<code>sudo apt remove tmplayer</code>, <code>sudo dnf remove tmplayer</code> or <code>flatpak uninstall io.github.dracu_lah.TMPlayer</code>) and take the AppImage. After the deb or rpm, your sign-in and settings carry over. The Flatpak kept them inside its sandbox, so <a href="https://github.com/dracu-lah/TMPlayer/blob/main/INSTALL.md#moving-from-a-format-that-is-no-longer-published">copy them out first</a> or sign in again.</p>
           </div>
         </div>
-        <p class="muted small section-note">The deb, rpm and Flatpak add a menu entry for you. For the AppImage and tarball, see below.</p>
+        <p class="muted small section-note">The Arch package adds a menu entry for you. For the AppImage, see below.</p>
       </div>
     </div>
   </section>
@@ -354,17 +337,16 @@ tar xzf TMPlayer-&lt;version&gt;-linux-x64.tar.gz -C ~/.local/opt
           <div class="panel panel-prose">
             <h3>Windows</h3>
             <p><strong>MSI install:</strong> it is already in Start and on the desktop. To pin it, right click it in Start and choose <em>Pin to taskbar</em>.</p>
-            <p><strong>Portable zip:</strong> right click <code>TMPlayer.exe</code>, <em>Send to</em>, <em>Desktop (create shortcut)</em>. For Start, press <kbd>Win</kbd>+<kbd>R</kbd>, type <code>shell:programs</code> and move the shortcut there.</p>
           </div>
           <div class="panel panel-prose">
-            <h3>Linux: deb, rpm and Flatpak</h3>
+            <h3>Linux: the Arch package</h3>
             <p>It is in the app menu as soon as it installs, under Multimedia or Sound and Video.</p>
             <p><strong>GNOME:</strong> right click it in Activities, <em>Pin to Dash</em>. <strong>KDE Plasma:</strong> right click it in the launcher, <em>Pin to Task Manager</em>.</p>
           </div>
         </div>
 
         <div class="panel panel-prose panel-wide">
-          <h3>Linux: AppImage and tarball, in the app menu</h3>
+          <h3>Linux: AppImage, in the app menu</h3>
           <p>A single file has no menu entry, so make one. These commands move the AppImage into place, fetch the icon and write a launcher:</p>
           <pre class="code"><code>mkdir -p ~/Applications ~/.local/share/icons ~/.local/share/applications
 mv ~/Downloads/TMPlayer-&lt;version&gt;-x86_64.AppImage ~/Applications/TMPlayer.AppImage
@@ -385,7 +367,7 @@ EOF
 
 chmod +x ~/.local/share/applications/tmplayer.desktop
 update-desktop-database ~/.local/share/applications</code></pre>
-          <p>For the tarball in <code>~/.local/opt</code>, change one line to <code>Exec=$HOME/.local/opt/TMPlayer/bin/TMPlayer</code>. Then pin it as above.</p>
+          <p>Then pin it as above.</p>
           <p>Prefer clicking? <a href="https://flathub.org/apps/it.mijorus.gearlever" rel="noopener">Gear Lever</a> and <a href="https://github.com/TheAssassin/AppImageLauncher" rel="noopener">AppImageLauncher</a> do all this for you.</p>
         </div>
 
@@ -395,9 +377,7 @@ update-desktop-database ~/.local/share/applications</code></pre>
           <pre class="code"><code>cp ~/.local/share/applications/tmplayer.desktop ~/Desktop/
 chmod +x ~/Desktop/tmplayer.desktop
 gio set ~/Desktop/tmplayer.desktop metadata::trusted true</code></pre>
-          <p>For a deb, rpm or Flatpak install, find its launcher and copy that instead:</p>
-          <pre class="code"><code>find /usr/share/applications ~/.local/share/flatpak/exports/share/applications \
-  /var/lib/flatpak/exports/share/applications -iname '*tmplayer*.desktop' 2&gt;/dev/null</code></pre>
+          <p>For the Arch package, copy its launcher instead: <code>/usr/share/applications/io.github.dracu_lah.TMPlayer.desktop</code>.</p>
           <p>GNOME needs the Desktop Icons NG extension and a one-time <em>Allow Launching</em>. KDE Plasma asks once; Xfce and Cinnamon read the trusted flag.</p>
         </div>
       </div>
@@ -442,7 +422,7 @@ gio set ~/Desktop/tmplayer.desktop metadata::trusted true</code></pre>
             <span class="faq-q">Windows shows no Run anyway button</span>
             <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
           </summary>
-          <div class="faq-body"><p>Click <em>More info</em> first. A work computer may block unsigned apps by policy. For the zip, tick <em>Unblock</em> in its <em>Properties</em> and unzip again.</p></div>
+          <div class="faq-body"><p>Click <em>More info</em> first. A work computer may block unsigned apps by policy.</p></div>
         </details>
         <details class="faq-item" name="trouble">
           <summary>
@@ -450,13 +430,6 @@ gio set ~/Desktop/tmplayer.desktop metadata::trusted true</code></pre>
             <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
           </summary>
           <div class="faq-body"><p>Usually FUSE is missing. Install <code>libfuse2t64</code> (Ubuntu 24.04 and newer) or <code>libfuse2</code> (22.04), or skip FUSE with <code>./TMPlayer-&lt;version&gt;-x86_64.AppImage --appimage-extract-and-run</code>.</p></div>
-        </details>
-        <details class="faq-item" name="trouble">
-          <summary>
-            <span class="faq-q">Flatpak says a runtime is missing</span>
-            <svg class="faq-chevron" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 15.5a1 1 0 0 1-.71-.29l-5-5a1 1 0 0 1 1.42-1.42L12 13.09l4.29-4.3a1 1 0 1 1 1.42 1.42l-5 5a1 1 0 0 1-.71.29Z"/></svg>
-          </summary>
-          <div class="faq-body"><p>The runtime comes from Flathub. Add it with <code>flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo</code> and install again.</p></div>
         </details>
         <details class="faq-item" name="trouble">
           <summary>
