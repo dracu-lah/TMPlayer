@@ -1,6 +1,8 @@
 package com.tmplayer.desktop
 
 import com.tmplayer.data.CacheShelf
+import com.tmplayer.data.DiskInfo
+import com.tmplayer.data.DownloadFiles
 import com.tmplayer.data.DownloadRequest
 import com.tmplayer.data.DownloadRunner
 import com.tmplayer.data.Failures
@@ -9,7 +11,10 @@ import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import com.tmplayer.data.errorMessage
+import com.tmplayer.desktop.player.ActiveStreams
 import com.tmplayer.platform.Logger
+import com.tmplayer.platform.NoTransferNotifier
+import com.tmplayer.platform.TransferNotifier
 import com.tmplayer.player.StreamStats
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -19,11 +24,16 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.IOException
 
 /**
  * The desktop's [DownloadRunner]: the queue is fetched by a coroutine in the app's own process.
@@ -33,14 +43,48 @@ import kotlinx.coroutines.withContext
  * as on Android, for the same reason: bandwidth split three ways finishes all three late. The
  * unfinished part of the queue is written to the settings store as it changes, so the next launch
  * restores it paused through [OfflineDownloads.restore].
+ *
+ * A finished file does not stay in TDLib's cache, where any clean up could take it: it is moved
+ * into the Downloads folder ([Stage.Moving][OfflineDownloads.Stage.Moving]), recorded in the
+ * index with its new path, and TDLib is told to forget its copy. The move runs beside the queue
+ * rather than in its one slot, because it may have to wait for a player to let the file go, and a
+ * film being watched is no reason for the next download to sit idle.
+ *
+ * @param downloadsDir where finished files go, asked each time, since a storage move changes it.
+ * @param isOpen whether a player has the file open, and the move must wait.
+ * @param disk free space where TDLib writes, and in the Downloads folder.
  */
-class DesktopDownloadRunner(private val settings: SettingsStore) : DownloadRunner {
+class DesktopDownloadRunner(
+    private val settings: SettingsStore,
+    private val downloadsDir: () -> File = { DesktopPaths.downloadsDir },
+    private val isOpen: (Int) -> Boolean = ActiveStreams::isOpen,
+    private val cacheDisk: () -> DiskInfo = { DesktopPaths.disk() },
+    private val downloadsDisk: (File) -> DiskInfo = { DiskInfo.of(it) },
+) : DownloadRunner {
+
+    /** Where progress and completion are shown outside the window. Set once the window exists. */
+    @Volatile
+    var notifier: TransferNotifier = NoTransferNotifier
+
+    /** A download that reached the Downloads folder, for the window's own toast. */
+    data class Finished(val title: String, val file: File)
+
+    private val _finished = MutableSharedFlow<Finished>(extraBufferCapacity = 8)
+
+    /** Every download as it lands in the Downloads folder. */
+    val finished: SharedFlow<Finished> = _finished.asSharedFlow()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Any()
     private val requests = mutableMapOf<Int, DownloadRequest>()
     private val waiting = ArrayDeque<Int>()
     private val running = mutableMapOf<Int, Job>()
+
+    /** Moves into the Downloads folder in flight, beside the queue. */
+    private val moves = mutableMapOf<Int, Job>()
+
+    /** File ids already asked about again. See [resourceAndRequeue]. */
+    private val resourced = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
     private var arrivals = 0L
     private val persistLock = Mutex()
 
@@ -70,13 +114,17 @@ class DesktopDownloadRunner(private val settings: SettingsStore) : DownloadRunne
 
     override fun cancel(fileId: Int) {
         idsFor(fileId).forEach { id ->
-            val job = synchronized(lock) {
+            val (job, move) = synchronized(lock) {
                 requests.remove(id)
                 waiting.remove(id)
-                running.remove(id)
+                running.remove(id) to moves.remove(id)
             }
             job?.cancel()
+            // A move cancelled part way removes its part file and leaves the cache copy alone.
+            move?.cancel()
             OfflineDownloads.forget(id)
+            notifier.cancel(id.toLong())
+            notifier.cancel(moveId(id))
             Td.cancelDownloadInBackground(id)
         }
         persist()
@@ -85,17 +133,42 @@ class DesktopDownloadRunner(private val settings: SettingsStore) : DownloadRunne
 
     /** TDLib has no pause: a cancellation that keeps the bytes, and a later fetch carries on. */
     override fun pause(fileId: Int) {
-        idsFor(fileId).filter { OfflineDownloads.active.value[it]?.busy == true }.forEach { id ->
+        // A move is not paused: it is a rename, or a copy that is over in moments, and a half moved
+        // file is the one state worth never leaving behind.
+        idsFor(fileId).filter {
+            val row = OfflineDownloads.active.value[it]
+            row?.busy == true && row.stage != OfflineDownloads.Stage.Moving
+        }.forEach { id ->
             val job = synchronized(lock) {
                 waiting.remove(id)
                 running.remove(id)
             }
             job?.cancel()
             Td.cancelDownloadInBackground(id)
+            notifier.cancel(id.toLong())
             OfflineDownloads.stage(id, OfflineDownloads.Stage.Paused)
         }
         persist()
         pump()
+    }
+
+    /**
+     * Brings back what an earlier run left: [OfflineDownloads.restore] for the unfinished part,
+     * paused, and the move for every video the last run finished fetching but had not got into
+     * Downloads when it ended. Those are complete, so restore drops them from the queue; without
+     * this they would sit in the cache with nothing claiming them until a sweep took them.
+     */
+    suspend fun restore() {
+        val stored = runCatching { settings.downloadQueueNow() }.getOrDefault(emptyList())
+        OfflineDownloads.restore(settings)
+        for (request in stored) {
+            if (OfflineDownloads.active.value.containsKey(request.fileId)) continue
+            val id = runCatching { Td.currentFileId(request.chatId, request.messageId, request.fileId) }
+                .getOrDefault(request.fileId)
+            if (runCatching { Td.localFileAvailability(id) }.getOrNull() == LocalFileAvailability.Complete) {
+                download(request.copy(fileId = id))
+            }
+        }
     }
 
     private fun idsFor(fileId: Int): List<Int> =
@@ -133,17 +206,19 @@ class DesktopDownloadRunner(private val settings: SettingsStore) : DownloadRunne
 
     private suspend fun fetch(request: DownloadRequest) = coroutineScope {
         if (Td.localFileAvailability(request.fileId) == LocalFileAvailability.Complete) {
-            withContext(NonCancellable) { finished(request) }
+            withContext(NonCancellable) { startMove(request) }
             return@coroutineScope
         }
 
         // Room is checked before the request goes out: TDLib's own answer to a full disk is a
         // message written for a developer, and it arrives after most of the data has been spent.
+        // A disk that reads as no size at all could not be measured, and is let through; one that
+        // was measured and has nothing free is not.
         val landedAlready = Td.localDownloadedBytes(request.fileId)
         val stillToCome = (request.sizeBytes - landedAlready).coerceAtLeast(0)
-        val free = DesktopPaths.disk().freeBytes
-        if (stillToCome > 0 && free in 1 until stillToCome + CacheShelf.HEADROOM_BYTES) {
-            val short = stillToCome + CacheShelf.HEADROOM_BYTES - free
+        val disk = cacheDisk()
+        if (stillToCome > 0 && disk.totalBytes > 0 && disk.freeBytes < stillToCome + CacheShelf.HEADROOM_BYTES) {
+            val short = stillToCome + CacheShelf.HEADROOM_BYTES - disk.freeBytes
             withContext(NonCancellable) {
                 fail(request, landedAlready, "Not enough space: ${StreamStats.formatBytes(short)} short")
             }
@@ -158,10 +233,20 @@ class DesktopDownloadRunner(private val settings: SettingsStore) : DownloadRunne
             return@coroutineScope
         }
 
+        // TDLib will not fetch a file it cannot trace back to a message it has seen this session,
+        // and a file id only means anything to the client that issued it: a queue restored from an
+        // earlier run holds ids in exactly that state. Asking for the message again hands back a
+        // current id. Once per id, so a video whose number keeps moving cannot become a loop.
+        if (withContext(NonCancellable) { resourceAndRequeue(request) }) return@coroutineScope
+
+        notifier.begin(request.fileId.toLong(), TransferNotifier.Kind.Download, request.title)
         val ticker = launch {
             while (isActive) {
                 delay(PROGRESS_INTERVAL_MS)
-                OfflineDownloads.sample(request.fileId, Td.localDownloadedBytes(request.fileId))
+                val done = Td.localDownloadedBytes(request.fileId)
+                OfflineDownloads.sample(request.fileId, done)
+                val rate = OfflineDownloads.active.value[request.fileId]?.bytesPerSecond?.takeIf { it > 0 }
+                notifier.progress(request.fileId.toLong(), done, request.sizeBytes.takeIf { it > 0 }, rate)
             }
         }
 
@@ -190,10 +275,17 @@ class DesktopDownloadRunner(private val settings: SettingsStore) : DownloadRunne
         }
         ticker.cancel()
 
+        // The id went stale while this waited its turn, or Telegram's file reference expired under
+        // it. Both are answered by asking for the message again rather than by a red row.
+        if (error != null && Failures.needsFreshFileReference(error)) {
+            if (withContext(NonCancellable) { resourceAndRequeue(request) }) return@coroutineScope
+        }
+
         withContext(NonCancellable) {
             val complete = Td.localFileAvailability(request.fileId) == LocalFileAvailability.Complete
             if (error == null && complete) {
-                finished(request)
+                notifier.cancel(request.fileId.toLong())
+                startMove(request)
             } else {
                 Logger.w(TAG, "Download of ${request.title} did not finish: ${error ?: "incomplete"}")
                 fail(
@@ -205,25 +297,148 @@ class DesktopDownloadRunner(private val settings: SettingsStore) : DownloadRunne
         }
     }
 
-    private suspend fun finished(request: DownloadRequest) {
-        settings.noteDownload(request.item(), request.chatTitle)
-        synchronized(lock) { requests.remove(request.fileId) }
+    /**
+     * Asks Telegram for the video's message again and moves the row onto the id it hands back,
+     * at the head of the queue so it keeps its turn. True when the row moved, which means this
+     * fetch is over; false when nothing changed or the message could not be reached, and the
+     * fetch carries on with the id it has.
+     */
+    private suspend fun resourceAndRequeue(request: DownloadRequest): Boolean {
+        if (request.chatId == 0L || request.messageId == 0L) return false
+        if (!resourced.add(request.fileId)) return false
+        val fresh = runCatching { Td.refreshMedia(request.chatId, request.messageId) }.getOrNull()
+        val id = fresh?.fileId ?: return false
+        if (id <= 0 || id == request.fileId) return false
+        Logger.i(TAG, "Re-sourced ${request.title}: file ${request.fileId} is now $id")
+        val moved = request.copy(fileId = id, sizeBytes = fresh.sizeBytes.takeIf { it > 0 } ?: request.sizeBytes)
+        resourced.add(id)
+        val old = OfflineDownloads.active.value[request.fileId]
+        synchronized(lock) {
+            requests.remove(request.fileId)
+            requests[id] = moved
+            waiting.remove(id)
+            waiting.addFirst(id)
+        }
         OfflineDownloads.forget(request.fileId)
+        OfflineDownloads.note(
+            OfflineDownloads.Progress(
+                request = moved,
+                downloadedBytes = Td.localDownloadedBytes(id),
+                totalBytes = moved.sizeBytes,
+                stage = OfflineDownloads.Stage.Queued,
+                order = old?.order ?: OfflineDownloads.nextOrder(),
+            ),
+        )
         persistNow()
+        return true
     }
 
-    /** Writes a failure only while this fetch still owns the row: a pause or cancel may have won. */
+    /**
+     * Hands a complete file to its own coroutine for the move into Downloads, so the queue's slot
+     * is free for the next video while this one waits for a player or copies across drives.
+     */
+    private fun startMove(request: DownloadRequest) {
+        synchronized(lock) {
+            if (moves.containsKey(request.fileId)) return
+            val job = scope.launch { finished(request) }
+            moves[request.fileId] = job
+            job.invokeOnCompletion { synchronized(lock) { if (moves[request.fileId] === job) moves.remove(request.fileId) } }
+        }
+        OfflineDownloads.moving(request.fileId)
+    }
+
+    /** Waits for every move into Downloads now in flight; a storage move must not start under one. */
+    suspend fun settleMoves() {
+        while (true) {
+            val pending = synchronized(lock) { moves.values.toList() }
+            if (pending.isEmpty()) return
+            pending.forEach { it.join() }
+        }
+    }
+
+    /**
+     * The move step (B3.2): wait while a player has the file open, move it into the Downloads
+     * folder, record it there, and tell TDLib its copy is gone.
+     */
+    private suspend fun finished(request: DownloadRequest) {
+        val fileId = request.fileId
+        val path = Td.localFilePath(fileId)
+        if (path == null) {
+            fail(request, Td.localDownloadedBytes(fileId), FAILED_TEXT)
+            return
+        }
+        // Moving a file a player is reading loses the picture, and on Windows is refused outright.
+        if (isOpen(fileId)) {
+            OfflineDownloads.moving(fileId, heldByPlayer = true)
+            while (isOpen(fileId)) delay(HOLD_POLL_MS)
+        }
+        OfflineDownloads.moving(fileId)
+
+        val src = File(path)
+        val dir = downloadsDir()
+        if (!DownloadFiles.sameStore(src, dir)) {
+            val room = downloadsDisk(dir)
+            val needed = src.length() + CacheShelf.HEADROOM_BYTES
+            if (room.totalBytes > 0 && room.freeBytes < needed) {
+                fail(
+                    request,
+                    src.length(),
+                    "Not enough space in the Downloads folder: ${StreamStats.formatBytes(needed - room.freeBytes)} short",
+                )
+                return
+            }
+        }
+
+        val moveId = moveId(fileId)
+        notifier.begin(moveId, TransferNotifier.Kind.MoveToDownloads, request.title)
+        val target = try {
+            DownloadFiles.moveIntoDownloads(src, dir, DownloadFiles.safeName(request.title, request.fileName)) { done, total ->
+                OfflineDownloads.moving(fileId, movedBytes = done)
+                notifier.progress(moveId, done, total, null)
+            }
+        } catch (e: CancellationException) {
+            notifier.cancel(moveId)
+            throw e
+        } catch (e: IOException) {
+            Logger.w(TAG, "Could not move ${request.title} into Downloads", e)
+            notifier.cancel(moveId)
+            fail(request, src.length(), MOVE_FAILED_TEXT)
+            return
+        }
+
+        withContext(NonCancellable) {
+            settings.noteDownload(request.item(), request.chatTitle, target.absolutePath)
+            // It belongs to the viewer now: no cache rule may count it, and TDLib, whose copy has
+            // just left its directory, is told so instead of finding out on the next stream.
+            runCatching { settings.forgetCachedVideo(request.chatId, request.messageId) }
+            runCatching { Td.deleteFile(fileId) }
+            synchronized(lock) { requests.remove(fileId) }
+            OfflineDownloads.forget(fileId)
+            persistNow()
+            notifier.complete(
+                moveId,
+                "Downloaded",
+                "${request.title} is in Downloads",
+                TransferNotifier.OpenTarget.File(target.absolutePath),
+            )
+            _finished.tryEmit(Finished(request.title, target))
+        }
+    }
+
+    /** Writes a failure only while this runner still owns the row: a pause or cancel may have won. */
     private suspend fun fail(request: DownloadRequest, landed: Long, text: String) {
         val row = OfflineDownloads.active.value[request.fileId]
-        if (row != null && row.stage == OfflineDownloads.Stage.Running) {
+        if (row != null && (row.stage == OfflineDownloads.Stage.Running || row.stage == OfflineDownloads.Stage.Moving)) {
             OfflineDownloads.note(
                 row.copy(
                     downloadedBytes = landed,
                     stage = OfflineDownloads.Stage.Failed,
                     failure = text,
                     bytesPerSecond = 0,
+                    heldByPlayer = false,
                 ),
             )
+            notifier.fail(request.fileId.toLong(), request.title, text, retryable = true)
         }
         persistNow()
     }
@@ -247,5 +462,10 @@ class DesktopDownloadRunner(private val settings: SettingsStore) : DownloadRunne
         const val TAKEOVER_BACKOFF_MS = 2_000L
         const val TAKEN_OVER = "Canceled by another downloadFile"
         const val FAILED_TEXT = "The download did not finish. Try again."
+        const val MOVE_FAILED_TEXT = "Could not move the video into Downloads. Try again."
+        const val HOLD_POLL_MS = 1_000L
+
+        /** The notifier id of a move, apart from the download's own so the two never collide. */
+        fun moveId(fileId: Int): Long = (1L shl 33) + fileId
     }
 }

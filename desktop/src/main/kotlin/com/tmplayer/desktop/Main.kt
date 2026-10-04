@@ -15,11 +15,11 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
-import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import com.tmplayer.data.ThemeChoice
 import com.tmplayer.desktop.os.AppExit
+import com.tmplayer.desktop.os.DesktopTransferNotifier
 import com.tmplayer.desktop.os.NativeFullscreen
 import com.tmplayer.desktop.os.NonReparentingWm
 import com.tmplayer.desktop.os.NativeInventory
@@ -54,9 +54,12 @@ fun main(args: Array<String>) {
     val settings = DesktopServices.settings
     // What an earlier run was in the middle of comes back paused, once there is an account to
     // ask TDLib about.
+    // A storage move a crash or a kill cut short is finished first: it needs the settings store
+    // and the disk, not TDLib, which is already starting over the new folders.
+    Background.scope.launch { runCatching { DesktopStorage.relocation.resumePending() } }
     Background.scope.launch {
         Td.awaitAuthorizedSession()
-        OfflineDownloads.restore(settings)
+        DesktopServices.downloads.restore()
     }
     DesktopUpdates.configure()
     // Before anything can rewrite desktop.properties, which would drop the old update keys.
@@ -88,6 +91,16 @@ fun main(args: Array<String>) {
         ) {
             window.minimumSize = java.awt.Dimension(960, 600)
             DesktopServices.selfUpdate.quit = quit
+            // Transfers show outside the window too, once there is a window for the taskbar bar.
+            LaunchedEffect(Unit) {
+                DesktopStorage.closePlayer = { shell.closePlayer() }
+                DesktopStorage.notifier = DesktopTransferNotifier.create({ window }) {
+                    java.awt.EventQueue.invokeLater {
+                        raise()
+                        shell.go(com.tmplayer.desktop.ui.Destination.Downloads)
+                    }
+                }
+            }
             // The update check, on every launch and before sign in too: the first one ten seconds
             // after the first frame, then every six hours while the window is open.
             LaunchedEffect(Unit) {
