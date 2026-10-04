@@ -112,6 +112,7 @@ import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.CrashReports
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.WatchedStore
 import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.StorageSplit
 import com.tmplayer.data.WatchCache
@@ -148,6 +149,7 @@ private sealed interface Prompt {
     /** Cache and pictures together, in one press. */
     data object ClearAllButDownloads : Prompt
     data object ClearHistory : Prompt
+    data object ClearWatched : Prompt
     data object ClearFavorites : Prompt
     data object SignOut : Prompt
 }
@@ -183,6 +185,8 @@ fun SettingsScreen(
     val touchPrefs by settings.touchPrefs.collectAsStateWithLifecycle(initialValue = TouchPrefs())
     val downmixChoice by settings.downmixChoice.collectAsStateWithLifecycle(initialValue = null)
     val history by settings.continueWatching.collectAsStateWithLifecycle(initialValue = emptyList())
+    val watchedStore = remember { WatchedStore(context) }
+    val watchedList by watchedStore.history.collectAsStateWithLifecycle(initialValue = emptyList())
     val favorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
     val lastChatId by settings.lastChatId.collectAsStateWithLifecycle(initialValue = 0L)
     val minSize by settings.minSizeBytes.collectAsStateWithLifecycle(
@@ -451,9 +455,9 @@ fun SettingsScreen(
 
         // ---- lists ---------------------------------------------------------------------------
 
-        // Both rows below are conditional, so the heading only appears when it has something
+        // Every row below is conditional, so the heading only appears when it has something
         // under it rather than standing over empty space.
-        if (favorites.isNotEmpty() || history.isNotEmpty()) {
+        if (favorites.isNotEmpty() || history.isNotEmpty() || watchedList.isNotEmpty()) {
             item { SectionTitle("Lists") }
         }
         if (favorites.isNotEmpty()) {
@@ -481,6 +485,20 @@ fun SettingsScreen(
                     },
                     icon = Icons.Filled.Close,
                     onClick = { prompt = Prompt.ClearHistory },
+                )
+            }
+        }
+        if (watchedList.isNotEmpty()) {
+            item {
+                ActionRow(
+                    title = "Clear watched list",
+                    subtitle = if (watchedList.size == 1) {
+                        "Takes the tick off the one video you have watched"
+                    } else {
+                        "Takes the tick off all ${watchedList.size} videos you have watched"
+                    },
+                    icon = Icons.Filled.Close,
+                    onClick = { prompt = Prompt.ClearWatched },
                 )
             }
         }
@@ -1034,6 +1052,23 @@ fun SettingsScreen(
             onDismiss = { prompt = null },
         )
 
+        Prompt.ClearWatched -> TvConfirm(
+            title = "Clear the watched list?",
+            message = "Every video loses its watched tick, and Previously watched empties.",
+            detail = "Nothing is deleted from Telegram. Videos you are part way through stay in " +
+                "Continue watching.",
+            confirmLabel = "Clear",
+            onConfirm = {
+                prompt = null
+                scope.launch {
+                    val count = watchedList.size
+                    runCatching { watchedStore.clear() }
+                    toast(if (count == 1) "Watched list cleared" else "$count videos unmarked")
+                }
+            },
+            onDismiss = { prompt = null },
+        )
+
         Prompt.ClearFavorites -> TvConfirm(
             title = "Clear favourites?",
             message = "All ${favorites.size} chats lose their star and the Favourites tab empties.",
@@ -1053,7 +1088,7 @@ fun SettingsScreen(
         Prompt.SignOut -> TvConfirm(
             title = "Sign out of Telegram?",
             message = "You'll be signed out and taken back to the sign-in screen. The cache, your " +
-                "favourites and everything you were part-way through go with it.",
+                "favourites, your watched list and everything you were part-way through go with it.",
             detail = if (split.downloadBytes > 0) "Your downloads stay unless you tick the box." else null,
             confirmLabel = "Sign out",
             extra = if (split.downloadBytes > 0) {
@@ -1086,6 +1121,9 @@ fun SettingsScreen(
                     // must not leave a reporter switched on behind them.
                     runCatching { CrashReports.stop() }
                     runCatching { settings.clearEverything(keepDownloads = !deleteDownloads) }
+                    // What this account watched is its own as much as the preferences are, and it
+                    // lives in a file of its own, so it is cleared on its own.
+                    runCatching { watchedStore.clear() }
                     Td.logOut()
                     onLoggedOut()
                 }

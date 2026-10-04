@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.runtime.Composable
@@ -73,6 +74,9 @@ class PlayerTvMenu(
     private val speed: () -> Float,
     /** Whether Save to Downloads is offered, asked each time the menu opens. */
     private val saveToDownloads: () -> Boolean = { false },
+    /** Whether Mark as watched is offered at all, and whether the video is on the list already. */
+    private val markWatched: () -> Boolean = { false },
+    private val watched: () -> Boolean = { false },
     private val onEntry: (PlayerMenuEntry) -> Unit,
     private val onSpeed: (Float) -> Unit,
     private val onClosed: () -> Unit,
@@ -108,7 +112,7 @@ class PlayerTvMenu(
             Page.Main -> TvMenu(
                 title = "More",
                 subtitle = title().ifBlank { null },
-                actions = PlayerMenu.tvEntries(pictureInPicture(), saveToDownloads()).map { action(it) },
+                actions = PlayerMenu.tvEntries(pictureInPicture(), saveToDownloads(), markWatched()).map { action(it) },
                 onDismiss = ::close,
             )
             Page.Speed -> TvMenu(
@@ -144,6 +148,19 @@ class PlayerTvMenu(
             icon = TmIcons.Download,
             detail = "Kept until you delete it",
         ) { choose(entry) }
+        PlayerMenuEntry.MarkWatched -> if (watched()) {
+            MenuAction(
+                label = "Mark as unwatched",
+                icon = Icons.Filled.Close,
+                detail = "Takes it off Previously watched",
+            ) { choose(entry) }
+        } else {
+            MenuAction(
+                label = "Mark as watched",
+                icon = Icons.Filled.Check,
+                detail = "Lists it in Previously watched",
+            ) { choose(entry) }
+        }
         PlayerMenuEntry.PictureInPicture ->
             MenuAction("Picture in picture", ImageVector.vectorResource(R.drawable.ic_pip)) { choose(entry) }
         PlayerMenuEntry.OpenInAnotherApp ->

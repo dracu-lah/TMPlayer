@@ -143,6 +143,8 @@ import com.tmplayer.data.Td
 import com.tmplayer.data.MediaFeedEntry
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.WatchedRecord
+import com.tmplayer.ui.components.WatchedBadge
 import com.tmplayer.data.SponsoredItem
 import com.tmplayer.data.SponsoredReportOption
 import com.tmplayer.data.SponsoredReportOutcome
@@ -204,6 +206,13 @@ fun MediaGridScreen(
     minSizeBytes: Long,
     maxSizeBytes: Long,
     watchProgress: Map<String, WatchPoint>,
+    /**
+     * The Watched list keyed like [watchProgress], for the tick on a finished video's tile. Empty
+     * by default, which draws every tile as it was before the list existed.
+     */
+    watchedVideos: Map<String, WatchedRecord> = emptyMap(),
+    /** "Mark as watched" (true) or "Mark as unwatched" (false) from a tile's menu. */
+    onSetWatched: (MediaItem, Boolean) -> Unit = { _, _ -> },
     onToggleFavorite: () -> Unit,
     /** Leaving the chat. On a phone this is the app bar's arrow as well as the hardware key. */
     onBack: () -> Unit = {},
@@ -546,6 +555,7 @@ fun MediaGridScreen(
                                         watched = watchProgress[
                                             SettingsStore.progressKey(item.chatId, item.messageId),
                                         ],
+                                        finished = SettingsStore.progressKey(item.chatId, item.messageId) in watchedVideos,
                                         dense = dense,
                                         selected = if (selecting) selected.containsKey(item.id) else null,
                                         onClick = { if (selecting) toggle(item) else onPlay(item) },
@@ -592,6 +602,7 @@ fun MediaGridScreen(
                                         watched = watchProgress[
                                             SettingsStore.progressKey(item.chatId, item.messageId),
                                         ],
+                                        finished = SettingsStore.progressKey(item.chatId, item.messageId) in watchedVideos,
                                         selected = if (selecting) selected.containsKey(item.id) else null,
                                         onClick = { if (selecting) toggle(item) else onPlay(item) },
                                         onLongClick = if (selecting) null else {
@@ -622,6 +633,8 @@ fun MediaGridScreen(
                         watched = watchProgress[
                             SettingsStore.progressKey(item.chatId, item.messageId),
                         ],
+                        finished = SettingsStore.progressKey(item.chatId, item.messageId) in watchedVideos,
+                        onSetWatched = { onSetWatched(item, it) },
                         onPlay = { onPlay(item) },
                         onSelectVideos = {
                             selected = mapOf(item.id to item)
@@ -1438,6 +1451,8 @@ internal fun MediaCard(
     onClick: () -> Unit,
     onFocused: () -> Unit,
     modifier: Modifier = Modifier,
+    /** On the Watched list: a tick on the art and a full bar under it. */
+    finished: Boolean = false,
     /** The phone's grid: smaller art, small type, running time over the picture. */
     dense: Boolean = false,
     /** A long press on a phone, or a hold of OK on a remote, which opens the tile's own menu. */
@@ -1471,6 +1486,7 @@ internal fun MediaCard(
             MediaArt(
                 item = item,
                 watched = watched,
+                finished = finished,
                 durationOverlay = true,
                 compact = true,
                 selected = selected,
@@ -1491,7 +1507,7 @@ internal fun MediaCard(
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(2.dp))
-            MetaLine(item, watched, compact = true)
+            MetaLine(item, watched, compact = true, finished = finished)
         }
         return
     }
@@ -1510,7 +1526,7 @@ internal fun MediaCard(
             },
             modifier = modifier.fillMaxWidth().longPressable(onClick, onLongClick),
         ) {
-            MediaCardBody(item, watched, selected)
+            MediaCardBody(item, watched, selected, finished)
         }
         return
     }
@@ -1528,14 +1544,25 @@ internal fun MediaCard(
             .border(3.dp, border, RoundedCornerShape(Corner.Medium))
             .holdOrPress(interactions, onClick, onLongClick),
     ) {
-        MediaCardBody(item, watched, selected)
+        MediaCardBody(item, watched, selected, finished)
     }
 }
 
 /** The picture and the caption under it, which both the phone's card and the TV's panel carry. */
 @Composable
-private fun MediaCardBody(item: MediaItem, watched: WatchPoint?, selected: Boolean? = null) {
-    MediaArt(item, watched, Modifier.fillMaxWidth().aspectRatio(16f / 9f), selected = selected)
+private fun MediaCardBody(
+    item: MediaItem,
+    watched: WatchPoint?,
+    selected: Boolean? = null,
+    finished: Boolean = false,
+) {
+    MediaArt(
+        item,
+        watched,
+        Modifier.fillMaxWidth().aspectRatio(16f / 9f),
+        selected = selected,
+        finished = finished,
+    )
     Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
         Text(
             item.title,
@@ -1548,7 +1575,7 @@ private fun MediaCardBody(item: MediaItem, watched: WatchPoint?, selected: Boole
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(6.dp))
-        MetaLine(item, watched)
+        MetaLine(item, watched, finished = finished)
     }
 }
 
@@ -1566,6 +1593,7 @@ private fun MediaRow(
     onClick: () -> Unit,
     onFocused: () -> Unit,
     modifier: Modifier = Modifier,
+    finished: Boolean = false,
     onLongClick: (() -> Unit)? = null,
     /** As on the tile: ticked, unticked, or `null` outside a selection entirely. */
     selected: Boolean? = null,
@@ -1610,6 +1638,7 @@ private fun MediaRow(
                     .aspectRatio(16f / 9f)
                     .clip(RoundedCornerShape(Corner.Small)),
                 selected = selected,
+                finished = finished,
             )
             Column(
                 Modifier.weight(if (touch) 1f - TOUCH_ART_SHARE else 1f),
@@ -1624,7 +1653,7 @@ private fun MediaRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                MetaLine(item, watched)
+                MetaLine(item, watched, finished = finished)
             }
         }
     }
@@ -1679,6 +1708,11 @@ private fun MediaArt(
      * the only part big enough for a mark to be read from a sofa.
      */
     selected: Boolean? = null,
+    /**
+     * On the Watched list. The bar runs full width and a tick sits in the bottom corner, the one
+     * corner no other badge uses, so a finished video reads as finished at a glance.
+     */
+    finished: Boolean = false,
 ) {
     val tagStyle = if (compact) {
         M3MaterialTheme.typography.labelSmall
@@ -1788,7 +1822,15 @@ private fun MediaArt(
                     .padding(horizontal = plateH, vertical = plateV),
             )
         }
-        if (watched != null && watched.fraction > 0f) {
+        // A finished video draws a full bar even with no saved position: finishing it is exactly
+        // what clears the position, and a video marked by hand may never have been opened here.
+        // One part way through a second viewing shows where that viewing is instead.
+        val fraction = when {
+            watched != null && watched.fraction > 0f -> watched.fraction
+            finished -> 1f
+            else -> 0f
+        }
+        if (fraction > 0f) {
             // A thin bar along the bottom of the art, where a viewer already looks to see whether
             // they have started something. Material draws it on a phone, gap and rounded ends
             // included, so it matches the bar under the video the tile opens. The television keeps
@@ -1798,7 +1840,7 @@ private fun MediaArt(
             val track = Color.Black.copy(alpha = 0.55f)
             if (isTouch()) {
                 LinearProgressIndicator(
-                    progress = { watched.fraction },
+                    progress = { fraction },
                     color = Tone.accent,
                     trackColor = track,
                     modifier = Modifier
@@ -1816,12 +1858,21 @@ private fun MediaArt(
                 ) {
                     Box(
                         Modifier
-                            .fillMaxWidth(watched.fraction)
+                            .fillMaxWidth(fraction)
                             .fillMaxHeight()
                             .background(Tone.accent),
                     )
                 }
             }
+        }
+        if (finished) {
+            WatchedBadge(
+                size = if (compact) 18.dp else 26.dp,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    // Clear of the 6 dp bar along the bottom edge.
+                    .padding(start = inset, bottom = inset + 6.dp),
+            )
         }
         if (selected != null) {
             val ring = if (compact) 30.dp else 44.dp
@@ -1909,6 +1960,9 @@ private fun MediaActionsSheet(
     item: MediaItem,
     chatTitle: String,
     watched: WatchPoint?,
+    /** On the Watched list, which decides which way the mark line reads. */
+    finished: Boolean,
+    onSetWatched: (Boolean) -> Unit,
     onPlay: () -> Unit,
     onSelectVideos: () -> Unit,
     onDownloadForLater: () -> Unit,
@@ -1990,6 +2044,23 @@ private fun MediaActionsSheet(
                 ),
             )
         }
+        // Beside the play lines, because it is about watching rather than about the file. Marking
+        // also forgets the saved position, so the video leaves Continue watching with it.
+        add(
+            MenuAction(
+                label = if (finished) "Mark as unwatched" else "Mark as watched",
+                icon = if (finished) Icons.Filled.Close else Icons.Filled.Check,
+                detail = if (finished) {
+                    "Takes the tick off and it out of Previously watched"
+                } else {
+                    "Ticks it and lists it in Previously watched"
+                },
+                onSelect = {
+                    onDismiss()
+                    onSetWatched(!finished)
+                },
+            ),
+        )
         when {
             // On the list already, at whatever stage: the one thing to offer is taking it off
             // again. Which stage it is in is what the wording says, since "stop the download" on
@@ -2227,12 +2298,18 @@ private const val SHARE_TAG = "ShareVideo"
 
 /** Running time, file size, and where playback stopped, on the one line both arrangements use. */
 @Composable
-private fun MetaLine(item: MediaItem, watched: WatchPoint?, compact: Boolean = false) {
+private fun MetaLine(
+    item: MediaItem,
+    watched: WatchPoint?,
+    compact: Boolean = false,
+    finished: Boolean = false,
+) {
     val duration = MediaMapper.formatDuration(item.durationSec)
     val size = MediaMapper.formatSize(item.sizeBytes)
     val resume = watched
         ?.takeIf { it.positionMs > 0 }
         ?.let { "Stopped at ${com.tmplayer.player.StreamStats.formatClock(it.positionMs)}" }
+        ?: "Watched".takeIf { finished }
     Text(
         listOfNotNull(duration.ifEmpty { null }, size.ifEmpty { null }, resume)
             .joinToString("  ·  "),

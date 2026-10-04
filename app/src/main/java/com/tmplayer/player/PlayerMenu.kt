@@ -12,6 +12,8 @@ enum class PlayerMenuEntry {
     StartOver,
     Speed,
     SaveToDownloads,
+    /** "Mark as watched", or "Mark as unwatched" once it is on the list. */
+    MarkWatched,
     PictureInPicture,
     OpenInAnotherApp,
     RemoteKeys,
@@ -29,12 +31,20 @@ object PlayerMenu {
      *
      * [saveToDownloads] is whether the video can still become a download: not one already in
      * Downloads or in the queue, which would make the line a press that does nothing.
+     *
+     * [markWatched] is whether the video came from a message: the Watched list is keyed by one,
+     * so a file with none has nothing to mark.
      */
-    fun tvEntries(pictureInPicture: Boolean, saveToDownloads: Boolean = false): List<PlayerMenuEntry> = buildList {
+    fun tvEntries(
+        pictureInPicture: Boolean,
+        saveToDownloads: Boolean = false,
+        markWatched: Boolean = false,
+    ): List<PlayerMenuEntry> = buildList {
         add(PlayerMenuEntry.PlaybackDetails)
         add(PlayerMenuEntry.StartOver)
         add(PlayerMenuEntry.Speed)
         if (saveToDownloads) add(PlayerMenuEntry.SaveToDownloads)
+        if (markWatched) add(PlayerMenuEntry.MarkWatched)
         if (pictureInPicture) add(PlayerMenuEntry.PictureInPicture)
         add(PlayerMenuEntry.OpenInAnotherApp)
         add(PlayerMenuEntry.RemoteKeys)

@@ -85,6 +85,8 @@ import com.tmplayer.data.Td
 import com.tmplayer.data.Thumbnails
 import androidx.compose.ui.graphics.asAndroidBitmap
 import com.tmplayer.data.WatchCache
+import com.tmplayer.data.WatchedRecord
+import com.tmplayer.data.WatchedStore
 import com.tmplayer.data.errorMessage
 import com.tmplayer.data.valueOrNull
 import dev.g000sha256.tdl.TdlClient
@@ -123,6 +125,17 @@ class PlayerActivity : FragmentActivity() {
     private var messageId = 0L
 
     private lateinit var settings: SettingsStore
+    private lateinit var watchedStore: WatchedStore
+
+    /** Whether this video is on the Watched list, for which way the menus' mark line reads. */
+    private var onWatchedList = false
+
+    /**
+     * Set when the viewer marks the video watched from this player. The position is then
+     * forgotten on the way out rather than saved, or leaving would put the video straight back
+     * into Continue watching a moment after they took it out.
+     */
+    private var markedWatchedHere = false
     private lateinit var subtitleView: SubtitleView
     private lateinit var statusOverlay: View
     private lateinit var statusIcon: ImageView
@@ -325,6 +338,7 @@ class PlayerActivity : FragmentActivity() {
         setSystemBarsHidden(true)
 
         settings = SettingsStore(this)
+        watchedStore = WatchedStore(this)
         fileId = intent.getIntExtra(EXTRA_FILE_ID, 0)
         chatId = intent.getLongExtra(EXTRA_CHAT_ID, 0)
         messageId = intent.getLongExtra(EXTRA_MESSAGE_ID, 0)
@@ -403,10 +417,17 @@ class PlayerActivity : FragmentActivity() {
                 pictureInPicture = { packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE) },
                 speed = { playbackSpeed },
                 saveToDownloads = ::canSaveToDownloads,
+                markWatched = ::hasMessage,
+                watched = { onWatchedList },
                 onEntry = ::onTvMenuEntry,
                 onSpeed = ::setSpeed,
                 onClosed = { controls?.show(); controls?.focusRow() },
             )
+        }
+        if (hasMessage()) {
+            lifecycleScope.launch {
+                onWatchedList = runCatching { watchedStore.isWatched(chatId, messageId) }.getOrDefault(false)
+            }
         }
         // On a television too: the controls timeout and the remaining time readout apply there.
         lifecycleScope.launch {
@@ -1636,6 +1657,7 @@ class PlayerActivity : FragmentActivity() {
      * no next episode the last frame stays up with a way to watch it again.
      */
     private fun onVideoEnded() {
+        recordFinished()
         lifecycleScope.launch {
             settings.clearResumePosition(chatId, messageId)
             val next = _episodes.value.next
@@ -2164,9 +2186,13 @@ class PlayerActivity : FragmentActivity() {
         items.add(0, MENU_SUBTITLE_FILE, 6, "Load a subtitle file")
         if (chatId != 0L && messageId != 0L) items.add(0, MENU_COPY_LINK, 7, "Copy Telegram link")
         if (canSaveToDownloads()) items.add(0, MENU_SAVE, 8, "Save to Downloads")
+        if (hasMessage()) {
+            items.add(0, MENU_WATCHED, 9, if (onWatchedList) "Mark as unwatched" else "Mark as watched")
+        }
         menu.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 MENU_SAVE -> saveToDownloads()
+                MENU_WATCHED -> toggleWatched()
                 MENU_SUBTITLE_FILE -> subtitleFiles.pick()
                 MENU_COPY_LINK -> lifecycleScope.launch { MessageLink.copy(this@PlayerActivity, chatId, messageId) }
                 MENU_LOCK -> lockScreen()
@@ -2192,6 +2218,7 @@ class PlayerActivity : FragmentActivity() {
             PlayerMenuEntry.PictureInPicture -> enterPictureInPictureNow()
             PlayerMenuEntry.OpenInAnotherApp -> openInAnotherApp()
             PlayerMenuEntry.SaveToDownloads -> saveToDownloads()
+            PlayerMenuEntry.MarkWatched -> toggleWatched()
             // Pages of the menu itself, opened there.
             PlayerMenuEntry.Speed, PlayerMenuEntry.RemoteKeys -> Unit
         }
@@ -3038,11 +3065,67 @@ class PlayerActivity : FragmentActivity() {
             durationSec = durationSec,
             updatedAt = System.currentTimeMillis(),
         )
+        if (watched) recordFinished()
+        val forget = watched || markedWatchedHere
         App.backgroundScope.launch {
             runCatching {
-                if (watched) store.clearResumePosition(chat, message)
+                if (forget) store.clearResumePosition(chat, message)
                 else store.saveResumePosition(chat, message, position, duration, description)
             }
+        }
+    }
+
+    /** Whether this video came from a message, which is what the Watched list is keyed by. */
+    private fun hasMessage(): Boolean = chatId != 0L && messageId != 0L
+
+    /** This video as the Watched list keeps it, with the player's length when the message had none. */
+    private fun watchedRecord(manual: Boolean): WatchedRecord {
+        val known = durationSec.takeIf { it > 0 }
+            ?: player?.duration?.takeIf { it > 0 }?.let { (it / 1_000).toInt() }
+            ?: 0
+        return WatchedRecord.of(
+            item = mediaItemForCache().copy(durationSec = known),
+            chatTitle = chatTitle,
+            watchedAt = System.currentTimeMillis(),
+            manual = manual,
+        )
+    }
+
+    /**
+     * Puts the video on the Watched list because playback reached the end. On the scope that
+     * outlives the activity, for the reason [saveResumePosition] is: the end is often followed by
+     * Back straight away.
+     */
+    private fun recordFinished() {
+        if (!hasMessage()) return
+        onWatchedList = true
+        val record = watchedRecord(manual = false)
+        val store = watchedStore
+        App.backgroundScope.launch { runCatching { store.markWatched(record) } }
+    }
+
+    /** The menus' "Mark as watched" and "Mark as unwatched". */
+    private fun toggleWatched() {
+        if (!hasMessage()) return
+        val store = watchedStore
+        val chat = chatId
+        val message = messageId
+        if (onWatchedList) {
+            onWatchedList = false
+            markedWatchedHere = false
+            App.backgroundScope.launch { runCatching { store.markUnwatched(chat, message) } }
+            showGestureFeedback("Marked as unwatched")
+        } else {
+            onWatchedList = true
+            markedWatchedHere = true
+            val record = watchedRecord(manual = true)
+            App.backgroundScope.launch {
+                runCatching {
+                    store.markWatched(record)
+                    settings.clearResumePosition(chat, message)
+                }
+            }
+            showGestureFeedback("Marked as watched")
         }
     }
 
@@ -3103,6 +3186,7 @@ class PlayerActivity : FragmentActivity() {
         private const val MENU_SUBTITLE_FILE = 7
         private const val MENU_COPY_LINK = 8
         private const val MENU_SAVE = 9
+        private const val MENU_WATCHED = 10
         private const val MENU_SPEED_BASE = 100
 
         private const val RESUME_TICK_MS = 10_000L

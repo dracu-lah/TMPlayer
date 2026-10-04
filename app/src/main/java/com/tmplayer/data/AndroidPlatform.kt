@@ -92,3 +92,21 @@ private object SettingsFile {
 
 /** Every screen builds its own [SettingsStore] from a context; they all share [SettingsFile]. */
 fun SettingsStore(context: Context): SettingsStore = SettingsStore(SettingsFile.get(context))
+
+/**
+ * The watched list's own DataStore, opened once per process for the reason [SettingsFile] is:
+ * `filesDir/datastore/watched.preferences_pb`, beside the settings and never inside them.
+ */
+private object WatchedFile {
+    @Volatile
+    private var store: DataStore<Preferences>? = null
+
+    fun get(context: Context): DataStore<Preferences> = store ?: synchronized(this) {
+        store ?: WatchedStore.openDataStore(
+            File(context.applicationContext.filesDir, "datastore/${WatchedStore.FILE_NAME}"),
+        ).also { store = it }
+    }
+}
+
+/** Every screen builds its own [WatchedStore] from a context; they all share [WatchedFile]. */
+fun WatchedStore(context: Context): WatchedStore = WatchedStore(WatchedFile.get(context))

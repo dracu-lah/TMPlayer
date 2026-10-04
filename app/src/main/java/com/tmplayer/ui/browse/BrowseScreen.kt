@@ -92,6 +92,8 @@ import com.tmplayer.ui.components.MediaPreview
 import com.tmplayer.ui.components.ChatListSkeleton
 import com.tmplayer.ui.components.StateScaffold
 import com.tmplayer.data.ResumeRecord
+import com.tmplayer.data.WatchedRecord
+import com.tmplayer.data.WatchedWhen
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.MenuAction
 import com.tmplayer.ui.components.holdable
@@ -114,11 +116,12 @@ import com.tmplayer.ui.theme.Tv
 /**
  * What the line under the app bar's title counts.
  *
- * Every tab but one is a list of chats; Continue watching is a list of videos, so it counts videos.
+ * Every tab but two is a list of chats; Continue watching and Previously watched are lists of
+ * videos, so they count videos.
  */
 private fun countLabel(section: BrowseSection, count: Int): String = when {
-    section.isContinue && count == 1 -> "1 video"
-    section.isContinue -> "$count videos"
+    section.listsVideos && count == 1 -> "1 video"
+    section.listsVideos -> "$count videos"
     count == 1 -> "1 chat"
     else -> "$count chats"
 }
@@ -167,6 +170,18 @@ fun BrowseScreen(
     onForgetMedia: (ResumeRecord) -> Unit = {},
     /** Empties Continue watching in one go, rather than one held-OK menu per video. */
     onClearHistory: () -> Unit = {},
+    /**
+     * Puts a Continue watching video on the Watched list, which also takes it off this one. For a
+     * video the viewer finished somewhere else, or gave up on and wants out of the way.
+     */
+    onMarkMediaWatched: (ResumeRecord) -> Unit = {},
+    /** Previously watched, newest first: what the player saw to the end, and what was marked. */
+    watchedHistory: List<WatchedRecord> = emptyList(),
+    /** Opens a finished video in the player again, from the start. */
+    onOpenWatched: (WatchedRecord) -> Unit = {},
+    onMarkUnwatched: (WatchedRecord) -> Unit = {},
+    /** Empties Previously watched in one go, behind a confirmation. */
+    onClearWatched: () -> Unit = {},
     /** Unstars every chat in one go, the counterpart to the star in each chat's menu. */
     onClearFavorites: () -> Unit = {},
     /** The chat that reopens on launch, marked on its row so the jump is never unexplained. */
@@ -189,7 +204,7 @@ fun BrowseScreen(
     // empty. Those are read from disk after the first frame, so the tab settles once they arrive;
     // an explicit pick always wins. [picked] is hoisted rather than remembered here because
     // opening a chat swaps this screen out of the composition.
-    val sections = remember(folders) { browseSections(folders) }
+    val sections = remember(folders) { browseSections(folders, withWatched = true) }
     // How many chats have something unread in them, not how many messages are unread across them:
     // the rail badge sits beside "Unread", which names a list of chats.
     val allChats = (state as? UiState.Content)?.value?.chats
@@ -215,7 +230,9 @@ fun BrowseScreen(
     // What the viewer held OK on. Only ever one at a time, so two nullable slots cover both lists.
     var chatMenu by remember { mutableStateOf<ChatSummary?>(null) }
     var mediaMenu by remember { mutableStateOf<ResumeRecord?>(null) }
+    var watchedMenu by remember { mutableStateOf<WatchedRecord?>(null) }
     var confirmClearHistory by remember { mutableStateOf(false) }
+    var confirmClearWatched by remember { mutableStateOf(false) }
     var confirmClearFavorites by remember { mutableStateOf(false) }
 
     // One question decides the whole shape of this screen: a permanent rail beside the listing on
@@ -265,8 +282,41 @@ fun BrowseScreen(
                                 insets = insets,
                                 tiles = tiles,
                                 autoFocus = !touch,
+                                text = { it.cardText() },
                                 onResume = onResumeMedia,
                                 onHold = { mediaMenu = it },
+                            )
+                        }
+                    } else if (tab.isWatched) {
+                        if (!touch) {
+                            TabHeading(tab, watchedHistory.size, insets) {
+                                LayoutAction(layout, onToggleLayout)
+                                if (watchedHistory.isNotEmpty()) {
+                                    HeaderAction(
+                                        label = "Clear watched",
+                                        icon = Icons.Filled.Close,
+                                        onClick = { confirmClearWatched = true },
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(20.dp))
+                        }
+                        if (watchedHistory.isEmpty()) {
+                            EmptyTab(tab, query = "")
+                        } else {
+                            // Read once per visit rather than ticking: "5 minutes ago" going stale
+                            // while the tab is open is harmless, and a clock here would recompose
+                            // every card each minute for it.
+                            val now = remember(watchedHistory) { System.currentTimeMillis() }
+                            ContinueSection(
+                                records = watchedHistory,
+                                text = { it.cardText(now) },
+                                layout = layout,
+                                insets = insets,
+                                tiles = tiles,
+                                autoFocus = !touch,
+                                onResume = onOpenWatched,
+                                onHold = { watchedMenu = it },
                             )
                         }
                     } else {
@@ -329,6 +379,8 @@ fun BrowseScreen(
         val chats = (state as? UiState.Content)?.value?.chats
         val count = if (tab.isContinue) {
             continueWatching.size
+        } else if (tab.isWatched) {
+            watchedHistory.size
         } else {
             remember(chats, tab, favorites, query) {
                 chats?.let { filterChats(it, tab, favorites, query).size } ?: 0
@@ -349,7 +401,7 @@ fun BrowseScreen(
             title = tab.heading,
             // Continue watching is a list of videos held on this device, and the box searches
             // chats. Offering it there would be a field that filters nothing.
-            searchQuery = if (tab.isContinue) null else query,
+            searchQuery = if (tab.listsVideos) null else query,
             onSearchQueryChange = { query = it },
             onVoiceSearch = voiceSearch,
             actions = {
@@ -362,18 +414,22 @@ fun BrowseScreen(
                     },
                     onClick = onToggleLayout,
                 )
-                if (!tab.isContinue) {
+                if (!tab.listsVideos) {
                     BarIcon("Refresh", Icons.Filled.Refresh, onRefresh)
                 }
                 // Everything destructive goes behind the overflow. A "Clear history" button
                 // sitting in the bar beside Refresh is one mis-tap from emptying the tab.
                 val clearHistory = tab.isContinue && continueWatching.isNotEmpty()
                 val clearFavorites = tab == BrowseSection.of(BrowseTab.Favorites) && favorites.isNotEmpty()
-                if (clearHistory || clearFavorites) {
+                val clearWatched = tab.isWatched && watchedHistory.isNotEmpty()
+                if (clearHistory || clearFavorites || clearWatched) {
                     BarOverflow(
                         items = buildList {
                             if (clearHistory) {
                                 add("Clear Continue watching" to { confirmClearHistory = true })
+                            }
+                            if (clearWatched) {
+                                add("Clear watched list" to { confirmClearWatched = true })
                             }
                             if (clearFavorites) {
                                 add("Clear favourites" to { confirmClearFavorites = true })
@@ -531,6 +587,47 @@ fun BrowseScreen(
         )
     }
 
+    if (confirmClearWatched) {
+        TvConfirm(
+            title = "Clear the watched list?",
+            message = "All ${watchedHistory.size} videos lose their watched tick and this tab " +
+                "empties. Nothing is deleted from Telegram.",
+            detail = "Videos you are part way through stay in Continue watching.",
+            confirmLabel = "Clear",
+            onConfirm = {
+                confirmClearWatched = false
+                onClearWatched()
+            },
+            onDismiss = { confirmClearWatched = false },
+        )
+    }
+
+    watchedMenu?.let { record ->
+        TvMenu(
+            title = record.title,
+            subtitle = listOf(
+                WatchedWhen.phrase(record.watchedAt, System.currentTimeMillis()),
+                record.chatTitle,
+            ).filter { it.isNotBlank() }.joinToString("  ·  "),
+            onDismiss = { watchedMenu = null },
+            actions = listOf(
+                MenuAction("Play again", Icons.Filled.PlayArrow, detail = "From the start") {
+                    watchedMenu = null
+                    onOpenWatched(record)
+                },
+                MenuAction(
+                    label = "Mark as unwatched",
+                    icon = Icons.Filled.Close,
+                    detail = "Takes it off this list and the tick off its tile",
+                    destructive = true,
+                ) {
+                    watchedMenu = null
+                    onMarkUnwatched(record)
+                },
+            ),
+        )
+    }
+
     mediaMenu?.let { record ->
         TvMenu(
             title = record.title,
@@ -544,6 +641,14 @@ fun BrowseScreen(
                 MenuAction("Play from the start", Icons.Filled.Refresh) {
                     mediaMenu = null
                     onRestartMedia(record)
+                },
+                MenuAction(
+                    label = "Mark as watched",
+                    icon = Icons.Filled.Check,
+                    detail = "Moves it to Previously watched",
+                ) {
+                    mediaMenu = null
+                    onMarkMediaWatched(record)
                 },
                 MenuAction(
                     label = "Remove from Continue watching",
@@ -590,21 +695,59 @@ internal fun RowScope.BarOverflow(items: List<Pair<String, () -> Unit>>) {
 
 // ---- continue watching -----------------------------------------------------------------------
 
+/**
+ * What a card in either list of videos shows: Continue watching and Previously watched draw the
+ * same card, and differ only in the line under the title and how full the bar is.
+ */
+private class VideoCardText(
+    val key: String,
+    val title: String,
+    /** The line under the title on a tile, and the start of it on a row. */
+    val detail: String,
+    val chatTitle: String,
+    val fraction: Float,
+)
+
+private fun ResumeRecord.cardText() = VideoCardText(
+    key = "${chatId}_$messageId",
+    title = title,
+    detail = buildString {
+        append(StreamStats.formatClock(positionMs))
+        if (remainingMs > 0) {
+            append("  ·  ")
+            append(StreamStats.formatClock(remainingMs))
+            append(" left")
+        }
+    },
+    chatTitle = chatTitle,
+    fraction = fraction,
+)
+
+/** A finished video: when it was finished, and a full bar, which is what "watched" looks like. */
+private fun WatchedRecord.cardText(now: Long) = VideoCardText(
+    key = key,
+    title = title,
+    detail = WatchedWhen.phrase(watchedAt, now),
+    chatTitle = chatTitle,
+    fraction = 1f,
+)
+
 @Composable
-private fun ContinueSection(
-    records: List<ResumeRecord>,
+private fun <T : Any> ContinueSection(
+    records: List<T>,
+    text: (T) -> VideoCardText,
     layout: CardLayout,
     insets: BrowseInsets,
     tiles: GridCells,
     /** Only a remote needs somewhere to stand; on a phone a stolen focus only opens the keyboard. */
     autoFocus: Boolean,
-    onResume: (ResumeRecord) -> Unit,
-    onHold: (ResumeRecord) -> Unit,
+    onResume: (T) -> Unit,
+    onHold: (T) -> Unit,
 ) {
     val first = remember { FocusRequester() }
     // Only the first card asks for focus, and which card that is does not change with the
     // arrangement, so the two branches can share one modifier.
-    fun focusOf(record: ResumeRecord): Modifier =
+    fun focusOf(record: T): Modifier =
         if (record === records.firstOrNull()) Modifier.focusRequester(first) else Modifier
 
     // The same start inset the chat list uses, so the cards line up under their heading instead of
@@ -620,11 +763,11 @@ private fun ContinueSection(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = padding,
         ) {
-            items(records, key = { "${it.chatId}_${it.messageId}" }) { record ->
+            items(records, key = { text(it).key }) { record ->
                 ContinueCard(
-                    record = record,
-                    onResume = onResume,
-                    onHold = onHold,
+                    text = text(record),
+                    onResume = { onResume(record) },
+                    onHold = { onHold(record) },
                     modifier = focusOf(record),
                 )
             }
@@ -636,11 +779,11 @@ private fun ContinueSection(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            gridItems(records, key = { "${it.chatId}_${it.messageId}" }) { record ->
+            gridItems(records, key = { text(it).key }) { record ->
                 ContinueTile(
-                    record = record,
-                    onResume = onResume,
-                    onHold = onHold,
+                    text = text(record),
+                    onResume = { onResume(record) },
+                    onHold = { onHold(record) },
                     modifier = focusOf(record),
                 )
             }
@@ -650,7 +793,7 @@ private fun ContinueSection(
     // This is the landing tab for anyone with a video on the go, and the remote has nowhere to go
     // until something holds focus. Re-run on a change of arrangement too: switching rebuilds the
     // list from scratch, and the card that was holding focus leaves the composition with it.
-    LaunchedEffect(records.firstOrNull()?.messageId, layout, autoFocus) {
+    LaunchedEffect(records.firstOrNull()?.let { text(it).key }, layout, autoFocus) {
         if (autoFocus) runCatching { first.requestFocus() }
     }
 }
@@ -661,9 +804,9 @@ private fun ContinueSection(
  */
 @Composable
 private fun ContinueTile(
-    record: ResumeRecord,
-    onResume: (ResumeRecord) -> Unit,
-    onHold: (ResumeRecord) -> Unit,
+    text: VideoCardText,
+    onResume: () -> Unit,
+    onHold: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val touch = isTouch()
@@ -681,7 +824,7 @@ private fun ContinueTile(
         Box {
             ContinueArt(Modifier.fillMaxWidth().aspectRatio(16f / 9f), badge = 40.dp)
             ResumeProgress(
-                fraction = record.fraction,
+                fraction = text.fraction,
                 touch = touch,
                 modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth(),
                 overArt = true,
@@ -689,7 +832,7 @@ private fun ContinueTile(
         }
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             Text(
-                record.title,
+                text.title,
                 style = MaterialTheme.typography.titleMedium,
                 color = Tone.text,
                 // Two lines, as everywhere else a release name is shown: one line cuts the title
@@ -700,14 +843,7 @@ private fun ContinueTile(
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                buildString {
-                    append(StreamStats.formatClock(record.positionMs))
-                    if (record.remainingMs > 0) {
-                        append("  ·  ")
-                        append(StreamStats.formatClock(record.remainingMs))
-                        append(" left")
-                    }
-                },
+                text.detail,
                 style = MaterialTheme.typography.bodyMedium,
                 color = Tone.muted,
                 maxLines = 1,
@@ -722,8 +858,8 @@ private fun ContinueTile(
                 .fillMaxWidth()
                 .holdable(
                     interactionSource = interactions,
-                    onClick = { onResume(record) },
-                    onHold = { onHold(record) },
+                    onClick = onResume,
+                    onHold = onHold,
                 ),
             shape = M3MaterialTheme.shapes.large,
             colors = CardDefaults.cardColors(containerColor = Tone.surface),
@@ -738,8 +874,8 @@ private fun ContinueTile(
                 .border(3.dp, border, RoundedCornerShape(Corner.Medium))
                 .holdable(
                     interactionSource = interactions,
-                    onClick = { onResume(record) },
-                    onHold = { onHold(record) },
+                    onClick = onResume,
+                    onHold = onHold,
                 ),
             content = body,
         )
@@ -791,9 +927,9 @@ private fun ResumeProgress(
 
 @Composable
 private fun ContinueCard(
-    record: ResumeRecord,
-    onResume: (ResumeRecord) -> Unit,
-    onHold: (ResumeRecord) -> Unit,
+    text: VideoCardText,
+    onResume: () -> Unit,
+    onHold: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val touch = isTouch()
@@ -812,7 +948,7 @@ private fun ContinueCard(
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                record.title,
+                text.title,
                 style = MaterialTheme.typography.titleMedium,
                 color = Tone.text,
                 // Two lines, as everywhere else a release name is shown: one line cuts the title
@@ -823,21 +959,16 @@ private fun ContinueCard(
             )
             Text(
                 buildString {
-                    append(StreamStats.formatClock(record.positionMs))
-                    if (record.remainingMs > 0) {
-                        append("  ·  ")
-                        append(StreamStats.formatClock(record.remainingMs))
-                        append(" left")
-                    }
+                    append(text.detail)
                     // The chat name gives way to the hold hint while focused: both are tail
                     // information on one line, and only the hint is worth saying to the row the
                     // viewer is standing on.
                     if (focused) {
                         append("  ·  ")
                         append(HOLD_HINT)
-                    } else if (record.chatTitle.isNotBlank()) {
+                    } else if (text.chatTitle.isNotBlank()) {
                         append("  ·  ")
-                        append(record.chatTitle)
+                        append(text.chatTitle)
                     }
                 },
                 style = MaterialTheme.typography.bodySmall,
@@ -848,7 +979,7 @@ private fun ContinueCard(
             // The bar is the point of the row: it says at a glance that this is a video part way
             // through rather than one not started.
             ResumeProgress(
-                fraction = record.fraction,
+                fraction = text.fraction,
                 touch = touch,
                 modifier = Modifier.fillMaxWidth(),
                 overArt = false,
@@ -862,8 +993,8 @@ private fun ContinueCard(
                 .fillMaxWidth()
                 .holdable(
                     interactionSource = interactions,
-                    onClick = { onResume(record) },
-                    onHold = { onHold(record) },
+                    onClick = onResume,
+                    onHold = onHold,
                 ),
             shape = M3MaterialTheme.shapes.large,
             colors = CardDefaults.cardColors(containerColor = Tone.surface),
@@ -884,8 +1015,8 @@ private fun ContinueCard(
                 .border(2.dp, border, RoundedCornerShape(Corner.Large))
                 .holdable(
                     interactionSource = interactions,
-                    onClick = { onResume(record) },
-                    onHold = { onHold(record) },
+                    onClick = onResume,
+                    onHold = onHold,
                 )
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -1294,10 +1425,10 @@ private fun TabHeading(
     insets: BrowseInsets,
     action: @Composable () -> Unit = {},
 ) {
-    // The number always carries its unit, and this one tab counts videos rather than chats.
+    // The number always carries its unit, and the two video tabs count videos rather than chats.
     val unit = when {
-        tab.isContinue && count == 1 -> "video"
-        tab.isContinue -> "videos"
+        tab.listsVideos && count == 1 -> "video"
+        tab.listsVideos -> "videos"
         count == 1 -> "chat"
         else -> "chats"
     }
@@ -1926,6 +2057,8 @@ private fun EmptyTab(tab: BrowseSection, query: String) {
             "Nothing in this folder yet. Folders are edited in Telegram, on your phone."
         tab == BrowseSection.of(BrowseTab.Continue) ->
             "You haven't started a video yet. Open a chat and pick one."
+        tab == BrowseSection.of(BrowseTab.Watched) ->
+            "Nothing watched yet. Videos you finish, or mark as watched, appear here."
         tab == BrowseSection.of(BrowseTab.Favorites) ->
             "No favourites yet. Hold OK on any chat to add it here."
         tab == BrowseSection.of(BrowseTab.Unread) -> "Nothing unread. You're up to date."

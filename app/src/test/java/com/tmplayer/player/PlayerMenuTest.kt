@@ -16,12 +16,19 @@ class PlayerMenuTest {
                 PlayerMenuEntry.StartOver,
                 PlayerMenuEntry.Speed,
                 PlayerMenuEntry.SaveToDownloads,
+                PlayerMenuEntry.MarkWatched,
                 PlayerMenuEntry.PictureInPicture,
                 PlayerMenuEntry.OpenInAnotherApp,
                 PlayerMenuEntry.RemoteKeys,
             ),
-            PlayerMenu.tvEntries(pictureInPicture = true, saveToDownloads = true),
+            PlayerMenu.tvEntries(pictureInPicture = true, saveToDownloads = true, markWatched = true),
         )
+    }
+
+    @Test
+    fun `mark as watched is only offered for a video that came from a message`() {
+        assertFalse(PlayerMenuEntry.MarkWatched in PlayerMenu.tvEntries(pictureInPicture = true, saveToDownloads = true))
+        assertTrue(PlayerMenuEntry.MarkWatched in PlayerMenu.tvEntries(pictureInPicture = true, markWatched = true))
     }
 
     @Test
@@ -32,7 +39,7 @@ class PlayerMenuTest {
 
     @Test
     fun `picture in picture is only offered where the device can do it`() {
-        val entries = PlayerMenu.tvEntries(pictureInPicture = false, saveToDownloads = true)
+        val entries = PlayerMenu.tvEntries(pictureInPicture = false, saveToDownloads = true, markWatched = true)
         assertFalse(PlayerMenuEntry.PictureInPicture in entries)
         assertEquals(PlayerMenuEntry.entries.size - 1, entries.size)
     }
@@ -41,7 +48,7 @@ class PlayerMenuTest {
     fun `every entry is reachable on a device with picture in picture`() {
         assertEquals(
             PlayerMenuEntry.entries.toSet(),
-            PlayerMenu.tvEntries(pictureInPicture = true, saveToDownloads = true).toSet(),
+            PlayerMenu.tvEntries(pictureInPicture = true, saveToDownloads = true, markWatched = true).toSet(),
         )
     }
 

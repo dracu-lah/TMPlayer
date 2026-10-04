@@ -53,6 +53,8 @@ import com.tmplayer.data.restore
 import com.tmplayer.data.NetworkStatus
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.WatchedRecord
+import com.tmplayer.data.WatchedStore
 import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.Td
 import com.tmplayer.data.start
@@ -228,6 +230,7 @@ private fun Root() {
     val networkStatus by NetworkMonitor.status.collectAsStateWithLifecycle()
     val telegramConnected by Td.connected.collectAsStateWithLifecycle()
     val settings = remember { SettingsStore(context) }
+    val watchedStore = remember { WatchedStore(context) }
 
     // The status and gesture bars draw their icons over the app's own background, and
     // `enableEdgeToEdge` decides their colour once at launch from the system setting. The app's
@@ -247,6 +250,8 @@ private fun Root() {
     val favorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
     val watchProgress by settings.watchProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
     val continueWatching by settings.continueWatching.collectAsStateWithLifecycle(initialValue = emptyList())
+    val watchedVideos by watchedStore.watched.collectAsStateWithLifecycle(initialValue = emptyMap())
+    val watchedHistory by watchedStore.history.collectAsStateWithLifecycle(initialValue = emptyList())
     val lastChatId by settings.lastChatId.collectAsStateWithLifecycle(initialValue = 0L)
     val minSize by settings.minSizeBytes.collectAsStateWithLifecycle(initialValue = SizeFilter.DEFAULT_MIN)
     val maxSize by settings.maxSizeBytes.collectAsStateWithLifecycle(initialValue = SizeFilter.DEFAULT_MAX)
@@ -573,18 +578,36 @@ private fun Root() {
     }
 
     /**
-     * Resuming from the Continue watching row, which counts as a visit to the video's own chat.
-     *
-     * The viewer never passed through that chat's screen, but it is what they were last watching,
-     * and that is the question the next launch is asking.
+     * Marks a video watched by hand, or takes the mark off. Marking also forgets the saved
+     * position, which is what takes it out of Continue watching.
      */
-    fun resumeMedia(record: ResumeRecord) {
+    fun setWatched(item: MediaItem, chatTitle: String, watched: Boolean) {
+        App.backgroundScope.launch {
+            runCatching {
+                if (watched) {
+                    watchedStore.markWatched(
+                        WatchedRecord.of(item, chatTitle, System.currentTimeMillis(), manual = true),
+                    )
+                    settings.clearResumePosition(item.chatId, item.messageId)
+                } else {
+                    watchedStore.markUnwatched(item.chatId, item.messageId)
+                }
+            }
+        }
+        toast(if (watched) "${item.title} marked as watched" else "${item.title} marked as unwatched")
+    }
+
+    /**
+     * Plays a video from a list kept on this device (Continue watching, Previously watched), which
+     * counts as a visit to its chat for the next launch.
+     */
+    fun openStored(stored: MediaItem, chatTitle: String) {
         scope.launch {
-            settings.rememberChatOpened(record.chatId)
+            settings.rememberChatOpened(stored.chatId)
             // In the Downloads folder: it plays from there, and asking Telegram first would only
             // be a wait, and offline a long one.
-            if (LocalDownloads.fileFor(settings, record.chatId, record.messageId) != null) {
-                play(record.toMediaItem(), chatTitle = record.chatTitle)
+            if (LocalDownloads.fileFor(settings, stored.chatId, stored.messageId) != null) {
+                play(stored, chatTitle = chatTitle)
                 return@launch
             }
             // The stored row carries a file id from whichever TDLib instance wrote it, which is
@@ -592,9 +615,19 @@ private fun Root() {
             // returns a current id and tells TDLib where the file came from, without which it
             // will not download it. The stored row is the fallback, and it is enough whenever the
             // video is already on the device.
-            val fresh = Td.refreshMedia(record.chatId, record.messageId)
-            play(fresh ?: record.toMediaItem(), chatTitle = record.chatTitle)
+            val fresh = Td.refreshMedia(stored.chatId, stored.messageId)
+            play(fresh ?: stored, chatTitle = chatTitle)
         }
+    }
+
+    /**
+     * Resuming from the Continue watching row, which counts as a visit to the video's own chat.
+     *
+     * The viewer never passed through that chat's screen, but it is what they were last watching,
+     * and that is the question the next launch is asking.
+     */
+    fun resumeMedia(record: ResumeRecord) {
+        openStored(record.toMediaItem(), record.chatTitle)
     }
 
     Box(Modifier.fillMaxSize().background(Tone.background)) {
@@ -817,6 +850,20 @@ private fun Root() {
                             toast("Continue watching cleared")
                         }
                     },
+                    onMarkMediaWatched = { record ->
+                        setWatched(record.toMediaItem(), record.chatTitle, watched = true)
+                    },
+                    watchedHistory = watchedHistory,
+                    onOpenWatched = { record -> openStored(record.toMediaItem(), record.chatTitle) },
+                    onMarkUnwatched = { record ->
+                        setWatched(record.toMediaItem(), record.chatTitle, watched = false)
+                    },
+                    onClearWatched = {
+                        scope.launch {
+                            runCatching { watchedStore.clear() }
+                            toast("Watched list cleared")
+                        }
+                    },
                     launchChatId = lastChatId,
                     picked = pickedTab,
                     onPickTab = { pickedTabKey = BrowseSection.encode(it) },
@@ -844,6 +891,8 @@ private fun Root() {
                     minSizeBytes = minSize,
                     maxSizeBytes = maxSize,
                     watchProgress = watchProgress,
+                    watchedVideos = watchedVideos,
+                    onSetWatched = { item, watched -> setWatched(item, current.chat.title, watched) },
                     onToggleFavorite = {
                         scope.launch {
                             val nowFavorite = settings.toggleFavorite(current.chat.id)

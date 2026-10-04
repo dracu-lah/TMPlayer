@@ -545,7 +545,7 @@ private fun DrawerFooter(account: Account?) {
  * Everything else the rail offers falls into the group below the rule without being named here, so
  * a destination added later appears in the drawer whether or not anybody remembers to list it.
  */
-internal val LIBRARY_TABS = listOf(BrowseTab.Continue, BrowseTab.Favorites, BrowseTab.Recent)
+internal val LIBRARY_TABS = listOf(BrowseTab.Continue, BrowseTab.Watched, BrowseTab.Favorites, BrowseTab.Recent)
     .map(BrowseSection::of)
 
 /**
