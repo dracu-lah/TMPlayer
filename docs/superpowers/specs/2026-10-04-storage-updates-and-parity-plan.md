@@ -1013,79 +1013,85 @@ Each has a recommendation; the plan proceeds on the recommendation unless told o
 
 # Part F: delivery and status
 
+Status on 2026-10-04 (release 1.20.0): everything below is implemented except the three
+unticked items. The Android storage volume chooser was left out because FileProvider cannot serve
+files on removable volumes, so Share and Open in another app would break there. SMTC and the TV
+QR code were not started. Nothing was run on Windows hardware or on the phone and TV for this
+release. The Windows CI step covers the fullscreen round trip.
+
 Phases are ordered so each ships on its own. Effort is for one developer with the devices the
 memory lists (a Linux desk, the POCO phone, the TV stick; no Windows machine).
 
 ## Phase 1: Windows fullscreen and the update button (small, ships first)
 
-- [ ] A2: `NativeFullscreen` Windows branch rewritten (un-maximize on entry, `wasMaximized`,
+- [x] A2: `NativeFullscreen` Windows branch rewritten (un-maximize on entry, `wasMaximized`,
       `pendingMaximize`, ex styles, `maximizedBounds`, `SetWindowPlacement` on exit)
-- [ ] A2: `DevPlayerMain --maximized`, richer `dev: back` print
-- [ ] A3: CI step on `windows-latest` asserting the round trip; INSTALL.md manual checklist
-- [ ] C1: `latest.json` written by `release.yml`, deployed with the site; `UpdateFeed` in `:core`
+- [x] A2: `DevPlayerMain --maximized`, richer `dev: back` print
+- [x] A3: CI step on `windows-latest` asserting the round trip; INSTALL.md manual checklist
+- [x] C1: `latest.json` written by `release.yml`, deployed with the site; `UpdateFeed` in `:core`
       replaces both parsers; one `compare`; `DesktopUpdates` shrinks; tests merged
-- [ ] C2: `UpdateScheduler`: launch plus 10 s, 6 h throttle in `SettingsStore`, repeat timer,
+- [x] C2: `UpdateScheduler`: launch plus 10 s, 6 h throttle in `SettingsStore`, repeat timer,
       pre sign in on both platforms; Android toggle
-- [ ] C3: desktop side bar and rail item in amber; phone drawer item amber on label and badge;
+- [x] C3: desktop side bar and rail item in amber; phone drawer item amber on label and badge;
       `UpdateNotice` removed; `BrowseRenderTest` updated
-- [ ] C4: the popup on phone, TV and desktop with the three buttons and the per kind lines;
+- [x] C4: the popup on phone, TV and desktop with the three buttons and the per kind lines;
       snooze and skip persisted; download progress and Restart now inside it
-- [ ] C2: APK download honours Wi-Fi only and the metered warning
-- [ ] Docs: INSTALL.md update table, site download page line
+- [x] C2: APK download honours Wi-Fi only and the metered warning
+- [x] Docs: INSTALL.md update table, site download page line
 
 ## Phase 2: downloads leave the cache (the core of Part B)
 
-- [ ] B3.1: `ResumeRecord.localPath`, `dl_` cap removed, missing file rows
-- [ ] B3.2: `Stage.Moving`, `DownloadFiles` in `:core` (move, safe name, same store test,
+- [x] B3.1: `ResumeRecord.localPath`, `dl_` cap removed, missing file rows
+- [x] B3.2: `Stage.Moving`, `DownloadFiles` in `:core` (move, safe name, same store test,
       progress), both runners move on completion and call `deleteFile`
-- [ ] B2.2: `Paths.downloadsDir` (Android `filesDir/downloads`, desktop OS Downloads folder
+- [x] B2.2: `Paths.downloadsDir` (Android `filesDir/downloads`, desktop OS Downloads folder
       through Known Folder, XDG user dirs, `~/Downloads`); `update_paths.xml` entry; Flatpak
       `xdg-download:create`; `tdlib-files` renamed `cache` with a one time rename on upgrade
-- [ ] B3.4: one time migration of legacy `dl_` records with an aggregate notification
-- [ ] B3.5: index first resolution in `MainActivity.play`, `PlayerActivity`, `PlayerMedia`,
+- [x] B3.4: one time migration of legacy `dl_` records with an aggregate notification
+- [x] B3.5: index first resolution in `MainActivity.play`, `PlayerActivity`, `PlayerMedia`,
       `ExternalPlayer`, `ShareMedia`, Downloads pages; `onDevice` three valued
-- [ ] B3.6: deletion through the index; desktop `removeDownload` fixed
-- [ ] B4: cached files reach the runner from the grid, the desktop menu and the player; "Finishes
+- [x] B3.6: deletion through the index; desktop `removeDownload` fixed
+- [x] B4: cached files reach the runner from the grid, the desktop menu and the player; "Finishes
       when playback stops"
-- [ ] B5: Save to Downloads everywhere in the table; badges "Downloaded" and "Cached"
-- [ ] B6: wording pass over Settings, Downloads screens, dialogs, badges, menus; sign out
+- [x] B5: Save to Downloads everywhere in the table; badges "Downloaded" and "Cached"
+- [x] B6: wording pass over Settings, Downloads screens, dialogs, badges, menus; sign out
       checkbox (E5)
-- [ ] B7: `TransferNotifier` in `:core`, Android implementation over the existing service,
+- [x] B7: `TransferNotifier` in `:core`, Android implementation over the existing service,
       Linux D-Bus plus LauncherEntry, Windows taskbar progress plus PowerShell toast with
       AUMID registration, in app toast and badge fallback; Flatpak `--talk-name`
-- [ ] B9: strays over `Paths.filesDir`; `currentFileId` fixes; desktop runner resourcing,
+- [x] B9: strays over `Paths.filesDir`; `currentFileId` fixes; desktop runner resourcing,
       `free == 0`, `Connectivity`; shared `WatchCacheRules`; `REFUSED` wording moved
-- [ ] Tests: `DownloadFilesTest` (same and cross store, name sanitising, collision), migration
+- [x] Tests: `DownloadFilesTest` (same and cross store, name sanitising, collision), migration
       test over a fake `TdFiles`, `ResumeRecord` round trip with and without path, runner stage
       tests, `UpdateFeedTest`, a render test of the Downloads page's three sections
 
 ## Phase 3: the storage location and the desktop cache cap
 
-- [ ] B2.3: FileKit dependency (E3), Storage location row, validation, confirm dialog
-- [ ] B2.4: `Td.restart(paths)`, `AuthAction.Close`, `AuthReducerTest`
-- [ ] B2.3: `StorageRelocation` (clear cache, restart TDLib, create folders, move downloads with
+- [x] B2.3: FileKit dependency (E3), Storage location row, validation, confirm dialog
+- [x] B2.4: `Td.restart(paths)`, `AuthAction.Close`, `AuthReducerTest`
+- [x] B2.3: `StorageRelocation` (clear cache, restart TDLib, create folders, move downloads with
       progress and a resumable pending state, Reset to default)
-- [ ] B8: Cache limit setting, LRU eviction under the cap, `Td.trimStorage` on desktop, pre play
+- [x] B8: Cache limit setting, LRU eviction under the cap, `Td.trimStorage` on desktop, pre play
       room check with the "Not enough space" sheet
-- [ ] B3.3: adopt an existing `TMPlayer/downloads`; Scan the downloads folder
-- [ ] D1: desktop Storage card, confirmations, Clear everything except downloads, Reset, Forget
+- [x] B3.3: adopt an existing `TMPlayer/downloads`; Scan the downloads folder
+- [x] D1: desktop Storage card, confirmations, Clear everything except downloads, Reset, Forget
       last chat, Privacy and Lawful use rows, offline banner, prune history, Downloads page multi
       select and Delete all, "Download the whole video first" wired
 - [ ] C5: TV release page as a QR code; note on `PackageInstaller`
-- [ ] Docs: INSTALL.md storage section (where files live per OS, how to move them, what the
+- [x] Docs: INSTALL.md storage section (where files live per OS, how to move them, what the
       cache is), FEATURES.md, site features page
 
 ## Phase 4: parity remainder
 
-- [ ] D1: pin, mute, archive, mark read on desktop chats; multi select download; Open in
+- [x] D1: pin, mute, archive, mark read on desktop chats; multi select download; Open in
       another app; sponsored Report
-- [ ] D2: TV More menu (Playback details, Start over, Speed, Save to Downloads, Open in another
+- [x] D2: TV More menu (Playback details, Start over, Speed, Save to Downloads, Open in another
       app, Remote keys), remaining time toggle, PiP button (E10), downmix setting, controls
       timeout on TV and desktop
-- [ ] D3: Copy link, external subtitles, Play from start on the phone
+- [x] D3: Copy link, external subtitles, Play from start on the phone
 - [ ] B2.2: Android storage volume chooser (internal, SD card, USB) with the same relocation flow
 - [ ] D1: SMTC spike (JNA COM `ISystemMediaTransportControlsInterop`), then SMTC
-- [ ] D5: documentation corrections
+- [x] D5: documentation corrections
 
 ## Not scheduled, with the reason
 
