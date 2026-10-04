@@ -431,3 +431,18 @@ Start it with `_JAVA_AWT_WM_NONREPARENTING=1` set in the environment.
 
 **A build you made yourself never shows a QR code.** It was built without `TG_API_ID` /
 `TG_API_HASH` in `local.properties`. See [docs/BUILDING.md](docs/BUILDING.md).
+
+## Known gaps
+
+**Fullscreen on Windows 11 has not been checked by hand yet.** Going fullscreen from a maximized
+window used to leave the window under the taskbar on the way back. The fix is checked on every
+push on a Windows Server runner (one monitor, no Windows 11 taskbar), so the cases below still
+want someone with Windows 11 to try them and tick them off:
+
+- [ ] Maximized, **F**, **F**: the window comes back maximized, with the taskbar visible below it.
+- [ ] Not maximized, **F**, **F**: the window comes back to the same size and place.
+- [ ] The same two with the taskbar at the top, and on the left.
+- [ ] With the taskbar set to hide automatically, it still pops up over the restored window.
+- [ ] A second monitor at a different scale: fullscreen fills that monitor, and back lands there.
+- [ ] **Win+Up** while fullscreen does not leave fullscreen half way; **F** then comes back maximized.
+- [ ] Minimize from the taskbar while fullscreen, then restore: still fullscreen, and **F** comes back as before.

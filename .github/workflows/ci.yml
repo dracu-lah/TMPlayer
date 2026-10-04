@@ -143,6 +143,80 @@ jobs:
           version: 1.0.1-ci.${{ github.run_number }}
           upgrade-from: 1.0.0
 
+      # The fullscreen round trip that left a maximized window under the taskbar. The dev
+      # harness plays a generated clip, goes fullscreen and back, and prints where the window
+      # landed: the frame, its client area, the monitor's work area, Compose's placement and AWT's
+      # extendedState. Maximized must come back maximized with the client area's bottom on the
+      # work area's bottom; floating must come back to the same rectangle ten times running. The
+      # hosted runner has an interactive desktop; should the harness get no window or the clip
+      # never open, the run is killed after a few minutes and the step fails rather than hanging.
+      - name: Fullscreen round trip
+        shell: pwsh
+        timeout-minutes: 15
+        run: |
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+            choco install ffmpeg -y --no-progress | Out-Null
+          }
+          $clip = Join-Path $env:RUNNER_TEMP "clip.mkv"
+          ffmpeg -hide_banner -loglevel error -y -f lavfi -i "testsrc=size=320x240:rate=25" -t 60 -c:v mpeg4 $clip
+          if (-not (Test-Path $clip)) { throw "could not generate the test clip" }
+          $settings = Join-Path $env:RUNNER_TEMP "harness-settings"
+
+          function Invoke-Harness([string]$name, [string]$extra) {
+            $out = Join-Path $env:RUNNER_TEMP "$name.txt"
+            $harnessArgs = "--file $clip --settings $settings --size 800x500 $extra"
+            $p = Start-Process cmd.exe -NoNewWindow -PassThru -ArgumentList "/c gradlew.bat --no-daemon -q :desktop:runPlayerDev `"--args=$harnessArgs`" > `"$out`" 2>&1"
+            $null = $p.Handle
+            if (-not $p.WaitForExit(300000)) {
+              taskkill /T /F /PID $p.Id | Out-Null
+              if (Test-Path $out) { Get-Content $out }
+              throw "${name}: the dev harness did not finish within 5 minutes (no window on the runner, or the clip never opened)"
+            }
+            $lines = @(Get-Content $out)
+            $lines | Write-Host
+            if ($p.ExitCode -ne 0) { throw "${name}: the dev harness exited with $($p.ExitCode)" }
+            return $lines
+          }
+
+          $pattern = 'bounds=(-?\d+),(-?\d+),(\d+)x(\d+) client=(-?\d+),(-?\d+),(\d+)x(\d+) work=(-?\d+),(-?\d+),(\d+)x(\d+) placement=(\w+) extendedState=(\d+)'
+          function Read-Geometry([string]$name, [string[]]$lines, [string]$label) {
+            $found = @($lines | Where-Object { $_ -like "dev: $label *" } | ForEach-Object {
+              if ($_ -notmatch $pattern) { throw "${name}: cannot read '$_'" }
+              [pscustomobject]@{
+                Bounds = "$($Matches[1]),$($Matches[2]),$($Matches[3])x$($Matches[4])"
+                ClientBottom = [int]$Matches[6] + [int]$Matches[8]
+                WorkBottom = [int]$Matches[10] + [int]$Matches[12]
+                Placement = $Matches[13]
+                State = [int]$Matches[14]
+              }
+            })
+            if ($found.Count -eq 0) { throw "${name}: the harness printed no 'dev: $label' line" }
+            return $found
+          }
+
+          # Maximized: one round trip.
+          $lines = Invoke-Harness "maximized" "--maximized --fullscreen-after 1500 --quit-after 6000"
+          foreach ($g in @(@(Read-Geometry "maximized" $lines "start")[0], @(Read-Geometry "maximized" $lines "back")[-1])) {
+            if ($g.Placement -ne "Maximized" -or ($g.State -band 6) -ne 6) {
+              throw "maximized: expected a maximized window, got placement $($g.Placement), extendedState $($g.State)"
+            }
+            if ([math]::Abs($g.ClientBottom - $g.WorkBottom) -gt 1) {
+              throw "maximized: the window's bottom is at $($g.ClientBottom), the work area's at $($g.WorkBottom)"
+            }
+          }
+
+          # Floating: ten round trips, no drift.
+          $lines = Invoke-Harness "floating" "--fullscreen-after 1500 --fullscreen-rounds 10 --quit-after 24000"
+          $start = @(Read-Geometry "floating" $lines "start")[0]
+          $backs = @(Read-Geometry "floating" $lines "back")
+          if ($backs.Count -ne 10) { throw "floating: expected 10 round trips, saw $($backs.Count)" }
+          foreach ($g in $backs) {
+            if ($g.Placement -ne "Floating" -or $g.State -ne 0 -or $g.Bounds -ne $start.Bounds) {
+              throw "floating: started at $($start.Bounds), came back at $($g.Bounds), placement $($g.Placement), extendedState $($g.State)"
+            }
+          }
+          Write-Host "Fullscreen round trip: maximized and floating both come back where they were."
+
       - name: Upload Windows packages
         uses: actions/upload-artifact@v7
         with:

@@ -19,6 +19,9 @@ import com.tmplayer.desktop.os.MiniPlayerWindow
 import com.tmplayer.desktop.os.NativeFullscreen
 import com.tmplayer.desktop.os.NonReparentingWm
 import kotlinx.coroutines.delay
+import java.awt.Frame
+import java.awt.Rectangle
+import java.awt.Toolkit
 import java.io.File
 import kotlin.system.exitProcess
 
@@ -40,6 +43,10 @@ import kotlin.system.exitProcess
  * - `--mini-after <ms>` turns the mini player on, prints the window's bounds, and off again a second later.
  * - `--sub <file>` loads a subtitle file once playing, as dropping it on the picture does.
  * - `--fullscreen-after <ms>` goes fullscreen, prints the window's bounds, and back a second later.
+ *   Each print carries the frame's bounds, its client area, the work area of its monitor, the
+ *   Compose placement and AWT's `extendedState`, so a script can check where the window landed.
+ * - `--fullscreen-rounds <n>` repeats that round trip n times (default 1), to show drift.
+ * - `--maximized` starts maximized, so the round trip above is the maximized one.
  * - `--quit-after <ms>` closes the window, so a scripted run ends on its own.
  */
 fun main(argv: Array<String>) {
@@ -65,10 +72,14 @@ fun main(argv: Array<String>) {
     val sub = value("--sub")
     val miniAfter = value("--mini-after")?.toLongOrNull()
     val fullscreenAfter = value("--fullscreen-after")?.toLongOrNull()
+    val fullscreenRounds = value("--fullscreen-rounds")?.toIntOrNull() ?: 1
 
     NonReparentingWm.applyIfNeeded()
     application {
-        val state = rememberWindowState(size = DpSize(w.dp, h.dp))
+        val state = rememberWindowState(
+            placement = if (flag("--maximized")) WindowPlacement.Maximized else WindowPlacement.Floating,
+            size = DpSize(w.dp, h.dp),
+        )
         var fullscreen by remember { mutableStateOf(false) }
         Window(onCloseRequest = ::exitApplication, state = state, title = "TMPlayer player (dev): ${file.name}") {
             // The same way in as the app's window takes (see Main.kt).
@@ -120,12 +131,15 @@ fun main(argv: Array<String>) {
                 }
                 if (fullscreenAfter != null) {
                     at(fullscreenAfter)
-                    fullscreen = true
-                    delay(1_000)
-                    println("dev: fullscreen ${window.bounds}")
-                    fullscreen = false
-                    delay(1_000)
-                    println("dev: back ${window.bounds}")
+                    println("dev: start ${geometry(window, state.placement)}")
+                    repeat(fullscreenRounds) {
+                        fullscreen = true
+                        delay(1_000)
+                        println("dev: fullscreen ${geometry(window, state.placement)}")
+                        fullscreen = false
+                        delay(1_000)
+                        println("dev: back ${geometry(window, state.placement)}")
+                    }
                 }
                 if (seekAfter != null && seekTo != null) {
                     at(seekAfter)
@@ -146,4 +160,22 @@ fun main(argv: Array<String>) {
             }
         }
     }
+}
+
+/**
+ * Where [window] is, as one line a script can read: the frame's bounds, its client area (the
+ * frame less its insets, whose bottom edge is the one a maximized window lines up with the work
+ * area), the work area of its monitor, the Compose [placement] and AWT's `extendedState`.
+ * Rectangles read `x,y,WxH`.
+ */
+private fun geometry(window: Frame, placement: WindowPlacement): String {
+    fun Rectangle.text() = "$x,$y,${width}x$height"
+    val b = window.bounds
+    val i = window.insets
+    val client = Rectangle(b.x + i.left, b.y + i.top, b.width - i.left - i.right, b.height - i.top - i.bottom)
+    val gc = window.graphicsConfiguration
+    val s = Toolkit.getDefaultToolkit().getScreenInsets(gc)
+    val work = gc.bounds.let { Rectangle(it.x + s.left, it.y + s.top, it.width - s.left - s.right, it.height - s.top - s.bottom) }
+    return "bounds=${b.text()} client=${client.text()} work=${work.text()} " +
+        "placement=$placement extendedState=${window.extendedState}"
 }
