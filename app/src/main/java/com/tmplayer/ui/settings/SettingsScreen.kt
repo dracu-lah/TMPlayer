@@ -111,8 +111,10 @@ import com.tmplayer.data.StorageSplit
 import com.tmplayer.data.WatchCache
 import com.tmplayer.data.Td
 import com.tmplayer.data.ThemeChoice
-import com.tmplayer.data.UpdateState
+import com.tmplayer.data.UpdateWords
 import com.tmplayer.data.Updates
+import com.tmplayer.data.release
+import com.tmplayer.data.updateScheduler
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.PhonePad
 import com.tmplayer.ui.components.TmIcons
@@ -190,6 +192,7 @@ fun SettingsScreen(
 
     val toast = rememberToast()
     val updateState by Updates.state.collectAsStateWithLifecycle()
+    val updateNotify by settings.updateNotify.collectAsStateWithLifecycle(initialValue = true)
     var showUpdate by remember { mutableStateOf(false) }
     // What TMPlayer is holding, split into downloads, cache and everything else. Worked out by
     // [StorageSplit], which is also what the Downloads screen reads, so the two panels cannot
@@ -744,12 +747,12 @@ fun SettingsScreen(
         // ---- version -------------------------------------------------------------------------
 
         item { SectionTitle("Version") }
-        (updateState as? UpdateState.Available)?.let { available ->
+        updateState.release?.let { offered ->
             item {
                 ActionRow(
-                    title = "Update to ${available.release.version}",
+                    title = UpdateWords.settingsRow(offered),
                     subtitle = "Downloads " +
-                        "${StreamStats.formatBytes(available.release.sizeBytes)} from GitHub, " +
+                        "${StreamStats.formatBytes(Updates.apkFor(offered)?.size ?: 0L)} from GitHub, " +
                         "then Android asks you to confirm",
                     icon = Icons.Filled.Refresh,
                     tint = Tone.caution,
@@ -765,8 +768,18 @@ fun SettingsScreen(
                 icon = Icons.Filled.Refresh,
                 onClick = {
                     showUpdate = true
-                    scope.launch { Updates.check() }
+                    // Past the six hour wait and the skipped version: the viewer asked.
+                    scope.launch { updateScheduler(context).checkNow() }
                 },
+            )
+        }
+        item {
+            ToggleRow(
+                title = "Tell me when a new version is out",
+                subtitle = "Looks every six hours. Nothing is downloaded or installed without you",
+                icon = Icons.Filled.Info,
+                checked = updateNotify,
+                onToggle = { scope.launch { settings.setUpdateNotify(!updateNotify) } },
             )
         }
 
@@ -854,8 +867,9 @@ fun SettingsScreen(
                 ),
             ) {
                 Text(
-                    "TMPlayer talks directly to Telegram for your chats and videos, and to GitHub " +
-                        "to see whether a newer version is out. It has no developer-run server, " +
+                    "TMPlayer talks directly to Telegram for your chats and videos, and to " +
+                        "tmplayer.org, or GitHub when the site cannot be reached, to see whether a " +
+                        "newer version is out. It has no developer-run server, " +
                         "analytics or advertising SDK.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Tone.muted,

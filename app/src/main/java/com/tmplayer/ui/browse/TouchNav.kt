@@ -37,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemColors
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -212,18 +213,19 @@ internal fun TouchBrowseShell(
 
                         DrawerSeparator()
                         if (updateVersion != null) {
+                            // Amber on the icon, the label and the version alike, as on the TV
+                            // rail and the desktop side bar: the one item that is news.
                             DrawerDestination(
                                 label = "Update",
                                 selected = false,
                                 badge = updateVersion,
-                                icon = {
-                                    Icon(
-                                        Icons.Filled.Refresh,
-                                        contentDescription = null,
-                                        tint = Tone.caution,
-                                    )
-                                },
+                                icon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
                                 onClick = { close(); onUpdate() },
+                                colors = NavigationDrawerItemDefaults.colors(
+                                    unselectedIconColor = Tone.caution,
+                                    unselectedTextColor = Tone.caution,
+                                    unselectedBadgeColor = Tone.caution,
+                                ),
                             )
                         }
                         DrawerDestination(
@@ -401,6 +403,7 @@ private fun DrawerDestination(
     badge: String?,
     icon: @Composable () -> Unit,
     onClick: () -> Unit,
+    colors: NavigationDrawerItemColors = NavigationDrawerItemDefaults.colors(),
 ) {
     NavigationDrawerItem(
         label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -409,6 +412,7 @@ private fun DrawerDestination(
         selected = selected,
         onClick = onClick,
         modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+        colors = colors,
     )
 }
 

@@ -8,33 +8,46 @@ import com.tmplayer.BuildConfig
 import java.io.File
 
 // Installing an update is Android's business; checking for one and fetching it is shared, in
-// `:core`'s [Updates].
+// `:core`'s [Updates], and when to check is [UpdateScheduler]'s.
 
 /** Tells [Updates] what this build is: called once from `App.onCreate`. */
-fun Updates.configureForAndroid() = configure(
-    installedVersion = BuildConfig.VERSION_NAME,
-    abis = Build.SUPPORTED_ABIS.orEmpty().toList(),
-    connectivity = NetworkMonitor,
-)
+fun Updates.configureForAndroid() {
+    val abis = Build.SUPPORTED_ABIS.orEmpty().toList()
+    configure(
+        installedVersion = BuildConfig.VERSION_NAME,
+        abis = abis,
+        connectivity = NetworkMonitor,
+        // A release with no APK this device can run is no news here.
+        offers = { UpdateFeed.androidAsset(it, abis) != null },
+    )
+}
+
+/** The update schedule over this app's settings. Holds no state of its own, so one per caller is fine. */
+fun updateScheduler(context: Context): UpdateScheduler = UpdateScheduler(SettingsStore(context).updatePrefs)
+
+/** The sentence for a download refused because Wi-Fi only is on and this is not Wi-Fi. */
+const val UPDATE_WAITS_FOR_WIFI = "Wi-Fi only is on in Settings, so the update waits for Wi-Fi."
 
 /**
- * Fetches the APK for this TV and hands it to the system installer.
+ * Fetches the APK for this device and hands it to the system installer.
+ *
+ * Honours "Wi-Fi only" the way a video does: on a metered connection with it on, nothing is
+ * fetched. The warning about mobile data without it is the popup's, on the button itself.
  *
  * The file lands in the cache directory: once Android has installed it there is no reason to
  * keep a second copy of the app around on a stick with eight gigabytes on it.
  */
 suspend fun Updates.downloadAndInstall(context: Context, release: Release) {
+    if (onMeteredNetwork() && SettingsStore(context).wifiOnlyDownloadsNow()) {
+        refuse(UPDATE_WAITS_FOR_WIFI)
+        return
+    }
     val file = download(release, File(context.cacheDir, "updates")) ?: return
     runCatching { context.startActivity(installIntent(context, file)) }
-        .onFailure {
-            installFailed(
-                "TMPlayer could not open Android's installer. Install it by hand from " +
-                    "${Updates.RELEASES_PAGE}.",
-            )
-        }
+        .onFailure { installFailed(UpdateWords.NO_INSTALLER) }
 }
 
-/** Whether the TV will let TMPlayer hand an APK to the installer at all. */
+/** Whether the device will let TMPlayer hand an APK to the installer at all. */
 @Suppress("UnusedReceiverParameter")
 fun Updates.canInstall(context: Context): Boolean =
     context.packageManager.canRequestPackageInstalls()
