@@ -78,8 +78,10 @@ ones still finds the thing. Exact matches still come first.
 microphone already in your remote, or your phone's own dictation, and asks for no permissions to
 do it.
 
-**Keeps itself current.** It checks GitHub once a launch, puts an amber *Update* on the rail when
-there is a newer release, and downloads and installs it for you. Signing out clears everything it
+**Keeps itself current.** Shortly after every launch, and every six hours while it runs, it looks
+for a newer release, puts an amber *Update* on the rail and in the drawer when there is one, and
+offers it once in a popup (Update now, Remind me later, Skip this version). It downloads and
+installs it for you, and waits for Wi-Fi when Wi-Fi only is on. Signing out clears everything it
 ever kept: the Telegram session, your history, favourites, settings, and downloaded media.
 
 <p align="center">
@@ -128,8 +130,9 @@ computer until you remove them, on their own page.
 **Mini player and shortcuts.** Ctrl+P shrinks the window to a small always on top picture in a
 corner of the screen and brings it back; `?` lists every key.
 
-**Updates itself.** Once a day it checks for a newer release and says so in a corner of the window
-(Settings can turn that off). Update now downloads the package that matches the install (MSI,
+**Updates itself.** Shortly after every launch, and every six hours while it runs, it looks for a
+newer release; when there is one, an amber *Update* item joins the side bar and a popup offers it
+once (Settings can turn the check off). Update now downloads the package that matches the install (MSI,
 portable zip, AppImage, deb or rpm), checks it against the release checksums, installs it and
 restarts. The deb and rpm ask for your password; the Flatpak and the tarball open the release page.
 
