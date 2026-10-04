@@ -2,6 +2,7 @@ package com.tmplayer.ui.browse
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
@@ -23,6 +24,7 @@ enum class BrowseTab(
     val icon: ImageVector,
 ) {
     Continue("Continue", "Continue watching", "Pick up where you left off", Icons.Filled.PlayArrow),
+    Watched("Watched", "Previously watched", "Videos you've finished", Icons.Filled.Check),
     Favorites("Favourites", "Favourites", "Chats you've starred", Icons.Filled.Star),
     // A clock, not the circular-arrow reload glyph: that one belongs to the video grid's refresh
     // action, and one picture must not stand for two unrelated things.
@@ -70,6 +72,12 @@ sealed interface BrowseSection {
     /** True for the one section that lists videos held on this device rather than chats. */
     val isContinue: Boolean get() = this is Tab && tab == BrowseTab.Continue
 
+    /** The list of finished videos, also videos rather than chats, and also read off this device. */
+    val isWatched: Boolean get() = this is Tab && tab == BrowseTab.Watched
+
+    /** Either list of videos: no chat search, no refresh, and a count in videos. */
+    val listsVideos: Boolean get() = isContinue || isWatched
+
     companion object {
         fun of(tab: BrowseTab): BrowseSection = Tab(tab)
 
@@ -106,12 +114,20 @@ sealed interface BrowseSection {
 /**
  * Every place the rail offers, with the viewer's folders after the chat tabs.
  *
+ * [withWatched] adds "Previously watched" right after Continue watching. It is opt in so a screen
+ * that has not learned to draw that list yet (and filters out [BrowseSection.isContinue] to keep
+ * chats only) is not handed a tab it would render as a chat list.
+ *
  * Folders come last because they are the only part of this list that differs per account. Keeping
  * the fixed, learnable tabs first also stops the rail changing shape halfway down when a folder is
  * added or renamed.
  */
-fun browseSections(folders: List<ChatFolderSummary>): List<BrowseSection> = buildList {
+fun browseSections(
+    folders: List<ChatFolderSummary>,
+    withWatched: Boolean = false,
+): List<BrowseSection> = buildList {
     add(BrowseSection.of(BrowseTab.Continue))
+    if (withWatched) add(BrowseSection.of(BrowseTab.Watched))
     add(BrowseSection.of(BrowseTab.Favorites))
     add(BrowseSection.of(BrowseTab.Recent))
     add(BrowseSection.of(BrowseTab.Unread))
@@ -151,8 +167,9 @@ fun filterChats(
             BrowseTab.People -> listed.filter {
                 it.kind == ChatKind.Direct || it.kind == ChatKind.Saved
             }
-            // Continue watching is a list of videos, not chats; it never reaches this filter.
-            BrowseTab.Continue, BrowseTab.Recent, BrowseTab.All, BrowseTab.Archived -> listed
+            // Continue watching and Watched are lists of videos, not chats; they never reach this
+            // filter.
+            BrowseTab.Continue, BrowseTab.Watched, BrowseTab.Recent, BrowseTab.All, BrowseTab.Archived -> listed
         }
     }
     // Ranked rather than filtered: a chat whose title is exactly what was typed belongs at the
