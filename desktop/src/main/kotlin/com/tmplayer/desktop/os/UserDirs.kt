@@ -40,7 +40,7 @@ object UserDirs {
      */
     internal fun xdgDownloads(env: Map<String, String>, home: File): File? {
         env["XDG_DOWNLOAD_DIR"]?.let { parseValue(it, home) }?.let { return it }
-        val configHome = env["XDG_CONFIG_HOME"]?.takeIf { it.startsWith("/") }?.let(::File)
+        val configHome = env["XDG_CONFIG_HOME"]?.let(::File)?.takeIf { it.isAbsolute }
         val candidates = listOfNotNull(configHome, File(home, ".config")).distinct()
         for (dir in candidates) {
             val file = File(dir, "user-dirs.dirs")
