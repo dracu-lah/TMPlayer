@@ -75,6 +75,31 @@ class AuthReducerTest {
     }
 
     @Test
+    fun `closing on purpose shows connecting and asks for the client to close`() {
+        val step = AuthReducer.close()
+        assertEquals(AuthState.Connecting, step.state)
+        assertEquals(AuthAction.Close, step.action)
+    }
+
+    @Test
+    fun `a client closed on purpose goes through closing to a rebuild, whatever the sign in route`() {
+        // The restart over new paths relies on exactly this: Close, then TDLib's own Closing and
+        // Closed, and the Closed is what starts the replacement.
+        for (method in SignInMethod.values()) {
+            assertEquals(AuthAction.None, AuthReducer.reduce(AuthorizationStateClosing(), method).action)
+            val closed = AuthReducer.reduce(AuthorizationStateClosed(), method)
+            assertEquals(AuthState.Connecting, closed.state)
+            assertEquals(AuthAction.RecreateClient, closed.action)
+        }
+    }
+
+    @Test
+    fun `the replacement client is answered with its parameters, as at first start`() {
+        assertEquals(AuthAction.SendParameters, AuthReducer.reduce(AuthorizationStateWaitTdlibParameters()).action)
+        assertEquals(AuthAction.OnReady, AuthReducer.reduce(AuthorizationStateReady()).action)
+    }
+
+    @Test
     fun `an SMS code request fails loudly instead of hanging on a loader`() {
         val codeInfo = AuthenticationCodeInfo("+10000000000", AuthenticationCodeTypeSms(5), null, 60)
         val step = AuthReducer.reduce(AuthorizationStateWaitCode(codeInfo))

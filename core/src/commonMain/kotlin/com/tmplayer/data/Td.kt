@@ -102,20 +102,64 @@ object Td {
     private val _folders = MutableStateFlow<List<ChatFolderSummary>>(emptyList())
     val folders: StateFlow<List<ChatFolderSummary>> = _folders.asStateFlow()
 
-    private lateinit var paths: Paths
+    /**
+     * Where TDLib keeps its database and files, read by every new client in [sendParameters].
+     *
+     * Volatile and replaceable rather than set once, because [restart] points the next client at a
+     * new files directory. Null until [start].
+     */
+    @Volatile
+    private var currentPaths: Paths? = null
     private lateinit var device: DeviceInfo
     private lateinit var credentials: Credentials
+
+    /** The directories the running client was given, or null before [start]. */
+    val paths: Paths? get() = currentPaths
 
     /**
      * Starts the client once per process; later calls are ignored. Each app supplies where TDLib
      * keeps its files, what the device calls itself, and the API credentials it was built with.
      */
     fun start(paths: Paths, device: DeviceInfo, credentials: Credentials) {
-        if (::paths.isInitialized) return
-        this.device = device
-        this.credentials = credentials
-        this.paths = paths
+        synchronized(this) {
+            if (currentPaths != null) return
+            this.device = device
+            this.credentials = credentials
+            this.currentPaths = paths
+        }
         scope.launch { clientLoop() }
+    }
+
+    /**
+     * Closes the client and starts a new one over [newPaths], keeping the viewer signed in.
+     *
+     * TDLib takes its directories once, at start, so moving its files directory means a new
+     * client. The database directory should be the same as before, since that is where the
+     * session is; only the files directory is expected to change. Returns once the replacement
+     * client exists, or after [timeoutMs] if TDLib never reports the old one closed, in which case
+     * the old one is abandoned and the new one started anyway.
+     *
+     * Callers stop everything that reads TDLib's files first (players, the download queue, the
+     * watch cache sweep): their file ids and paths belong to the old client. The download queue
+     * is not restored again; it is resumed by whoever paused it.
+     */
+    suspend fun restart(newPaths: Paths, timeoutMs: Long = RESTART_TIMEOUT_MS) {
+        check(currentPaths != null) { "Td.start has not been called" }
+        currentPaths = newPaths
+        val before = _session.value?.generation
+        val signal = closedSignal
+        val td = current
+        if (td != null) {
+            gate.withLock { perform(td, AuthReducer.close()) }
+        }
+        val replaced = withTimeoutOrNull(timeoutMs) {
+            _session.first { it != null && it.generation != before }
+        }
+        if (replaced == null) {
+            Logger.w(TAG, "TDLib did not report the old client closed; starting a new one anyway")
+            signal?.complete(Unit)
+            _session.first { it != null && it.generation != before }
+        }
     }
 
     private suspend fun clientLoop() = coroutineScope {
@@ -187,11 +231,16 @@ object Td {
         lastHandled = state
 
         val step = AuthReducer.reduce(state, method)
+        Logger.i(TAG, "auth: ${state::class.simpleName} -> ${step.state::class.simpleName}")
+        perform(td, step)
+    }
+
+    /** Shows [step]'s state and carries out its action. Called with [gate] held. */
+    private suspend fun perform(td: TdlClient, step: AuthStep) {
         // Never let a stale "connecting" overwrite a terminal failure the user still needs to read.
         if (_auth.value !is AuthState.Failed || step.state !is AuthState.Connecting) {
             _auth.value = step.state
         }
-        Logger.i(TAG, "auth: ${state::class.simpleName} -> ${step.state::class.simpleName}")
 
         when (step.action) {
             AuthAction.SendParameters -> sendParameters(td)
@@ -201,6 +250,10 @@ object Td {
             }
             AuthAction.OnReady -> onReady(td)
             AuthAction.RecreateClient -> closedSignal?.complete(Unit)
+            // TDLib answers with Closing and then Closed, and Closed is reduced to RecreateClient
+            // above: the replacement is started there, once the old client has let go of the
+            // database, rather than here, where it would find the database still locked.
+            AuthAction.Close -> runCatching { td.close() }
             AuthAction.None -> Unit
         }
     }
@@ -297,6 +350,7 @@ object Td {
     }
 
     private suspend fun sendParameters(td: TdlClient) {
+        val paths = currentPaths ?: return
         if (!credentials.present) {
             _auth.value = AuthState.Failed(
                 "No Telegram API credentials in this build. Add TG_API_ID and TG_API_HASH to local.properties and rebuild. See the README.",
@@ -577,21 +631,40 @@ object Td {
      * "delete the videos" and wrong for the one that means "I need this space back". So: no
      * immunity, no type filter, no ceiling. The browse grid goes grey for a moment and refetches.
      */
-    suspend fun clearEverythingCached() {
-        val td = current ?: return
-        runCatching {
+    suspend fun clearEverythingCached(): Boolean =
+        optimizeStorage(sizeBytes = 0, ttlSeconds = Int.MAX_VALUE, immunityDelaySeconds = 0, fileTypes = emptyArray())
+
+    /**
+     * TDLib's own garbage collector, run once with the limits given.
+     *
+     * Files go oldest first until the cache is under [sizeBytes] (or at once, at zero), and any
+     * not touched for [ttlSeconds] go regardless; nothing touched in the last
+     * [immunityDelaySeconds] is taken, and only files of [fileTypes] are considered (all of them
+     * when empty). TDLib never asks whether a file is a download, which is why a download must
+     * not be in its files directory by the time this runs.
+     *
+     * @return whether TDLib carried it out; false with no client, or when it refused.
+     */
+    suspend fun optimizeStorage(
+        sizeBytes: Long,
+        ttlSeconds: Int,
+        immunityDelaySeconds: Int,
+        fileTypes: Array<FileType>,
+    ): Boolean {
+        val td = current ?: return false
+        return runCatching {
             td.optimizeStorage(
-                size = 0,
-                ttl = Int.MAX_VALUE,
+                size = sizeBytes,
+                ttl = ttlSeconds,
                 count = Int.MAX_VALUE,
-                immunityDelay = 0,
-                fileTypes = emptyArray(),
+                immunityDelay = immunityDelaySeconds,
+                fileTypes = fileTypes,
                 chatIds = longArrayOf(),
                 excludeChatIds = longArrayOf(),
                 returnDeletedFileStatistics = false,
                 chatLimit = 0,
-            )
-        }
+            ) is TdlResult.Success
+        }.getOrDefault(false)
     }
 
     /**
@@ -681,15 +754,15 @@ object Td {
     /** Long enough for a slow stick on a cold morning, short enough not to read as a hang. */
     private const val CONNECT_TIMEOUT_MS = 30_000L
 
+    /** How long [restart] waits for TDLib to say the old client is closed before moving on. */
+    private const val RESTART_TIMEOUT_MS = 20_000L
+
     /**
      * What TMPlayer is allowed to keep on disk before the oldest of it starts going, measured
      * against the disk it is actually installed on. See [CacheShelf.ceiling].
      */
-    fun cacheCeilingBytes(): Long = if (::paths.isInitialized) {
-        CacheShelf.ceiling(paths.disk().totalBytes)
-    } else {
-        CacheShelf.MAX_CEILING_BYTES
-    }
+    fun cacheCeilingBytes(): Long = currentPaths?.let { CacheShelf.ceiling(it.disk().totalBytes) }
+        ?: CacheShelf.MAX_CEILING_BYTES
 
     /** A month. Anything untouched for longer is not a cache, it is a leak. */
     private const val CACHE_TTL_SECONDS = 30 * 24 * 60 * 60
