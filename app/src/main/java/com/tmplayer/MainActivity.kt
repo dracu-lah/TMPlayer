@@ -32,7 +32,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.tmplayer.data.AndroidPaths
+import com.tmplayer.data.AndroidTransferNotifier
 import com.tmplayer.data.AuthState
+import com.tmplayer.data.LegacyDownloads
+import com.tmplayer.data.LocalDownloads
+import com.tmplayer.platform.CoalescingTransferNotifier
 import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.CardLayout
 import com.tmplayer.data.ChatKind
@@ -286,6 +291,30 @@ private fun Root() {
         if (auth is AuthState.Ready) OfflineDownloads.restore(context)
     }
 
+    // Downloads from before they had a folder, moved into it once, after sign in: it asks TDLib
+    // where each file is. One notification for the lot while it runs, and a toast naming the
+    // folder at the end. Partly downloaded ones stay where they are and say so on the Downloads
+    // screen, with Resume.
+    LaunchedEffect(auth) {
+        if (auth !is AuthState.Ready) return@LaunchedEffect
+        val result = withContext(Dispatchers.IO) {
+            runCatching {
+                LegacyDownloads(
+                    settings = settings,
+                    downloadsDir = { AndroidPaths(context).downloadsDir },
+                    notifier = CoalescingTransferNotifier(AndroidTransferNotifier(context)),
+                ).migrateOnce()
+            }.getOrNull()
+        }
+        LegacyDownloads.toast(result)?.let(toast)
+    }
+
+    // A download finishing, said in the window too. A television shows apps like this one no
+    // notification shade, so without this the end of a download would pass unremarked there.
+    LaunchedEffect(Unit) {
+        AndroidTransferNotifier.completions.collect { title -> toast("Downloaded: $title") }
+    }
+
     // Half-watched entries that can no longer be turned into a card are swept once per launch.
     // Left alone they are invisible: the tab skips them, so nothing the viewer can press will
     // ever clear them.
@@ -365,6 +394,9 @@ private fun Root() {
     val device = remember { if (FormFactor.isTv(context)) "TV" else "phone" }
     // Where leaving the Downloads screen goes back to.
     var downloadsCameFrom by remember { mutableStateOf<Screen>(Screen.Chats) }
+    // Whether the Downloads screen opens on its cached videos, which is how Settings' Cached
+    // videos row reaches the list of them.
+    var downloadsOnCached by remember { mutableStateOf(false) }
 
     // A launch that asked for a particular screen, which is how the download notification opens
     // the list it is about. Cleared as it is acted on, so it happens once per press.
@@ -374,6 +406,7 @@ private fun Root() {
         // Back from the Downloads screen goes wherever the viewer already was, not to the chat
         // list: they were reading a chat, pressed a notification, and Back should return them to it.
         if (screen !is Screen.Downloads) downloadsCameFrom = screen
+        downloadsOnCached = false
         screen = Screen.Downloads
         MainActivity.requestedScreen.value = null
     }
@@ -424,6 +457,14 @@ private fun Root() {
         // drawing the grid. Only the decision is moved: everything after it touches Compose state
         // or starts an activity and has to be back on Main to do it.
         withContext(Dispatchers.Default) {
+            // A download plays from its file in the Downloads folder, and nothing below applies
+            // to it: it needs no connection, no room, and it is not the cache's to claim.
+            if (LocalDownloads.fileFor(settings, item.chatId, item.messageId) != null) {
+                withContext(Dispatchers.Main) {
+                    context.startActivity(PlayerActivity.intent(context, item, chatTitle))
+                }
+                return@withContext
+            }
             val local = runCatching { Td.localFileAvailability(item.fileId) }
                 .getOrDefault(LocalFileAvailability.Missing)
             val canReachTelegram = telegramConnected || networkStatus != NetworkStatus.Offline
@@ -540,6 +581,12 @@ private fun Root() {
     fun resumeMedia(record: ResumeRecord) {
         scope.launch {
             settings.rememberChatOpened(record.chatId)
+            // In the Downloads folder: it plays from there, and asking Telegram first would only
+            // be a wait, and offline a long one.
+            if (LocalDownloads.fileFor(settings, record.chatId, record.messageId) != null) {
+                play(record.toMediaItem(), chatTitle = record.chatTitle)
+                return@launch
+            }
             // The stored row carries a file id from whichever TDLib instance wrote it, which is
             // not a number this one can necessarily use. Asking Telegram for the message again
             // returns a current id and tells TDLib where the file came from, without which it
@@ -685,6 +732,7 @@ private fun Root() {
                     onOpenSettings = { screen = Screen.Settings },
                     onOpenDownloads = {
                         downloadsCameFrom = Screen.Chats
+                        downloadsOnCached = false
                         screen = Screen.Downloads
                     },
                     downloadCount = activeDownloads.size,
@@ -827,6 +875,7 @@ private fun Root() {
                 DownloadsScreen(
                     onPlay = { record -> resumeMedia(record) },
                     onBack = leaveDownloads,
+                    openOnCached = downloadsOnCached,
                 )
             }
 
@@ -842,6 +891,11 @@ private fun Root() {
                     chats = chats,
                     onLoggedOut = { screen = Screen.Chats },
                     onBack = leaveSettings,
+                    onOpenCachedVideos = {
+                        downloadsCameFrom = Screen.Settings
+                        downloadsOnCached = true
+                        screen = Screen.Downloads
+                    },
                 )
             }
         }
@@ -857,7 +911,7 @@ private fun Root() {
                     "${StreamStats.formatBytes(pending.shortfallBytes)} short. " +
                     if (pending.reclaimBytes > 0) {
                         "TMPlayer is holding " +
-                            "${StreamStats.formatBytes(pending.reclaimBytes)} in downloads you " +
+                            "${StreamStats.formatBytes(pending.reclaimBytes)} in Downloads you " +
                             "can delete."
                     } else {
                         "Freeing space on the $device will let it play."
@@ -867,6 +921,7 @@ private fun Root() {
                 onConfirm = {
                     roomPrompt = null
                     downloadsCameFrom = screen
+                    downloadsOnCached = false
                     screen = Screen.Downloads
                 },
                 onDismiss = { roomPrompt = null },

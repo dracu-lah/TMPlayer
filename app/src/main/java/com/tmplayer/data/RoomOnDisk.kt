@@ -92,8 +92,10 @@ object RoomOnDisk {
 
         // The viewer's own downloads, which are never given up to make room. Measured only so a
         // refusal can say where the space went and point at the screen that manages them.
-        val keptBytes = runCatching {
+        // Those in the Downloads folder are measured there; the rest are still TDLib's to answer.
+        val keptBytes = LocalDownloads.indexedBytes(settings) + runCatching {
             settings.downloadHistory.first()
+                .filter { it.localPath == null }
                 .distinctBy { it.fileId }
                 .map { record ->
                     async {

@@ -61,6 +61,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.tmplayer.App
 import com.tmplayer.R
 import com.tmplayer.data.ChatRepository
+import com.tmplayer.data.LocalDownloads
+import com.tmplayer.data.start
 import com.tmplayer.data.Failures
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaName
@@ -182,6 +184,13 @@ class PlayerActivity : FragmentActivity() {
     private val hideGestureHud = Runnable { gestureHud?.visibility = View.GONE }
 
     private var fileId = 0
+
+    /**
+     * The video's file in the Downloads folder, when it is a download, and then the whole of
+     * playback comes from it: no TDLib stream, no room check, no claim on the cache, no connection.
+     * Set once, before the player is built.
+     */
+    private var downloadedFile: File? = null
     private var fileSizeBytes = 0L
     private var durationSec = 0
     private var resumeMs = 0L
@@ -393,6 +402,7 @@ class PlayerActivity : FragmentActivity() {
                 title = { mediaTitle },
                 pictureInPicture = { packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE) },
                 speed = { playbackSpeed },
+                saveToDownloads = ::canSaveToDownloads,
                 onEntry = ::onTvMenuEntry,
                 onSpeed = ::setSpeed,
                 onClosed = { controls?.show(); controls?.focusRow() },
@@ -459,22 +469,33 @@ class PlayerActivity : FragmentActivity() {
 
         lifecycleScope.launch {
             val session = Td.awaitAuthorizedSession()
-            val availability = Td.localFileAvailability(fileId)
-            if (
-                availability != LocalFileAvailability.Complete &&
-                NetworkMonitor.status.value == NetworkStatus.Offline &&
-                !Td.connected.value
-            ) {
-                showError("This video isn't fully downloaded. Connect to the internet and try again.")
-                return@launch
+            // The download index first. Every way into this screen passes here, the next episode
+            // and autoplay included, so a downloaded episode plays from its file however it was
+            // reached.
+            val downloaded = LocalDownloads.fileFor(settings, chatId, messageId)
+            downloadedFile = downloaded
+            if (downloaded != null) {
+                downloadComplete = true
+                downloadedFraction = 1f
+                if (fileSizeBytes <= 0) fileSizeBytes = downloaded.length()
+            } else {
+                val availability = Td.localFileAvailability(fileId)
+                if (
+                    availability != LocalFileAvailability.Complete &&
+                    NetworkMonitor.status.value == NetworkStatus.Offline &&
+                    !Td.connected.value
+                ) {
+                    showError("This video isn't fully downloaded. Connect to the internet and try again.")
+                    return@launch
+                }
+                if (!allowedOnThisConnection(availability)) return@launch
+                if (!makeRoomForThisVideo(availability)) return@launch
+                holdFile(fileId)
+                claimTheWatchCache()
+                val downloadFirst = runCatching { settings.downloadBeforePlayingNow() }
+                    .getOrDefault(false)
+                if (downloadFirst && !fetchWholeFilm()) return@launch
             }
-            if (!allowedOnThisConnection(availability)) return@launch
-            if (!makeRoomForThisVideo(availability)) return@launch
-            holdFile(fileId)
-            claimTheWatchCache()
-            val downloadFirst = runCatching { settings.downloadBeforePlayingNow() }
-                .getOrDefault(false)
-            if (downloadFirst && !fetchWholeFilm()) return@launch
             playbackSpeed = runCatching { settings.playbackSpeedNow() }
                 .getOrDefault(PlaybackSpeed.DEFAULT)
             videoScale = runCatching { VideoScale.from(settings.videoScaleNow()) }
@@ -494,7 +515,10 @@ class PlayerActivity : FragmentActivity() {
     private fun startPlayback(client: TdlClient) {
         val exo = buildPlayer(client).also { built ->
             built.addListener(playerListener)
-            built.setMediaItem(subtitleFiles.item(tdFileUri(fileId)))
+            // A plain file for a download, which the default data source reads directly; the TDLib
+            // stream for everything else.
+            val source = downloadedFile?.let { android.net.Uri.fromFile(it) } ?: tdFileUri(fileId)
+            built.setMediaItem(subtitleFiles.item(source))
             if (resumeMs > 0) built.seekTo(resumeMs)
             built.prepare()
             built.playWhenReady = true
@@ -1350,6 +1374,8 @@ class PlayerActivity : FragmentActivity() {
      * Returns true when it has taken over, in which case the retry, or the sheet, comes later.
      */
     private fun resourceAgain(error: PlaybackException): Boolean {
+        // A file in the Downloads folder has no Telegram id to go stale.
+        if (downloadedFile != null) return false
         if (reSourced || chatId == 0L || messageId == 0L) return false
         reSourced = true
         lifecycleScope.launch {
@@ -1885,6 +1911,9 @@ class PlayerActivity : FragmentActivity() {
 
     /** Applies both the initial file snapshot and later TDLib updates to the same meter state. */
     private fun applyDownloadState(file: TdFile) {
+        // TDLib let go of a download's file when it moved into Downloads, so what it says about
+        // that id now is "nothing here", which is not true of the video on screen.
+        if (downloadedFile != null) return
         if (fileSizeBytes <= 0 && file.size > 0) fileSizeBytes = file.size
         val local = file.local
         val diskFile = local.path.takeIf { it.isNotBlank() }?.let(::File)
@@ -2134,8 +2163,10 @@ class PlayerActivity : FragmentActivity() {
         items.add(0, MENU_DETAILS, 5, "Playback details")
         items.add(0, MENU_SUBTITLE_FILE, 6, "Load a subtitle file")
         if (chatId != 0L && messageId != 0L) items.add(0, MENU_COPY_LINK, 7, "Copy Telegram link")
+        if (canSaveToDownloads()) items.add(0, MENU_SAVE, 8, "Save to Downloads")
         menu.setOnMenuItemClickListener { item ->
             when (item.itemId) {
+                MENU_SAVE -> saveToDownloads()
                 MENU_SUBTITLE_FILE -> subtitleFiles.pick()
                 MENU_COPY_LINK -> lifecycleScope.launch { MessageLink.copy(this@PlayerActivity, chatId, messageId) }
                 MENU_LOCK -> lockScreen()
@@ -2160,9 +2191,38 @@ class PlayerActivity : FragmentActivity() {
             PlayerMenuEntry.StartOver -> startOver()
             PlayerMenuEntry.PictureInPicture -> enterPictureInPictureNow()
             PlayerMenuEntry.OpenInAnotherApp -> openInAnotherApp()
+            PlayerMenuEntry.SaveToDownloads -> saveToDownloads()
             // Pages of the menu itself, opened there.
             PlayerMenuEntry.Speed, PlayerMenuEntry.RemoteKeys -> Unit
         }
+    }
+
+    /**
+     * Whether Save to Downloads means anything for this video: not one that is a download already,
+     * not one the queue has, and not one with no message to download it from again.
+     */
+    private fun canSaveToDownloads(): Boolean =
+        downloadedFile == null && fileId > 0 && chatId != 0L && messageId != 0L &&
+            !OfflineDownloads.isDownloading(fileId)
+
+    /**
+     * Keeps the video being watched: it joins the download queue, which fetches whatever of it is
+     * not here yet, and moves it into Downloads once this player lets go of the file.
+     */
+    private fun saveToDownloads() {
+        if (!canSaveToDownloads()) {
+            showGestureFeedback(if (downloadedFile != null) "Already in Downloads" else "Already downloading")
+            return
+        }
+        val item = mediaItemForCache()
+        OfflineDownloads.start(this, item, chatTitle)
+        showGestureFeedback(
+            if (downloadComplete) {
+                "Saving to Downloads. It finishes when playback stops."
+            } else {
+                "Downloading to Downloads. It finishes when playback stops."
+            },
+        )
     }
 
     private fun setSpeed(value: Float) {
@@ -2722,9 +2782,14 @@ class PlayerActivity : FragmentActivity() {
                 }
             }
 
-            val availability = runCatching { Td.localFileAvailability(fileId) }
-                .getOrDefault(LocalFileAvailability.Missing)
-            val downloaded = runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
+            val local = downloadedFile
+            val availability = if (local != null) {
+                LocalFileAvailability.Complete
+            } else {
+                runCatching { Td.localFileAvailability(fileId) }.getOrDefault(LocalFileAvailability.Missing)
+            }
+            val downloaded = local?.length()
+                ?: runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L)
             val state = ExternalPlayer.readiness(availability, downloaded)
             if (state == ExternalPlayer.Readiness.Nothing) return@launch
             // Offered on the failure another app fixes, and left off the one it does not: a stream
@@ -2810,8 +2875,13 @@ class PlayerActivity : FragmentActivity() {
     fun openInAnotherApp() {
         saveResumePosition()
         lifecycleScope.launch {
+            val local = downloadedFile
             val outcome = runCatching {
-                ExternalPlayer.handOver(this@PlayerActivity, fileId, mediaTitle)
+                if (local != null) {
+                    ExternalPlayer.handOverFile(this@PlayerActivity, local.absolutePath, mediaTitle)
+                } else {
+                    ExternalPlayer.handOver(this@PlayerActivity, fileId, mediaTitle)
+                }
             }.getOrElse { ExternalPlayer.Handoff.Refused("That video can't be handed to another app.") }
             when (outcome) {
                 is ExternalPlayer.Handoff.Started -> outcome.caution?.let(::showGestureFeedback)
@@ -3032,6 +3102,7 @@ class PlayerActivity : FragmentActivity() {
         private const val MENU_DETAILS = 6
         private const val MENU_SUBTITLE_FILE = 7
         private const val MENU_COPY_LINK = 8
+        private const val MENU_SAVE = 9
         private const val MENU_SPEED_BASE = 100
 
         private const val RESUME_TICK_MS = 10_000L

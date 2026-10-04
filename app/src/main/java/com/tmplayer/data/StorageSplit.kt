@@ -36,15 +36,18 @@ data class StorageSplit(
          */
         suspend fun measure(context: Context): StorageSplit = withContext(Dispatchers.IO) {
             val settings = SettingsStore(context)
+            // TDLib's figure is its own files directory: the cache, the pictures, and the downloads
+            // from before they had a folder. The Downloads folder is beside it and measured apart.
             val total = runCatching { Td.storageUsedBytes() }.getOrDefault(0L)
-            val kept = runCatching { settings.downloadHistory.first() }.getOrDefault(emptyList())
-                .distinctBy { it.fileId }
+            val history = runCatching { settings.downloadHistory.first() }.getOrDefault(emptyList())
+            val indexedBytes = LocalDownloads.indexedBytes(settings)
+            val kept = history.filter { it.localPath == null }.distinctBy { it.fileId }
             val keptIds = kept.map { it.fileId }.toSet()
             // Matched on the message as well as the file. TDLib does not promise the same file id
             // for the same video twice: watching it and then downloading it can produce two ids
             // for one file on disk, so matching only on the id counts the download a second time
             // as cache. Eviction matches on the message, so this must too.
-            val keptMessages = kept.map { it.chatId to it.messageId }.toSet()
+            val keptMessages = history.map { it.chatId to it.messageId }.toSet()
 
             // A video can be both, if it was watched and then downloaded. It belongs to the viewer
             // then, and counting it in both halves would have the figures overrun the total.
@@ -67,7 +70,8 @@ data class StorageSplit(
             val cachedBytesEach = cachedNow.map { (_, id) ->
                 async { runCatching { Td.localDownloadedBytes(id) }.getOrDefault(0L) }
             }
-            val downloads = keptBytes.awaitAll().sumOf { it.coerceAtLeast(0L) }
+            val legacyDownloads = keptBytes.awaitAll().sumOf { it.coerceAtLeast(0L) }
+            val downloads = legacyDownloads + indexedBytes
             var cached = 0L
             var count = 0
             for (held in cachedBytesEach.awaitAll()) {
@@ -108,8 +112,8 @@ data class StorageSplit(
                 cachedCount = count,
                 // The remainder, floored: TDLib's total and a walk of the disk are taken a moment
                 // apart, and a negative band is worse than a missing one.
-                otherBytes = (total - downloads - cached).coerceAtLeast(0L),
-                totalBytes = maxOf(total, downloads + cached),
+                otherBytes = (total - legacyDownloads - cached).coerceAtLeast(0L),
+                totalBytes = maxOf(total, legacyDownloads + cached) + indexedBytes,
             )
         }
     }
