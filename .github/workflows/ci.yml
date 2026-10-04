@@ -164,7 +164,8 @@ jobs:
 
           function Invoke-Harness([string]$name, [string]$extra) {
             $out = Join-Path $env:RUNNER_TEMP "$name.txt"
-            $harnessArgs = "--file $clip --settings $settings --size 800x500 $extra"
+            # Forward slashes: Gradle splits --args itself, and a backslash is not worth the doubt.
+            $harnessArgs = "--file $($clip -replace '\\', '/') --settings $($settings -replace '\\', '/') --size 800x500 $extra"
             $p = Start-Process cmd.exe -NoNewWindow -PassThru -ArgumentList "/c gradlew.bat --no-daemon -q :desktop:runPlayerDev `"--args=$harnessArgs`" > `"$out`" 2>&1"
             $null = $p.Handle
             if (-not $p.WaitForExit(300000)) {
