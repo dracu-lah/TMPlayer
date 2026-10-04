@@ -911,8 +911,9 @@ fun SettingsScreen(
                 Text(
                     "TMPlayer talks directly to Telegram for your chats and videos, and to " +
                         "tmplayer.org, or GitHub when the site cannot be reached, to see whether a " +
-                        "newer version is out. It has no developer-run server, " +
-                        "analytics or advertising SDK.",
+                        "newer version is out. That check reads one static file, the same for " +
+                        "everyone, and sends nothing about you. TMPlayer has no account or backend " +
+                        "of its own, and no analytics or advertising SDK.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Tone.muted,
                 )

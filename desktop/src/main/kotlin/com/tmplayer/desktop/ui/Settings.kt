@@ -265,9 +265,11 @@ fun SettingsPage(state: ShellState, version: String = "") {
                     OutlinedButton(onClick = { confirmSignOut = true }) { Text("Sign out", color = Tone.danger) }
                 }
                 Text(
-                    "TMPlayer talks directly to Telegram for your chats and videos, and to GitHub " +
-                        "to see whether a newer version is out. It has no developer run server, " +
-                        "analytics or advertising SDK.",
+                    "TMPlayer talks directly to Telegram for your chats and videos, and to " +
+                        "tmplayer.org, or GitHub when the site cannot be reached, to see whether a " +
+                        "newer version is out. That check reads one static file, the same for " +
+                        "everyone, and sends nothing about you. TMPlayer has no account or backend " +
+                        "of its own, and no analytics or advertising SDK.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Tone.muted,
                     modifier = Modifier.padding(top = 20.dp, bottom = 24.dp),
