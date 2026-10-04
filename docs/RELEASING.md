@@ -14,20 +14,30 @@ device, and a hand-rolled number is easy to get wrong.
 
 ## What a release carries
 
-From 1.18.0 on, one GitHub release holds the Android APKs and the desktop app for Windows and
-Linux. The desktop installers are built on a Windows runner and a Linux runner, because the
-Compose packager only makes installers for the system it runs on. For `v1.18.0` the assets are:
+One GitHub release holds the Android APK and the desktop app for Windows and Linux, and nothing
+more than people install or the licence needs. The desktop installers are built on a Windows
+runner and a Linux runner, because the Compose packager only makes installers for the system it
+runs on. For a tag `v<v>` the assets are:
 
 | Asset | Built on |
 | --- | --- |
-| `TMPlayer-1.18.0-universal.apk`, `-arm64-v8a.apk`, `-armeabi-v7a.apk` | Linux, signed with the release key |
-| `TMPlayer-1.18.0-windows-x64.msi`, `TMPlayer-1.18.0-windows-x64-portable.zip` | Windows, unsigned |
-| `tmplayer_1.18.0_amd64.deb`, `tmplayer-1.18.0.x86_64.rpm` | Linux |
-| `TMPlayer-1.18.0-x86_64.AppImage`, `TMPlayer-1.18.0-linux-x64.tar.gz`, `TMPlayer-1.18.0.flatpak` | Linux, wrapped from the app folder with the recipes in `desktop/packaging/` |
-| `SHA256SUMS-1.18.0.txt` | over every file above |
+| `TMPlayer-<v>-universal.apk` | Linux, signed with the release key |
+| `TMPlayer-<v>-windows-x64.msi` | Windows, unsigned |
+| `TMPlayer-<v>-x86_64.AppImage`, `TMPlayer-<v>-linux-x64.tar.gz` | Linux, wrapped from the app folder by `desktop/packaging/linux/package.sh`; the tarball is what the AUR PKGBUILD builds from |
+| `nextlib-corresponding-source-<v>.tar.gz`, `LICENSE-GPL-3.0.txt`, `THIRD_PARTY_NOTICES.md` | the publish job, for the GPL |
+| `SHA256SUMS-<v>.txt` | over every file above |
+
+GitHub attaches the source archives of the tagged tree to every release by itself. Up to 1.21.0 a
+release also carried per-ABI APKs, a Windows portable zip, a deb, an rpm, a Flatpak, a TMPlayer
+source tarball and the R8 mapping; none of those are built any more.
+
+The R8 mapping, which turns a stack trace from the released APK back into readable names, is kept
+as a workflow artifact named `mapping-<v>` on the release run, for 90 days. Download it from
+the run's page (or `gh run download <run id> -n mapping-<v>`) and keep it with your own
+records if a crash from that build may need decoding later.
 
 These names are what the website matches on: `site/app.js` reads the release list from the GitHub
-API and finds each file by the end of its name (`universal.apk`, `windows-x64.msi`, `_amd64.deb`,
+API and finds each file by the end of its name (`universal.apk`, `windows-x64.msi`, `.AppImage`,
 and so on), because the version in the middle rules out GitHub's fixed `latest/download/<name>`
 links. Renaming an asset means updating the `KINDS` table in `site/app.js` in the same change, or
 the download page falls back to linking the release page for that row.

@@ -34,9 +34,9 @@ No messages, no server, no account except yours.
 
 - **Android 8.0 and up**, TV and phone from the same APK. It was built and tested on an 8 GB TV
   stick with a gigabyte of RAM, so a cheap device is the target rather than an afterthought.
-- **Windows 10 and 11**, 64-bit, as an MSI installer or a portable zip.
-- **Linux**, 64-bit x86, as a deb, an rpm, an AppImage, a Flatpak or a tarball, with an AUR
-  recipe in [desktop/packaging/aur](desktop/packaging/aur).
+- **Windows 10 and 11**, 64-bit, as an MSI installer.
+- **Linux**, 64-bit x86 with glibc 2.38 or newer, as an AppImage, with an AUR recipe in
+  [desktop/packaging/aur](desktop/packaging/aur).
 
 macOS is planned for later. Everything is on the same [GitHub release](../../releases), and
 [tmplayer.org/download](https://tmplayer.org/download/) lists it by platform.
@@ -46,8 +46,7 @@ macOS is planned for later. Everything is on the same [GitHub release](../../rel
 ### Android TV and phones
 
 Grab the universal APK from [Releases](../../releases). The same file works on every supported
-architecture, so there is no CPU variant to identify. Per-architecture APKs are published beside
-it and are roughly 40 per cent smaller, if you already know what your device is.
+architecture, so there is no CPU variant to identify.
 
 On the TV, turn on Developer options (Settings, About, press *Build* seven times), enable network
 debugging, then:
@@ -61,19 +60,18 @@ adb install TMPlayer-<version>-universal.apk
 
 Download `TMPlayer-<version>-windows-x64.msi` and open it. The build is not signed yet, so
 SmartScreen says *Windows protected your PC*: click **More info**, then **Run anyway**. It installs
-for your user only, with a Start menu entry and a desktop shortcut. The
-`-windows-x64-portable.zip` beside it installs nothing: unzip it and run `TMPlayer.exe`.
+for your user only, with a Start menu entry and a desktop shortcut.
 
 ### Linux
 
 ```bash
-sudo apt install ./tmplayer_<version>_amd64.deb         # Debian, Ubuntu, Mint
-sudo dnf install ./tmplayer-<version>.x86_64.rpm        # Fedora (openSUSE: sudo zypper install --allow-unsigned-rpm)
-flatpak install --user ./TMPlayer-<version>.flatpak     # any distribution, needs the Flathub remote
-chmod +x TMPlayer-<version>-x86_64.AppImage             # any distribution, then run it
+chmod +x TMPlayer-<version>-x86_64.AppImage
+./TMPlayer-<version>-x86_64.AppImage
 ```
 
-Arch: build from [desktop/packaging/aur](desktop/packaging/aur), or use the AppImage or the Flatpak.
+Arch: build from [desktop/packaging/aur](desktop/packaging/aur), or use the AppImage. The deb, rpm,
+Flatpak and Windows portable zip are no longer published; [INSTALL.md](INSTALL.md#moving-from-a-format-that-is-no-longer-published)
+says how to move over.
 
 [INSTALL.md](INSTALL.md) has the full steps for every platform, how to put the app on the desktop,
 in the app menu and on the taskbar, the remote, touch and keyboard references, and troubleshooting.

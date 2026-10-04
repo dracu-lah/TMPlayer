@@ -135,9 +135,12 @@ corner of the screen and brings it back; `?` lists every key.
 
 **Updates itself.** Shortly after every launch, and every six hours while it runs, it looks for a
 newer release; when there is one, an amber *Update* item joins the side bar and a popup offers it
-once (Settings can turn the check off). Update now downloads the package that matches the install (MSI,
-portable zip, AppImage, deb or rpm), checks it against the release checksums, installs it and
-restarts. The deb and rpm ask for your password; the Flatpak and the tarball open the release page.
+once (Settings can turn the check off). Update now downloads the package that matches the install (the MSI or
+the AppImage), checks it against the release checksums, installs it and restarts. The tarball
+opens the release page. The Windows portable zip, the deb, the rpm and the Flatpak are no longer
+published: a copy from one of them still hears of each release and opens the release page. The
+popup's own wording for them (the format is gone, take the MSI or the AppImage) is in the code for
+any such build that runs it, but the copies already out there are 1.21.0 or older and do not.
 
 **What it does not do yet.** No voice search (there is no portable speech API). Windows builds are
 not signed yet, so SmartScreen warns the first time.

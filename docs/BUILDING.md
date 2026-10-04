@@ -62,13 +62,13 @@ cross compilation, which is why the release builds each one on its own runner.
 ```bash
 ./gradlew :desktop:packageDistributionForCurrentOS   # whatever this OS makes
 ./gradlew :desktop:packageMsi                        # Windows
-./gradlew :desktop:packageDeb :desktop:packageRpm    # Linux
+./gradlew :desktop:packageDeb :desktop:packageRpm    # Linux, for local use; releases ship the AppImage
 ./gradlew :desktop:createDistributable               # the plain app folder, no installer
 ```
 
-They land under `desktop/build/compose/binaries/main/`. The AppImage, the Flatpak, the Linux
-tarball and the Windows portable zip are wrapped from the `createDistributable` folder by the
-release workflow, with the recipes in `desktop/packaging/`. The libmpv runtime pulled in is the one for
+They land under `desktop/build/compose/binaries/main/`. The AppImage and the Linux tarball
+are wrapped from the `createDistributable` folder by the release workflow, with
+`desktop/packaging/linux/package.sh`. The libmpv runtime pulled in is the one for
 the host only, since each is 30 to 75 MB and the other systems' would never load.
 
 Linux notes: on a tiling window manager set `_JAVA_AWT_WM_NONREPARENTING=1` or the window stays

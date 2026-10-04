@@ -5,8 +5,9 @@ exist at all). Every build is on the [Releases](../../releases) page, and the
 [download page](https://tmplayer.org/download/) lists them by platform.
 
 - [Android TV and phones](#installing-tmplayer-on-an-android-tv-device): sideload the APK
-- [Windows](#windows): an MSI installer or a portable zip
-- [Linux](#linux): deb, rpm, AppImage, Flatpak, a tarball, or the AUR recipe
+- [Windows](#windows): an MSI installer
+- [Linux](#linux): an AppImage, or the AUR recipe on Arch
+- [Moving from the deb, rpm, Flatpak or Windows zip](#moving-from-a-format-that-is-no-longer-published)
 - [Desktop, menu and taskbar shortcuts](#putting-it-on-the-desktop-in-the-menu-and-on-the-taskbar)
 - [The desktop keyboard](#using-the-keyboard-and-mouse)
 
@@ -22,20 +23,6 @@ for a television, where there is no browser to open it from.
 Download `TMPlayer-<version>-universal.apk` from the Releases page. It contains the native code
 for every supported Android TV architecture, so the same file works on older sticks, newer 64-bit
 boxes and the Android TV emulator. If you are not sure, this is the file to take.
-
-Two smaller APKs sit beside it, carrying one architecture each. Most of the download is native
-code, so dropping the architecture you do not have takes roughly 40 per cent off:
-
-| File | For |
-| --- | --- |
-| `-arm64-v8a.apk` | 64-bit ARM: Chromecast with Google TV, Shield, Fire TV Stick 4K, and any phone from about 2017 on |
-| `-armeabi-v7a.apk` | The older 32-bit sticks, including the original Mi TV Stick |
-
-`adb shell getprop ro.product.cpu.abi` reports which one a device wants. Guessing wrongly is safe
-in both directions, though they fail differently. The 64-bit file on a 32-bit stick is refused
-outright, at install time, with `INSTALL_FAILED_NO_MATCHING_ABIS`. The 32-bit file on a 64-bit
-device does install and does work, because a 64-bit Android runs 32-bit code, but it runs the app
-as a 32-bit process for no reason: take `arm64-v8a` if the device reports it.
 
 Each release also carries `SHA256SUMS-<version>.txt`. Check a download against it with
 `sha256sum -c` if you care to; a truncated transfer otherwise looks like a broken app.
@@ -67,8 +54,8 @@ If you see `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, an older build signed with a di
 already there. Run `adb uninstall com.tmplayer` first.
 
 The original 1080p Mi TV Stick (`MiTV-AESP0`, Android TV 9) is supported. Its system is 32-bit
-ARM even though its processor is based on Cortex-A53; use the universal APK, which includes
-`armeabi-v7a`. If its on-screen installer only says *App not installed*, use the ADB command
+ARM even though its processor is based on Cortex-A53; the universal APK carries 32-bit code for
+it. If its on-screen installer only says *App not installed*, use the ADB command
 above to get the real error. A signature mismatch, a version downgrade, too little free space
 to unpack the APK, or an incomplete copy are the usual causes, rather than Android 9 itself.
 
@@ -162,18 +149,17 @@ to the same Telegram account, shows the same library and streams the same way as
 played through mpv, which is bundled: there is nothing to install beside it. macOS is planned for
 later; there is no build for it yet.
 
-Every file is on the same GitHub release as the APKs, from version 1.18.0 on:
+Every file is on the same GitHub release as the APK:
 
 | File | For |
 | --- | --- |
 | `TMPlayer-<version>-windows-x64.msi` | Windows installer, per user, no administrator needed |
-| `TMPlayer-<version>-windows-x64-portable.zip` | Windows, nothing installed: unzip and run `TMPlayer.exe` |
-| `tmplayer_<version>_amd64.deb` | Debian, Ubuntu, Linux Mint, Pop!_OS |
-| `tmplayer-<version>.x86_64.rpm` | Fedora, RHEL and rebuilds, openSUSE |
-| `TMPlayer-<version>-x86_64.AppImage` | Any distribution, one file |
-| `TMPlayer-<version>.flatpak` | Any distribution with Flatpak |
-| `TMPlayer-<version>-linux-x64.tar.gz` | Any distribution, the plain app folder |
+| `TMPlayer-<version>-x86_64.AppImage` | Linux, any distribution, one file |
+| `TMPlayer-<version>-linux-x64.tar.gz` | The plain app folder, which the Arch PKGBUILD builds from |
 | `SHA256SUMS-<version>.txt` | Checksums for all of the above |
+
+Releases up to 1.21.0 also carried a Windows portable zip, a deb, an rpm and a Flatpak. Those are
+no longer built; see [Moving from a format that is no longer published](#moving-from-a-format-that-is-no-longer-published).
 
 Check a download with `sha256sum -c --ignore-missing SHA256SUMS-<version>.txt` in the folder that
 holds both (on Windows, `Get-FileHash <file>` in PowerShell and compare by eye).
@@ -190,44 +176,10 @@ holds both (on Windows, `Get-FileHash <file>` in PowerShell and compare by eye).
 Installing a newer MSI later upgrades the app in place; your sign-in, history and downloads live in
 your user profile and are kept. Remove it under **Settings, Apps, Installed apps**.
 
-**Portable zip.** Unzip `TMPlayer-<version>-windows-x64-portable.zip` anywhere, a USB stick
-included, and run `TMPlayer.exe` from the folder. SmartScreen can show the same warning the first
-time. If it asks about every file, right click the zip before unzipping, choose **Properties**,
-tick **Unblock** and unzip it again.
-
 ## Linux
 
-64-bit x86 only for now. Pick by how you like to install software; every format is the same app.
-
-The deb, rpm, AppImage and tarball need a 2024 or newer system (glibc 2.38): Ubuntu 24.04, Debian
-13, Linux Mint 22, Fedora 39, openSUSE Tumbleweed, RHEL 10, Arch, or anything newer. On an older
-system, such as Ubuntu 22.04, Debian 12 or RHEL 9, take the Flatpak, which brings its own runtime.
-
-**Debian, Ubuntu, Mint and relatives:**
-
-```bash
-sudo apt install ./tmplayer_<version>_amd64.deb
-```
-
-**Fedora, RHEL and rebuilds:**
-
-```bash
-sudo dnf install ./tmplayer-<version>.x86_64.rpm
-```
-
-**openSUSE:**
-
-```bash
-sudo zypper install --allow-unsigned-rpm ./tmplayer-<version>.x86_64.rpm
-```
-
-**Flatpak, on any distribution.** The bundle takes the `org.freedesktop.Platform` runtime from
-Flathub, so add that remote first if you do not have it (the first line does nothing if you do):
-
-```bash
-flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-flatpak install --user ./TMPlayer-<version>.flatpak
-```
+64-bit x86 only for now, and a 2024 or newer system (glibc 2.38): Ubuntu 24.04, Debian 13, Linux
+Mint 22, Fedora 39, openSUSE Tumbleweed, RHEL 10, Arch, or anything newer.
 
 **AppImage, on any distribution:**
 
@@ -238,21 +190,45 @@ chmod +x TMPlayer-<version>-x86_64.AppImage
 
 Or tick *Allow executing file as program* in the file's properties and double click it.
 
-**Tarball, on any distribution:**
+**Arch Linux.** A PKGBUILD for the AUR lives in [desktop/packaging/aur](desktop/packaging/aur): build it with
+`makepkg -si` from that folder. It builds from the release's `linux-x64.tar.gz`. The AppImage also
+runs on Arch as it is.
+
+To upgrade, the AppImage updates itself from inside the app (see below), or you replace the file
+by hand. Your sign-in and history live in your home directory and are kept.
+
+## Moving from a format that is no longer published
+
+The Windows portable zip, the deb, the rpm and the Flatpak were built up to 1.21.0 and are not
+built any more. A copy installed from one of them keeps working, but it cannot update itself: when
+a newer version is out, its update popup still tells you about it, and its button opens the
+release page, where there is no file in that format. Remove the old copy and install the MSI or
+the AppImage instead.
+
+| Installed from | Remove it with | Then take | Sign-in and settings |
+| --- | --- | --- | --- |
+| Windows portable zip | Close TMPlayer and delete its folder | The MSI | Kept: they live in `%LOCALAPPDATA%\TMPlayer`, not in the folder |
+| deb | `sudo apt remove tmplayer` | The AppImage | Kept: they live in your home directory |
+| rpm | `sudo dnf remove tmplayer` (openSUSE: `sudo zypper remove tmplayer`) | The AppImage | Kept: they live in your home directory |
+| Flatpak | `flatpak uninstall io.github.dracu_lah.TMPlayer` | The AppImage | Not carried over by themselves, see below |
+
+Your downloads stay in `~/Downloads/TMPlayer` (or `Downloads\TMPlayer` on Windows) in every case,
+and the new copy finds them there.
+
+**From the Flatpak.** A Flatpak keeps its sign-in, settings and cache inside its own sandbox folder,
+`~/.var/app/io.github.dracu_lah.TMPlayer`, where the AppImage does not look. Either sign in again
+in the AppImage, or copy them across before the first launch of the AppImage:
 
 ```bash
-mkdir -p ~/.local/opt
-tar xzf TMPlayer-<version>-linux-x64.tar.gz -C ~/.local/opt
-~/.local/opt/TMPlayer/bin/TMPlayer
+mkdir -p ~/.local/share ~/.config
+cp -a ~/.var/app/io.github.dracu_lah.TMPlayer/data/TMPlayer ~/.local/share/
+cp -a ~/.var/app/io.github.dracu_lah.TMPlayer/config/TMPlayer ~/.config/
 ```
 
-**Arch Linux.** A PKGBUILD for the AUR lives in [desktop/packaging/aur](desktop/packaging/aur): build it with
-`makepkg -si` from that folder. The AppImage and the Flatpak also run on Arch as they are.
-
-To upgrade, install the newer file the same way: the deb, rpm and Flatpak replace the old version,
-and for the AppImage or tarball you replace the file or folder. Your sign-in and history live in
-your home directory and are kept. To remove it: `sudo apt remove tmplayer`, `sudo dnf remove
-tmplayer`, or `flatpak uninstall` with the ID that `flatpak list` shows.
+`flatpak uninstall` leaves that folder in place, so this works after uninstalling too; once the
+AppImage is signed in, remove it with `rm -rf ~/.var/app/io.github.dracu_lah.TMPlayer`. If you
+picked a storage location in the Flatpak's settings, check it again in the AppImage's
+**Settings, Storage**.
 
 ## First run on a computer
 
@@ -317,10 +293,9 @@ The phone and the TV do the same with the amber **Update** row in the drawer and
 | Installed from | What **Update now** does |
 |---|---|
 | Windows installer (MSI) | Downloads the new MSI, closes, installs it without an administrator prompt, and opens again |
-| Windows portable zip | Unpacks the new version beside the folder, closes, swaps the folders, and opens again |
 | AppImage | Replaces the AppImage file in place; **Restart now** in the popup runs the new one |
-| deb or rpm | Installs the package with `pkexec`, so your system asks for your password; then **Restart now** |
-| Flatpak, tarball | **Open release page**; Flatpak updates come through your software centre or `flatpak update`, and the tarball is unpacked over the old one |
+| Arch package, tarball | **Open release page**; rebuild the PKGBUILD, or unpack the tarball over the old one |
+| Windows portable zip, deb, rpm, Flatpak | Announces the new version and opens the release page, which no longer has that format; see [Moving from a format that is no longer published](#moving-from-a-format-that-is-no-longer-published) |
 | Android phone or TV | Downloads the APK (on mobile data the button says how much; with Wi-Fi only on, it waits for Wi-Fi), then Android asks you to confirm |
 
 The download, the check and **Restart now** all happen inside the popup; **Later** leaves the
@@ -328,25 +303,18 @@ item reading **Restart to update**. Every download is checked against its SHA-25
 is installed, and nothing happens until you press the button. Your sign in, downloads and settings
 stay.
 
-The deb and rpm route needs a polkit agent for the password prompt. Full desktops (GNOME, KDE,
-Xfce, Cinnamon) run one; on sway or another bare compositor, start one (for example
-`lxpolkit` or `polkit-gnome-authentication-agent-1`) or install the package by hand.
-
 ## Putting it on the desktop, in the menu and on the taskbar
 
 ### Windows
 
-- **Installed with the MSI:** TMPlayer is already in the Start menu and on the desktop. To pin it
-  to the taskbar, open Start, find TMPlayer, right click it and choose **Pin to taskbar**. Or,
-  while it is running, right click its taskbar icon and choose **Pin to taskbar**.
-- **From the portable zip:** right click `TMPlayer.exe`, then **Send to**, then **Desktop (create
-  shortcut)**. On Windows 11 these are under **Show more options**. For a Start menu entry, press
-  `Win`+`R`, type `shell:programs`, and move that shortcut into the folder that opens. Pinning to
-  the taskbar works from the same right click menu, or from the running app's taskbar icon.
+The MSI puts TMPlayer in the Start menu and on the desktop. To pin it to the taskbar, open Start,
+find TMPlayer, right click it and choose **Pin to taskbar**. Or, while it is running, right click
+its taskbar icon and choose **Pin to taskbar**.
 
-### Linux: deb, rpm and Flatpak
+### Linux: once it is in the app menu
 
-These add TMPlayer to the app menu on their own, under Multimedia or Sound and Video.
+The Arch package adds TMPlayer to the app menu on its own, under Multimedia or Sound and Video. For
+the AppImage, make the entry first with the commands in the next section.
 
 - **GNOME:** open Activities, search for TMPlayer, right click it and choose **Pin to Dash**
   (**Add to Favourites** on older releases). Right clicking the running app's icon in the dash
@@ -357,7 +325,7 @@ These add TMPlayer to the app menu on their own, under Multimedia or Sound and V
 - **Xfce, Cinnamon, MATE:** right click the entry in the menu and choose **Add to Panel** or
   **Add to Favourites**.
 
-### Linux: AppImage and tarball
+### Linux: putting the AppImage in the app menu
 
 A single file has nowhere to register a menu entry, so you write one. These commands move the
 AppImage somewhere permanent (renamed, so an update is a drop-in replacement), fetch the icon and
@@ -400,13 +368,6 @@ Terminal=false
 StartupWMClass=com-tmplayer-desktop-MainKt
 ```
 
-For the tarball unpacked into `~/.local/opt`, use the same commands without the `mv` and `chmod`
-of the AppImage, and change one line:
-
-```ini
-Exec=/home/you/.local/opt/TMPlayer/bin/TMPlayer
-```
-
 TMPlayer then appears in the app menu (log out and in again if your desktop is slow to notice),
 and you can pin it as described above.
 
@@ -416,8 +377,7 @@ place and create its menu entry for you.
 
 ### Linux: an icon on the desktop
 
-Copy a launcher onto the desktop and mark it trusted. For the AppImage or tarball launcher made
-above:
+Copy a launcher onto the desktop and mark it trusted. For the AppImage launcher made above:
 
 ```bash
 cp ~/.local/share/applications/tmplayer.desktop ~/Desktop/
@@ -425,13 +385,8 @@ chmod +x ~/Desktop/tmplayer.desktop
 gio set ~/Desktop/tmplayer.desktop metadata::trusted true
 ```
 
-For a deb, rpm or Flatpak install, find the launcher the package added and copy that one the same
-way:
-
-```bash
-find /usr/share/applications ~/.local/share/flatpak/exports/share/applications \
-  /var/lib/flatpak/exports/share/applications -iname '*tmplayer*.desktop' 2>/dev/null
-```
+For the Arch package, copy the launcher it added,
+`/usr/share/applications/io.github.dracu_lah.TMPlayer.desktop`, the same way.
 
 GNOME shows desktop icons only with the Desktop Icons NG extension, and the first time you need to
 right click the icon and choose **Allow Launching**. KDE Plasma asks once whether to run it. Xfce
@@ -482,9 +437,6 @@ change that.
 no longer install by default. Run it from a terminal to see the message, then install `libfuse2t64`
 (Ubuntu 24.04 and newer) or `libfuse2` (22.04). Or skip FUSE with
 `./TMPlayer-<version>-x86_64.AppImage --appimage-extract-and-run`.
-
-**Flatpak says a runtime is missing.** Add the Flathub remote with the `flatpak remote-add` line
-above and install again.
 
 **The window is blank or grey on a tiling window manager** (sway, i3, Hyprland and the like).
 Start it with `_JAVA_AWT_WM_NONREPARENTING=1` set in the environment.
