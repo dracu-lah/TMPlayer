@@ -45,12 +45,14 @@ import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.TrackChoice
 import com.tmplayer.desktop.DesktopPrefs
 import com.tmplayer.player.PlaybackSpeed
+import com.tmplayer.player.TouchPrefs
 import com.tmplayer.player.VideoScale
 import com.tmplayer.platform.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.openani.mediamp.mpv.compose.MpvMediampPlayerSurface
 import java.awt.Point
@@ -295,9 +297,13 @@ fun PlayerScreen(
     // ---- controls and cursor -----------------------------------------------------------------
 
     val menusOpen = menu != null || showShortcuts
-    LaunchedEffect(activity, status.playing, menusOpen, overControls, phase) {
+    // "Hide the controls after" is the phone's setting, shared: zero keeps them up while playing.
+    val hideAfterMs by remember(settings) { settings.touchPrefs.map { it.controlsTimeoutMs } }
+        .collectAsState(initial = TouchPrefs.TIMEOUT_DEFAULT_MS)
+    LaunchedEffect(activity, status.playing, menusOpen, overControls, phase, hideAfterMs) {
         if (!status.playing || menusOpen || overControls || phase != Phase.Playing) return@LaunchedEffect
-        delay(CONTROLS_TIMEOUT_MS)
+        if (hideAfterMs <= 0L) return@LaunchedEffect
+        delay(hideAfterMs)
         controlsUp = false
     }
     val showControls = phase == Phase.Playing && (controlsUp || !status.playing || menusOpen)
@@ -686,7 +692,6 @@ private val playerColors = darkColorScheme(
     surfaceContainer = Color(0xFF242426),
 )
 
-internal const val CONTROLS_TIMEOUT_MS = 3_000L
 private const val RESUME_TICK_MS = 10_000L
 private const val NEXT_UP_LEAD_MS = 30_000L
 private const val AUTOPLAY_COUNTDOWN_SEC = 8

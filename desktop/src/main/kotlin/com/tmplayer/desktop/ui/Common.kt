@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -19,7 +20,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -157,6 +160,44 @@ fun PageHeader(
         }
         actions()
     }
+}
+
+/**
+ * The prompt before anything hard to undo, the desktop's twin of the Android `TvConfirm`: a title,
+ * what will happen, an optional line on what will not, and Cancel beside the confirm button. Focus
+ * starts on Cancel, so an Enter pressed out of habit is the cheap mistake; Esc and a click outside
+ * cancel too.
+ */
+@Composable
+fun ConfirmDialog(
+    title: String,
+    message: String,
+    confirmLabel: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    detail: String? = null,
+    destructive: Boolean = true,
+) {
+    val cancelFocus = remember { FocusRequester() }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(message)
+                if (detail != null) Text(detail, color = Tone.muted, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(confirmLabel, color = if (destructive) Tone.danger else Tone.accent)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.focusRequester(cancelFocus)) { Text("Cancel") }
+        },
+    )
+    LaunchedEffect(Unit) { runCatching { cancelFocus.requestFocus() } }
 }
 
 /** A chat's picture, or its first letter on the surface colour while there is none. */
