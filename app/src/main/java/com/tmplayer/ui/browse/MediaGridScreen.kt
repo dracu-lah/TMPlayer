@@ -534,6 +534,11 @@ fun MediaGridScreen(
                         horizontalArrangement = Arrangement.spacedBy(gap),
                         verticalArrangement = Arrangement.spacedBy(gap),
                     ) {
+                        if (list.hiddenBySize > 0) {
+                            item(key = "hidden-by-size", span = { GridItemSpan(maxLineSpan) }) {
+                                HiddenBySizeNote(list.hiddenBySize)
+                            }
+                        }
                         gridItems(
                             items = feed,
                             key = {
@@ -585,6 +590,9 @@ fun MediaGridScreen(
                         contentPadding = padding,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
+                        if (list.hiddenBySize > 0) {
+                            item(key = "hidden-by-size") { HiddenBySizeNote(list.hiddenBySize) }
+                        }
                         items(
                             items = feed,
                             key = {
@@ -2372,3 +2380,24 @@ private const val REFRESH_TIMEOUT_MS = 20_000L
 
 /** How long a gap in focus has to last before the name strip counts it as having left. */
 private const val FOCUS_SETTLE_MS = 150L
+
+/**
+ * Says how many videos the size limits kept out of this chat.
+ *
+ * At the top rather than the bottom: a remote only scrolls as far as the last focusable card, so a
+ * line under the grid would never be seen on a TV. An episode missing with no word about why reads
+ * as TMPlayer having lost it, which is what viewers reported.
+ */
+@Composable
+private fun HiddenBySizeNote(count: Int) {
+    Text(
+        hiddenBySizeText(count),
+        style = MaterialTheme.typography.bodyMedium,
+        color = Tone.muted,
+        modifier = Modifier.padding(vertical = 4.dp),
+    )
+}
+
+internal fun hiddenBySizeText(count: Int): String =
+    (if (count == 1) "1 video is" else "$count videos are") +
+        " hidden by the video size limits. Change them in Settings to see everything."
