@@ -1,12 +1,27 @@
 name: CI
 
-# Every push and every pull request. This job never touches signing keys or Telegram
-# credentials, so it is safe to run on contributions from people you do not know.
+# Every push and every pull request that touches the build. This job never touches signing keys
+# or Telegram credentials, so it is safe to run on contributions from people you do not know.
+#
+# A change confined to the site, the docs, Markdown or the PKGBUILD cannot break a build, so it
+# does not start one: that covers the release job's own "site: the update feed names x.y.z"
+# commit and ordinary doc edits. A push that also touches anything else still runs everything,
+# and workflow_dispatch runs it by hand whatever changed.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "site/**"
+      - "docs/**"
+      - "**/*.md"
+      - "desktop/packaging/aur/**"
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "site/**"
+      - "docs/**"
+      - "**/*.md"
+      - "desktop/packaging/aur/**"
   workflow_dispatch:
 
 concurrency:
@@ -76,7 +91,7 @@ jobs:
           if-no-files-found: ignore
 
   # The desktop app, packaged exactly as a release packages it (the same composite actions under
-  # .github/actions) and self-tested from every package, so a broken installer shows up on the
+  # .github/actions) and self-tested from every download, so a broken installer shows up on the
   # push that broke it rather than on release day. No credentials: the app builds and loads its
   # natives without them. This is where Windows and macOS are compiled, tested and packaged at
   # all, since the developer has only a Linux machine.
