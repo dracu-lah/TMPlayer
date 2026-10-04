@@ -1,6 +1,7 @@
 package com.tmplayer.desktop
 
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.UpdateScheduler
 
 /**
  * The desktop's process-wide services, each opened exactly once.
@@ -23,8 +24,8 @@ object DesktopServices {
 
     val prefs: DesktopPrefs by lazy { DesktopPrefs(java.io.File(DesktopPaths.configDir, "desktop.properties")) }
 
-    /** The once a day "a newer version is out" check. */
-    val updates: DesktopUpdates by lazy { DesktopUpdates(prefs) }
+    /** When to ask whether a newer version is out, and the popup's once per version memory. */
+    val updates: UpdateScheduler by lazy { UpdateScheduler(settings.updatePrefs) }
 
     /** Fetches and installs a release over this copy, where the way it was installed allows. */
     val selfUpdate: SelfUpdate by lazy { SelfUpdate() }

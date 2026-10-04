@@ -1,5 +1,8 @@
 package com.tmplayer.desktop
 
+import com.tmplayer.data.Release
+import com.tmplayer.data.ReleaseAsset
+import com.tmplayer.data.UpdateFeed
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -10,7 +13,7 @@ import java.nio.file.Files
 
 class SelfUpdateTest {
 
-    private val assets = listOf(
+    private val names = listOf(
         "SHA256SUMS-1.19.0.txt",
         "TMPlayer-1.19.0-universal.apk",
         "TMPlayer-1.19.0-linux-x64.tar.gz",
@@ -20,6 +23,14 @@ class SelfUpdateTest {
         "TMPlayer-1.19.0.flatpak",
         "tmplayer-1.19.0.x86_64.rpm",
         "tmplayer_1.19.0_amd64.deb",
+    )
+
+    /** The release as the GitHub fallback reads it: no hashes, a checksum file instead. */
+    private val release = Release(
+        version = "1.19.0",
+        pageUrl = "page",
+        assets = names.mapNotNull { name -> UpdateFeed.keyFor(name)?.let { it to ReleaseAsset("https://x/$name") } }.toMap(),
+        checksumsUrl = "https://x/SHA256SUMS-1.19.0.txt",
     )
 
     private fun detect(
@@ -49,23 +60,28 @@ class SelfUpdateTest {
 
     @Test
     fun `picks the asset each install updates from`() {
-        assertEquals("TMPlayer-1.19.0-windows-x64.msi", SelfUpdate.assetFor(InstallKind.WindowsMsi, assets))
-        assertEquals("TMPlayer-1.19.0-windows-x64-portable.zip", SelfUpdate.assetFor(InstallKind.WindowsPortable, assets))
-        assertEquals("TMPlayer-1.19.0-x86_64.AppImage", SelfUpdate.assetFor(InstallKind.AppImage, assets))
-        assertEquals("tmplayer_1.19.0_amd64.deb", SelfUpdate.assetFor(InstallKind.Deb, assets))
-        assertEquals("tmplayer-1.19.0.x86_64.rpm", SelfUpdate.assetFor(InstallKind.Rpm, assets))
-        assertNull(SelfUpdate.assetFor(InstallKind.Flatpak, assets))
-        assertNull(SelfUpdate.assetFor(InstallKind.Manual, assets))
-        assertNull(SelfUpdate.assetFor(InstallKind.Deb, listOf("TMPlayer-1.19.0-universal.apk")))
-        assertEquals("SHA256SUMS-1.19.0.txt", SelfUpdate.checksumsName(assets))
+        fun pick(kind: InstallKind) = SelfUpdate.assetFor(kind)?.let(release.assets::get)?.name
+        assertEquals("TMPlayer-1.19.0-windows-x64.msi", pick(InstallKind.WindowsMsi))
+        assertEquals("TMPlayer-1.19.0-windows-x64-portable.zip", pick(InstallKind.WindowsPortable))
+        assertEquals("TMPlayer-1.19.0-x86_64.AppImage", pick(InstallKind.AppImage))
+        assertEquals("tmplayer_1.19.0_amd64.deb", pick(InstallKind.Deb))
+        assertEquals("tmplayer-1.19.0.x86_64.rpm", pick(InstallKind.Rpm))
+        assertNull(pick(InstallKind.Flatpak))
+        assertNull(pick(InstallKind.Manual))
     }
 
     @Test
-    fun `offers an update only with a package and a checksum list`() {
-        val release = LatestRelease("1.19.0", "page", assets)
+    fun `offers an update only with a package and a hash to check it by`() {
         assertTrue(SelfUpdate(InstallKind.AppImage).canUpdateTo(release))
         assertFalse(SelfUpdate(InstallKind.Flatpak).canUpdateTo(release))
-        assertFalse(SelfUpdate(InstallKind.AppImage).canUpdateTo(release.copy(assetNames = assets - "SHA256SUMS-1.19.0.txt")))
+        assertFalse(SelfUpdate(InstallKind.AppImage).canUpdateTo(release.copy(checksumsUrl = null)))
+        // The feed's own hash is enough without the checksum file.
+        val hashed = release.copy(
+            checksumsUrl = null,
+            assets = mapOf("linux-x64-appimage" to ReleaseAsset("https://x/a.AppImage", sha256 = "a".repeat(64))),
+        )
+        assertTrue(SelfUpdate(InstallKind.AppImage).canUpdateTo(hashed))
+        assertFalse(SelfUpdate(InstallKind.Deb).canUpdateTo(hashed))
     }
 
     @Test
@@ -83,16 +99,6 @@ class SelfUpdateTest {
         val f = Files.createTempFile("tm", ".bin").toFile()
         f.writeText("abc")
         assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", SelfUpdate.sha256(f))
-    }
-
-    @Test
-    fun `the release answer keeps each asset's link`() {
-        val json = """{"tag_name":"v1.19.0","assets":[{"browser_download_url":"https://github.com/dracu-lah/TMPlayer/releases/download/v1.19.0/tmplayer_1.19.0_amd64.deb"}]}"""
-        val parsed = DesktopUpdates.parse(json)!!
-        assertEquals(
-            "https://github.com/dracu-lah/TMPlayer/releases/download/v1.19.0/tmplayer_1.19.0_amd64.deb",
-            parsed.assetUrls["tmplayer_1.19.0_amd64.deb"],
-        )
     }
 
     @Test

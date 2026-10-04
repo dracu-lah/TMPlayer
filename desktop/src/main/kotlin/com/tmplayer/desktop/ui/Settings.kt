@@ -39,11 +39,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.SizeFilter
 import com.tmplayer.desktop.DesktopSettings
 import com.tmplayer.data.Td
 import com.tmplayer.data.ThemeChoice
+import com.tmplayer.data.UpdateState
+import com.tmplayer.data.UpdateWords
+import com.tmplayer.data.Updates
+import com.tmplayer.data.release
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.theme.Tone
@@ -66,6 +71,8 @@ fun SettingsPage(state: ShellState, version: String = "") {
     val minSize by settings.minSizeBytes.collectAsState(initial = SizeFilter.FLOOR)
     val maxSize by settings.maxSizeBytes.collectAsState(initial = SizeFilter.CEILING)
     val desktop by state.extras.prefs.state.collectAsState()
+    val notifyUpdates by settings.updateNotify.collectAsState(initial = true)
+    val updateState by Updates.state.collectAsState()
     var used by remember { mutableLongStateOf(-1L) }
     var confirmSignOut by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { used = runCatching { Td.storageUsedBytes() }.getOrDefault(-1L) }
@@ -181,11 +188,34 @@ fun SettingsPage(state: ShellState, version: String = "") {
                     Group("Updates")
                     Toggle(
                         "Tell me when a new version is out",
-                        "Asks GitHub once a day. Nothing is downloaded or installed without you",
-                        desktop.checkForUpdates,
-                    ) { on -> state.extras.prefs.update { it.copy(checkForUpdates = on) } }
-                    Setting("Check now", "TMPlayer $version") {
-                        OutlinedButton(onClick = { scope.launch { toast(updates.check(quiet = false)) } }) { Text("Check") }
+                        "Looks every six hours. Nothing is downloaded or installed without you",
+                        notifyUpdates,
+                    ) { on -> scope.launch { settings.setUpdateNotify(on) } }
+                    val offered = updateState.release
+                    if (offered != null) {
+                        Setting(UpdateWords.settingsRow(offered), UpdateWords.youHave(version), titleColor = Tone.caution) {
+                            OutlinedButton(onClick = { state.updatePopup = true }) { Text("Open", color = Tone.caution) }
+                        }
+                    }
+                    Setting("Check for updates", "TMPlayer $version") {
+                        var checking by remember { mutableStateOf(false) }
+                        OutlinedButton(enabled = !checking, onClick = {
+                            checking = true
+                            scope.launch {
+                                updates.checkNow()
+                                checking = false
+                                // Anything to offer opens the popup, a skipped version included;
+                                // the rest is a sentence.
+                                when (val after = Updates.state.value) {
+                                    is UpdateState.Available -> state.updatePopup = true
+                                    is UpdateState.Failed -> {
+                                        toast(after.message)
+                                        Updates.dismiss()
+                                    }
+                                    else -> toast("TMPlayer $version is the newest version")
+                                }
+                            }
+                        }) { Text(if (checking) "Checking" else "Check") }
                     }
                 }
 
@@ -234,14 +264,14 @@ private fun Group(title: String) {
 }
 
 @Composable
-private fun Setting(title: String, detail: String, control: @Composable () -> Unit) {
+private fun Setting(title: String, detail: String, titleColor: Color = Color.Unspecified, control: @Composable () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = titleColor)
             Text(detail, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
         }
         control()

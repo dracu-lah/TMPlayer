@@ -336,6 +336,22 @@ jobs:
           mv "SHA256SUMS-$VERSION.txt" dist/
           cat "dist/SHA256SUMS-$VERSION.txt"
 
+      # The update feed every installed copy reads (C1 of the storage and updates plan). Written
+      # here, from the files about to go up, so each package's size and SHA-256 are the published
+      # bytes'. It is only committed after the release exists, below, so the feed never points
+      # at a download that is not there yet.
+      - name: Write the update feed
+        run: |
+          VERSION="${{ needs.version.outputs.name }}"
+          # An annotated tag's message becomes the popup's notes; a plain tag gets the default.
+          NOTES=""
+          if [ "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME" 2>/dev/null)" = "tag" ]; then
+            NOTES="$(git tag -l --format='%(contents:subject) %(contents:body)' "$GITHUB_REF_NAME")"
+          fi
+          python3 scripts/write-latest-json.py \
+            --version "$VERSION" --dist dist --notes "$NOTES" \
+            --out "$RUNNER_TEMP/latest.json"
+
       - name: Publish the release
         uses: softprops/action-gh-release@v2
         with:
@@ -437,3 +453,34 @@ jobs:
             third-party notices, and the R8 mapping for this APK.
 
             See the immutable [source tree for this release](https://github.com/${{ github.repository }}/tree/${{ github.ref_name }}).
+
+      # tmplayer.org is deployed by Vercel's git integration from main, with no build step and no
+      # deploy hook, so a commit to main is the one way the site learns of the release: Vercel
+      # picks it up like any other push and the feed is live a minute later. Pushed with this
+      # job's token, which starts no other workflow. A tag for an older version (a re-run, a
+      # patch to an old line) leaves a newer feed alone.
+      - name: Publish the update feed on the site
+        run: |
+          VERSION="${{ needs.version.outputs.name }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3; do
+            git fetch --depth=1 origin main
+            git checkout -B feed FETCH_HEAD
+            CURRENT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' site/latest.json 2>/dev/null || echo 0.0.0)"
+            if [ "$(printf '%s\n%s\n' "$CURRENT" "$VERSION" | sort -V | tail -n1)" != "$VERSION" ]; then
+              echo "The feed already names $CURRENT, newer than $VERSION; leaving it."
+              exit 0
+            fi
+            cp "$RUNNER_TEMP/latest.json" site/latest.json
+            git add site/latest.json
+            if git diff --cached --quiet; then
+              echo "The feed already names $VERSION."
+              exit 0
+            fi
+            git commit -m "site: the update feed names $VERSION"
+            if git push origin HEAD:main; then exit 0; fi
+            echo "main moved while the feed was written; trying again."
+          done
+          echo "::error::Could not push site/latest.json to main"
+          exit 1

@@ -23,6 +23,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
@@ -48,7 +52,10 @@ import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.Td
 import com.tmplayer.data.start
 import com.tmplayer.data.UpdateState
+import com.tmplayer.data.UpdateScheduler
 import com.tmplayer.data.Updates
+import com.tmplayer.data.release
+import com.tmplayer.data.updateScheduler
 import com.tmplayer.player.PlayerActivity
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.theme.LocalDarkTheme
@@ -243,12 +250,33 @@ private fun Root() {
 
     val toast = rememberToast()
 
-    // One quiet ask per launch. Nothing is said unless there is genuinely a newer release, and
-    // the rail is where it turns up.
+    // The update check, on every launch and before sign in too: ten seconds after the first
+    // frame, then every six hours (see UpdateScheduler). Nothing is said unless there is genuinely
+    // a newer release; the drawer and the rail are where it turns up.
     val updateState by Updates.state.collectAsStateWithLifecycle()
     var showUpdate by remember { mutableStateOf(false) }
-    LaunchedEffect(auth) {
-        if (auth is AuthState.Ready) Updates.check(quiet = true)
+    val updates = remember { updateScheduler(context) }
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        updates.run()
+    }
+    // Whatever stage the update is at, the item stays and reopens the popup. A skipped version
+    // that Settings re-offered stays out of the drawer and the rail.
+    val offeredUpdate = updateState.release?.version
+        ?.takeUnless { (updateState as? UpdateState.Available)?.skipped == true }
+    // The popup follows the item, once per version, two seconds after it appears. Not over the
+    // sign in screens and not over the player (another activity, which leaves this one stopped):
+    // either way the wait starts again once the shell is in front.
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val inShell = auth is AuthState.Ready && overviewSeen && lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
+    LaunchedEffect(offeredUpdate, inShell) {
+        val version = offeredUpdate ?: return@LaunchedEffect
+        if (!inShell) return@LaunchedEffect
+        delay(UpdateScheduler.POPUP_DELAY_MS)
+        if (updates.shouldPopUp(version)) {
+            updates.popupShown(version)
+            showUpdate = true
+        }
     }
 
     // The downloads an earlier run of the app was in the middle of, back on the Downloads screen
@@ -318,7 +346,7 @@ private fun Root() {
                 wasOffline = false
                 if (auth is AuthState.Ready) {
                     chatsViewModel.load()
-                    Updates.check(quiet = true)
+                    updates.checkIfDue()
                     toast("Back online. Library updated.")
                 }
             }
@@ -660,7 +688,7 @@ private fun Root() {
                         screen = Screen.Downloads
                     },
                     downloadCount = activeDownloads.size,
-                    updateVersion = (updateState as? UpdateState.Available)?.release?.version,
+                    updateVersion = offeredUpdate,
                     onUpdate = { showUpdate = true },
                     // Each of these changes the chat in Telegram, so each says out loud what it
                     // did: the row has already moved by the time the menu closes, and a row

@@ -19,12 +19,6 @@ data class DesktopSettings(
     val wheelSeeks: Boolean = false,
     /** Decode in software even where the OS has a hardware decoder (mpv `hwdec=no`). */
     val softwareDecoding: Boolean = defaultSoftwareDecoding(),
-    /** Ask GitHub, at most once a day, whether a newer TMPlayer is out. */
-    val checkForUpdates: Boolean = true,
-    /** When that was last asked, epoch milliseconds; 0 for never. */
-    val lastUpdateCheck: Long = 0,
-    /** A release the viewer closed the notice for, so the same one is not offered every launch. */
-    val dismissedRelease: String = "",
 ) {
     companion object {
         /**
@@ -69,6 +63,25 @@ class DesktopPrefs(private val file: File) {
         }
     }
 
+    /**
+     * The update check's settings as 1.19 and older kept them here, before they moved to the shared
+     * store beside the phone's. Hands them to [into] once and then rewrites the file without them;
+     * does nothing when there is nothing left to move.
+     */
+    suspend fun migrateUpdatePrefs(into: suspend (LegacyUpdatePrefs) -> Unit) {
+        val p = Properties()
+        runCatching { if (file.isFile) file.inputStream().use { p.load(it) } }
+        if (LEGACY_UPDATE_KEYS.none(p::containsKey)) return
+        into(
+            LegacyUpdatePrefs(
+                notify = p.getProperty("check_for_updates")?.toBooleanStrictOrNull(),
+                lastCheck = p.getProperty("last_update_check")?.toLongOrNull() ?: 0L,
+                dismissed = p.getProperty("dismissed_release").orEmpty(),
+            ),
+        )
+        synchronized(lock) { write(_state.value) }
+    }
+
     private fun read(): DesktopSettings {
         val p = Properties()
         runCatching { if (file.isFile) file.inputStream().use { p.load(it) } }
@@ -81,9 +94,6 @@ class DesktopPrefs(private val file: File) {
             downmix = bool("downmix", d.downmix),
             wheelSeeks = bool("wheel_seeks", d.wheelSeeks),
             softwareDecoding = bool("software_decoding", d.softwareDecoding),
-            checkForUpdates = bool("check_for_updates", d.checkForUpdates),
-            lastUpdateCheck = p.getProperty("last_update_check")?.toLongOrNull() ?: d.lastUpdateCheck,
-            dismissedRelease = p.getProperty("dismissed_release") ?: d.dismissedRelease,
         )
     }
 
@@ -94,9 +104,6 @@ class DesktopPrefs(private val file: File) {
             setProperty("downmix", s.downmix.toString())
             setProperty("wheel_seeks", s.wheelSeeks.toString())
             setProperty("software_decoding", s.softwareDecoding.toString())
-            setProperty("check_for_updates", s.checkForUpdates.toString())
-            setProperty("last_update_check", s.lastUpdateCheck.toString())
-            setProperty("dismissed_release", s.dismissedRelease)
         }
         runCatching {
             file.parentFile?.mkdirs()
@@ -112,5 +119,9 @@ class DesktopPrefs(private val file: File) {
 
     private companion object {
         const val TAG = "DesktopPrefs"
+        val LEGACY_UPDATE_KEYS = listOf("check_for_updates", "last_update_check", "dismissed_release")
     }
 }
+
+/** See [DesktopPrefs.migrateUpdatePrefs]. A dismissed release is what is now a skipped one. */
+data class LegacyUpdatePrefs(val notify: Boolean?, val lastCheck: Long, val dismissed: String)

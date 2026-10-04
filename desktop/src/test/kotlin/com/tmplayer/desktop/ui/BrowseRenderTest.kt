@@ -22,11 +22,12 @@ import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DownloadRequest
 import com.tmplayer.data.DownloadRunner
 import com.tmplayer.data.MediaItem
+import com.tmplayer.data.Release
+import com.tmplayer.data.ReleaseAsset
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.UpdateScheduler
 import com.tmplayer.desktop.DesktopPrefs
-import com.tmplayer.desktop.DesktopUpdates
 import com.tmplayer.desktop.DesktopWatchCache
-import com.tmplayer.desktop.LatestRelease
 import androidx.compose.foundation.layout.padding
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.TmMaterialTheme
@@ -62,7 +63,7 @@ class BrowseRenderTest {
         services = {
             DesktopExtras(
                 prefs = prefs,
-                updates = DesktopUpdates(prefs, installed = "2.0.0", fetch = { null }),
+                updates = UpdateScheduler(settings.updatePrefs, check = { _, _ -> false }, onSkip = {}),
                 watchCache = DesktopWatchCache(settings, dir.resolve("tdlib-files")),
             )
         },
@@ -122,32 +123,63 @@ class BrowseRenderTest {
     }
 
     @Test
-    fun settingsAndUpdateNotice() {
-        val png = render {
+    fun settingsAndUpdatePopup() {
+        val release = Release(
+            version = "2.0.1",
+            pageUrl = "https://github.com/dracu-lah/TMPlayer/releases/tag/v2.0.1",
+            notes = "Downloads leave the cache and live in a folder you choose.",
+            assets = mapOf("windows-x64-msi" to ReleaseAsset("https://x/TMPlayer-2.0.1-windows-x64.msi", size = 155_000_000)),
+        )
+        val png = render(update = NavUpdate("Update", "2.0.1")) {
             Box(Modifier.fillMaxSize()) {
                 SettingsPage(shell, "2.0.0")
-                UpdateNotice(
-                    LatestRelease("2.0.1", "https://github.com/dracu-lah/TMPlayer/releases/tag/v2.0.1", listOf("TMPlayer.msi")),
-                    canUpdate = true,
+                UpdatePopup(
+                    release = release,
+                    skipped = false,
+                    installed = "2.0.0",
                     kind = com.tmplayer.desktop.InstallKind.WindowsMsi,
+                    canUpdate = true,
                     progress = com.tmplayer.desktop.UpdateProgress.Downloading(0.42f),
                     onUpdate = {},
+                    onOpenPage = {},
+                    onLater = {},
+                    onSkip = {},
                     onRestart = {},
-                    onDownload = {},
-                    onDismiss = {},
-                    modifier = Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(24.dp),
+                    onClose = {},
                 )
             }
         }
         save("settings.png", png)
     }
 
-    private fun render(page: @androidx.compose.runtime.Composable () -> Unit): ByteArray =
+    @Test
+    fun updatePopupOffers() {
+        val release = Release("2.0.1", "page", notes = "Downloads leave the cache.")
+        val png = render(update = NavUpdate("Update", "2.0.1")) {
+            UpdatePopup(
+                release = release,
+                skipped = false,
+                installed = "2.0.0",
+                kind = com.tmplayer.desktop.InstallKind.Flatpak,
+                canUpdate = false,
+                progress = com.tmplayer.desktop.UpdateProgress.Idle,
+                onUpdate = {},
+                onOpenPage = {},
+                onLater = {},
+                onSkip = {},
+                onRestart = {},
+                onClose = {},
+            )
+        }
+        save("update-popup.png", png)
+    }
+
+    private fun render(update: NavUpdate? = null, page: @androidx.compose.runtime.Composable () -> Unit): ByteArray =
         ImageComposeScene(WIDTH, HEIGHT, Density(1f)) {
             TmMaterialTheme(dark = true) {
                 Surface(Modifier.fillMaxSize(), color = Tone.background) {
                     Row(Modifier.fillMaxSize()) {
-                        Sidebar(shell)
+                        Sidebar(shell, update)
                         VerticalDivider(color = Tone.outline)
                         Box(Modifier.weight(1f).fillMaxHeight()) { page() }
                     }

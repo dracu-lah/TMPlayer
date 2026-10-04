@@ -256,19 +256,30 @@ download it or copy its Telegram link.
 
 ## Updating on a computer
 
-Once a day TMPlayer asks GitHub for a newer release (Settings, Updates turns that off or checks
-now). When one is out, a notice appears in the corner of the window:
+Ten seconds after it starts, signed in or not, and every six hours while it runs, TMPlayer looks
+for a newer release (Settings, Updates turns that off or checks now). It reads
+`tmplayer.org/latest.json` and asks GitHub only when the site cannot be reached. When a newer
+version is out, an amber **Update** item with the version beside it appears at the bottom of the
+side bar (on the narrow rail, the version sits on the icon). It stays until the new version is
+installed or you skip it, and clicking it opens a popup: **TMPlayer 1.20.0 is out**, with what is
+new and three buttons, **Update now**, **Remind me later** and **Skip this version**. The popup
+also opens by itself once per version, never while a video plays. **Remind me later** keeps the
+item and brings the popup back a day later; **Skip this version** hides both until a newer one.
+The phone and the TV do the same with the amber **Update** row in the drawer and the rail.
 
 | Installed from | What **Update now** does |
 |---|---|
 | Windows installer (MSI) | Downloads the new MSI, closes, installs it without an administrator prompt, and opens again |
 | Windows portable zip | Unpacks the new version beside the folder, closes, swaps the folders, and opens again |
-| AppImage | Replaces the AppImage file in place; **Restart now** runs the new one |
+| AppImage | Replaces the AppImage file in place; **Restart now** in the popup runs the new one |
 | deb or rpm | Installs the package with `pkexec`, so your system asks for your password; then **Restart now** |
-| Flatpak, tarball | **Download** opens the release page; install the new file over the old one |
+| Flatpak, tarball | **Open release page**; Flatpak updates come through your software centre or `flatpak update`, and the tarball is unpacked over the old one |
+| Android phone or TV | Downloads the APK (on mobile data the button says how much; with Wi-Fi only on, it waits for Wi-Fi), then Android asks you to confirm |
 
-Every download is checked against the release's `SHA256SUMS` before anything is installed, and
-nothing happens until you press the button. Your sign in, downloads and settings stay.
+The download, the check and **Restart now** all happen inside the popup; **Later** leaves the
+item reading **Restart to update**. Every download is checked against its SHA-256 before anything
+is installed, and nothing happens until you press the button. Your sign in, downloads and settings
+stay.
 
 The deb and rpm route needs a polkit agent for the password prompt. Full desktops (GNOME, KDE,
 Xfce, Cinnamon) run one; on sway or another bare compositor, start one (for example

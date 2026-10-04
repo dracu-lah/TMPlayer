@@ -19,9 +19,9 @@ import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DownloadRunner
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.UpdateScheduler
 import com.tmplayer.desktop.DesktopPrefs
 import com.tmplayer.desktop.DesktopServices
-import com.tmplayer.desktop.DesktopUpdates
 import com.tmplayer.desktop.DesktopWatchCache
 import com.tmplayer.desktop.SelfUpdate
 import com.tmplayer.ui.nav.BackStack
@@ -30,7 +30,7 @@ import com.tmplayer.ui.nav.isBackKey
 /** The desktop only services the pages reach through the shell. */
 class DesktopExtras(
     val prefs: DesktopPrefs,
-    val updates: DesktopUpdates?,
+    val updates: UpdateScheduler?,
     val watchCache: DesktopWatchCache?,
     val selfUpdate: SelfUpdate? = null,
 ) {
@@ -91,6 +91,9 @@ class ShellState(
 
     /** Whether the window is fullscreen: the first rung of the Esc ladder. The player sets it. */
     var fullscreen by mutableStateOf(false)
+
+    /** Whether the update popup is open: the side bar item, Settings or the once per version rule. */
+    var updatePopup by mutableStateOf(false)
 
     /** The window's back dispatcher, fed by Esc, Backspace, Alt+Left, Cmd+[ and the mouse. */
     val backStack = BackStack()
