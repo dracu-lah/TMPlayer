@@ -201,12 +201,19 @@ fun PlayerScreen(
             muted = prefs.now.muted,
             hwdec = OpenPrefs.hwdecFor(prefs.now.softwareDecoding),
         )
+        // A slow open (the whole video downloading first) says what it is waiting on; Back on the
+        // loading screen cancels it.
+        val preparing = launch { current.preparing.collect { text -> if (text != null) phase = Phase.Loading(text) } }
         val data = try {
             current.open()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Logger.w("PlayerScreen", "Could not open ${item.title}", e)
             phase = Phase.Failed(e.message ?: "This video could not be opened.")
             return@LaunchedEffect
+        } finally {
+            preparing.cancel()
         }
         phase = Phase.Loading(if (start > 0) "Resuming from ${SeekMath.clock(start)}" else "Opening")
         engine.open(data, start, prefs)
