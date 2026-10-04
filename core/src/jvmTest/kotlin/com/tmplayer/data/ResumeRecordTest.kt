@@ -13,7 +13,8 @@ class ResumeRecordTest {
         sizeBytes: Long = 1_500_000_000,
         durationSec: Int = 8176,
         updatedAt: Long = 1_700_000_000_000,
-    ) = ResumeRecord.encode(fileId, title, chatTitle, sizeBytes, durationSec, updatedAt)
+        localPath: String? = null,
+    ) = ResumeRecord.encode(fileId, title, chatTitle, sizeBytes, durationSec, updatedAt, localPath)
 
     @Test
     fun `round trips every field`() {
@@ -28,6 +29,40 @@ class ResumeRecordTest {
         assertEquals(8176, record.durationSec)
         assertEquals(250_000L, record.positionMs)
         assertEquals(1_700_000_000_000L, record.updatedAt)
+    }
+
+    @Test
+    fun `a record without a path reads back with none`() {
+        val record = ResumeRecord.decode("1_2", encoded(), 0L, 0L)!!
+        assertNull(record.localPath)
+    }
+
+    @Test
+    fun `a download's path round trips as a seventh field`() {
+        val path = "/data/user/0/com.tmplayer/files/downloads/Harbour Notes (2026) 720p.mkv"
+        val record = ResumeRecord.decode("-100123_45", encoded(localPath = path), 0L, 0L)!!
+        assertEquals(path, record.localPath)
+        assertEquals("Harbour Notes 2026 720p.mkv", record.title)
+        assertEquals(1_700_000_000_000L, record.updatedAt)
+    }
+
+    @Test
+    fun `a line an older build wrote still decodes, with no path`() {
+        // Six fields, exactly what every build before downloads had a folder wrote.
+        val legacy = listOf("42", "Old.mkv", "Chat", "10", "60", "5").joinToString("\u001F")
+        val record = ResumeRecord.decode("1_2", legacy, 0L, 0L)!!
+        assertEquals("Old.mkv", record.title)
+        assertNull(record.localPath)
+    }
+
+    @Test
+    fun `a blank path is written as no path`() {
+        assertEquals(encoded(), encoded(localPath = ""))
+    }
+
+    @Test
+    fun `the timestamp is still found on a line with a path`() {
+        assertEquals(1_700_000_000_000L, ResumeRecord.updatedAtOf(encoded(localPath = "/x/y.mkv")))
     }
 
     @Test

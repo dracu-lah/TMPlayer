@@ -60,6 +60,9 @@ private val CACHED_VIDEO = stringPreferencesKey("cached_video")
  * write was interrupted.
  */
 private val DOWNLOAD_QUEUE = stringPreferencesKey("download_queue")
+
+/** Set once the downloads recorded before they had a folder of their own have been moved into it. */
+private val DOWNLOADS_MIGRATED = booleanPreferencesKey("downloads_migrated")
 private val SCREEN_ORIENTATION = stringPreferencesKey("screen_orientation")
 
 // The phone player's touch settings. See [TouchPrefs].
@@ -687,25 +690,77 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
     /**
      * Every video this install has ever asked TDLib for, newest first.
      *
-     * Whether the file is still on disk is TDLib's answer, not this one: the screen asks it per
-     * row. This is only the names, so that a row can say what it is rather than quoting a file id.
+     * A record with a [ResumeRecord.localPath] is a download in TMPlayer's own Downloads folder,
+     * and the path is where its file is. One without is a download from before downloads had a
+     * folder, whose file is wherever TDLib's cache put it: whether that is still on disk is TDLib's
+     * answer, not this one, and the screen asks it per row.
      */
-    val downloadHistory: Flow<List<ResumeRecord>> = read { prefs ->
-        buildList {
-            for ((key, value) in prefs.asMap()) {
-                val name = key.name
-                if (!name.startsWith("dl_")) continue
-                val ids = name.removePrefix("dl_")
-                val record = ResumeRecord.decode(
-                    key = ids,
-                    encoded = value as? String,
-                    positionMs = prefs[longPreferencesKey("resume_$ids")] ?: 0L,
-                    durationMs = prefs[longPreferencesKey("duration_$ids")] ?: 0L,
-                ) ?: continue
-                add(record)
-            }
-        }.sortedByDescending { it.updatedAt }
+    val downloadHistory: Flow<List<ResumeRecord>> = read { prefs -> decodeDownloads(prefs) }
+
+    /** The same list read once, for work that must not wait on a flow's first emission. */
+    suspend fun downloadsNow(): List<ResumeRecord> = decodeDownloads(prefs.data.first())
+
+    /** The record for one message, or null when it was never downloaded or has been removed. */
+    suspend fun downloadRecord(chatId: Long, messageId: Long): ResumeRecord? {
+        val prefs = prefs.data.first()
+        val ids = progressKey(chatId, messageId)
+        return decodeDownload(prefs, ids, prefs[downloadKey(chatId, messageId)])
     }
+
+    /**
+     * Points one download at its file, or at none with a null [localPath].
+     *
+     * Written per file as each move lands, so an interrupted move of many leaves a list in which
+     * every record is right about where its file is. Does nothing for a message with no record:
+     * a path on its own, with no title or size, is not a row anything could draw.
+     *
+     * @return whether there was a record to update.
+     */
+    suspend fun setDownloadPath(chatId: Long, messageId: Long, localPath: String?): Boolean {
+        var updated = false
+        prefs.edit { prefs ->
+            val key = downloadKey(chatId, messageId)
+            val ids = progressKey(chatId, messageId)
+            val record = decodeDownload(prefs, ids, prefs[key]) ?: return@edit
+            prefs[key] = ResumeRecord.encode(
+                fileId = record.fileId,
+                title = record.title,
+                chatTitle = record.chatTitle,
+                sizeBytes = record.sizeBytes,
+                durationSec = record.durationSec,
+                updatedAt = record.updatedAt,
+                localPath = localPath,
+            )
+            updated = true
+        }
+        return updated
+    }
+
+    /**
+     * Whether the downloads recorded before they had a folder of their own have been moved into it.
+     *
+     * Set once, by whichever platform runs that migration, so it is not attempted on every launch.
+     */
+    suspend fun downloadsMigratedNow(): Boolean = prefs.data.first()[DOWNLOADS_MIGRATED] ?: false
+
+    suspend fun markDownloadsMigrated() {
+        prefs.edit { it[DOWNLOADS_MIGRATED] = true }
+    }
+
+    private fun decodeDownloads(prefs: Preferences): List<ResumeRecord> = buildList {
+        for ((key, value) in prefs.asMap()) {
+            val ids = key.name.removePrefixOrNull("dl_") ?: continue
+            add(decodeDownload(prefs, ids, value as? String) ?: continue)
+        }
+    }.sortedByDescending { it.updatedAt }
+
+    private fun decodeDownload(prefs: Preferences, ids: String, encoded: String?): ResumeRecord? =
+        ResumeRecord.decode(
+            key = ids,
+            encoded = encoded,
+            positionMs = prefs[longPreferencesKey("resume_$ids")] ?: 0L,
+            durationMs = prefs[longPreferencesKey("duration_$ids")] ?: 0L,
+        )
 
     /**
      * The unfinished downloads, as the last write of the queue left them.
@@ -734,8 +789,17 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
         }
     }
 
-    /** Remembers a video as one that has been fetched, so Downloads can name it later. */
-    suspend fun noteDownload(item: MediaItem, chatTitle: String) {
+    /**
+     * Remembers a video as one that has been fetched, so Downloads can name it later.
+     *
+     * [localPath] is where the file now is, once it has been moved into TMPlayer's Downloads
+     * folder; null records a download whose file is still in TDLib's cache.
+     *
+     * Not capped, unlike the resume history: this list is the only record of which files on the
+     * disk are the viewer's, and a download whose record fell off the end would become a file
+     * nothing can name, play or delete.
+     */
+    suspend fun noteDownload(item: MediaItem, chatTitle: String, localPath: String? = null) {
         prefs.edit { prefs ->
             prefs[downloadKey(item.chatId, item.messageId)] = ResumeRecord.encode(
                 fileId = item.fileId,
@@ -744,28 +808,14 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
                 sizeBytes = item.sizeBytes,
                 durationSec = item.durationSec,
                 updatedAt = System.currentTimeMillis(),
+                localPath = localPath,
             )
-            evictOldestDownloads(prefs)
         }
     }
 
     /** Drops one row from Downloads, once its file has actually been deleted. */
     suspend fun forgetDownload(chatId: Long, messageId: Long) {
         prefs.edit { it.remove(downloadKey(chatId, messageId)) }
-    }
-
-    /** The same cap the resume history has, for the same reason: this list is not a log. */
-    private fun evictOldestDownloads(prefs: MutablePreferences) {
-        val stamps = prefs.asMap().keys
-            .mapNotNull { it.name.removePrefixOrNull("dl_") }
-            .mapNotNull { ids ->
-                val meta = prefs[stringPreferencesKey("dl_$ids")] ?: return@mapNotNull null
-                ids to (ResumeRecord.updatedAtOf(meta) ?: 0L)
-            }
-        if (stamps.size <= MAX_HISTORY) return
-        stamps.sortedBy { it.second }
-            .take(stamps.size - MAX_HISTORY)
-            .forEach { (ids, _) -> prefs.remove(stringPreferencesKey("dl_$ids")) }
     }
 
     suspend fun saveResumePosition(
@@ -896,7 +946,11 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
 
         const val MIN_RESUME_MS = 60_000L
 
-        /** How many half-watched videos are kept before the oldest start dropping off. */
+        /**
+         * How many half-watched videos are kept before the oldest start dropping off.
+         *
+         * The resume history only. Downloads are not capped: see [noteDownload].
+         */
         const val MAX_HISTORY = 200
 
         /** Anything within this of the end counts as watched. */
