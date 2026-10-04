@@ -1897,6 +1897,27 @@ private fun MediaActionsSheet(
                 onSelect = { onDismiss(); onPlay() },
             ),
         )
+        // Any tile, not only the ones in Continue watching: a video half seen months ago is still
+        // one somebody may want from the first frame. The saved position goes first, so the
+        // player opening a moment later finds nothing to resume from.
+        if (watched != null && watched.positionMs > 0) {
+            add(
+                MenuAction(
+                    label = "Play from the start",
+                    icon = Icons.Filled.Refresh,
+                    onSelect = {
+                        scope.launch {
+                            runCatching {
+                                SettingsStore(context)
+                                    .clearResumePosition(item.chatId, item.messageId)
+                            }
+                            onDismiss()
+                            onPlay()
+                        }
+                    },
+                ),
+            )
+        }
         when {
             // On the list already, at whatever stage: the one thing to offer is taking it off
             // again. Which stage it is in is what the wording says, since "stop the download" on
@@ -1973,6 +1994,22 @@ private fun MediaActionsSheet(
                     onSelect = {
                         scope.launch { shareVideo(context, item, send = false) }
                         onDismiss()
+                    },
+                ),
+            )
+        }
+        // A phone's line: a link on a television's clipboard has nowhere to be pasted.
+        if (isTouch()) {
+            add(
+                MenuAction(
+                    label = "Copy Telegram link",
+                    icon = TmIcons.Share,
+                    detail = "To open this video in Telegram, or send it on",
+                    onSelect = {
+                        scope.launch {
+                            com.tmplayer.data.MessageLink.copy(context, item.chatId, item.messageId)
+                            onDismiss()
+                        }
                     },
                 ),
             )
