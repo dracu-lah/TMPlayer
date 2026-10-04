@@ -263,7 +263,43 @@ tmplayer`, or `flatpak uninstall` with the ID that `flatpak list` shows.
 
 You land on your chats. The sidebar has Chats, Favourites, Continue, Downloads and Settings; open a
 chat for its videos, hover a tile for its Play button, or right click it to play from the start,
-download it or copy its Telegram link.
+download it or copy its Telegram link. Ctrl+click (Cmd+click on a Mac) picks several tiles and
+Shift+click a run of them; **Download selected** then queues them all.
+
+## Storage on a computer
+
+A computer keeps the same two kinds of video as the phone, with more room for the first:
+
+- **Cached**: what playing leaves behind, so a video played again starts at once. The desktop keeps
+  as many as fit under **Settings, Storage, Cache limit** (10 GB to start, anything from 2 to
+  100 GB) and deletes the least recently played first once it is over. TMPlayer may delete cache
+  at any time; nothing in it is yours to keep.
+- **Downloads**: videos you chose to keep. Each is a plain file under its own name, moved out of
+  the cache into the Downloads folder when it finishes, and kept until you delete it. They play
+  without a connection, and **Open in another app** hands one to any other player.
+
+Where the files are, until you choose otherwise:
+
+| | Downloads | Cache |
+|---|---|---|
+| Linux | `~/Downloads/TMPlayer` (your XDG Downloads folder) | `~/.cache/TMPlayer/cache` |
+| Windows | `Downloads\TMPlayer` (your Downloads folder, wherever it has been moved) | `%LOCALAPPDATA%\TMPlayer\Cache\cache` |
+
+Your sign in and settings stay in the per user data and config folders and never move.
+
+**Moving them:** **Settings, Storage, Storage location, Change** and pick a folder, a second drive
+for instance. TMPlayer makes a `TMPlayer` folder inside it with `downloads`, `cache` and `updates`,
+moves your downloads across (a rename on the same drive, a checked copy to another, with progress
+in the system's notifications), clears the cache rather than copying it, and keeps you signed in.
+Playback and downloads pause while it runs. If the app is closed part way, it finishes the move on
+the next launch. **Reset** moves everything back to the folders above. A folder TMPlayer used
+before is recognised and its downloads taken back on; **Scan the downloads folder** lists any file
+there that TMPlayer does not know, to keep or delete.
+
+The Storage card shows what downloads, cached videos and pictures take, and the free space on each
+drive involved. **Clear cache**, **Clear pictures and previews** and **Clear everything except
+downloads** never touch a download. Signing out keeps your downloads unless you tick **Also delete
+my downloads**.
 
 ## Updating on a computer
 
