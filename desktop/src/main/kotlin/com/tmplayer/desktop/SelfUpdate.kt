@@ -63,7 +63,7 @@ sealed interface UpdateProgress {
  */
 class SelfUpdate(
     val kind: InstallKind = detect(),
-    private val workDir: File = File(DesktopPaths.cacheDir, "updates"),
+    private val workDir: File = DesktopPaths.updatesDir,
 ) {
     private val _progress = MutableStateFlow<UpdateProgress>(UpdateProgress.Idle)
     val progress: StateFlow<UpdateProgress> = _progress.asStateFlow()

@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import com.tmplayer.BuildConfig
+import com.tmplayer.platform.CacheDirRename
 import com.tmplayer.platform.Credentials
 import com.tmplayer.platform.DeviceInfo
 import com.tmplayer.platform.LogSink
@@ -13,7 +14,8 @@ import com.tmplayer.platform.Paths
 import java.io.File
 
 // The Android answers to what `:core` asks of the platform it runs on. Each is the value the app
-// used before the core was lifted out of it, so nothing a viewer has on disk moves.
+// used before the core was lifted out of it, so nothing a viewer has on disk moves, save the name
+// of the cache directory, which [AndroidPaths] changes once.
 
 /** Logcat, with the tags the shared code has always used. */
 object AndroidLogSink : LogSink {
@@ -26,12 +28,37 @@ object AndroidLogSink : LogSink {
     }
 }
 
-/** TDLib under `filesDir`, where it has always been: `tdlib` and `tdlib-files`. */
+/**
+ * Everything under `filesDir`: TDLib's session in `tdlib`, its cache in `cache` and the viewer's
+ * downloads in `downloads`. Internal storage is one volume, so moving a finished download out of
+ * the cache is always a rename.
+ *
+ * The cache was called `tdlib-files` up to 1.19. The first [AndroidPaths] built in a process
+ * renames it, once, before anything can hand it to TDLib (see [CacheDirRename] for why the old
+ * name is left as a link); every other place that needs the cache's location asks this class.
+ */
 class AndroidPaths(context: Context) : Paths {
     private val app = context.applicationContext
     override val databaseDir: File = File(app.filesDir, "tdlib")
-    override val filesDir: File = File(app.filesDir, "tdlib-files")
-    override fun disk(): DiskInfo = DiskSpace.read(app)
+    override val filesDir: File = cacheDir(app)
+    override val downloadsDir: File = File(app.filesDir, DOWNLOADS)
+    override fun disk(): DiskInfo = DiskSpace.read(app, filesDir)
+    override fun downloadsDisk(): DiskInfo = DiskSpace.read(app, downloadsDir)
+
+    companion object {
+        const val DOWNLOADS = "downloads"
+
+        @Volatile
+        private var adopted: File? = null
+
+        /** TDLib's files directory, renamed from its old name the first time this is asked. */
+        fun cacheDir(context: Context): File = adopted ?: synchronized(this) {
+            adopted ?: CacheDirRename.adopt(
+                legacy = File(context.applicationContext.filesDir, CacheDirRename.LEGACY_NAME),
+                current = File(context.applicationContext.filesDir, CacheDirRename.NAME),
+            ).also { adopted = it }
+        }
+    }
 }
 
 fun androidDeviceInfo(): DeviceInfo = DeviceInfo(

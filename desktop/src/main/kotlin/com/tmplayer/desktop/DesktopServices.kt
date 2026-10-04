@@ -21,7 +21,7 @@ object DesktopServices {
         DesktopWatchCache(settings, DesktopPaths.filesDir, playing = { com.tmplayer.desktop.player.ActiveStreams.openIds() })
     }
 
-    val prefs: DesktopPrefs by lazy { DesktopPrefs(java.io.File(DesktopPaths.configDir, "desktop.properties")) }
+    val prefs: DesktopPrefs by lazy { DesktopPrefs(DesktopPaths.prefsFile) }
 
     /** The once a day "a newer version is out" check. */
     val updates: DesktopUpdates by lazy { DesktopUpdates(prefs) }
