@@ -53,8 +53,8 @@ android {
         // upgrade of the wrong one; nothing here goes to a store. For sideloading, equal codes are
         // what lets somebody who took the universal file swap to the arm64 one without Android
         // refusing it as a downgrade, which an offset scheme would cause in one direction.
-        versionCode = (findProperty("tmVersionCode") as String?)?.toInt() ?: 11900
-        versionName = (findProperty("tmVersionName") as String?) ?: "1.19.0"
+        versionCode = (findProperty("tmVersionCode") as String?)?.toInt() ?: 11901
+        versionName = (findProperty("tmVersionName") as String?) ?: "1.19.1"
 
         // Telegram API credentials. Bring your own via local.properties (see README)
         buildConfigField("int", "TG_API_ID", localProps.getProperty("TG_API_ID") ?: "0")
