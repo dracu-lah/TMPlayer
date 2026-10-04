@@ -41,6 +41,13 @@ private val THEME_CHOICE = stringPreferencesKey("theme_choice")
 private val DYNAMIC_COLOUR = booleanPreferencesKey("dynamic_colour")
 private val VIDEO_SCALE = stringPreferencesKey("video_scale")
 
+// The update check's memory, shared by the phone, the TV and the desktop. See [UpdateScheduler].
+private val UPDATE_NOTIFY = booleanPreferencesKey("update_notify")
+private val UPDATE_LAST_CHECK = longPreferencesKey("update_last_check")
+private val UPDATE_SKIPPED = stringPreferencesKey("update_skipped_version")
+private val UPDATE_SNOOZED_UNTIL = longPreferencesKey("update_snoozed_until")
+private val UPDATE_POPUP_SHOWN = stringPreferencesKey("update_popup_shown")
+
 /**
  * The one video the watch cache is holding: which message it came from, and what it is called.
  *
@@ -347,6 +354,39 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
 
     /** Read at the start of playback, where the flow's first emission has not arrived yet. */
     suspend fun wifiOnlyDownloadsNow(): Boolean = prefs.data.first()[WIFI_ONLY] ?: false
+
+    // ---- updates ----------------------------------------------------------------------------
+
+    /**
+     * "Tell me when a new version is out": the scheduled checks. On by default, because a
+     * sideloaded app has nothing else to tell anybody; Settings' own button works either way.
+     */
+    val updateNotify: Flow<Boolean> = read { it[UPDATE_NOTIFY] ?: true }
+
+    suspend fun setUpdateNotify(value: Boolean) {
+        prefs.edit { it[UPDATE_NOTIFY] = value }
+    }
+
+    /** The update check's own memory, read and written by [UpdateScheduler] alone. */
+    val updatePrefs: UpdatePrefs = object : UpdatePrefs {
+        override suspend fun notify() = prefs.data.first()[UPDATE_NOTIFY] ?: true
+        override suspend fun lastCheck() = prefs.data.first()[UPDATE_LAST_CHECK] ?: 0L
+        override suspend fun setLastCheck(at: Long) {
+            prefs.edit { it[UPDATE_LAST_CHECK] = at }
+        }
+        override suspend fun skippedVersion() = prefs.data.first()[UPDATE_SKIPPED].orEmpty()
+        override suspend fun setSkippedVersion(version: String) {
+            prefs.edit { it[UPDATE_SKIPPED] = version }
+        }
+        override suspend fun snoozedUntil() = prefs.data.first()[UPDATE_SNOOZED_UNTIL] ?: 0L
+        override suspend fun setSnoozedUntil(at: Long) {
+            prefs.edit { it[UPDATE_SNOOZED_UNTIL] = at }
+        }
+        override suspend fun popupShownFor() = prefs.data.first()[UPDATE_POPUP_SHOWN].orEmpty()
+        override suspend fun setPopupShownFor(version: String) {
+            prefs.edit { it[UPDATE_POPUP_SHOWN] = version }
+        }
+    }
 
     /**
      * Whether a crash may be reported to the project, and the one thing in this app that ever
