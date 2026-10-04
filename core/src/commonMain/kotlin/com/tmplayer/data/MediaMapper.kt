@@ -30,8 +30,40 @@ data class MediaItem(
     val miniThumbnail: ByteArray?,
     val date: Int,
     val fileName: String = "",
+    /**
+     * Whether a whole copy of the video is on this device, whichever kind: true for both
+     * [Locality.Cached] and [Locality.Downloaded]. Kept beside [locality] for the callers that only
+     * ask "can this play without a connection".
+     */
     val onDevice: Boolean = false,
+    /**
+     * Which kind of copy that is, which is what the tile badge and the menu name. Follows [onDevice]
+     * unless told otherwise: a mapper that only knows TDLib's answer can say no more than cached.
+     */
+    val locality: Locality = if (onDevice) Locality.Cached else Locality.Remote,
 ) {
+    /**
+     * Where a video's bytes are, as far as the viewer is concerned.
+     *
+     * Three answers rather than a yes or no, because the two kinds of copy behave differently: a
+     * download is in TMPlayer's Downloads folder until the viewer deletes it, while a cached copy is
+     * in TDLib's cache and the next video played may take it.
+     */
+    enum class Locality {
+        /** Only on Telegram. Playing it streams it. */
+        Remote,
+
+        /** Whole in TDLib's cache, because it was played. Evictable. */
+        Cached,
+
+        /** In the Downloads folder, listed in the download index. Kept until deleted. */
+        Downloaded,
+    }
+
+    /** This item with its copy described again, keeping [onDevice] and [locality] in step. */
+    fun withLocality(locality: Locality): MediaItem =
+        copy(onDevice = locality != Locality.Remote, locality = locality)
+
     /**
      * "4K", "1080p": read off the file name, which is where releases state it.
      *
@@ -59,6 +91,7 @@ data class MediaItem(
             date == other.date &&
             fileName == other.fileName &&
             onDevice == other.onDevice &&
+            locality == other.locality &&
             miniThumbnail.contentEquals(other.miniThumbnail)
     }
 
@@ -74,6 +107,7 @@ data class MediaItem(
         result = 31 * result + date
         result = 31 * result + fileName.hashCode()
         result = 31 * result + onDevice.hashCode()
+        result = 31 * result + locality.hashCode()
         result = 31 * result + (miniThumbnail?.contentHashCode() ?: 0)
         return result
     }
