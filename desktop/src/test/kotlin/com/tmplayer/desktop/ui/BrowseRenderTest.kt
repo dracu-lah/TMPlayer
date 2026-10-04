@@ -25,6 +25,7 @@ import com.tmplayer.data.MediaItem
 import com.tmplayer.data.Release
 import com.tmplayer.data.ReleaseAsset
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.WatchedStore
 import com.tmplayer.data.UpdateScheduler
 import com.tmplayer.desktop.DesktopPrefs
 import com.tmplayer.desktop.DesktopWatchCache
@@ -60,6 +61,7 @@ class BrowseRenderTest {
             override fun cancel(fileId: Int) = Unit
             override fun pause(fileId: Int) = Unit
         },
+        WatchedStore(WatchedStore.openDataStore(Files.createTempDirectory("tm-render-watched").resolve(WatchedStore.FILE_NAME).toFile())),
         services = {
             DesktopExtras(
                 prefs = prefs,
@@ -120,6 +122,26 @@ class BrowseRenderTest {
             }
         }
         save("grid.png", png)
+    }
+
+    @Test
+    fun watchedTicksAndSizeNote() = kotlinx.coroutines.runBlocking {
+        val items = (1..6).map { at ->
+            MediaItem(
+                chatId = 2, messageId = at.toLong(), fileId = 0, title = "Harbour Lights S02E0$at",
+                sizeBytes = 400L * 1024 * 1024, durationSec = 2400, mimeType = "video/mp4", thumbnailFileId = 0,
+                miniThumbnail = jpeg(0xFF12A594.toInt()), date = 0, fileName = "Harbour Lights S02E0$at.mkv",
+            )
+        }
+        val now = System.currentTimeMillis()
+        shell.watched.markWatched(com.tmplayer.data.WatchedRecord.of(items[0], "Weekend series", now - 3 * 60_000, manual = false))
+        shell.watched.markWatched(com.tmplayer.data.WatchedRecord.of(items[1], "Weekend series", now - 26 * 3_600_000L, manual = true))
+        // A second viewing part way through: the tick stays, the bar shows where it is.
+        settings.saveResumePosition(2, 2, 600_000, 2_400_000, "")
+        val grid = render { VideoGrid(shell, items, "Weekend series", hiddenBySize = 3) }
+        save("watched-grid.png", grid)
+        val page = render { WatchedPage(shell) }
+        save("watched-page.png", page)
     }
 
     @Test

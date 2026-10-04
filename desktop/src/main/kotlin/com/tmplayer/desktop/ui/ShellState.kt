@@ -20,6 +20,7 @@ import com.tmplayer.data.DownloadRunner
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.UpdateScheduler
+import com.tmplayer.data.WatchedStore
 import com.tmplayer.desktop.DesktopPrefs
 import com.tmplayer.desktop.DesktopServices
 import com.tmplayer.desktop.DesktopWatchCache
@@ -47,6 +48,7 @@ enum class Destination(val label: String) {
     Chats("Chats"),
     Favourites("Favourites"),
     Continue("Continue"),
+    Watched("Watched"),
     Downloads("Downloads"),
     Settings("Settings"),
 }
@@ -73,6 +75,8 @@ data class PlayRequest(
 class ShellState(
     val settings: SettingsStore,
     val downloads: DownloadRunner,
+    /** The Watched list: the ticks on the posters and the page of finished videos. */
+    val watched: WatchedStore,
     services: () -> DesktopExtras = { DesktopExtras.live() },
 ) {
     /** The desktop's own settings, cache and update check; opened on first use, so tests that never touch them pay nothing. */
@@ -114,6 +118,17 @@ class ShellState(
 
     /** Chat titles by id, so a video opened from anywhere can say where it came from. */
     private val chatTitles = mutableMapOf<Long, String>()
+
+    /**
+     * Set by the "Change" under a chat's grid, so Settings opens scrolled to the size limits.
+     * Settings clears it once it has scrolled.
+     */
+    var showSizeLimits by mutableStateOf(false)
+
+    fun openSizeLimits() {
+        go(Destination.Settings)
+        showSizeLimits = true
+    }
 
     fun go(to: Destination) {
         openChat = null

@@ -3,6 +3,8 @@ package com.tmplayer.desktop
 import com.tmplayer.data.CacheRule
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.UpdateScheduler
+import com.tmplayer.data.WatchedStore
+import java.io.File
 
 /**
  * The desktop's process-wide services, each opened exactly once.
@@ -13,6 +15,14 @@ import com.tmplayer.data.UpdateScheduler
 object DesktopServices {
     val settings: SettingsStore by lazy {
         SettingsStore(SettingsStore.openDataStore(DesktopPaths.settingsFile))
+    }
+
+    /**
+     * What has been watched to the end, in a file of its own beside the settings file: the list
+     * grows with use, and clearing it must never be one stray edit away from the preferences.
+     */
+    val watched: WatchedStore by lazy {
+        WatchedStore(WatchedStore.openDataStore(File(DesktopPaths.settingsFile.parentFile, WatchedStore.FILE_NAME)))
     }
 
     val downloads: DesktopDownloadRunner by lazy { DesktopDownloadRunner(settings, connectivity = DesktopConnectivity) }

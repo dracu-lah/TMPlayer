@@ -89,6 +89,7 @@ fun PlayerHost(
         fullscreen = fullscreen,
         onToggleFullscreen = onToggleFullscreen,
         settings = settings,
+        watched = DesktopServices.watched,
         prefs = DesktopServices.prefs,
         onToggleAlwaysOnTop = onToggleAlwaysOnTop,
         onMiniPlayer = mini?.let { m ->

@@ -30,6 +30,7 @@ import com.tmplayer.data.DownloadRequest
 import com.tmplayer.data.DownloadRunner
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.WatchedStore
 import com.tmplayer.ui.theme.TmMaterialTheme
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -52,6 +53,7 @@ class BrowseKeyboardTest {
             override fun cancel(fileId: Int) = Unit
             override fun pause(fileId: Int) = Unit
         },
+        WatchedStore(WatchedStore.openDataStore(Files.createTempDirectory("tm-keys-watched").resolve(WatchedStore.FILE_NAME).toFile())),
         services = { error("not used by these pages") },
     )
 

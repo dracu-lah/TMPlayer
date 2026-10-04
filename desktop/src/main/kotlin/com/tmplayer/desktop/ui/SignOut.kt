@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.StorageRelocationPlan
 import com.tmplayer.data.Td
+import com.tmplayer.data.WatchedStore
 import com.tmplayer.desktop.DesktopPaths
 import com.tmplayer.desktop.DownloadIndex
 import com.tmplayer.ui.theme.Tone
@@ -29,7 +30,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Signing out (B6, Decision E5). Downloads are files in the viewer's own folder now, not cache, so
- * they stay unless the box is ticked; favourites, history and the cache go as before.
+ * they stay unless the box is ticked; favourites, history, the watched list and the cache go as before.
  */
 @Composable
 internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
@@ -46,8 +47,8 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "You'll be signed out and taken back to the sign in screen. Your favourites and everything " +
-                        "you were part way through go with it. Downloads stay in ${DesktopPaths.downloadsDir.path}.",
+                    "You'll be signed out and taken back to the sign in screen. Your favourites, your watched list " +
+                        "and everything you were part way through go with it. Downloads stay in ${DesktopPaths.downloadsDir.path}.",
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = alsoDownloads, onCheckedChange = { alsoDownloads = it })
@@ -60,7 +61,7 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
                 onDismiss()
                 val deleteDownloads = alsoDownloads
                 scope.launch {
-                    signOut(settings, deleteDownloads)
+                    signOut(settings, deleteDownloads, state.watched)
                     state.go(Destination.Chats)
                     Td.logOut()
                 }
@@ -74,9 +75,12 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
  * Everything this app knows about the account that is leaving goes, except the downloads that
  * have a file of their own, which stay in the index unless [deleteDownloads].
  */
-internal suspend fun signOut(settings: SettingsStore, deleteDownloads: Boolean) {
+internal suspend fun signOut(settings: SettingsStore, deleteDownloads: Boolean, watched: WatchedStore? = null) {
     val downloads = runCatching { settings.downloadsNow() }.getOrDefault(emptyList())
     if (deleteDownloads) downloads.forEach { runCatching { DownloadIndex.delete(settings, it) } }
     runCatching { Td.clearMediaCache() }
     runCatching { settings.clearEverything(keepDownloads = !deleteDownloads) }
+    // What this account watched is its own as much as the preferences are, and it lives in a
+    // file of its own, so it is cleared on its own.
+    watched?.let { runCatching { it.clear() } }
 }

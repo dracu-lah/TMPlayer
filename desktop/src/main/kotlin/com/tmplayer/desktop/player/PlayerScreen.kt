@@ -45,7 +45,10 @@ import com.tmplayer.data.MediaName
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.TrackChoice
+import com.tmplayer.data.WatchedRecord
+import com.tmplayer.data.WatchedStore
 import com.tmplayer.desktop.DesktopPrefs
+import com.tmplayer.desktop.WatchedWords
 import com.tmplayer.player.PlaybackSpeed
 import com.tmplayer.player.TouchPrefs
 import com.tmplayer.player.VideoScale
@@ -54,6 +57,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.openani.mediamp.mpv.compose.MpvMediampPlayerSurface
@@ -105,6 +109,8 @@ private val blankCursor: PointerIcon by lazy {
  *   browse screen). Episodes played after it resume as usual.
  * @param settings the process's one [SettingsStore]; resume points, speed, picture shape and the
  *   per series track choice are read from and written to it exactly as on Android.
+ * @param watched the Watched list: a video played to the end goes on it, and the menu marks or
+ *   unmarks the one playing. Null (the UI tests) leaves both out.
  * @param prefs the desktop's own settings: volume, mute and downmix are kept there across
  *   launches, and the wheel and decoder choices are read from it.
  * @param onPlayingItemChanged called with each item once it has opened, including episodes the
@@ -123,6 +129,7 @@ fun PlayerScreen(
     onToggleFullscreen: () -> Unit,
     settings: SettingsStore,
     prefs: DesktopPrefs,
+    watched: WatchedStore? = null,
     modifier: Modifier = Modifier,
     onMiniPlayer: (() -> Unit)? = null,
     onToggleAlwaysOnTop: (() -> Unit)? = null,
@@ -164,6 +171,12 @@ fun PlayerScreen(
     var flash by remember { mutableStateOf<Flash?>(null) }
     var seekRun by remember { mutableStateOf(0L to 0L) } // (accumulated ms, last at)
     val downloaded by current.downloaded.collectAsState()
+    // The Watched list as it stands, for which way the menu's mark line reads.
+    val watchedKeys by remember(watched) { watched?.watched ?: flowOf(emptyMap()) }
+        .collectAsState(initial = emptyMap())
+    // Videos marked watched from this player. Their position is forgotten on the way out rather
+    // than saved, or leaving would put them straight back into Continue watching (as on Android).
+    val markedHere = remember { mutableSetOf<String>() }
 
     val focus = remember { FocusRequester() }
     val item = current.item
@@ -231,12 +244,33 @@ fun PlayerScreen(
         refocus()
     }
 
+    /**
+     * Puts [m] on the Watched list because playback reached the end, or [manual]ly from the menu.
+     * On [playerScope], since the end is often followed by Back straight away. A file with no
+     * message behind it (the dev harness) has nothing to key the list by and is left out.
+     */
+    fun recordWatched(m: PlayerMedia, durationMs: Long, manual: Boolean, then: suspend () -> Unit = {}) {
+        val store = watched ?: return
+        val it = m.item
+        if (!hasMessage(it)) return
+        val known = it.durationSec.takeIf { d -> d > 0 } ?: (durationMs / 1000).toInt().coerceAtLeast(0)
+        val record = WatchedRecord.of(it.copy(durationSec = known), m.chatTitle, System.currentTimeMillis(), manual)
+        playerScope.launch {
+            runCatching {
+                store.markWatched(record)
+                then()
+            }
+        }
+    }
+
     fun saveResume(m: PlayerMedia, s: PlaybackStatus) {
         if (!s.opened) return
         val it = m.item
         val position = s.positionMs
         val duration = s.durationMs
         val watched = SeekMath.watched(position, duration, SettingsStore.END_MARGIN_MS)
+        if (watched) recordWatched(m, duration, manual = false)
+        val forget = watched || SettingsStore.progressKey(it.chatId, it.messageId) in markedHere
         val description = ResumeRecord.encode(
             fileId = it.fileId,
             title = it.title,
@@ -247,7 +281,7 @@ fun PlayerScreen(
         )
         playerScope.launch {
             runCatching {
-                if (watched) settings.clearResumePosition(it.chatId, it.messageId)
+                if (forget) settings.clearResumePosition(it.chatId, it.messageId)
                 else settings.saveResumePosition(it.chatId, it.messageId, position, duration, description)
             }
         }
@@ -278,6 +312,7 @@ fun PlayerScreen(
     // The end: the next episode after a countdown, or the last frame with a way to watch again.
     LaunchedEffect(status.ended) {
         if (!status.ended || phase != Phase.Playing) return@LaunchedEffect
+        recordWatched(current, status.durationMs, manual = false)
         runCatching { settings.clearResumePosition(item.chatId, item.messageId) }
         val next = episodes.next
         if (next == null || !autoplayNext || nextUpDismissed) {
@@ -394,6 +429,26 @@ fun PlayerScreen(
         val wasPlaying = status.playing
         if (!showControls) showFlash(if (wasPlaying) Flash.Kind.Pause else Flash.Kind.Play)
         engine.togglePlay()
+    }
+
+    /** The menu's "Mark as watched" and "Mark as unwatched", for the video playing. */
+    fun toggleWatched() {
+        val store = watched ?: return
+        if (!hasMessage(item)) return
+        val key = SettingsStore.progressKey(item.chatId, item.messageId)
+        if (key in watchedKeys) {
+            markedHere.remove(key)
+            val chat = item.chatId
+            val message = item.messageId
+            playerScope.launch { runCatching { store.markUnwatched(chat, message) } }
+            showFlash(Flash.Kind.Text, "Marked as unwatched")
+        } else {
+            markedHere.add(key)
+            val chat = item.chatId
+            val message = item.messageId
+            recordWatched(current, status.durationMs, manual = true) { settings.clearResumePosition(chat, message) }
+            showFlash(Flash.Kind.Text, "Marked as watched")
+        }
     }
 
     fun startOver() {
@@ -571,6 +626,11 @@ fun PlayerScreen(
                 miniPlayerAvailable = onMiniPlayer != null,
                 alwaysOnTopAvailable = onToggleAlwaysOnTop != null,
                 fromTelegram = current.fromTelegram,
+                watchedLabel = if (watched != null && current.fromTelegram && hasMessage(item)) {
+                    WatchedWords.markLabel(SettingsStore.progressKey(item.chatId, item.messageId) in watchedKeys)
+                } else {
+                    null
+                },
                 onHoverControls = { overControls = it },
                 onBack = onBack,
                 onTogglePlay = ::togglePlay,
@@ -615,6 +675,7 @@ fun PlayerScreen(
                         MenuAction.OpenElsewhere -> openElsewhere()
                         MenuAction.Details -> showDetails = true
                         MenuAction.Shortcuts -> showShortcuts = true
+                        MenuAction.ToggleWatched -> toggleWatched()
                     }
                 },
             )
@@ -692,6 +753,9 @@ fun PlayerScreen(
 
     LaunchedEffect(Unit) { refocus() }
 }
+
+/** Whether [item] came from a message, which is what the Watched list is keyed by. */
+internal fun hasMessage(item: MediaItem): Boolean = item.chatId != 0L && item.messageId != 0L
 
 /** What is filed under one series for the track choice: the parsed name, or the video's own. */
 internal fun seriesKeyOf(item: MediaItem): String {

@@ -60,6 +60,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapNotNull
 import com.tmplayer.data.Td
 import com.tmplayer.ui.browse.ChatListViewModel
+import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.components.AppLogo
 import com.tmplayer.ui.components.LocalToastHost
 import com.tmplayer.ui.components.TmIcons
@@ -185,6 +186,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
                             Destination.Chats -> ChatsPage(state, chats, favouritesOnly = false)
                             Destination.Favourites -> ChatsPage(state, chats, favouritesOnly = true)
                             Destination.Continue -> ContinuePage(state)
+                            Destination.Watched -> WatchedPage(state)
                             Destination.Downloads -> DownloadsPage(state)
                             Destination.Settings -> SettingsPage(state, BuildInfo.VERSION)
                         }
@@ -217,6 +219,7 @@ private fun Destination.icon(): ImageVector = when (this) {
     Destination.Chats -> Icons.Filled.Home
     Destination.Favourites -> Icons.Filled.Star
     Destination.Continue -> Icons.Filled.PlayArrow
+    Destination.Watched -> BrowseTab.Watched.icon
     Destination.Downloads -> TmIcons.Download
     Destination.Settings -> Icons.Filled.Settings
 }

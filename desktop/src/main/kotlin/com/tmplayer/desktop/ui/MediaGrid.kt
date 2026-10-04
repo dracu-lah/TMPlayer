@@ -97,6 +97,9 @@ import com.tmplayer.data.SponsoredReportOutcome
 import com.tmplayer.data.Td
 import com.tmplayer.data.valueOrNull
 import com.tmplayer.data.WatchPoint
+import com.tmplayer.desktop.WatchedWords
+import com.tmplayer.desktop.setWatched
+import com.tmplayer.ui.components.WatchedBadge
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.browse.MediaListViewModel
 import com.tmplayer.ui.components.MediaArt
@@ -173,6 +176,8 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 onNav = { gridNav = it },
                 header = ad?.let { { SponsoredCard(it, model) } },
                 loadingMore = content.loadingMore,
+                // Search ignores the size limits, so the note would be wrong while one is typed.
+                hiddenBySize = if (query.isBlank()) content.hiddenBySize else 0,
             )
         }
     }
@@ -192,9 +197,12 @@ internal fun VideoGrid(
     onNav: (KeyboardNav) -> Unit = {},
     header: (@Composable () -> Unit)? = null,
     loadingMore: Boolean = false,
+    /** Videos the size limits kept out; above zero, a quiet line over the posters says so. */
+    hiddenBySize: Int = 0,
 ) {
     val cells by rememberUpdatedState(items)
-    val headerItems by rememberUpdatedState(if (header != null) 1 else 0)
+    val note = WatchedWords.sizeLimitNote(hiddenBySize)
+    val headerItems by rememberUpdatedState((if (header != null) 1 else 0) + (if (note != null) 1 else 0))
     val nav = rememberKeyboardNav(remember(grid) { GridSurface(grid, { headerItems }, { cells.size }) })
     LaunchedEffect(nav) { onNav(nav) }
     val history by state.settings.downloadHistory.collectAsState(initial = emptyList())
@@ -213,6 +221,11 @@ internal fun VideoGrid(
         ) {
             if (header != null) {
                 item(key = "sponsored", span = { GridItemSpan(maxLineSpan) }) { header() }
+            }
+            if (note != null) {
+                item(key = "hidden-by-size", span = { GridItemSpan(maxLineSpan) }) {
+                    SizeLimitNote(note, onChange = { state.openSizeLimits() })
+                }
             }
             itemsIndexed(items, key = { _, it -> it.id }) { index, item ->
                 MediaTile(state, item, chatTitle, nav, index)
@@ -233,6 +246,18 @@ internal fun VideoGrid(
         if (selection.active) {
             SelectionBar(state, selection, items, chatTitle, index, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
         }
+    }
+}
+
+/**
+ * The line over a chat's posters when the size limits kept some of its videos out, so a missing
+ * episode is explained rather than looking lost. Quiet on purpose: muted text and a text button.
+ */
+@Composable
+private fun SizeLimitNote(text: String, onChange: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(text, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
+        TextButton(onClick = onChange) { Text("Change", style = MaterialTheme.typography.bodySmall) }
     }
 }
 
@@ -270,6 +295,7 @@ fun PosterSizeStep(state: ShellState) {
 fun ContinuePage(state: ShellState) {
     val records by state.settings.continueWatching.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
+    val toast = rememberToast()
     Column(Modifier.fillMaxSize()) {
         PageHeader("Continue", "Pick up where you left off", actions = { PosterSizeStep(state) })
         val list = records
@@ -291,7 +317,17 @@ fun ContinuePage(state: ShellState) {
                     ) {
                         itemsIndexed(list, key = { _, it -> "${it.chatId}:${it.messageId}" }) { index, record ->
                             LaunchedEffect(record) { state.noteChatTitle(record.chatId, record.chatTitle) }
-                            ContinueTile(state, record, nav, index) {
+                            ContinueTile(
+                                state, record, nav, index,
+                                onMarkWatched = {
+                                    // On the page's scope: marking takes the card off this page.
+                                    val item = record.toMediaItem()
+                                    toast("${item.title} marked as watched")
+                                    scope.launch {
+                                        runCatching { setWatched(state.watched, state.settings, item, record.chatTitle, watched = true) }
+                                    }
+                                },
+                            ) {
                                 scope.launch { state.settings.clearResumePosition(record.chatId, record.messageId) }
                             }
                         }
@@ -304,7 +340,14 @@ fun ContinuePage(state: ShellState) {
 }
 
 @Composable
-private fun ContinueTile(state: ShellState, record: ResumeRecord, nav: KeyboardNav?, index: Int, onForget: () -> Unit) {
+private fun ContinueTile(
+    state: ShellState,
+    record: ResumeRecord,
+    nav: KeyboardNav?,
+    index: Int,
+    onMarkWatched: () -> Unit,
+    onForget: () -> Unit,
+) {
     val item = remember(record) { record.toMediaItem() }
     Poster(
         state = state,
@@ -320,8 +363,14 @@ private fun ContinueTile(state: ShellState, record: ResumeRecord, nav: KeyboardN
         },
         subtitle = "${record.chatTitle}  ·  ${MediaMapper.formatDuration((record.remainingMs / 1000).toInt())} left",
         extraMenu = { close ->
+            // Marking also forgets the position, so the card leaves this page with it.
+            DropdownMenuItem(text = { Text(WatchedWords.markLabel(onList = false)) }, onClick = {
+                close()
+                onMarkWatched()
+            })
             DropdownMenuItem(text = { Text("Remove from Continue watching") }, onClick = { close(); onForget() })
         },
+        markToggle = false,
     )
 }
 
@@ -329,14 +378,18 @@ private fun ContinueTile(state: ShellState, record: ResumeRecord, nav: KeyboardN
 @Composable
 internal fun MediaTile(state: ShellState, item: MediaItem, chatTitle: String, nav: KeyboardNav? = null, index: Int = 0) {
     val progress by state.settings.watchProgress.collectAsState(initial = emptyMap())
-    val point: WatchPoint? = progress[SettingsStore.progressKey(item.chatId, item.messageId)]
+    val key = SettingsStore.progressKey(item.chatId, item.messageId)
+    val point: WatchPoint? = progress[key]
+    val watched by state.watched.watched.collectAsState(initial = emptyMap())
+    val finished = key in watched
     Poster(
         state = state,
         nav = nav,
         index = index,
         item = item,
         chatTitle = chatTitle,
-        progress = point?.fraction,
+        progress = WatchedWords.posterProgress(point?.fraction, finished),
+        finished = finished,
         art = {
             MediaArt(item.miniThumbnail, item.thumbnailFileId, Modifier.fillMaxSize()) {
                 Text(item.title.take(1).uppercase(), style = MaterialTheme.typography.headlineSmall, color = Tone.muted)
@@ -346,6 +399,7 @@ internal fun MediaTile(state: ShellState, item: MediaItem, chatTitle: String, na
             if (item.durationSec > 0) append(MediaMapper.formatDuration(item.durationSec)).append("  ·  ")
             append(MediaMapper.formatSize(item.sizeBytes))
             item.qualityTags.firstOrNull()?.let { append("  ·  ").append(it) }
+            if (WatchedWords.showsWatched(point?.fraction, finished)) append("  ·  Watched")
         },
     )
 }
@@ -361,7 +415,7 @@ internal fun MediaTile(state: ShellState, item: MediaItem, chatTitle: String, na
  */
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
-private fun Poster(
+internal fun Poster(
     state: ShellState,
     nav: KeyboardNav?,
     index: Int,
@@ -371,6 +425,12 @@ private fun Poster(
     art: @Composable () -> Unit,
     subtitle: String,
     extraMenu: (@Composable (close: () -> Unit) -> Unit)? = null,
+    /** On the Watched list: a tick in the bottom corner of the art. */
+    finished: Boolean = false,
+    /** Whether the menu offers "Mark as watched" or "Mark as unwatched" by [finished]. */
+    markToggle: Boolean = true,
+    /** The menu's play, download and link lines; off for a page whose [extraMenu] is the menu. */
+    fileMenu: Boolean = true,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
@@ -463,6 +523,10 @@ private fun Poster(
                     trackColor = Color.Black.copy(alpha = 0.4f),
                 )
             }
+            if (finished) {
+                // The one corner no other badge uses, clear of the bar along the bottom edge.
+                WatchedBadge(Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = 9.dp), size = 24.dp)
+            }
             when {
                 selected -> Badge(Icons.Filled.CheckCircle, "Selected", Modifier.align(Alignment.TopStart))
                 record != null -> Badge(Icons.Filled.CheckCircle, "Downloaded", Modifier.align(Alignment.TopStart))
@@ -490,7 +554,7 @@ private fun Poster(
                     menu = false
                     // Back to the poster, so the arrows carry on from where the menu was opened.
                     if (focused || nav?.current == index) runCatching { requester.requestFocus() }
-                }, extra = extraMenu)
+                }, extra = extraMenu, watchedToggle = if (markToggle) finished else null, fileMenu = fileMenu)
             }
         }
         Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -525,6 +589,9 @@ private fun TileMenu(
     expanded: Boolean,
     onDismiss: () -> Unit,
     extra: (@Composable (close: () -> Unit) -> Unit)?,
+    /** Null leaves the mark line out; otherwise whether the video is on the Watched list. */
+    watchedToggle: Boolean? = null,
+    fileMenu: Boolean = true,
 ) {
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
@@ -534,8 +601,23 @@ private fun TileMenu(
     val title = chatTitle.ifBlank { state.chatTitleOf(item.chatId) }
 
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+      if (!fileMenu) {
+        extra?.invoke(onDismiss)
+      } else {
         DropdownMenuItem(text = { Text("Play") }, onClick = { onDismiss(); state.openPlayer(item, startFromBeginning = false) })
         DropdownMenuItem(text = { Text("Play from start") }, onClick = { onDismiss(); state.openPlayer(item, startFromBeginning = true) })
+        // Beside the play lines, because it is about watching rather than about the file. Marking
+        // also forgets the saved position, so the video leaves Continue watching with it.
+        if (watchedToggle != null) {
+            DropdownMenuItem(text = { Text(WatchedWords.markLabel(watchedToggle)) }, onClick = {
+                onDismiss()
+                val mark = !watchedToggle
+                scope.launch {
+                    runCatching { setWatched(state.watched, state.settings, item, title, mark) }
+                    toast(if (mark) "${item.title} marked as watched" else "${item.title} marked as unwatched")
+                }
+            })
+        }
         when {
             record != null -> {
                 DropdownMenuItem(text = { Text("In Downloads") }, onClick = { onDismiss(); state.go(Destination.Downloads) })
@@ -594,6 +676,7 @@ private fun TileMenu(
             }
         })
         extra?.invoke(onDismiss)
+      }
     }
 }
 

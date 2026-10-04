@@ -27,7 +27,12 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +60,7 @@ import kotlinx.coroutines.launch
  * the size limits, storage, history and signing out. Voice search is not here at all (no portable
  * speech API, B2.5), nor are the phone's touch and orientation settings.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SettingsPage(state: ShellState, version: String = "") {
     val settings = state.settings
@@ -75,6 +81,17 @@ fun SettingsPage(state: ShellState, version: String = "") {
     val lastChatId by settings.lastChatId.collectAsState(initial = 0L)
     val history by settings.continueWatching.collectAsState(initial = emptyList())
     val favourites by settings.favorites.collectAsState(initial = emptySet())
+    val watchedList by state.watched.history.collectAsState(initial = emptyList())
+    var confirmClearWatched by remember { mutableStateOf(false) }
+    // The "Change" under a chat's grid lands here, on the size limits.
+    val sizeLimits = remember { BringIntoViewRequester() }
+    LaunchedEffect(state.showSizeLimits) {
+        if (!state.showSizeLimits) return@LaunchedEffect
+        // One frame, so the rows exist before they are asked to come into view.
+        withFrameNanos { }
+        runCatching { sizeLimits.bringIntoView() }
+        state.showSizeLimits = false
+    }
 
     val scroll = rememberScrollState()
     Box(Modifier.fillMaxSize()) {
@@ -148,6 +165,7 @@ fun SettingsPage(state: ShellState, version: String = "") {
                         }) { Text("Forget") }
                     }
                 }
+                Box(Modifier.bringIntoViewRequester(sizeLimits)) {
                 Setting("Smallest video shown", SizeFilter.label(minSize)) {
                     Stepper(
                         onLess = { scope.launch { settings.setMinSizeBytes(SizeFilter.clampMin(SizeFilter.step(minSize, -1), maxSize)) } },
@@ -159,6 +177,7 @@ fun SettingsPage(state: ShellState, version: String = "") {
                         onLess = { scope.launch { settings.setMaxSizeBytes(SizeFilter.clampMax(SizeFilter.step(maxSize, -1), minSize)) } },
                         onMore = { scope.launch { settings.setMaxSizeBytes(SizeFilter.clampMax(SizeFilter.step(maxSize, 1), minSize)) } },
                     )
+                }
                 }
                 if (minSize != SizeFilter.FLOOR || maxSize != SizeFilter.CEILING) {
                     Setting("Size limits", "Show every video again, whatever its size") {
@@ -191,6 +210,18 @@ fun SettingsPage(state: ShellState, version: String = "") {
                                 toast(if (count == 1) "Continue watching cleared" else "$count videos forgotten")
                             }
                         }
+                    }) { Text("Clear") }
+                }
+                Setting(
+                    "Clear watched list",
+                    when (watchedList.size) {
+                        0 -> "Take the watched tick off every video"
+                        1 -> "Take the tick off the one video you have watched"
+                        else -> "Take the tick off all ${watchedList.size} videos you have watched"
+                    },
+                ) {
+                    OutlinedButton(onClick = {
+                        if (watchedList.isEmpty()) toast("Nothing in Previously watched") else confirmClearWatched = true
                     }) { Text("Clear") }
                 }
                 Setting("Favourites", "Take the star off every chat") {
@@ -261,7 +292,7 @@ fun SettingsPage(state: ShellState, version: String = "") {
                 }
 
                 Group("Account")
-                Setting("Sign out of Telegram", "Favourites and history go with it. Downloads stay unless you say otherwise") {
+                Setting("Sign out of Telegram", "Favourites, history and the watched list go with it. Downloads stay unless you say otherwise") {
                     OutlinedButton(onClick = { confirmSignOut = true }) { Text("Sign out", color = Tone.danger) }
                 }
                 Text(
@@ -280,6 +311,9 @@ fun SettingsPage(state: ShellState, version: String = "") {
     }
 
     if (confirmSignOut) SignOutDialog(state, onDismiss = { confirmSignOut = false })
+    if (confirmClearWatched) {
+        ClearWatchedDialog(state, watchedList.size, scope, onDismiss = { confirmClearWatched = false })
+    }
 
     confirm?.let { asked ->
         ConfirmDialog(
