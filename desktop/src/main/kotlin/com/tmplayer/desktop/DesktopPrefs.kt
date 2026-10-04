@@ -19,14 +19,6 @@ data class DesktopSettings(
     val wheelSeeks: Boolean = false,
     /** Decode in software even where the OS has a hardware decoder (mpv `hwdec=no`). */
     val softwareDecoding: Boolean = defaultSoftwareDecoding(),
-<<<<<<< HEAD
-=======
-    /** Ask GitHub, at most once a day, whether a newer TMPlayer is out. */
-    val checkForUpdates: Boolean = true,
-    /** When that was last asked, epoch milliseconds; 0 for never. */
-    val lastUpdateCheck: Long = 0,
-    /** A release the viewer closed the notice for, so the same one is not offered every launch. */
-    val dismissedRelease: String = "",
     /**
      * The folder the viewer chose to hold TMPlayer's files, or blank for the default folders.
      *
@@ -36,7 +28,6 @@ data class DesktopSettings(
     val storageRoot: String = "",
     /** How much the cache may hold before the least recently played video goes. */
     val cacheLimitBytes: Long = DEFAULT_CACHE_LIMIT_BYTES,
->>>>>>> worktree-agent-a94269079a4c97fee
 ) {
     companion object {
         /**
@@ -84,7 +75,6 @@ class DesktopPrefs(private val file: File) {
         }
     }
 
-<<<<<<< HEAD
     /**
      * The update check's settings as 1.19 and older kept them here, before they moved to the shared
      * store beside the phone's. Hands them to [into] once and then rewrites the file without them;
@@ -104,23 +94,7 @@ class DesktopPrefs(private val file: File) {
         synchronized(lock) { write(_state.value) }
     }
 
-    private fun read(): DesktopSettings {
-        val p = Properties()
-        runCatching { if (file.isFile) file.inputStream().use { p.load(it) } }
-            .onFailure { Logger.w(TAG, "could not read ${file.name}: ${it.message}") }
-        val d = DesktopSettings()
-        fun bool(key: String, default: Boolean) = p.getProperty(key)?.toBooleanStrictOrNull() ?: default
-        return DesktopSettings(
-            volume = p.getProperty("volume")?.toIntOrNull()?.coerceIn(0, 100) ?: d.volume,
-            muted = bool("muted", d.muted),
-            downmix = bool("downmix", d.downmix),
-            wheelSeeks = bool("wheel_seeks", d.wheelSeeks),
-            softwareDecoding = bool("software_decoding", d.softwareDecoding),
-        )
-    }
-=======
     private fun read(): DesktopSettings = read(file)
->>>>>>> worktree-agent-a94269079a4c97fee
 
     private fun write(s: DesktopSettings) {
         val p = Properties().apply {
@@ -129,14 +103,8 @@ class DesktopPrefs(private val file: File) {
             setProperty("downmix", s.downmix.toString())
             setProperty("wheel_seeks", s.wheelSeeks.toString())
             setProperty("software_decoding", s.softwareDecoding.toString())
-<<<<<<< HEAD
-=======
-            setProperty("check_for_updates", s.checkForUpdates.toString())
-            setProperty("last_update_check", s.lastUpdateCheck.toString())
-            setProperty("dismissed_release", s.dismissedRelease)
             setProperty("storage_root", s.storageRoot)
             setProperty("cache_limit_bytes", s.cacheLimitBytes.toString())
->>>>>>> worktree-agent-a94269079a4c97fee
         }
         runCatching {
             file.parentFile?.mkdirs()
@@ -150,13 +118,9 @@ class DesktopPrefs(private val file: File) {
         }.onFailure { Logger.w(TAG, "could not save ${file.name}: ${it.message}") }
     }
 
-<<<<<<< HEAD
-    private companion object {
-        const val TAG = "DesktopPrefs"
-        val LEGACY_UPDATE_KEYS = listOf("check_for_updates", "last_update_check", "dismissed_release")
-=======
     companion object {
         private const val TAG = "DesktopPrefs"
+        private val LEGACY_UPDATE_KEYS = listOf("check_for_updates", "last_update_check", "dismissed_release")
 
         /**
          * Reads [file] without holding it, for code that needs a setting before the app's one
@@ -174,15 +138,11 @@ class DesktopPrefs(private val file: File) {
                 downmix = bool("downmix", d.downmix),
                 wheelSeeks = bool("wheel_seeks", d.wheelSeeks),
                 softwareDecoding = bool("software_decoding", d.softwareDecoding),
-                checkForUpdates = bool("check_for_updates", d.checkForUpdates),
-                lastUpdateCheck = p.getProperty("last_update_check")?.toLongOrNull() ?: d.lastUpdateCheck,
-                dismissedRelease = p.getProperty("dismissed_release") ?: d.dismissedRelease,
                 storageRoot = p.getProperty("storage_root")?.trim() ?: d.storageRoot,
                 cacheLimitBytes = p.getProperty("cache_limit_bytes")?.toLongOrNull()?.takeIf { it > 0 }
                     ?: d.cacheLimitBytes,
             )
         }
->>>>>>> worktree-agent-a94269079a4c97fee
     }
 }
 
