@@ -16,7 +16,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,12 +26,9 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -43,13 +39,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.SizeFilter
 import com.tmplayer.desktop.DesktopSettings
-import com.tmplayer.data.Td
 import com.tmplayer.data.ThemeChoice
 import com.tmplayer.data.UpdateState
 import com.tmplayer.data.UpdateWords
 import com.tmplayer.data.Updates
 import com.tmplayer.data.release
-import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.launch
@@ -73,9 +67,7 @@ fun SettingsPage(state: ShellState, version: String = "") {
     val desktop by state.extras.prefs.state.collectAsState()
     val notifyUpdates by settings.updateNotify.collectAsState(initial = true)
     val updateState by Updates.state.collectAsState()
-    var used by remember { mutableLongStateOf(-1L) }
     var confirmSignOut by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { used = runCatching { Td.storageUsedBytes() }.getOrDefault(-1L) }
 
     val scroll = rememberScrollState()
     Box(Modifier.fillMaxSize()) {
@@ -140,31 +132,18 @@ fun SettingsPage(state: ShellState, version: String = "") {
                         onMore = { scope.launch { settings.setMaxSizeBytes(SizeFilter.clampMax(SizeFilter.step(maxSize, 1), minSize)) } },
                     )
                 }
-
-                Group("Storage")
-                Setting(
-                    "Telegram's files on this computer",
-                    if (used < 0) "Working it out…" else StreamStats.formatBytes(used),
-                ) {
-                    OutlinedButton(onClick = {
-                        scope.launch {
-                            runCatching { Td.clearPicturesAndPreviews() }
-                            used = runCatching { Td.storageUsedBytes() }.getOrDefault(-1L)
-                            toast("Pictures and previews cleared")
-                        }
-                    }) { Text("Clear pictures") }
-                }
-                state.extras.watchCache?.let { cache ->
-                    Setting("Cached videos", "What streaming left on the disk. Downloads stay") {
+                if (minSize != SizeFilter.FLOOR || maxSize != SizeFilter.CEILING) {
+                    Setting("Size limits", "Show every video again, whatever its size") {
                         OutlinedButton(onClick = {
                             scope.launch {
-                                val freed = runCatching { cache.clearAll() }.getOrDefault(0L)
-                                used = runCatching { Td.storageUsedBytes() }.getOrDefault(-1L)
-                                toast(if (freed > 0) "${StreamStats.formatBytes(freed)} freed" else "No cached videos to clear")
+                                settings.setMinSizeBytes(SizeFilter.FLOOR)
+                                settings.setMaxSizeBytes(SizeFilter.CEILING)
                             }
-                        }) { Text("Clear cache") }
+                        }) { Text("Reset") }
                     }
                 }
+
+                StorageGroup(state)
 
                 Group("History")
                 Setting("Continue watching", "Forget where every video was stopped") {
@@ -220,7 +199,7 @@ fun SettingsPage(state: ShellState, version: String = "") {
                 }
 
                 Group("Account")
-                Setting("Sign out of Telegram", "Downloads, favourites and history go with it") {
+                Setting("Sign out of Telegram", "Favourites and history go with it. Downloads stay unless you say otherwise") {
                     OutlinedButton(onClick = { confirmSignOut = true }) { Text("Sign out", color = Tone.danger) }
                 }
             }
@@ -228,35 +207,11 @@ fun SettingsPage(state: ShellState, version: String = "") {
         VerticalScrollbar(rememberScrollbarAdapter(scroll), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
     }
 
-    if (confirmSignOut) {
-        AlertDialog(
-            onDismissRequest = { confirmSignOut = false },
-            title = { Text("Sign out of Telegram?") },
-            text = {
-                Text(
-                    "You'll be signed out and taken back to the sign in screen. The downloaded videos, " +
-                        "your favourites and everything you were part way through go with it.",
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmSignOut = false
-                    scope.launch {
-                        // Everything this app knows is about the account that is leaving.
-                        runCatching { Td.clearMediaCache() }
-                        runCatching { settings.clearEverything() }
-                        state.go(Destination.Chats)
-                        Td.logOut()
-                    }
-                }) { Text("Sign out", color = Tone.danger) }
-            },
-            dismissButton = { TextButton(onClick = { confirmSignOut = false }) { Text("Cancel") } },
-        )
-    }
+    if (confirmSignOut) SignOutDialog(state, onDismiss = { confirmSignOut = false })
 }
 
 @Composable
-private fun Group(title: String) {
+internal fun Group(title: String) {
     Column(Modifier.padding(top = 20.dp)) {
         Text(title, style = MaterialTheme.typography.titleSmall, color = Tone.accent)
         HorizontalDivider(Modifier.padding(top = 6.dp), color = Tone.outline)
@@ -264,7 +219,7 @@ private fun Group(title: String) {
 }
 
 @Composable
-private fun Setting(title: String, detail: String, titleColor: Color = Color.Unspecified, control: @Composable () -> Unit) {
+internal fun Setting(title: String, detail: String, titleColor: Color = Color.Unspecified, control: @Composable () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -284,7 +239,7 @@ private fun Toggle(title: String, detail: String, checked: Boolean, onChange: (B
 }
 
 @Composable
-private fun Stepper(onLess: () -> Unit, onMore: () -> Unit) {
+internal fun Stepper(onLess: () -> Unit, onMore: () -> Unit) {
     Row {
         IconButton(onClick = onLess) { Icon(Icons.Filled.Remove, contentDescription = "Less") }
         IconButton(onClick = onMore) { Icon(Icons.Filled.Add, contentDescription = "More") }

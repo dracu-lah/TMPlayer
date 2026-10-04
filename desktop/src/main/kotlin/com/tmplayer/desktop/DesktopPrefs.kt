@@ -28,6 +28,12 @@ data class DesktopSettings(
     val storageRoot: String = "",
     /** How much the cache may hold before the least recently played video goes. */
     val cacheLimitBytes: Long = DEFAULT_CACHE_LIMIT_BYTES,
+    /**
+     * A move to a new storage location that began and has not finished, encoded by
+     * [com.tmplayer.data.StorageRelocationPlan.Pending], or blank. Written before the first
+     * download moves and cleared after the last, so the next launch can finish what a crash left.
+     */
+    val storageRootPending: String = "",
 ) {
     companion object {
         /**
@@ -46,6 +52,24 @@ data class DesktopSettings(
 
         /** A computer has disk to spare, and ten gigabytes is a handful of films played again. */
         const val DEFAULT_CACHE_LIMIT_BYTES = 10L * 1024 * 1024 * 1024
+
+        /** The Cache limit stepper's range and step, in gigabytes. */
+        const val MIN_CACHE_LIMIT_GB = 2
+        const val MAX_CACHE_LIMIT_GB = 100
+
+        /**
+         * The next Cache limit up or down from [bytes]: one gigabyte at a time up to ten, then five,
+         * then ten past fifty, so the far end of the range is a few presses away rather than ninety.
+         */
+        fun stepCacheLimit(bytes: Long, direction: Int): Long {
+            val gb = (bytes / GB).toInt().coerceIn(MIN_CACHE_LIMIT_GB, MAX_CACHE_LIMIT_GB)
+            val stops = (MIN_CACHE_LIMIT_GB..10) + (15..50 step 5) + (60..MAX_CACHE_LIMIT_GB step 10)
+            val next = if (direction > 0) stops.firstOrNull { it > gb } ?: MAX_CACHE_LIMIT_GB
+            else stops.lastOrNull { it < gb } ?: MIN_CACHE_LIMIT_GB
+            return next * GB
+        }
+
+        private const val GB = 1024L * 1024 * 1024
     }
 }
 
@@ -105,6 +129,7 @@ class DesktopPrefs(private val file: File) {
             setProperty("software_decoding", s.softwareDecoding.toString())
             setProperty("storage_root", s.storageRoot)
             setProperty("cache_limit_bytes", s.cacheLimitBytes.toString())
+            setProperty("storage_root_pending", s.storageRootPending)
         }
         runCatching {
             file.parentFile?.mkdirs()
@@ -141,6 +166,7 @@ class DesktopPrefs(private val file: File) {
                 storageRoot = p.getProperty("storage_root")?.trim() ?: d.storageRoot,
                 cacheLimitBytes = p.getProperty("cache_limit_bytes")?.toLongOrNull()?.takeIf { it > 0 }
                     ?: d.cacheLimitBytes,
+                storageRootPending = p.getProperty("storage_root_pending")?.trim() ?: d.storageRootPending,
             )
         }
     }

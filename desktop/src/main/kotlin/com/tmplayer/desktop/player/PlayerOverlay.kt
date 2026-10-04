@@ -105,6 +105,7 @@ internal sealed interface MenuAction {
     data object ToggleIgnoreClicks : MenuAction
     data object CopyLink : MenuAction
     data object Download : MenuAction
+    data object OpenElsewhere : MenuAction
     data object Details : MenuAction
     data object Shortcuts : MenuAction
 }
@@ -549,7 +550,8 @@ private fun PlayerMenu(
                 Entry("Start over") { pick(MenuAction.StartOver) }
                 if (fromTelegram) {
                     Entry("Copy link") { pick(MenuAction.CopyLink) }
-                    Entry("Download") { pick(MenuAction.Download) }
+                    Entry("Save to Downloads") { pick(MenuAction.Download) }
+                    Entry("Open in another app") { pick(MenuAction.OpenElsewhere) }
                 }
                 Entry("Playback details", trailing = "I") { pick(MenuAction.Details) }
                 Entry("Keyboard shortcuts", trailing = "?") { pick(MenuAction.Shortcuts) }

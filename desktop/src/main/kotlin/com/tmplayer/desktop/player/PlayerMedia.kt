@@ -1,12 +1,18 @@
 package com.tmplayer.desktop.player
 
+import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.ChatRepository
 import com.tmplayer.data.DownloadRunner
+import com.tmplayer.desktop.DesktopPaths
+import com.tmplayer.desktop.DesktopServices
 import com.tmplayer.desktop.DesktopWatchCache
+import com.tmplayer.desktop.DownloadIndex
+import com.tmplayer.desktop.RoomOnDisk
 import com.tmplayer.data.LocalFileAvailability
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaName
 import com.tmplayer.data.OfflineDownloads
+import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.Td
 import com.tmplayer.data.valueOrNull
 import com.tmplayer.platform.Logger
@@ -60,6 +66,12 @@ interface PlayerMedia {
 
     /** Queues the whole file to be kept, and says what happened in words for a notice. */
     fun download(): String = "Only Telegram videos can be downloaded"
+
+    /**
+     * The whole file on disk, for Open in another app: the download in the Downloads folder, or
+     * TDLib's complete copy. Null while any of it is still to come.
+     */
+    suspend fun localFile(): java.io.File? = null
 }
 
 /** Which Telegram files a player currently has open, so a late cancel never stops a new playback. */
@@ -79,6 +91,10 @@ class TelegramPlayerMedia(
     override val chatTitle: String = "",
     private val downloads: DownloadRunner? = null,
     private val cache: DesktopWatchCache? = null,
+    /** The download of a message, from the index, when it is whole in the Downloads folder. */
+    private val indexed: suspend (chatId: Long, messageId: Long) -> File? = { chatId, messageId ->
+        DownloadIndex.fileFor(DesktopServices.settings, chatId, messageId)
+    },
 ) : PlayerMedia {
 
     override val fromTelegram: Boolean get() = true
@@ -91,9 +107,26 @@ class TelegramPlayerMedia(
     override val downloaded: StateFlow<Float?> = _downloaded.asStateFlow()
     private var watcher: Job? = null
 
+    /** The file in the Downloads folder this is playing from, when it is a download. */
+    @Volatile
+    private var downloadFile: File? = null
+
+    /** The TDLib file id as this session knows it, once [open] has asked. */
+    @Volatile
+    private var playingId: Int = item.fileId
+
     override suspend fun open(): MediaData {
+        // A download plays from the Downloads folder (B3.5), before TDLib is asked anything: it is
+        // not in TDLib's cache at all any more, and it plays with no connection.
+        indexed(item.chatId, item.messageId)?.let { file ->
+            downloadFile = file
+            _downloaded.value = 1f
+            return UriMediaData(file.absolutePath)
+        }
+        ensureRoom()
         val session = Td.awaitAuthorizedSession()
         val fileId = Td.currentFileId(item.chatId, item.messageId, item.fileId)
+        playingId = fileId
         watchDownload(fileId)
         // The player claims the cache for every video it opens (the phone's rule): this one is
         // the cached video now, and the one before it goes, unless either is a download.
@@ -163,18 +196,68 @@ class TelegramPlayerMedia(
         return episodesAmong(name, candidates)
     }
 
-    override fun episode(other: MediaItem): PlayerMedia = TelegramPlayerMedia(other, chatTitle, downloads, cache)
+    override fun episode(other: MediaItem): PlayerMedia = TelegramPlayerMedia(other, chatTitle, downloads, cache, indexed)
 
     override suspend fun messageLink(): String? = runCatching {
         Td.client.getMessageLink(item.chatId, item.messageId, 0, 0, "", false, false).valueOrNull?.link
     }.getOrNull()?.takeIf { it.isNotBlank() }
 
+    /**
+     * Save to Downloads (B4): a video being watched can be kept from the player, whether it is
+     * streaming or already whole in the cache. The queue moves it into Downloads once the player
+     * lets go of the file, which for the video on screen is when playback stops.
+     */
     override fun download(): String {
         val runner = downloads ?: return "Downloads are not available here"
-        if (_downloaded.value == 1f) return "Already on this computer"
-        if (OfflineDownloads.active.value.containsKey(item.fileId)) return "Already downloading"
-        OfflineDownloads.start(runner, item, chatTitle)
-        return "Downloading ${item.title}"
+        if (downloadFile != null) return "Already in Downloads"
+        val row = OfflineDownloads.active.value[playingId]
+        if (row != null && row.busy) {
+            return if (row.stage == OfflineDownloads.Stage.Moving) "Saves to Downloads when playback stops" else "Already downloading"
+        }
+        OfflineDownloads.start(runner, item.copy(fileId = playingId), chatTitle)
+        return if (_downloaded.value == 1f) "Saving to Downloads. It finishes when playback stops" else "Downloading ${item.title}"
+    }
+
+    override suspend fun localFile(): File? {
+        downloadFile?.let { return it }
+        return runCatching { Td.localFilePath(playingId) }.getOrNull()?.let(::File)
+    }
+
+    /**
+     * Makes room on the cache's drive before a stream starts (B8): the least recently played
+     * cached videos go if that is what it takes, and a video that cannot fit even then is refused
+     * here, with a sentence, rather than by TDLib halfway through.
+     */
+    private suspend fun ensureRoom() {
+        if (cache == null || item.chatId == 0L) return
+        val settings = DesktopServices.settings
+        val fileId = runCatching { Td.currentFileId(item.chatId, item.messageId, item.fileId) }.getOrDefault(item.fileId)
+        if (runCatching { Td.localFileAvailability(fileId) }.getOrNull() == LocalFileAvailability.Complete) return
+        val records = runCatching { settings.cachedVideosNow() }.getOrDefault(emptyList())
+        val byId = mutableMapOf<Int, ResumeRecord>()
+        val held = records.map { record ->
+            val id = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }.getOrDefault(record.fileId)
+            byId[id] = record
+            CacheShelf.Held(id, runCatching { Td.localDownloadedBytes(id) }.getOrDefault(0L), record.updatedAt)
+        }
+        val disk = DesktopPaths.disk()
+        val decision = RoomOnDisk.decide(
+            sizeBytes = item.sizeBytes,
+            partialBytes = runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L),
+            cached = held,
+            spared = ActiveStreams.openIds() + OfflineDownloads.active.value.keys + fileId,
+            freeBytes = disk.freeBytes,
+            totalBytes = disk.totalBytes,
+        )
+        when (decision) {
+            RoomOnDisk.Decision.Proceed -> Unit
+            is RoomOnDisk.Decision.Evict -> decision.fileIds.forEach { id ->
+                runCatching { Td.deleteFile(id) }
+                byId[id]?.let { runCatching { settings.forgetCachedVideo(it.chatId, it.messageId) } }
+            }
+            is RoomOnDisk.Decision.NotEnoughSpace ->
+                throw java.io.IOException(RoomOnDisk.refusal(decision.shortBytes, DesktopPaths.filesDir))
+        }
     }
 
     override suspend fun tdlibVersion(): String? = runCatching {

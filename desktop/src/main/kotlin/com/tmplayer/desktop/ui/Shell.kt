@@ -130,7 +130,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     // settled. The update check is not here: it runs from Main.kt, sign in or not.
     LaunchedEffect(Unit) {
         delay(HOUSEKEEPING_DELAY_MS)
-        runCatching { state.extras.watchCache?.sweep() }
+        runCatching { com.tmplayer.desktop.DesktopStorage.housekeeping(state.extras.watchCache) }
     }
     val update = rememberNavUpdate(state)
     UpdatePopupTrigger(state, update)

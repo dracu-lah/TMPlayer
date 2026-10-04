@@ -101,11 +101,17 @@ import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import com.tmplayer.desktop.os.OpenExternal
+import com.tmplayer.desktop.DownloadIndex
+import com.tmplayer.ui.nav.BackHandler
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
+import java.io.File
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 
@@ -187,7 +193,12 @@ internal fun VideoGrid(
     val headerItems by rememberUpdatedState(if (header != null) 1 else 0)
     val nav = rememberKeyboardNav(remember(grid) { GridSurface(grid, { headerItems }, { cells.size }) })
     LaunchedEffect(nav) { onNav(nav) }
+    val history by state.settings.downloadHistory.collectAsState(initial = emptyList())
+    val index = remember(history) { history.associateBy { "${it.chatId}:${it.messageId}" } }
+    val selection = remember(grid) { GridSelection { cells.getOrNull(it)?.id } }
+    BackHandler(enabled = selection.active) { selection.clear() }
     Box(Modifier.fillMaxSize()) {
+      CompositionLocalProvider(LocalGridSelection provides selection, LocalDownloadIndex provides index) {
         LazyVerticalGrid(
             columns = GridCells.Adaptive(state.posterWidth),
             state = grid,
@@ -210,10 +221,14 @@ internal fun VideoGrid(
                 }
             }
         }
+      }
         VerticalScrollbar(
             rememberScrollbarAdapter(grid),
             Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(vertical = 4.dp),
         )
+        if (selection.active) {
+            SelectionBar(state, selection, items, chatTitle, index, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
+        }
     }
 }
 
@@ -369,9 +384,21 @@ private fun Poster(
     val scale by animateFloatAsState(if (lifted || focused) 1.05f else 1f)
     var menu by remember { mutableStateOf(false) }
     val requester = remember { FocusRequester() }
-    val play = { state.openPlayer(item, startFromBeginning = false) }
+    val selection = LocalGridSelection.current
+    // Set by a Ctrl or Shift press just before the click it belongs to, so that click picks the
+    // poster instead of playing it.
+    var picking by remember { mutableStateOf(false) }
+    val play = {
+        if (picking && selection != null) {
+            picking = false
+        } else {
+            state.openPlayer(item, startFromBeginning = false)
+        }
+    }
     val downloads by OfflineDownloads.active.collectAsState()
     val download = downloads[item.fileId]
+    val record = LocalDownloadIndex.current[item.id]
+    val selected = selection?.isSelected(item.id) == true
 
     Column(
         Modifier
@@ -379,6 +406,22 @@ private fun Poster(
             .onPointerEvent(PointerEventType.Press) { event ->
                 val macContext = IS_MAC && event.keyboardModifiers.isCtrlPressed && event.buttons.isPrimaryPressed
                 if (event.buttons.isSecondaryPressed || macContext) menu = true
+            }
+            .onPointerEvent(PointerEventType.Press, PointerEventPass.Initial) { event ->
+                if (selection == null || !event.buttons.isPrimaryPressed) return@onPointerEvent
+                val mods = event.keyboardModifiers
+                val toggle = if (IS_MAC) mods.isMetaPressed else mods.isCtrlPressed
+                when {
+                    mods.isShiftPressed -> {
+                        picking = true
+                        selection.extend(index)
+                    }
+                    toggle -> {
+                        picking = true
+                        selection.toggle(index)
+                    }
+                    else -> picking = false
+                }
             }
             .then(if (nav != null) Modifier.navCell(nav, index, requester) else Modifier.focusRequester(requester))
             .onFocusChanged { focused = it.isFocused }
@@ -405,7 +448,7 @@ private fun Poster(
                 .aspectRatio(16f / 9f)
                 .graphicsLayer { scaleX = scale; scaleY = scale }
                 .clip(MaterialTheme.shapes.medium)
-                .then(if (focused) Modifier.border(3.dp, Tone.accent, MaterialTheme.shapes.medium) else Modifier),
+                .then(if (focused || selected) Modifier.border(3.dp, Tone.accent, MaterialTheme.shapes.medium) else Modifier),
         ) {
             art()
             if (progress != null && progress > 0f) {
@@ -417,8 +460,10 @@ private fun Poster(
                 )
             }
             when {
-                item.onDevice -> Badge(Icons.Filled.CheckCircle, "On this computer", Modifier.align(Alignment.TopStart))
-                download != null -> Badge(TmIcons.Download, "Downloading", Modifier.align(Alignment.TopStart))
+                selected -> Badge(Icons.Filled.CheckCircle, "Selected", Modifier.align(Alignment.TopStart))
+                record != null -> Badge(Icons.Filled.CheckCircle, "Downloaded", Modifier.align(Alignment.TopStart))
+                download != null && download.busy -> Badge(TmIcons.Download, "Downloading", Modifier.align(Alignment.TopStart))
+                item.onDevice -> Badge(TmIcons.Download, "Cached", Modifier.align(Alignment.TopStart))
             }
             if (lifted || menu || focused) {
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)))
@@ -449,16 +494,25 @@ private fun Poster(
     }
 }
 
+/** A word on the poster's corner: Downloaded, Cached, Downloading or Selected. */
 @Composable
 private fun Badge(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, modifier: Modifier) {
-    Box(
-        modifier.padding(6.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)).padding(4.dp),
+    Row(
+        modifier.padding(6.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.6f))
+            .padding(start = 4.dp, end = 8.dp, top = 3.dp, bottom = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(16.dp))
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White)
     }
 }
 
-/** Play, Play from start, Download or Remove download, Copy link: the poster's overflow. */
+/**
+ * Play, Play from start, the one download entry for where the video is (Download when it is on
+ * Telegram only, Save to Downloads when it is cached, Downloading while it is queued, In Downloads
+ * and Remove from Downloads once it is kept), Open in another app for a whole file, Copy link.
+ */
 @Composable
 private fun TileMenu(
     state: ShellState,
@@ -471,25 +525,54 @@ private fun TileMenu(
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
     val downloads by OfflineDownloads.active.collectAsState()
-    val history by state.settings.downloadHistory.collectAsState(initial = emptyList())
-    val kept = item.onDevice || history.any { it.chatId == item.chatId && it.messageId == item.messageId }
-    val queued = downloads.containsKey(item.fileId)
+    val record = LocalDownloadIndex.current[item.id]
+    val row = downloads[item.fileId]
+    val title = chatTitle.ifBlank { state.chatTitleOf(item.chatId) }
 
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         DropdownMenuItem(text = { Text("Play") }, onClick = { onDismiss(); state.openPlayer(item, startFromBeginning = false) })
         DropdownMenuItem(text = { Text("Play from start") }, onClick = { onDismiss(); state.openPlayer(item, startFromBeginning = true) })
-        if (!kept && !queued) {
-            DropdownMenuItem(text = { Text("Download") }, onClick = {
+        when {
+            record != null -> {
+                DropdownMenuItem(text = { Text("In Downloads") }, onClick = { onDismiss(); state.go(Destination.Downloads) })
+                DropdownMenuItem(text = { Text("Remove from Downloads") }, onClick = {
+                    onDismiss()
+                    scope.launch {
+                        if (DownloadIndex.delete(state.settings, record)) {
+                            toast("${item.title} removed from Downloads")
+                        } else {
+                            toast("The file is in use. Close whatever has it open and try again")
+                        }
+                    }
+                })
+            }
+            row != null && row.busy -> {
+                DropdownMenuItem(text = { Text("Downloading…") }, onClick = { onDismiss(); state.go(Destination.Downloads) })
+                DropdownMenuItem(text = { Text("Cancel download") }, onClick = {
+                    onDismiss()
+                    OfflineDownloads.cancel(state.downloads, item.fileId)
+                })
+            }
+            item.onDevice -> DropdownMenuItem(text = { Text("Save to Downloads") }, onClick = {
                 onDismiss()
-                OfflineDownloads.start(state.downloads, item, chatTitle.ifBlank { state.chatTitleOf(item.chatId) })
+                OfflineDownloads.start(state.downloads, item, title)
+                toast("Saving ${item.title} to Downloads")
+            })
+            else -> DropdownMenuItem(text = { Text("Download") }, onClick = {
+                onDismiss()
+                OfflineDownloads.start(state.downloads, item, title)
                 toast("Downloading ${item.title}")
             })
         }
-        if (kept || queued) {
-            DropdownMenuItem(text = { Text("Remove download") }, onClick = {
+        if (record != null || item.onDevice) {
+            DropdownMenuItem(text = { Text("Open in another app") }, onClick = {
                 onDismiss()
-                scope.removeDownload(state, item, queued)
-                toast("${item.title} removed from this computer")
+                scope.launch {
+                    val file = record?.localPath?.let(::File)?.takeIf { it.isFile }
+                        ?: runCatching { Td.localFilePath(Td.currentFileId(item.chatId, item.messageId, item.fileId)) }
+                            .getOrNull()?.let(::File)
+                    if (file == null) toast("The file is not here any more") else OpenExternal.open(file)
+                }
             })
         }
         DropdownMenuItem(text = { Text("Copy link") }, onClick = {
@@ -507,14 +590,6 @@ private fun TileMenu(
             }
         })
         extra?.invoke(onDismiss)
-    }
-}
-
-private fun CoroutineScope.removeDownload(state: ShellState, item: MediaItem, queued: Boolean) {
-    if (queued) OfflineDownloads.cancel(state.downloads, item.fileId)
-    launch {
-        runCatching { Td.deleteFile(item.fileId) }
-        state.settings.forgetDownload(item.chatId, item.messageId)
     }
 }
 

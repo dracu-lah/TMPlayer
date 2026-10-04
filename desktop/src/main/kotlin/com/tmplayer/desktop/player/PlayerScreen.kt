@@ -460,6 +460,17 @@ fun PlayerScreen(
             }
         }
     }
+    fun openElsewhere() {
+        scope.launch {
+            val file = current.localFile()
+            if (file == null) {
+                showFlash(Flash.Kind.Text, "Only a video that is all here can open in another app")
+            } else {
+                com.tmplayer.desktop.os.OpenExternal.open(file)
+                showFlash(Flash.Kind.Text, "Opening in another app")
+            }
+        }
+    }
     val mac = remember { System.getProperty("os.name").orEmpty().startsWith("Mac") }
 
     // ---- layout ------------------------------------------------------------------------------
@@ -583,6 +594,7 @@ fun PlayerScreen(
                         }
                         MenuAction.CopyLink -> copyLink()
                         MenuAction.Download -> showFlash(Flash.Kind.Text, current.download())
+                        MenuAction.OpenElsewhere -> openElsewhere()
                         MenuAction.Details -> showDetails = true
                         MenuAction.Shortcuts -> showShortcuts = true
                     }

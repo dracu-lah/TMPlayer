@@ -136,6 +136,7 @@ dependencies {
     implementation(libs.dbus.java.transport.native.unixsocket)
     implementation(libs.jna)
     implementation(libs.jna.platform)
+    implementation(libs.filekit.dialogs.compose)
     runtimeOnly(libs.slf4j.nop)
 
     testImplementation(libs.junit)
