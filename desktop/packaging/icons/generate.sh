@@ -5,7 +5,7 @@
 #   desktop/packaging/icons/generate.sh
 #
 # Outputs, all committed:
-#   tmplayer.svg             the scalable icon (hicolor/scalable, Flatpak, AppImage)
+#   tmplayer.svg             the scalable icon (hicolor/scalable, AppImage)
 #   hicolor/<n>x<n>.png      the Linux icon theme sizes
 #   tmplayer.png             512 px, the Compose Linux iconFile and the AppImage icon
 #   tmplayer.ico             Windows, 16 to 256 px

@@ -9,7 +9,10 @@ release that is already out instead (`gh release view vX.Y.Z --json assets` carr
     scripts/write-latest-json.py --version 1.19.1 --from-release assets.json --out site/latest.json
 
 The schema is version 1 of the plan's C1. Clients ignore keys they do not know, so adding one is
-safe; renaming or removing one is not, because installed copies read this file for years.
+safe. Renaming a key is not, because installed copies read this file for years. A key may be left
+out when the release no longer carries that file: clients treat a missing key as "nothing to
+update from" and point at the release page. That is how the per-ABI APKs, the Windows portable
+zip, the deb, the rpm and the Flatpak left the feed after 1.21.0.
 """
 
 import argparse
@@ -23,16 +26,11 @@ import sys
 REPO = "dracu-lah/TMPlayer"
 
 # Feed key to the file name CI gives it: the same names release.yml checks before publishing.
+# Only what a release carries; a client finds nothing under any other key and says so.
 ASSETS = {
     "android-universal": "TMPlayer-{v}-universal.apk",
-    "android-arm64-v8a": "TMPlayer-{v}-arm64-v8a.apk",
-    "android-armeabi-v7a": "TMPlayer-{v}-armeabi-v7a.apk",
     "windows-x64-msi": "TMPlayer-{v}-windows-x64.msi",
-    "windows-x64-portable": "TMPlayer-{v}-windows-x64-portable.zip",
     "linux-x64-appimage": "TMPlayer-{v}-x86_64.AppImage",
-    "linux-x64-deb": "tmplayer_{v}_amd64.deb",
-    "linux-x64-rpm": "tmplayer-{v}.x86_64.rpm",
-    "linux-x64-flatpak": "TMPlayer-{v}.flatpak",
     "linux-x64-tarball": "TMPlayer-{v}-linux-x64.tar.gz",
 }
 

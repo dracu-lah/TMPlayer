@@ -7,10 +7,10 @@ import java.util.zip.ZipOutputStream
 // TMPlayer for Windows, Linux and macOS (Part B of the 2026-10-03 plan): a Compose Desktop front
 // end over :core, playing through libmpv (mediamp).
 //
-// Release packaging: the MSI comes straight from the Compose plugin (jpackage). The Linux packages
-// (deb, rpm, AppImage, Flatpak, tarball) are built by desktop/packaging/linux/package.sh over
-// createDistributable's app image, because jpackage's own .desktop file cannot carry
-// StartupWMClass or the full category list. The plugin's deb and rpm still work for local builds.
+// Release packaging: the MSI comes straight from the Compose plugin (jpackage). The Linux AppImage
+// and tarball are built by desktop/packaging/linux/package.sh over createDistributable's app
+// image, because jpackage's own .desktop file cannot carry StartupWMClass or the full category
+// list. The plugin's deb and rpm still work for local builds, but are not released.
 
 plugins {
     alias(libs.plugins.kotlin.jvm)

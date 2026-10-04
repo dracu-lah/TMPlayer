@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Prints the newest glibc and libstdc++ symbol versions any native in the app image needs,
 # including the ones packed inside jars (TDLib, libmpv and FFmpeg, skiko, JNA), and fails if
-# either is newer than the floor the packages promise (package.sh, nfpm.yaml, the release notes).
+# either is newer than the floor the downloads promise (package.sh, the PKGBUILD, the release notes).
 #
 #   desktop/packaging/linux/glibc-floor.sh desktop/build/compose/binaries/main/app/TMPlayer
 set -euo pipefail
@@ -37,7 +37,7 @@ echo "glibc $glibc (floor $max_glibc), libstdc++ GLIBCXX_$glibcxx (floor $max_gl
 
 above() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" != "$2" ]; }
 if above "$glibc" "$max_glibc" || above "$glibcxx" "$max_glibcxx"; then
-  echo "A native now needs a newer glibc or libstdc++ than the packages declare." >&2
-  echo "Raise the floor in nfpm.yaml, the PKGBUILD, package.sh and the release notes, or pin the dependency." >&2
+  echo "A native now needs a newer glibc or libstdc++ than the downloads promise." >&2
+  echo "Raise the floor in the PKGBUILD, package.sh and the release notes, or pin the dependency." >&2
   exit 1
 fi

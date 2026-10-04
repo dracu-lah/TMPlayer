@@ -1,7 +1,7 @@
 name: Desktop Windows packages
 description: >
-  Tests the desktop app, builds the MSI and the portable zip into dist/, and runs --self-test from
-  the unpacked zip and from the installed MSI. With upgrade-from, an older MSI is built and
+  Tests the desktop app, builds the MSI into dist/, and runs --self-test from the installed MSI.
+  With upgrade-from, an older MSI is built and
   installed first, and the new one must replace it rather than install beside it. Shared by ci.yml
   and release.yml; the caller checks out, sets up JDK 21 and Gradle, and writes local.properties
   if the build should carry credentials.
@@ -34,7 +34,7 @@ runs:
       shell: bash
       run: ./gradlew :desktop:packageMsi :desktop:createDistributable -PdesktopVersion=${{ inputs.version }}
 
-    - name: Name the MSI and zip the portable app
+    - name: Name the MSI
       shell: bash
       run: |
         V="${{ inputs.version }}"
@@ -42,10 +42,6 @@ runs:
         msis=(desktop/build/compose/binaries/main/msi/*.msi)
         [ ${#msis[@]} -eq 1 ] || { echo "::error::expected one MSI, found ${msis[*]}"; exit 1; }
         cp "${msis[0]}" "dist/TMPlayer-$V-windows-x64.msi"
-        # The zip holds one TMPlayer folder; TMPlayer.exe inside it runs from wherever it lands.
-        # portable.txt tells the in-app updater this copy is the zip, not the MSI.
-        echo "Unpacked from the portable zip. The in-app updater replaces this folder." > desktop/build/compose/binaries/main/app/TMPlayer/portable.txt
-        (cd desktop/build/compose/binaries/main/app && 7z a -tzip -mx=7 "$GITHUB_WORKSPACE/dist/TMPlayer-$V-windows-x64-portable.zip" TMPlayer > /dev/null)
         ls -la dist
 
     - name: Check the bundled C++ runtime
@@ -58,13 +54,6 @@ runs:
           if (-not (Test-Path (Join-Path $bin $dll))) { Write-Error "$dll is missing from $bin" }
         }
         Get-ChildItem $bin -Filter *.dll | Select-Object Name, Length | Format-Table -AutoSize
-
-    - name: Self-test the portable zip
-      shell: pwsh
-      run: |
-        $dest = Join-Path $env:RUNNER_TEMP "portable"
-        7z x "dist/TMPlayer-${{ inputs.version }}-windows-x64-portable.zip" "-o$dest" | Out-Null
-        & "$env:GITHUB_ACTION_PATH/selftest.ps1" -Exe (Join-Path $dest "TMPlayer/TMPlayer.exe")
 
     - name: Install the older MSI
       if: inputs.upgrade-from != ''

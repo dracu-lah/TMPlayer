@@ -2,29 +2,29 @@
 # Builds the Linux release packages from the app image that `:desktop:createDistributable` makes.
 #
 #   ./gradlew :desktop:createDistributable -PdesktopVersion=1.18.0
-#   desktop/packaging/linux/package.sh 1.18.0 [tar] [deb] [rpm] [appimage]
+#   desktop/packaging/linux/package.sh 1.18.0 [tar] [appimage]
 #
-# With no format named it builds all four into desktop/build/packages (OUT overrides):
+# With no format named it builds both into desktop/build/packages (OUT overrides):
 #
-#   TMPlayer-<v>-linux-x64.tar.gz   any distribution; also what the Flatpak and the AUR build from
-#   tmplayer_<v>_amd64.deb          Debian, Ubuntu, Mint, Pop!_OS
-#   tmplayer-<v>.x86_64.rpm         Fedora, openSUSE, RHEL
+#   TMPlayer-<v>-linux-x64.tar.gz   by hand on any distribution; what the AUR PKGBUILD builds from
 #   TMPlayer-<v>-x86_64.AppImage    any distribution, nothing installed
 #
-# The deb and rpm come from nfpm and the AppImage from appimagetool; set NFPM and APPIMAGETOOL to
-# their paths if they are not on PATH. Neither needs root, dpkg or rpmbuild. The Flatpak has its
-# own script next to its manifest (../flatpak/build.sh), since it needs flatpak-builder.
+# The AppImage comes from appimagetool; set APPIMAGETOOL to its path if it is not on PATH. The
+# deb, rpm and Flatpak that earlier releases carried are no longer built.
 #
 # Every native the app loads (TDLib inside the tdl-coroutines jar, libmpv and FFmpeg inside the
 # mediamp runtime jar) was linked against glibc 2.38 and GCC 13's libstdc++, which is the floor
-# for every format here except the Flatpak, whose runtime brings its own: Ubuntu 24.04, Debian 13,
-# Fedora 39, Mint 22, openSUSE Tumbleweed or Leap 16, RHEL 10, Arch, or newer.
+# for both: Ubuntu 24.04, Debian 13, Fedora 39, Mint 22, openSUSE Tumbleweed or Leap 16, RHEL 10,
+# Arch, or newer.
 set -euo pipefail
 
-version="${1:?usage: package.sh <version> [tar] [deb] [rpm] [appimage]}"
+version="${1:?usage: package.sh <version> [tar] [appimage]}"
 shift
 formats=("$@")
-[ ${#formats[@]} -eq 0 ] && formats=(tar deb rpm appimage)
+[ ${#formats[@]} -eq 0 ] && formats=(tar appimage)
+for f in "${formats[@]}"; do
+  case "$f" in tar|appimage) ;; *) echo "unknown format: $f (tar or appimage)" >&2; exit 1 ;; esac
+done
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../../.." && pwd)"
@@ -40,7 +40,7 @@ release_date="$(git -C "$root" log -1 --format=%cs 2>/dev/null || date -u +%F)"
 rm -rf "$work"
 mkdir -p "$work" "$out"
 
-# The freedesktop integration every format shares: launcher, icons, AppStream metadata, licence.
+# The freedesktop integration both formats share: launcher, icons, AppStream metadata, licence.
 share="$work/share"
 install -Dm644 "$here/$id.desktop" "$share/applications/$id.desktop"
 for png in "$icons"/hicolor/*.png; do
@@ -65,22 +65,6 @@ if has tar; then
   cp -a "$share" "$work/tar/$top/share"
   tar -C "$work/tar" --owner=0 --group=0 -czf "$out/TMPlayer-$version-linux-x64.tar.gz" "$top"
   echo "built $out/TMPlayer-$version-linux-x64.tar.gz"
-fi
-
-if has deb || has rpm; then
-  nfpm="${NFPM:-$(command -v nfpm || true)}"
-  [ -n "$nfpm" ] || { echo "nfpm not found; set NFPM" >&2; exit 1; }
-  stage="$work/stage"
-  mkdir -p "$stage/opt"
-  cp -a "$app" "$stage/opt/tmplayer"
-  cp -a "$share" "$stage/share"
-  export TM_VERSION="$version"
-  if has deb; then
-    (cd "$work" && "$nfpm" package --config "$here/nfpm.yaml" --packager deb --target "$out/tmplayer_${version}_amd64.deb")
-  fi
-  if has rpm; then
-    (cd "$work" && "$nfpm" package --config "$here/nfpm.yaml" --packager rpm --target "$out/tmplayer-$version.x86_64.rpm")
-  fi
 fi
 
 if has appimage; then
