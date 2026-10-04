@@ -9,7 +9,7 @@
 # from SHA256SUMS-<version>.txt) and regenerate .SRCINFO with `makepkg --printsrcinfo > .SRCINFO`.
 pkgname=tmplayer-bin
 _appid=io.github.dracu_lah.TMPlayer
-pkgver=1.18.0
+pkgver=1.20.0
 pkgrel=1
 pkgdesc="Watch the videos in your Telegram chats while they download (unofficial client)"
 arch=('x86_64')
@@ -24,7 +24,7 @@ depends=('glibc>=2.38' 'gcc-libs' 'openssl' 'zlib' 'alsa-lib' 'libpulse' 'libglv
 # Prebuilt and already stripped; stripping would also break libskiko's checksum.
 options=('!strip' '!debug')
 source=("https://github.com/dracu-lah/TMPlayer/releases/download/v${pkgver}/TMPlayer-${pkgver}-linux-x64.tar.gz")
-sha256sums=('abb4a334de14f3a8e2be20801c9dba939b1fdf7cd44938e15645166881bd13bb')
+sha256sums=('6fcefec640898dd8503a3d18acc400eb8be9a632cc44775914f54850e7c58e07')
 
 package() {
   cd "TMPlayer-${pkgver}"
