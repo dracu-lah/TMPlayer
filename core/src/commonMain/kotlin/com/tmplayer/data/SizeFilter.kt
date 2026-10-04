@@ -19,8 +19,16 @@ object SizeFilter {
     /** One D-pad press. 82 presses cross the whole range, which a held key covers quickly. */
     const val STEP = 100 * MB
 
-    const val DEFAULT_MIN = 400 * MB
-    const val DEFAULT_MAX = 2560 * MB
+    /**
+     * Low enough for a short or low bitrate episode, high enough to keep trailers and samples out.
+     *
+     * Was 400 MB with a 2.5 GB top until 1.21: viewers saw a series with episodes 9 and 30 missing,
+     * the ones encoded a little smaller or larger than the rest, and nothing said why.
+     */
+    const val DEFAULT_MIN = 50 * MB
+
+    /** No upper bound: the top of the slider, which [matches] reads as "anything". */
+    const val DEFAULT_MAX = CEILING
 
     /**
      * A file passes when it sits inside the bounds.
@@ -39,8 +47,9 @@ object SizeFilter {
     /**
      * Moves [value] one press in [direction], snapped onto the step grid first.
      *
-     * Snapping matters because the defaults do not sit on the grid: 2.5 GB is 2560 MB, and
-     * without this the slider would forever read 2660, 2760, 2860 once nudged.
+     * Snapping matters because a value can sit off the grid (the 50 MB default, or the 2560 MB an
+     * older build defaulted to), and without this the slider would forever read 150, 250, 350
+     * once nudged.
      */
     fun step(value: Long, direction: Int): Long {
         val moved = when {

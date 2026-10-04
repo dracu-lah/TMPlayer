@@ -12,14 +12,25 @@ import org.junit.Test
 
 class SizeFilterTest {
 
-    private val min = SizeFilter.DEFAULT_MIN
-    private val max = SizeFilter.DEFAULT_MAX
+    // Explicit bounds rather than the defaults, which now have no top for a remux to exceed.
+    private val min = 400 * MB
+    private val max = 2560 * MB
 
     @Test
-    fun `defaults are 400 MB and 2 and a half GB`() {
-        assertEquals(400 * MB, SizeFilter.DEFAULT_MIN)
-        assertEquals(2560 * MB, SizeFilter.DEFAULT_MAX)
+    fun `defaults are 50 MB and no upper bound`() {
+        assertEquals(50 * MB, SizeFilter.DEFAULT_MIN)
+        assertEquals(CEILING, SizeFilter.DEFAULT_MAX)
         assertEquals(8 * GB, CEILING)
+    }
+
+    @Test
+    fun `the defaults keep a trailer out and every episode size in`() {
+        val lo = SizeFilter.DEFAULT_MIN
+        val hi = SizeFilter.DEFAULT_MAX
+        assertFalse(SizeFilter.matches(30 * MB, lo, hi))
+        assertTrue(SizeFilter.matches(180 * MB, lo, hi))
+        assertTrue(SizeFilter.matches(6 * GB, lo, hi))
+        assertTrue(SizeFilter.matches(20 * GB, lo, hi))
     }
 
     @Test
