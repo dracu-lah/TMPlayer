@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -61,6 +62,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -90,6 +92,8 @@ import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.SponsoredItem
+import com.tmplayer.data.SponsoredReportOption
+import com.tmplayer.data.SponsoredReportOutcome
 import com.tmplayer.data.Td
 import com.tmplayer.data.valueOrNull
 import com.tmplayer.data.WatchPoint
@@ -522,6 +526,25 @@ private fun CoroutineScope.removeDownload(state: ShellState, item: MediaItem, qu
 @Composable
 private fun SponsoredCard(ad: SponsoredItem, model: MediaListViewModel) {
     val toast = rememberToast()
+    var reportOptions by remember(ad.messageId) { mutableStateOf<Pair<String, List<SponsoredReportOption>>?>(null) }
+
+    fun report(item: SponsoredItem, optionId: ByteArray) {
+        model.reportSponsored(
+            item = item,
+            optionId = optionId,
+            onResult = { outcome ->
+                when (outcome) {
+                    is SponsoredReportOutcome.Options -> reportOptions = outcome.title to outcome.options
+                    SponsoredReportOutcome.Reported -> toast("Sponsored message reported.")
+                    SponsoredReportOutcome.AdsHidden -> toast("Sponsored messages hidden by Telegram.")
+                    SponsoredReportOutcome.PremiumRequired -> toast("Telegram Premium is required to hide sponsored messages.")
+                    SponsoredReportOutcome.Unavailable -> toast("This sponsored message can no longer be reported.")
+                }
+            },
+            onFailure = toast,
+        )
+    }
+
     LaunchedEffect(ad.messageId) { model.markSponsoredViewed(ad.messageId) }
     Surface(shape = MaterialTheme.shapes.large, color = Tone.surface, modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -544,7 +567,34 @@ private fun SponsoredCard(ad: SponsoredItem, model: MediaListViewModel) {
                     }, onFailure = toast)
                 }) { Text(ad.buttonText.ifBlank { "Open" }) }
             }
+            if (ad.canBeReported) {
+                TextButton(onClick = { report(ad, byteArrayOf()) }) { Text("Report", color = Tone.muted) }
+            }
         }
+    }
+
+    // Telegram answers a first report with the reasons it accepts; the chosen one is sent back
+    // the same way, and may itself be answered with a narrower list.
+    reportOptions?.let { (title, options) ->
+        AlertDialog(
+            onDismissRequest = { reportOptions = null },
+            title = { Text(title.ifBlank { "Why are you reporting this?" }) },
+            text = {
+                Column {
+                    options.forEach { option ->
+                        TextButton(
+                            onClick = {
+                                reportOptions = null
+                                report(ad, option.id)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(option.text, modifier = Modifier.fillMaxWidth()) }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { reportOptions = null }) { Text("Cancel") } },
+        )
     }
 }
 

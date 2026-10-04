@@ -17,6 +17,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
@@ -146,5 +147,49 @@ class BrowseKeyboardTest {
         assertEquals(setOf(30L), starred)
         onNode(isFocused()).performKeyInput { pressKey(Key.Enter) }
         assertEquals(30L, opened?.id)
+    }
+
+    @Test
+    fun `p m a and r pin mute archive and mark read the focused chat, and shift F10 opens its menu`() = runComposeUiTest {
+        val chats = listOf(
+            ChatSummary(id = 1, title = "Quiet", miniThumbnail = null, photoFileId = 0, kind = ChatKind.Channel, unreadCount = 0),
+            ChatSummary(id = 2, title = "Busy", miniThumbnail = null, photoFileId = 0, kind = ChatKind.Channel, unreadCount = 4),
+        )
+        val done = mutableListOf<String>()
+        val actions = ChatRowActions(
+            onTogglePinned = { done += "pin ${it.id}" },
+            onToggleMuted = { done += "mute ${it.id}" },
+            onToggleArchived = { done += "archive ${it.id}" },
+            onMarkRead = { done += "read ${it.id}" },
+        )
+        setContent {
+            TmMaterialTheme(dark = true) {
+                Box(Modifier.size(900.dp, 500.dp)) {
+                    val list = remember { LazyListState() }
+                    val nav = rememberKeyboardNav(remember(list) { ListSurface(list) })
+                    ChatList(chats, emptySet(), list, nav, onOpen = {}, onStar = {}, actions = actions)
+                }
+            }
+        }
+        fun row(title: String) = hasText(title) and hasClickAction() and SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.Focused)
+        onNode(row("Busy")).requestFocus()
+        onNode(isFocused()).performKeyInput { pressKey(Key.P) }
+        onNode(isFocused()).performKeyInput { pressKey(Key.M) }
+        onNode(isFocused()).performKeyInput { pressKey(Key.A) }
+        onNode(isFocused()).performKeyInput { pressKey(Key.R) }
+        assertEquals(listOf("pin 2", "mute 2", "archive 2", "read 2"), done)
+
+        // Nothing unread: R has nothing to clear, and the menu does not offer it.
+        done.clear()
+        onNode(row("Quiet")).requestFocus()
+        onNode(isFocused()).performKeyInput { pressKey(Key.R) }
+        assertEquals(emptyList<String>(), done)
+        onNode(isFocused()).performKeyInput { withKeyDown(Key.ShiftLeft) { pressKey(Key.F10) } }
+        onNodeWithText("Pin to the top").assertExists()
+        onNodeWithText("Mute").assertExists()
+        onNodeWithText("Archive").assertExists()
+        onNodeWithText("Mark as read").assertDoesNotExist()
+        onNodeWithText("Pin to the top").performClick()
+        assertEquals(listOf("pin 1"), done)
     }
 }
