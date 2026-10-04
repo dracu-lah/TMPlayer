@@ -1,5 +1,7 @@
 package com.tmplayer.desktop
 
+import com.tmplayer.data.Release
+import com.tmplayer.data.UpdateWords
 import com.tmplayer.desktop.os.OsInfo
 import com.tmplayer.platform.Logger
 import kotlinx.coroutines.Dispatchers
@@ -8,10 +10,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URI
 import java.security.MessageDigest
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
@@ -31,7 +33,7 @@ enum class InstallKind(val canSelfUpdate: Boolean, val label: String) {
     Manual(false, "manual install"),
 }
 
-/** What the notice shows while an update is being fetched and put in place. */
+/** What the update popup shows while an update is being fetched and put in place. */
 sealed interface UpdateProgress {
     data object Idle : UpdateProgress
     data class Downloading(val fraction: Float?) : UpdateProgress
@@ -58,8 +60,9 @@ sealed interface UpdateProgress {
  *   mount), and a restart runs it.
  * - **deb, rpm**: installed with `pkexec`, so the system asks for the password, then a restart.
  *
- * Every download is checked against the release's `SHA256SUMS` before anything is installed: the
- * packages are not code signed, so the checksum is what says the file is the one CI built.
+ * Every download is checked against its SHA-256 before anything is installed, from the update feed
+ * or, failing that, the release's `SHA256SUMS`: the packages are not code signed, so the checksum
+ * is what says the file is the one CI built.
  */
 class SelfUpdate(
     val kind: InstallKind = detect(),
@@ -75,19 +78,25 @@ class SelfUpdate(
     /** Runs after the app has gone, on Windows: the install itself. */
     private var pendingHelper: List<String>? = null
 
-    /** Whether [release] has a package this install can update itself from. */
-    fun canUpdateTo(release: LatestRelease): Boolean =
-        kind.canSelfUpdate && assetFor(kind, release.assetNames) != null && checksumsName(release.assetNames) != null
+    /** Whether [release] has a package this install can update itself from, and a hash to check it by. */
+    fun canUpdateTo(release: Release): Boolean {
+        if (!kind.canSelfUpdate) return false
+        val asset = assetFor(kind)?.let(release.assets::get) ?: return false
+        return asset.sha256 != null || release.checksumsUrl != null
+    }
 
     /** Downloads, verifies and installs (or stages) [release]. Progress lands in [progress]. */
-    suspend fun update(release: LatestRelease) = withContext(Dispatchers.IO) {
+    suspend fun update(release: Release) = withContext(Dispatchers.IO) {
         if (_progress.value.let { it is UpdateProgress.Downloading || it is UpdateProgress.Verifying || it is UpdateProgress.Installing }) {
             return@withContext
         }
         val result = runCatching { run(release) }
         result.onFailure {
             Logger.w(TAG, "update failed: ${it.message}")
-            _progress.value = UpdateProgress.Failed(it.message ?: "The update did not finish")
+            // A dropped connection reads the same whichever request it was; the rest are this
+            // class's own sentences.
+            val message = if (it is IOException) UNREACHABLE else it.message ?: "The update did not finish."
+            _progress.value = UpdateProgress.Failed(message)
         }
     }
 
@@ -104,25 +113,24 @@ class SelfUpdate(
         if (_progress.value is UpdateProgress.Failed) _progress.value = UpdateProgress.Idle
     }
 
-    private fun run(release: LatestRelease) {
-        val assetName = assetFor(kind, release.assetNames) ?: error("This release has no ${kind.label}")
-        val sumsName = checksumsName(release.assetNames) ?: error("This release has no checksum list")
-        val assetUrl = release.assetUrls[assetName] ?: error("No download link for $assetName")
-        val sumsUrl = release.assetUrls[sumsName] ?: error("No download link for $sumsName")
+    private fun run(release: Release) {
+        val asset = assetFor(kind)?.let(release.assets::get) ?: error("This release has no ${kind.label}.")
+        val assetName = asset.name
 
         workDir.mkdirs()
         workDir.listFiles()?.forEach { if (it.name != assetName) it.deleteRecursively() }
         _progress.value = UpdateProgress.Downloading(null)
-        val sums = String(httpGet(sumsUrl).readBytes())
-        val expected = expectedSha256(sums, assetName) ?: error("$assetName is not in the checksum list")
+        val expected = asset.sha256
+            ?: release.checksumsUrl?.let { expectedSha256(String(httpGet(it).readBytes()), assetName) }
+            ?: error("This release has no checksum for $assetName.")
         val file = File(workDir, assetName)
-        download(assetUrl, file)
+        download(asset.url, file)
 
         _progress.value = UpdateProgress.Verifying
         val actual = sha256(file)
         if (!actual.equals(expected, ignoreCase = true)) {
             file.delete()
-            error("The download did not match its checksum. Nothing was installed")
+            error(DAMAGED)
         }
 
         when (kind) {
@@ -270,12 +278,15 @@ class SelfUpdate(
         connection.readTimeout = 30_000
         connection.instanceFollowRedirects = true
         connection.setRequestProperty("User-Agent", "TMPlayer-desktop/${BuildInfo.VERSION}")
-        if (connection.responseCode !in 200..299) error("GitHub answered ${connection.responseCode}")
+        if (connection.responseCode !in 200..299) throw IOException("GitHub answered ${connection.responseCode}")
         return connection
     }
 
     companion object {
         private const val TAG = "SelfUpdate"
+
+        const val UNREACHABLE = UpdateWords.UNREACHABLE
+        const val DAMAGED = UpdateWords.DAMAGED
 
         /** Dropped into the portable zip's folder by CI, so the app knows it is not the MSI. */
         const val PORTABLE_MARKER = "portable.txt"
@@ -328,21 +339,15 @@ class SelfUpdate(
             p.waitFor(5, TimeUnit.SECONDS) && p.exitValue() == 0
         }.getOrDefault(false)
 
-        /** The release asset [kind] installs from, by the names CI gives them. */
-        fun assetFor(kind: InstallKind, names: List<String>): String? {
-            val suffix = when (kind) {
-                InstallKind.WindowsMsi -> "-windows-x64.msi"
-                InstallKind.WindowsPortable -> "-windows-x64-portable.zip"
-                InstallKind.AppImage -> "-x86_64.appimage"
-                InstallKind.Deb -> "_amd64.deb"
-                InstallKind.Rpm -> ".x86_64.rpm"
-                else -> return null
-            }
-            return names.firstOrNull { it.lowercase(Locale.ROOT).endsWith(suffix) }
+        /** The update feed's key for the package [kind] installs from (see `site/latest.json`). */
+        fun assetFor(kind: InstallKind): String? = when (kind) {
+            InstallKind.WindowsMsi -> "windows-x64-msi"
+            InstallKind.WindowsPortable -> "windows-x64-portable"
+            InstallKind.AppImage -> "linux-x64-appimage"
+            InstallKind.Deb -> "linux-x64-deb"
+            InstallKind.Rpm -> "linux-x64-rpm"
+            else -> null
         }
-
-        fun checksumsName(names: List<String>): String? =
-            names.firstOrNull { it.startsWith("SHA256SUMS") && it.endsWith(".txt") }
 
         /** The hash `sha256sum` wrote for [name] ("<hash>  <name>", or "<hash> *<name>" in binary mode). */
         fun expectedSha256(sums: String, name: String): String? = sums.lineSequence()

@@ -21,7 +21,7 @@ class DesktopPrefsTest {
     @Test
     fun survivesARestart() {
         DesktopPrefs(file).update {
-            it.copy(volume = 35, muted = true, downmix = true, wheelSeeks = true, softwareDecoding = false, lastUpdateCheck = 42L, dismissedRelease = "2.0.1")
+            it.copy(volume = 35, muted = true, downmix = true, wheelSeeks = true, softwareDecoding = false)
         }
         val again = DesktopPrefs(file).now
         assertEquals(35, again.volume)
@@ -29,8 +29,18 @@ class DesktopPrefsTest {
         assertTrue(again.downmix)
         assertTrue(again.wheelSeeks)
         assertFalse(again.softwareDecoding)
-        assertEquals(42L, again.lastUpdateCheck)
-        assertEquals("2.0.1", again.dismissedRelease)
+    }
+
+    @Test
+    fun updateSettingsMoveOutOnce() = kotlinx.coroutines.runBlocking {
+        file.writeText("volume=40\ncheck_for_updates=false\nlast_update_check=42\ndismissed_release=2.0.1\n")
+        val prefs = DesktopPrefs(file)
+        val moved = mutableListOf<LegacyUpdatePrefs>()
+        prefs.migrateUpdatePrefs { moved += it }
+        prefs.migrateUpdatePrefs { moved += it }
+        assertEquals(listOf(LegacyUpdatePrefs(notify = false, lastCheck = 42L, dismissed = "2.0.1")), moved)
+        assertFalse(file.readText().contains("last_update_check"))
+        assertEquals(40, DesktopPrefs(file).now.volume)
     }
 
     @Test

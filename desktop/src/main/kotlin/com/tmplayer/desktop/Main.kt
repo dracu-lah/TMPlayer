@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -57,6 +58,9 @@ fun main(args: Array<String>) {
         Td.awaitAuthorizedSession()
         OfflineDownloads.restore(settings)
     }
+    DesktopUpdates.configure()
+    // Before anything can rewrite desktop.properties, which would drop the old update keys.
+    Background.scope.launch { runCatching { DesktopUpdates.migrate(DesktopServices.prefs, settings) } }
     // Compose would end the process itself once the last window closes, with System.exit, which on
     // Linux can hang for good (see AppExit). It returns here instead, and AppExit ends it.
     application(exitProcessOnExit = false) {
@@ -84,6 +88,12 @@ fun main(args: Array<String>) {
         ) {
             window.minimumSize = java.awt.Dimension(960, 600)
             DesktopServices.selfUpdate.quit = quit
+            // The update check, on every launch and before sign in too: the first one ten seconds
+            // after the first frame, then every six hours while the window is open.
+            LaunchedEffect(Unit) {
+                withFrameNanos { }
+                DesktopServices.updates.run()
+            }
             // Fullscreen is the shell's to ask for and the window's to do. The window system is
             // asked directly where it can be (see NativeFullscreen); elsewhere Compose's placement
             // does it, and leaving goes back to whatever the window was before.

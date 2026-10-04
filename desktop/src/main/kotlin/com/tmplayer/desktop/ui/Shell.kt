@@ -17,13 +17,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -46,12 +51,7 @@ import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.AuthState
 import com.tmplayer.desktop.BuildInfo
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
-import com.tmplayer.desktop.InstallKind
-import com.tmplayer.desktop.UpdateProgress
 import com.tmplayer.ui.components.UiState
-import com.tmplayer.desktop.os.OpenExternal
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapNotNull
@@ -127,12 +127,13 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     }
 
     // Housekeeping once signed in: the strays streaming left behind, after the first screen has
-    // settled, and the once a day look for a newer version.
+    // settled. The update check is not here: it runs from Main.kt, sign in or not.
     LaunchedEffect(Unit) {
         delay(HOUSEKEEPING_DELAY_MS)
         runCatching { state.extras.watchCache?.sweep() }
     }
-    LaunchedEffect(Unit) { runCatching { state.extras.updates?.checkIfDue() } }
+    val update = rememberNavUpdate(state)
+    UpdatePopupTrigger(state, update)
 
     BackHandler(enabled = state.openChat != null) { state.closeChat() }
     BackHandler(enabled = state.openChat == null && state.destination != Destination.Chats) {
@@ -143,7 +144,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val wide = maxWidth >= SIDEBAR_FROM
             Row(Modifier.fillMaxSize()) {
-                if (wide) Sidebar(state) else Rail(state)
+                if (wide) Sidebar(state, update) else Rail(state, update)
                 VerticalDivider(color = Tone.outline)
                 Box(Modifier.weight(1f).fillMaxHeight()) {
                     val open = state.openChat
@@ -161,30 +162,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
             }
         }
 
-        val updates = state.extras.updates
-        val release = updates?.available?.collectAsState()?.value
-        if (release != null && state.nowPlaying == null) {
-            val selfUpdate = state.extras.selfUpdate
-            val progress = selfUpdate?.progress?.collectAsState()?.value ?: UpdateProgress.Idle
-            val scope = rememberCoroutineScope()
-            UpdateNotice(
-                release = release,
-                canUpdate = selfUpdate?.canUpdateTo(release) == true,
-                kind = selfUpdate?.kind ?: InstallKind.Manual,
-                progress = progress,
-                onUpdate = { scope.launch { selfUpdate?.update(release) } },
-                onRestart = { selfUpdate?.restart() },
-                onDownload = {
-                    OpenExternal.browse(release.pageUrl)
-                    updates.dismiss()
-                },
-                onDismiss = {
-                    selfUpdate?.reset()
-                    updates.dismiss()
-                },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
-            )
-        }
+        UpdatePopupHost(state)
 
         // Over the page rather than instead of it, so the page keeps its scroll position and its
         // search, and closing the player is simply taking this away.
@@ -210,7 +188,7 @@ private fun Destination.icon(): ImageVector = when (this) {
 }
 
 @Composable
-internal fun Sidebar(state: ShellState) {
+internal fun Sidebar(state: ShellState, update: NavUpdate? = null) {
     Column(
         Modifier.width(240.dp).fillMaxHeight().padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -232,11 +210,26 @@ internal fun Sidebar(state: ShellState) {
                 onClick = { state.go(destination) },
             )
         }
+        // After the destinations rather than one of them: it opens the popup, not a page.
+        if (update != null) {
+            NavigationDrawerItem(
+                label = { Text(update.label) },
+                icon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
+                badge = { Text(update.version) },
+                selected = false,
+                onClick = { state.updatePopup = true },
+                colors = NavigationDrawerItemDefaults.colors(
+                    unselectedIconColor = Tone.caution,
+                    unselectedTextColor = Tone.caution,
+                    unselectedBadgeColor = Tone.caution,
+                ),
+            )
+        }
     }
 }
 
 @Composable
-private fun Rail(state: ShellState) {
+private fun Rail(state: ShellState, update: NavUpdate?) {
     NavigationRail(containerColor = Tone.background) {
         Image(
             AppLogo.Mark,
@@ -249,6 +242,27 @@ private fun Rail(state: ShellState) {
                 onClick = { state.go(destination) },
                 icon = { Icon(destination.icon(), contentDescription = destination.label) },
                 label = { Text(destination.label.substringBefore(' ')) },
+            )
+        }
+        // The rail cuts labels at the first space, so the version rides in a badge on the icon.
+        if (update != null) {
+            NavigationRailItem(
+                selected = false,
+                onClick = { state.updatePopup = true },
+                icon = {
+                    BadgedBox(badge = {
+                        Badge(containerColor = Tone.caution, contentColor = Tone.readableOn(Tone.caution)) {
+                            Text(update.version)
+                        }
+                    }) {
+                        Icon(Icons.Filled.Refresh, contentDescription = "${update.label} ${update.version}")
+                    }
+                },
+                label = { Text(update.label.substringBefore(' ')) },
+                colors = NavigationRailItemDefaults.colors(
+                    unselectedIconColor = Tone.caution,
+                    unselectedTextColor = Tone.caution,
+                ),
             )
         }
     }
