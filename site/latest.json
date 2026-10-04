@@ -1,60 +1,60 @@
 {
   "schema": 1,
-  "version": "1.19.1",
-  "versionCode": 11901,
-  "published": "2026-10-04T07:49:30Z",
-  "releaseUrl": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.19.1",
-  "notes": "The desktop app now fills its window and goes properly fullscreen on sway, and closing it ends the process.",
+  "version": "1.20.0",
+  "versionCode": 12000,
+  "published": "2026-10-04T11:29:05Z",
+  "releaseUrl": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.20.0",
+  "notes": "Fixes and improvements. The release page lists everything that changed.",
   "assets": {
     "android-universal": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.19.1/TMPlayer-1.19.1-universal.apk",
-      "sha256": "19fe92c150b4ee01120f6e1e4ce96eb12e78420aa339739fc71880942bacc8e2",
-      "size": 52401237
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.20.0/TMPlayer-1.20.0-universal.apk",
+      "sha256": "02211089da9f479a98d84fe03bd969b47e131ee0c3ff9c650d4c468d9947bcfe",
+      "size": 52434185
     },
     "android-arm64-v8a": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.19.1/TMPlayer-1.19.1-arm64-v8a.apk",
-      "sha256": "1d2fb27e17e48441a7b15f0b88af9f210808a1d00ba3d847919b310cb9080680",
-      "size": 31856182
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.20.0/TMPlayer-1.20.0-arm64-v8a.apk",
+      "sha256": "0234a2c9d5ff0b0d472cc27a3eb26829d110eaf0b8bcb6dd11ec922438bf474a",
+      "size": 31889130
     },
     "android-armeabi-v7a": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.19.1/TMPlayer-1.19.1-armeabi-v7a.apk",
-      "sha256": "9216649bba0a8cd817efc28faa8560147aae3e3b23acfd26a981676914f7c1f3",
-      "size": 24809958
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.20.0/TMPlayer-1.20.0-armeabi-v7a.apk",
+      "sha256": "4f6105ee0ac7e6b50cf234c13206278069d70b6994d1cebd465bf89cdcdf6002",
+      "size": 24842906
     },
     "windows-x64-msi": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.19.1/TMPlayer-1.19.1-windows-x64.msi",
-      "sha256": "3394f15445f28b0b1c8e470bdb684505c5542723a6cce6edd1aa61c2a899c7d7",
-      "size": 155363294
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.20.0/TMPlayer-1.20.0-windows-x64.msi",
+      "sha256": "39c634a8511d810117542277bb170387211e43a4e6bcbbabf4411120b9f726a2",
+      "size": 156449496
     },
     "windows-x64-portable": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.19.1/TMPlayer-1.19.1-windows-x64-portable.zip",
-      "sha256": "82533365d178082fa45075f4f6d5dc0cdd55ec31b1c091d3f0869459aa7eea39",
-      "size": 152512649
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.20.0/TMPlayer-1.20.0-windows-x64-portable.zip",
+      "sha256": "5acf818bdd89bcbf9195e23f621fae6be5efa9b707bf973a8c9db11d4fd3972c",
+      "size": 153599324
     },
     "linux-x64-appimage": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.19.1/TMPlayer-1.19.1-x86_64.AppImage",
-      "sha256": "1e9ec41b02beb2495fd38718dc0b8bd41560dd4cd9675c0a1731e84974070764",
-      "size": 172423672
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.20.0/TMPlayer-1.20.0-x86_64.AppImage",
+      "sha256": "05bcbaf647799a329344bf51009582ddeeca6046a17b678ad45edee0170bdd13",
+      "size": 173505016
     },
     "linux-x64-deb": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.19.1/tmplayer_1.19.1_amd64.deb",
-      "sha256": "3fccffe1df1b330989dd59c03c7ff6f4e385919da55d0fb0f5c3dbb786fe85c9",
-      "size": 153431362
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.20.0/tmplayer_1.20.0_amd64.deb",
+      "sha256": "586f560ee508c7c6de96a27e7a0353a73dcd6026980344e0a1c8c138984bf6d8",
+      "size": 154512930
     },
     "linux-x64-rpm": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.19.1/tmplayer-1.19.1.x86_64.rpm",
-      "sha256": "28a72052bf1b76afa1bc24930d7ba284d314621ee69720ba8a60a05cf1fdb4d9",
-      "size": 161768468
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.20.0/tmplayer-1.20.0.x86_64.rpm",
+      "sha256": "728dac28940df67fa72f55b7714b348fdf3dc716daa88a7bc63ecb36f1f2c466",
+      "size": 162443541
     },
     "linux-x64-flatpak": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.19.1/TMPlayer-1.19.1.flatpak",
-      "sha256": "1ce640f5b6a62c0e176b95302073846abfcd5610bb1246158ffc816154615d75",
-      "size": 143581712
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.20.0/TMPlayer-1.20.0.flatpak",
+      "sha256": "1096467d4d739a915b9a98bb6d6178add05bd324bdf5081460ef8010cc32a21a",
+      "size": 144666376
     },
     "linux-x64-tarball": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.19.1/TMPlayer-1.19.1-linux-x64.tar.gz",
-      "sha256": "28238fd81810b09aeff2d0f7a2565cec8c901489d7b74b13fa91d7f2d2881c40",
-      "size": 175685565
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.20.0/TMPlayer-1.20.0-linux-x64.tar.gz",
+      "sha256": "6fcefec640898dd8503a3d18acc400eb8be9a632cc44775914f54850e7c58e07",
+      "size": 176777015
     }
   }
 }
