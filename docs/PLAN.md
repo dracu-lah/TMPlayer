@@ -94,7 +94,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [ ] U23 Amazon Appstore listing submission (after CP30)
 
 **Phase F. The "Online" release**
-- [ ] U24 Rotate the OpenSubtitles key (it was pasted in chat)
+- [x] U24 Rotate the OpenSubtitles key (2026-10-06: new key in the `OPENSUBTITLES_API_KEY` repo secret and local.properties; TMDB_API_KEY was already a repo secret since 2026-08-07)
 - [ ] CP31 P12 OpenSubtitles
 - [ ] CP32 P13 TMDB, TVmaze, AniList, then release "Online" on request
 - [ ] U25 MSone reply (issue #5). If yes, add CP33 for an MSone provider
