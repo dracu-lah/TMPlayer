@@ -39,7 +39,9 @@ import com.tmplayer.data.MediaItem
  * next), and an elapsed and total line over the bar. With the transport moved there, the bottom row
  * keeps five buttons, which fit a phone held upright without scrolling; lock and picture in
  * picture join them when the row is wide enough. A television shows none of the phone pieces and
- * keeps the one row it has always had, focus chain and all.
+ * keeps one row, but without the transport: the remote already plays, pauses and jumps, and the
+ * episode steps are its media keys and lines in More. What a television keeps of the centre is
+ * the play disc as a cue rather than a button, drawn only while the video is paused.
  *
  * The activity stays the owner of every action. This class decides nothing about playback; it
  * raises, lowers and repaints the furniture, and forwards each press to the lambda wired for it.
@@ -239,11 +241,33 @@ class PlayerControls(
     }
 
     /**
-     * The television's additions to its one row: More at the end of it, picture in picture where
-     * the device has it, and the time readout made something OK can land on and press, which flips
-     * the total to the time left the way a tap on the phone's total does.
+     * The television's row: no transport, since the remote's own keys play, pause and jump and a
+     * button for each was a second way to do what a thumb never needed. More goes at the end,
+     * picture in picture where the device has it, and the time readout becomes something OK can
+     * land on and press, which flips the total to the time left the way a tap on the phone's
+     * total does.
+     *
+     * The centre disc stays, stripped to the glyph: not focusable, not pressable, shown only while
+     * paused. With no play button on the row it is the one thing on screen that says paused.
      */
     private fun setUpTv(root: View) {
+        listOf(
+            playPause,
+            root.findViewById<View>(R.id.control_rewind),
+            root.findViewById<View>(R.id.control_forward),
+            previous,
+            next,
+            centerPrevious,
+            root.findViewById<View>(R.id.center_rewind),
+            root.findViewById<View>(R.id.center_forward),
+            centerNext,
+        ).forEach { it.visibility = View.GONE }
+        centerPlay.isFocusable = false
+        centerPlay.isClickable = false
+        centerPlay.contentDescription = "Paused"
+        // Down from the bar lands on the first button the row still has; the layout's own pointer
+        // names the play button, which a television no longer shows.
+        timeBar.nextFocusDownId = R.id.control_subtitles
         val more = root.findViewById<View>(R.id.control_tv_more)
         more.visibility = View.VISIBLE
         wire(more) { onMore(more) }
@@ -365,6 +389,10 @@ class PlayerControls(
             nextEpisode?.let(onPlayEpisode)
         }
         if (isTv) {
+            // The remote's media keys and the More menu carry the steps; the row has no seat for
+            // them.
+            previous.visibility = View.GONE
+            next.visibility = View.GONE
             return
         }
         // The phone's transport lives in the centre; the row's two copies stay hidden. Invisible
@@ -418,12 +446,12 @@ class PlayerControls(
     /**
      * Puts the D-pad back on the buttons, for when a picker above the row closes and focus falls
      * wherever the system drops it: left alone it lands on the scrub bar, and the next press
-     * seeks instead of walking the row. Play or pause is the deliberate choice here, not the
+     * seeks instead of walking the row. The first button is the deliberate choice here, not the
      * bar: someone leaving a picker was working the buttons, and is put back among them.
      */
     fun focusRow() {
         if (!isTv || !visible) return
-        playPause.requestFocus()
+        container.findViewById<View>(R.id.control_subtitles).requestFocus()
         poke()
     }
 
@@ -474,11 +502,52 @@ class PlayerControls(
         val playing = exo?.isPlaying == true || (exo?.playWhenReady == true && buffering)
         playPause.setImageResource(if (playing) R.drawable.ic_player_pause else R.drawable.ic_player_play)
         describe(playPause, if (playing) "Pause" else "Play")
-        if (!isTv) {
-            centerIcon.setShowsPlay(!playing, animate = animate && centerDrawn && visible)
-            centerDrawn = true
-            describe(centerPlay, if (playing) "Pause" else "Play")
+        if (isTv) {
+            renderPausedCue(paused = exo != null && !exo.playWhenReady, animate = animate)
+            return
         }
+        centerIcon.setShowsPlay(!playing, animate = animate && centerDrawn && visible)
+        centerDrawn = true
+        describe(centerPlay, if (playing) "Pause" else "Play")
+    }
+
+    /** True while the television's disc is folding back into play on its way out. */
+    private var cueLeaving = false
+
+    /**
+     * The television's centre disc, which shows state where the phone's shows the action: the
+     * pause bars while paused. Read from the player's intent, so a stall mid-play is not a pause.
+     * Pausing folds the triangle into the bars, resuming folds them back and fades the disc, so
+     * the change itself is the feedback; a row raised over a video already paused just shows the
+     * bars.
+     */
+    private fun renderPausedCue(paused: Boolean, animate: Boolean) {
+        val morph = animate && visible
+        if (paused) {
+            if (center.visibility != View.VISIBLE || cueLeaving) {
+                center.animate().cancel()
+                cueLeaving = false
+                center.alpha = 1f
+                if (center.visibility != View.VISIBLE) centerIcon.setShowsPlay(true, animate = false)
+                center.visibility = View.VISIBLE
+            }
+            centerIcon.setShowsPlay(false, animate = morph)
+            return
+        }
+        if (center.visibility != View.VISIBLE || cueLeaving) return
+        if (!morph) {
+            center.visibility = View.GONE
+            return
+        }
+        cueLeaving = true
+        centerIcon.setShowsPlay(true, animate = true)
+        center.animate().alpha(0f).setStartDelay(CUE_HOLD_MS).setDuration(FADE_MS)
+            .withEndAction {
+                cueLeaving = false
+                center.visibility = View.GONE
+                center.alpha = 1f
+            }
+            .start()
     }
 
     private fun renderProgress() {
@@ -536,6 +605,9 @@ class PlayerControls(
 
         /** A row at least this wide (a phone held sideways) also seats lock and PiP. */
         const val WIDE_ROW_DP = 560
+
+        /** How long the television's disc holds the play triangle before it fades on a resume. */
+        const val CUE_HOLD_MS = 500L
 
         /** Twice a second: faster than the eye needs on a scrub bar this size. */
         const val TICK_MS = 500L

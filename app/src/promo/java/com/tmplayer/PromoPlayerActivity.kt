@@ -2,9 +2,11 @@ package com.tmplayer
 
 import android.os.Bundle
 import android.os.Looper
+import android.view.KeyEvent
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.TextView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -28,15 +30,20 @@ import com.tmplayer.player.TapZone
  * so the transport can be captured and checked without a Telegram account or a video file.
  *
  *     adb shell am start -n com.tmplayer.promo/com.tmplayer.PromoPlayerActivity \
- *         [--ez tv true] [--ez playing true] [--es feedback ripple|level|scrub|hold|flash]
+ *         [--ez tv true] [--ez playing true] [--es feedback ripple|level|scrub|hold|flash|jump]
  *         [--ez nextup true] [--ez menu true]
  *
- * `nextup` raises the next-up card over the bare picture, `menu` the television's More menu.
+ * `nextup` raises the next-up card over the bare picture, `menu` the television's More menu,
+ * `jump` the remote's side figure for a ten second jump. The stand-in player really plays and
+ * pauses, so on a television OK on the focused bar and the play key show the paused cue.
  *
  * Nothing here exists in a release build.
  */
 @UnstableApi
 class PromoPlayerActivity : FragmentActivity() {
+
+    private var controls: PlayerControls? = null
+    private var standIn: StandInPlayer? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,7 +67,7 @@ class PromoPlayerActivity : FragmentActivity() {
             isTv = tv,
             player = { player },
             onVisibility = {},
-            onTogglePlay = {},
+            onTogglePlay = { player.playWhenReady = !player.playWhenReady },
             onSkip = {},
             onPickSubtitles = {},
             onPickAudio = {},
@@ -74,6 +81,11 @@ class PromoPlayerActivity : FragmentActivity() {
         controls.setEpisodes(demoEpisode(3), demoEpisode(5), "Previous S01E03", "Next S01E05")
         controls.timeoutMs = 0
         controls.show()
+        this.controls = controls
+        standIn = player
+        player.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) = controls.onPlayingChanged()
+        })
 
         val feedback = if (tv) null else PlayerFeedback(findViewById(R.id.player_root), findViewById(R.id.overlay_container))
         val root = findViewById<View>(R.id.player_root)
@@ -99,6 +111,15 @@ class PromoPlayerActivity : FragmentActivity() {
                     controls.hideNow()
                     feedback?.flashPlayPause(false)
                 }
+                "jump" -> {
+                    controls.hideNow()
+                    findViewById<TextView>(R.id.gesture_hud).apply {
+                        text = "10 s   ▶▶"
+                        (layoutParams as FrameLayout.LayoutParams).gravity =
+                            android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.END
+                        visibility = View.VISIBLE
+                    }
+                }
             }
             if (intent.getBooleanExtra("nextup", false)) {
                 controls.hideNow()
@@ -119,12 +140,29 @@ class PromoPlayerActivity : FragmentActivity() {
                     title = { "The Coast S01E04" },
                     pictureInPicture = { true },
                     speed = { 1f },
+                    nextEpisode = { "Next S01E05" },
+                    previousEpisode = { "Previous S01E03" },
                     onEntry = {},
                     onSpeed = {},
                     onClosed = {},
                 ).open()
             }
         }, 600)
+    }
+
+    /** The two remote keys the paused cue answers: OK on the focused bar, and play or pause. */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER ->
+                    if (controls?.okOnTimeBar() == true) return true
+                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                    standIn?.let { it.playWhenReady = !it.playWhenReady }
+                    return true
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     private fun demoEpisode(number: Int) = MediaItem(

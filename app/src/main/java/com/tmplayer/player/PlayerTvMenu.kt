@@ -86,6 +86,9 @@ class PlayerTvMenu(
     private val sleepTimer: () -> String? = { null },
     /** A sleep timer chosen from its page: minutes, [SleepTimer.END_OF_VIDEO], or null for off. */
     private val onSleepTimer: (Int?) -> Unit = {},
+    /** The episode steps' labels ("Next S01E03"), or null where the chat has no such episode. */
+    private val nextEpisode: () -> String? = { null },
+    private val previousEpisode: () -> String? = { null },
     private val onEntry: (PlayerMenuEntry) -> Unit,
     private val onSpeed: (Float) -> Unit,
     private val onClosed: () -> Unit,
@@ -128,6 +131,8 @@ class PlayerTvMenu(
                     saveToDownloads(),
                     markWatched(),
                     openInAnotherApp(),
+                    nextEpisode = nextEpisode() != null,
+                    previousEpisode = previousEpisode() != null,
                 ).map { action(it) },
                 onDismiss = ::close,
             )
@@ -173,6 +178,14 @@ class PlayerTvMenu(
 
     @Composable
     private fun action(entry: PlayerMenuEntry): MenuAction = when (entry) {
+        PlayerMenuEntry.NextEpisode -> MenuAction(
+            label = nextEpisode() ?: "Next episode",
+            icon = ImageVector.vectorResource(R.drawable.ic_player_next),
+        ) { choose(entry) }
+        PlayerMenuEntry.PreviousEpisode -> MenuAction(
+            label = previousEpisode() ?: "Previous episode",
+            icon = ImageVector.vectorResource(R.drawable.ic_player_previous),
+        ) { choose(entry) }
         PlayerMenuEntry.PlaybackDetails -> MenuAction("Playback details", Icons.Filled.Info) { choose(entry) }
         PlayerMenuEntry.StartOver -> MenuAction("Start over", Icons.Filled.Refresh) { choose(entry) }
         PlayerMenuEntry.Speed -> MenuAction(

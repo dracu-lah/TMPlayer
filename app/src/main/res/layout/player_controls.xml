@@ -27,7 +27,10 @@
   overflow menu), a centre cluster (previous, back, play or pause, forward, next) of the kind every
   phone player draws, and an elapsed and total line over the bar. Those take the transport buttons
   and the time text out of the bottom row, which is what lets the row fit a phone held upright
-  without scrolling. PlayerControls.kt decides which pieces a device shows.
+  without scrolling. A television drops the transport buttons altogether, because the remote's own
+  keys already play, pause, jump and change episode, and keeps only the play disc from the centre
+  cluster, as a cue shown while paused rather than a button. PlayerControls.kt decides which pieces
+  a device shows.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -137,9 +140,10 @@
     </LinearLayout>
 
     <!--
-      Phone only: the big transport in the middle of the picture, where a thumb expects it. The
-      spinner sits inside the play disc and takes its place while the video is buffering, so the
-      middle of the screen always says what the video is doing.
+      The phone's big transport in the middle of the picture, where a thumb expects it; a
+      television shows only the disc, as its paused cue. On a phone the spinner sits inside the
+      play disc and takes its place while the video is buffering, so the middle of the screen
+      always says what the video is doing.
     -->
     <LinearLayout
         android:id="@+id/controls_center"

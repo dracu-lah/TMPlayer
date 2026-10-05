@@ -12,6 +12,8 @@ class PlayerMenuTest {
     fun `the menu carries the phone overflow's actions and the remote keys, in a fixed order`() {
         assertEquals(
             listOf(
+                PlayerMenuEntry.NextEpisode,
+                PlayerMenuEntry.PreviousEpisode,
                 PlayerMenuEntry.PlaybackDetails,
                 PlayerMenuEntry.StartOver,
                 PlayerMenuEntry.Speed,
@@ -23,7 +25,24 @@ class PlayerMenuTest {
                 PlayerMenuEntry.OpenInAnotherApp,
                 PlayerMenuEntry.RemoteKeys,
             ),
-            PlayerMenu.tvEntries(pictureInPicture = true, saveToDownloads = true, markWatched = true),
+            PlayerMenu.tvEntries(
+                pictureInPicture = true,
+                saveToDownloads = true,
+                markWatched = true,
+                nextEpisode = true,
+                previousEpisode = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `the episode steps are only offered when the chat has a neighbour`() {
+        val none = PlayerMenu.tvEntries(pictureInPicture = true)
+        assertFalse(PlayerMenuEntry.NextEpisode in none)
+        assertFalse(PlayerMenuEntry.PreviousEpisode in none)
+        assertEquals(
+            listOf(PlayerMenuEntry.NextEpisode, PlayerMenuEntry.PlaybackDetails),
+            PlayerMenu.tvEntries(pictureInPicture = true, nextEpisode = true).take(2),
         )
     }
 
@@ -50,7 +69,13 @@ class PlayerMenuTest {
 
     @Test
     fun `picture in picture is only offered where the device can do it`() {
-        val entries = PlayerMenu.tvEntries(pictureInPicture = false, saveToDownloads = true, markWatched = true)
+        val entries = PlayerMenu.tvEntries(
+            pictureInPicture = false,
+            saveToDownloads = true,
+            markWatched = true,
+            nextEpisode = true,
+            previousEpisode = true,
+        )
         assertFalse(PlayerMenuEntry.PictureInPicture in entries)
         assertEquals(PlayerMenuEntry.entries.size - 1, entries.size)
     }
@@ -59,7 +84,13 @@ class PlayerMenuTest {
     fun `every entry is reachable on a device with picture in picture`() {
         assertEquals(
             PlayerMenuEntry.entries.toSet(),
-            PlayerMenu.tvEntries(pictureInPicture = true, saveToDownloads = true, markWatched = true).toSet(),
+            PlayerMenu.tvEntries(
+                pictureInPicture = true,
+                saveToDownloads = true,
+                markWatched = true,
+                nextEpisode = true,
+                previousEpisode = true,
+            ).toSet(),
         )
     }
 
@@ -67,7 +98,7 @@ class PlayerMenuTest {
     fun `the key table names every key the player answers, each once`() {
         val keys = RemoteKeys.ROWS.map { it.first }
         assertEquals(keys.size, keys.toSet().size)
-        listOf("OK", "Back", "Hold OK, controls up", "OK on the time", "0 to 9").forEach {
+        listOf("OK", "Play / Pause", "Next / Previous", "Back", "Hold OK, controls up", "OK on the time", "0 to 9").forEach {
             assertTrue("missing $it", it in keys)
         }
         assertTrue(RemoteKeys.ROWS.all { (key, does) -> key.isNotBlank() && does.isNotBlank() })

@@ -467,6 +467,8 @@ class PlayerActivity : FragmentActivity() {
                 volumeBoost = { volumeBoostOn },
                 sleepTimer = ::sleepTimerDetail,
                 onSleepTimer = ::setSleepTimer,
+                nextEpisode = { _episodes.value.next?.let { episodeLabel("Next", it) } },
+                previousEpisode = { _episodes.value.previous?.let { episodeLabel("Previous", it) } },
                 onEntry = ::onTvMenuEntry,
                 onSpeed = ::setSpeed,
                 onClosed = { controls?.show(); controls?.focusRow() },
@@ -724,14 +726,49 @@ class PlayerActivity : FragmentActivity() {
     /**
      * Play or pause from a button, a key or a headset. The phone's centre button morphs on its
      * own, so a press with the row up needs nothing more; with the row down a phone flashes the
-     * big glyph and a television shows its figure.
+     * big glyph.
+     *
+     * A television has no play button on its row any more, so the cue is the row's centre disc:
+     * a pause raises the row, where the disc folds into the pause bars and stays while paused,
+     * and a resume with the row up folds it back into the triangle and lets it fade. Only a
+     * resume over the bare picture has nothing to morph, and shows its figure instead.
      */
     private fun togglePlayback() {
         val exo = player ?: return
         val nowPlaying = !exo.isPlaying
+        if (feedback == null) {
+            // The row first, so the disc is on screen to fold when the pause lands.
+            if (!nowPlaying && statusOverlay.visibility != View.VISIBLE) controls?.show()
+            if (nowPlaying) exo.play() else exo.pause()
+            if (nowPlaying && !controlsUp) showGestureFeedback("▶")
+            return
+        }
         if (nowPlaying) exo.play() else exo.pause()
-        if (controlsUp && feedback != null) return
-        feedback?.flashPlayPause(nowPlaying) ?: showGestureFeedback(if (nowPlaying) "▶" else "❙❙")
+        if (controlsUp) return
+        feedback?.flashPlayPause(nowPlaying)
+    }
+
+    /**
+     * A remote's jump, from an arrow over the bare picture or the rewind and fast forward keys:
+     * the seek lands at once, and the only thing drawn is the icon and figure on the side the
+     * jump went.
+     */
+    private fun jumpFromRemote(forward: Boolean) {
+        if (forward) {
+            skipBy(Skip.FORWARD_MS)
+            showGestureFeedback("${Skip.FORWARD_MS / 1000} s   ▶▶", PlayerGestures.SIDE_RIGHT)
+        } else {
+            skipBy(-Skip.BACK_MS)
+            showGestureFeedback("◀◀   ${Skip.BACK_MS / 1000} s", PlayerGestures.SIDE_LEFT)
+        }
+    }
+
+    /** The remote's next and previous keys; false when the chat has no such episode. */
+    private fun stepEpisode(forward: Boolean): Boolean {
+        val found = _episodes.value
+        val item = (if (forward) found.next else found.previous) ?: return false
+        playEpisode(item)
+        return true
     }
 
     /**
@@ -1942,25 +1979,31 @@ class PlayerActivity : FragmentActivity() {
         }
 
         when (event.keyCode) {
+            // Every key that changes playback shows that it did: the jumps their side figure, play
+            // and pause the centre disc or glyph. With no buttons for them on a television's row,
+            // the cue is the only sign the press landed.
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
-                skipBy(Skip.FORWARD_MS)
+                jumpFromRemote(forward = true)
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_REWIND -> {
-                skipBy(-Skip.BACK_MS)
+                jumpFromRemote(forward = false)
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
-                togglePlayback()
+                if (event.repeatCount == 0) togglePlayback()
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_PLAY -> {
-                player?.play()
+                if (player?.playWhenReady == false) togglePlayback()
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_PAUSE -> {
-                player?.pause()
+                if (player?.playWhenReady == true) togglePlayback()
                 return true
+            }
+            KeyEvent.KEYCODE_MEDIA_NEXT, KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
+                if (stepEpisode(forward = event.keyCode == KeyEvent.KEYCODE_MEDIA_NEXT)) return true
             }
             // Back peels the overlays off in the order they were put on: the row first, and only
             // then is the film what Back was aimed at.
@@ -1978,13 +2021,7 @@ class PlayerActivity : FragmentActivity() {
                 // reach the focused view through super, which on the bar is the stride and on
                 // the buttons is walking the row.
                 if (FormFactor.isTv(this) && !controlsUp && statusOverlay.visibility != View.VISIBLE) {
-                    if (event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                        skipBy(Skip.FORWARD_MS)
-                        showGestureFeedback("${Skip.FORWARD_MS / 1000} s   ▶▶", PlayerGestures.SIDE_RIGHT)
-                    } else {
-                        skipBy(-Skip.BACK_MS)
-                        showGestureFeedback("◀◀   ${Skip.BACK_MS / 1000} s", PlayerGestures.SIDE_LEFT)
-                    }
+                    jumpFromRemote(forward = event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)
                     return true
                 }
             }
@@ -2065,14 +2102,8 @@ class PlayerActivity : FragmentActivity() {
     private fun handleTouchDeviceKey(event: KeyEvent): Boolean {
         if (controlsUp || statusOverlay.visibility == View.VISIBLE) return false
         when (event.keyCode) {
-            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                skipBy(Skip.FORWARD_MS)
-                showGestureFeedback("${Skip.FORWARD_MS / 1000} s   ▶▶", PlayerGestures.SIDE_RIGHT)
-            }
-            KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_DPAD_LEFT -> {
-                skipBy(-Skip.BACK_MS)
-                showGestureFeedback("◀◀   ${Skip.BACK_MS / 1000} s", PlayerGestures.SIDE_LEFT)
-            }
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_DPAD_RIGHT -> jumpFromRemote(forward = true)
+            KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_DPAD_LEFT -> jumpFromRemote(forward = false)
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
             KeyEvent.KEYCODE_DPAD_CENTER,
             KeyEvent.KEYCODE_ENTER,
@@ -2399,6 +2430,8 @@ class PlayerActivity : FragmentActivity() {
             PlayerMenuEntry.SaveToDownloads -> saveToDownloads()
             PlayerMenuEntry.MarkWatched -> toggleWatched()
             PlayerMenuEntry.VolumeBoost -> toggleVolumeBoost()
+            PlayerMenuEntry.NextEpisode -> _episodes.value.next?.let(::playEpisode)
+            PlayerMenuEntry.PreviousEpisode -> _episodes.value.previous?.let(::playEpisode)
             // Pages of the menu itself, opened there.
             PlayerMenuEntry.Speed, PlayerMenuEntry.SleepTimer, PlayerMenuEntry.RemoteKeys -> Unit
         }
