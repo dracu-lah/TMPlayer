@@ -28,7 +28,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 **Phase A. Compliance before any more listings (no release needed to commit; ships with the next release)**
 - [x] CP01 Crash reports and privacy page match each other (c6b3e22)
 - [x] CP02 Wording: "unofficial" everywhere, site titles, release notes text, legal Terms (ae52f5a)
-- [ ] CP03 Third-party notices complete, a real desktop corresponding source script, notices inside every package
+- [x] CP03 Third-party notices complete, a real desktop corresponding source script, notices inside every package (97a0f3f)
 - [ ] CP04 Respect Telegram "restrict saving content" and self-destructing media
 - [ ] CP05 About screen on phone, TV and desktop
 - [ ] U01 Two Sentry settings, and tell Claude the DSN host
