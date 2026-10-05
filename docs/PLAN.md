@@ -46,6 +46,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [ ] CP10a Sidebar: version beside the logo, compact accordion groups (phone, TV, desktop)
 - [ ] CP10b One theme on every platform: Android TV modal borders, surfaces and the rest match phone and desktop
 - [ ] CP10c Support the project: sponsor button and QR code on every platform, a gentle reminder, site section
+- [ ] CP10d TV player: drop the on-screen play, back 5 s and forward 10 s buttons the remote already covers
 - [ ] CP11 Release prep and device verification
 - [ ] CP12 Release "Player" (only when the user says so) and post-release checks
 - [ ] U06 Check the 1.22.1 post on @tmplayerapp went out
@@ -347,6 +348,24 @@ and `.github/FUNDING.yml`.
   single switch that flavor can turn off.
 **Done when:** screenshots of the entry and the QR on TV, phone and desktop, and the reminder forced on with a
 debug flag.
+**STOP**
+
+### CP10d TV player: drop the redundant centre buttons
+**Why:** the user asked on 2026-10-06 whether the TV player's play, back 5 s and forward 10 s buttons are
+needed, since the remote already does all three, and said to remove them if they are not.
+**Where:** `app/src/main/res/layout/player_controls.xml` (`controls_center`: `center_previous`,
+`center_rewind`, `center_play_pause`, `center_forward`, `center_next`; and the bottom row `controls_buttons`)
+and `PlayerControls.kt`. Desktop's layout for comparison: `desktop/.../player/PlayerScreen.kt`.
+**Do:**
+- TV has no touch gestures, but the D-pad already does the job: left and right on the bare picture jump
+  back 5 s and forward 10 s, OK opens the row, OK on the focused timebar plays and pauses, and the remote's
+  play key works too. So on TV, hide the big centre cluster. Keep it on the phone, where it is the tap target.
+- Keep one play and pause button in the bottom row, like desktop, so there is still a visible control and a
+  place for focus to land. Drop the bottom row's back 5 s and forward 10 s buttons on TV too if they are there.
+- Previous and next episode: keep them reachable on TV (bottom row) if they are not already.
+- Check D-pad focus: OK still opens the row on the timebar, Down reaches the buttons, no dead focus spots.
+  Update INSTALL.md's remote table if it lists the removed buttons.
+**Done when:** TV emulator screenshots of the row while playing and paused, and a D-pad walk across the row.
 **STOP**
 
 ### CP11 Release prep and device verification
