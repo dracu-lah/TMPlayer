@@ -1,0 +1,26 @@
+# Created by hand from the 1.22.0 release. Goes to winget-pkgs at manifests/d/dracu-lah/TMPlayer/1.22.0/
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+
+PackageIdentifier: dracu-lah.TMPlayer
+PackageVersion: 1.22.0
+InstallerType: msi
+Scope: user
+InstallModes:
+- interactive
+- silent
+- silentWithProgress
+UpgradeBehavior: install
+ProductCode: '{A989562B-541B-3A74-BA84-4D34ED8EF145}'
+ReleaseDate: 2026-10-04
+AppsAndFeaturesEntries:
+- DisplayName: TMPlayer
+  Publisher: TMPlayer
+  DisplayVersion: 1.22.0
+  ProductCode: '{A989562B-541B-3A74-BA84-4D34ED8EF145}'
+  UpgradeCode: '{6F1D3C0E-2B8A-4B7E-9D2C-7A1E5F4C3B21}'
+Installers:
+- Architecture: x64
+  InstallerUrl: https://github.com/dracu-lah/TMPlayer/releases/download/v1.22.0/TMPlayer-1.22.0-windows-x64.msi
+  InstallerSha256: 5A36263B35348EF67D6347452F30C10D05C5653899F1E37F9A4506DD0B8ABD78
+ManifestType: installer
+ManifestVersion: 1.6.0

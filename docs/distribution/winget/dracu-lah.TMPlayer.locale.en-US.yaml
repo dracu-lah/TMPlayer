@@ -1,0 +1,37 @@
+# Created by hand from the 1.22.0 release. Goes to winget-pkgs at manifests/d/dracu-lah/TMPlayer/1.22.0/
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+
+PackageIdentifier: dracu-lah.TMPlayer
+PackageVersion: 1.22.0
+PackageLocale: en-US
+Publisher: dracu-lah
+PublisherUrl: https://github.com/dracu-lah
+PublisherSupportUrl: https://github.com/dracu-lah/TMPlayer/issues
+Author: dracu-lah
+PackageName: TMPlayer
+PackageUrl: https://tmplayer.org
+License: GPL-3.0-or-later
+LicenseUrl: https://github.com/dracu-lah/TMPlayer/blob/main/LICENSE
+ShortDescription: Watch the videos in your Telegram chats while they download. Unofficial, not affiliated with Telegram.
+Description: |-
+  TMPlayer plays the videos in your own Telegram chats and channels. It starts within seconds while
+  the file is still downloading, and seeking re-aims the download instead of waiting for it. Sign in
+  with a QR code or your phone number, browse each chat's videos as a poster grid, resume where you
+  stopped and go on to the next episode. Embedded subtitles and audio tracks play through the bundled
+  mpv. TMPlayer is an unofficial client built on TDLib: it is not made by or affiliated with
+  Telegram, and it needs your own Telegram account.
+Moniker: tmplayer
+Tags:
+- media-player
+- mpv
+- streaming
+- tdlib
+- telegram
+- video
+- video-player
+ReleaseNotes: |-
+  Smaller downloads. The Android APK is about half its old size, and the Windows and Linux packages
+  are a third to almost two thirds smaller. The Linux tarball is now a .tar.xz.
+ReleaseNotesUrl: https://github.com/dracu-lah/TMPlayer/releases/tag/v1.22.0
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

@@ -1,0 +1,2 @@
+Smaller downloads. The Android APK is about half its old size, and the Windows and Linux packages are a third to almost two thirds smaller. The Linux tarball is now a .tar.xz.
+
