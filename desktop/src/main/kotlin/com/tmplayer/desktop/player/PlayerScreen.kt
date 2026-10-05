@@ -43,7 +43,10 @@ import androidx.compose.ui.input.pointer.pointerHoverIcon
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaName
 import com.tmplayer.data.ResumeRecord
+import com.tmplayer.data.ResumeRules
+import com.tmplayer.data.ResumeState
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.desktop.os.UserDirs
 import com.tmplayer.data.TrackChoice
 import com.tmplayer.data.WatchedRecord
 import com.tmplayer.data.WatchedStore
@@ -134,6 +137,8 @@ private val blankCursor: PointerIcon by lazy {
  * @param menuOpen start with the menu open at that page, by its name in [MenuPage] (the harness's `--menu`).
  * @param downloads the download queue, held while "Still watching?" is up. Null leaves it be.
  * @param idleLimitMs playback without input before "Still watching?" asks; the harness shortens it.
+ * @param shortcutsOpen start with the "?" sheet up (the harness's `--shortcuts`).
+ * @param screenshotDir where S puts its pictures: Pictures/TMPlayer, or a temp folder in the tests.
  * @param engineFactory the engine; libmpv in the app, a fake in the UI tests that drive the mouse.
  */
 @OptIn(ExperimentalComposeUiApi::class)
@@ -157,6 +162,8 @@ fun PlayerScreen(
     menuOpen: String? = null,
     downloads: DownloadRunner? = null,
     idleLimitMs: Long = StillWatching.IDLE_LIMIT_MS,
+    shortcutsOpen: Boolean = false,
+    screenshotDir: () -> java.io.File = { java.io.File(UserDirs.pictures(), "TMPlayer") },
     engineFactory: () -> PlaybackEngine = { MpvPlaybackEngine(OpenPrefs.hwdecFor(prefs.now.softwareDecoding)) },
 ) {
     val engine = remember { engineFactory() }
@@ -187,7 +194,7 @@ fun PlayerScreen(
     var overControls by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(MenuPage.entries.firstOrNull { it.name.equals(menuOpen, ignoreCase = true) }?.let { MenuAt(it, MenuAt.Anchor.Cursor, Offset(240f, 120f)) }) }
     var showDetails by remember { mutableStateOf(detailsOpen) }
-    var showShortcuts by remember { mutableStateOf(false) }
+    var showShortcuts by remember { mutableStateOf(shortcutsOpen) }
     var flash by remember { mutableStateOf<Flash?>(null) }
     var seekRun by remember { mutableStateOf(0L to 0L) } // (accumulated ms, last at)
     val downloaded by current.downloaded.collectAsState()
@@ -198,6 +205,11 @@ fun PlayerScreen(
     // Videos marked watched from this player. Their position is forgotten on the way out rather
     // than saved, or leaving would put them straight back into Continue watching (as on Android).
     val markedHere = remember { mutableSetOf<String>() }
+    // Videos already put on the Watched list for being left past 90 %, so leaving the same one
+    // twice (switching away, then closing) marks it once.
+    val watchedHere = remember { mutableSetOf<String>() }
+    // A-B repeat, for the video playing only: a new video starts with none.
+    var abLoop by remember(current) { mutableStateOf<AbLoop?>(null) }
 
     // "Still watching?" and the sleep timer (CP07). The counts live for the whole player session,
     // so they carry across the episodes autoplay moves on to, and any input starts them again.
@@ -238,6 +250,12 @@ fun PlayerScreen(
         val reopening = reopenAt != null
         reopenAt = null
         trackChoice = runCatching { settings.trackChoice(seriesKey) }.getOrDefault(TrackChoice())
+        // A resumed video goes back to the tracks and speed it was playing with. See [ResumeState].
+        val resumed = if (start > 0 && hasMessage(item)) {
+            runCatching { settings.resumeRecord(item.chatId, item.messageId)?.state }.getOrNull()
+        } else {
+            null
+        }
         // Offsets are remembered per message; a file on disk (the dev harness) starts in step.
         val delays = if (hasMessage(item)) {
             runCatching { settings.syncDelays(item.chatId, item.messageId) }.getOrDefault(SyncDelays())
@@ -248,7 +266,8 @@ fun PlayerScreen(
             audioLanguage = trackChoice.audioLanguage,
             subtitleLanguage = trackChoice.textLanguage,
             subtitlesOn = if (trackChoice.empty) null else trackChoice.subtitlesOn,
-            speed = runCatching { settings.playbackSpeedNow() }.getOrDefault(PlaybackSpeed.DEFAULT),
+            speed = resumed?.speed?.coerceIn(SeekMath.MIN_SPEED, SeekMath.MAX_SPEED)
+                ?: runCatching { settings.playbackSpeedNow() }.getOrDefault(PlaybackSpeed.DEFAULT),
             scale = runCatching { VideoScale.from(settings.videoScaleNow()) }.getOrDefault(VideoScale.Fit),
             downmix = prefs.now.downmix,
             volume = prefs.now.volume,
@@ -257,6 +276,7 @@ fun PlayerScreen(
             hwdec = OpenPrefs.hwdecFor(prefs.now.softwareDecoding),
             subtitleStyle = runCatching { settings.subtitleStyleNow() }.getOrDefault(SubtitleStyle()),
             delays = delays,
+            resume = resumed,
         )
         // A slow open (the whole video downloading first) says what it is waiting on; Back on the
         // loading screen cancels it.
@@ -280,6 +300,8 @@ fun PlayerScreen(
             return@LaunchedEffect
         }
         ignoreSavedPosition = false
+        // Keep watching opens the file again, and a fresh open has no loop in mpv.
+        abLoop?.takeIf { it.complete }?.let(engine::setAbLoop)
         phase = Phase.Playing
         if (start > 0 && !reopening) resumedFrom = start
         onPlayingItemChanged(item)
@@ -305,14 +327,21 @@ fun PlayerScreen(
         }
     }
 
-    fun saveResume(m: PlayerMedia, s: PlaybackStatus) {
+    /**
+     * Writes [m]'s position with its tracks and speed. Past 90 % the position is forgotten on
+     * every write (see [ResumeRules]), but the video goes on the Watched list only when [leaving]
+     * it: a mark is what "Remove after watching" deletes a download on, and the last tenth of a
+     * film is still being watched.
+     */
+    fun saveResume(m: PlayerMedia, s: PlaybackStatus, leaving: Boolean = false) {
         if (!s.opened) return
         val it = m.item
         val position = s.positionMs
         val duration = s.durationMs
-        val watched = SeekMath.watched(position, duration, SettingsStore.END_MARGIN_MS)
-        if (watched) recordWatched(m, duration, manual = false)
-        val forget = watched || SettingsStore.progressKey(it.chatId, it.messageId) in markedHere
+        val watched = ResumeRules.watched(position, duration)
+        val key = SettingsStore.progressKey(it.chatId, it.messageId)
+        if (watched && leaving && watchedHere.add(key)) recordWatched(m, duration, manual = false)
+        val forget = watched || key in markedHere
         val description = ResumeRecord.encode(
             fileId = it.fileId,
             title = it.title,
@@ -320,6 +349,7 @@ fun PlayerScreen(
             sizeBytes = it.sizeBytes,
             durationSec = it.durationSec.takeIf { d -> d > 0 } ?: (duration / 1000).toInt(),
             updatedAt = System.currentTimeMillis(),
+            state = resumeState(engine.tracks.value, s.speed),
         )
         playerScope.launch {
             runCatching {
@@ -334,7 +364,7 @@ fun PlayerScreen(
     DisposableEffect(current) {
         val leaving = current
         onDispose {
-            saveResume(leaving, engine.state.value)
+            saveResume(leaving, engine.state.value, leaving = true)
             leaving.release()
         }
     }
@@ -346,8 +376,15 @@ fun PlayerScreen(
         }
     }
 
+    // A pause is a natural place to stop for the night: written now, since the heartbeat above
+    // only beats while playing. Not the pause that comes with the end, which the end handles.
+    LaunchedEffect(current, status.playing) {
+        val s = engine.state.value
+        if (!s.playing && !s.ended && s.opened && phase == Phase.Playing) saveResume(current, s)
+    }
+
     fun switchTo(next: MediaItem) {
-        saveResume(current, engine.state.value)
+        saveResume(current, engine.state.value, leaving = true)
         current = current.episode(next)
     }
 
@@ -665,6 +702,71 @@ fun PlayerScreen(
         showFlash(Flash.Kind.Text, "From the start")
     }
 
+    /**
+     * The frame on screen to Pictures/TMPlayer. Refused for a chat that restricts saving, as
+     * Telegram's own apps refuse a screenshot there; written off the UI thread, since a 4K PNG
+     * takes a moment.
+     */
+    fun takeScreenshot(withSubtitles: Boolean) {
+        if (!current.savable.value) {
+            showFlash(Flash.Kind.Text, com.tmplayer.data.ContentProtection.NOT_SAVABLE)
+            return
+        }
+        val at = status.positionMs
+        // The name the title bar shows ("Night Train S01E02"), not the release name with its dots.
+        val parsed = MediaName.parse(item.fileName.ifBlank { item.title })
+        val name = listOfNotNull(parsed.title.ifBlank { null }, parsed.episodeCode).joinToString(" ").ifBlank { item.title }
+        scope.launch {
+            val file = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                runCatching {
+                    val dir = screenshotDir().apply { mkdirs() }
+                    ScreenshotFiles.fileFor(dir, name, at).takeIf { engine.screenshot(it, withSubtitles) }
+                }.getOrNull()
+            }
+            showFlash(Flash.Kind.Text, if (file != null) "Screenshot saved: ${file.name}" else "The screenshot could not be saved")
+        }
+    }
+
+    /** R: the loop's start, then its end (and the loop runs), then off. */
+    fun pressAbRepeat() {
+        val at = status.positionMs
+        val before = abLoop
+        val after = AbLoop.press(before, at)
+        abLoop = after
+        when {
+            after == null -> {
+                engine.setAbLoop(null)
+                showFlash(Flash.Kind.Text, "Repeat off")
+            }
+            after == before -> showFlash(Flash.Kind.Text, "Play on a little, then press R again to end the loop")
+            after.complete -> {
+                engine.setAbLoop(after)
+                showFlash(Flash.Kind.Text, "Repeating ${SeekMath.clock(after.startMs)} to ${SeekMath.clock(after.endMs ?: 0)}")
+            }
+            else -> showFlash(Flash.Kind.Text, "Loop from ${SeekMath.clock(after.startMs)}. Press R again to end it")
+        }
+    }
+
+    /** Ctrl+Left and Ctrl+Right: the next chapter, or the start of this one, as [Chapters] has it. */
+    fun stepChapter(forward: Boolean) {
+        val chapters = status.chapters
+        if (chapters.isEmpty()) {
+            // The minute those keys seeked before they meant chapters, for a file that has none.
+            val delta = if (forward) PlayerKeys.SEEK_LONG_MS else -PlayerKeys.SEEK_LONG_MS
+            engine.seekBy(delta)
+            seekFlash(delta)
+            return
+        }
+        val at = status.positionMs
+        val target = if (forward) Chapters.next(chapters, at) else Chapters.previous(chapters, at)
+        if (target == null) {
+            showFlash(Flash.Kind.Text, if (forward) "This is the last chapter" else "Before the first chapter")
+            return
+        }
+        engine.seekTo(chapters[target].startMs)
+        showFlash(Flash.Kind.Text, Chapters.label(chapters, target))
+    }
+
     fun dispatch(action: PlayerAction) {
         when (action) {
             PlayerAction.TogglePlay -> togglePlay()
@@ -714,6 +816,9 @@ fun PlayerScreen(
             PlayerAction.Back -> onBack()
             PlayerAction.Quit -> onQuit?.invoke()
             PlayerAction.ShortcutSheet -> showShortcuts = !showShortcuts
+            is PlayerAction.Screenshot -> takeScreenshot(action.withSubtitles)
+            PlayerAction.AbRepeat -> pressAbRepeat()
+            is PlayerAction.ChapterStep -> stepChapter(action.forward)
         }
     }
 
@@ -871,6 +976,7 @@ fun PlayerScreen(
                     refocus()
                 },
                 sleepTimer = sleepTimerDetail(),
+                loop = abLoop,
                 onMenuAction = { action ->
                     noteInput()
                     when (action) {
@@ -981,6 +1087,28 @@ fun PlayerScreen(
 
 /** Whether [item] came from a message, which is what the Watched list is keyed by. */
 internal fun hasMessage(item: MediaItem): Boolean = item.chatId != 0L && item.messageId != 0L
+
+/**
+ * The tracks and speed as they stand, counted the way a [ResumeState] counts them: each track's
+ * place among mpv's tracks of its kind. Subtitles none of which is selected are stored as off.
+ */
+internal fun resumeState(tracks: List<MediaTrack>, speed: Float): ResumeState {
+    val audio = tracks.filter { it.type == TrackType.Audio }
+    val subs = tracks.filter { it.type == TrackType.Subtitle }
+    val a = audio.indexOfFirst { it.selected }
+    val s = subs.indexOfFirst { it.selected }
+    return ResumeState(
+        audioTrack = a.takeIf { it >= 0 },
+        audioLanguage = audio.getOrNull(a)?.language,
+        subtitleTrack = when {
+            s >= 0 -> s
+            subs.isNotEmpty() -> ResumeState.SUBTITLES_OFF
+            else -> null
+        },
+        subtitleLanguage = subs.getOrNull(s)?.language,
+        speed = speed,
+    )
+}
 
 /** What is filed under one series for the track choice: the parsed name, or the video's own. */
 internal fun seriesKeyOf(item: MediaItem): String {

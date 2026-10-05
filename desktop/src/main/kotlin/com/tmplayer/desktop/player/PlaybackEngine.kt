@@ -59,6 +59,15 @@ interface PlaybackEngine {
     /** Loads a subtitle file from disk beside the video's own tracks and selects it. */
     fun addSubtitle(path: String): Boolean
 
+    /**
+     * Writes the frame on screen to [file], a PNG at the size it is drawn, with the subtitles as
+     * drawn when [withSubtitles] or the bare picture otherwise. True once the file is there.
+     */
+    suspend fun screenshot(file: java.io.File, withSubtitles: Boolean): Boolean
+
+    /** Repeats from [loop]'s start once playback reaches its end; null plays straight through again. */
+    fun setAbLoop(loop: AbLoop?)
+
     /** What is actually playing, as label and value pairs for the Playback details panel. */
     fun details(): List<Pair<String, String>>
 
@@ -82,6 +91,8 @@ data class OpenPrefs(
     val subtitleStyle: SubtitleStyle = SubtitleStyle(),
     /** This file's own offsets, or zero for a file with no message to remember them by. */
     val delays: SyncDelays = SyncDelays(),
+    /** The exact tracks a resumed video was playing with, put back over the languages above. */
+    val resume: com.tmplayer.data.ResumeState? = null,
 ) {
     companion object {
         /** Hardware where mpv considers it safe, software otherwise; mpv also falls back per stream. */
@@ -116,6 +127,8 @@ data class PlaybackStatus(
     val subtitleStyle: SubtitleStyle = SubtitleStyle(),
     val subtitleDelayMs: Long = 0,
     val audioDelayMs: Long = 0,
+    /** The file's chapters in order, empty for a file without any. */
+    val chapters: List<Chapter> = emptyList(),
 ) {
     val delays: SyncDelays get() = SyncDelays(subtitleDelayMs, audioDelayMs)
 }

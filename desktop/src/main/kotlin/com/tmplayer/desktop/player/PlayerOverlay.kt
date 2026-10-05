@@ -21,6 +21,7 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -132,6 +133,9 @@ internal sealed interface MenuAction {
 
 private val Scrim = Color(0xB3000000)
 
+/** The A-B repeat on the timebar: amber, apart from the played blue and the buffered grey. */
+private val LoopColor = Color(0xFFFFC107)
+
 /**
  * The picture itself as a click target (B2.3): a single click plays or pauses after 300 ms, so a
  * double click (fullscreen) does not flicker the picture first; right click opens the menu at the
@@ -207,6 +211,8 @@ internal fun BoxScope.PlayerOverlay(
     watchedLabel: String? = null,
     /** A running sleep timer as the menu reads it ("25 minutes left"), or null for none. */
     sleepTimer: String? = null,
+    /** The A-B repeat as marked so far, drawn on the timebar and named above it; null for none. */
+    loop: AbLoop? = null,
     onHoverControls: (Boolean) -> Unit,
     onBack: () -> Unit,
     onTogglePlay: () -> Unit,
@@ -304,7 +310,24 @@ internal fun BoxScope.PlayerOverlay(
             ) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(SeekMath.clock(status.positionMs), color = Color.White, fontSize = 13.sp)
+                    // The chapter playing, as YouTube names it beside the time.
+                    val chapter = Chapters.at(status.chapters, status.positionMs)
+                    if (chapter >= 0) {
+                        Text(
+                            "  ·  " + Chapters.label(status.chapters, chapter),
+                            color = Color.White.copy(alpha = 0.8f),
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                        )
+                    }
                     Spacer(Modifier.weight(1f))
+                    if (loop != null) {
+                        Chip(
+                            loop.endMs?.let { "Repeating ${SeekMath.clock(loop.startMs)} to ${SeekMath.clock(it)}  (R to stop)" }
+                                ?: "Loop from ${SeekMath.clock(loop.startMs)}  (R to end it)",
+                        )
+                        Spacer(Modifier.weight(1f))
+                    }
                     Text(
                         if (showRemaining) SeekMath.remaining(status.positionMs, status.durationMs) else SeekMath.clock(status.durationMs),
                         color = Color.White,
@@ -312,10 +335,10 @@ internal fun BoxScope.PlayerOverlay(
                         modifier = Modifier.clip(RoundedCornerShape(4.dp)).clickable(onClick = onToggleRemaining).padding(horizontal = 4.dp, vertical = 2.dp),
                     )
                 }
-                TimeBar(status.positionMs, status.durationMs, status.bufferedMs, onSeekTo)
+                TimeBar(status.positionMs, status.durationMs, status.bufferedMs, onSeekTo, status.chapters, loop)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Box {
-                        OverlayButton(PlayerIcons.Subtitles, "Subtitles (S, C)", onClick = { onOpenMenu(MenuAt(MenuPage.Subtitles, MenuAt.Anchor.Subtitles)) })
+                        OverlayButton(PlayerIcons.Subtitles, "Subtitles (V, C)", onClick = { onOpenMenu(MenuAt(MenuPage.Subtitles, MenuAt.Anchor.Subtitles)) })
                         if (menu?.anchor == MenuAt.Anchor.Subtitles) {
                             PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, onOpenMenu, onCloseMenu, onMenuAction)
                         }
@@ -464,7 +487,14 @@ private fun VolumeControl(volume: Int, muted: Boolean, onVolume: (Int) -> Unit, 
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun TimeBar(position: Long, duration: Long, buffered: Long, onSeekTo: (Long) -> Unit) {
+private fun TimeBar(
+    position: Long,
+    duration: Long,
+    buffered: Long,
+    onSeekTo: (Long) -> Unit,
+    chapters: List<Chapter> = emptyList(),
+    loop: AbLoop? = null,
+) {
     var width by remember { mutableFloatStateOf(0f) }
     var hoverX by remember { mutableStateOf<Float?>(null) }
     var dragX by remember { mutableStateOf<Float?>(null) }
@@ -504,6 +534,23 @@ private fun TimeBar(position: Long, duration: Long, buffered: Long, onSeekTo: (L
             drawRoundRect(Color(0x40FFFFFF), cornerRadius = r)
             if (ahead > played) drawRoundRect(Color(0x66FFFFFF), size = Size(size.width * ahead, size.height), cornerRadius = r)
             drawRoundRect(primary, size = Size(size.width * played, size.height), cornerRadius = r)
+            // Chapter marks as gaps in the bar, the way YouTube splits it.
+            val gap = 2.dp.toPx()
+            for (chapter in chapters) {
+                if (chapter.startMs <= 0) continue
+                val x = size.width * SeekMath.fraction(chapter.startMs, duration)
+                drawRect(Color(0xCC000000), Offset(x - gap / 2, 0f), Size(gap, size.height))
+            }
+            // The A-B loop: the run between the marks in amber, each mark a taller tick.
+            if (loop != null && duration > 0) {
+                val a = size.width * SeekMath.fraction(loop.startMs, duration)
+                val b = loop.endMs?.let { size.width * SeekMath.fraction(it, duration) }
+                if (b != null) drawRect(LoopColor.copy(alpha = 0.6f), Offset(a, 0f), Size(b - a, size.height))
+                val reach = 5.dp.toPx()
+                for (x in listOfNotNull(a, b)) {
+                    drawRect(LoopColor, Offset(x - gap / 2, -reach), Size(gap, size.height + reach * 2))
+                }
+            }
             val thumb = if (thick) 8.dp.toPx() else 6.dp.toPx()
             drawCircle(primary, thumb, Offset(size.width * played, size.height / 2))
         }
@@ -882,18 +929,46 @@ internal fun BoxScope.StatusSheet(
     }
 }
 
+/**
+ * The "?" sheet. Two columns on a window wide enough for them, so the whole table fits a 720p
+ * window without scrolling; one column, scrolling, on a narrow one.
+ */
 @Composable
 internal fun BoxScope.ShortcutSheet(onClose: () -> Unit, mac: Boolean = false, wheelSeeks: Boolean = false) {
-    Box(Modifier.matchParentSize().background(Color(0x99000000)).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
-        Surface(shape = RoundedCornerShape(12.dp), color = Color(0xF21C1C1E), modifier = Modifier.widthIn(max = 560.dp)) {
+    BoxWithConstraints(
+        Modifier.matchParentSize().background(Color(0x99000000)).clickable(onClick = onClose),
+        contentAlignment = Alignment.Center,
+    ) {
+        val rows = PlayerKeys.sheet(mac, wheelSeeks)
+        val twoColumns = maxWidth >= 900.dp
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = Color(0xF21C1C1E),
+            modifier = Modifier.widthIn(max = if (twoColumns) 1040.dp else 560.dp).padding(16.dp),
+        ) {
             Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState())) {
                 Text("Keyboard shortcuts", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(12.dp))
-                PlayerKeys.sheet(mac, wheelSeeks).forEach { (what, keys) ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
-                        Text(what, color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                        Text(keys, color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
+                @Composable
+                fun Rows(part: List<Pair<String, String>>, modifier: Modifier) {
+                    Column(modifier) {
+                        part.forEach { (what, keys) ->
+                            Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                                Text(what, color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f).padding(end = 12.dp))
+                                Text(keys, color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
+                            }
+                        }
                     }
+                }
+                if (twoColumns) {
+                    val half = (rows.size + 1) / 2
+                    Row {
+                        Rows(rows.take(half), Modifier.weight(1f))
+                        Spacer(Modifier.width(32.dp))
+                        Rows(rows.drop(half), Modifier.weight(1f))
+                    }
+                } else {
+                    Rows(rows, Modifier.fillMaxWidth())
                 }
             }
         }

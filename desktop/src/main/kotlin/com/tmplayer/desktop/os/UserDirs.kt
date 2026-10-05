@@ -6,7 +6,8 @@ import com.tmplayer.platform.Logger
 import java.io.File
 
 /**
- * The viewer's own Downloads folder, where the OS keeps it rather than where it usually is.
+ * The viewer's own Downloads (and Pictures) folder, where the OS keeps it rather than where it
+ * usually is.
  *
  * On Windows the folder can be redirected (to another drive, or to OneDrive), so it is asked of
  * the shell as a Known Folder rather than assumed to be `%USERPROFILE%\Downloads`. On Linux it is
@@ -26,26 +27,46 @@ object UserDirs {
     }.onFailure { Logger.w(TAG, "could not resolve the Downloads folder: ${it.message}") }
         .getOrNull() ?: File(home(), "Downloads")
 
+    /**
+     * The Pictures folder, the same way: a Known Folder on Windows, `XDG_PICTURES_DIR` on Linux,
+     * `~/Pictures` on macOS and whenever nothing says otherwise. The player's screenshots go in a
+     * TMPlayer folder inside it.
+     */
+    fun pictures(): File = runCatching {
+        when {
+            OsInfo.isWindows -> knownFolder(KnownFolders.FOLDERID_Pictures)
+            OsInfo.isMac -> null
+            else -> xdgDir(System.getenv(), home(), PICTURES_KEY)
+        }
+    }.onFailure { Logger.w(TAG, "could not resolve the Pictures folder: ${it.message}") }
+        .getOrNull() ?: File(home(), "Pictures")
+
     private fun home(): File = File(System.getProperty("user.home").orEmpty())
 
-    private fun windowsDownloads(): File? =
-        Shell32Util.getKnownFolderPath(KnownFolders.FOLDERID_Downloads)?.takeIf { it.isNotBlank() }?.let(::File)
+    private fun windowsDownloads(): File? = knownFolder(KnownFolders.FOLDERID_Downloads)
+
+    private fun knownFolder(id: com.sun.jna.platform.win32.Guid.GUID): File? =
+        Shell32Util.getKnownFolderPath(id)?.takeIf { it.isNotBlank() }?.let(::File)
+
+    /** The XDG Downloads folder. See [xdgDir]. */
+    internal fun xdgDownloads(env: Map<String, String>, home: File): File? = xdgDir(env, home, DOWNLOAD_KEY)
 
     /**
-     * The XDG Downloads folder, from the environment and `user-dirs.dirs`.
+     * One XDG user folder ([key], such as `XDG_PICTURES_DIR`), from the environment and
+     * `user-dirs.dirs`.
      *
      * `$XDG_CONFIG_HOME/user-dirs.dirs` is read first and `~/.config/user-dirs.dirs` second: inside
      * a Flatpak the first is the sandbox's own config directory, which holds the host's file only
      * when Flatpak has put it there.
      */
-    internal fun xdgDownloads(env: Map<String, String>, home: File): File? {
-        env["XDG_DOWNLOAD_DIR"]?.let { parseValue(it, home) }?.let { return it }
+    internal fun xdgDir(env: Map<String, String>, home: File, key: String): File? {
+        env[key]?.let { parseValue(it, home) }?.let { return it }
         val configHome = env["XDG_CONFIG_HOME"]?.let(::File)?.takeIf { it.isAbsolute }
         val candidates = listOfNotNull(configHome, File(home, ".config")).distinct()
         for (dir in candidates) {
             val file = File(dir, "user-dirs.dirs")
             if (!file.isFile) continue
-            val found = runCatching { parseUserDirs(file.readText(), home) }.getOrNull()
+            val found = runCatching { parseUserDirs(file.readText(), home, key) }.getOrNull()
             if (found != null) return found
         }
         return null
@@ -87,4 +108,6 @@ object UserDirs {
     }
 
     private const val TAG = "UserDirs"
+    private const val DOWNLOAD_KEY = "XDG_DOWNLOAD_DIR"
+    internal const val PICTURES_KEY = "XDG_PICTURES_DIR"
 }

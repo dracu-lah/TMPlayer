@@ -19,7 +19,9 @@ class ShortcutSheetTest {
         "Seek 10 s" to { it is PlayerAction.SeekBy && kotlin.math.abs(it.deltaMs) == 10_000L },
         "Seek 1 min" to { it is PlayerAction.SeekBy && kotlin.math.abs(it.deltaMs) == 60_000L },
         "Seek 5 min" to { it is PlayerAction.SeekBy && kotlin.math.abs(it.deltaMs) == 300_000L },
+        "Previous, next chapter" to { it is PlayerAction.ChapterStep },
         "Frame step while paused" to { it is PlayerAction.FrameStep },
+        "Repeat A to B: start, end, off" to { it == PlayerAction.AbRepeat },
         "Jump to 0 to 90 %" to { it is PlayerAction.JumpToTenth },
         "Start, end" to { it == PlayerAction.JumpToTenth(0) || it == PlayerAction.JumpToEnd },
         "Volume" to { it is PlayerAction.VolumeBy },
@@ -36,6 +38,7 @@ class ShortcutSheetTest {
         "Next, previous episode" to { it == PlayerAction.NextEpisode || it == PlayerAction.PreviousEpisode },
         "Always on top" to { it == PlayerAction.AlwaysOnTop },
         "Mini player" to { it == PlayerAction.MiniPlayer },
+        "Screenshot, without subtitles" to { it is PlayerAction.Screenshot },
         "Playback details" to { it == PlayerAction.Stats },
         "Back" to { it == PlayerAction.Back },
         "Quit" to { it == PlayerAction.Quit },
@@ -116,8 +119,8 @@ class ShortcutSheetTest {
 
     private val LETTERS = mapOf(
         "A" to Key.A, "C" to Key.C, "F" to Key.F, "I" to Key.I, "J" to Key.J, "K" to Key.K, "L" to Key.L,
-        "M" to Key.M, "N" to Key.N, "P" to Key.P, "Q" to Key.Q, "S" to Key.S, "T" to Key.T,
-        "X" to Key.X, "Z" to Key.Z,
+        "M" to Key.M, "N" to Key.N, "P" to Key.P, "Q" to Key.Q, "R" to Key.R, "S" to Key.S, "T" to Key.T,
+        "V" to Key.V, "X" to Key.X, "Z" to Key.Z,
     )
 
     private fun digit(d: Int): Key = listOf(

@@ -34,6 +34,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem as Media3Item
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.common.text.CueGroup
@@ -81,6 +82,8 @@ import com.tmplayer.data.LocalFilePolicy
 import com.tmplayer.data.NetworkMonitor
 import com.tmplayer.data.NetworkStatus
 import com.tmplayer.data.ResumeRecord
+import com.tmplayer.data.ResumeRules
+import com.tmplayer.data.ResumeState
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.TrackChoice
 import com.tmplayer.data.OfflineDownloads
@@ -141,6 +144,12 @@ class PlayerActivity : FragmentActivity() {
      * into Continue watching a moment after they took it out.
      */
     private var markedWatchedHere = false
+
+    /**
+     * Set once leaving past 90 % has put this video on the Watched list, so going to the
+     * background and back again does not mark it a second time.
+     */
+    private var watchedHere = false
     private lateinit var subtitleView: SubtitleView
     private lateinit var statusOverlay: View
     private lateinit var statusIcon: ImageView
@@ -252,6 +261,12 @@ class PlayerActivity : FragmentActivity() {
     private var fileSizeBytes = 0L
     private var durationSec = 0
     private var resumeMs = 0L
+
+    /**
+     * The tracks the saved position was playing with, put back once the player lists the file's
+     * tracks, and then cleared. Null for a video started from the beginning.
+     */
+    private var resumeTracks: ResumeState? = null
 
     /** Only used to label the video in "Continue watching"; playback never needs it. */
     private var chatTitle = ""
@@ -566,6 +581,15 @@ class PlayerActivity : FragmentActivity() {
             }
             playbackSpeed = runCatching { settings.playbackSpeedNow() }
                 .getOrDefault(PlaybackSpeed.DEFAULT)
+            // A video with a saved position goes back to the speed and the tracks it was playing
+            // with there, over the general speed and the series' languages. See [ResumeState].
+            val resumed = if (hasMessage()) {
+                runCatching { settings.resumeRecord(chatId, messageId)?.state }.getOrNull()
+            } else {
+                null
+            }
+            resumed?.speed?.let { playbackSpeed = PlaybackSpeed.sanitise(it) }
+            resumeTracks = resumed
             videoScale = runCatching { VideoScale.from(settings.videoScaleNow()) }
                 .getOrDefault(VideoScale.Fit)
             // Read before the player is built, because the track selector is configured once and
@@ -1373,6 +1397,7 @@ class PlayerActivity : FragmentActivity() {
          * a phone, and the file's defaults on a series being watched for the first time.
          */
         override fun onTracksChanged(tracks: Tracks) {
+            restoreResumeTracks(tracks)
             rememberTracks(tracks)
             subtitleFiles.onTracksChanged(tracks)
         }
@@ -1398,6 +1423,9 @@ class PlayerActivity : FragmentActivity() {
             keepScreenOn(isPlaying || openingFilm)
             controls?.onPlayingChanged()
             updatePictureInPictureParams()
+            // A pause is a natural place to stop for the night: written now, not at the next
+            // heartbeat, which only beats while playing. A stall for bytes is not a pause.
+            if (!isPlaying && player?.playWhenReady == false) saveResumePosition()
         }
 
         override fun onPlaybackStateChanged(state: Int) {
@@ -1441,6 +1469,68 @@ class PlayerActivity : FragmentActivity() {
      * different evening. A track with no language declared at all is remembered only as "captions
      * were on", which the next episode honours by leaving its own default alone.
      */
+    /**
+     * The file's tracks of one kind, flattened in the order the player lists them: the places a
+     * [ResumeState] counts by. Each entry is the group and the track's index inside it.
+     */
+    private fun tracksOfType(current: Tracks, type: Int): List<Pair<Tracks.Group, Int>> =
+        current.groups.filter { it.type == type }.flatMap { group -> (0 until group.length).map { group to it } }
+
+    /** This video's tracks and speed as they stand, for the resume point. */
+    private fun resumeState(exo: Player): ResumeState {
+        val current = exo.currentTracks
+        fun place(type: Int): Pair<Int, String?>? = tracksOfType(current, type)
+            .withIndex()
+            .firstOrNull { (_, entry) -> entry.first.isTrackSelected(entry.second) }
+            ?.let { (at, entry) -> at to entry.first.getTrackFormat(entry.second).language }
+        val audio = place(C.TRACK_TYPE_AUDIO)
+        val text = place(C.TRACK_TYPE_TEXT)
+        val anyText = tracksOfType(current, C.TRACK_TYPE_TEXT).isNotEmpty()
+        return ResumeState(
+            audioTrack = audio?.first,
+            audioLanguage = audio?.second,
+            subtitleTrack = text?.first ?: ResumeState.SUBTITLES_OFF.takeIf { anyText },
+            subtitleLanguage = text?.second,
+            speed = playbackSpeed,
+        )
+    }
+
+    /**
+     * Puts back the tracks the saved position was playing with, the first time the player lists
+     * the file's tracks. A place that now holds a track in another language is left to the
+     * series memory rather than guessed at.
+     */
+    private fun restoreResumeTracks(current: Tracks) {
+        val wanted = resumeTracks ?: return
+        val exo = player ?: return
+        if (current.groups.isEmpty()) return
+        resumeTracks = null
+        val builder = exo.trackSelectionParameters.buildUpon()
+        var changed = false
+        wanted.audioTrack?.let { at ->
+            val (group, index) = tracksOfType(current, C.TRACK_TYPE_AUDIO).getOrNull(at) ?: return@let
+            if (group.isTrackSelected(index)) return@let
+            if (!ResumeState.sameTrack(wanted.audioLanguage, group.getTrackFormat(index).language)) return@let
+            builder.setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, index))
+            changed = true
+        }
+        val text = tracksOfType(current, C.TRACK_TYPE_TEXT)
+        when {
+            wanted.subtitlesOff -> if (text.any { (group, index) -> group.isTrackSelected(index) }) {
+                builder.clearOverridesOfType(C.TRACK_TYPE_TEXT).setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                changed = true
+            }
+            else -> wanted.subtitleTrack?.let { text.getOrNull(it) }?.let { (group, index) ->
+                if (group.isTrackSelected(index)) return@let
+                if (!ResumeState.sameTrack(wanted.subtitleLanguage, group.getTrackFormat(index).language)) return@let
+                builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, index))
+                changed = true
+            }
+        }
+        if (changed) exo.trackSelectionParameters = builder.build()
+    }
+
     private fun rememberTracks(current: Tracks) {
         fun language(type: Int): String? = current.groups
             .firstOrNull { it.type == type && it.isSelected }
@@ -3299,7 +3389,7 @@ class PlayerActivity : FragmentActivity() {
 
     override fun onStop() {
         super.onStop()
-        saveResumePosition()
+        saveResumePosition(leaving = !inPictureInPicture)
         // In picture in picture the activity is stopped while the video is still on screen and
         // still the point of it; pausing here would stop the very thing the mode exists for.
         if (!inPictureInPicture) player?.pause()
@@ -3307,7 +3397,7 @@ class PlayerActivity : FragmentActivity() {
 
     override fun onDestroy() {
         stopArtDrift()
-        saveResumePosition()
+        saveResumePosition(leaving = true)
         holdFile(0)
         stopDownload()
         trimCache()
@@ -3376,12 +3466,17 @@ class PlayerActivity : FragmentActivity() {
     /**
      * Runs on a scope that outlives the activity, because the write has to survive the Back press
      * that triggered it.
+     *
+     * Past 90 % the position is forgotten on every write, but the video goes on the Watched list
+     * only when [leaving]: a mark is what "Remove after watching" deletes a download on, and the
+     * last tenth of a film is still being watched.
      */
-    private fun saveResumePosition() {
+    private fun saveResumePosition(leaving: Boolean = false) {
         val exo = player ?: return
         val position = exo.currentPosition
         val duration = exo.duration
-        val watched = duration > 0 && position >= duration - SettingsStore.END_MARGIN_MS
+        // Watched from 90 %, and the position then forgotten; see [ResumeRules].
+        val watched = ResumeRules.watched(position, duration)
         val store = settings
         val chat = chatId
         val message = messageId
@@ -3394,8 +3489,14 @@ class PlayerActivity : FragmentActivity() {
             sizeBytes = fileSizeBytes,
             durationSec = durationSec,
             updatedAt = System.currentTimeMillis(),
+            // The tracks and speed go with the position. A restore still waiting on the track
+            // list is what this video is meant to play with, so that is written, not the defaults.
+            state = resumeTracks?.copy(speed = playbackSpeed) ?: resumeState(exo),
         )
-        if (watched) recordFinished()
+        if (watched && leaving && !watchedHere) {
+            watchedHere = true
+            recordFinished()
+        }
         val forget = watched || markedWatchedHere
         App.backgroundScope.launch {
             runCatching {

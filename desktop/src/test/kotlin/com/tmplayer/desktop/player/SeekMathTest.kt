@@ -62,11 +62,8 @@ class SeekMathTest {
     }
 
     @Test
-    fun `remaining time and watched`() {
+    fun `remaining time`() {
         assertEquals("-1:00", SeekMath.remaining(60_000, 120_000))
-        assertTrue(SeekMath.watched(95_000, 120_000, 30_000))
-        assertFalse(SeekMath.watched(60_000, 120_000, 30_000))
-        assertFalse(SeekMath.watched(60_000, 0, 30_000))
     }
 
     @Test

@@ -405,12 +405,15 @@ None of them fire while a search field has focus.
 | **J / L** | Back / forward 10 seconds (also Shift with the mouse wheel) |
 | **Shift+Left / Shift+Right** | Back / forward 1 minute |
 | **Ctrl+Alt+Left / Ctrl+Alt+Right** | Back / forward 5 minutes |
+| **Ctrl+Left / Ctrl+Right** | Previous / next chapter (Cmd on a Mac); a minute in a video without chapters |
 | **, / .** | One frame back / forward, while paused |
+| **R** | Repeat from A to B: press once at the start, again at the end, a third time to stop |
+| **S / Shift+S** | Screenshot, with or without the subtitles, into Pictures/TMPlayer |
 | **0 - 9** | Jump to that tenth of the video; 5 is halfway. **Home** and **End** go to the start and the end |
 | **Up / Down** | Volume (also the mouse wheel) |
 | **M** | Mute |
 | **F**, **F11**, **Alt+Enter** | Fullscreen (also a double click); **Esc** leaves it |
-| **S / Shift+S / C** | Next / previous subtitles, subtitles on or off |
+| **V / Shift+V / C** | Next / previous subtitles, subtitles on or off |
 | **A / Shift+A** | Next / previous audio track |
 | **] / [ / Backspace** | Faster / slower / back to normal speed |
 | **Shift+N / Shift+P** | Next / previous episode (also Page Down / Page Up) |

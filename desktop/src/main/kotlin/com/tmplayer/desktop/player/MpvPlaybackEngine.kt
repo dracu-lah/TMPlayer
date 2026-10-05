@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.player
 
+import com.tmplayer.data.ResumeState
 import com.tmplayer.desktop.DesktopPaths
 import com.tmplayer.platform.Logger
 import com.tmplayer.player.SubtitleStyle
@@ -19,6 +20,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.openani.mediamp.PlaybackEvent
+import org.openani.mediamp.features.Screenshots
 import org.openani.mediamp.mpv.MPVHandle
 import org.openani.mediamp.mpv.MpvMediampPlayer
 import org.openani.mediamp.source.MediaData
@@ -168,7 +170,18 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
         if (tracksDirty || tick % TRACK_POLL_EVERY == 0) {
             tracksDirty = false
             _tracks.value = readTracks(h)
+            val chapters = readChapters(h)
+            if (chapters != _state.value.chapters) _state.update { it.copy(chapters = chapters) }
         }
+    }
+
+    /** mpv's `chapter-list`, in time order, without a mark mpv could not place. */
+    private fun readChapters(h: MPVHandle): List<Chapter> {
+        val count = h.int("chapter-list/count") ?: return emptyList()
+        return (0 until count).mapNotNull { i ->
+            val seconds = h.double("chapter-list/$i/time") ?: return@mapNotNull null
+            Chapter((seconds * 1000).roundToLong().coerceAtLeast(0), h.string("chapter-list/$i/title"))
+        }.sortedBy { it.startMs }
     }
 
     private fun landSeek(at: Long?) {
@@ -240,6 +253,8 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             h.setPropertyDouble("sub-delay", prefs.delays.subtitleMs / 1000.0)
             h.setPropertyDouble("audio-delay", prefs.delays.audioMs / 1000.0)
         }
+        // mpv keeps a loop across files as well, and the last video's is no use to this one.
+        setAbLoop(null)
         try {
             withContext(Dispatchers.IO) {
                 player.setMediaData(data, playWhenReady = true, startPositionMillis = startAtMs)
@@ -251,6 +266,7 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
                 val pick = wanted.firstOrNull { it.language == prefs.subtitleLanguage } ?: wanted.firstOrNull()
                 if (pick != null && wanted.none { it.selected }) runCatching { h.setPropertyString("sid", pick.id.toString()) }
             }
+            prefs.resume?.let { restoreTracks(h, it) }
             // The leveller goes in once there is sound to put it on; see [addLeveller].
             if (prefs.volumeBoost) addLeveller()
             tracksDirty = true
@@ -260,6 +276,25 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
         } catch (e: Throwable) {
             Logger.w(TAG, "Open failed", e)
             _state.update { it.copy(error = e.message ?: "This video could not be opened.", buffering = false) }
+        }
+    }
+
+    /**
+     * The exact tracks a resumed video was playing with, over the series' languages. A place that
+     * now holds a track in another language is left to them rather than guessed at.
+     */
+    private fun restoreTracks(h: MPVHandle, wanted: ResumeState) {
+        val all = readTracks(h)
+        val audio = all.filter { it.type == TrackType.Audio }
+        val subs = all.filter { it.type == TrackType.Subtitle }
+        wanted.audioTrack?.let { audio.getOrNull(it) }
+            ?.takeIf { ResumeState.sameTrack(wanted.audioLanguage, it.language) }
+            ?.let { runCatching { h.setPropertyString("aid", it.id.toString()) } }
+        when {
+            wanted.subtitlesOff -> runCatching { h.setPropertyString("sid", "no") }
+            else -> wanted.subtitleTrack?.let { subs.getOrNull(it) }
+                ?.takeIf { ResumeState.sameTrack(wanted.subtitleLanguage, it.language) }
+                ?.let { runCatching { h.setPropertyString("sid", it.id.toString()) } }
         }
     }
 
@@ -454,6 +489,45 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
         val ok = runCatching { handle.command("sub-add", path, "select") }.getOrDefault(false)
         tracksDirty = true
         return ok
+    }
+
+    /**
+     * Through mediamp's [Screenshots], which renders the frame off the same render context the
+     * picture comes from, at the size it is drawn, and writes the PNG itself. mpv's own
+     * `screenshot-to-file` cannot be used: it encodes through libavcodec, and the FFmpeg mediamp
+     * ships has no image encoder at all. The subtitles are drawn by that render, so a bare
+     * picture hides them for the moment it takes.
+     */
+    override suspend fun screenshot(file: java.io.File, withSubtitles: Boolean): Boolean {
+        if (!_state.value.opened) return false
+        val shots = player.features[Screenshots] ?: return false
+        file.parentFile?.mkdirs()
+        val h = handle
+        val hideSubs = !withSubtitles && h.bool("sub-visibility") == true
+        if (hideSubs) runCatching { h.setPropertyBoolean("sub-visibility", false) }
+        try {
+            shots.takeScreenshot(file.absolutePath)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Logger.w(TAG, "Screenshot failed", e)
+        } finally {
+            if (hideSubs) runCatching { h.setPropertyBoolean("sub-visibility", true) }
+        }
+        return file.isFile && file.length() > 0
+    }
+
+    override fun setAbLoop(loop: AbLoop?) {
+        val end = loop?.endMs
+        runCatching {
+            if (loop == null || end == null) {
+                handle.setPropertyString("ab-loop-b", "no")
+                handle.setPropertyString("ab-loop-a", "no")
+            } else {
+                handle.setPropertyDouble("ab-loop-a", loop.startMs / 1000.0)
+                handle.setPropertyDouble("ab-loop-b", end / 1000.0)
+            }
+        }
     }
 
     override fun details(): List<Pair<String, String>> {

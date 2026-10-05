@@ -85,8 +85,4 @@ object SeekMath {
     /** "-1:29:18": what is left, for the remaining time toggle. */
     fun remaining(position: Long, duration: Long): String =
         "-" + StreamStats.formatClock((duration - position).coerceAtLeast(0))
-
-    /** Whether a position counts as watched, the rule Android's resume writer uses. */
-    fun watched(position: Long, duration: Long, endMarginMs: Long): Boolean =
-        duration > 0 && position >= duration - endMarginMs
 }

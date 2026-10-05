@@ -33,6 +33,14 @@ sealed interface PlayerAction {
     data object AlwaysOnTop : PlayerAction
     data object MiniPlayer : PlayerAction
     data object Stats : PlayerAction
+    /** The frame on screen to Pictures/TMPlayer, with the subtitles as drawn or without. */
+    data class Screenshot(val withSubtitles: Boolean) : PlayerAction
+
+    /** Marks the loop start, then its end, then clears it. See [AbLoop]. */
+    data object AbRepeat : PlayerAction
+
+    /** The next chapter, or back to the start of this one (or the one before). See [Chapters]. */
+    data class ChapterStep(val forward: Boolean) : PlayerAction
     data object Back : PlayerAction
     data object Quit : PlayerAction
     data object ShortcutSheet : PlayerAction
@@ -60,7 +68,9 @@ data class KeyContext(
  *
  * Where an alias in the table collides with a primary key, the primary wins: 9 and 0 jump to 90 %
  * and the start (not volume), J seeks (not subtitles), I opens the stats (not the mini player),
- * and Alt+Left/Right seek 10 s (not back). macOS swaps Ctrl for Cmd on the window shortcuts.
+ * Alt+Left/Right seek 10 s (not back), S takes a screenshot (not the next subtitles) and
+ * Ctrl+Left/Right step through chapters (not a minute). macOS swaps Ctrl for Cmd on the window
+ * shortcuts and the chapter keys.
  */
 object PlayerKeys {
 
@@ -85,6 +95,9 @@ object PlayerKeys {
 
         when (key) {
             Key.DirectionLeft, Key.DirectionRight -> {
+                // Chapters on the command key alone, as YouTube has them; a file without chapters
+                // seeks a minute instead, which is what Ctrl did before chapters had a key.
+                if (command && !shift && !alt) return PlayerAction.ChapterStep(forward = key == Key.DirectionRight)
                 val sign = if (key == Key.DirectionRight) 1 else -1
                 val huge = if (context.mac) meta && shift && alt else ctrl && alt
                 val ms = when {
@@ -145,8 +158,11 @@ object PlayerKeys {
             Key.Period -> if (shift) PlayerAction.SpeedUp else PlayerAction.FrameStep(forward = true)
             Key.M -> PlayerAction.ToggleMute
             Key.F -> PlayerAction.ToggleFullscreen
-            Key.S -> if (shift) PlayerAction.SubtitlePrevious else PlayerAction.SubtitleNext
-            Key.V -> PlayerAction.SubtitleNext
+            // mpv's screenshot keys: s with the subtitles, S the bare picture. The subtitle cycle
+            // that S had before moved to V, mpv's own and already its alias.
+            Key.S -> PlayerAction.Screenshot(withSubtitles = !shift)
+            Key.V -> if (shift) PlayerAction.SubtitlePrevious else PlayerAction.SubtitleNext
+            Key.R -> PlayerAction.AbRepeat
             Key.C -> PlayerAction.SubtitleToggle
             Key.A -> if (shift) PlayerAction.AudioPrevious else PlayerAction.AudioNext
             Key.B -> PlayerAction.AudioNext
@@ -192,14 +208,16 @@ object PlayerKeys {
             "Seek 10 s" to "J, L",
             "Seek 1 min" to "Shift+Left, Shift+Right",
             "Seek 5 min" to if (mac) "Cmd+Shift+Alt+Left, Cmd+Shift+Alt+Right" else "Ctrl+Alt+Left, Ctrl+Alt+Right",
+            "Previous, next chapter" to "$cmd+Left, $cmd+Right",
             "Frame step while paused" to ", and .",
+            "Repeat A to B: start, end, off" to "R",
             "Jump to 0 to 90 %" to "0 to 9",
             "Start, end" to "Home, End",
             "Volume" to if (wheelSeeks) "Up, Down, Shift+wheel" else "Up, Down, wheel",
             "Seek 10 s with the wheel" to if (wheelSeeks) "wheel" else "Shift+wheel",
             "Mute" to "M",
             "Fullscreen" to "F, F11, double click",
-            "Subtitles next, previous, on or off" to "S, Shift+S, C",
+            "Subtitles next, previous, on or off" to "V, Shift+V, C",
             "Audio next, previous" to "A, Shift+A",
             "Subtitles earlier, later" to "Z, X",
             "Sound earlier, later" to "Ctrl+-, Ctrl+=",
@@ -207,6 +225,7 @@ object PlayerKeys {
             "Next, previous episode" to "Shift+N, Shift+P",
             "Always on top" to "$cmd+T",
             "Mini player" to "$cmd+P",
+            "Screenshot, without subtitles" to "S, Shift+S",
             "Playback details" to "I",
             "Back" to "Esc, Backspace",
             "Quit" to "$cmd+Q",

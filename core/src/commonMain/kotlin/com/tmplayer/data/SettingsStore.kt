@@ -128,8 +128,8 @@ private fun delayKey(chatId: Long, messageId: Long) =
 /**
  * The same line again, for the Downloads screen.
  *
- * It cannot read the resume history instead: a video is written there only once a minute of it has
- * been watched, and a download the viewer started and walked away from is precisely the one taking
+ * It cannot read the resume history instead: a video is written there only once three minutes of it
+ * have been watched (see [ResumeRules]), and a download the viewer started and walked away from is precisely the one taking
  * up the space they are looking for. This is written the moment playback is allowed to begin.
  */
 private fun downloadKey(chatId: Long, messageId: Long) =
@@ -812,6 +812,21 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
         prefs.data.first()[resumeKey(chatId, messageId)] ?: 0L
 
     /**
+     * The whole resume point for one video, with the [ResumeState] it was playing with, or null
+     * when there is none (or its description is missing).
+     */
+    suspend fun resumeRecord(chatId: Long, messageId: Long): ResumeRecord? {
+        val prefs = prefs.data.first()
+        val positionMs = prefs[resumeKey(chatId, messageId)] ?: return null
+        return ResumeRecord.decode(
+            key = SettingsStore.progressKey(chatId, messageId),
+            encoded = prefs[metaKey(chatId, messageId)],
+            positionMs = positionMs,
+            durationMs = prefs[durationKey(chatId, messageId)] ?: 0L,
+        )
+    }
+
+    /**
      * Every stored resume point, keyed by `chatId:messageId`, read in one pass.
      *
      * The grid needs a progress bar on every preview at once; asking DataStore per card would be
@@ -994,8 +1009,8 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
     ) {
         prefs.edit { prefs ->
             val key = resumeKey(chatId, messageId)
-            // Under a minute in, or basically finished: there is nothing worth resuming.
-            if (positionMs < MIN_RESUME_MS) {
+            // In the first three minutes, or in the credits: there is nothing worth resuming.
+            if (!ResumeRules.keeps(positionMs, durationMs)) {
                 prefs.remove(key)
                 prefs.remove(durationKey(chatId, messageId))
                 prefs.remove(metaKey(chatId, messageId))
@@ -1113,17 +1128,12 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
         fun autoOpenChatId(lastChatId: Long, enabled: Boolean): Long? =
             if (enabled && lastChatId != 0L) lastChatId else null
 
-        const val MIN_RESUME_MS = 60_000L
-
         /**
          * How many half-watched videos are kept before the oldest start dropping off.
          *
          * The resume history only. Downloads are not capped: see [noteDownload].
          */
         const val MAX_HISTORY = 200
-
-        /** Anything within this of the end counts as watched. */
-        const val END_MARGIN_MS = 30_000L
 
         fun progressKey(chatId: Long, messageId: Long) = "${chatId}_$messageId"
     }

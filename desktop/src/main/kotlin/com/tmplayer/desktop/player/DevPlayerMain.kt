@@ -59,6 +59,11 @@ import kotlin.system.exitProcess
  *   the settings mid run (names as in [com.tmplayer.player.SubtitleSize] and
  *   [com.tmplayer.player.SubtitlePosition]), the way the Settings page does, to show it reaching
  *   the video already playing.
+ * - `--shortcuts` opens the "?" sheet from the start.
+ * - `--shots <dir>` puts S's screenshots there instead of Pictures/TMPlayer.
+ * - `--press "<ms>:<key>;<ms>:<key>"` presses each key at its time through `java.awt.Robot`, for
+ *   keys that need their own moment (A-B repeat, chapters). A key is a letter, or a name with
+ *   modifiers in front: `r`, `shift+s`, `ctrl+right`, `ctrl+left`.
  * - `--quit-after <ms>` closes the window, so a scripted run ends on its own.
  */
 fun main(argv: Array<String>) {
@@ -94,6 +99,10 @@ fun main(argv: Array<String>) {
     val fullscreenRounds = value("--fullscreen-rounds")?.toIntOrNull() ?: 1
     val menuPage = value("--menu")
     val idleLimit = value("--idle-limit")?.toLongOrNull()
+    val presses = value("--press").orEmpty().split(';').mapNotNull { step ->
+        val (at, key) = step.split(':', limit = 2).takeIf { it.size == 2 } ?: return@mapNotNull null
+        at.trim().toLongOrNull()?.let { it to key.trim() }
+    }
     // Written before the player opens, as the menu's toggle would have left it.
     value("--volume-boost")?.let { on -> kotlinx.coroutines.runBlocking { store.setVolumeBoost(on == "on") } }
 
@@ -131,6 +140,8 @@ fun main(argv: Array<String>) {
                 detailsOpen = flag("--details"),
                 menuOpen = menuPage,
                 idleLimitMs = idleLimit ?: com.tmplayer.player.StillWatching.IDLE_LIMIT_MS,
+                shortcutsOpen = flag("--shortcuts"),
+                screenshotDir = value("--shots")?.let { dir -> { File(dir) } } ?: { File(com.tmplayer.desktop.os.UserDirs.pictures(), "TMPlayer") },
             )
             LaunchedEffect(engine) {
                 val e = engine ?: return@LaunchedEffect
@@ -184,6 +195,12 @@ fun main(argv: Array<String>) {
                     at(seekAfter)
                     e.seekTo(seekTo)
                 }
+                for ((ms, key) in presses.sortedBy { it.first }) {
+                    at(ms)
+                    window.toFront()
+                    pressKey(key)
+                    println("dev: pressed $key at ${e.state.value.positionMs} ms")
+                }
                 if (pauseAfter != null) {
                     at(pauseAfter)
                     e.pause()
@@ -213,6 +230,32 @@ private suspend fun typeKeys(keys: String) {
         if (ctrl) robot.keyRelease(java.awt.event.KeyEvent.VK_CONTROL)
         delay(120)
     }
+}
+
+/** See `--press`: one key with its modifiers held, `ctrl+right` or `s`. */
+private fun pressKey(spec: String) {
+    val robot = java.awt.Robot()
+    val parts = spec.lowercase().split('+')
+    val mods = parts.dropLast(1).mapNotNull {
+        when (it) {
+            "ctrl" -> java.awt.event.KeyEvent.VK_CONTROL
+            "shift" -> java.awt.event.KeyEvent.VK_SHIFT
+            "alt" -> java.awt.event.KeyEvent.VK_ALT
+            "meta", "cmd" -> java.awt.event.KeyEvent.VK_META
+            else -> null
+        }
+    }
+    val code = when (val name = parts.last()) {
+        "left" -> java.awt.event.KeyEvent.VK_LEFT
+        "right" -> java.awt.event.KeyEvent.VK_RIGHT
+        "space" -> java.awt.event.KeyEvent.VK_SPACE
+        "slash", "?" -> java.awt.event.KeyEvent.VK_SLASH
+        else -> java.awt.event.KeyEvent.getExtendedKeyCodeForChar(name.first().code)
+    }
+    mods.forEach(robot::keyPress)
+    robot.keyPress(code)
+    robot.keyRelease(code)
+    mods.reversed().forEach(robot::keyRelease)
 }
 
 /**

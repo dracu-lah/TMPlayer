@@ -25,7 +25,8 @@ class PlayerKeysTest {
         assertEquals(PlayerAction.SeekBy(10_000), action(Key.L))
         assertEquals(PlayerAction.SeekBy(10_000), action(Key.DirectionRight, alt = true))
         assertEquals(PlayerAction.SeekBy(-60_000), action(Key.DirectionLeft, shift = true))
-        assertEquals(PlayerAction.SeekBy(60_000), action(Key.DirectionRight, ctrl = true))
+        // Ctrl alone is the chapter key now; with Shift it is still the minute.
+        assertEquals(PlayerAction.SeekBy(60_000), action(Key.DirectionRight, ctrl = true, shift = true))
         assertEquals(PlayerAction.SeekBy(300_000), action(Key.DirectionRight, ctrl = true, alt = true))
         assertEquals(PlayerAction.SeekBy(-300_000), action(Key.DirectionLeft, shift = true, alt = true, meta = true, context = KeyContext(mac = true)))
         assertEquals(PlayerAction.SeekBy(-10_000), action(Key.MediaRewind))
@@ -70,8 +71,8 @@ class PlayerKeysTest {
 
     @Test
     fun `tracks and speed`() {
-        assertEquals(PlayerAction.SubtitleNext, action(Key.S))
-        assertEquals(PlayerAction.SubtitlePrevious, action(Key.S, shift = true))
+        assertEquals(PlayerAction.SubtitleNext, action(Key.V))
+        assertEquals(PlayerAction.SubtitlePrevious, action(Key.V, shift = true))
         assertEquals(PlayerAction.SubtitleToggle, action(Key.C))
         assertEquals(PlayerAction.AudioNext, action(Key.A))
         assertEquals(PlayerAction.AudioPrevious, action(Key.A, shift = true))
@@ -81,6 +82,22 @@ class PlayerKeysTest {
         assertEquals(PlayerAction.SpeedUp, action(Key.Period, shift = true))
         assertEquals(PlayerAction.FrameStep(forward = true), action(Key.Period))
         assertEquals(PlayerAction.FrameStep(forward = false), action(Key.Comma))
+    }
+
+    @Test
+    fun `screenshot, A-B repeat and chapters`() {
+        assertEquals(PlayerAction.Screenshot(withSubtitles = true), action(Key.S))
+        assertEquals(PlayerAction.Screenshot(withSubtitles = false), action(Key.S, shift = true))
+        assertEquals(PlayerAction.AbRepeat, action(Key.R))
+        assertEquals(PlayerAction.ChapterStep(forward = true), action(Key.DirectionRight, ctrl = true))
+        assertEquals(PlayerAction.ChapterStep(forward = false), action(Key.DirectionLeft, ctrl = true))
+        val mac = KeyContext(mac = true)
+        assertEquals(PlayerAction.ChapterStep(forward = true), action(Key.DirectionRight, meta = true, context = mac))
+        // Ctrl on a Mac is not the command key, and still seeks the minute.
+        assertEquals(PlayerAction.SeekBy(60_000), action(Key.DirectionRight, ctrl = true, context = mac))
+        // The longer seeks that share the modifiers are untouched.
+        assertEquals(PlayerAction.SeekBy(60_000), action(Key.DirectionRight, ctrl = true, shift = true))
+        assertEquals(PlayerAction.SeekBy(300_000), action(Key.DirectionRight, ctrl = true, alt = true))
     }
 
     @Test
