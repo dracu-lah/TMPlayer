@@ -5,8 +5,15 @@
     <link>https://tmplayer.org/changelog/</link>
     <description>What changed in every TMPlayer release, newest first: Android TV, phones, Windows and Linux, all from one release.</description>
     <language>en-gb</language>
-    <lastBuildDate>Sun, 04 Oct 2026 23:40:45 GMT</lastBuildDate>
+    <lastBuildDate>Mon, 05 Oct 2026 18:48:31 GMT</lastBuildDate>
     <atom:link href="https://tmplayer.org/changelog/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>TMPlayer 1.22.1</title>
+      <link>https://tmplayer.org/changelog/#v1.22.1</link>
+      <guid isPermaLink="false">tmplayer-v1.22.1</guid>
+      <pubDate>Mon, 05 Oct 2026 18:48:31 GMT</pubDate>
+      <description>&lt;p&gt;Videos play on Android TV again. In 1.22.0 the player closed itself a few seconds into every video on a television; phones and computers were not affected.&lt;/p&gt;</description>
+    </item>
     <item>
       <title>TMPlayer 1.22.0</title>
       <link>https://tmplayer.org/changelog/#v1.22.0</link>
