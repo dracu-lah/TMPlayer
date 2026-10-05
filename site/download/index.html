@@ -173,7 +173,7 @@
       <div class="section-head" data-reveal>
         <div class="section-title">
           <h2 id="download-h">Every platform, one release</h2>
-          <p class="section-sub">Every file comes from one GitHub release. The Android files are signed with the project's key; Windows builds are not signed yet.</p>
+          <p class="section-sub">Every file comes from one GitHub release. The Android files are signed with the project's key. Windows builds are signed using a free certificate provided by the <a href="https://about.signpath.io/" rel="noopener">SignPath Foundation</a> for open-source projects (<a href="/signing">Code Signing Policy</a>).</p>
         </div>
       </div>
 
@@ -277,7 +277,7 @@
               </li>
             </ul>
             <div class="callout callout-warn">
-              <p><strong>Windows will warn you first.</strong> The build is not signed yet, so SmartScreen says <em>Windows protected your PC</em>. Click <em>More info</em>, then <em>Run anyway</em>.</p>
+              <p>Windows binaries are signed via SignPath to verify their integrity and prevent unauthorized modifications.</p>
             </div>
             <p class="platform-foot"><a href="/install/#windows">How to install on Windows</a></p>
           </article>
@@ -373,7 +373,7 @@
             What it will not do
           </h3>
           <ul class="crosses">
-            <li>It is not in a store, so Android asks to allow the install and Windows shows SmartScreen. Read those prompts.</li>
+            <li>It is not in a store, so Android asks to allow the install. Read those prompts.</li>
             <li>It comes with no media. It only shows what is already in your chats.</li>
             <li>No store updates. TMPlayer looks for a new version itself and offers it in the side bar instead; the Windows installer and the AppImage update in place from there.</li>
           </ul>
