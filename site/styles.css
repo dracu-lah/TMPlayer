@@ -2488,6 +2488,31 @@ a.card:hover .card-go svg { transform: translateX(4px); }
 .support-more h3 { margin: 0 0 10px; font-size: clamp(1.15rem, 2.2vw, 1.4rem); letter-spacing: -0.02em; }
 .support-more .support-stats a { color: var(--on-surface-variant); }
 .support-more .support-stats a:hover { color: var(--on-surface); }
+/* Two buttons, not three: kept to the width of two so they do not stretch across the card. */
+.support-give { max-width: 520px; }
+/* The support links again as QR codes, for paying from a phone while reading on a computer.
+   Black on a white plate in both themes, which is what a camera reads best. */
+.support-codes { display: none; }
+@media (min-width: 900px) {
+  .support-codes {
+    display: flex;
+    justify-content: center;
+    gap: 48px;
+    margin: 0 auto clamp(8px, 1.4vw, 16px);
+  }
+  .support-codes figure { margin: 0; }
+  .support-codes .support-qr {
+    display: block;
+    margin: 0 auto 8px;
+    padding: 10px;
+    border-radius: var(--shape-m);
+    background: #fff;
+    box-shadow: 0 0 0 1px var(--outline-variant);
+  }
+  .support-codes figcaption { color: var(--on-surface-variant); font-size: 0.9rem; }
+}
+.support-talk { border-top: 0; margin-top: 0; }
+.support-talk .support-actions { max-width: 320px; }
 
 /* The footer's second row: where to talk and where to chip in. */
 .footer-community a { font-size: 0.9rem; }

@@ -75,6 +75,11 @@ android {
             ?: ""
         buildConfigField("String", "SENTRY_DSN", "\"$sentryDsn\"")
 
+        // Donation links and the support card, all behind one switch (SupportReminder.enabled).
+        // The `play` flavor planned in CP35 sets this to false: Play does not allow donation links
+        // that bypass its billing.
+        buildConfigField("boolean", "SUPPORT_LINKS", "true")
+
         // English only. Every androidx and Media3 dependency ships translations for ~80
         // locales, and none of this app's own strings are translated, so the rest is dead
         // weight in resources.arsc. Revisit the moment the UI itself is localised.

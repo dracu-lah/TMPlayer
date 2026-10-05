@@ -64,6 +64,12 @@ import androidx.compose.foundation.layout.padding
 import com.tmplayer.ui.onboarding.OverviewScreen
 import com.tmplayer.ui.settings.AboutScreen
 import com.tmplayer.ui.settings.SettingsScreen
+import com.tmplayer.ui.settings.SupportCard
+import com.tmplayer.ui.settings.SupportDialog
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.Alignment
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.LocalDarkTheme
 import com.tmplayer.ui.theme.TMPlayerTheme
@@ -76,9 +82,10 @@ import com.tmplayer.ui.theme.Tv
  * screens of their own: `chats-first` (the first chat list, with its tip, and after fifteen seconds
  * the slow-answer line), and `media` with `--es variant hidden|empty-hidden|empty-more|slow|recent`.
  * `--es variant menu` opens the first video's menu over the grid, with its "x GB free" line, and
- * `--es screen downloads` is the Downloads screen. Add `--ez tv true` to capture the
- * television layout on a phone panel resized to 1920x1080, which is how the TV shots on the site
- * are taken now that the stick is not the only device this app has to look right on.
+ * `--es screen downloads` is the Downloads screen, `--es screen support` the support codes over
+ * Settings, and `--ez support_reminder true` the support card over the chat list. Add
+ * `--ez tv true` to capture the television layout on a phone panel resized to 1920x1080, which is
+ * how the TV shots on the site are taken now that the stick is not the only device this app has to look right on.
  *
  * Every picture in here is a demo drawable shipped with this build. Nothing on screen belongs to
  * anybody, which is the point: the shots on the README and the site can be published as they are.
@@ -126,7 +133,11 @@ class PromoCaptureActivity : ComponentActivity() {
         setContent {
             // The fixture navigates, so one recording can walk from the chat list into a chat and
             // back out the way a viewer would, rather than being three unrelated clips cut together.
-            var screen by remember { mutableStateOf(start) }
+            // `--es screen support` is Settings with the "Support TMPlayer" codes open over it, and
+            // `--ez support_reminder true` puts the support card over the chat list.
+            var screen by remember { mutableStateOf(if (start == "support") "settings" else start) }
+            var supporting by remember { mutableStateOf(start == "support") }
+            var supportCard by remember { mutableStateOf(intent.getBooleanExtra("support_reminder", false)) }
             TMPlayerTheme {
                 // The real app does this from MainActivity, which the fixture does not run
                 // through. Without it a light shot carries a white clock on a white status bar,
@@ -185,6 +196,18 @@ class PromoCaptureActivity : ComponentActivity() {
                             layout = if (intent.getStringExtra("layout") == "grid") CardLayout.Grid else CardLayout.List,
                         )
                     }
+                    if (supportCard && screen == "chats") {
+                        SupportCard(
+                            onSupport = { supportCard = false; supporting = true },
+                            onNotNow = { supportCard = false },
+                            onNever = { supportCard = false },
+                            modifier = Modifier
+                                .align(if (tv) Alignment.BottomEnd else Alignment.BottomCenter)
+                                .windowInsetsPadding(WindowInsets.safeDrawing)
+                                .padding(if (tv) 40.dp else 16.dp),
+                        )
+                    }
+                    if (supporting) SupportDialog(onClose = { supporting = false })
                 }
             }
         }

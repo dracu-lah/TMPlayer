@@ -95,6 +95,7 @@ fun AboutScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val touch = isTouch()
     var qr by remember { mutableStateOf<About.Link?>(null) }
+    var supporting by remember { mutableStateOf(false) }
     val first = remember { FocusRequester() }
     val insets = WindowInsets.safeDrawing.asPaddingValues()
     val open = { link: About.Link -> if (!openLink(context, link.url)) qr = link }
@@ -147,6 +148,17 @@ fun AboutScreen(onBack: () -> Unit) {
                         )
                     }
                 }
+                // Both support links as codes on one screen, to scan from any device.
+                if (group.title == About.SUPPORT_TITLE) {
+                    item {
+                        ActionRow(
+                            title = "Show both as QR codes",
+                            subtitle = "Scan one with your phone, or open it on another device",
+                            icon = Icons.Filled.Favorite,
+                            onClick = { supporting = true },
+                        )
+                    }
+                }
                 items(group.links, key = { it.url + it.title }) { link ->
                     ActionRow(
                         title = link.title,
@@ -182,6 +194,8 @@ fun AboutScreen(onBack: () -> Unit) {
             runCatching { first.requestFocus() }
         }
     }
+
+    if (supporting) SupportDialog(onClose = { supporting = false })
 
     qr?.let { link ->
         LinkQrDialog(url = link.url, what = link.title.replaceFirstChar { it.lowercase() }.let { "the $it link" }) {
@@ -236,7 +250,7 @@ private fun Masthead() {
 
 private fun iconFor(group: String): ImageVector = when (group) {
     "Contact" -> Icons.Filled.Email
-    "Support TMPlayer" -> Icons.Filled.Favorite
+    About.SUPPORT_TITLE -> Icons.Filled.Favorite
     "Your data and the law" -> Icons.Filled.Lock
     else -> Icons.Filled.Info
 }

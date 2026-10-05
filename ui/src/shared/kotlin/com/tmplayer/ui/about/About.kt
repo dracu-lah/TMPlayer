@@ -1,5 +1,7 @@
 package com.tmplayer.ui.about
 
+import com.tmplayer.data.SupportReminder
+
 /**
  * What the About screen says, the same on phone, TV and desktop: the licence line, every link it
  * offers and the third-party notices. Each app draws it its own way (a TV turns each link into a
@@ -21,12 +23,34 @@ object About {
     const val PRIVACY = "https://tmplayer.org/privacy"
     const val LEGAL = "https://tmplayer.org/legal"
     const val EMAIL = "hello@tmplayer.org"
+    const val SPONSORS = "https://github.com/sponsors/dracu-lah"
+    const val COFFEE = "https://buymeacoffee.com/nevil.dev"
+
+    /** The heading, the Settings row and the card's title. */
+    const val SUPPORT_TITLE = "Support TMPlayer"
+
+    /** Under the support heading, wherever the links appear. */
+    const val SUPPORT_NOTE = "Voluntary. It unlocks nothing: every feature is free for everyone."
 
     /** A link and the sentence under it. */
     data class Link(val title: String, val detail: String, val url: String)
 
     /** A heading and the links under it. [note] is a line drawn under the heading, if any. */
     data class Group(val title: String, val links: List<Link>, val note: String? = null)
+
+    /** The two ways to chip in, in the order every screen shows them. */
+    val supportLinks: List<Link> = listOf(
+        Link("GitHub Sponsors", "A monthly or one-off sponsorship", SPONSORS),
+        Link("Buy Me a Coffee", "A one-off coffee", COFFEE),
+    )
+
+    /**
+     * The support card's words: rare, short, and honest that nothing is held back. See
+     * [SupportReminder] for when it appears.
+     */
+    const val REMINDER_TITLE = "Enjoying TMPlayer?"
+    const val REMINDER_TEXT = "It is free and has no ads of its own. If it has earned a place on " +
+        "your screen, a coffee or a sponsorship keeps it going."
 
     /**
      * Where the corresponding source for this build is: the release it came from, whose notes link
@@ -37,9 +61,10 @@ object About {
 
     /**
      * Every link About offers, in order. The third-party notices are not among them: those are read
-     * inside the app, so each screen puts that row first under "Licence" itself.
+     * inside the app, so each screen puts that row first under "Licence" itself. With
+     * [SupportReminder.enabled] off (the future Play build), the support group is left out.
      */
-    fun groups(version: String): List<Group> = listOf(
+    fun groups(version: String, support: Boolean = SupportReminder.enabled): List<Group> = listOfNotNull(
         Group(
             "Licence",
             listOf(
@@ -67,14 +92,7 @@ object About {
                 Link("GitHub Discussions", "Questions, ideas and bug reports", "$SOURCE/discussions"),
             ),
         ),
-        Group(
-            "Support TMPlayer",
-            listOf(
-                Link("GitHub Sponsors", "A monthly or one-off sponsorship", "https://github.com/sponsors/dracu-lah"),
-                Link("Buy Me a Coffee", "A one-off coffee", "https://buymeacoffee.com/nevil.dev"),
-            ),
-            note = "Voluntary. It unlocks nothing: every feature is free for everyone.",
-        ),
+        if (support) Group(SUPPORT_TITLE, supportLinks, note = SUPPORT_NOTE) else null,
     )
 
     /** One piece of the notices: a heading, a paragraph or a bullet point. */

@@ -1,5 +1,6 @@
 package com.tmplayer.ui.about
 
+import com.tmplayer.data.SupportReminder
 import com.tmplayer.ui.about.About.Block
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -57,5 +58,18 @@ class AboutTest {
     fun `only a release version links to its own release`() {
         assertEquals("${About.SOURCE}/releases/tag/v1.22.1", About.releaseUrl("1.22.1"))
         assertEquals("${About.SOURCE}/releases", About.releaseUrl("1.0.0-dev"))
+    }
+
+    @Test
+    fun `the support group follows the one switch`() {
+        assertEquals(About.SUPPORT_TITLE, About.groups("1.22.1").last().title)
+        assertEquals(listOf(About.SPONSORS, About.COFFEE), About.groups("1.22.1").last().links.map { it.url })
+        assertTrue(About.groups("1.22.1", support = false).none { it.title == About.SUPPORT_TITLE })
+        try {
+            SupportReminder.enabled = false
+            assertTrue(About.groups("1.22.1").none { group -> group.links.any { it.url == About.SPONSORS } })
+        } finally {
+            SupportReminder.enabled = true
+        }
     }
 }

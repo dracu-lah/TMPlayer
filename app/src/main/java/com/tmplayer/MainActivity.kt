@@ -10,6 +10,9 @@ import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Alignment
@@ -53,6 +56,7 @@ import com.tmplayer.data.restore
 import com.tmplayer.data.NetworkStatus
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.SupportReminder
 import com.tmplayer.data.WatchedRecord
 import com.tmplayer.data.WatchedStore
 import com.tmplayer.data.SizeFilter
@@ -83,6 +87,8 @@ import com.tmplayer.ui.onboarding.OverviewScreen
 import com.tmplayer.ui.update.UpdateDialog
 import com.tmplayer.ui.settings.AboutScreen
 import com.tmplayer.ui.settings.SettingsScreen
+import com.tmplayer.ui.settings.SupportCard
+import com.tmplayer.ui.settings.SupportDialog
 import com.tmplayer.ui.theme.TMPlayerTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -186,6 +192,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         Td.start(this)
+        // A debug or promo build can force the support card on, to check it by eye:
+        // `adb shell am start -n com.tmplayer/.MainActivity --ez support_reminder true`.
+        if (BuildConfig.DEBUG && intent?.getBooleanExtra(EXTRA_SUPPORT_REMINDER, false) == true) {
+            SupportReminder.forced = true
+        }
         noteRequestedScreen(intent)
         setContent {
             TMPlayerTheme { Root() }
@@ -212,6 +223,9 @@ class MainActivity : ComponentActivity() {
     companion object {
         /** Which screen a launch is asking for, when it is asking for one. */
         const val EXTRA_OPEN = "com.tmplayer.extra.OPEN"
+
+        /** Debug and promo builds only: show the support card now. See [SupportReminder.forced]. */
+        const val EXTRA_SUPPORT_REMINDER = "support_reminder"
 
         const val OPEN_DOWNLOADS = SCREEN_DOWNLOADS
 
@@ -291,6 +305,19 @@ private fun Root() {
         if (updates.shouldPopUp(version)) {
             updates.popupShown(version)
             showUpdate = true
+        }
+    }
+
+    // The support card: rare, after real use, never over the player or the update popup. The rule
+    // and its counters are SupportReminder's; showing it starts the 60 day snooze.
+    var supportCard by remember { mutableStateOf(false) }
+    var supporting by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { runCatching { settings.noteSupportFirstSeen(System.currentTimeMillis()) } }
+    LaunchedEffect(inShell) {
+        if (!inShell || supportCard) return@LaunchedEffect
+        delay(SUPPORT_CARD_DELAY_MS)
+        if (!showUpdate && runCatching { SupportReminder.claim(settings, System.currentTimeMillis()) }.getOrDefault(false)) {
+            supportCard = true
         }
     }
 
@@ -993,6 +1020,22 @@ private fun Root() {
             UpdateDialog(onDismiss = { showUpdate = false; Updates.dismiss() })
         }
 
+        if (supportCard && screen is Screen.Chats && !showUpdate) {
+            SupportCard(
+                onSupport = { supportCard = false; supporting = true },
+                onNotNow = { supportCard = false },
+                onNever = {
+                    supportCard = false
+                    scope.launch { runCatching { settings.neverAskSupport() } }
+                },
+                modifier = Modifier
+                    .align(if (FormFactor.isTv(context)) Alignment.BottomEnd else Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(if (FormFactor.isTv(context)) 40.dp else 16.dp),
+            )
+        }
+        if (supporting) SupportDialog(onClose = { supporting = false })
+
         ConnectionStatus(
             notice = connectionNotice,
             modifier = Modifier
@@ -1003,3 +1046,7 @@ private fun Root() {
 }
 
 private const val OFFLINE_SETTLE_MS = 750L
+
+/** How long the chat list is up before the support card may slide in. */
+private const val SUPPORT_CARD_DELAY_MS = 4_000L
+

@@ -59,6 +59,14 @@ private val UPDATE_SKIPPED = stringPreferencesKey("update_skipped_version")
 private val UPDATE_SNOOZED_UNTIL = longPreferencesKey("update_snoozed_until")
 private val UPDATE_POPUP_SHOWN = stringPreferencesKey("update_popup_shown")
 
+// The support card's memory. See [SupportReminder]. About this device's viewer rather than the
+// Telegram account, so signing out keeps them: "Don't ask again" must not come undone.
+private val SUPPORT_FIRST_SEEN = longPreferencesKey("support_first_seen")
+private val SUPPORT_PLAYS = longPreferencesKey("support_plays")
+private val SUPPORT_SNOOZED_UNTIL = longPreferencesKey("support_snoozed_until")
+private val SUPPORT_NEVER = booleanPreferencesKey("support_never")
+private val SUPPORT_KEYS = listOf(SUPPORT_FIRST_SEEN, SUPPORT_PLAYS, SUPPORT_SNOOZED_UNTIL)
+
 /**
  * The one video the watch cache is holding: which message it came from, and what it is called.
  *
@@ -201,6 +209,8 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
             val theme = prefs[THEME_CHOICE]
             val dynamic = prefs[DYNAMIC_COLOUR]
             val migrated = prefs[DOWNLOADS_MIGRATED]
+            val support = SUPPORT_KEYS.mapNotNull { key -> prefs[key]?.let { Pair(key, it) } }
+            val supportNever = prefs[SUPPORT_NEVER]
             val kept = if (keepDownloads) {
                 prefs.asMap().mapNotNull { (key, value) ->
                     val ids = key.name.removePrefixOrNull("dl_") ?: return@mapNotNull null
@@ -213,6 +223,8 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
             prefs.clear()
             theme?.let { prefs[THEME_CHOICE] = it }
             dynamic?.let { prefs[DYNAMIC_COLOUR] = it }
+            for ((key, value) in support) prefs[key] = value
+            supportNever?.let { prefs[SUPPORT_NEVER] = it }
             if (keepDownloads) {
                 for ((key, value) in kept) prefs[key] = value
                 migrated?.let { prefs[DOWNLOADS_MIGRATED] = it }
@@ -432,6 +444,46 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
 
     suspend fun setRemoveAfterWatching(value: Boolean) {
         prefs.edit { it[REMOVE_AFTER_WATCHING] = value }
+    }
+
+    // ---- the support card -------------------------------------------------------------------
+
+    /** What [SupportReminder] decides from. */
+    val supportCounters: Flow<SupportReminder.Counters> = read(::supportCountersOf)
+
+    suspend fun supportCountersNow(): SupportReminder.Counters = supportCountersOf(prefs.data.first())
+
+    private fun supportCountersOf(prefs: Preferences) = SupportReminder.Counters(
+        firstSeenAt = prefs[SUPPORT_FIRST_SEEN] ?: 0L,
+        plays = (prefs[SUPPORT_PLAYS] ?: 0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+        snoozedUntil = prefs[SUPPORT_SNOOZED_UNTIL] ?: 0L,
+        neverAgain = prefs[SUPPORT_NEVER] ?: false,
+    )
+
+    /**
+     * The day the counting starts. Called on every launch; only the first call writes. An install
+     * that predates the card starts counting from its first launch with it.
+     */
+    suspend fun noteSupportFirstSeen(now: Long) {
+        prefs.edit { if ((it[SUPPORT_FIRST_SEEN] ?: 0L) <= 0L) it[SUPPORT_FIRST_SEEN] = now }
+    }
+
+    /** One more video started. Also starts the day count, if launch somehow did not. */
+    suspend fun noteSupportPlay(now: Long) {
+        prefs.edit {
+            if ((it[SUPPORT_FIRST_SEEN] ?: 0L) <= 0L) it[SUPPORT_FIRST_SEEN] = now
+            it[SUPPORT_PLAYS] = (it[SUPPORT_PLAYS] ?: 0L) + 1
+        }
+    }
+
+    /** The card was shown, or "Not now" pressed: away for [SupportReminder.SNOOZE_DAYS] days. */
+    suspend fun snoozeSupport(now: Long) {
+        prefs.edit { it[SUPPORT_SNOOZED_UNTIL] = SupportReminder.snoozedUntil(now) }
+    }
+
+    /** "Don't ask again". The Settings row and About keep the links. */
+    suspend fun neverAskSupport() {
+        prefs.edit { it[SUPPORT_NEVER] = true }
     }
 
     // ---- updates ----------------------------------------------------------------------------

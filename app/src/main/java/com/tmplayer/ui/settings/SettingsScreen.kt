@@ -54,6 +54,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -141,6 +142,7 @@ import com.tmplayer.ui.update.LinkQrDialog
 import com.tmplayer.ui.update.UpdateDialog
 import com.tmplayer.ui.update.openLink
 import com.tmplayer.ui.about.About
+import com.tmplayer.data.SupportReminder
 import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
@@ -224,6 +226,7 @@ fun SettingsScreen(
     var showUpdate by remember { mutableStateOf(false) }
     // A link a TV cannot open, shown as a QR code instead: the address and what it is.
     var qrLink by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var supporting by remember { mutableStateOf(false) }
     val openPage = { url: String, what: String -> if (!openLink(context, url)) qrLink = url to what }
     // What TMPlayer is holding, split into downloads, cache and everything else. Worked out by
     // [StorageSplit], which is also what the Downloads screen reads, so the two panels cannot
@@ -964,6 +967,17 @@ fun SettingsScreen(
             )
         }
 
+        if (SupportReminder.enabled) {
+            item {
+                ActionRow(
+                    title = About.SUPPORT_TITLE,
+                    subtitle = "GitHub Sponsors or Buy Me a Coffee, with a QR code for each",
+                    icon = Icons.Filled.Favorite,
+                    onClick = { supporting = true },
+                )
+            }
+        }
+
         item {
             ActionRow(
                 title = "About TMPlayer",
@@ -1032,6 +1046,7 @@ fun SettingsScreen(
     }
 
     qrLink?.let { (url, what) -> LinkQrDialog(url = url, what = what, onClose = { qrLink = null }) }
+    if (supporting) SupportDialog(onClose = { supporting = false })
 
     when (prompt) {
         Prompt.ClearCache -> TvConfirm(

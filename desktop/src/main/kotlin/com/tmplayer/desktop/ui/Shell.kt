@@ -54,6 +54,7 @@ import com.tmplayer.desktop.BuildInfo
 import com.tmplayer.desktop.DesktopConnectivity
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
+import com.tmplayer.data.SupportReminder
 import com.tmplayer.ui.components.UiState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -209,6 +210,9 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         }
 
         UpdatePopupHost(state)
+        if (SupportReminder.enabled) {
+            SupportCardHost(state, Modifier.align(Alignment.BottomEnd).padding(24.dp))
+        }
 
         ConnectionBanner(connection, Modifier.align(Alignment.TopCenter).padding(top = 12.dp))
 

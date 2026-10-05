@@ -74,6 +74,8 @@ fun AboutPage(version: String, onBack: () -> Unit) {
 
 @Composable
 private fun Links(version: String, onRead: () -> Unit) {
+    var supporting by remember { mutableStateOf(false) }
+    if (supporting) SupportPopup(onClose = { supporting = false })
     Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
         Image(AppLogo.Mark, contentDescription = null, modifier = Modifier.size(72.dp).clip(RoundedCornerShape(16.dp)))
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -89,6 +91,11 @@ private fun Links(version: String, onRead: () -> Unit) {
         if (index == 0) {
             Setting("Third-party notices", "The libraries inside TMPlayer and their licences. Readable offline") {
                 OutlinedButton(onClick = onRead) { Text("Read") }
+            }
+        }
+        if (group.title == About.SUPPORT_TITLE) {
+            Setting("Show both as QR codes", "Scan one with your phone to pay from there") {
+                OutlinedButton(onClick = { supporting = true }) { Text("Show") }
             }
         }
         group.links.forEach { link ->

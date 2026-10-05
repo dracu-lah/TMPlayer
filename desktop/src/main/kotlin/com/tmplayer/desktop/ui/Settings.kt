@@ -65,6 +65,7 @@ import com.tmplayer.data.Updates
 import com.tmplayer.data.release
 import com.tmplayer.desktop.os.OpenExternal
 import com.tmplayer.ui.about.About
+import com.tmplayer.data.SupportReminder
 import com.tmplayer.player.TouchPrefs
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.theme.Tone
@@ -96,6 +97,7 @@ fun SettingsPage(state: ShellState, version: String = "") {
     val notifyUpdates by settings.updateNotify.collectAsState(initial = true)
     val updateState by Updates.state.collectAsState()
     var confirmSignOut by remember { mutableStateOf(false) }
+    var supporting by remember { mutableStateOf(false) }
     var confirm by remember { mutableStateOf<Confirm?>(null) }
     val touchPrefs by settings.touchPrefs.collectAsState(initial = TouchPrefs())
     val subtitleStyle by settings.subtitleStyle.collectAsState(initial = SubtitleStyle())
@@ -336,6 +338,11 @@ fun SettingsPage(state: ShellState, version: String = "") {
                 Setting("Lawful use", "Use TMPlayer only with media you may access") {
                     OutlinedButton(onClick = { OpenExternal.browse(About.LEGAL) }) { Text("Open") }
                 }
+                if (SupportReminder.enabled) {
+                    Setting(About.SUPPORT_TITLE, "GitHub Sponsors or Buy Me a Coffee, with a QR code for each") {
+                        OutlinedButton(onClick = { supporting = true }) { Text("Show") }
+                    }
+                }
                 Setting("About TMPlayer", "Version $version, licence, notices, contact and support") {
                     OutlinedButton(onClick = { showAbout = true }) { Text("Open") }
                 }
@@ -360,6 +367,7 @@ fun SettingsPage(state: ShellState, version: String = "") {
     }
 
     if (confirmSignOut) SignOutDialog(state, onDismiss = { confirmSignOut = false })
+    if (supporting) SupportPopup(onClose = { supporting = false })
     if (confirmClearWatched) {
         ClearWatchedDialog(state, watchedList.size, scope, onDismiss = { confirmClearWatched = false })
     }
