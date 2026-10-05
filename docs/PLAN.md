@@ -29,7 +29,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [x] CP01 Crash reports and privacy page match each other (c6b3e22)
 - [x] CP02 Wording: "unofficial" everywhere, site titles, release notes text, legal Terms (ae52f5a)
 - [x] CP03 Third-party notices complete, a real desktop corresponding source script, notices inside every package (97a0f3f)
-- [ ] CP04 Respect Telegram "restrict saving content" and self-destructing media
+- [x] CP04 Respect Telegram "restrict saving content" and self-destructing media (572287c, not yet tested on a protected channel)
 - [ ] CP05 About screen on phone, TV and desktop
 - [ ] U01 Two Sentry settings, and tell Claude the DSN host
 - [ ] U02 Licence label and the player logo's source
@@ -217,6 +217,11 @@ permissions". Today nothing checks it, and desktop writes downloads to the visib
 - Tests in `:core` for the filter.
 **Done when:** a protected test channel shows no Download action on phone and desktop. If no protected channel
 is available, say so and test with a forced flag.
+**Result (572287c):** built and unit tested; no phone was attached and no protected channel tried, so check one
+in CP11. Known gaps: rows rebuilt from stored records (Continue watching, Watched, Downloads) do not carry the
+flag, so their actions ask `Td.maySave` when pressed, and the move into Downloads checks it again. Files already
+in Downloads keep Show in folder and Open with. `./gradlew build` fails on lint errors that were already there
+(UnsafeOptInUsageError in PlayerControls and App, NewApi in themes.xml); run it with `-x lint` until fixed.
 **STOP**
 
 ### CP05 About screen on phone, TV and desktop
