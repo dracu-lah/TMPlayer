@@ -26,7 +26,7 @@ removed in the commit that added this file), the listing plan artifact
 Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claude's.
 
 **Phase A. Compliance before any more listings (no release needed to commit; ships with the next release)**
-- [ ] CP01 Crash reports and privacy page match each other
+- [x] CP01 Crash reports and privacy page match each other (c6b3e22)
 - [ ] CP02 Wording: "unofficial" everywhere, site titles, release notes text, legal Terms
 - [ ] CP03 Third-party notices complete, a real desktop corresponding source script, notices inside every package
 - [ ] CP04 Respect Telegram "restrict saving content" and self-destructing media
