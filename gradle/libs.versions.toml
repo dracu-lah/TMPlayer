@@ -23,6 +23,9 @@ datastore = "1.2.1"
 # umbrella pulls in NDK, fragment, Compose and Room integrations, none of which this needs.
 sentry = "8.16.0"
 junit = "4.13.2"
+# Draws the TV player's Compose overlays on the JVM, so a screen that cannot compose fails CI.
+robolectric = "4.17"
+androidxTestCore = "1.7.0"
 # Android ships org.json in the platform; a plain JVM does not, so `:core`'s jvm target carries
 # this for update-response parsing (and its tests), and the Android build never bundles it.
 json = "20240303"
@@ -49,6 +52,8 @@ slf4j = "2.0.17"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+androidx-test-core = { group = "androidx.test", name = "core", version.ref = "androidxTestCore" }
 json = { group = "org.json", name = "json", version.ref = "json" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }

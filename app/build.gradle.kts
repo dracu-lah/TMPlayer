@@ -186,6 +186,8 @@ android {
             // Log.w in otherwise pure code fails the test that covers it, which pushes
             // logging out of exactly the error paths that most need it.
             isReturnDefaultValues = true
+            // Robolectric reads the real resources, so a vectorResource in a smoke test resolves.
+            isIncludeAndroidResources = true
         }
     }
 }
@@ -240,4 +242,6 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
 }

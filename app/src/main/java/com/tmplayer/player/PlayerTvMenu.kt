@@ -89,7 +89,9 @@ class PlayerTvMenu(
 
     init {
         val view = ComposeView(activity).apply {
-            setContent { TMPlayerTheme { Content() } }
+            // Not named Content: inside apply that resolves to ComposeView.Content, which draws
+            // this same lambda again, and the player died of a stack overflow on every TV.
+            setContent { TMPlayerTheme { MenuContent() } }
         }
         // Nothing of its own is drawn in the player's window, so it takes no room there; the
         // dialogs it opens are windows of their own.
@@ -106,7 +108,7 @@ class PlayerTvMenu(
     }
 
     @Composable
-    private fun Content() {
+    private fun MenuContent() {
         when (page.value) {
             Page.Closed -> Unit
             Page.Main -> TvMenu(
