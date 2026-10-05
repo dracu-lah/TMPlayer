@@ -2472,3 +2472,71 @@ a.card:hover .card-go svg { transform: translateX(4px); }
 .panel-prose em { font-style: normal; font-weight: 600; color: var(--on-surface); }
 .panel-wide { margin-top: 16px; }
 @media (min-width: 880px) { .panel-wide { margin-top: 24px; } }
+
+/* ---------- Support: chip in, or come and talk ----------
+
+   The donation and community links sit under the star in the same card, set apart by a rule, so
+   the free part reads first and the money is a quiet second offer rather than a toll. */
+
+.support-more {
+  max-width: 760px;
+  margin: clamp(28px, 3.6vw, 40px) auto 0;
+  padding-top: clamp(24px, 3vw, 32px);
+  border-top: 1px solid var(--outline-variant);
+}
+.support-more h3 { margin: 0 0 10px; font-size: clamp(1.15rem, 2.2vw, 1.4rem); letter-spacing: -0.02em; }
+.support-more .support-stats a { color: var(--on-surface-variant); }
+.support-more .support-stats a:hover { color: var(--on-surface); }
+
+/* The footer's second row: where to talk and where to chip in. */
+.footer-community a { font-size: 0.9rem; }
+.footer-grid .footer-community { grid-column: 1 / -1; }
+
+/* ---------- Changelog ----------
+
+   One card per release, newest first, written by scripts/build-changelog.py. The cards are the
+   panels' shape on the tonal band, and the notes inside them are prose at the page's measure, so
+   a long release reads like a paragraph rather than like a log. The version heading is its own
+   link, because the feed and the update popup point at these anchors and a reader who lands on
+   one should be able to copy it back out. The fixed header would cover a heading scrolled to the
+   top, hence the scroll margin. */
+
+.changelog { display: grid; gap: 16px; }
+@media (min-width: 880px) { .changelog { gap: 20px; } }
+
+.changelog-entry {
+  min-width: 0;
+  padding: clamp(24px, 3.4vw, 36px);
+  background: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-xl);
+  scroll-margin-top: 104px;
+}
+.changelog-entry:target { border-color: var(--primary); }
+
+.changelog-entry-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 20px;
+  margin-bottom: 14px;
+}
+.changelog-entry-head h2 {
+  margin: 0;
+  font-size: clamp(1.3rem, 2.4vw, 1.6rem);
+  line-height: 1.2;
+  letter-spacing: -0.022em;
+}
+.changelog-entry-head h2 a { color: var(--on-surface); }
+.changelog-entry-head h2 a:hover { color: var(--primary); text-decoration: none; }
+.changelog-meta { margin: 0; font-size: 0.9rem; color: var(--on-surface-variant); }
+.changelog-meta .sep { padding: 0 8px; opacity: 0.6; }
+
+.changelog-notes { max-width: var(--measure); color: var(--on-surface-variant); font-size: 0.98rem; line-height: 1.7; }
+.changelog-notes > :last-child { margin-bottom: 0; }
+.changelog-notes p { margin: 0 0 0.9rem; }
+.changelog-notes ul { margin: 0 0 0.9rem; padding-left: 1.2em; display: grid; gap: 6px; }
+.changelog-notes h4 { margin: 1.2rem 0 0.5rem; font-size: 1rem; font-weight: 600; color: var(--on-surface); }
+.changelog-notes strong { color: var(--on-surface); font-weight: 600; }
+.changelog-foot { text-align: center; }

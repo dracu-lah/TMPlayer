@@ -13,6 +13,13 @@
   <img alt="Tests" src="https://img.shields.io/badge/tests-209%20passing-brightgreen" />
 </p>
 
+<p align="center">
+  <a href="https://t.me/tmplayerapp"><img alt="Telegram channel" src="https://img.shields.io/badge/Telegram-channel-26A5E4?logo=telegram&logoColor=white" /></a>
+  <a href="https://github.com/dracu-lah/TMPlayer/discussions"><img alt="GitHub Discussions" src="https://img.shields.io/badge/GitHub-Discussions-181717?logo=github" /></a>
+  <a href="https://github.com/sponsors/dracu-lah"><img alt="Sponsor on GitHub" src="https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?logo=githubsponsors&logoColor=white" /></a>
+  <a href="https://buymeacoffee.com/nevil.dev"><img alt="Buy me a coffee" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black" /></a>
+</p>
+
 ---
 
 TMPlayer plays the videos in your own Telegram chats and channels on an Android TV, a phone, or a
@@ -104,11 +111,23 @@ the reference test devices, and the version pins that are not free choices.
 ## Read more
 
 - [Feature list](docs/FEATURES.md): everything the app does, and what it deliberately does not.
+- [Changelog](https://tmplayer.org/changelog/): every release, with an RSS feed.
 - [Install guide](INSTALL.md): sideloading, Windows and Linux, shortcuts, the remote and the keyboard, troubleshooting.
 - [Architecture](docs/ARCHITECTURE.md): TDLib, the streaming `DataSource`, why it is built this way.
 - [Building](docs/BUILDING.md) and [releasing](docs/RELEASING.md).
 - [Contributing](CONTRIBUTING.md): ground rules, style, how to report an issue.
 - [Third-party notices](THIRD_PARTY_NOTICES.md): dependency licences and source locations.
+
+## Community and support
+
+- **News:** the [Telegram channel](https://t.me/tmplayerapp) announces every release.
+- **Help and chat:** the [Telegram group](https://t.me/tmplayer_chat) or
+  [GitHub Discussions](https://github.com/dracu-lah/TMPlayer/discussions). Bugs go in
+  [Issues](https://github.com/dracu-lah/TMPlayer/issues); security reports follow [SECURITY.md](SECURITY.md).
+- **Chip in:** TMPlayer has no ads and no paid tier. If it helps you,
+  [sponsor it on GitHub](https://github.com/sponsors/dracu-lah) or
+  [buy me a coffee](https://buymeacoffee.com/nevil.dev). Either way, a star helps the next person trust it.
+- **Email:** [hello@tmplayer.org](mailto:hello@tmplayer.org).
 
 ## Legal
 

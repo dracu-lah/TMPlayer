@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>TMPlayer releases</title>
+    <link>https://tmplayer.org/changelog/</link>
+    <description>What changed in every TMPlayer release, newest first: Android TV, phones, Windows and Linux, all from one release.</description>
+    <language>en-gb</language>
+    <lastBuildDate>Sun, 04 Oct 2026 23:40:45 GMT</lastBuildDate>
+    <atom:link href="https://tmplayer.org/changelog/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>TMPlayer 1.22.0</title>
+      <link>https://tmplayer.org/changelog/#v1.22.0</link>
+      <guid isPermaLink="false">tmplayer-v1.22.0</guid>
+      <pubDate>Sun, 04 Oct 2026 23:40:45 GMT</pubDate>
+      <description>&lt;p&gt;Smaller downloads. The Android APK is about half its old size, and the Windows and Linux packages are a third to almost two thirds smaller. The Linux tarball is now a .tar.xz.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>TMPlayer 1.21.0</title>
+      <link>https://tmplayer.org/changelog/#v1.21.0</link>
+      <guid isPermaLink="false">tmplayer-v1.21.0</guid>
+      <pubDate>Sun, 04 Oct 2026 12:11:11 GMT</pubDate>
+      <description>&lt;p&gt;Finished episodes now get a tick, and any video can be marked as watched or unwatched by hand. A new Watched tab lists what you have finished. Searching a chat now finds videos outside the size limits, and the grid says how many videos the limits are hiding. On a TV, the release page opens as a QR code. On Windows, the media keys and the media flyout control the player.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>TMPlayer 1.20.0</title>
+      <link>https://tmplayer.org/changelog/#v1.20.0</link>
+      <guid isPermaLink="false">tmplayer-v1.20.0</guid>
+      <pubDate>Sun, 04 Oct 2026 11:29:18 GMT</pubDate>
+      <description>&lt;p&gt;The first release with a desktop app for Windows and Linux. It signs in with the same Telegram account and plays the same chats, with the keyboard, the mouse and your media keys.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>TMPlayer 1.16.0</title>
+      <link>https://tmplayer.org/changelog/#v1.16.0</link>
+      <guid isPermaLink="false">tmplayer-v1.16.0</guid>
+      <pubDate>Sat, 29 Aug 2026 18:59:59 GMT</pubDate>
+      <description>&lt;p&gt;No notes were written for this release.&lt;/p&gt;</description>
+    </item>
+  </channel>
+</rss>

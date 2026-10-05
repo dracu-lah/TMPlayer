@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TMPlayer: Telegram video player for Android TV and Google TV</title>
-<meta name="description" content="Watch Telegram videos on Android TV and Google TV. TMPlayer is free and open source, with a remote-first layout, QR sign-in and smooth playback on 1 GB sticks.">
-<link rel="canonical" href="https://tmplayer.org/android-tv/">
+<title>TMPlayer changelog: every release</title>
+<meta name="description" content="What changed in every TMPlayer release, newest first: Android TV, phones, Windows and Linux, all from one release.">
+<link rel="canonical" href="https://tmplayer.org/changelog/">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta name="author" content="dracu-lah">
 <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
@@ -14,9 +14,9 @@
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="TMPlayer">
-<meta property="og:title" content="TMPlayer: Telegram video player for Android TV and Google TV">
-<meta property="og:description" content="Watch Telegram videos on Android TV and Google TV. TMPlayer is free and open source, with a remote-first layout, QR sign-in and smooth playback on 1 GB sticks.">
-<meta property="og:url" content="https://tmplayer.org/android-tv/">
+<meta property="og:title" content="TMPlayer changelog: every release">
+<meta property="og:description" content="What changed in every TMPlayer release, newest first: Android TV, phones, Windows and Linux, all from one release.">
+<meta property="og:url" content="https://tmplayer.org/changelog/">
 <meta property="og:image" content="https://tmplayer.org/og.png">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
@@ -24,14 +24,15 @@
 <meta property="og:locale" content="en_GB">
 
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="TMPlayer: Telegram video player for Android TV and Google TV">
-<meta name="twitter:description" content="Watch Telegram videos on Android TV and Google TV. TMPlayer is free and open source, with a remote-first layout, QR sign-in and smooth playback on 1 GB sticks.">
+<meta name="twitter:title" content="TMPlayer changelog: every release">
+<meta name="twitter:description" content="What changed in every TMPlayer release, newest first: Android TV, phones, Windows and Linux, all from one release.">
 <meta name="twitter:image" content="https://tmplayer.org/og.png">
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/icon-512.png" type="image/png" sizes="512x512">
 <link rel="apple-touch-icon" href="/icon-512.png">
 <link rel="manifest" href="/site.webmanifest">
+<link rel="alternate" type="application/rss+xml" title="TMPlayer releases" href="/changelog/feed.xml">
 
 <link rel="preload" href="/fonts/poppins-400.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/poppins-600.woff2" as="font" type="font/woff2" crossorigin>
@@ -65,14 +66,19 @@
     {
       "@type": "ListItem",
       "position": 2,
-      "name": "Android TV",
-      "item": "https://tmplayer.org/android-tv/"
+      "name": "Changelog",
+      "item": "https://tmplayer.org/changelog/"
     }
   ]
 }
 </script>
 </head>
 <body>
+
+<!--
+  Written by scripts/build-changelog.py from the GitHub releases; the release job regenerates it.
+  Edit the script, not this file: a hand edit here is gone after the next release.
+-->
 
 <a class="skip" href="#main">Skip to content</a>
 
@@ -142,170 +148,68 @@
 
   <section class="page-head">
     <div class="wrap page-head-wrap">
-      <p class="crumbs"><a href="/">Home</a><span aria-hidden="true">/</span>Android TV</p>
-      <h1>A Telegram video player <em>built for the remote</em></h1>
-      <p class="page-lede">Designed for a D-pad first: a rail you reach without looking, cards you read from the sofa, and clear focus.</p>
+      <p class="crumbs"><a href="/">Home</a><span aria-hidden="true">/</span>Changelog</p>
+      <h1>Every <em>release</em></h1>
+      <p class="page-lede">What changed in each TMPlayer release, newest first. Installed copies update themselves, so this is where to find out what just arrived.</p>
       <div class="page-actions">
-        <a class="btn btn-filled" href="/download/#android-tv">
-          <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.4l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg>
-          Download for Android TV
+        <a class="btn btn-filled" href="/download/">Download the latest</a>
+        <a class="btn btn-outline" href="/changelog/feed.xml" type="application/rss+xml">
+          <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><path fill="currentColor" d="M5 3a1 1 0 0 0 0 2 14 14 0 0 1 14 14 1 1 0 1 0 2 0A16 16 0 0 0 5 3Zm0 6a1 1 0 0 0 0 2 8 8 0 0 1 8 8 1 1 0 1 0 2 0A10 10 0 0 0 5 9Zm1.5 7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z"/></svg>
+          Follow by RSS
         </a>
-        <a class="btn btn-outline" href="/install/#android">Sideload it in four steps <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><path fill="currentColor" d="M5 12a1 1 0 0 1 1-1h10.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4l3.3-3.3H6a1 1 0 0 1-1-1Z"/></svg></a>
       </div>
     </div>
   </section>
 
 <svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
 
-  <section class="band band-tonal" aria-labelledby="tv-h">
+  <section class="band band-tonal" aria-label="Releases">
     <div class="wrap">
-      <div class="section-head" data-reveal>
-        <div class="section-title">
-          <h2 id="tv-h">What changes on a television</h2>
-          <p class="section-sub">Same account, same APK. Only the interface changes, built for the remote.</p>
-        </div>
-      </div>
-
-      <div class="card-grid card-grid-3" data-reveal>
-        <div class="card">
-          <h3>A rail, not a menu</h3>
-          <p>Every category down the left, one press away.</p>
-        </div>
-        <div class="card">
-          <h3>Sign in without typing</h3>
-          <p>Scan a QR code with your phone. No typing with arrow keys.</p>
-        </div>
-        <div class="card">
-          <h3>Voice search from the remote</h3>
-          <p>Typos and missing accents still find the episode.</p>
-        </div>
-        <div class="card">
-          <h3>Runs on a 1 GB stick</h3>
-          <p>Built on a Mi TV Stick. Smooth there, smooth on a Shield.</p>
-        </div>
-        <div class="card">
-          <h3>One video on disk at a time</h3>
-          <p>The previous video is cleared, so an 8 GB stick never fills up.</p>
-        </div>
-        <div class="card">
-          <h3>Next episode on its own</h3>
-          <p>Plays the next episode after a countdown you can stop.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-<svg class="wave wave-flip" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
-
-  <section class="band" aria-labelledby="tvshots-h">
-    <div class="wrap">
-      <div class="section-head" data-reveal>
-        <div class="section-title">
-          <h2 id="tvshots-h">The ten-foot layout</h2>
-          <p class="section-sub">The app on a television, filled with demo content.</p>
-        </div>
-      </div>
-
-      <div class="shots">
-        <figure class="shot" data-reveal>
-          <div class="device device-tv">
-            <div class="screen">
-              <picture>
-                <source data-theme-src srcset="/screenshots/tv-chats-light.webp" media="(prefers-color-scheme: light)">
-                <img src="/screenshots/tv-chats.webp" alt="The TMPlayer chat list on Android TV, with a navigation rail down the left for Continue, Favourites, Recent, Channels, Groups, People and All chats." width="1920" height="1080" loading="lazy" decoding="async">
-              </picture>
-            </div>
-            <div class="stand"></div>
-            <div class="foot"></div>
+      <div class="changelog">
+        <article class="changelog-entry" id="v1.22.0" aria-labelledby="v1.22.0-h">
+          <header class="changelog-entry-head">
+            <h2 id="v1.22.0-h"><a href="#v1.22.0">TMPlayer 1.22.0</a></h2>
+            <p class="changelog-meta"><time datetime="2026-10-04">4 October 2026</time><span class="sep" aria-hidden="true">&middot;</span><a href="https://github.com/dracu-lah/TMPlayer/releases/tag/v1.22.0" rel="noopener">On GitHub</a></p>
+          </header>
+          <div class="changelog-notes">
+            <p>Smaller downloads. The Android APK is about half its old size, and the Windows and Linux packages are a third to almost two thirds smaller. The Linux tarball is now a .tar.xz.</p>
           </div>
-          <figcaption><b>Your chats, as somewhere to start</b>Categories on the rail, chats in the grid, recent ones along the top.</figcaption>
-        </figure>
+        </article>
 
-        <figure class="shot" data-reveal>
-          <div class="device device-tv">
-            <div class="screen">
-              <picture>
-                <source data-theme-src srcset="/screenshots/tv-grid-light.webp" media="(prefers-color-scheme: light)">
-                <img src="/screenshots/tv-grid.webp" alt="Videos from a Telegram chat shown on Android TV as a grid of tiles carrying running times and file sizes." width="1920" height="1080" loading="lazy" decoding="async">
-              </picture>
-            </div>
-            <div class="stand"></div>
-            <div class="foot"></div>
+        <article class="changelog-entry" id="v1.21.0" aria-labelledby="v1.21.0-h">
+          <header class="changelog-entry-head">
+            <h2 id="v1.21.0-h"><a href="#v1.21.0">TMPlayer 1.21.0</a></h2>
+            <p class="changelog-meta"><time datetime="2026-10-04">4 October 2026</time><span class="sep" aria-hidden="true">&middot;</span><a href="https://github.com/dracu-lah/TMPlayer/releases/tag/v1.21.0" rel="noopener">On GitHub</a></p>
+          </header>
+          <div class="changelog-notes">
+            <p>Finished episodes now get a tick, and any video can be marked as watched or unwatched by hand. A new Watched tab lists what you have finished. Searching a chat now finds videos outside the size limits, and the grid says how many videos the limits are hiding. On a TV, the release page opens as a QR code. On Windows, the media keys and the media flyout control the player.</p>
           </div>
-          <figcaption><b>The videos in one chat</b>Running time and size on every tile. Press one and it plays as it downloads.</figcaption>
-        </figure>
+        </article>
+
+        <article class="changelog-entry" id="v1.20.0" aria-labelledby="v1.20.0-h">
+          <header class="changelog-entry-head">
+            <h2 id="v1.20.0-h"><a href="#v1.20.0">TMPlayer 1.20.0</a></h2>
+            <p class="changelog-meta"><time datetime="2026-10-04">4 October 2026</time><span class="sep" aria-hidden="true">&middot;</span><a href="https://github.com/dracu-lah/TMPlayer/releases/tag/v1.20.0" rel="noopener">On GitHub</a></p>
+          </header>
+          <div class="changelog-notes">
+            <p>The first release with a desktop app for Windows and Linux. It signs in with the same Telegram account and plays the same chats, with the keyboard, the mouse and your media keys.</p>
+          </div>
+        </article>
+
+        <article class="changelog-entry" id="v1.16.0" aria-labelledby="v1.16.0-h">
+          <header class="changelog-entry-head">
+            <h2 id="v1.16.0-h"><a href="#v1.16.0">TMPlayer 1.16.0</a></h2>
+            <p class="changelog-meta"><time datetime="2026-08-29">29 August 2026</time><span class="sep" aria-hidden="true">&middot;</span><a href="https://github.com/dracu-lah/TMPlayer/releases/tag/v1.16.0" rel="noopener">On GitHub</a></p>
+          </header>
+          <div class="changelog-notes">
+            <p class="muted">No notes were written for this release. <a href="https://github.com/dracu-lah/TMPlayer/releases/tag/v1.16.0" rel="noopener">The release on GitHub</a> lists its files.</p>
+          </div>
+        </article>
       </div>
+
+      <p class="muted small section-note changelog-foot">Releases from before 1.16.0 are on <a href="https://github.com/dracu-lah/TMPlayer/tags" rel="noopener">GitHub as tags</a>. Every release links the source tree it was built from.</p>
     </div>
   </section>
-
-<svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
-
-  <section class="band band-tonal" aria-labelledby="tvfit-h">
-    <div class="wrap">
-      <div class="section-head" data-reveal>
-        <div class="section-title">
-          <h2 id="tvfit-h">Will it run on yours?</h2>
-        </div>
-      </div>
-
-      <div class="two-col" data-reveal>
-        <div class="panel">
-          <h3>
-            <span class="panel-icon icon-yes" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><path fill="currentColor" d="M9.8 16.8 5.6 12.6a1 1 0 0 1 1.4-1.4l2.8 2.8 6.8-6.8a1 1 0 0 1 1.4 1.4l-8.2 8.2Z"/></svg>
-            </span>
-            Yes
-          </h3>
-          <ul class="ticks">
-            <li>Android TV and Google TV, on Android 8.0 or above.</li>
-            <li>Sticks: Mi TV Stick, Chromecast with Google TV, and Fire-adjacent boxes that allow sideloading.</li>
-            <li>Boxes and TVs: Nvidia Shield, Sony, Philips, TCL and other Android TV sets.</li>
-            <li>32-bit and 64-bit alike, from the one universal APK.</li>
-          </ul>
-        </div>
-        <div class="panel">
-          <h3>
-            <span class="panel-icon icon-no" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><path fill="currentColor" d="M18.3 7.1 13.4 12l4.9 4.9a1 1 0 0 1-1.4 1.4L12 13.4l-4.9 4.9a1 1 0 0 1-1.4-1.4l4.9-4.9-4.9-4.9a1 1 0 0 1 1.4-1.4l4.9 4.9 4.9-4.9a1 1 0 0 1 1.4 1.4Z"/></svg>
-            </span>
-            No
-          </h3>
-          <ul class="crosses">
-            <li>Not Samsung Tizen, not LG webOS, not Roku. They are not Android and cannot run an APK.</li>
-            <li>Not Apple TV, and not a Chromecast without Google TV.</li>
-            <li>Not a device where sideloading is locked off.</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </section>
-
-<svg class="wave wave-flip" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
-
-  <section class="band band-tonal" aria-labelledby="support-h">
-    <div class="wrap">
-      <div class="support" data-reveal>
-        <h2 id="support-h">Star it if it helped</h2>
-        <p>A TV app outside the Play Store lives on word of mouth. A star is the easiest way to spread it.</p>
-        <div class="support-actions">
-          <a class="btn btn-filled" href="https://github.com/dracu-lah/TMPlayer" rel="noopener">
-            <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg>
-            Star on GitHub
-          </a>
-          <a class="btn btn-outline" href="https://github.com/dracu-lah/TMPlayer/fork" rel="noopener">
-            <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M6.5 2a3.5 3.5 0 0 0-1 6.86V10a4 4 0 0 0 4 4H11v1.14a3.5 3.5 0 1 0 2 0V14h1.5a4 4 0 0 0 4-4V8.86A3.5 3.5 0 1 0 16.5 2a3.5 3.5 0 0 0-1 6.86V10a2 2 0 0 1-2 2h-3a2 2 0 0 1-2-2V8.86A3.5 3.5 0 0 0 6.5 2Zm0 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm10 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM12 17a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"/></svg>
-            Fork the repository
-          </a>
-        </div>
-        <p class="support-stats">
-          <span data-count-wrap hidden><b data-count="stars"></b> stars</span>
-          <span data-count-wrap hidden><b data-count="forks"></b> forks</span>
-          <span>GPL-3.0, and free for good</span>
-        </p>
-      </div>
-    </div>
-  </section>
-
 
 </main>
 

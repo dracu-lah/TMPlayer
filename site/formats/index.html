@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TMPlayer: Telegram video player for Android TV and Google TV</title>
-<meta name="description" content="Watch Telegram videos on Android TV and Google TV. TMPlayer is free and open source, with a remote-first layout, QR sign-in and smooth playback on 1 GB sticks.">
-<link rel="canonical" href="https://tmplayer.org/android-tv/">
+<title>Supported formats: what TMPlayer plays on Android TV, Windows and Linux</title>
+<meta name="description" content="The containers, video and audio codecs and subtitles TMPlayer plays: Media3 with FFmpeg decoders on Android TV and phones, mpv on Windows and Linux.">
+<link rel="canonical" href="https://tmplayer.org/formats/">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta name="author" content="dracu-lah">
 <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
@@ -14,9 +14,9 @@
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="TMPlayer">
-<meta property="og:title" content="TMPlayer: Telegram video player for Android TV and Google TV">
-<meta property="og:description" content="Watch Telegram videos on Android TV and Google TV. TMPlayer is free and open source, with a remote-first layout, QR sign-in and smooth playback on 1 GB sticks.">
-<meta property="og:url" content="https://tmplayer.org/android-tv/">
+<meta property="og:title" content="Supported formats: what TMPlayer plays on Android TV, Windows and Linux">
+<meta property="og:description" content="The containers, video and audio codecs and subtitles TMPlayer plays: Media3 with FFmpeg decoders on Android TV and phones, mpv on Windows and Linux.">
+<meta property="og:url" content="https://tmplayer.org/formats/">
 <meta property="og:image" content="https://tmplayer.org/og.png">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
@@ -24,8 +24,8 @@
 <meta property="og:locale" content="en_GB">
 
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="TMPlayer: Telegram video player for Android TV and Google TV">
-<meta name="twitter:description" content="Watch Telegram videos on Android TV and Google TV. TMPlayer is free and open source, with a remote-first layout, QR sign-in and smooth playback on 1 GB sticks.">
+<meta name="twitter:title" content="Supported formats: what TMPlayer plays on Android TV, Windows and Linux">
+<meta name="twitter:description" content="The containers, video and audio codecs and subtitles TMPlayer plays: Media3 with FFmpeg decoders on Android TV and phones, mpv on Windows and Linux.">
 <meta name="twitter:image" content="https://tmplayer.org/og.png">
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -65,8 +65,8 @@
     {
       "@type": "ListItem",
       "position": 2,
-      "name": "Android TV",
-      "item": "https://tmplayer.org/android-tv/"
+      "name": "Formats",
+      "item": "https://tmplayer.org/formats/"
     }
   ]
 }
@@ -142,54 +142,41 @@
 
   <section class="page-head">
     <div class="wrap page-head-wrap">
-      <p class="crumbs"><a href="/">Home</a><span aria-hidden="true">/</span>Android TV</p>
-      <h1>A Telegram video player <em>built for the remote</em></h1>
-      <p class="page-lede">Designed for a D-pad first: a rail you reach without looking, cards you read from the sofa, and clear focus.</p>
-      <div class="page-actions">
-        <a class="btn btn-filled" href="/download/#android-tv">
-          <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 3a1 1 0 0 1 1 1v9.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.4l3.3 3.3V4a1 1 0 0 1 1-1Zm-7 15a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/></svg>
-          Download for Android TV
-        </a>
-        <a class="btn btn-outline" href="/install/#android">Sideload it in four steps <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" focusable="false"><path fill="currentColor" d="M5 12a1 1 0 0 1 1-1h10.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 0 1-1.4-1.4l3.3-3.3H6a1 1 0 0 1-1-1Z"/></svg></a>
-      </div>
+      <p class="crumbs"><a href="/">Home</a><span aria-hidden="true">/</span>Formats</p>
+      <h1>The formats it <em>plays</em></h1>
+      <p class="page-lede">On Android TV and phones, TMPlayer plays through Media3 with FFmpeg decoders built in. On Windows and Linux it plays through mpv, which opens nearly anything.</p>
+      <nav class="platform-jump" aria-label="On this page">
+        <a href="#listed">Which files show up</a>
+        <a href="#android">Android TV and phones</a>
+        <a href="#desktop">Windows and Linux</a>
+        <a href="#subtitles">Subtitle files</a>
+      </nav>
     </div>
   </section>
 
 <svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
 
-  <section class="band band-tonal" aria-labelledby="tv-h">
+  <section class="band band-tonal" id="listed" aria-labelledby="listed-h">
     <div class="wrap">
       <div class="section-head" data-reveal>
         <div class="section-title">
-          <h2 id="tv-h">What changes on a television</h2>
-          <p class="section-sub">Same account, same APK. Only the interface changes, built for the remote.</p>
+          <h2 id="listed-h">Which files show up in a chat</h2>
+          <p class="section-sub">The same on every platform.</p>
         </div>
       </div>
 
       <div class="card-grid card-grid-3" data-reveal>
         <div class="card">
-          <h3>A rail, not a menu</h3>
-          <p>Every category down the left, one press away.</p>
+          <h3>Videos</h3>
+          <p>Anything Telegram sent as a video, whatever the format.</p>
         </div>
         <div class="card">
-          <h3>Sign in without typing</h3>
-          <p>Scan a QR code with your phone. No typing with arrow keys.</p>
+          <h3>Files sent as documents</h3>
+          <p>Films are often sent as files to keep their quality and audio tracks. They show up when Telegram calls them video, or when the name ends in MKV, MP4, M4V, AVI, MOV, WebM, TS, M2TS, MTS, FLV, WMV, MPG, MPEG, 3GP, OGV, DivX, VOB, ASF or RMVB.</p>
         </div>
         <div class="card">
-          <h3>Voice search from the remote</h3>
-          <p>Typos and missing accents still find the episode.</p>
-        </div>
-        <div class="card">
-          <h3>Runs on a 1 GB stick</h3>
-          <p>Built on a Mi TV Stick. Smooth there, smooth on a Shield.</p>
-        </div>
-        <div class="card">
-          <h3>One video on disk at a time</h3>
-          <p>The previous video is cleared, so an 8 GB stick never fills up.</p>
-        </div>
-        <div class="card">
-          <h3>Next episode on its own</h3>
-          <p>Plays the next episode after a countdown you can stop.</p>
+          <h3>Silent clips</h3>
+          <p>The short looping videos Telegram calls GIFs, which are really MP4 files.</p>
         </div>
       </div>
     </div>
@@ -197,115 +184,92 @@
 
 <svg class="wave wave-flip" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
 
-  <section class="band" aria-labelledby="tvshots-h">
+  <section class="band" id="android" aria-labelledby="android-h">
     <div class="wrap">
       <div class="section-head" data-reveal>
         <div class="section-title">
-          <h2 id="tvshots-h">The ten-foot layout</h2>
-          <p class="section-sub">The app on a television, filled with demo content.</p>
+          <h2 id="android-h">On Android TV and phones</h2>
+          <p class="section-sub">The device's own decoders come first, because they are the fastest. FFmpeg decoders inside the app take over for what the device has no chip for, which is most often DTS and TrueHD audio.</p>
         </div>
       </div>
 
-      <div class="shots">
-        <figure class="shot" data-reveal>
-          <div class="device device-tv">
-            <div class="screen">
-              <picture>
-                <source data-theme-src srcset="/screenshots/tv-chats-light.webp" media="(prefers-color-scheme: light)">
-                <img src="/screenshots/tv-chats.webp" alt="The TMPlayer chat list on Android TV, with a navigation rail down the left for Continue, Favourites, Recent, Channels, Groups, People and All chats." width="1920" height="1080" loading="lazy" decoding="async">
-              </picture>
-            </div>
-            <div class="stand"></div>
-            <div class="foot"></div>
-          </div>
-          <figcaption><b>Your chats, as somewhere to start</b>Categories on the rail, chats in the grid, recent ones along the top.</figcaption>
-        </figure>
+      <div class="keys-wrap" data-reveal>
+        <table class="keys">
+          <thead>
+            <tr><th scope="col">What</th><th scope="col">Plays</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Containers</th><td>MKV, WebM, MP4, M4V, MOV, TS, M2TS, MTS, AVI, FLV, MPG, MPEG, 3GP. VOB and DivX files usually play too.</td></tr>
+            <tr><th scope="row">Video: H.264, HEVC (H.265), VP9, VP8, MPEG-2</th><td>Yes. In hardware where the device can, in software through FFmpeg where it cannot. Software decoding is slower, so a 4K file wants a device that decodes it in hardware.</td></tr>
+            <tr><th scope="row">Video: AV1, MPEG-4 Part 2 (Xvid, DivX)</th><td>Through the device's own decoder. Newer TVs and phones handle AV1 well; older sticks may not.</td></tr>
+            <tr><th scope="row">Audio: AAC, MP3, Opus, Vorbis, FLAC, ALAC, PCM</th><td>Yes.</td></tr>
+            <tr><th scope="row">Audio: Dolby Digital, Dolby Digital Plus (E-AC-3, Atmos included), DTS, DTS-HD, TrueHD</th><td>Sent as it is to a soundbar or receiver that takes it, otherwise decoded in the app. <em>Downmix to stereo</em> in Settings folds surround into two speakers.</td></tr>
+            <tr><th scope="row">Several audio tracks</th><td>Yes, switched during playback, and remembered for the rest of a series.</td></tr>
+            <tr><th scope="row">Subtitles inside the file</th><td>SRT, ASS and SSA (with simplified styling), WebVTT, and image subtitles such as PGS and VobSub.</td></tr>
+            <tr><th scope="row">HDR</th><td>Handed to the device's decoder and screen, so it shows in HDR where both support it.</td></tr>
+            <tr><th scope="row">Frame rate matching</th><td>On Android TV 12 and later with <em>Match content frame rate</em> set to <em>Always</em>, the screen switches to the film's own rate, so 24 fps plays at 24 Hz. Elsewhere it switches only when that needs no blank screen.</td></tr>
+          </tbody>
+        </table>
+      </div>
 
-        <figure class="shot" data-reveal>
-          <div class="device device-tv">
-            <div class="screen">
-              <picture>
-                <source data-theme-src srcset="/screenshots/tv-grid-light.webp" media="(prefers-color-scheme: light)">
-                <img src="/screenshots/tv-grid.webp" alt="Videos from a Telegram chat shown on Android TV as a grid of tiles carrying running times and file sizes." width="1920" height="1080" loading="lazy" decoding="async">
-              </picture>
-            </div>
-            <div class="stand"></div>
-            <div class="foot"></div>
-          </div>
-          <figcaption><b>The videos in one chat</b>Running time and size on every tile. Press one and it plays as it downloads.</figcaption>
-        </figure>
+      <div class="callout" data-reveal>
+        <p><strong>Not on Android:</strong> WMV and ASF, RealMedia (RMVB) and Ogg video (OGV). They still show up in the chat. When one will not play, the player offers <em>Open in another app</em>, which hands the downloaded file to a player such as VLC or MX Player.</p>
       </div>
     </div>
   </section>
 
 <svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
 
-  <section class="band band-tonal" aria-labelledby="tvfit-h">
+  <section class="band band-tonal" id="desktop" aria-labelledby="desktop-h">
     <div class="wrap">
       <div class="section-head" data-reveal>
         <div class="section-title">
-          <h2 id="tvfit-h">Will it run on yours?</h2>
+          <h2 id="desktop-h">On Windows and Linux</h2>
+          <p class="section-sub">The desktop app plays through mpv, bundled inside it. Nothing else to install.</p>
         </div>
       </div>
 
-      <div class="two-col" data-reveal>
-        <div class="panel">
-          <h3>
-            <span class="panel-icon icon-yes" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><path fill="currentColor" d="M9.8 16.8 5.6 12.6a1 1 0 0 1 1.4-1.4l2.8 2.8 6.8-6.8a1 1 0 0 1 1.4 1.4l-8.2 8.2Z"/></svg>
-            </span>
-            Yes
-          </h3>
-          <ul class="ticks">
-            <li>Android TV and Google TV, on Android 8.0 or above.</li>
-            <li>Sticks: Mi TV Stick, Chromecast with Google TV, and Fire-adjacent boxes that allow sideloading.</li>
-            <li>Boxes and TVs: Nvidia Shield, Sony, Philips, TCL and other Android TV sets.</li>
-            <li>32-bit and 64-bit alike, from the one universal APK.</li>
-          </ul>
-        </div>
-        <div class="panel">
-          <h3>
-            <span class="panel-icon icon-no" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="22" height="22" focusable="false"><path fill="currentColor" d="M18.3 7.1 13.4 12l4.9 4.9a1 1 0 0 1-1.4 1.4L12 13.4l-4.9 4.9a1 1 0 0 1-1.4-1.4l4.9-4.9-4.9-4.9a1 1 0 0 1 1.4-1.4l4.9 4.9 4.9-4.9a1 1 0 0 1 1.4 1.4Z"/></svg>
-            </span>
-            No
-          </h3>
-          <ul class="crosses">
-            <li>Not Samsung Tizen, not LG webOS, not Roku. They are not Android and cannot run an APK.</li>
-            <li>Not Apple TV, and not a Chromecast without Google TV.</li>
-            <li>Not a device where sideloading is locked off.</li>
-          </ul>
-        </div>
+      <div class="keys-wrap" data-reveal>
+        <table class="keys">
+          <thead>
+            <tr><th scope="col">What</th><th scope="col">Plays</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Containers</th><td>Every one in the list above, WMV, ASF, RMVB and OGV included.</td></tr>
+            <tr><th scope="row">Video</th><td>H.264, HEVC, VP9, AV1, MPEG-2, MPEG-4 Part 2 and the older formats mpv reads. Hardware decoding where it is safe, with <em>Force software decoding</em> in Settings for a driver that misbehaves.</td></tr>
+            <tr><th scope="row">Audio</th><td>AAC, MP3, Opus, Vorbis, FLAC, Dolby Digital and Digital Plus, DTS, DTS-HD and TrueHD.</td></tr>
+            <tr><th scope="row">Subtitles inside the file</th><td>Text and image subtitles alike, ASS with its full styling.</td></tr>
+            <tr><th scope="row">Several audio tracks</th><td>Yes, from the right click menu or the keyboard.</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </section>
 
 <svg class="wave wave-flip" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path fill="currentColor" d="M0 30c180-40 360-40 540 0s360 40 540 0 300-30 360-20v50H0Z"/></svg>
 
-  <section class="band band-tonal" aria-labelledby="support-h">
+  <section class="band" id="subtitles" aria-labelledby="subtitles-h">
     <div class="wrap">
-      <div class="support" data-reveal>
-        <h2 id="support-h">Star it if it helped</h2>
-        <p>A TV app outside the Play Store lives on word of mouth. A star is the easiest way to spread it.</p>
-        <div class="support-actions">
-          <a class="btn btn-filled" href="https://github.com/dracu-lah/TMPlayer" rel="noopener">
-            <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg>
-            Star on GitHub
-          </a>
-          <a class="btn btn-outline" href="https://github.com/dracu-lah/TMPlayer/fork" rel="noopener">
-            <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M6.5 2a3.5 3.5 0 0 0-1 6.86V10a4 4 0 0 0 4 4H11v1.14a3.5 3.5 0 1 0 2 0V14h1.5a4 4 0 0 0 4-4V8.86A3.5 3.5 0 1 0 16.5 2a3.5 3.5 0 0 0-1 6.86V10a2 2 0 0 1-2 2h-3a2 2 0 0 1-2-2V8.86A3.5 3.5 0 0 0 6.5 2Zm0 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm10 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM12 17a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Z"/></svg>
-            Fork the repository
-          </a>
+      <div class="section-head" data-reveal>
+        <div class="section-title">
+          <h2 id="subtitles-h">Subtitle files of your own</h2>
+          <p class="section-sub">For a video whose subtitles are not inside it.</p>
         </div>
-        <p class="support-stats">
-          <span data-count-wrap hidden><b data-count="stars"></b> stars</span>
-          <span data-count-wrap hidden><b data-count="forks"></b> forks</span>
-          <span>GPL-3.0, and free for good</span>
-        </p>
       </div>
+
+      <div class="two-col" data-reveal>
+        <div class="panel panel-prose">
+          <h3>On a phone</h3>
+          <p>In the player's menu, <em>Load a subtitle file</em> opens the phone's file picker. It takes <code>.srt</code>, <code>.ass</code>, <code>.ssa</code>, <code>.vtt</code> and text <code>.sub</code> (MicroDVD) files. Older files in a Windows code page keep their accents.</p>
+        </div>
+        <div class="panel panel-prose">
+          <h3>On Windows and Linux</h3>
+          <p>Drop the file on the picture while the video plays. The same formats work: <code>.srt</code>, <code>.ass</code>, <code>.ssa</code>, <code>.vtt</code> and <code>.sub</code>.</p>
+        </div>
+      </div>
+      <p class="muted small section-note" data-reveal>Picture-based VobSub <code>.sub</code> files cannot be loaded this way, though the same subtitles inside an MKV play fine.</p>
     </div>
   </section>
-
 
 </main>
 
