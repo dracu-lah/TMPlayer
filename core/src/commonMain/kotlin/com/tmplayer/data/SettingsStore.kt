@@ -32,6 +32,7 @@ private val AUTOPLAY_NEXT = booleanPreferencesKey("autoplay_next")
 private val DOWNMIX_STEREO = booleanPreferencesKey("downmix_stereo")
 private val VOLUME_BOOST = booleanPreferencesKey("volume_boost")
 private val WIFI_ONLY = booleanPreferencesKey("wifi_only_downloads")
+private val REMOVE_AFTER_WATCHING = booleanPreferencesKey("remove_after_watching")
 private val CRASH_REPORTS = booleanPreferencesKey("crash_reports")
 private val PLAYBACK_SPEED = floatPreferencesKey("playback_speed")
 private val LAST_CHAT = longPreferencesKey("last_chat")
@@ -419,6 +420,16 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
 
     /** Read at the start of playback, where the flow's first emission has not arrived yet. */
     suspend fun wifiOnlyDownloadsNow(): Boolean = prefs.data.first()[WIFI_ONLY] ?: false
+
+    /**
+     * "Remove after watching": a download is deleted once it is marked watched. Off by default,
+     * because a download is something the viewer asked to keep. See [RemoveAfterWatching].
+     */
+    val removeAfterWatching: Flow<Boolean> = read { it[REMOVE_AFTER_WATCHING] ?: false }
+
+    suspend fun setRemoveAfterWatching(value: Boolean) {
+        prefs.edit { it[REMOVE_AFTER_WATCHING] = value }
+    }
 
     // ---- updates ----------------------------------------------------------------------------
 

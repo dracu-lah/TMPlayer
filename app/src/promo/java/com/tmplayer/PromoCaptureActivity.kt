@@ -45,7 +45,9 @@ import com.tmplayer.ui.browse.BrowseScreen
 import com.tmplayer.ui.browse.BrowseSection
 import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.browse.Header
+import com.tmplayer.ui.browse.MediaActionsSheet
 import com.tmplayer.ui.browse.MediaCard
+import com.tmplayer.ui.downloads.DownloadsScreen
 import com.tmplayer.ui.browse.TouchMediaScaffold
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.components.StateScaffold
@@ -71,7 +73,9 @@ import com.tmplayer.ui.theme.Tv
  *
  * Start it with `--es screen chats`, `media` or `settings`. The empty, error and loading states have
  * screens of their own: `chats-first` (the first chat list, with its tip, and after fifteen seconds
- * the slow-answer line), and `media` with `--es variant hidden|empty-hidden|empty-more|slow|recent`. Add `--ez tv true` to capture the
+ * the slow-answer line), and `media` with `--es variant hidden|empty-hidden|empty-more|slow|recent`.
+ * `--es variant menu` opens the first video's menu over the grid, with its "x GB free" line, and
+ * `--es screen downloads` is the Downloads screen. Add `--ez tv true` to capture the
  * television layout on a phone panel resized to 1920x1080, which is how the TV shots on the site
  * are taken now that the stick is not the only device this app has to look right on.
  *
@@ -165,9 +169,14 @@ class PromoCaptureActivity : ComponentActivity() {
                             onOpenAbout = { screen = "about" },
                         )
                         "about" -> AboutScreen(onBack = { screen = "settings" })
+                        // The Downloads screen as it is, over this build's own empty index: the
+                        // storage panel and the "Remove after watching" row.
+                        "downloads" -> DownloadsScreen(onPlay = {}, onBack = { screen = "chats" })
                         else -> PromoChatsScreen(
                             onOpenChat = { screen = "media" },
                             onOpenSettings = { screen = "settings" },
+                            // `--es layout grid` for the chat tiles rather than the list.
+                            layout = if (intent.getStringExtra("layout") == "grid") CardLayout.Grid else CardLayout.List,
                         )
                     }
                 }
@@ -197,6 +206,7 @@ private fun PromoChatsScreen(
     onOpenChat: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     state: UiState<BrowseData>? = null,
+    layout: CardLayout = CardLayout.List,
 ) {
     val chats = promoChats()
     val account = Account("Demo", "demo", null, 0)
@@ -212,7 +222,7 @@ private fun PromoChatsScreen(
         onToggleFavorite = {},
         picked = BrowseSection.of(BrowseTab.Recent),
         onPickTab = {},
-        layout = CardLayout.List,
+        layout = layout,
     )
 }
 
@@ -276,7 +286,27 @@ private fun PhoneMediaScreen(variant: String, onBack: () -> Unit = {}) {
                 MediaCard(item = item, watched = null, onClick = {}, onFocused = {}, dense = true)
             }
         }
+        if (variant == "menu") PromoMenu(media.first())
     }
+}
+
+/** The menu a long press or a held OK opens, for the first video, in the state a fresh one is in. */
+@Composable
+private fun PromoMenu(item: MediaItem) {
+    var open by remember { mutableStateOf(true) }
+    if (!open) return
+    MediaActionsSheet(
+        item = item,
+        chatTitle = "Weekend Clips",
+        watched = null,
+        finished = false,
+        onSetWatched = {},
+        onPlay = {},
+        onSelectVideos = {},
+        onDownloadForLater = {},
+        onRemoved = {},
+        onDismiss = { open = false },
+    )
 }
 
 @Composable
@@ -320,6 +350,7 @@ private fun TvMediaScreen(variant: String) {
             contentPadding = PaddingValues(
                 start = Tv.SafeH,
                 end = Tv.SafeH,
+                top = Tv.FocusClearance,
                 bottom = Tv.SafeV + 16.dp,
             ),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -343,6 +374,7 @@ private fun TvMediaScreen(variant: String) {
             }
         }
     }
+    if (variant == "menu") PromoMenu(media.first())
 }
 
 @Composable

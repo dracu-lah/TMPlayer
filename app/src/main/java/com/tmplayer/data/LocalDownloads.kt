@@ -106,6 +106,24 @@ object LocalDownloads {
     }
 
     /**
+     * Deletes one download of either kind, for "Remove after watching": a file in the Downloads
+     * folder through [delete], and one from before downloads had a folder through TDLib, the way
+     * the Downloads screen removes it. The record goes only once the bytes have.
+     *
+     * @return whether it went.
+     */
+    suspend fun deleteAnyKind(settings: SettingsStore, record: ResumeRecord): Boolean {
+        if (record.localPath != null) return delete(settings, record)
+        return withContext(Dispatchers.IO) {
+            val fileId = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }
+                .getOrDefault(record.fileId)
+            runCatching { Td.deleteFile(fileId) }
+            if (runCatching { Td.localDownloadedBytes(fileId) }.getOrDefault(0L) > 0) return@withContext false
+            runCatching { settings.forgetDownload(record.chatId, record.messageId) }.isSuccess
+        }
+    }
+
+    /**
      * Every download in the Downloads folder, deleted with its record, for "Also delete my
      * downloads" when signing out.
      *

@@ -5,7 +5,9 @@ import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import com.tmplayer.data.AndroidLogSink
 import com.tmplayer.data.CrashReports
+import com.tmplayer.data.LocalDownloads
 import com.tmplayer.data.NetworkMonitor
+import com.tmplayer.data.RemoveAfterWatching
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import com.tmplayer.data.start
@@ -14,6 +16,7 @@ import com.tmplayer.data.trim
 import com.tmplayer.data.Updates
 import com.tmplayer.data.configureForAndroid
 import com.tmplayer.data.WatchCache
+import com.tmplayer.data.WatchedStore
 import com.tmplayer.platform.Logger
 import com.tmplayer.player.PlayerActivity
 import kotlinx.coroutines.CoroutineScope
@@ -59,6 +62,18 @@ class App : Application() {
             runCatching {
                 PlayerActivity.primeOrientation(SettingsStore(this@App).screenOrientationNow())
             }
+        }
+        // "Remove after watching". Here, for the life of the process, rather than on a screen or in
+        // the player: a video is marked watched from the grid, from the player's own button and by
+        // the player reaching the end, and all three write the one list this reads.
+        backgroundScope.launch {
+            val settings = SettingsStore(this@App)
+            RemoveAfterWatching(
+                enabled = settings.removeAfterWatching,
+                watched = WatchedStore(this@App).watched,
+                downloads = { settings.downloadsNow() },
+                delete = { LocalDownloads.deleteAnyKind(settings, it) },
+            ).run()
         }
         // Kept off the launch path: the storage ceiling is about tomorrow's disk, not this frame,
         // and TDLib has a database to open first. Waits for an authorized session, so on a device

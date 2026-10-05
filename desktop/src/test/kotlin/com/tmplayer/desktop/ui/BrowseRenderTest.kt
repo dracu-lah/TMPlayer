@@ -201,6 +201,8 @@ class BrowseRenderTest {
         settings.noteDownload(item(11, "Night Train (2019) 1080p", 2048), "Film Club", kept.absolutePath)
         settings.noteDownload(item(12, "The Long Road S01E01", 4096), "Film Club", folder.resolve("gone.mkv").absolutePath)
         settings.rememberCachedVideo(item(13, "Harbour Lights S02E05", 900L * 1024 * 1024), "Weekend series")
+        // Drawn on, so the shot shows the "Remove after watching" switch in its live state.
+        settings.setRemoveAfterWatching(true)
         com.tmplayer.data.OfflineDownloads.note(
             com.tmplayer.data.OfflineDownloads.Progress(
                 request = DownloadRequest.from(item(14, "Mountains, a film", 1_500L * 1024 * 1024), "Documentaries"),
@@ -293,6 +295,12 @@ class BrowseRenderTest {
             scene.render(500_000_000)
             scene.render(1_000_000_000).encodeToData(EncodedImageFormat.PNG)!!.bytes
         }
+
+    @Test
+    fun downloadLineCarriesFreeSpace() {
+        org.junit.Assert.assertEquals("Download (12.0 GB free)", withFree("Download", 12L * 1024 * 1024 * 1024))
+        org.junit.Assert.assertEquals("Download", withFree("Download", 0))
+    }
 
     private fun save(name: String, png: ByteArray) {
         assertTrue(png.size > 1000)

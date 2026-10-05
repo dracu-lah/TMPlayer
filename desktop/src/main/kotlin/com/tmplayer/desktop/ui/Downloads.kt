@@ -28,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -71,12 +72,17 @@ import java.io.File
  * Kept rows can be picked with their boxes for Delete selected; Delete all clears the lot, after a
  * question, since a download is the one thing TMPlayer never takes back on its own.
  */
+/** The "Remove after watching" switch's words. */
+internal const val REMOVE_AFTER_WATCHING = "Remove after watching"
+internal const val REMOVE_AFTER_WATCHING_DETAIL = "Delete a download once it is marked watched. Cached videos are not affected"
+
 @Composable
 fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloadsDir) {
     val active by OfflineDownloads.active.collectAsState()
     val history by state.settings.downloadHistory.collectAsState(initial = emptyList())
     val cachedRecords by state.settings.cachedVideos.collectAsState(initial = emptyList())
     val unlisted by DownloadIndex.unlisted.collectAsState()
+    val removeAfterWatching by state.settings.removeAfterWatching.collectAsState(initial = false)
     val desktop by state.extras.prefs.state.collectAsState()
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
@@ -142,6 +148,14 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                 items(queue, key = { "a${it.fileId}" }) { row -> ActiveRow(state, row) }
 
                 item(key = "h-done") { Section("Downloaded") }
+                item(key = "t-remove") {
+                    Setting(REMOVE_AFTER_WATCHING, REMOVE_AFTER_WATCHING_DETAIL) {
+                        Switch(
+                            checked = removeAfterWatching,
+                            onCheckedChange = { on -> scope.launch { state.settings.setRemoveAfterWatching(on) } },
+                        )
+                    }
+                }
                 if (history.isEmpty()) {
                     item(key = "e-done") { Empty("Nothing downloaded yet. Downloads are kept in ${downloadsDir.path} until you delete them.") }
                 }

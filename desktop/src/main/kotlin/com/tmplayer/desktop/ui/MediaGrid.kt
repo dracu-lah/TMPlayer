@@ -1,5 +1,10 @@
 package com.tmplayer.desktop.ui
 
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.tmplayer.data.DiskInfo
+import com.tmplayer.desktop.DesktopPaths
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.VerticalScrollbar
@@ -596,6 +601,10 @@ private fun Badge(icon: androidx.compose.ui.graphics.vector.ImageVector, label: 
     }
 }
 
+/** "Download (12.3 GB free)", or the bare label while the disk has not answered. */
+internal fun withFree(label: String, freeBytes: Long): String =
+    DiskInfo.freeLabel(freeBytes)?.let { "$label ($it)" } ?: label
+
 /**
  * Play, Play from start, the one download entry for where the video is (Download when it is on
  * Telegram only, Save to Downloads when it is cached, Downloading while it is queued, In Downloads
@@ -619,6 +628,10 @@ private fun TileMenu(
     val record = LocalDownloadIndex.current[item.id]
     val row = downloads[item.fileId]
     val title = chatTitle.ifBlank { state.chatTitleOf(item.chatId) }
+    // Measured each time the menu opens, off the UI thread, for the "x GB free" on the download line.
+    val free by produceState(0L, expanded) {
+        if (expanded) value = withContext(Dispatchers.IO) { DiskInfo.of(DesktopPaths.downloadsDir).freeBytes }
+    }
 
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
       if (!fileMenu) {
@@ -662,12 +675,12 @@ private fun TileMenu(
             // A chat with "restrict saving content" lets its videos be watched and nothing more,
             // so neither a download nor, below, a hand off to another app is offered.
             !item.canBeSaved -> Unit
-            item.onDevice -> DropdownMenuItem(text = { Text("Save to Downloads") }, onClick = {
+            item.onDevice -> DropdownMenuItem(text = { Text(withFree("Save to Downloads", free)) }, onClick = {
                 onDismiss()
                 OfflineDownloads.start(state.downloads, item, title)
                 toast("Saving ${item.title} to Downloads")
             })
-            else -> DropdownMenuItem(text = { Text("Download") }, onClick = {
+            else -> DropdownMenuItem(text = { Text(withFree("Download", free)) }, onClick = {
                 onDismiss()
                 OfflineDownloads.start(state.downloads, item, title)
                 toast("Downloading ${item.title}")

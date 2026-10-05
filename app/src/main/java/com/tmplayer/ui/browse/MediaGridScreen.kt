@@ -175,7 +175,10 @@ import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.focusRing
+import com.tmplayer.ui.theme.focusScale
 import com.tmplayer.ui.theme.Tv
+import com.tmplayer.data.AndroidPaths
+import com.tmplayer.data.DiskInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -522,6 +525,8 @@ fun MediaGridScreen(
             val padding = PaddingValues(
                 start = if (dense) DENSE_GAP else edge,
                 end = if (dense) DENSE_GAP else edge,
+                // Room above the first row for a focused tile to grow into.
+                top = if (touch) 0.dp else Tv.FocusClearance,
                 // A television crops its outermost few percent, so the last row needs
                 // clearance or its titles are cut off the bottom of the panel. A phone crops
                 // nothing but does put a gesture bar over the last row.
@@ -1515,7 +1520,7 @@ private fun Pill(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(icon, contentDescription = label, tint = foreground, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = if (showLabel) null else label, tint = foreground, modifier = Modifier.size(22.dp))
         if (showLabel) {
             Text(label, style = MaterialTheme.typography.bodyLarge, color = foreground, maxLines = 1)
         }
@@ -1558,10 +1563,10 @@ private fun FullName(name: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * A media tile that marks focus with a border rather than by growing.
+ * A media tile that marks focus with a border and a small [focusScale].
  *
- * TV Material's card scales up when focused, and a card in the outermost grid column visibly
- * runs off the screen edge when it does.
+ * TV Material's card grows by 10% when focused, and a card in the outermost grid column visibly
+ * ran off the screen edge when it did; 5% stays inside the overscan margin.
  */
 @Composable
 internal fun MediaCard(
@@ -1653,6 +1658,7 @@ internal fun MediaCard(
     Column(
         modifier
             .fillMaxWidth()
+            .focusScale(focused)
             .clip(RoundedCornerShape(Corner.Medium))
             .background(if (focused) Tone.surfaceHigh else Tone.surface)
             .selectionEdge(selected, RoundedCornerShape(Corner.Medium))
@@ -2075,7 +2081,7 @@ private fun Modifier.selectionEdge(selected: Boolean?, shape: Shape): Modifier =
  * in VLC is a video that plays for two minutes and stops, with nothing on screen to say why.
  */
 @Composable
-private fun MediaActionsSheet(
+internal fun MediaActionsSheet(
     item: MediaItem,
     chatTitle: String,
     watched: WatchPoint?,
@@ -2104,6 +2110,15 @@ private fun MediaActionsSheet(
         value = runCatching { Td.isFileCached(item.fileId) }.getOrDefault(false)
     }
     val onDisk = inDownloads || cachedHere
+    // Room on the volume downloads go to, measured once the sheet is up and never on the UI thread
+    // (a statvfs), for the "x GB free" on the download line.
+    val freeBytes by produceState(initialValue = 0L) {
+        value = withContext(Dispatchers.IO) {
+            DiskSpace.read(context, java.io.File(context.filesDir, AndroidPaths.DOWNLOADS)).freeBytes
+        }
+    }
+    val free = DiskInfo.freeLabel(freeBytes)
+    fun withFree(detail: String) = if (free == null) detail else "$detail  ·  $free"
     var confirmingRemove by remember { mutableStateOf(false) }
     if (confirmingRemove) {
         TvConfirm(
@@ -2233,7 +2248,7 @@ private fun MediaActionsSheet(
                 MenuAction(
                     label = "Save to Downloads",
                     icon = TmIcons.Download,
-                    detail = "Kept until you delete it, not replaced by the next video",
+                    detail = withFree("Kept until you delete it, not replaced by the next video"),
                     onSelect = {
                         onDownloadForLater()
                         onDismiss()
@@ -2244,7 +2259,7 @@ private fun MediaActionsSheet(
                 MenuAction(
                     label = "Download",
                     icon = TmIcons.Download,
-                    detail = "Kept in Downloads, no signal needed",
+                    detail = withFree("Kept in Downloads, no signal needed"),
                     onSelect = {
                         // Through the same planner the multi-select uses, which asks the disk
                         // first and spends the watch cache if that is what makes room.

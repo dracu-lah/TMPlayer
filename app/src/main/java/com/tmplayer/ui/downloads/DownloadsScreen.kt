@@ -3,8 +3,11 @@ package com.tmplayer.ui.downloads
 import com.tmplayer.ui.nav.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -44,6 +47,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -100,6 +104,7 @@ import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.LocalDarkTheme
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.Tv
 import com.tmplayer.ui.theme.focusRing
 import kotlinx.coroutines.launch
 
@@ -165,6 +170,7 @@ fun DownloadsScreen(
     val settings = remember { SettingsStore(context) }
     val toast = rememberToast()
     val history by settings.downloadHistory.collectAsStateWithLifecycle(initialValue = emptyList())
+    val removeAfterWatching by settings.removeAfterWatching.collectAsStateWithLifecycle(initialValue = false)
     // What is arriving and what is behind it, which the finished-downloads record knows nothing
     // about until the file has landed. In the order the videos were asked for, which is the order
     // they will arrive in, so the list does not reshuffle itself as the figures move.
@@ -454,6 +460,13 @@ fun DownloadsScreen(
 
     Scaffold(
         containerColor = Tone.background,
+        // A television crops its outer few percent, and this screen is stock Material laid out to
+        // the panel's edge, so on a TV the whole of it moves inside the overscan margin.
+        modifier = if (isTouch()) {
+            Modifier
+        } else {
+            Modifier.background(Tone.background).padding(horizontal = Tv.SafeH, vertical = Tv.SafeV)
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -661,6 +674,11 @@ fun DownloadsScreen(
                         totalBytes = disk.totalBytes,
                     )
                 }
+                item {
+                    RemoveAfterWatchingRow(removeAfterWatching) { on ->
+                        scope.launch { settings.setRemoveAfterWatching(on) }
+                    }
+                }
                 items(shown, key = { it.key }) { row ->
                     DownloadCard(
                         row = row,
@@ -819,6 +837,45 @@ private fun Modifier.tvFocusRing(
                 Modifier
             },
         )
+}
+
+/**
+ * "Remove after watching": one row, the whole of it the switch, so a remote lands on one thing and
+ * OK flips it. The deleting itself happens in [com.tmplayer.data.RemoveAfterWatching], which runs
+ * for the life of the process.
+ */
+@Composable
+private fun RemoveAfterWatchingRow(checked: Boolean, onChange: (Boolean) -> Unit) {
+    val interactions = remember { MutableInteractionSource() }
+    val shape = RoundedCornerShape(Corner.Medium)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(shape)
+            .tvFocusRing(interactions, shape)
+            .toggleable(
+                value = checked,
+                interactionSource = interactions,
+                indication = LocalIndication.current,
+                role = Role.Switch,
+                onValueChange = onChange,
+            )
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Remove after watching", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Delete a download once it is marked watched. Cached videos are not affected.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        // Drawn, not pressed: the row is the control, so the switch takes no focus of its own.
+        Switch(checked = checked, onCheckedChange = null)
+    }
 }
 
 /**

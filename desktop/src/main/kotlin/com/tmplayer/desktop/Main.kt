@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
+import com.tmplayer.data.RemoveAfterWatching
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import com.tmplayer.data.ThemeChoice
@@ -60,6 +61,16 @@ fun main(args: Array<String>) {
     Background.scope.launch {
         Td.awaitAuthorizedSession()
         DesktopServices.downloads.restore()
+    }
+    // "Remove after watching", for the life of the process: the grid, the player's button and the
+    // player reaching the end all write the one watched list this reads.
+    Background.scope.launch {
+        RemoveAfterWatching(
+            enabled = settings.removeAfterWatching,
+            watched = DesktopServices.watched.watched,
+            downloads = { settings.downloadsNow() },
+            delete = { DownloadIndex.delete(settings, it) },
+        ).run()
     }
     DesktopUpdates.configure()
     // Before anything can rewrite desktop.properties, which would drop the old update keys.

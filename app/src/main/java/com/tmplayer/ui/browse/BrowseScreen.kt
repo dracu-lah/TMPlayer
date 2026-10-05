@@ -78,6 +78,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
@@ -112,6 +113,7 @@ import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.focusRing
+import com.tmplayer.ui.theme.focusScale
 import com.tmplayer.ui.theme.Tv
 
 /**
@@ -756,6 +758,8 @@ private fun <T : Any> ContinueSection(
     val padding = PaddingValues(
         start = insets.start,
         end = insets.end,
+        // Room above the first row for a focused tile to grow into; nothing on a phone.
+        top = if (isTouch()) 0.dp else Tv.FocusClearance,
         bottom = insets.bottom,
     )
 
@@ -870,6 +874,7 @@ private fun ContinueTile(
         Column(
             modifier
                 .fillMaxWidth()
+                .focusScale(focused)
                 .clip(RoundedCornerShape(Corner.Medium))
                 .background(if (focused) Tone.surfaceHigh else Tone.surface)
                 .border(3.dp, border, RoundedCornerShape(Corner.Medium))
@@ -1081,7 +1086,8 @@ private fun NavRail(
 ) {
     Column(
         Modifier
-            .width(196.dp)
+            // 180dp of room for the items, whatever the overscan margin takes on the left.
+            .width(180.dp + Tv.SafeH - RAIL_INSET)
             .fillMaxHeight()
             .background(Tone.surface)
             // The rail is the leftmost thing on the screen, so it alone decides whether the app
@@ -1540,7 +1546,7 @@ private fun SearchRow(query: String, insets: BrowseInsets, onQuery: (String) -> 
         )
         if (startVoice != null) {
             // A microphone on its own says it, and leaves the room to the search field.
-            PillButton(label = null, icon = TmIcons.Mic, onClick = startVoice)
+            PillButton(label = "Voice search", icon = TmIcons.Mic, showLabel = false, onClick = startVoice)
         }
         if (query.isNotBlank()) {
             // Clearing the query removes this pill, and a control that deletes itself while
@@ -1555,7 +1561,13 @@ private fun SearchRow(query: String, insets: BrowseInsets, onQuery: (String) -> 
 }
 
 @Composable
-private fun PillButton(label: String?, icon: ImageVector?, onClick: () -> Unit) {
+private fun PillButton(
+    label: String,
+    icon: ImageVector?,
+    /** False draws the icon alone; the label is still what a screen reader says. */
+    showLabel: Boolean = true,
+    onClick: () -> Unit,
+) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
@@ -1573,20 +1585,21 @@ private fun PillButton(label: String?, icon: ImageVector?, onClick: () -> Unit) 
             .focusRing(focused, CircleShape)
             .clickable(interactionSource = interactions, indication = null, onClick = onClick)
             // An icon on its own gets even padding, so the pill comes out round rather than wide.
-            .padding(horizontal = if (label == null) 13.dp else 18.dp),
+            .padding(horizontal = if (showLabel) 18.dp else 13.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (icon != null) {
             Icon(
                 icon,
-                // A wordless pill still hands its label to the screen reader.
-                contentDescription = label,
+                // A wordless pill still hands its label to the screen reader; a worded one says
+                // it once, through the text.
+                contentDescription = if (showLabel) null else label,
                 tint = foreground,
                 modifier = Modifier.size(22.dp),
             )
         }
-        if (label != null) {
+        if (showLabel) {
             Text(
                 label,
                 style = MaterialTheme.typography.bodyLarge,
@@ -1612,6 +1625,8 @@ private fun ChatSection(
     launchChatId: Long,
 ) {
     val rowsAreFullBleed = isTouch()
+    // Around the strip's tiles, for the television's focus scale. A phone does not grow them.
+    val clearance = if (rowsAreFullBleed) 0.dp else Tv.FocusClearance
     val first = remember { FocusRequester() }
     // The strip is what a viewer lands on when it is there, because it is the largest thing on the
     // screen; otherwise the first card takes it.
@@ -1653,7 +1668,14 @@ private fun ChatSection(
                             color = Tone.text,
                             modifier = Modifier.padding(bottom = 14.dp),
                         )
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        LazyRow(
+                            // Drawn [clearance] past every side and padded back in by as much, so
+                            // a grown tile keeps its border and the strip still lines up under its
+                            // heading and sits where it did.
+                            modifier = Modifier.bleed(clearance),
+                            contentPadding = PaddingValues(clearance),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
                             items(recent, key = { "r-${it.id}" }) { chat ->
                                 ChatTile(
                                     chat = chat,
@@ -1698,6 +1720,7 @@ private fun ChatSection(
             contentPadding = PaddingValues(
                 start = insets.start,
                 end = insets.end,
+                top = if (rowsAreFullBleed) 0.dp else Tv.FocusClearance,
                 bottom = insets.bottom,
             ),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -1800,6 +1823,7 @@ private fun ChatTile(
         Column(
             modifier
                 .height(RECENT_TILE_HEIGHT)
+                .focusScale(focused)
                 .clip(RoundedCornerShape(Corner.Large))
                 .background(if (focused) Tone.surfaceHigh else Tone.surface)
                 .border(
@@ -2124,7 +2148,22 @@ private val TOUCH_AVATAR = Avatar.List
  * A television crops its outermost few percent, so the TV figures are overscan clearance and have
  * nothing to do with taste. A phone crops nothing, so it spends far less of its width on margins.
  */
+/**
+ * Grows a lazy row by [by] on every side without taking any more room, so it may draw that far past
+ * the space it was given. Paired with a content padding of the same size.
+ */
+private fun Modifier.bleed(by: Dp): Modifier = layout { measurable, constraints ->
+    val extra = by.roundToPx()
+    if (extra == 0 || !constraints.hasBoundedWidth) {
+        val placeable = measurable.measure(constraints)
+        return@layout layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+    }
+    val wide = constraints.maxWidth + extra * 2
+    val placeable = measurable.measure(constraints.copy(minWidth = wide, maxWidth = wide))
+    layout(constraints.maxWidth, placeable.height - extra * 2) { placeable.place(-extra, -extra) }
+}
+
 private class BrowseInsets(val start: Dp, val end: Dp, val top: Dp, val bottom: Dp)
 
-private val TvInsets = BrowseInsets(start = 28.dp, end = 4.dp, top = Tv.SafeV, bottom = Tv.SafeV)
+private val TvInsets = BrowseInsets(start = 28.dp, end = Tv.FocusClearance, top = Tv.SafeV, bottom = Tv.SafeV)
 private val TouchInsets = BrowseInsets(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)
