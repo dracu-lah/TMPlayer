@@ -258,6 +258,11 @@
           <pre class="code"><code>apksigner verify --print-certs TMPlayer-&lt;version&gt;-universal.apk</code></pre>
           <p><code>apksigner</code> comes with the Android SDK build tools. The certificate's SHA-256 should be the same from one release to the next.</p>
         </div>
+        <div class="panel panel-prose panel-wide">
+          <h3>Any file, where it was built (optional)</h3>
+          <pre class="code"><code>gh attestation verify TMPlayer-&lt;version&gt;-windows-x64.msi --repo dracu-lah/TMPlayer</code></pre>
+          <p>Releases after 1.22.0 carry a build attestation for every file: a statement, signed through GitHub and Sigstore, that the file came out of the release workflow at that version's tag. The <a href="https://cli.github.com/" rel="noopener">GitHub CLI</a> checks it, and the command works the same for the APK, the AppImage and the tarball.</p>
+        </div>
       </div>
     </div>
   </section>

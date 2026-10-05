@@ -267,6 +267,12 @@ jobs:
     name: Publish the release
     needs: [version, android, desktop-linux, desktop-windows]
     runs-on: ubuntu-latest
+    # id-token and attestations are for the provenance step below; naming any permission here
+    # replaces the workflow's list for this job, so contents: write is restated.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
 
     steps:
       - uses: actions/checkout@v7
@@ -302,6 +308,16 @@ jobs:
             esac
           done
           ls -la dist
+
+      # A signed statement, through GitHub and Sigstore, that each file came out of this workflow
+      # run at this tag. It costs nothing, adds no file to the release, and anyone can check a
+      # download with `gh attestation verify <file> --repo dracu-lah/TMPlayer`. It does not
+      # replace the APK's own signature or a Windows code signing certificate; it says where the
+      # bytes were built, not who vouches for them to the operating system.
+      - name: Attest where every file was built
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/*
 
       # The TMPlayer source is the tag's tree and the archives GitHub attaches. The corresponding
       # source of the bundled GPL media extension does not change while its version does not, so
