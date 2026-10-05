@@ -43,7 +43,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [x] CP07b Volume boost, sleep timer and "still watching?" on desktop (83b0789, menu and card checked in the dev player; the bundled FFmpeg has no dynaudnorm, so the boost is gain only for now)
 - [ ] CP08 Resume rules, desktop player extras
 - [x] CP09 Empty and error states with actions, recent searches (7b4656e, every state checked on the phone and TV emulator fixtures and the desktop render test; real slow Telegram and search recording not yet tested on a device)
-- [ ] CP10 Remove after watching, free space, TV focus and labels
+- [x] CP10 Remove after watching, free space, TV focus and labels (6d4d36f, toggle, free space, focus scale and 48/27 margins checked on the phone and TV emulator fixtures and the desktop render test; real deletion after a watched download not yet tested on a device)
 - [ ] CP10a Sidebar: version beside the logo, compact accordion groups (phone, TV, desktop)
 - [ ] CP10b One theme on every platform: Android TV modal borders, surfaces and the rest match phone and desktop
 - [ ] CP10c Support the project: sponsor button and QR code on every platform, a gentle reminder, site section
