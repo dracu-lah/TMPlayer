@@ -76,7 +76,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [ ] U21 Downloader code and Amazon developer account
 
 **Phase D. The "Languages" release**
-- [ ] CP19 P1 i18n infrastructure
+- [x] CP19 P1 i18n infrastructure (f7ba39d, catalog, generated `L`, Translator, ICU subset, CLDR plurals for all 17 languages, formatter, resolution, `LocalStrings` and en-XA covered by the :core tests; TV promo home unchanged on the emulator. API: add a key to en.json, read `LocalStrings.current.key` in Compose and `L.key` elsewhere)
 - [ ] CP20 P2 shared onboarding and the desktop promo fixture
 - [ ] CP21 P3 extract phone and TV text
 - [ ] CP22 P4 extract desktop and core text
