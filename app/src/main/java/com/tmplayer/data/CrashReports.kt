@@ -67,27 +67,10 @@ object CrashReports {
             options.isAttachStacktrace = true
 
             // Two gates, in code rather than in configuration. If the switch went off between the
-            // crash and the send, the report is dropped. And the user object goes, which is where
-            // Sentry puts the installation identifier that would tie one person's reports together.
+            // crash and the send, the report is dropped. Otherwise it is cut down to the stack
+            // trace, the versions and the device model; see CrashReportScrubber.
             options.setBeforeSend { event, _ ->
-                if (!enabledNow) {
-                    null
-                } else {
-                    event.user = null
-                    
-                    // Scrub file paths and telegram IDs from exceptions
-                    event.exceptions?.forEach { exception ->
-                        exception.value = exception.value?.replace(Regex("/(?:storage|data|sdcard|mnt)/[^\\s\"']+"), "[REDACTED_PATH]")
-                    }
-                    
-                    // Remove device identifiers
-                    event.contexts.device?.let { device ->
-                        device.id = null
-                        device.name = null
-                    }
-                    
-                    event
-                }
+                if (!enabledNow) null else CrashReportScrubber.scrub(event)
             }
             options.setDiagnosticLevel(SentryLevel.ERROR)
         }
