@@ -80,7 +80,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [ ] CP21 P3 extract phone and TV text
 - [ ] CP22 P4 extract desktop and core text
 - [ ] CP23 P5 language setting, what's new, feedback, localized metadata
-- [ ] CP24 P6 translations (langsync only on the user's go-ahead)
+- [ ] CP24 P6 translations (go-ahead given 2026-10-06, 16 languages)
 - [ ] CP25 P7 verification, then release "Languages" on request
 - [ ] CP26 P14b site localization and the remaining site pages
 - [ ] U22 Review hi and ml; ask the issue #2 author to review es
@@ -360,12 +360,16 @@ and `PlayerControls.kt`. Desktop's layout for comparison: `desktop/.../player/Pl
 - TV has no touch gestures, but the D-pad already does the job: left and right on the bare picture jump
   back 5 s and forward 10 s, OK opens the row, OK on the focused timebar plays and pauses, and the remote's
   play key works too. So on TV, hide the big centre cluster. Keep it on the phone, where it is the tap target.
-- Keep one play and pause button in the bottom row, like desktop, so there is still a visible control and a
-  place for focus to land. Drop the bottom row's back 5 s and forward 10 s buttons on TV too if they are there.
-- Previous and next episode: keep them reachable on TV (bottom row) if they are not already.
+- The user then said (2026-10-06) that on TV the remote plus the feedback icons are enough: no transport
+  buttons at all. So on TV also drop play and pause, back 5 s and forward 10 s from the bottom row. What stays:
+  the timebar and the non transport buttons (tracks, subtitles, speed and the rest of the menu).
+- Make sure every remote action shows its icon: the existing side HUD for the 5 s and 10 s jumps, and a brief
+  centre play or pause glyph when OK or the play key toggles playback. Paused keeps showing a pause cue.
+- Previous and next episode: the remote's media keys, plus entries in the player menu if they are not there.
 - Check D-pad focus: OK still opens the row on the timebar, Down reaches the buttons, no dead focus spots.
   Update INSTALL.md's remote table if it lists the removed buttons.
-**Done when:** TV emulator screenshots of the row while playing and paused, and a D-pad walk across the row.
+**Done when:** TV emulator screenshots of the row while playing and paused, the play and pause cue, the jump
+HUD, and a D-pad walk across the row.
 **STOP**
 
 ### CP11 Release prep and device verification
@@ -477,8 +481,9 @@ module and stop at the split.
 **STOP**
 
 ### CP24 P6 translations
-**Needs:** the user's explicit go-ahead to run langsync. **Do:** empty `{}` files for es-419, pt-BR, hi, ml;
-`langsync --dry-run`, then `langsync`; a review pass (Spanish "tú", leftovers); CONTRIBUTING "Add a translation"
+**Go-ahead given 2026-10-06:** the user said to translate into the most common languages with langsync now and
+review while using the app. **Do:** empty `{}` files for es-419, pt-BR, fr, de, it, ru, uk, tr, id, vi, ar, zh-CN, ja, ko, hi, ml
+(check how langsync maps `zh-CN` and `es-419` before the run); `langsync --dry-run`, then `langsync`; a review pass (Spanish "tú", leftovers); CONTRIBUTING "Add a translation"
 and an issue template; a review request on issue #2. Unreviewed languages stay hidden from the picker.
 **STOP**
 
@@ -492,7 +497,7 @@ only on request, after the cadence guard.
 **Design:** R8. `data-i18n` on the pages and `app.js`; `scripts/build-site-i18n.py` renders `site/<lang>/` with
 `lang`, `hreflang` and `x-default`, `og:locale`, sitemap entries, a header language picker, a suggestion bar, no
 auto-redirect; CI fails on stale output. Also `/translate/`, the three SEO guides, "Now in Español, Português,
-हिन्दी, മലയാളം" on the home page. `langsync -c langsync.site.json` only with the go-ahead.
+हिन्दी, മലയാളം" on the home page. `langsync -c langsync.site.json` for the same 16 languages (go-ahead given 2026-10-06).
 **Done when:** Chromium shots of `/`, `/es/`, `/download/`, `/fire-tv/` at phone and desktop widths; hreflang,
 sitemap and JSON-LD validate.
 **STOP**
@@ -705,7 +710,7 @@ Register a Downloader short code for `https://tmplayer.org/download/` at aftvnew
 (it replaces the DOWNLOADER-CODE marker on `/fire-tv/`). Create the Amazon developer account for U23.
 
 ### U22 Translation reviews (CP24)
-Review hi and ml yourself; ask the issue #2 author to review es-419.
+Review the languages you read as you use the app; ask the issue #2 author to review es-419.
 
 ### U23 Amazon Appstore listing (after CP30)
 Submit using the pack Claude prepares in `docs/distribution/`.
@@ -756,6 +761,12 @@ Permission email sent 2026-10-05. Nothing MSone-related is built (not even a lin
 - Decisions: auto-switch to a supported system language plus a one-time "Now in Español, change in Settings"
   card; contributions by GitHub PR on the JSON with CI `langsync --check`, no Weblate; screenshots English only;
   first wave es-419 (issue author reviews), pt-BR, hi, ml (user reviews); unreviewed languages hidden.
+- **Changed 2026-10-06 (user):** ship the most common languages at once and review in use: es-419, pt-BR, fr, de, it, ru, uk, tr, id, vi, ar, zh-CN, ja, ko, hi, ml.
+  Machine translations are visible in the picker (no hiding). This widens the earlier choices: CLDR plural
+  rules for all 16 (ru, uk and ar have the extra categories; ja, ko, zh, vi and id have one form); right to
+  left layout for `ar` (Compose mirrors on its own; check the XML player overlay, icons that point a
+  direction, and the timebar); desktop fonts for CJK, Arabic, Devanagari and Malayalam (Noto, with a notices
+  entry; subset or load from the system if the package grows too much, and say how much it grew).
 
 ### R2 Shared onboarding
 Pages: Language (system preselected, each language named in itself, "Help translate"); What TMPlayer is
