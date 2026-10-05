@@ -44,7 +44,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [x] CP08 Resume rules, desktop player extras (b47cddc, rules and saved tracks, speed and delays unit tested on both stores; help sheet, A-B loop, chapters and a real screenshot checked in the dev player; resume restore on Android not yet tested on a device)
 - [x] CP09 Empty and error states with actions, recent searches (7b4656e, every state checked on the phone and TV emulator fixtures and the desktop render test; real slow Telegram and search recording not yet tested on a device)
 - [x] CP10 Remove after watching, free space, TV focus and labels (6d4d36f, toggle, free space, focus scale and 48/27 margins checked on the phone and TV emulator fixtures and the desktop render test; real deletion after a watched download not yet tested on a device)
-- [ ] CP10a Sidebar: version beside the logo, compact accordion groups (phone, TV, desktop)
+- [x] CP10a Sidebar: version beside the logo, compact accordion groups (phone, TV, desktop) (b5d6468, draft, awaiting user review; TV rail folded and open, D-pad walk, phone drawer and desktop light and dark checked on the emulator fixtures and the render test. The TV rail has no icons only mode, so none was added)
 - [ ] CP10b One theme on every platform: Android TV modal borders, surfaces and the rest match phone and desktop
 - [ ] CP10c Support the project: sponsor button and QR code on every platform, a gentle reminder, site section
 - [x] CP10d TV player: drop the on-screen play, back 5 s and forward 10 s buttons the remote already covers (ab2f4b9, row, paused cue, jump HUD, menu and D-pad walk checked on the TV emulator fixture; real playback keys not yet tested on a device)
