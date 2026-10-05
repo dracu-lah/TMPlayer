@@ -85,12 +85,17 @@ import kotlinx.coroutines.launch
  * is the Favourites page: the starred chats and no chips.
  */
 @Composable
-fun ChatsPage(state: ShellState, model: ChatListViewModel, favouritesOnly: Boolean) {
+fun ChatsPage(
+    state: ShellState,
+    model: ChatListViewModel,
+    favouritesOnly: Boolean,
+    /** False beside the wide side bar, which lists the same sections in its Chats group. */
+    showSections: Boolean = true,
+) {
     val ui by model.state.collectAsState()
     val favourites by state.settings.favorites.collectAsState(initial = emptySet())
     val folders by Td.folders.collectAsState()
     var query by rememberSaveable(favouritesOnly) { mutableStateOf("") }
-    var sectionKey by rememberSaveable { mutableStateOf(BrowseSection.encode(BrowseSection.of(BrowseTab.All))) }
     val toast = rememberToast()
     val scope = rememberCoroutineScope()
     val listState = if (favouritesOnly) androidx.compose.foundation.lazy.rememberLazyListState() else state.chatListState
@@ -103,12 +108,12 @@ fun ChatsPage(state: ShellState, model: ChatListViewModel, favouritesOnly: Boole
     val section = if (favouritesOnly) {
         BrowseSection.of(BrowseTab.Favorites)
     } else {
-        BrowseSection.decode(sectionKey) ?: BrowseSection.of(BrowseTab.All)
+        state.chatSection
     }
 
     Column(Modifier.fillMaxSize()) {
         PageHeader(
-            title = if (favouritesOnly) "Favourites" else "Chats",
+            title = if (favouritesOnly) "Favourites" else section.heading,
             subtitle = if (favouritesOnly) "Chats you've starred" else section.blurb,
             actions = {
                 SearchField(
@@ -127,7 +132,7 @@ fun ChatsPage(state: ShellState, model: ChatListViewModel, favouritesOnly: Boole
                 }
             },
         )
-        if (!favouritesOnly) {
+        if (!favouritesOnly && showSections) {
             LazyRow(
                 Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -135,7 +140,7 @@ fun ChatsPage(state: ShellState, model: ChatListViewModel, favouritesOnly: Boole
                 items(sections, key = { BrowseSection.encode(it) }) { entry ->
                     FilterChip(
                         selected = entry == section,
-                        onClick = { sectionKey = BrowseSection.encode(entry) },
+                        onClick = { state.showChats(entry) },
                         label = { Text(entry.label) },
                         leadingIcon = { Icon(entry.icon, contentDescription = null) },
                     )

@@ -93,6 +93,36 @@ class BrowseRenderTest {
     }
 
     @Test
+    fun sidebarGroups() = kotlinx.coroutines.runBlocking {
+        val folders = listOf(
+            com.tmplayer.data.ChatFolderSummary(3, "Films"),
+            com.tmplayer.data.ChatFolderSummary(7, "Family"),
+        )
+        val chats = listOf(
+            chat(2, "Film Club", ChatKind.Channel, 12, 0xFFE5484D.toInt()),
+            chat(4, "Weekend series", ChatKind.Group, 3, 0xFFF5A524.toInt()),
+        )
+        // On Unread, so Chats is open because the viewer is in it; Watch is open by default and
+        // Folders is the group left closed.
+        shell.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.Unread))
+        for (dark in listOf(true, false)) {
+            val png = render(update = NavUpdate("Update", "2.0.1"), dark = dark, folders = folders) {
+                Column(Modifier.fillMaxSize()) {
+                    PageHeader("Unread", "Chats with messages you haven't read")
+                    chats.forEach { ChatRow(it, favourite = false, onOpen = {}, onStar = {}) }
+                }
+            }
+            save(if (dark) "sidebar-dark.png" else "sidebar-light.png", png)
+        }
+        // Folding Watch as well leaves only the group the viewer is in, and the open state is
+        // what the store now says.
+        com.tmplayer.ui.browse.toggleNavGroup(settings, com.tmplayer.ui.browse.NavGroup.Watch)
+        save("sidebar-watch-folded.png", render(dark = true, folders = folders) {})
+        com.tmplayer.ui.browse.toggleNavGroup(settings, com.tmplayer.ui.browse.NavGroup.Watch)
+        shell.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.All))
+    }
+
+    @Test
     fun mediaGrid() {
         val titles = listOf(
             "The Long Road S01E01", "The Long Road S01E02", "The Long Road S01E03",
@@ -277,12 +307,17 @@ class BrowseRenderTest {
         save("update-popup.png", png)
     }
 
-    private fun render(update: NavUpdate? = null, page: @androidx.compose.runtime.Composable () -> Unit): ByteArray =
+    private fun render(
+        update: NavUpdate? = null,
+        dark: Boolean = true,
+        folders: List<com.tmplayer.data.ChatFolderSummary> = emptyList(),
+        page: @androidx.compose.runtime.Composable () -> Unit,
+    ): ByteArray =
         ImageComposeScene(WIDTH, HEIGHT, Density(1f)) {
-            TmMaterialTheme(dark = true) {
+            TmMaterialTheme(dark = dark) {
                 Surface(Modifier.fillMaxSize(), color = Tone.background) {
                     Row(Modifier.fillMaxSize()) {
-                        Sidebar(shell, update)
+                        Sidebar(shell, update, folders)
                         VerticalDivider(color = Tone.outline)
                         Box(Modifier.weight(1f).fillMaxHeight()) { page() }
                     }

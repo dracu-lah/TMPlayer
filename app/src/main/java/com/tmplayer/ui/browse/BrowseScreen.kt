@@ -34,6 +34,17 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import com.tmplayer.data.SettingsStore
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -1100,13 +1111,18 @@ private fun NavRail(
                 bottom = Tv.SafeV,
             ),
     ) {
+        RailBrand()
+        Spacer(Modifier.height(14.dp))
         AccountBadge(account)
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(10.dp))
 
-        // Scrolls, and takes whatever height is left after the bottom cluster: Downloads,
-        // Settings and the update item. Ten fixed
-        // items fill a 1080p rail, and each folder adds a row: a plain Column clips what it cannot
-        // fit, so anything past the fold would be unreachable.
+        val context = LocalContext.current
+        val settings = remember(context) { SettingsStore(context) }
+        val groups = rememberNavGroups(settings, current = navGroupOf(selected))
+
+        // Scrolls, and takes whatever height is left after the bottom cluster: Settings and the
+        // update item. A plain Column clips what it cannot fit, so with every group open and a
+        // few folders anything past the fold would be unreachable.
         //
         // The remote never has to think about it: focus moving down inside a scrolling column
         // brings the focused item into view, so the rail scrolls as a side effect of pressing down.
@@ -1115,44 +1131,60 @@ private fun NavRail(
                 .weight(1f)
                 .verticalScroll(rememberScrollState()),
         ) {
-            val item: @Composable (BrowseSection) -> Unit = { entry ->
-                RailItem(
-                    label = entry.label,
-                    icon = entry.icon,
-                    badge = when {
-                        entry == BrowseSection.of(BrowseTab.Favorites) && favoriteCount > 0 ->
-                            favoriteCount.toString()
-                        entry == BrowseSection.of(BrowseTab.Unread) && unreadCount > 0 ->
-                            unreadCount.toString()
-                        else -> null
-                    },
-                    selected = entry == selected,
-                    onClick = { onSelect(entry) },
+            // Watch, Chats and the account's folders, each folding under a heading OK toggles.
+            // The grouping is the shared one in :ui, so the phone's drawer and the desktop's side
+            // bar fold the same entries the same way. A folded group's rows are not composed, so
+            // D-pad down from its heading goes straight on to the next heading.
+            navGroups(sections).forEach { (group, entries) ->
+                val open = groups.isOpen(group)
+                RailGroupHeading(
+                    label = group.label,
+                    open = open,
+                    toggleable = groups.canToggle(group),
+                    onToggle = { groups.toggle(group) },
                 )
-                Spacer(Modifier.height(4.dp))
-            }
-
-            // The same three groups the phone's drawer uses: a dozen flat rows read as one
-            // undifferentiated pile. The viewer's own watching leads, because it is what somebody
-            // sitting down in the evening is reaching for, and it needs no heading: a label on the
-            // first group is a word before anything it could be dividing.
-            sections.filter { it in LIBRARY_TABS }.forEach { item(it) }
-
-            val chatTabs = sections.filter { it !in LIBRARY_TABS && it !is BrowseSection.Folder }
-            if (chatTabs.isNotEmpty()) {
-                RailHeading("Chats")
-                chatTabs.forEach { item(it) }
-            }
-
-            // Folders last, and only with a heading when there are any, otherwise an account with
-            // none gets a rule and the word "Folders" over nothing.
-            val folders = sections.filterIsInstance<BrowseSection.Folder>()
-            if (folders.isNotEmpty()) {
-                RailHeading("Folders")
-                folders.forEach { item(it) }
+                AnimatedVisibility(
+                    visible = open,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    Column {
+                        entries.forEach { entry ->
+                            when (entry) {
+                                NavEntry.Downloads -> RailItem(
+                                    label = "Downloads",
+                                    icon = TmIcons.Download,
+                                    // How many videos are coming down right now. A download outlives
+                                    // the screen it was started from, and a television has no
+                                    // notification shade to say one is still running, so this mark
+                                    // is the only place that says it at all.
+                                    badge = downloadCount.takeIf { it > 0 }?.toString(),
+                                    selected = false,
+                                    onClick = onOpenDownloads,
+                                )
+                                is NavEntry.Section -> RailItem(
+                                    label = entry.section.label,
+                                    icon = entry.section.icon,
+                                    badge = when {
+                                        entry.section == BrowseSection.of(BrowseTab.Favorites) && favoriteCount > 0 ->
+                                            favoriteCount.toString()
+                                        entry.section == BrowseSection.of(BrowseTab.Unread) && unreadCount > 0 ->
+                                            unreadCount.toString()
+                                        else -> null
+                                    },
+                                    selected = entry.section == selected,
+                                    onClick = { onSelect(entry.section) },
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
-        Spacer(Modifier.height(4.dp))
+        HorizontalDivider(
+            modifier = Modifier.padding(start = RAIL_INSET, end = 4.dp, top = 6.dp, bottom = 6.dp),
+            color = Tone.outline.copy(alpha = 0.5f),
+        )
         if (updateVersion != null) {
             RailItem(
                 label = "Update",
@@ -1162,26 +1194,13 @@ private fun NavRail(
                 onClick = onUpdate,
                 accent = Caution,
             )
-            Spacer(Modifier.height(4.dp))
         }
-        RailItem(
-            label = "Downloads",
-            icon = TmIcons.Download,
-            // How many videos are coming down right now. A download outlives the screen it was
-            // started from, and a television has no notification shade to say one is still
-            // running, so this mark is the only place that says it at all.
-            badge = downloadCount.takeIf { it > 0 }?.toString(),
-            selected = false,
-            onClick = onOpenDownloads,
-        )
-        Spacer(Modifier.height(4.dp))
+        // The version no longer rides on Settings: it sits beside the name at the top, where a
+        // long one has room and "Settings" keeps its whole word.
         RailItem(
             label = "Settings",
             icon = Icons.Filled.Settings,
-            // Which build this is, riding along with Settings rather than on a row of its own: the
-            // rail is already as tall as the screen. The number only, since a suffixed build would
-            // otherwise crowd out the word beside it.
-            badge = "v${Updates.installedVersion.substringBefore('-')}",
+            badge = null,
             selected = false,
             onClick = onOpenSettings,
         )
@@ -1189,26 +1208,101 @@ private fun NavRail(
 }
 
 /**
- * The name of a group of rail items, on the rule that starts it.
+ * The logo, the name and the version, at the top of the rail.
  *
- * Deliberately quiet, and deliberately not focusable: it is a label on a boundary, not a row, and
- * anything a remote can land on is one more press between the viewer and the tab they wanted.
+ * Two lines beside the mark rather than one, because the rail is 180 dp wide and the version has
+ * to stay at a readable 14 sp from across the room. Not focusable: it is a label, not a place.
  */
 @Composable
-private fun RailHeading(text: String) {
-    Spacer(Modifier.height(10.dp))
-    HorizontalDivider(
-        modifier = Modifier.padding(start = RAIL_INSET, end = 4.dp),
-        color = Tone.outline.copy(alpha = 0.5f),
+private fun RailBrand() {
+    Row(
+        Modifier.padding(start = RAIL_INSET),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AppMark(RAIL_MARK)
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(
+                "TMPlayer",
+                style = MaterialTheme.typography.titleMedium,
+                color = Tone.text,
+                maxLines = 1,
+            )
+            Text(
+                "v${Updates.installedVersion}",
+                style = MaterialTheme.typography.labelLarge,
+                color = Tone.muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/**
+ * The heading over a group of rail items, which OK folds and unfolds.
+ *
+ * Quiet like the old unfocusable headings, muted text and a small chevron, until focus lands on it,
+ * when it fills the way a rail item does. The group holding the current tab cannot fold, so its
+ * heading is a plain label the remote passes straight over, exactly as every heading used to be.
+ */
+@Composable
+private fun RailGroupHeading(
+    label: String,
+    open: Boolean,
+    toggleable: Boolean,
+    onToggle: () -> Unit,
+) {
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusedAsState()
+    val background by animateColorAsState(
+        targetValue = if (focused) Tone.focusFill else Color.Transparent,
+        animationSpec = tween(FOCUS_FADE_MS),
+        label = "railHeadingBackground",
     )
-    Text(
-        text,
-        style = MaterialTheme.typography.labelMedium,
-        color = Tone.muted,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.padding(start = RAIL_INSET + 4.dp, top = 8.dp, bottom = 6.dp),
+    val foreground by animateColorAsState(
+        targetValue = if (focused) Tone.onFocusFill else Tone.muted,
+        animationSpec = tween(FOCUS_FADE_MS),
+        label = "railHeadingForeground",
     )
+    val turn by animateFloatAsState(if (open) 0f else -90f, label = "railHeadingChevron")
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(RAIL_ROW)
+            .clip(RoundedCornerShape(Corner.Small))
+            .background(background)
+            .focusRing(focused, RoundedCornerShape(Corner.Small))
+            .then(
+                if (toggleable) {
+                    Modifier
+                        .clickable(interactionSource = interactions, indication = null, onClick = onToggle)
+                        .semantics { stateDescription = if (open) "Open" else "Folded" }
+                } else {
+                    Modifier
+                },
+            )
+            .padding(horizontal = RAIL_INSET),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (focused) FontWeight.SemiBold else FontWeight.Medium,
+            color = foreground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (toggleable) {
+            Icon(
+                Icons.Filled.KeyboardArrowDown,
+                contentDescription = null,
+                tint = foreground,
+                modifier = Modifier.size(22.dp).rotate(turn),
+            )
+        }
+    }
 }
 
 @Composable
@@ -1301,7 +1395,7 @@ private fun RailItem(
     Row(
         Modifier
             .fillMaxWidth()
-            .height(44.dp)
+            .height(RAIL_ROW)
             .clip(RoundedCornerShape(Corner.Small))
             .background(background)
             .focusRing(focused, RoundedCornerShape(Corner.Small))
@@ -1309,8 +1403,8 @@ private fun RailItem(
             .padding(horizontal = RAIL_INSET),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, tint = foreground, modifier = Modifier.size(24.dp))
-        Spacer(Modifier.width(16.dp))
+        Icon(icon, contentDescription = null, tint = foreground, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(12.dp))
         Text(
             label,
             style = MaterialTheme.typography.bodyLarge,
@@ -2108,6 +2202,15 @@ private const val FOCUS_FADE_MS = 140
  * when it is actionable, and costs no layout: it takes the place of a label the row already had.
  */
 private const val HOLD_HINT = "Hold OK for options"
+/**
+ * One rail row, heading or item, back to back. The old 44 dp item plus a 4 dp gap had the same
+ * pitch; this gives the whole of it to the target, the 48 dp floor of the v1 design.
+ */
+private val RAIL_ROW = 48.dp
+
+/** The mark beside the name and version at the top of the rail. */
+private val RAIL_MARK = 32.dp
+
 /** Horizontal padding every rail child carries, which is what keeps them out of the overscan. */
 private val RAIL_INSET = 16.dp
 

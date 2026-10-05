@@ -37,6 +37,7 @@ import com.tmplayer.data.CardLayout
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.ThemeChoice
 import com.tmplayer.data.ChatKind
+import com.tmplayer.data.ChatFolderSummary
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaItem
@@ -175,6 +176,11 @@ class PromoCaptureActivity : ComponentActivity() {
                         else -> PromoChatsScreen(
                             onOpenChat = { screen = "media" },
                             onOpenSettings = { screen = "settings" },
+                            onOpenDownloads = { screen = "downloads" },
+                            // `--ez folders true` adds two Telegram folders, so the sidebar shows
+                            // its Folders group; `--es update 9.9.9` adds the amber Update row.
+                            folders = if (intent.getBooleanExtra("folders", false)) PROMO_FOLDERS else emptyList(),
+                            updateVersion = intent.getStringExtra("update"),
                             // `--es layout grid` for the chat tiles rather than the list.
                             layout = if (intent.getStringExtra("layout") == "grid") CardLayout.Grid else CardLayout.List,
                         )
@@ -191,6 +197,8 @@ private fun imageBytes(@DrawableRes drawable: Int): ByteArray {
     return remember(drawable) { resources.openRawResource(drawable).use { it.readBytes() } }
 }
 
+private val PROMO_FOLDERS = listOf(ChatFolderSummary(1, "Films"), ChatFolderSummary(2, "Family"))
+
 @Composable
 private fun promoChats(): List<ChatSummary> = listOf(
     ChatSummary(101, "Weekend Clips", imageBytes(R.drawable.demo_coast), 0, ChatKind.Group),
@@ -205,10 +213,15 @@ private fun promoChats(): List<ChatSummary> = listOf(
 private fun PromoChatsScreen(
     onOpenChat: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
+    onOpenDownloads: () -> Unit = {},
     state: UiState<BrowseData>? = null,
     layout: CardLayout = CardLayout.List,
+    folders: List<ChatFolderSummary> = emptyList(),
+    updateVersion: String? = null,
 ) {
     val chats = promoChats()
+    // Picking a tab moves the highlight, so a walk down the sidebar shows its groups following.
+    var picked by remember { mutableStateOf<BrowseSection>(BrowseSection.of(BrowseTab.Recent)) }
     val account = Account("Demo", "demo", null, 0)
     BrowseScreen(
         state = state ?: UiState.Content(BrowseData(chats, account)),
@@ -219,10 +232,13 @@ private fun PromoChatsScreen(
         onOpenChat = { onOpenChat() },
         onResumeMedia = {},
         onOpenSettings = onOpenSettings,
+        onOpenDownloads = onOpenDownloads,
         onToggleFavorite = {},
-        picked = BrowseSection.of(BrowseTab.Recent),
-        onPickTab = {},
+        picked = picked,
+        onPickTab = { picked = it },
+        folders = folders,
         layout = layout,
+        updateVersion = updateVersion,
     )
 }
 

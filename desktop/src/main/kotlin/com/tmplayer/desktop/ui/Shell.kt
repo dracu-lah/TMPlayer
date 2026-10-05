@@ -61,6 +61,19 @@ import kotlinx.coroutines.flow.mapNotNull
 import com.tmplayer.data.Td
 import com.tmplayer.ui.browse.ChatListViewModel
 import com.tmplayer.ui.browse.BrowseTab
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.text.style.TextOverflow
+import com.tmplayer.data.ChatFolderSummary
+import com.tmplayer.ui.browse.BrowseSection
+import com.tmplayer.ui.browse.NavBrand
+import com.tmplayer.ui.browse.NavEntry
+import com.tmplayer.ui.browse.NavGroupBody
+import com.tmplayer.ui.browse.NavGroupHeading
+import com.tmplayer.ui.browse.browseSections
+import com.tmplayer.ui.browse.navGroups
+import com.tmplayer.ui.browse.rememberNavGroups
 import com.tmplayer.ui.components.AppLogo
 import com.tmplayer.ui.components.LocalToastHost
 import com.tmplayer.ui.components.TmIcons
@@ -183,7 +196,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
                     when {
                         open != null -> MediaGridPage(state, open)
                         else -> when (state.destination) {
-                            Destination.Chats -> ChatsPage(state, chats, favouritesOnly = false)
+                            Destination.Chats -> ChatsPage(state, chats, favouritesOnly = false, showSections = !wide)
                             Destination.Favourites -> ChatsPage(state, chats, favouritesOnly = true)
                             Destination.Continue -> ContinuePage(state)
                             Destination.Watched -> WatchedPage(state)
@@ -224,41 +237,60 @@ private fun Destination.icon(): ImageVector = when (this) {
     Destination.Settings -> Icons.Filled.Settings
 }
 
+/**
+ * The wide side bar: the name and version, then Watch, Chats and the account's folders folding
+ * under their headings, with Settings and Update pinned at the bottom. The grouping is the shared
+ * one in :ui, so the phone's drawer and the television's rail fold the same entries the same way.
+ */
 @Composable
-internal fun Sidebar(state: ShellState, update: NavUpdate? = null) {
-    Column(
-        Modifier.width(240.dp).fillMaxHeight().padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Row(
-            Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Image(AppLogo.Mark, contentDescription = null, modifier = Modifier.size(28.dp))
-            Text("TMPlayer", style = MaterialTheme.typography.titleMedium)
+internal fun Sidebar(
+    state: ShellState,
+    update: NavUpdate? = null,
+    folders: List<ChatFolderSummary> = Td.folders.collectAsState().value,
+) {
+    val groups = rememberNavGroups(state.settings, state.currentGroup)
+    val sections = remember(folders) { browseSections(folders, withWatched = true) }
+    val inFlight = rememberDownloadsInFlight()
+    Column(Modifier.width(240.dp).fillMaxHeight().padding(12.dp)) {
+        NavBrand(BuildInfo.VERSION, Modifier.padding(horizontal = 12.dp, vertical = 10.dp))
+        Spacer(Modifier.height(4.dp))
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            navGroups(sections).forEach { (group, entries) ->
+                val open = groups.isOpen(group)
+                NavGroupHeading(
+                    group = group,
+                    open = open,
+                    toggleable = groups.canToggle(group),
+                    onToggle = { groups.toggle(group) },
+                    height = SIDEBAR_ROW,
+                )
+                NavGroupBody(open) {
+                    entries.forEach { entry ->
+                        val target = entry.destination()
+                        SidebarItem(
+                            label = if (entry is NavEntry.Section) entry.section.label else "Downloads",
+                            icon = target?.icon() ?: (entry as NavEntry.Section).section.icon,
+                            badge = if (entry == NavEntry.Downloads && inFlight > 0) inFlight.toString() else null,
+                            selected = when {
+                                target != null -> state.destination == target
+                                else -> state.destination == Destination.Chats &&
+                                    state.chatSection == (entry as NavEntry.Section).section
+                            },
+                            onClick = {
+                                if (target != null) state.go(target) else state.showChats((entry as NavEntry.Section).section)
+                            },
+                        )
+                    }
+                }
+            }
         }
-        Spacer(Modifier.height(8.dp))
-        val inFlight = rememberDownloadsInFlight()
-        Destination.entries.forEach { destination ->
-            NavigationDrawerItem(
-                label = { Text(destination.label) },
-                icon = { Icon(destination.icon(), contentDescription = null) },
-                badge = if (destination == Destination.Downloads && inFlight > 0) {
-                    { Text(inFlight.toString()) }
-                } else {
-                    null
-                },
-                selected = state.destination == destination,
-                onClick = { state.go(destination) },
-            )
-        }
-        // After the destinations rather than one of them: it opens the popup, not a page.
+        HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), color = Tone.outline)
+        // Above Settings, as on the phone and the TV, rather than among the pages: it opens the popup.
         if (update != null) {
-            NavigationDrawerItem(
-                label = { Text(update.label) },
-                icon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
-                badge = { Text(update.version) },
+            SidebarItem(
+                label = update.label,
+                icon = Icons.Filled.Refresh,
+                badge = update.version,
                 selected = false,
                 onClick = { state.updatePopup = true },
                 colors = NavigationDrawerItemDefaults.colors(
@@ -268,8 +300,49 @@ internal fun Sidebar(state: ShellState, update: NavUpdate? = null) {
                 ),
             )
         }
+        SidebarItem(
+            label = Destination.Settings.label,
+            icon = Destination.Settings.icon(),
+            badge = null,
+            selected = state.destination == Destination.Settings,
+            onClick = { state.go(Destination.Settings) },
+        )
     }
 }
+
+/** The page an entry opens when it is a page of its own; null for a slice of the chat list. */
+private fun NavEntry.destination(): Destination? = when (this) {
+    NavEntry.Downloads -> Destination.Downloads
+    is NavEntry.Section -> when (section) {
+        BrowseSection.of(BrowseTab.Continue) -> Destination.Continue
+        BrowseSection.of(BrowseTab.Watched) -> Destination.Watched
+        BrowseSection.of(BrowseTab.Favorites) -> Destination.Favourites
+        else -> null
+    }
+}
+
+/** A side bar row, 40 dp rather than Material's 56: a pointer needs no thumb sized target. */
+@Composable
+private fun SidebarItem(
+    label: String,
+    icon: ImageVector,
+    badge: String?,
+    selected: Boolean,
+    onClick: () -> Unit,
+    colors: androidx.compose.material3.NavigationDrawerItemColors = NavigationDrawerItemDefaults.colors(),
+) {
+    NavigationDrawerItem(
+        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
+        badge = badge?.let { { Text(it) } },
+        selected = selected,
+        onClick = onClick,
+        modifier = Modifier.height(SIDEBAR_ROW),
+        colors = colors,
+    )
+}
+
+private val SIDEBAR_ROW = 40.dp
 
 @Composable
 private fun Rail(state: ShellState, update: NavUpdate?) {

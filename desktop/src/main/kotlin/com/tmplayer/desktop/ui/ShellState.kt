@@ -25,6 +25,10 @@ import com.tmplayer.desktop.DesktopPrefs
 import com.tmplayer.desktop.DesktopServices
 import com.tmplayer.desktop.DesktopWatchCache
 import com.tmplayer.desktop.SelfUpdate
+import com.tmplayer.ui.browse.BrowseSection
+import com.tmplayer.ui.browse.BrowseTab
+import com.tmplayer.ui.browse.NavGroup
+import com.tmplayer.ui.browse.navGroupOf
 import com.tmplayer.ui.nav.BackStack
 import com.tmplayer.ui.nav.isBackKey
 
@@ -84,6 +88,27 @@ class ShellState(
 
     var destination by mutableStateOf(Destination.Chats)
         private set
+
+    /**
+     * Which slice of the chat list the Chats page shows: one of the phone's tabs or a Telegram
+     * folder. Kept here rather than on the page so the side bar can pick it.
+     */
+    var chatSection by mutableStateOf<BrowseSection>(BrowseSection.of(BrowseTab.All))
+        private set
+
+    /** The side bar group holding where the window is, which is always open; null on Settings. */
+    val currentGroup: NavGroup?
+        get() = when (destination) {
+            Destination.Chats -> navGroupOf(chatSection)
+            Destination.Settings -> null
+            else -> NavGroup.Watch
+        }
+
+    /** The chat list, showing [section]. */
+    fun showChats(section: BrowseSection) {
+        chatSection = section
+        go(Destination.Chats)
+    }
 
     /** The chat whose videos are on screen, over whichever destination opened it. */
     var openChat by mutableStateOf<ChatSummary?>(null)

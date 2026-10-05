@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -62,6 +61,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.layout.height
+import com.tmplayer.data.SettingsStore
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -72,7 +74,6 @@ import androidx.compose.ui.unit.min
 import com.tmplayer.data.Account
 import com.tmplayer.data.Updates
 import com.tmplayer.ui.components.AppMark
-import com.tmplayer.ui.components.MarkSize
 import com.tmplayer.ui.components.MediaPreview
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.theme.Avatar
@@ -125,6 +126,9 @@ internal fun TouchBrowseShell(
     content: @Composable () -> Unit,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val context = LocalContext.current
+    val settings = remember(context) { SettingsStore(context) }
+    val groups = rememberNavGroups(settings, current = navGroupOf(selected))
     val scope = rememberCoroutineScope()
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
     fun close() = scope.launch { drawerState.close() }
@@ -170,43 +174,45 @@ internal fun TouchBrowseShell(
                             Modifier.weight(1f).verticalScroll(middleScroll)
                         }
                         Column(middle) {
-                            // The three tabs about this viewer's own watching, first because they
-                            // are what somebody opening the app in the evening is reaching for.
-                            DrawerDestinations(
-                                sections.filter { it in LIBRARY_TABS },
-                                selected,
-                                favoriteCount,
-                                unreadCount,
-                            ) {
-                                close(); onSelect(it)
-                            }
-
-                            DrawerSeparator("Chats")
-
-                            // The ways of slicing the chat list. The heading is what turns a dozen
-                            // flat destinations into short lists the eye can take in as groups.
-                            val ways = sections.filter {
-                                it !in LIBRARY_TABS && it !is BrowseSection.Folder
-                            }
-                            DrawerDestinations(
-                                ways,
-                                selected,
-                                favoriteCount,
-                                unreadCount,
-                            ) {
-                                close(); onSelect(it)
-                            }
-
-                            // Folders last, and only with a heading when there are any: an account
-                            // with none would otherwise get a rule and the word "Folders" over
-                            // nothing. They follow the fixed tabs because they are the personal
-                            // part of this list, and a group that changes size does less damage at
-                            // the bottom than in the middle.
-                            val folders = sections.filterIsInstance<BrowseSection.Folder>()
-                            if (folders.isNotEmpty()) {
-                                DrawerSeparator("Folders")
-                                DrawerDestinations(folders, selected, favoriteCount, unreadCount) {
-                                    close(); onSelect(it)
+                            // Watch, Chats and the account's folders, each folding under its
+                            // heading. The grouping is the shared one in :ui, so the drawer, the
+                            // television's rail and the desktop's side bar fold the same way.
+                            navGroups(sections).forEach { (group, entries) ->
+                                val open = groups.isOpen(group)
+                                NavGroupHeading(
+                                    group = group,
+                                    open = open,
+                                    toggleable = groups.canToggle(group),
+                                    onToggle = { groups.toggle(group) },
+                                    height = DRAWER_ROW,
+                                    start = 16.dp,
+                                    modifier = Modifier.padding(horizontal = 12.dp),
+                                )
+                                NavGroupBody(open) {
+                                    entries.forEach { entry ->
+                                        when (entry) {
+                                            NavEntry.Downloads -> DrawerDestination(
+                                                label = "Downloads",
+                                                selected = false,
+                                                // How many videos are coming down right now. A
+                                                // download outlives the screen it was started
+                                                // from, so without a mark here the only evidence it
+                                                // is running is a notification the viewer may well
+                                                // have swiped away.
+                                                badge = downloadCount.takeIf { it > 0 }?.toString(),
+                                                icon = { Icon(TmIcons.Download, contentDescription = null) },
+                                                onClick = { close(); onOpenDownloads() },
+                                            )
+                                            is NavEntry.Section -> DrawerSection(
+                                                entry.section,
+                                                selected,
+                                                favoriteCount,
+                                                unreadCount,
+                                            ) {
+                                                close(); onSelect(it)
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -228,16 +234,6 @@ internal fun TouchBrowseShell(
                                 ),
                             )
                         }
-                        DrawerDestination(
-                            label = "Downloads",
-                            selected = false,
-                            // How many videos are coming down right now. A download outlives the
-                            // screen it was started from, so without a mark here the only evidence
-                            // it is running is a notification the viewer may well have swiped away.
-                            badge = downloadCount.takeIf { it > 0 }?.toString(),
-                            icon = { Icon(TmIcons.Download, contentDescription = null) },
-                            onClick = { close(); onOpenDownloads() },
-                        )
                         DrawerDestination(
                             label = "Settings",
                             selected = false,
@@ -411,42 +407,37 @@ private fun DrawerDestination(
         badge = badge?.let { { Text(it) } },
         selected = selected,
         onClick = onClick,
-        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+        // 48 dp rather than Material's 56: still a full thumb target, and the drawer holds a dozen
+        // of them.
+        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding).height(DRAWER_ROW),
         colors = colors,
     )
 }
 
-/**
- * One group of destinations.
- *
- * Split out so the drawer reads as the short lists it actually is rather than as one long column
- * of peers.
- */
+/** One browse section as a drawer row. */
 @Composable
-private fun DrawerDestinations(
-    tabs: List<BrowseSection>,
+private fun DrawerSection(
+    entry: BrowseSection,
     selected: BrowseSection,
     favoriteCount: Int,
     unreadCount: Int,
     onPick: (BrowseSection) -> Unit,
 ) {
-    tabs.forEach { entry ->
-        DrawerDestination(
-            label = entry.label,
-            selected = entry == selected,
-            // Only counts get a badge: a badge promises something that changes and is worth
-            // noticing, which static text is not.
-            badge = when {
-                entry == BrowseSection.of(BrowseTab.Favorites) && favoriteCount > 0 ->
-                    favoriteCount.toString()
-                entry == BrowseSection.of(BrowseTab.Unread) && unreadCount > 0 ->
-                    unreadCount.toString()
-                else -> null
-            },
-            icon = { Icon(entry.icon, contentDescription = null) },
-            onClick = { onPick(entry) },
-        )
-    }
+    DrawerDestination(
+        label = entry.label,
+        selected = entry == selected,
+        // Only counts get a badge: a badge promises something that changes and is worth
+        // noticing, which static text is not.
+        badge = when {
+            entry == BrowseSection.of(BrowseTab.Favorites) && favoriteCount > 0 ->
+                favoriteCount.toString()
+            entry == BrowseSection.of(BrowseTab.Unread) && unreadCount > 0 ->
+                unreadCount.toString()
+            else -> null
+        },
+        icon = { Icon(entry.icon, contentDescription = null) },
+        onClick = { onPick(entry) },
+    )
 }
 
 /**
@@ -454,46 +445,30 @@ private fun DrawerDestinations(
  *
  * A drawer is pulled out of a phone that is running a dozen other things, so it is the conventional
  * place for the app to name itself once, quietly, the way YouTube and NewPipe both do. The account
- * belongs in the footer, not here: nobody opens a drawer to reach it.
+ * belongs in the footer, not here: nobody opens a drawer to reach it. The version sits beside the
+ * name, small and muted, as something to read off when reporting a problem.
  */
 @Composable
 private fun DrawerBrand() {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 18.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        AppMark(MarkSize.Inline)
-        Spacer(Modifier.width(12.dp))
-        Text("TMPlayer", style = MaterialTheme.typography.titleMedium)
-    }
+    NavBrand(
+        version = Updates.installedVersion,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 14.dp),
+        logo = { AppMark(BRAND_MARK) },
+    )
 }
 
-/**
- * A rule between groups, with an optional heading for the group below it.
- *
- * The heading is deliberately quiet: it is a label on a boundary, not a row, and anything with
- * enough weight to read as a row is one more thing to scan past.
- */
+/** The rule above the rows pinned to the bottom of the drawer. */
 @Composable
-private fun DrawerSeparator(heading: String? = null) {
-    HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-    if (heading != null) {
-        Text(
-            heading,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 28.dp, top = 4.dp, bottom = 4.dp),
-        )
-    }
+private fun DrawerSeparator() {
+    HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp))
 }
 
 /**
  * Whose library this is, along the bottom edge.
  *
  * One line along the bottom, because it answers a question asked once ever ("am I signed in as the
- * right account?") and should not take the sheet's most valuable space to do it. The build number
- * rides here for the same reason: it is something to read off when reporting a problem, and as a
- * badge on Settings it would look like a destination.
+ * right account?") and should not take the sheet's most valuable space to do it. The version used
+ * to ride here too; it now sits beside the name at the top.
  */
 @Composable
 private fun DrawerFooter(account: Account?) {
@@ -523,15 +498,8 @@ private fun DrawerFooter(account: Account?) {
                 overflow = TextOverflow.Ellipsis,
             )
         },
-        supportingContent = {
-            Text(
-                listOfNotNull(
-                    account?.username?.takeIf { it.isNotBlank() }?.let { "@$it" },
-                    "v${Updates.installedVersion}",
-                ).joinToString("  ·  "),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        supportingContent = account?.username?.takeIf { it.isNotBlank() }?.let { username ->
+            { Text("@$username", maxLines = 1, overflow = TextOverflow.Ellipsis) }
         },
         // The sheet has already painted its own background, and a second one over it draws a
         // panel around the account for no reason.
@@ -539,14 +507,11 @@ private fun DrawerFooter(account: Account?) {
     )
 }
 
-/**
- * What this viewer has been watching. First, because it is what the app is opened for.
- *
- * Everything else the rail offers falls into the group below the rule without being named here, so
- * a destination added later appears in the drawer whether or not anybody remembers to list it.
- */
-internal val LIBRARY_TABS = listOf(BrowseTab.Continue, BrowseTab.Watched, BrowseTab.Favorites, BrowseTab.Recent)
-    .map(BrowseSection::of)
+/** A drawer row and a group heading: a full thumb target, and no taller. */
+private val DRAWER_ROW = 48.dp
+
+/** The logo beside the name and version, smaller than the 40 dp inline mark so the row stays short. */
+private val BRAND_MARK = 32.dp
 
 /**
  * How wide the drawer is on a phone that has room for it.

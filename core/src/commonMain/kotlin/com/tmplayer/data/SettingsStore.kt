@@ -46,6 +46,9 @@ private val THEME_CHOICE = stringPreferencesKey("theme_choice")
 private val DYNAMIC_COLOUR = booleanPreferencesKey("dynamic_colour")
 private val VIDEO_SCALE = stringPreferencesKey("video_scale")
 
+/** Which of the sidebar's folding groups the viewer left open. Absent until the first fold. */
+private val NAV_GROUPS_OPEN = stringSetPreferencesKey("nav_groups_open")
+
 /** The last few searches inside a chat, one per line, newest first. See [RecentSearches]. */
 private val RECENT_SEARCHES = stringPreferencesKey("recent_searches")
 
@@ -708,6 +711,19 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
             prefs.remove(CHAT_SNAPSHOT)
             prefs.remove(ACCOUNT_SNAPSHOT)
         }
+    }
+
+    // ---- sidebar groups ----------------------------------------------------------------------
+
+    /**
+     * The sidebar groups the viewer left open, by key, or null before anything was ever folded, in
+     * which case the sidebar uses its defaults. The keys belong to `NavGroup` in `:ui`.
+     */
+    val navGroupsOpen: Flow<Set<String>?> = read { it[NAV_GROUPS_OPEN] }
+
+    /** Rewrites the open groups from what is stored now, so two quick folds cannot undo each other. */
+    suspend fun updateNavGroupsOpen(transform: (Set<String>?) -> Set<String>) {
+        prefs.edit { it[NAV_GROUPS_OPEN] = transform(it[NAV_GROUPS_OPEN]) }
     }
 
     // ---- recent searches --------------------------------------------------------------------
