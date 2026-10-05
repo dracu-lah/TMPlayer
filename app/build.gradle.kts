@@ -40,6 +40,11 @@ android {
     // separate and stays where it is.
     compileSdk = 37
 
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+
     defaultConfig {
         applicationId = "com.tmplayer"
         minSdk = 26

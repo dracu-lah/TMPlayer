@@ -162,6 +162,14 @@ private fun ColumnScope.Intro(touch: Boolean, focus: FocusRequester, onContinue:
     )
 
     Spacer(Modifier.size(10.dp))
+    
+    Text(
+        "TMPlayer is an unofficial Telegram client, not affiliated with Telegram FZ-LLC.",
+        style = if (touch) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium,
+        color = Tone.muted,
+    )
+    Spacer(Modifier.size(8.dp))
+
     TmButton(
         onClick = onContinue,
         modifier = Modifier.focusRequester(focus).paneAction(),

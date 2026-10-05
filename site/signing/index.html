@@ -42,44 +42,28 @@
 <main id="main" class="policy-page">
   <div class="wrap policy-wrap">
     <p class="eyebrow">Effective 5 October 2026</p>
-    <h1>Privacy</h1>
-    <p class="policy-lede">TMPlayer runs on your Android TV or desktop device and talks directly to the services needed to play media from your own Telegram account. There is no TMPlayer account or developer-operated backend.</p>
+    <h1>Code Signing Policy</h1>
+    <p class="policy-lede">This document outlines the code signing policy for TMPlayer binaries, detailing how we ensure the integrity and authenticity of our releases.</p>
 
     <section>
-      <h2>What stays on your device</h2>
-      <p>Telegram's TDLib stores your signed-in session, cached chat information, thumbnails, and downloaded media inside TMPlayer's private app data directory. TMPlayer also stores your settings, favourites, Continue watching positions, and a temporary update installer when you choose to download an update.</p>
-      <p>Other apps cannot normally read this data. Anyone with control of the device or a rooted device may still be able to access it, so treat the device as a signed-in device.</p>
+      <h2>Build Process</h2>
+      <p>All TMPlayer releases are built exclusively via automated Continuous Integration (CI) pipelines on GitHub Actions. No releases are built manually on developer machines. The CI pipeline pulls the source code directly from the repository, builds the artifacts, and prepares them for signing.</p>
     </section>
 
     <section>
-      <h2>Services TMPlayer contacts</h2>
-      <ul>
-        <li><strong>Telegram</strong> handles sign-in, chat and channel lists, file metadata, media downloads, and Telegram-provided sponsored messages where applicable.</li>
-        <li><strong>tmplayer.org</strong> is asked for one small file, <code>latest.json</code>, that names the newest TMPlayer release, when the app starts and every six hours while it runs. <strong>GitHub</strong> is asked instead when the site cannot be reached. The request carries nothing about you or your account, and Settings can turn it off. An update is downloaded from GitHub only after you choose to update.</li>
-        <li><strong>Your device's speech-recognition provider (Android TV only)</strong> receives audio only when you deliberately start voice search.</li>
-        <li><strong>Sentry</strong> receives a crash report, and only if you have switched crash reporting on in Settings. It is off until then and nothing is contacted. See below for what a report contains.</li>
-      </ul>
-      <p>TMPlayer does not send filenames, viewing history, or media to a developer-operated service.</p>
+      <h2>Code Signing</h2>
+      <p>To ensure that users receive untampered binaries, we digitally sign our Windows releases using a certificate provided by the <a href="https://about.signpath.io/" rel="noopener">SignPath Foundation</a>. The signing process is integrated into our automated CI pipeline and is only triggered for official release tags.</p>
+      <p>Android releases are signed with our own secure keystore, managed via GitHub Secrets.</p>
     </section>
 
     <section>
-      <h2>What TMPlayer does not include</h2>
-      <p>TMPlayer has no account system or backend of its own: tmplayer.org is a static website, and the update check reads the same public file for everyone. There is no analytics SDK, no advertising SDK and no cross-app tracking. Nothing measures how you use the app, and the developer does not receive your Telegram credentials, chat list, filenames, viewing history, or media.</p>
-      <p>There is one exception, and it is off until you switch it on: crash reporting. See below.</p>
+      <h2>Access Control</h2>
+      <p>Only authorized maintainers (currently dracu-lah) have write access to the TMPlayer repository and the ability to push tags that trigger the release and signing pipeline. Branch protection rules are in place for the main branch to ensure all changes go through proper review.</p>
     </section>
 
     <section>
-      <h2>Crash reporting, if you turn it on</h2>
-      <p><strong>Off on a fresh install, and off again after signing out.</strong> With the switch off, nothing about crash reporting is started: no library is initialised and no server is contacted. Turning it on is the only thing in TMPlayer that ever sends anything anywhere other than Telegram, GitHub and the update check on tmplayer.org.</p>
-      <p>With it on, a crash sends the stack trace, the TMPlayer version, the OS version and the device model to <a href="https://sentry.io" rel="noopener">Sentry</a>, which stores it on the developer's behalf in its European region. That is the whole report.</p>
-      <p>What a report deliberately does not carry: no chat names, no filenames, no search terms, no viewing history, no breadcrumb trail of what you were doing, no session or usage measurement, no IP address kept as personal data, and no identifier that ties two reports to the same person or device. The automatic trail Sentry would otherwise collect is switched off in code rather than merely left unused, because that trail is exactly where the name of the video you were watching would otherwise appear.</p>
-      <p>Switch it off in Settings and reporting stops immediately. The setting lives on your device, and signing out clears it back to off along with everything else.</p>
-    </section>
-
-    <section>
-      <h2>Your controls and deleting your data</h2>
-      <p>Settings lets you delete the downloaded video, clear Continue watching, clear favourites, and sign out. Signing out removes TMPlayer preferences and asks TDLib to log out and clear its local account database.</p>
-      <p>To completely delete your app data: on Android, uninstalling TMPlayer removes its app data through the OS. On desktop, uninstalling may leave your user data behind; you must manually delete the TMPlayer app data folder in your user directory to remove it entirely.</p>
+      <h2>Verification</h2>
+      <p>Users can verify the signature of our Windows binaries by checking the digital signature properties in Windows Explorer. The certificate should be issued to our open source project via SignPath Foundation.</p>
     </section>
 
     <section>

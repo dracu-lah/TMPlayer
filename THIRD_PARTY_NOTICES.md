@@ -25,6 +25,20 @@ The corresponding source is one archive, linked from every TMPlayer release's no
 <https://github.com/dracu-lah/TMPlayer/releases/download/v1.21.0/nextlib-corresponding-source-1.21.0.tar.gz>. It holds the exact NextLib 1.10.1-0.13.0 source and build scripts plus the three upstream
 source archives above, and stays the right archive for as long as TMPlayer bundles that version.
 
+### MediaMP 0.5.0
+
+- Author: Khang Le and contributors
+- Licence: Apache License 2.0
+- Source: <https://github.com/Khang-ALe/mediamp/tree/v0.5.0>
+
+MediaMP bundles MPV and FFmpeg native libraries for desktop targets:
+
+- MPV: GPL-2.0-or-later
+- FFmpeg: LGPL-2.1-or-later
+
+The corresponding source archive for these native dependencies is linked from every TMPlayer release's notes:
+<https://github.com/dracu-lah/TMPlayer/releases/download/v1.21.0/mediamp-corresponding-source-0.5.0.tar.gz>. It holds the exact MediaMP 0.5.0 source and the bundled MPV and FFmpeg source archives, and stays the right archive for as long as TMPlayer bundles that version.
+
 ## Telegram client stack
 
 ### tdl-coroutines 15.0.0

@@ -124,7 +124,7 @@ the reference test devices, and the version pins that are not free choices.
 - **Help and chat:** the [Telegram group](https://t.me/tmplayer_chat) or
   [GitHub Discussions](https://github.com/dracu-lah/TMPlayer/discussions). Bugs go in
   [Issues](https://github.com/dracu-lah/TMPlayer/issues); security reports follow [SECURITY.md](SECURITY.md).
-- **Chip in:** TMPlayer has no ads and no paid tier. If it helps you,
+- **Chip in:** TMPlayer has no ads of our own (Telegram's sponsored messages appear in public channels, as Telegram requires) and no paid tier. If it helps you,
   [sponsor it on GitHub](https://github.com/sponsors/dracu-lah) or
   [buy me a coffee](https://buymeacoffee.com/nevil.dev). Either way, a star helps the next person trust it.
 - **Email:** [hello@tmplayer.org](mailto:hello@tmplayer.org).
@@ -132,7 +132,7 @@ the reference test devices, and the version pins that are not free choices.
 ## Legal
 
 Unofficial client. Not affiliated with, endorsed by, or connected to Telegram FZ-LLC. It uses the
-official Telegram API through TDLib with your own credentials, as
+official Telegram API through TDLib with your own Telegram account, as
 [permitted for third-party clients](https://core.telegram.org/api/obtaining_api_id).
 
 TMPlayer does not provide media, recommend channels, or bypass access controls. Use it only with

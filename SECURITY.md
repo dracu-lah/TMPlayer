@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Only the latest release gets fixes. Installed copies update themselves, so please check that the
+Only the latest release gets fixes. Installed copies offer each update, so please check that the
 problem still happens on the newest version from https://tmplayer.org/download/ before reporting.
 
 ## Reporting a vulnerability

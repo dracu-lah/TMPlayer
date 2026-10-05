@@ -74,6 +74,18 @@ object CrashReports {
                     null
                 } else {
                     event.user = null
+                    
+                    // Scrub file paths and telegram IDs from exceptions
+                    event.exceptions?.forEach { exception ->
+                        exception.value = exception.value?.replace(Regex("/(?:storage|data|sdcard|mnt)/[^\\s\"']+"), "[REDACTED_PATH]")
+                    }
+                    
+                    // Remove device identifiers
+                    event.contexts.device?.let { device ->
+                        device.id = null
+                        device.name = null
+                    }
+                    
                     event
                 }
             }
