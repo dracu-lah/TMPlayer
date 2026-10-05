@@ -41,7 +41,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [x] CP06 Subtitle and audio delay, subtitle style (905d009, desktop verified; phone and TV not yet tested on a device)
 - [x] CP07a Volume boost, sleep timer and "still watching?" on Android, TV next-up card (cf88a64, TV card and menu checked on the emulator; phone and real audio not yet tested on a device)
 - [x] CP07b Volume boost, sleep timer and "still watching?" on desktop (83b0789, menu and card checked in the dev player; the bundled FFmpeg has no dynaudnorm, so the boost is gain only for now)
-- [ ] CP08 Resume rules, desktop player extras
+- [x] CP08 Resume rules, desktop player extras (b47cddc, rules and saved tracks, speed and delays unit tested on both stores; help sheet, A-B loop, chapters and a real screenshot checked in the dev player; resume restore on Android not yet tested on a device)
 - [x] CP09 Empty and error states with actions, recent searches (7b4656e, every state checked on the phone and TV emulator fixtures and the desktop render test; real slow Telegram and search recording not yet tested on a device)
 - [x] CP10 Remove after watching, free space, TV focus and labels (6d4d36f, toggle, free space, focus scale and 48/27 margins checked on the phone and TV emulator fixtures and the desktop render test; real deletion after a watched download not yet tested on a device)
 - [ ] CP10a Sidebar: version beside the logo, compact accordion groups (phone, TV, desktop)
