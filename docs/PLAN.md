@@ -44,6 +44,8 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [ ] CP09 Empty and error states with actions, recent searches
 - [ ] CP10 Remove after watching, free space, TV focus and labels
 - [ ] CP10a Sidebar: version beside the logo, compact accordion groups (phone, TV, desktop)
+- [ ] CP10b One theme on every platform: Android TV modal borders, surfaces and the rest match phone and desktop
+- [ ] CP10c Support the project: sponsor button and QR code on every platform, a gentle reminder, site section
 - [ ] CP11 Release prep and device verification
 - [ ] CP12 Release "Player" (only when the user says so) and post-release checks
 - [ ] U06 Check the 1.22.1 post on @tmplayerapp went out
@@ -308,6 +310,43 @@ desktop `Sidebar` and `Rail` in `desktop/.../ui/Shell.kt`; the tab list `BrowseT
 - Desktop: the same groups; the collapsed icon rail keeps working.
 **Done when:** screenshots of the rail on the TV emulator (collapsed and expanded), the phone drawer, and the
 desktop sidebar in light and dark, with one group closed; D-pad walk on TV reaches every entry.
+**STOP**
+
+### CP10b One theme on every platform (Android TV looks different)
+**Why:** the user asked on 2026-10-06: the Android TV build does not look like phone and desktop. Modals and
+sheets lack the borders the other platforms have, and surfaces, corners and accents drift.
+**Where:** `app/.../ui/theme/Theme.kt`, the TV components in `app/.../ui/components/` (`TvMenu.kt`,
+`TvConfirm.kt`, `TmButton.kt`, `TvSearchField.kt`, `StateScaffold.kt`), the desktop theme in `desktop/`, and
+shared code in `ui/src/shared`.
+**Do:**
+- First an audit: screenshots of the same screens (browse grid, a modal, a menu, a confirm dialog, Settings,
+  player menu, sign-in) on the TV emulator, the POCO and desktop, light and dark, side by side. List every
+  difference: colours, surface tones, border width and colour, corner radius, elevation, typography, focus
+  and pressed states. Show the user the list before changing anything.
+- Pull the shared values (colours, border, radius, spacing) into one token set in `:ui` shared code, so the
+  phone `MaterialTheme`, the TV `androidx.tv.material3` theme and desktop all read from it.
+- Modals, dialogs, menus and sheets on TV get the same border and radius as phone and desktop. The TV focus
+  ring stays (it is how the D-pad shows where you are), but it is drawn from the same tokens.
+**Done when:** the audit screens again on all three, light and dark, with no unexplained differences.
+**STOP**
+
+### CP10c Support the project: sponsor button, QR code and a gentle reminder
+**Why:** the user asked on 2026-10-06: the apps have no way to sponsor. GitHub Sponsors
+(`github.com/sponsors/dracu-lah`) and Buy Me a Coffee (`buymeacoffee.com/nevil.dev`) are only in the README
+and `.github/FUNDING.yml`.
+**Do:**
+- A "Support TMPlayer" entry in Settings and in the About screen from CP05 on phone, TV and desktop. Phone and
+  desktop open the links. TV shows a QR code for each instead of opening a browser (reuse
+  `ui/src/shared/kotlin/com/tmplayer/ui/auth/QrCode.kt`). The QR is useful on phone and desktop too, as a
+  "scan on another device" option.
+- A friendly reminder, shown rarely: a small dismissible card (not a blocking dialog, never during playback)
+  after real use, for example 14 days since install and 10 plays, then not again for 60 days. "Not now" and
+  "Don't ask again" both work. Counters and the opt-out live in `SettingsStore`.
+- The site: a support section on the home page and the download page with the same two links.
+- Keep CP35 in mind: the future `play` flavor drops donation links, so put the entry and the reminder behind a
+  single switch that flavor can turn off.
+**Done when:** screenshots of the entry and the QR on TV, phone and desktop, and the reminder forced on with a
+debug flag.
 **STOP**
 
 ### CP11 Release prep and device verification
