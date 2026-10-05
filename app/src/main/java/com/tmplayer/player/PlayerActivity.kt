@@ -3,6 +3,7 @@ package com.tmplayer.player
 import android.annotation.SuppressLint
 import android.app.PictureInPictureParams
 import android.content.Context
+import android.os.Looper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
@@ -43,10 +44,12 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.text.TextOutput
 import androidx.media3.exoplayer.audio.DefaultAudioTrackBufferSizeProvider
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
@@ -192,6 +195,22 @@ class PlayerActivity : FragmentActivity() {
 
     /** The viewer's Downmix to stereo answer, or null for the device default. See [AudioDownmix.wanted]. */
     private var downmixChoice: Boolean? = null
+
+    /**
+     * How far this file's subtitles and sound are moved against the picture, read with the other
+     * settings before the player is built and written back on every step. See [SyncDelays].
+     */
+    private var syncDelays = SyncDelays()
+
+    /** [syncDelays]' subtitle half in microseconds, for [DelayedTextRenderer] on the playback thread. */
+    @Volatile
+    private var subtitleDelayUs = 0L
+
+    /** The audio half's processor, owned by the current player's sink. */
+    private var audioOffset: AudioOffsetProcessor? = null
+
+    /** How subtitles are drawn. Shared with Settings and the desktop. */
+    private var subtitleStyle = SubtitleStyle()
 
     /**
      * Which way up the picture is held, and whether the viewer has said so themselves.
@@ -457,19 +476,7 @@ class PlayerActivity : FragmentActivity() {
             if (!pickerOpen) controls?.focusRow()
         }
         subtitleView.setApplyEmbeddedStyles(true)
-        // A TV's default caption size is tuned for broadcast subtitles; video subs need to be
-        // legible from a sofa, with an outline that survives a bright frame behind them.
-        subtitleView.setFractionalTextSize(SUBTITLE_TEXT_FRACTION)
-        subtitleView.setStyle(
-            CaptionStyleCompat(
-                Color.WHITE,
-                Color.TRANSPARENT,
-                Color.TRANSPARENT,
-                CaptionStyleCompat.EDGE_TYPE_OUTLINE,
-                Color.BLACK,
-                null,
-            ),
-        )
+        applySubtitleStyle()
 
         if (fileId <= 0) {
             showError("There's nothing to play here.", retryable = false)
@@ -547,6 +554,14 @@ class PlayerActivity : FragmentActivity() {
             tracks = runCatching { settings.trackChoice(seriesKey) }
                 .getOrDefault(TrackChoice())
             downmixChoice = runCatching { settings.downmixChoiceNow() }.getOrNull()
+            subtitleStyle = runCatching { settings.subtitleStyleNow() }.getOrDefault(SubtitleStyle())
+            applySubtitleStyle()
+            // Only a video from a message has somewhere to keep an offset; a file opened from
+            // elsewhere starts in sync and forgets any change on the way out.
+            if (hasMessage()) {
+                syncDelays = runCatching { settings.syncDelays(chatId, messageId) }.getOrDefault(SyncDelays())
+            }
+            subtitleDelayUs = syncDelays.subtitleMs * 1000
             if (!session.isCurrent()) return@launch
             startPlayback(session.client)
         }
@@ -1081,8 +1096,13 @@ class PlayerActivity : FragmentActivity() {
                 } else {
                     emptyList()
                 }
+                // Last in the chain, so the offset is counted in the frames the sink actually plays.
+                val offset = AudioOffsetProcessor().also {
+                    it.offsetUs = syncDelays.audioMs * 1000
+                    audioOffset = it
+                }
                 val processors = if (folds.isEmpty()) {
-                    emptyArray()
+                    arrayOf<AudioProcessor>(offset)
                 } else {
                     val mixer = ChannelMixingAudioProcessor()
                     folds.forEach { fold ->
@@ -1112,7 +1132,7 @@ class PlayerActivity : FragmentActivity() {
                             },
                         )
                     }
-                    arrayOf<AudioProcessor>(mixer)
+                    arrayOf<AudioProcessor>(mixer, offset)
                 }
                 // Twice Media3's passthrough allowance, and four times its AC-3 multiplier: about
                 // two seconds of bitstream instead of half a second. The stock figure is what let
@@ -1139,6 +1159,19 @@ class PlayerActivity : FragmentActivity() {
                     .setAudioProcessors(processors)
                     .setAudioTrackBufferSizeProvider(audioBuffers)
                     .build()
+            }
+
+            /** Media3's own text renderers, each behind the subtitle delay. See [DelayedTextRenderer]. */
+            override fun buildTextRenderers(
+                context: Context,
+                output: TextOutput,
+                outputLooper: Looper,
+                extensionRendererMode: Int,
+                out: ArrayList<Renderer>,
+            ) {
+                val built = ArrayList<Renderer>()
+                super.buildTextRenderers(context, output, outputLooper, extensionRendererMode, built)
+                built.mapTo(out) { DelayedTextRenderer(it) { subtitleDelayUs } }
             }
         }
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
@@ -1741,6 +1774,55 @@ class PlayerActivity : FragmentActivity() {
         val duration = exo.duration
         val target = (exo.currentPosition + deltaMs).coerceAtLeast(0)
         exo.seekTo(if (duration > 0) target.coerceAtMost(duration - END_GUARD_MS) else target)
+    }
+
+    /** The offsets now in force, for the track picker's timing lines. */
+    fun syncDelaysNow(): SyncDelays = syncDelays
+
+    /**
+     * Moves subtitles ([C.TRACK_TYPE_TEXT]) or sound one step later ([direction] 1) or earlier
+     * (-1), or back to none ([direction] 0), and keeps the result for this file.
+     */
+    fun stepDelay(trackType: Int, direction: Int) {
+        syncDelays = if (trackType == C.TRACK_TYPE_TEXT) {
+            syncDelays.copy(subtitleMs = if (direction == 0) 0 else SyncDelays.step(syncDelays.subtitleMs, direction))
+        } else {
+            syncDelays.copy(audioMs = if (direction == 0) 0 else SyncDelays.step(syncDelays.audioMs, direction))
+        }
+        subtitleDelayUs = syncDelays.subtitleMs * 1000
+        audioOffset?.offsetUs = syncDelays.audioMs * 1000
+        if (hasMessage()) {
+            val (chat, message, delays) = Triple(chatId, messageId, syncDelays)
+            lifecycleScope.launch { runCatching { settings.setSyncDelays(chat, message, delays) } }
+        }
+    }
+
+    fun subtitleStyleNow(): SubtitleStyle = subtitleStyle
+
+    /** Applies [style] to the subtitles on screen at once, and keeps it for every video after. */
+    fun changeSubtitleStyle(style: SubtitleStyle) {
+        subtitleStyle = style
+        applySubtitleStyle()
+        lifecycleScope.launch { runCatching { settings.setSubtitleStyle(style) } }
+    }
+
+    /**
+     * Draws subtitles the way [subtitleStyle] says. White with a black outline either way: the
+     * outline is what survives a bright frame, and the optional box is for a busy one.
+     */
+    private fun applySubtitleStyle() {
+        subtitleView.setFractionalTextSize(subtitleStyle.size.fraction)
+        subtitleView.setBottomPaddingFraction(subtitleStyle.position.bottomFraction)
+        subtitleView.setStyle(
+            CaptionStyleCompat(
+                Color.WHITE,
+                if (subtitleStyle.box) SUBTITLE_BOX_COLOUR else Color.TRANSPARENT,
+                Color.TRANSPARENT,
+                CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+                Color.BLACK,
+                null,
+            ),
+        )
     }
 
     fun showTrackPicker(trackType: Int) {
@@ -3281,7 +3363,8 @@ class PlayerActivity : FragmentActivity() {
         /** Deep enough for Media3's own wrapping, short enough not to walk a cycle. */
         private const val MAX_CAUSE_HOPS = 6
 
-        private const val SUBTITLE_TEXT_FRACTION = 0.065f
+        /** Three quarters black: dark enough to read white on, light enough to see the picture. */
+        private const val SUBTITLE_BOX_COLOUR = 0xC0000000.toInt()
 
         /** The gap between the poster and the words, beside them and above them. */
         private const val POSTER_GAP_DP = 24f

@@ -34,6 +34,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -41,6 +43,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import com.tmplayer.player.TouchPrefs
 import com.tmplayer.player.AudioDownmix
+import com.tmplayer.player.SubtitlePosition
+import com.tmplayer.player.SubtitleSize
+import com.tmplayer.player.SubtitleStyle
 import com.tmplayer.R
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -89,6 +94,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -189,6 +198,7 @@ fun SettingsScreen(
     val wifiOnly by settings.wifiOnlyDownloads.collectAsStateWithLifecycle(initialValue = false)
     val touchPrefs by settings.touchPrefs.collectAsStateWithLifecycle(initialValue = TouchPrefs())
     val downmixChoice by settings.downmixChoice.collectAsStateWithLifecycle(initialValue = null)
+    val subtitleStyle by settings.subtitleStyle.collectAsStateWithLifecycle(initialValue = SubtitleStyle())
     val history by settings.continueWatching.collectAsStateWithLifecycle(initialValue = emptyList())
     val watchedStore = remember { WatchedStore(context) }
     val watchedList by watchedStore.history.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -596,6 +606,58 @@ fun SettingsScreen(
                     onToggle = { scope.launch { settings.setWifiOnlyDownloads(!wifiOnly) } },
                 )
             }
+        }
+
+        // ---- subtitles ---------------------------------------------------------------------------
+        // The same three the player's subtitle list offers, with a preview here because nothing is
+        // playing behind Settings to show the change on.
+
+        item { SectionTitle("Subtitles") }
+        item { SubtitlePreview(subtitleStyle) }
+        item {
+            val sizes = SubtitleSize.entries
+            val at = sizes.indexOf(subtitleStyle.size)
+            StepperRow(
+                title = "Subtitle size",
+                subtitle = "For subtitles without a style of their own",
+                value = subtitleStyle.size.label,
+                icon = ImageVector.vectorResource(R.drawable.ic_subtitles),
+                canDecrease = at > 0,
+                canIncrease = at < sizes.lastIndex,
+                onStep = { direction ->
+                    val next = sizes[(at + direction).coerceIn(0, sizes.lastIndex)]
+                    scope.launch { settings.setSubtitleStyle(subtitleStyle.copy(size = next)) }
+                },
+            )
+        }
+        item {
+            ToggleRow(
+                title = "Background box",
+                subtitle = if (subtitleStyle.box) {
+                    "A dark box behind the text, for a bright or busy picture"
+                } else {
+                    "Off: white text with a black outline"
+                },
+                icon = ImageVector.vectorResource(R.drawable.ic_subtitles),
+                checked = subtitleStyle.box,
+                onToggle = { scope.launch { settings.setSubtitleStyle(subtitleStyle.copy(box = !subtitleStyle.box)) } },
+            )
+        }
+        item {
+            val positions = SubtitlePosition.entries
+            val at = positions.indexOf(subtitleStyle.position)
+            StepperRow(
+                title = "Subtitle position",
+                subtitle = "Raise them above burnt in text or a cropped edge",
+                value = subtitleStyle.position.label,
+                icon = ImageVector.vectorResource(R.drawable.ic_subtitles),
+                canDecrease = at > 0,
+                canIncrease = at < positions.lastIndex,
+                onStep = { direction ->
+                    val next = positions[(at + direction).coerceIn(0, positions.lastIndex)]
+                    scope.launch { settings.setSubtitleStyle(subtitleStyle.copy(position = next)) }
+                },
+            )
         }
 
         // ---- the phone player ------------------------------------------------------------------
@@ -1852,6 +1914,40 @@ private fun StepperRow(
             contentDescription = null,
             tint = if (canIncrease) onSurface else dim,
             modifier = Modifier.size(26.dp),
+        )
+    }
+}
+
+/**
+ * A frame of picture with a line of subtitle on it, drawn the way [style] says.
+ *
+ * Sized off its own height the way the player sizes off the video's, so Large here is Large there
+ * in proportion, whatever the screen.
+ */
+@Composable
+private fun SubtitlePreview(style: SubtitleStyle) {
+    BoxWithConstraints(
+        Modifier
+            .padding(horizontal = if (isTouch()) 16.dp else 0.dp, vertical = 8.dp)
+            .fillMaxWidth()
+            .widthIn(max = 560.dp)
+            .aspectRatio(16f / 9f)
+            .clip(RoundedCornerShape(Corner.Large))
+            .background(Brush.verticalGradient(listOf(Color(0xFF3A4A5C), Color(0xFF12161C)))),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        val density = LocalDensity.current
+        val fontSize = with(density) { (maxHeight * style.size.fraction).toSp() }
+        M3Text(
+            "This is how subtitles will look.",
+            color = Color.White,
+            fontSize = fontSize,
+            textAlign = TextAlign.Center,
+            style = TextStyle(shadow = Shadow(Color.Black, blurRadius = 6f)),
+            modifier = Modifier
+                .padding(bottom = maxHeight * style.position.bottomFraction, start = 12.dp, end = 12.dp)
+                .then(if (style.box) Modifier.background(Color.Black.copy(alpha = 0.75f)) else Modifier)
+                .padding(horizontal = 6.dp, vertical = 2.dp),
         )
     }
 }

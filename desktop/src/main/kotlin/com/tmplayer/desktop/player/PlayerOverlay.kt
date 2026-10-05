@@ -85,6 +85,10 @@ import androidx.compose.ui.unit.sp
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaName
 import com.tmplayer.player.PlaybackSpeed
+import com.tmplayer.player.SubtitlePosition
+import com.tmplayer.player.SubtitleSize
+import com.tmplayer.player.SubtitleStyle
+import com.tmplayer.player.SyncDelays
 import com.tmplayer.player.VideoScale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -101,6 +105,13 @@ internal sealed interface MenuAction {
     data class Speed(val speed: Float) : MenuAction
     data class Shape(val scale: VideoScale) : MenuAction
     data object ToggleDownmix : MenuAction
+
+    /** One step later (1) or earlier (-1), or 0 for back in step. The menu stays open for more. */
+    data class SubtitleDelay(val direction: Int) : MenuAction
+    data class AudioDelay(val direction: Int) : MenuAction
+
+    /** A new subtitle look, previewed on the picture while the menu stays open. */
+    data class SubtitleLook(val style: SubtitleStyle) : MenuAction
     data object StartOver : MenuAction
     data object ToggleIgnoreClicks : MenuAction
     data object CopyLink : MenuAction
@@ -533,7 +544,26 @@ private fun PlayerMenu(
         )
     }
 
-    DropdownMenu(expanded = true, onDismissRequest = onClose, modifier = Modifier.widthIn(min = 240.dp, max = 380.dp)) {
+    /**
+     * A figure with a pair of buttons either side of it, for the settings a viewer nudges and
+     * watches the result of: the menu stays open, so the next press is one click away.
+     */
+    @Composable
+    fun Nudge(text: String, value: String, less: String, more: String, onLess: (() -> Unit)?, onMore: (() -> Unit)?) {
+        Row(
+            Modifier.fillMaxWidth().height(48.dp).padding(start = 12.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Lines up with the entries' text, past the space their tick takes.
+            Spacer(Modifier.width(30.dp))
+            Text(text, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1)
+            TextButton(onClick = { onLess?.invoke() }, enabled = onLess != null) { Text(less) }
+            Text(value, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.widthIn(min = 64.dp))
+            TextButton(onClick = { onMore?.invoke() }, enabled = onMore != null) { Text(more) }
+        }
+    }
+
+    DropdownMenu(expanded = true, onDismissRequest = onClose, modifier = Modifier.widthIn(min = 240.dp, max = 420.dp)) {
         if (menu.page != MenuPage.Main && menu.anchor != MenuAt.Anchor.Subtitles && menu.anchor != MenuAt.Anchor.Audio) {
             Entry("Back") { page(MenuPage.Main) }
             HorizontalDivider()
@@ -570,11 +600,32 @@ private fun PlayerMenu(
                 val list = tracks.filter { it.type == TrackType.Audio }
                 if (list.isEmpty()) Entry("No audio tracks") { onClose() }
                 list.forEach { t -> Entry(t.label, checked = t.selected) { pick(MenuAction.Track(TrackType.Audio, t)) } }
+                HorizontalDivider()
+                Nudge("Delay", SyncDelays.label(status.audioDelayMs), "Earlier", "Later",
+                    { onAction(MenuAction.AudioDelay(-1)) }, { onAction(MenuAction.AudioDelay(1)) })
+                if (status.audioDelayMs != 0L) Entry("Reset delay") { onAction(MenuAction.AudioDelay(0)) }
             }
             MenuPage.Subtitles -> {
                 val list = tracks.filter { it.type == TrackType.Subtitle }
                 Entry("Off", checked = list.none { it.selected }) { pick(MenuAction.Track(TrackType.Subtitle, null)) }
                 list.forEach { t -> Entry(t.label, checked = t.selected) { pick(MenuAction.Track(TrackType.Subtitle, t)) } }
+                HorizontalDivider()
+                Nudge("Delay", SyncDelays.label(status.subtitleDelayMs), "Earlier", "Later",
+                    { onAction(MenuAction.SubtitleDelay(-1)) }, { onAction(MenuAction.SubtitleDelay(1)) })
+                if (status.subtitleDelayMs != 0L) Entry("Reset delay") { onAction(MenuAction.SubtitleDelay(0)) }
+                HorizontalDivider()
+                // The look, previewed on the picture as it changes; the ends of each scale stop.
+                val style = status.subtitleStyle
+                val sizes = SubtitleSize.entries
+                val places = SubtitlePosition.entries
+                fun look(to: SubtitleStyle) = onAction(MenuAction.SubtitleLook(to))
+                Nudge("Size", style.size.label, "Smaller", "Larger",
+                    sizes.getOrNull(style.size.ordinal - 1)?.let { s -> { look(style.copy(size = s)) } },
+                    sizes.getOrNull(style.size.ordinal + 1)?.let { s -> { look(style.copy(size = s)) } })
+                Nudge("Position", style.position.label, "Lower", "Higher",
+                    places.getOrNull(style.position.ordinal - 1)?.let { p -> { look(style.copy(position = p)) } },
+                    places.getOrNull(style.position.ordinal + 1)?.let { p -> { look(style.copy(position = p)) } })
+                Entry("Background box", checked = style.box) { look(style.copy(box = !style.box)) }
             }
             MenuPage.Speed -> PlaybackSpeed.CHOICES.forEach { s ->
                 Entry(PlaybackSpeed.label(s), checked = kotlin.math.abs(s - status.speed) < 0.001f) { pick(MenuAction.Speed(s)) }

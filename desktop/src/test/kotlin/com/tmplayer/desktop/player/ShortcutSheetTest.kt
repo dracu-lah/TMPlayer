@@ -30,6 +30,8 @@ class ShortcutSheetTest {
             it == PlayerAction.SubtitleNext || it == PlayerAction.SubtitlePrevious || it == PlayerAction.SubtitleToggle
         },
         "Audio next, previous" to { it == PlayerAction.AudioNext || it == PlayerAction.AudioPrevious },
+        "Subtitles earlier, later" to { it is PlayerAction.SubtitleDelay },
+        "Sound earlier, later" to { it is PlayerAction.AudioDelay },
         "Speed up, down, reset" to { it == PlayerAction.SpeedUp || it == PlayerAction.SpeedDown || it == PlayerAction.SpeedReset },
         "Next, previous episode" to { it == PlayerAction.NextEpisode || it == PlayerAction.PreviousEpisode },
         "Always on top" to { it == PlayerAction.AlwaysOnTop },
@@ -103,6 +105,8 @@ class ShortcutSheetTest {
             "." -> Key.Period
             "]" -> Key.RightBracket
             "[" -> Key.LeftBracket
+            "-" -> Key.Minus
+            "=" -> Key.Equals
             else -> letter(name)
         }
         return KeyPress(key, shift = "Shift" in mods, ctrl = "Ctrl" in mods, alt = "Alt" in mods, meta = "Cmd" in mods)
@@ -113,6 +117,7 @@ class ShortcutSheetTest {
     private val LETTERS = mapOf(
         "A" to Key.A, "C" to Key.C, "F" to Key.F, "I" to Key.I, "J" to Key.J, "K" to Key.K, "L" to Key.L,
         "M" to Key.M, "N" to Key.N, "P" to Key.P, "Q" to Key.Q, "S" to Key.S, "T" to Key.T,
+        "X" to Key.X, "Z" to Key.Z,
     )
 
     private fun digit(d: Int): Key = listOf(

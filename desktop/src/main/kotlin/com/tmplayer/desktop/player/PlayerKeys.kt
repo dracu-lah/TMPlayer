@@ -20,6 +20,11 @@ sealed interface PlayerAction {
     data object SubtitleToggle : PlayerAction
     data object AudioNext : PlayerAction
     data object AudioPrevious : PlayerAction
+    /** Subtitles one [com.tmplayer.player.SyncDelays.STEP_MS] later ([direction] 1) or earlier (-1). */
+    data class SubtitleDelay(val direction: Int) : PlayerAction
+
+    /** The sound one step later or earlier, as [SubtitleDelay]. */
+    data class AudioDelay(val direction: Int) : PlayerAction
     data object SpeedUp : PlayerAction
     data object SpeedDown : PlayerAction
     data object SpeedReset : PlayerAction
@@ -109,6 +114,15 @@ object PlayerKeys {
             Key.Back -> return PlayerAction.Back
             else -> Unit
         }
+        // mpv's audio delay pair, with Ctrl on every system as in mpv. Ctrl+Shift+= is the same
+        // physical key as Ctrl++, so either reads as later.
+        if (ctrl && !alt && !meta) {
+            when (key) {
+                Key.Minus, Key.NumPadSubtract -> return PlayerAction.AudioDelay(-1)
+                Key.Equals, Key.Plus, Key.NumPadAdd -> return PlayerAction.AudioDelay(1)
+                else -> Unit
+            }
+        }
         if (ctrl || alt || meta) {
             // Cmd+[ is the Mac's back; nothing else below takes a modifier other than Shift.
             if (context.mac && meta && key == Key.LeftBracket) return PlayerAction.Back
@@ -140,6 +154,9 @@ object PlayerKeys {
             Key.LeftBracket -> PlayerAction.SpeedDown
             Key.Equals, Key.Plus, Key.NumPadAdd -> PlayerAction.SpeedUp
             Key.Minus, Key.NumPadSubtract -> PlayerAction.SpeedDown
+            // mpv's subtitle delay keys: z earlier, Z and x later.
+            Key.Z -> PlayerAction.SubtitleDelay(if (shift) 1 else -1)
+            Key.X -> PlayerAction.SubtitleDelay(1)
             Key.T -> PlayerAction.AlwaysOnTop
             Key.I -> PlayerAction.Stats
             Key.Slash -> if (shift) PlayerAction.ShortcutSheet else null
@@ -184,6 +201,8 @@ object PlayerKeys {
             "Fullscreen" to "F, F11, double click",
             "Subtitles next, previous, on or off" to "S, Shift+S, C",
             "Audio next, previous" to "A, Shift+A",
+            "Subtitles earlier, later" to "Z, X",
+            "Sound earlier, later" to "Ctrl+-, Ctrl+=",
             "Speed up, down, reset" to "], [, Backspace",
             "Next, previous episode" to "Shift+N, Shift+P",
             "Always on top" to "$cmd+T",

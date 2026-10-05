@@ -16,6 +16,10 @@ import java.util.Locale
  *
  * Uses leanback's guided-step list rather than a dialog, because that is the one list style on
  * Android TV that is already large, D-pad-native and readable from a sofa.
+ *
+ * Below the tracks sit the timing lines (earlier, later, reset) and, for subtitles, their look.
+ * Those act in place and leave the picker open, so a line can be nudged a tenth at a time while it
+ * plays behind the list, and the look changes on the subtitles as they are chosen.
  */
 @UnstableApi
 class TrackPickerFragment : GuidedStepSupportFragment() {
@@ -59,6 +63,8 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
                 "This video has no subtitles"
             }
             actions.add(GuidedAction.Builder(requireContext()).id(ID_NONE).title(none).build())
+            // Sound can still be out of step with only the one track to choose from.
+            if (trackType == C.TRACK_TYPE_AUDIO && options.isNotEmpty()) addTimingActions(actions)
             return
         }
 
@@ -74,11 +80,57 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
                     .build(),
             )
         }
+        addTimingActions(actions)
+        if (trackType == C.TRACK_TYPE_TEXT) addStyleActions(actions)
+    }
+
+    private fun addTimingActions(actions: MutableList<GuidedAction>) {
+        val subtitles = trackType == C.TRACK_TYPE_TEXT
+        actions += plain(ID_EARLIER, if (subtitles) "Show subtitles earlier" else "Play sound earlier")
+        actions += plain(ID_LATER, if (subtitles) "Show subtitles later" else "Play sound later")
+        actions += plain(ID_RESET, "Reset timing")
+        actions.forEach(::describeTiming)
+    }
+
+    private fun addStyleActions(actions: MutableList<GuidedAction>) {
+        actions += plain(ID_SIZE, "Subtitle size")
+        actions += plain(ID_BOX, "Background box")
+        actions += plain(ID_POSITION, "Subtitle position")
+        actions.forEach(::describeStyle)
+    }
+
+    private fun plain(id: Long, title: String) =
+        GuidedAction.Builder(requireContext()).id(id).title(title).build()
+
+    /** The offset now in force, under each timing line, so a press shows where it got to. */
+    private fun describeTiming(action: GuidedAction) {
+        val delays = (activity as? PlayerActivity)?.syncDelaysNow() ?: return
+        val ms = if (trackType == C.TRACK_TYPE_TEXT) delays.subtitleMs else delays.audioMs
+        when (action.id) {
+            ID_EARLIER, ID_LATER -> action.description = "A tenth of a second. Now ${SyncDelays.label(ms)}"
+            ID_RESET -> {
+                action.description = if (ms == 0L) "In step with the file" else "Now ${SyncDelays.label(ms)}"
+                action.isEnabled = ms != 0L
+            }
+        }
+    }
+
+    private fun describeStyle(action: GuidedAction) {
+        val style = (activity as? PlayerActivity)?.subtitleStyleNow() ?: return
+        when (action.id) {
+            ID_SIZE -> action.description = style.size.label
+            ID_BOX -> action.description = if (style.box) "On" else "Off"
+            ID_POSITION -> action.description = style.position.label
+        }
     }
 
     override fun onGuidedActionClicked(action: GuidedAction) {
         val activity = activity as? PlayerActivity
         val player = activity?.player
+        if (activity != null && action.id in IN_PLACE) {
+            actOnPlace(activity, action.id)
+            return
+        }
         if (player == null || action.id == ID_NONE) {
             finishGuidedStepSupportFragments()
             return
@@ -100,6 +152,26 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
             player.trackSelectionParameters = builder.build()
         }
         finishGuidedStepSupportFragments()
+    }
+
+    /** A timing or look line: applied at once, the picker stays where it is. */
+    private fun actOnPlace(activity: PlayerActivity, id: Long) {
+        when (id) {
+            ID_EARLIER -> activity.stepDelay(trackType, -1)
+            ID_LATER -> activity.stepDelay(trackType, 1)
+            ID_RESET -> activity.stepDelay(trackType, 0)
+            ID_SIZE -> activity.changeSubtitleStyle(activity.subtitleStyleNow().nextSize())
+            ID_BOX -> activity.subtitleStyleNow().let { activity.changeSubtitleStyle(it.copy(box = !it.box)) }
+            ID_POSITION -> activity.changeSubtitleStyle(activity.subtitleStyleNow().nextPosition())
+        }
+        for (action in actions) {
+            if (action.id !in IN_PLACE) continue
+            describeTiming(action)
+            describeStyle(action)
+            notifyActionChanged(findActionPositionById(action.id))
+        }
+        // Reset greys itself out at zero, and focus on a disabled line is lost: move it to Later.
+        if (id == ID_RESET) setSelectedActionPosition(findActionPositionById(ID_LATER))
     }
 
     private fun isSelected(tracks: Tracks, option: Option): Boolean {
@@ -157,6 +229,15 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
     companion object {
         private const val ARG_TRACK_TYPE = "track_type"
         private const val ID_NONE = -1L
+
+        // Well clear of the track lines, whose ids are their positions in the list.
+        private const val ID_EARLIER = 1_000L
+        private const val ID_LATER = 1_001L
+        private const val ID_RESET = 1_002L
+        private const val ID_SIZE = 1_010L
+        private const val ID_BOX = 1_011L
+        private const val ID_POSITION = 1_012L
+        private val IN_PLACE = setOf(ID_EARLIER, ID_LATER, ID_RESET, ID_SIZE, ID_BOX, ID_POSITION)
 
         // Spelled several ways depending on whether the id came from the MP4 sample entry or
         // from the MIME type, so both are matched.

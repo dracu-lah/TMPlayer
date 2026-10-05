@@ -48,6 +48,13 @@ import kotlin.system.exitProcess
  *   Compose placement and AWT's `extendedState`, so a script can check where the window landed.
  * - `--fullscreen-rounds <n>` repeats that round trip n times (default 1), to show drift.
  * - `--maximized` starts maximized, so the round trip above is the maximized one.
+ * - `--keys-after <ms> --keys <chars>` types the keys into the window through `java.awt.Robot`,
+ *   so a run goes through the real keyboard table: letters as themselves, `-` and `=` with Ctrl
+ *   held (the audio delay pair). Pair it with `--pause-after` to read the result off the log.
+ * - `--sub-style-after <ms> --sub-style <Size>[,box][,<Position>]` writes the subtitle look to
+ *   the settings mid run (names as in [com.tmplayer.player.SubtitleSize] and
+ *   [com.tmplayer.player.SubtitlePosition]), the way the Settings page does, to show it reaching
+ *   the video already playing.
  * - `--quit-after <ms>` closes the window, so a scripted run ends on its own.
  */
 fun main(argv: Array<String>) {
@@ -72,6 +79,12 @@ fun main(argv: Array<String>) {
     val pauseAfter = value("--pause-after")?.toLongOrNull()
     val quitAfter = value("--quit-after")?.toLongOrNull()
     val sub = value("--sub")
+    val keysAfter = value("--keys-after")?.toLongOrNull()
+    val keys = value("--keys").orEmpty()
+    val styleAfter = value("--sub-style-after")?.toLongOrNull()
+    val style = value("--sub-style")?.split(',')?.let { parts ->
+        com.tmplayer.player.SubtitleStyle.from(parts.first(), "box" in parts, parts.drop(1).firstOrNull { it != "box" })
+    }
     val miniAfter = value("--mini-after")?.toLongOrNull()
     val fullscreenAfter = value("--fullscreen-after")?.toLongOrNull()
     val fullscreenRounds = value("--fullscreen-rounds")?.toIntOrNull() ?: 1
@@ -144,6 +157,19 @@ fun main(argv: Array<String>) {
                         println("dev: back ${geometry(window, state.placement)}")
                     }
                 }
+                if (styleAfter != null && style != null) {
+                    at(styleAfter)
+                    store.setSubtitleStyle(style)
+                    println("dev: style $style")
+                }
+                if (keysAfter != null && keys.isNotEmpty()) {
+                    at(keysAfter)
+                    window.toFront()
+                    delay(300)
+                    typeKeys(keys)
+                    delay(300)
+                    println("dev: after keys '$keys' ${e.state.value.delays}")
+                }
                 if (seekAfter != null && seekTo != null) {
                     at(seekAfter)
                     e.seekTo(seekTo)
@@ -162,6 +188,20 @@ fun main(argv: Array<String>) {
                 }
             }
         }
+    }
+}
+
+/** See `--keys`: each character pressed and let go, `-` and `=` with Ctrl held. */
+private suspend fun typeKeys(keys: String) {
+    val robot = java.awt.Robot()
+    for (c in keys) {
+        val ctrl = c == '-' || c == '='
+        val code = java.awt.event.KeyEvent.getExtendedKeyCodeForChar(c.code)
+        if (ctrl) robot.keyPress(java.awt.event.KeyEvent.VK_CONTROL)
+        robot.keyPress(code)
+        robot.keyRelease(code)
+        if (ctrl) robot.keyRelease(java.awt.event.KeyEvent.VK_CONTROL)
+        delay(120)
     }
 }
 

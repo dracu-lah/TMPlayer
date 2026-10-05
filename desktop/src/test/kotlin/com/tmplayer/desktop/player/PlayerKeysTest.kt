@@ -84,6 +84,20 @@ class PlayerKeysTest {
     }
 
     @Test
+    fun `subtitle and sound delay the mpv way`() {
+        assertEquals(PlayerAction.SubtitleDelay(-1), action(Key.Z))
+        assertEquals(PlayerAction.SubtitleDelay(1), action(Key.Z, shift = true))
+        assertEquals(PlayerAction.SubtitleDelay(1), action(Key.X))
+        assertEquals(PlayerAction.AudioDelay(-1), action(Key.Minus, ctrl = true))
+        assertEquals(PlayerAction.AudioDelay(1), action(Key.Equals, ctrl = true))
+        assertEquals(PlayerAction.AudioDelay(1), action(Key.Equals, ctrl = true, shift = true))
+        assertEquals(PlayerAction.AudioDelay(1), action(Key.NumPadAdd, ctrl = true))
+        // Without Ctrl the same keys still change the speed.
+        assertEquals(PlayerAction.SpeedDown, action(Key.Minus))
+        assertEquals(PlayerAction.SpeedUp, action(Key.Equals))
+    }
+
+    @Test
     fun `episodes, window and sheets`() {
         assertEquals(PlayerAction.NextEpisode, action(Key.N, shift = true))
         assertEquals(PlayerAction.PreviousEpisode, action(Key.P, shift = true))
@@ -99,7 +113,7 @@ class PlayerKeysTest {
 
     @Test
     fun `unbound keys and stray modifiers do nothing`() {
-        assertNull(action(Key.Z))
+        assertNull(action(Key.G))
         assertNull(action(Key.K, ctrl = true))
         assertNull(action(Key.Q))
         assertNull(action(Key.Spacebar, shift = true))

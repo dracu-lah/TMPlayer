@@ -11,6 +11,8 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.tmplayer.player.PlaybackSpeed
+import com.tmplayer.player.SubtitleStyle
+import com.tmplayer.player.SyncDelays
 import com.tmplayer.player.TouchPrefs
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -84,6 +86,11 @@ private val GESTURE_VOLUME = booleanPreferencesKey("gesture_volume")
 private val PLAYER_HAPTICS = booleanPreferencesKey("player_haptics")
 private val SHOW_REMAINING = booleanPreferencesKey("show_remaining_time")
 
+// How subtitles look, on every platform. See [SubtitleStyle].
+private val SUBTITLE_SIZE = stringPreferencesKey("subtitle_size")
+private val SUBTITLE_BOX = booleanPreferencesKey("subtitle_box")
+private val SUBTITLE_POSITION = stringPreferencesKey("subtitle_position")
+
 /**
  * One series, as a key.
  *
@@ -108,6 +115,10 @@ private fun durationKey(chatId: Long, messageId: Long) =
 /** Title, chat and file id, so a half-watched video can be reopened without its chat loaded. */
 private fun metaKey(chatId: Long, messageId: Long) =
     stringPreferencesKey("meta_${chatId}_$messageId")
+
+/** The subtitle and audio offsets the viewer set for one file. See [SyncDelays]. */
+private fun delayKey(chatId: Long, messageId: Long) =
+    stringPreferencesKey("delay_${chatId}_$messageId")
 
 /**
  * The same line again, for the Downloads screen.
@@ -519,6 +530,40 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
         haptics = prefs[PLAYER_HAPTICS] ?: true,
         showRemaining = prefs[SHOW_REMAINING] ?: false,
     )
+
+    // ---- subtitle look and per file sync ----------------------------------------------------
+
+    val subtitleStyle: Flow<SubtitleStyle> = read(::subtitleStyleOf)
+
+    suspend fun subtitleStyleNow(): SubtitleStyle = subtitleStyleOf(prefs.data.first())
+
+    suspend fun setSubtitleStyle(style: SubtitleStyle) {
+        prefs.edit {
+            it[SUBTITLE_SIZE] = style.size.name
+            it[SUBTITLE_BOX] = style.box
+            it[SUBTITLE_POSITION] = style.position.name
+        }
+    }
+
+    private fun subtitleStyleOf(prefs: Preferences) =
+        SubtitleStyle.from(prefs[SUBTITLE_SIZE], prefs[SUBTITLE_BOX], prefs[SUBTITLE_POSITION])
+
+    /**
+     * The offsets set for this file, kept beside its resume position.
+     *
+     * A key of its own rather than a field of the resume line: an offset is worth keeping for a video
+     * watched less than a minute (that is exactly when a viewer fixes one), and the resume line is not
+     * written until then.
+     */
+    suspend fun syncDelays(chatId: Long, messageId: Long): SyncDelays =
+        SyncDelays.decode(prefs.data.first()[delayKey(chatId, messageId)])
+
+    suspend fun setSyncDelays(chatId: Long, messageId: Long, delays: SyncDelays) {
+        prefs.edit { prefs ->
+            delays.encode()?.let { prefs[delayKey(chatId, messageId)] = it }
+                ?: prefs.remove(delayKey(chatId, messageId))
+        }
+    }
 
     // ---- tracks, per series -----------------------------------------------------------------
 
@@ -935,6 +980,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
                 prefs.remove(longPreferencesKey("resume_$ids"))
                 prefs.remove(longPreferencesKey("duration_$ids"))
                 prefs.remove(stringPreferencesKey("meta_$ids"))
+                prefs.remove(stringPreferencesKey("delay_$ids"))
             }
     }
 
@@ -951,7 +997,8 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
         prefs.edit { prefs ->
             val doomed = prefs.asMap().keys.filter { key ->
                 val name = key.name
-                name.startsWith("resume_") || name.startsWith("duration_") || name.startsWith("meta_")
+                name.startsWith("resume_") || name.startsWith("duration_") || name.startsWith("meta_") ||
+                    name.startsWith("delay_")
             }
             for (key in doomed) prefs.remove(key)
         }

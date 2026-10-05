@@ -1,5 +1,7 @@
 package com.tmplayer.desktop.player
 
+import com.tmplayer.player.SubtitleStyle
+import com.tmplayer.player.SyncDelays
 import com.tmplayer.player.VideoScale
 import kotlinx.coroutines.flow.StateFlow
 import org.openani.mediamp.source.MediaData
@@ -32,6 +34,15 @@ interface PlaybackEngine {
     fun setScale(scale: VideoScale)
     fun setDownmix(stereo: Boolean)
 
+    /** Size, box and position for plain text subtitles; a file's own ASS styling is left alone. */
+    fun setSubtitleStyle(style: SubtitleStyle)
+
+    /** Subtitles moved against the picture; positive is later. See [SyncDelays]. */
+    fun setSubtitleDelay(ms: Long)
+
+    /** Sound moved against the picture; positive is later. */
+    fun setAudioDelay(ms: Long)
+
     /** Loads a subtitle file from disk beside the video's own tracks and selects it. */
     fun addSubtitle(path: String): Boolean
 
@@ -54,6 +65,9 @@ data class OpenPrefs(
     val muted: Boolean = false,
     /** mpv's `hwdec`: [HWDEC_AUTO] or [HWDEC_SOFTWARE]. */
     val hwdec: String = HWDEC_AUTO,
+    val subtitleStyle: SubtitleStyle = SubtitleStyle(),
+    /** This file's own offsets, or zero for a file with no message to remember them by. */
+    val delays: SyncDelays = SyncDelays(),
 ) {
     companion object {
         /** Hardware where mpv considers it safe, software otherwise; mpv also falls back per stream. */
@@ -84,7 +98,12 @@ data class PlaybackStatus(
     val speed: Float = 1f,
     val scale: VideoScale = VideoScale.Fit,
     val downmix: Boolean = false,
-)
+    val subtitleStyle: SubtitleStyle = SubtitleStyle(),
+    val subtitleDelayMs: Long = 0,
+    val audioDelayMs: Long = 0,
+) {
+    val delays: SyncDelays get() = SyncDelays(subtitleDelayMs, audioDelayMs)
+}
 
 enum class TrackType { Audio, Subtitle, Video }
 

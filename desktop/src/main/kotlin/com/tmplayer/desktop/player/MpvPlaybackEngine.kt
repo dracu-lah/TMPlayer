@@ -2,6 +2,8 @@ package com.tmplayer.desktop.player
 
 import com.tmplayer.desktop.DesktopPaths
 import com.tmplayer.platform.Logger
+import com.tmplayer.player.SubtitleStyle
+import com.tmplayer.player.SyncDelays
 import com.tmplayer.player.VideoScale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -22,6 +24,7 @@ import org.openani.mediamp.mpv.MpvMediampPlayer
 import org.openani.mediamp.source.MediaData
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.SwingUtilities
+import kotlin.math.roundToLong
 
 /** libmpv and its friends, unpacked once into the app's own folder rather than a fresh temp dir per launch. */
 object MpvNatives {
@@ -82,7 +85,7 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             h.option("audio-channels", "auto-safe")
             // Subtitles come with the file and are drawn by libass inside the frame.
             h.option("sub-auto", "no")
-            h.option("sub-font-size", "46")
+            h.option("sub-font-size", SubtitleStyle().size.mpvFontSize.toString())
             h.option("sub-border-size", "2.5")
             h.option("msg-level", "all=warn")
         })
@@ -206,6 +209,9 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             downmix = prefs.downmix,
             volume = prefs.volume,
             muted = prefs.muted,
+            subtitleStyle = prefs.subtitleStyle,
+            subtitleDelayMs = prefs.delays.subtitleMs,
+            audioDelayMs = prefs.delays.audioMs,
             buffering = true,
         )
         _tracks.value = emptyList()
@@ -222,6 +228,12 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             h.setPropertyString("hwdec", prefs.hwdec)
         }
         applyScale(prefs.scale)
+        applySubtitleStyle(prefs.subtitleStyle)
+        // Set before the file loads, so the first line is already in step; mpv keeps both across files.
+        runCatching {
+            h.setPropertyDouble("sub-delay", prefs.delays.subtitleMs / 1000.0)
+            h.setPropertyDouble("audio-delay", prefs.delays.audioMs / 1000.0)
+        }
         try {
             withContext(Dispatchers.IO) {
                 player.setMediaData(data, playWhenReady = true, startPositionMillis = startAtMs)
@@ -336,6 +348,48 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
         _state.update { it.copy(downmix = stereo) }
     }
 
+    override fun setSubtitleStyle(style: SubtitleStyle) {
+        applySubtitleStyle(style)
+        _state.update { it.copy(subtitleStyle = style) }
+    }
+
+    /**
+     * Each property on its own, so one this libmpv does not know leaves the others applied.
+     *
+     * The bundled libmpv is 0.41, where `background-box` draws one box behind the whole subtitle in
+     * `sub-back-color` (mpv's colours are #AARRGGBB). `opaque-box`, the older style, boxes each line
+     * in the outline colour instead and draws no outline, which is the fallback for a libmpv that
+     * predates `background-box` (0.39). `sub-ass-override` stays at mpv's default, `scale`: these
+     * options reach plain text tracks, and an ASS track keeps the look its author gave it.
+     */
+    private fun applySubtitleStyle(style: SubtitleStyle) {
+        val h = handle
+        runCatching { h.setPropertyString("sub-font-size", style.size.mpvFontSize.toString()) }
+        runCatching { h.setPropertyString("sub-pos", style.position.mpvSubPos.toString()) }
+        if (!style.box) {
+            runCatching { h.setPropertyString("sub-border-style", "outline-and-shadow") }
+            return
+        }
+        runCatching { h.setPropertyString("sub-back-color", BOX_COLOR) }
+        val boxed = runCatching { h.setPropertyString("sub-border-style", "background-box") }.getOrDefault(false)
+        if (!boxed) {
+            runCatching {
+                h.setPropertyString("sub-outline-color", BOX_COLOR)
+                h.setPropertyString("sub-border-style", "opaque-box")
+            }
+        }
+    }
+
+    override fun setSubtitleDelay(ms: Long) {
+        runCatching { handle.setPropertyDouble("sub-delay", ms / 1000.0) }
+        _state.update { it.copy(subtitleDelayMs = ms) }
+    }
+
+    override fun setAudioDelay(ms: Long) {
+        runCatching { handle.setPropertyDouble("audio-delay", ms / 1000.0) }
+        _state.update { it.copy(audioDelayMs = ms) }
+    }
+
     override fun addSubtitle(path: String): Boolean {
         if (!_state.value.opened) return false
         val ok = runCatching { handle.command("sub-add", path, "select") }.getOrDefault(false)
@@ -361,6 +415,9 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             )
             if (audio.isNotEmpty()) add("Sound" to audio.joinToString(", "))
             add("Downmix to stereo" to if (_state.value.downmix) "On" else "Off")
+            // Read back from mpv rather than from the state, so the panel shows what is in force.
+            h.double("sub-delay")?.let { add("Subtitle delay" to SyncDelays.label((it * 1000).roundToLong())) }
+            h.double("audio-delay")?.let { add("Audio delay" to SyncDelays.label((it * 1000).roundToLong())) }
             h.string("file-format")?.let { add("Container" to it) }
             h.double("demuxer-cache-duration")?.let { add("Buffered ahead" to "%.1f s".format(it)) }
             h.string("current-vo")?.let { add("Video output" to it) }
@@ -387,6 +444,9 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
         const val POLL_MS = 250L
         const val TRACK_POLL_EVERY = 8
         const val SEEK_SETTLE_MS = 600L
+
+        /** The subtitle box: black at 70 %, dark enough to read on snow, light enough to see through. */
+        const val BOX_COLOR = "#B3000000"
     }
 }
 

@@ -233,6 +233,9 @@ class PlayerMouseTest {
         override fun selectTrack(type: TrackType, id: Int?) = Unit
         override fun setScale(scale: com.tmplayer.player.VideoScale) { _state.update { it.copy(scale = scale) } }
         override fun setDownmix(stereo: Boolean) { _state.update { it.copy(downmix = stereo) } }
+        override fun setSubtitleStyle(style: com.tmplayer.player.SubtitleStyle) { _state.update { it.copy(subtitleStyle = style) } }
+        override fun setSubtitleDelay(ms: Long) { calls += "subDelay:$ms"; _state.update { it.copy(subtitleDelayMs = ms) } }
+        override fun setAudioDelay(ms: Long) { calls += "audioDelay:$ms"; _state.update { it.copy(audioDelayMs = ms) } }
         override fun addSubtitle(path: String): Boolean { calls += "sub:$path"; return true }
         override fun details(): List<Pair<String, String>> = emptyList()
         override fun close() = Unit

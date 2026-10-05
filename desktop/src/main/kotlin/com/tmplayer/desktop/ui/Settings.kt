@@ -1,6 +1,20 @@
 package com.tmplayer.desktop.ui
 
 import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
+import com.tmplayer.player.SubtitlePosition
+import com.tmplayer.player.SubtitleSize
+import com.tmplayer.player.SubtitleStyle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -84,6 +98,7 @@ fun SettingsPage(state: ShellState, version: String = "") {
     var confirmSignOut by remember { mutableStateOf(false) }
     var confirm by remember { mutableStateOf<Confirm?>(null) }
     val touchPrefs by settings.touchPrefs.collectAsState(initial = TouchPrefs())
+    val subtitleStyle by settings.subtitleStyle.collectAsState(initial = SubtitleStyle())
     val lastChatId by settings.lastChatId.collectAsState(initial = 0L)
     val history by settings.continueWatching.collectAsState(initial = emptyList())
     val favourites by settings.favorites.collectAsState(initial = emptySet())
@@ -155,6 +170,31 @@ fun SettingsPage(state: ShellState, version: String = "") {
                     },
                     desktop.softwareDecoding,
                 ) { on -> state.extras.prefs.update { it.copy(softwareDecoding = on) } }
+
+                Group("Subtitles")
+                Setting("Size", "${subtitleStyle.size.label}. A file's own styled subtitles keep their look") {
+                    val sizes = SubtitleSize.entries
+                    fun size(by: Int) {
+                        val next = sizes[(subtitleStyle.size.ordinal + by).coerceIn(0, sizes.lastIndex)]
+                        scope.launch { settings.setSubtitleStyle(subtitleStyle.copy(size = next)) }
+                    }
+                    Stepper(onLess = { size(-1) }, onMore = { size(1) })
+                }
+                Toggle("Background box", "A dark box behind the text, for a bright or busy picture", subtitleStyle.box) { on ->
+                    scope.launch { settings.setSubtitleStyle(subtitleStyle.copy(box = on)) }
+                }
+                Setting("Position", "Raised clears the controls; High clears text burnt into the picture") {
+                    SingleChoiceSegmentedButtonRow {
+                        SubtitlePosition.entries.forEachIndexed { index, place ->
+                            SegmentedButton(
+                                selected = subtitleStyle.position == place,
+                                onClick = { scope.launch { settings.setSubtitleStyle(subtitleStyle.copy(position = place)) } },
+                                shape = SegmentedButtonDefaults.itemShape(index, SubtitlePosition.entries.size),
+                            ) { Text(place.label) }
+                        }
+                    }
+                }
+                SubtitlePreview(subtitleStyle, Modifier.padding(vertical = 6.dp))
 
                 Group("Library")
                 Toggle("Open the last chat on launch", "Start where you left off rather than on the chat list", openLast) {
@@ -335,6 +375,36 @@ fun SettingsPage(state: ShellState, version: String = "") {
                 asked.action()
             },
             onDismiss = { confirm = null },
+        )
+    }
+}
+
+/**
+ * A small stand in for the picture, with a line drawn the way mpv will draw it: mpv's font size is
+ * in pixels of a 720 line frame and its `sub-pos` is the share of the height the line's foot sits
+ * at, above a 22 pixel margin, so both scale straight onto the preview's height.
+ */
+@Composable
+private fun SubtitlePreview(style: SubtitleStyle, modifier: Modifier = Modifier) {
+    BoxWithConstraints(
+        modifier.width(360.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp))
+            .background(Brush.verticalGradient(listOf(Color(0xFF3A4A5C), Color(0xFF1A1F26)))),
+    ) {
+        val frame = maxHeight
+        val fontSize = with(LocalDensity.current) { (frame * (style.size.mpvFontSize / 720f)).toSp() }
+        val foot = frame * (1f - style.position.mpvSubPos / 100f) + frame * (22f / 720f)
+        val text = TextStyle(
+            color = Color.White,
+            fontSize = fontSize,
+            textAlign = TextAlign.Center,
+            // mpv's outline, near enough; the box replaces it, as mpv's does.
+            shadow = if (style.box) null else Shadow(Color.Black, blurRadius = 3f),
+        )
+        Text(
+            "This is how subtitles will look.",
+            style = text,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = foot)
+                .then(if (style.box) Modifier.background(Color(0xB3000000)).padding(horizontal = 4.dp, vertical = 1.dp) else Modifier),
         )
     }
 }

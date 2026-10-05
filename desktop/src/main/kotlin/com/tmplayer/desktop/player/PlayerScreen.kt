@@ -50,10 +50,13 @@ import com.tmplayer.data.WatchedStore
 import com.tmplayer.desktop.DesktopPrefs
 import com.tmplayer.desktop.WatchedWords
 import com.tmplayer.player.PlaybackSpeed
+import com.tmplayer.player.SubtitleStyle
+import com.tmplayer.player.SyncDelays
 import com.tmplayer.player.TouchPrefs
 import com.tmplayer.player.VideoScale
 import com.tmplayer.platform.Logger
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
@@ -206,6 +209,12 @@ fun PlayerScreen(
             settings.resumePosition(item.chatId, item.messageId)
         }.getOrDefault(0L)
         trackChoice = runCatching { settings.trackChoice(seriesKey) }.getOrDefault(TrackChoice())
+        // Offsets are remembered per message; a file on disk (the dev harness) starts in step.
+        val delays = if (hasMessage(item)) {
+            runCatching { settings.syncDelays(item.chatId, item.messageId) }.getOrDefault(SyncDelays())
+        } else {
+            SyncDelays()
+        }
         val prefs = OpenPrefs(
             audioLanguage = trackChoice.audioLanguage,
             subtitleLanguage = trackChoice.textLanguage,
@@ -216,6 +225,8 @@ fun PlayerScreen(
             volume = prefs.now.volume,
             muted = prefs.now.muted,
             hwdec = OpenPrefs.hwdecFor(prefs.now.softwareDecoding),
+            subtitleStyle = runCatching { settings.subtitleStyleNow() }.getOrDefault(SubtitleStyle()),
+            delays = delays,
         )
         // A slow open (the whole video downloading first) says what it is waiting on; Back on the
         // loading screen cancels it.
@@ -339,6 +350,14 @@ fun PlayerScreen(
     LaunchedEffect(nextUpVisible) { if (nextUpVisible) nextUpShown = true }
     LaunchedEffect(left > NEXT_UP_LEAD_MS) { if (left > NEXT_UP_LEAD_MS) nextUpShown = false }
 
+    // The subtitle look is one setting for every video: a change in Settings (or in the subtitle
+    // menu, which writes the same setting) reaches the video playing now.
+    LaunchedEffect(engine, settings) {
+        settings.subtitleStyle.collect { style ->
+            if (style != engine.state.value.subtitleStyle) engine.setSubtitleStyle(style)
+        }
+    }
+
     // ---- controls and cursor -----------------------------------------------------------------
 
     val menusOpen = menu != null || showShortcuts
@@ -412,6 +431,42 @@ fun PlayerScreen(
         engine.setMuted(muted)
         prefs.update { it.copy(muted = muted) }
         showFlash(Flash.Kind.Volume, if (muted) "Muted" else "${status.volume}%")
+    }
+
+    /**
+     * Writes this file's offsets as they now stand. Started undispatched, so the writes reach the
+     * settings in the order the keys were pressed, and a quick run of Z presses cannot land an
+     * older figure last.
+     */
+    fun saveDelays() {
+        if (!hasMessage(item)) return
+        val chat = item.chatId
+        val message = item.messageId
+        val delays = engine.state.value.delays
+        playerScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            runCatching { settings.setSyncDelays(chat, message, delays) }
+        }
+    }
+
+    /** One step later ([direction] 1) or earlier (-1); 0 puts the subtitles back in step. */
+    fun stepSubtitleDelay(direction: Int) {
+        val ms = if (direction == 0) 0L else SyncDelays.step(engine.state.value.subtitleDelayMs, direction)
+        engine.setSubtitleDelay(ms)
+        showFlash(Flash.Kind.Text, "Subtitle delay ${SyncDelays.label(ms)}")
+        saveDelays()
+    }
+
+    fun stepAudioDelay(direction: Int) {
+        val ms = if (direction == 0) 0L else SyncDelays.step(engine.state.value.audioDelayMs, direction)
+        engine.setAudioDelay(ms)
+        showFlash(Flash.Kind.Text, "Audio delay ${SyncDelays.label(ms)}")
+        saveDelays()
+    }
+
+    /** From the subtitle menu: shown on the picture at once, and kept as the setting for every video. */
+    fun setSubtitleStyle(style: SubtitleStyle) {
+        engine.setSubtitleStyle(style)
+        playerScope.launch { runCatching { settings.setSubtitleStyle(style) } }
     }
 
     fun seekFlash(delta: Long) {
@@ -492,6 +547,8 @@ fun PlayerScreen(
             }
             PlayerAction.AudioNext -> cycleTrack(TrackType.Audio, true)
             PlayerAction.AudioPrevious -> cycleTrack(TrackType.Audio, false)
+            is PlayerAction.SubtitleDelay -> stepSubtitleDelay(action.direction)
+            is PlayerAction.AudioDelay -> stepAudioDelay(action.direction)
             PlayerAction.SpeedUp -> setSpeed(SeekMath.fineSpeed(status.speed, up = true))
             PlayerAction.SpeedDown -> setSpeed(SeekMath.fineSpeed(status.speed, up = false))
             PlayerAction.SpeedReset -> setSpeed(1f)
@@ -671,6 +728,9 @@ fun PlayerScreen(
                             prefs.update { it.copy(downmix = on) }
                             showFlash(Flash.Kind.Text, if (on) "Downmix to stereo on" else "Downmix to stereo off")
                         }
+                        is MenuAction.SubtitleDelay -> stepSubtitleDelay(action.direction)
+                        is MenuAction.AudioDelay -> stepAudioDelay(action.direction)
+                        is MenuAction.SubtitleLook -> setSubtitleStyle(action.style)
                         MenuAction.StartOver -> startOver()
                         MenuAction.ToggleIgnoreClicks -> {
                             ignoreClicks = !ignoreClicks
