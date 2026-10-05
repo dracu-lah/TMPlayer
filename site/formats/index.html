@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Supported formats: what TMPlayer plays on Android TV, Windows and Linux</title>
-<meta name="description" content="The containers, video and audio codecs and subtitles TMPlayer plays: Media3 with FFmpeg decoders on Android TV and phones, mpv on Windows and Linux.">
+<title data-i18n="formats.supported_formats_what_tmplayer_plays">Supported formats: what TMPlayer plays on Android TV, Windows and Linux</title>
+<meta name="description" content="The containers, video and audio codecs and subtitles TMPlayer plays: Media3 with FFmpeg decoders on Android TV and phones, mpv on Windows and Linux." data-i18n-content="formats.the_containers_video_and_audio">
 <link rel="canonical" href="https://tmplayer.org/formats/">
+<!-- i18n:head --><!-- /i18n:head -->
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta name="author" content="dracu-lah">
 <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
@@ -14,8 +15,8 @@
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="TMPlayer">
-<meta property="og:title" content="Supported formats: what TMPlayer plays on Android TV, Windows and Linux">
-<meta property="og:description" content="The containers, video and audio codecs and subtitles TMPlayer plays: Media3 with FFmpeg decoders on Android TV and phones, mpv on Windows and Linux.">
+<meta property="og:title" content="Supported formats: what TMPlayer plays on Android TV, Windows and Linux" data-i18n-content="formats.supported_formats_what_tmplayer_plays">
+<meta property="og:description" content="The containers, video and audio codecs and subtitles TMPlayer plays: Media3 with FFmpeg decoders on Android TV and phones, mpv on Windows and Linux." data-i18n-content="formats.the_containers_video_and_audio">
 <meta property="og:url" content="https://tmplayer.org/formats/">
 <meta property="og:image" content="https://tmplayer.org/og.png">
 <meta property="og:image:type" content="image/png">
@@ -24,8 +25,8 @@
 <meta property="og:locale" content="en_GB">
 
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Supported formats: what TMPlayer plays on Android TV, Windows and Linux">
-<meta name="twitter:description" content="The containers, video and audio codecs and subtitles TMPlayer plays: Media3 with FFmpeg decoders on Android TV and phones, mpv on Windows and Linux.">
+<meta name="twitter:title" content="Supported formats: what TMPlayer plays on Android TV, Windows and Linux" data-i18n-content="formats.supported_formats_what_tmplayer_plays">
+<meta name="twitter:description" content="The containers, video and audio codecs and subtitles TMPlayer plays: Media3 with FFmpeg decoders on Android TV and phones, mpv on Windows and Linux." data-i18n-content="formats.the_containers_video_and_audio">
 <meta name="twitter:image" content="https://tmplayer.org/og.png">
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -74,7 +75,7 @@
 </head>
 <body>
 
-<a class="skip" href="#main">Skip to content</a>
+<a class="skip" href="#main" data-i18n="common.skip_to_content">Skip to content</a>
 
 <!-- Decorative background art, hidden from assistive technology and still under reduced motion. -->
 <div class="bg-art" aria-hidden="true">
@@ -94,25 +95,26 @@
 
 <header class="site-header">
   <div class="wrap header-inner">
-    <a class="brand" href="/" aria-label="TMPlayer home">
+    <a class="brand" href="/" aria-label="TMPlayer home" data-i18n-aria-label="common.tmplayer_home">
       <img class="brand-mark" src="/favicon.svg" width="32" height="32" alt="" decoding="async">
       <span class="brand-name">TMPlayer</span>
     </a>
 
-    <nav class="nav-links" id="site-nav" aria-label="Primary">
-        <a href="/">Home</a>
-        <a href="/features/">Features</a>
-        <a href="/download/">Download</a>
-        <a href="/install/">Install</a>
+    <nav class="nav-links" id="site-nav" aria-label="Primary" data-i18n-aria-label="common.primary">
+        <a href="/" data-i18n="common.home">Home</a>
+        <a href="/features/" data-i18n="common.features">Features</a>
+        <a href="/download/" data-i18n="common.download">Download</a>
+        <a href="/install/" data-i18n="common.install">Install</a>
         <a class="only-menu" href="/android-tv/">Android TV</a>
-        <a href="/faq/">Questions</a>
+        <a href="/faq/" data-i18n="common.questions">Questions</a>
       </nav>
 
     <div class="nav">
-      <a class="nav-icon" href="https://github.com/dracu-lah/TMPlayer" rel="noopener" aria-label="TMPlayer on GitHub">
+      <a class="nav-icon" href="https://github.com/dracu-lah/TMPlayer" rel="noopener" aria-label="TMPlayer on GitHub" data-i18n-aria-label="common.tmplayer_on_github">
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.9c-2.8.6-3.4-1.3-3.4-1.3-.4-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.4 1.1 3 .8.1-.7.3-1.1.6-1.4-2.2-.2-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.7 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.8-4.6 5 .4.3.7.9.7 1.9v2.8c0 .3.2.6.7.5A10 10 0 0 0 12 2Z"/></svg>
       </a>
-      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark theme">
+      <!-- i18n:picker --><!-- /i18n:picker -->
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark theme" data-i18n-aria-label="common.switch_to_dark_theme">
         <svg class="icon-sun" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
           <circle cx="12" cy="12" r="4.6" fill="currentColor"/>
           <g stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
@@ -130,7 +132,7 @@
           <path fill="currentColor" d="M21 14.2A9 9 0 0 1 9.8 3 9 9 0 1 0 21 14.2Z"/>
         </svg>
       </button>
-      <button class="menu-btn" id="menu-btn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav">
+      <button class="menu-btn" id="menu-btn" type="button" aria-label="Menu" aria-expanded="false" aria-controls="site-nav" data-i18n-aria-label="common.menu">
         <svg class="icon-menu" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M4 7a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1Zm0 5a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1Zm0 5a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1Z"/></svg>
         <svg class="icon-close" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M18.3 7.1 13.4 12l4.9 4.9a1 1 0 0 1-1.4 1.4L12 13.4l-4.9 4.9a1 1 0 0 1-1.4-1.4l4.9-4.9-4.9-4.9a1 1 0 0 1 1.4-1.4l4.9 4.9 4.9-4.9a1 1 0 0 1 1.4 1.4Z"/></svg>
       </button>
@@ -142,14 +144,14 @@
 
   <section class="page-head">
     <div class="wrap page-head-wrap">
-      <p class="crumbs"><a href="/">Home</a><span aria-hidden="true">/</span>Formats</p>
-      <h1>The formats it <em>plays</em></h1>
-      <p class="page-lede">On Android TV and phones, TMPlayer plays through Media3 with FFmpeg decoders built in. On Windows and Linux it plays through mpv, which opens nearly anything.</p>
-      <nav class="platform-jump" aria-label="On this page">
-        <a href="#listed">Which files show up</a>
-        <a href="#android">Android TV and phones</a>
-        <a href="#desktop">Windows and Linux</a>
-        <a href="#subtitles">Subtitle files</a>
+      <p class="crumbs" data-i18n="formats.formats"><a href="/">Home</a><span aria-hidden="true">/</span>Formats</p>
+      <h1 data-i18n="formats.the_formats_it">The formats it <em>plays</em></h1>
+      <p class="page-lede" data-i18n="formats.on_android_tv_and_phones">On Android TV and phones, TMPlayer plays through Media3 with FFmpeg decoders built in. On Windows and Linux it plays through mpv, which opens nearly anything.</p>
+      <nav class="platform-jump" aria-label="On this page" data-i18n-aria-label="fire_tv.on_this_page">
+        <a href="#listed" data-i18n="formats.which_files_show_up">Which files show up</a>
+        <a href="#android" data-i18n="formats.android_tv_and_phones">Android TV and phones</a>
+        <a href="#desktop" data-i18n="formats.windows_and_linux">Windows and Linux</a>
+        <a href="#subtitles" data-i18n="formats.subtitle_files">Subtitle files</a>
       </nav>
     </div>
   </section>
@@ -160,23 +162,23 @@
     <div class="wrap">
       <div class="section-head" data-reveal>
         <div class="section-title">
-          <h2 id="listed-h">Which files show up in a chat</h2>
-          <p class="section-sub">The same on every platform.</p>
+          <h2 id="listed-h" data-i18n="formats.which_files_show_up_in">Which files show up in a chat</h2>
+          <p class="section-sub" data-i18n="formats.the_same_on_every_platform">The same on every platform.</p>
         </div>
       </div>
 
       <div class="card-grid card-grid-3" data-reveal>
         <div class="card">
-          <h3>Videos</h3>
-          <p>Anything Telegram sent as a video, whatever the format.</p>
+          <h3 data-i18n="formats.videos">Videos</h3>
+          <p data-i18n="formats.anything_telegram_sent_as_a">Anything Telegram sent as a video, whatever the format.</p>
         </div>
         <div class="card">
-          <h3>Files sent as documents</h3>
-          <p>Films are often sent as files to keep their quality and audio tracks. They show up when Telegram calls them video, or when the name ends in MKV, MP4, M4V, AVI, MOV, WebM, TS, M2TS, MTS, FLV, WMV, MPG, MPEG, 3GP, OGV, DivX, VOB, ASF or RMVB.</p>
+          <h3 data-i18n="formats.files_sent_as_documents">Files sent as documents</h3>
+          <p data-i18n="formats.films_are_often_sent_as">Films are often sent as files to keep their quality and audio tracks. They show up when Telegram calls them video, or when the name ends in MKV, MP4, M4V, AVI, MOV, WebM, TS, M2TS, MTS, FLV, WMV, MPG, MPEG, 3GP, OGV, DivX, VOB, ASF or RMVB.</p>
         </div>
         <div class="card">
-          <h3>Silent clips</h3>
-          <p>The short looping videos Telegram calls GIFs, which are really MP4 files.</p>
+          <h3 data-i18n="formats.silent_clips">Silent clips</h3>
+          <p data-i18n="formats.the_short_looping_videos_telegram">The short looping videos Telegram calls GIFs, which are really MP4 files.</p>
         </div>
       </div>
     </div>
@@ -188,32 +190,32 @@
     <div class="wrap">
       <div class="section-head" data-reveal>
         <div class="section-title">
-          <h2 id="android-h">On Android TV and phones</h2>
-          <p class="section-sub">The device's own decoders come first, because they are the fastest. FFmpeg decoders inside the app take over for what the device has no chip for, which is most often DTS and TrueHD audio.</p>
+          <h2 id="android-h" data-i18n="formats.on_android_tv_and_phones_2">On Android TV and phones</h2>
+          <p class="section-sub" data-i18n="formats.the_device_s_own_decoders">The device's own decoders come first, because they are the fastest. FFmpeg decoders inside the app take over for what the device has no chip for, which is most often DTS and TrueHD audio.</p>
         </div>
       </div>
 
       <div class="keys-wrap" data-reveal>
         <table class="keys">
           <thead>
-            <tr><th scope="col">What</th><th scope="col">Plays</th></tr>
+            <tr><th scope="col" data-i18n="formats.what">What</th><th scope="col" data-i18n="formats.plays">Plays</th></tr>
           </thead>
           <tbody>
-            <tr><th scope="row">Containers</th><td>MKV, WebM, MP4, M4V, MOV, TS, M2TS, MTS, AVI, FLV, MPG, MPEG, 3GP. VOB and DivX files usually play too.</td></tr>
-            <tr><th scope="row">Video: H.264, HEVC (H.265), VP9, VP8, MPEG-2</th><td>Yes. In hardware where the device can, in software through FFmpeg where it cannot. Software decoding is slower, so a 4K file wants a device that decodes it in hardware.</td></tr>
-            <tr><th scope="row">Video: AV1, MPEG-4 Part 2 (Xvid, DivX)</th><td>Through the device's own decoder. Newer TVs and phones handle AV1 well; older sticks may not.</td></tr>
-            <tr><th scope="row">Audio: AAC, MP3, Opus, Vorbis, FLAC, ALAC, PCM</th><td>Yes.</td></tr>
-            <tr><th scope="row">Audio: Dolby Digital, Dolby Digital Plus (E-AC-3, Atmos included), DTS, DTS-HD, TrueHD</th><td>Sent as it is to a soundbar or receiver that takes it, otherwise decoded in the app. <em>Downmix to stereo</em> in Settings folds surround into two speakers.</td></tr>
-            <tr><th scope="row">Several audio tracks</th><td>Yes, switched during playback, and remembered for the rest of a series.</td></tr>
-            <tr><th scope="row">Subtitles inside the file</th><td>SRT, ASS and SSA (with simplified styling), WebVTT, and image subtitles such as PGS and VobSub.</td></tr>
-            <tr><th scope="row">HDR</th><td>Handed to the device's decoder and screen, so it shows in HDR where both support it.</td></tr>
-            <tr><th scope="row">Frame rate matching</th><td>On Android TV 12 and later with <em>Match content frame rate</em> set to <em>Always</em>, the screen switches to the film's own rate, so 24 fps plays at 24 Hz. Elsewhere it switches only when that needs no blank screen.</td></tr>
+            <tr><th scope="row" data-i18n="formats.containers">Containers</th><td data-i18n="formats.mkv_webm_mp4_m4v_mov">MKV, WebM, MP4, M4V, MOV, TS, M2TS, MTS, AVI, FLV, MPG, MPEG, 3GP. VOB and DivX files usually play too.</td></tr>
+            <tr><th scope="row" data-i18n="formats.video_h_264_hevc_h">Video: H.264, HEVC (H.265), VP9, VP8, MPEG-2</th><td data-i18n="formats.yes_in_hardware_where_the">Yes. In hardware where the device can, in software through FFmpeg where it cannot. Software decoding is slower, so a 4K file wants a device that decodes it in hardware.</td></tr>
+            <tr><th scope="row" data-i18n="formats.video_av1_mpeg_4_part">Video: AV1, MPEG-4 Part 2 (Xvid, DivX)</th><td data-i18n="formats.through_the_device_s_own">Through the device's own decoder. Newer TVs and phones handle AV1 well; older sticks may not.</td></tr>
+            <tr><th scope="row" data-i18n="formats.audio_aac_mp3_opus_vorbis">Audio: AAC, MP3, Opus, Vorbis, FLAC, ALAC, PCM</th><td data-i18n="formats.yes">Yes.</td></tr>
+            <tr><th scope="row" data-i18n="formats.audio_dolby_digital_dolby_digital">Audio: Dolby Digital, Dolby Digital Plus (E-AC-3, Atmos included), DTS, DTS-HD, TrueHD</th><td data-i18n="formats.sent_as_it_is_to">Sent as it is to a soundbar or receiver that takes it, otherwise decoded in the app. <em>Downmix to stereo</em> in Settings folds surround into two speakers.</td></tr>
+            <tr><th scope="row" data-i18n="formats.several_audio_tracks">Several audio tracks</th><td data-i18n="formats.yes_switched_during_playback_and">Yes, switched during playback, and remembered for the rest of a series.</td></tr>
+            <tr><th scope="row" data-i18n="formats.subtitles_inside_the_file">Subtitles inside the file</th><td data-i18n="formats.srt_ass_and_ssa_with">SRT, ASS and SSA (with simplified styling), WebVTT, and image subtitles such as PGS and VobSub.</td></tr>
+            <tr><th scope="row">HDR</th><td data-i18n="formats.handed_to_the_device_s">Handed to the device's decoder and screen, so it shows in HDR where both support it.</td></tr>
+            <tr><th scope="row" data-i18n="formats.frame_rate_matching">Frame rate matching</th><td data-i18n="formats.on_android_tv_12_and">On Android TV 12 and later with <em>Match content frame rate</em> set to <em>Always</em>, the screen switches to the film's own rate, so 24 fps plays at 24 Hz. Elsewhere it switches only when that needs no blank screen.</td></tr>
           </tbody>
         </table>
       </div>
 
       <div class="callout" data-reveal>
-        <p><strong>Not on Android:</strong> WMV and ASF, RealMedia (RMVB) and Ogg video (OGV). They still show up in the chat. When one will not play, the player offers <em>Open in another app</em>, which hands the downloaded file to a player such as VLC or MX Player.</p>
+        <p data-i18n="formats.wmv_and_asf_realmedia_rmvb"><strong>Not on Android:</strong> WMV and ASF, RealMedia (RMVB) and Ogg video (OGV). They still show up in the chat. When one will not play, the player offers <em>Open in another app</em>, which hands the downloaded file to a player such as VLC or MX Player.</p>
       </div>
     </div>
   </section>
@@ -224,22 +226,22 @@
     <div class="wrap">
       <div class="section-head" data-reveal>
         <div class="section-title">
-          <h2 id="desktop-h">On Windows and Linux</h2>
-          <p class="section-sub">The desktop app plays through mpv, bundled inside it. Nothing else to install.</p>
+          <h2 id="desktop-h" data-i18n="features.on_windows_and_linux">On Windows and Linux</h2>
+          <p class="section-sub" data-i18n="formats.the_desktop_app_plays_through">The desktop app plays through mpv, bundled inside it. Nothing else to install.</p>
         </div>
       </div>
 
       <div class="keys-wrap" data-reveal>
         <table class="keys">
           <thead>
-            <tr><th scope="col">What</th><th scope="col">Plays</th></tr>
+            <tr><th scope="col" data-i18n="formats.what">What</th><th scope="col" data-i18n="formats.plays">Plays</th></tr>
           </thead>
           <tbody>
-            <tr><th scope="row">Containers</th><td>Every one in the list above, WMV, ASF, RMVB and OGV included.</td></tr>
-            <tr><th scope="row">Video</th><td>H.264, HEVC, VP9, AV1, MPEG-2, MPEG-4 Part 2 and the older formats mpv reads. Hardware decoding where it is safe, with <em>Force software decoding</em> in Settings for a driver that misbehaves.</td></tr>
-            <tr><th scope="row">Audio</th><td>AAC, MP3, Opus, Vorbis, FLAC, Dolby Digital and Digital Plus, DTS, DTS-HD and TrueHD.</td></tr>
-            <tr><th scope="row">Subtitles inside the file</th><td>Text and image subtitles alike, ASS with its full styling.</td></tr>
-            <tr><th scope="row">Several audio tracks</th><td>Yes, from the right click menu or the keyboard.</td></tr>
+            <tr><th scope="row" data-i18n="formats.containers">Containers</th><td data-i18n="formats.every_one_in_the_list">Every one in the list above, WMV, ASF, RMVB and OGV included.</td></tr>
+            <tr><th scope="row" data-i18n="formats.video">Video</th><td data-i18n="formats.h_264_hevc_vp9_av1">H.264, HEVC, VP9, AV1, MPEG-2, MPEG-4 Part 2 and the older formats mpv reads. Hardware decoding where it is safe, with <em>Force software decoding</em> in Settings for a driver that misbehaves.</td></tr>
+            <tr><th scope="row" data-i18n="formats.audio">Audio</th><td data-i18n="formats.aac_mp3_opus_vorbis_flac">AAC, MP3, Opus, Vorbis, FLAC, Dolby Digital and Digital Plus, DTS, DTS-HD and TrueHD.</td></tr>
+            <tr><th scope="row" data-i18n="formats.subtitles_inside_the_file">Subtitles inside the file</th><td data-i18n="formats.text_and_image_subtitles_alike">Text and image subtitles alike, ASS with its full styling.</td></tr>
+            <tr><th scope="row" data-i18n="formats.several_audio_tracks">Several audio tracks</th><td data-i18n="formats.yes_from_the_right_click">Yes, from the right click menu or the keyboard.</td></tr>
           </tbody>
         </table>
       </div>
@@ -252,59 +254,66 @@
     <div class="wrap">
       <div class="section-head" data-reveal>
         <div class="section-title">
-          <h2 id="subtitles-h">Subtitle files of your own</h2>
-          <p class="section-sub">For a video whose subtitles are not inside it.</p>
+          <h2 id="subtitles-h" data-i18n="formats.subtitle_files_of_your_own">Subtitle files of your own</h2>
+          <p class="section-sub" data-i18n="formats.for_a_video_whose_subtitles">For a video whose subtitles are not inside it.</p>
         </div>
       </div>
 
       <div class="two-col" data-reveal>
         <div class="panel panel-prose">
-          <h3>On a phone</h3>
-          <p>In the player's menu, <em>Load a subtitle file</em> opens the phone's file picker. It takes <code>.srt</code>, <code>.ass</code>, <code>.ssa</code>, <code>.vtt</code> and text <code>.sub</code> (MicroDVD) files. Older files in a Windows code page keep their accents.</p>
+          <h3 data-i18n="formats.on_a_phone">On a phone</h3>
+          <p data-i18n="formats.in_the_player_s_menu">In the player's menu, <em>Load a subtitle file</em> opens the phone's file picker. It takes <code>.srt</code>, <code>.ass</code>, <code>.ssa</code>, <code>.vtt</code> and text <code>.sub</code> (MicroDVD) files. Older files in a Windows code page keep their accents.</p>
         </div>
         <div class="panel panel-prose">
-          <h3>On Windows and Linux</h3>
-          <p>Drop the file on the picture while the video plays. The same formats work: <code>.srt</code>, <code>.ass</code>, <code>.ssa</code>, <code>.vtt</code> and <code>.sub</code>.</p>
+          <h3 data-i18n="features.on_windows_and_linux">On Windows and Linux</h3>
+          <p data-i18n="formats.drop_the_file_on_the">Drop the file on the picture while the video plays. The same formats work: <code>.srt</code>, <code>.ass</code>, <code>.ssa</code>, <code>.vtt</code> and <code>.sub</code>.</p>
         </div>
       </div>
-      <p class="muted small section-note" data-reveal>Picture-based VobSub <code>.sub</code> files cannot be loaded this way, though the same subtitles inside an MKV play fine.</p>
+      <p class="muted small section-note" data-reveal data-i18n="formats.picture_based_vobsub_files_cannot">Picture-based VobSub <code>.sub</code> files cannot be loaded this way, though the same subtitles inside an MKV play fine.</p>
     </div>
   </section>
 
 </main>
 
-<button class="to-top" id="to-top" type="button" aria-label="Back to top">
+<button class="to-top" id="to-top" type="button" aria-label="Back to top" data-i18n-aria-label="common.back_to_top">
   <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 4.5a1 1 0 0 1 .71.29l6 6a1 1 0 0 1-1.42 1.42L13 7.91V19a1 1 0 1 1-2 0V7.91l-4.29 4.3a1 1 0 1 1-1.42-1.42l6-6A1 1 0 0 1 12 4.5Z"/></svg>
 </button>
 
 <footer class="site-footer">
   <div class="wrap footer-inner">
     <p class="footer-brand">TMPlayer</p>
-    <nav class="footer-links" aria-label="Footer">
-      <a href="/">Home</a>
-      <a href="/features/">Features</a>
-      <a href="/download/">Download</a>
-      <a href="/install/">Install</a>
+    <nav class="footer-links" aria-label="Footer" data-i18n-aria-label="common.footer">
+      <a href="/" data-i18n="common.home">Home</a>
+      <a href="/features/" data-i18n="common.features">Features</a>
+      <a href="/download/" data-i18n="common.download">Download</a>
+      <a href="/install/" data-i18n="common.install">Install</a>
       <a href="/android-tv/">Android TV</a>
-      <a href="/faq/">Questions</a>
-      <a href="/changelog/">Changelog</a>
+      <a href="/faq/" data-i18n="common.questions">Questions</a>
+      <a href="/changelog/" data-i18n="common.changelog">Changelog</a>
       <a href="/fire-tv/">Fire TV</a>
-      <a href="/formats/">Formats</a>
-      <a href="/security/">Security</a>
-      <a href="https://github.com/dracu-lah/TMPlayer" rel="noopener">Source</a>
-      <a href="/privacy">Privacy</a>
-      <a href="/legal">Lawful use</a>
+      <a href="/formats/" data-i18n="common.formats">Formats</a>
+      <a href="/translate/" data-i18n="common.translate">Translate</a>
+      <a href="/security/" data-i18n="common.security">Security</a>
+      <a href="https://github.com/dracu-lah/TMPlayer" rel="noopener" data-i18n="common.source">Source</a>
+      <a href="/privacy" data-i18n="common.privacy">Privacy</a>
+      <a href="/legal" data-i18n="common.lawful_use">Lawful use</a>
       <a href="https://nevil.dev" rel="noopener">nevil.dev</a>
     </nav>
-    <nav class="footer-links footer-community" aria-label="Community">
-      <a href="https://t.me/tmplayerapp" rel="noopener">Telegram channel</a>
+    <nav class="footer-links footer-guides" aria-label="Guides" data-i18n-aria-label="common.guides">
+      <a href="/guides/telegram-videos-on-android-tv/" data-i18n="common.telegram_on_android_tv">Telegram on Android TV</a>
+      <a href="/guides/telegram-videos-on-fire-tv/" data-i18n="common.telegram_on_fire_tv">Telegram on Fire TV</a>
+      <a href="/guides/telegram-on-tv-without-casting/" data-i18n="common.telegram_without_casting">Telegram without casting</a>
+    </nav>
+    <nav class="footer-links footer-community" aria-label="Community" data-i18n-aria-label="common.community">
+      <a href="https://t.me/tmplayerapp" rel="noopener" data-i18n="home.telegram_channel">Telegram channel</a>
       <a href="https://t.me/tmplayer_chat" rel="noopener">Telegram group</a>
-      <a href="https://github.com/dracu-lah/TMPlayer/discussions" rel="noopener">Discussions</a>
-      <a href="https://github.com/sponsors/dracu-lah" rel="noopener">Sponsor</a>
-      <a href="https://buymeacoffee.com/nevil.dev" rel="noopener">Buy me a coffee</a>
+      <a href="https://github.com/dracu-lah/TMPlayer/discussions" rel="noopener" data-i18n="common.discussions">Discussions</a>
+      <a href="https://github.com/sponsors/dracu-lah" rel="noopener" data-i18n="common.sponsor">Sponsor</a>
+      <a href="https://buymeacoffee.com/nevil.dev" rel="noopener" data-i18n="home.buy_me_a_coffee">Buy me a coffee</a>
       <a href="mailto:hello@tmplayer.org">hello@tmplayer.org</a>
     </nav>
-    <p class="footer-legal muted small">GPL-3.0, &copy; 2026 dracu-lah. An unofficial Telegram video player, not affiliated with Telegram FZ-LLC. TMPlayer does not provide media: use it only with content you own or are authorized to access. Player mark via <a href="https://www.svgrepo.com" rel="noopener">SVG Repo</a>, set in Poppins under the SIL Open Font License and served from this domain.</p>
+    <!-- i18n:footer --><!-- /i18n:footer -->
+    <p class="footer-legal muted small" data-i18n="common.gpl_3_0_2026_dracu">GPL-3.0, &copy; 2026 dracu-lah. An unofficial Telegram video player, not affiliated with Telegram FZ-LLC. TMPlayer does not provide media: use it only with content you own or are authorized to access. Player mark via <a href="https://www.svgrepo.com" rel="noopener">SVG Repo</a>, set in Poppins under the SIL Open Font License and served from this domain.</p>
   </div>
 </footer>
 

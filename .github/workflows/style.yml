@@ -31,3 +31,17 @@ jobs:
           fi
           echo "Clean: no em or en dashes in tracked files."
 
+  site-i18n:
+    name: Site translations are current
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # The localized site under site/<lang>/, the English catalog site/i18n/en.json, the
+      # language picker and the sitemap alternates are all generated from the English pages by
+      # scripts/build-site-i18n.py and committed. This fails when a page, app.js or a catalog was
+      # edited without running it, or when a page carries text with no data-i18n key, so stale
+      # or half-English output never reaches the site. The script needs only the standard library.
+      - name: Check the generated site
+        run: python3 scripts/build-site-i18n.py --check

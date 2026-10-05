@@ -3,5 +3,5 @@
   "dir": "site/i18n",
   "max_parallel_locales": 4,
   "batch_size": 25,
-  "whitelist": ["TMPlayer","Telegram","Android TV","Android","TDLib","mpv","libmpv","ExoPlayer","Flatpak","AppImage","GitHub","Windows","Linux","macOS","MSI","APK","AUR","Wi-Fi","QR"]
+  "whitelist": ["TMPlayer","Telegram Desktop","Telegram","Android TV","Google TV","Fire TV","Fire OS","Vega OS","Android","TDLib","mpv","libmpv","ExoPlayer","Flatpak","AppImage","GitHub","Windows","Linux","macOS","MSI","APK","AUR","Wi-Fi","QR","Send files to TV","Mi TV Stick","NVIDIA Shield","Chromecast","Obtainium","Downloader","AFTVnews","TVGram","Infoek.cz","nevil.dev","dracu-lah","SVG Repo","Poppins","Vercel","adb"]
 }

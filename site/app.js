@@ -8,6 +8,34 @@
    The markup therefore links every row to the releases/latest page, which
    always works, and this script swaps in the file itself once it has read the
    release list. */
+
+/* Text this script writes, in the page's language.
+
+   Every sentence below goes through tmT(key, english, values). The
+   English stays here as the source: scripts/build-site-i18n.py reads these calls
+   into site/i18n/en.json as js.<key>, and a translated page carries its strings
+   in a <script id="tm-strings"> block, so this file is the same for every
+   language and nothing extra is fetched. A key missing from that block falls
+   back to the English beside it. {name} placeholders are filled in last, so a
+   translation can move them wherever its grammar wants them. */
+var tmLocale = (document.documentElement.getAttribute('lang') || 'en').replace(/^en$/, 'en-GB');
+var tmT = (function () {
+  var strings = {};
+  try {
+    var block = document.getElementById('tm-strings');
+    if (block) { strings = JSON.parse(block.textContent) || {}; }
+  } catch (e) {}
+  return function (key, english, vars) {
+    var text = Object.prototype.hasOwnProperty.call(strings, key) ? strings[key] : english;
+    if (vars) {
+      text = text.replace(/\{(\w+)\}/g, function (all, name) {
+        return Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : all;
+      });
+    }
+    return text;
+  };
+})();
+
 (function () {
   'use strict';
 
@@ -25,18 +53,18 @@
      releases list still names the files older releases had (x86_64 and per-ABI
      APKs, the Windows zip, the deb, the rpm and the Flatpak). */
   var KINDS = [
-    { id: 'apk-universal', label: 'Universal APK', test: /universal\.apk$/i },
+    { id: 'apk-universal', label: tmT('kind_universal_apk', 'Universal APK'), test: /universal\.apk$/i },
     { id: 'apk-arm64', label: 'arm64-v8a', test: /arm64-v8a\.apk$/i },
     { id: 'apk-armv7', label: 'armeabi-v7a', test: /armeabi-v7a\.apk$/i },
     { id: 'apk-x86_64', label: 'x86_64', test: /x86_64\.apk$/i },
-    { id: 'win-msi', label: 'Windows installer', test: /windows-x64\.msi$/i },
-    { id: 'win-zip', label: 'Windows zip', test: /windows-x64-portable\.zip$/i },
+    { id: 'win-msi', label: tmT('kind_windows_installer', 'Windows installer'), test: /windows-x64\.msi$/i },
+    { id: 'win-zip', label: tmT('kind_windows_zip', 'Windows zip'), test: /windows-x64-portable\.zip$/i },
     { id: 'linux-deb', label: 'deb', test: /_amd64\.deb$/i },
     { id: 'linux-rpm', label: 'rpm', test: /\.x86_64\.rpm$/i },
     { id: 'linux-appimage', label: 'AppImage', test: /\.appimage$/i },
     { id: 'linux-flatpak', label: 'Flatpak', test: /\.flatpak$/i },
-    { id: 'linux-tar', label: 'Linux tarball', test: /linux-x64\.tar\.(gz|xz)$/i },
-    { id: 'sums', label: 'Checksums', test: /^sha256sums/i, quiet: true }
+    { id: 'linux-tar', label: tmT('kind_linux_tarball', 'Linux tarball'), test: /linux-x64\.tar\.(gz|xz)$/i },
+    { id: 'sums', label: tmT('kind_checksums', 'Checksums'), test: /^sha256sums/i, quiet: true }
   ];
 
   var NAMES = {
@@ -120,8 +148,8 @@
     if (!document.getElementById('platforms')) { return; }
     if (os === 'mac' || os === 'ios') {
       el.osNote.textContent = os === 'mac'
-        ? 'There is no macOS version yet: it is coming later. Everything below is for Android, Windows and Linux.'
-        : 'There is no iPhone or iPad version. Everything below is for Android, Windows and Linux.';
+        ? tmT('os_note_mac', 'There is no macOS version yet: it is coming later. Everything below is for Android, Windows and Linux.')
+        : tmT('os_note_ios', 'There is no iPhone or iPad version. Everything below is for Android, Windows and Linux.');
       el.osNote.hidden = false;
       return;
     }
@@ -134,7 +162,7 @@
     var row = primaryRow(os);
     if (row) { row.className += ' pick'; }
     el.osBtn.href = '#' + os;
-    el.osLabel.textContent = 'Download for ' + NAMES[os];
+    el.osLabel.textContent = tmT('download_for', 'Download for {os}', { os: NAMES[os] });
     el.osBtn.hidden = false;
   }
 
@@ -166,7 +194,10 @@
      than in a dashboard: it is public data either way. */
   function formatCount(n) {
     if (typeof n !== 'number' || !isFinite(n) || n < 0) { return ''; }
-    return n.toLocaleString('en-GB') + (n === 1 ? ' download' : ' downloads');
+    var number = n.toLocaleString(tmLocale);
+    return n === 1
+      ? tmT('downloads_one', '{count} download', { count: number })
+      : tmT('downloads_other', '{count} downloads', { count: number });
   }
 
   function formatDate(iso) {
@@ -174,7 +205,7 @@
     var d = new Date(iso);
     if (isNaN(d.getTime())) { return ''; }
     try {
-      return new Intl.DateTimeFormat('en-GB', {
+      return new Intl.DateTimeFormat(tmLocale, {
         day: 'numeric', month: 'long', year: 'numeric'
       }).format(d);
     } catch (e) {
@@ -252,17 +283,17 @@
       var files = row.querySelectorAll('[data-file]');
       if (!asset) {
         row.className += ' missing';
-        if (size) { size.textContent = 'Not in ' + tag; }
+        if (size) { size.textContent = tmT('not_in_release', 'Not in {version}', { version: tag }); }
         if (dl) {
           dl.href = release.html_url || LATEST_PAGE;
           var label = dl.querySelector('span');
-          if (label) { label.textContent = 'On GitHub'; }
+          if (label) { label.textContent = tmT('on_github', 'On GitHub'); }
         }
         return;
       }
       if (dl) {
         dl.href = asset.browser_download_url;
-        dl.setAttribute('aria-label', 'Download ' + asset.name);
+        dl.setAttribute('aria-label', tmT('download_file', 'Download {file}', { file: asset.name }));
       }
       if (size) {
         var bits = [formatSize(asset.size)];
@@ -303,8 +334,8 @@
       el.osBtn.href = asset.browser_download_url;
       el.heroBtn.href = asset.browser_download_url;
       var what = kindOf(asset).label;
-      el.heroLabel.textContent = 'Download ' + tag + ' for ' + NAMES[os];
-      el.osLabel.textContent = 'Download ' + tag + ' for ' + NAMES[os];
+      el.heroLabel.textContent = tmT('download_version_for', 'Download {version} for {os}', { version: tag, os: NAMES[os] });
+      el.osLabel.textContent = el.heroLabel.textContent;
       el.osBtn.title = asset.name;
       el.heroBtn.title = asset.name + ' (' + what + ')';
       return;
@@ -313,13 +344,13 @@
     // No guess, or a guess this release has no file for: the download page.
     el.heroBtn.href = '/download/';
     el.heroLabel.textContent = os === 'mac' || os === 'ios'
-      ? 'Download ' + tag + ' for Android, Windows or Linux'
-      : 'Download ' + tag;
+      ? tmT('download_version_other_os', 'Download {version} for Android, Windows or Linux', { version: tag })
+      : tmT('download_version', 'Download {version}', { version: tag });
   }
 
   function renderLatest(release) {
     settled();
-    var tag = release.tag_name || release.name || 'Latest';
+    var tag = release.tag_name || release.name || tmT('latest', 'Latest');
     el.version.textContent = tag;
     var when = formatDate(release.published_at || release.created_at);
     var total = releaseDownloads(release);
@@ -327,8 +358,8 @@
 
     if (appAssets(release).length === 0) {
       showStatus('error', [
-        { text: 'This release has no files attached yet. The build may still be running.' },
-        { link: { href: release.html_url || RELEASES_PAGE, text: 'Open ' + tag + ' on GitHub' } }
+        { text: tmT('no_files_yet', 'This release has no files attached yet. The build may still be running.') },
+        { link: { href: release.html_url || RELEASES_PAGE, text: tmT('open_on_github', 'Open {version} on GitHub', { version: tag }) } }
       ]);
     } else {
       el.status.hidden = true;
@@ -353,7 +384,7 @@
       var li = make('li', 'prev-item');
 
       var head = make('div', 'prev-head');
-      head.appendChild(link(release.html_url || RELEASES_PAGE, 'prev-tag', release.tag_name || release.name || 'Release'));
+      head.appendChild(link(release.html_url || RELEASES_PAGE, 'prev-tag', release.tag_name || release.name || tmT('release', 'Release')));
       var when = formatDate(release.published_at || release.created_at);
       var total = releaseDownloads(release);
       head.appendChild(make('span', 'prev-date', total ? when + ', ' + formatCount(total) : when));
@@ -365,7 +396,7 @@
         assets.forEach(function (asset) {
           var item = make('li');
           var a = link(asset.browser_download_url, null, kindOf(asset).label);
-          a.setAttribute('aria-label', 'Download ' + asset.name);
+          a.setAttribute('aria-label', tmT('download_file', 'Download {file}', { file: asset.name }));
           item.appendChild(a);
           list.appendChild(item);
         });
@@ -380,39 +411,41 @@
 
   function fail(reason) {
     settled();
-    el.version.textContent = 'Unavailable';
+    el.version.textContent = tmT('unavailable', 'Unavailable');
     el.date.textContent = '';
 
+    // One sentence with the link inside it, so a translation can put the link where it reads.
+    var around = tmT('fail_downloads', 'The downloads are still there: every button below opens {link}, where the files are listed by name.').split('{link}');
     showStatus('error', [
       { text: reason },
       {
-        text: 'The downloads are still there: every button below opens ',
-        link: { href: LATEST_PAGE, text: 'the latest release on GitHub' },
-        after: ', where the files are listed by name.'
+        text: around[0],
+        link: { href: LATEST_PAGE, text: tmT('fail_link', 'the latest release on GitHub') },
+        after: around[1] || ''
       }
     ]);
 
     el.heroBtn.href = '/download/';
-    el.heroLabel.textContent = 'Go to the downloads';
+    el.heroLabel.textContent = tmT('go_to_downloads', 'Go to the downloads');
   }
 
   function noReleases() {
     settled();
-    el.version.textContent = 'Not released yet';
+    el.version.textContent = tmT('not_released', 'Not released yet');
     el.date.textContent = '';
     showStatus('error', [
-      { text: 'No release has been published yet. You can still build the app from source.' },
-      { link: { href: 'https://github.com/' + OWNER + '/' + REPO, text: 'Read the build instructions on GitHub' } }
+      { text: tmT('no_release', 'No release has been published yet. You can still build the app from source.') },
+      { link: { href: 'https://github.com/' + OWNER + '/' + REPO, text: tmT('build_instructions', 'Read the build instructions on GitHub') } }
     ]);
     el.heroBtn.href = 'https://github.com/' + OWNER + '/' + REPO;
-    el.heroLabel.textContent = 'View the project on GitHub';
+    el.heroLabel.textContent = tmT('view_project', 'View the project on GitHub');
   }
 
   /* ---------- fetch ---------- */
 
   function load() {
     if (typeof fetch !== 'function') {
-      fail('This browser cannot load the release list.');
+      fail(tmT('fail_browser', 'This browser cannot load the release list.'));
       return;
     }
 
@@ -457,11 +490,11 @@
       clearTimeout(timer);
       var message = String((err && err.message) || '');
       if (message === 'rate-limited') {
-        fail('GitHub is rate-limiting this network. Its public API allows 60 requests an hour per address, and this one has used them up.');
+        fail(tmT('fail_rate', 'GitHub is rate-limiting this network. Its public API allows 60 requests an hour per address, and this one has used them up.'));
       } else if (err && err.name === 'AbortError') {
-        fail('GitHub did not answer in time.');
+        fail(tmT('fail_timeout', 'GitHub did not answer in time.'));
       } else {
-        fail('The release list could not be loaded from GitHub.');
+        fail(tmT('fail_load', 'The release list could not be loaded from GitHub.'));
       }
     });
   }
@@ -514,8 +547,11 @@
 
   function label() {
     var next = showing() === 'dark' ? 'light' : 'dark';
-    button.setAttribute('aria-label', 'Switch to ' + next + ' theme');
-    button.setAttribute('title', 'Switch to ' + next + ' theme');
+    var text = next === 'dark'
+      ? tmT('theme_to_dark', 'Switch to dark theme')
+      : tmT('theme_to_light', 'Switch to light theme');
+    button.setAttribute('aria-label', text);
+    button.setAttribute('title', text);
   }
 
   /* The phone screenshots exist in both of the app's own themes, and the page
@@ -829,7 +865,7 @@
 
   function set(next) {
     button.setAttribute('aria-expanded', next ? 'true' : 'false');
-    button.setAttribute('aria-label', next ? 'Close menu' : 'Menu');
+    button.setAttribute('aria-label', next ? tmT('menu_close', 'Close menu') : tmT('menu', 'Menu'));
     if (next) {
       if (panel.className.indexOf('is-open') === -1) { panel.className += ' is-open'; }
     } else {
@@ -870,4 +906,99 @@
   });
 
   set(false);
+})();
+
+/* Languages: the header picker and the suggestion bar.
+
+   scripts/build-site-i18n.py writes a <script id="tm-langs"> block into every
+   page once a second language is published: the language this page is in, and
+   for every published language its URL for this page and the suggestion in
+   that language's own words. With one language the block is absent and none of
+   this runs.
+
+   Nothing ever redirects. A reader whose browser lists a published language
+   ahead of the one on screen gets a bar offering that language, in it. Following
+   the link, choosing from the picker or pressing "Stay" is remembered, and the
+   bar does not come back. */
+(function () {
+  'use strict';
+
+  var KEY = 'tm-lang';
+  var info = null;
+  try {
+    var block = document.getElementById('tm-langs');
+    if (block) { info = JSON.parse(block.textContent); }
+  } catch (e) {}
+  if (!info || !info.langs || info.langs.length < 2) { return; }
+
+  function remember(code) {
+    try { localStorage.setItem(KEY, code); } catch (e) {}
+  }
+  function remembered() {
+    try { return localStorage.getItem(KEY); } catch (e) { return null; }
+  }
+
+  /* The picker is a <details>: it opens by itself, and this only closes it on
+     a click elsewhere or on Escape, the way a menu is expected to behave. */
+  var picker = document.querySelector('.lang-picker');
+  if (picker) {
+    document.addEventListener('click', function (event) {
+      if (picker.open && !picker.contains(event.target)) { picker.open = false; }
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && picker.open) {
+        picker.open = false;
+        var summary = picker.querySelector('summary');
+        if (summary) { summary.focus(); }
+      }
+    });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('[data-lang-pick]'), function (a) {
+    a.addEventListener('click', function () { remember(a.getAttribute('data-lang-pick')); });
+  });
+
+  if (remembered()) { return; }
+
+  /* The first language in the browser's list that the site has, matched on the
+     language alone, so es-MX finds Español and zh-CN finds 简体中文. */
+  function base(tag) { return String(tag || '').toLowerCase().split('-')[0]; }
+  var wanted = null;
+  var prefs = (navigator.languages && navigator.languages.length)
+    ? navigator.languages : [navigator.language || ''];
+  for (var i = 0; i < prefs.length && !wanted; i++) {
+    for (var j = 0; j < info.langs.length; j++) {
+      if (base(info.langs[j].tag) === base(prefs[i])) { wanted = info.langs[j]; break; }
+    }
+  }
+  if (!wanted || wanted.code === info.current) { return; }
+
+  var bar = document.createElement('div');
+  bar.className = 'lang-suggest';
+  bar.setAttribute('lang', wanted.tag);
+  bar.setAttribute('role', 'region');
+  bar.setAttribute('aria-label', wanted.name);
+  if (wanted.dir) { bar.setAttribute('dir', wanted.dir); }
+
+  var text = document.createElement('p');
+  text.textContent = wanted.suggest + ' ';
+  var go = document.createElement('a');
+  go.href = wanted.href;
+  go.hreflang = wanted.code;
+  go.textContent = wanted.go;
+  go.addEventListener('click', function () { remember(wanted.code); });
+  text.appendChild(go);
+
+  var stay = document.createElement('button');
+  stay.type = 'button';
+  stay.textContent = wanted.dismiss;
+  stay.addEventListener('click', function () {
+    remember(info.current);
+    bar.parentNode.removeChild(bar);
+  });
+
+  bar.appendChild(text);
+  bar.appendChild(stay);
+  var skip = document.querySelector('.skip');
+  document.body.insertBefore(bar, skip ? skip.nextSibling : document.body.firstChild);
 })();

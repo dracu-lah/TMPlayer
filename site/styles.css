@@ -2541,3 +2541,180 @@ a.card:hover .card-go svg { transform: translateX(4px); }
 .changelog-notes h4 { margin: 1.2rem 0 0.5rem; font-size: 1rem; font-weight: 600; color: var(--on-surface); }
 .changelog-notes strong { color: var(--on-surface); font-weight: 600; }
 .changelog-foot { text-align: center; }
+
+/* ---------- Languages ----------
+
+   scripts/build-site-i18n.py renders a copy of the site per language under /es/, /fr/ and the
+   rest, and writes the picker, the footer list and the "Now in" line into every page once a
+   second language is published. Nothing redirects: app.js offers a reader whose browser prefers
+   another published language the suggestion bar below, once, and remembers the answer. */
+
+/* The header picker: a globe with the current code beside it, opening a list of every language
+   in its own name. A <details>, so it opens and closes with no script at all. */
+.lang-picker { position: relative; flex: none; margin: 0 0 0 4px; }
+.lang-picker-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 46px;
+  padding: 0 12px 0 11px;
+  border-radius: var(--shape-full);
+  background: var(--surface-container);
+  color: var(--on-surface-variant);
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  transition: background-color 0.2s var(--ease-standard), color 0.2s var(--ease-standard);
+}
+.lang-picker-btn::-webkit-details-marker { display: none; }
+.lang-picker-btn:hover,
+.lang-picker[open] .lang-picker-btn { background: var(--surface-container-high); color: var(--on-surface); }
+.lang-picker-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  inset-inline-end: 0;
+  z-index: 45;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(9.5em, 1fr));
+  gap: 2px;
+  width: max-content;
+  max-width: calc(100vw - 2 * var(--gutter));
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-l);
+  background: var(--surface-container-low);
+  box-shadow: var(--shadow-2);
+}
+.lang-picker-menu a {
+  display: block;
+  padding: 10px 14px;
+  border-radius: var(--shape-s);
+  color: var(--on-surface);
+  font-size: 0.98rem;
+  white-space: nowrap;
+}
+.lang-picker-menu a:hover { background: var(--surface-container); text-decoration: none; }
+.lang-picker-menu a[aria-current] { background: var(--primary-container); color: var(--on-primary-container); font-weight: 600; }
+@media (max-width: 480px) {
+  .lang-picker-btn { padding: 0 11px; }
+  .lang-picker-code { display: none; }
+  /* Four round buttons and the name do not fit beside each other at phone width; the repository
+     is one tap away in the footer, so it gives up its place to the picker. */
+  .nav:has(.lang-picker) .nav-icon { display: none; }
+  /* The list hangs from the header bar rather than from the button, full width under it. */
+  .lang-picker { position: static; }
+  .lang-picker-menu { top: 100%; inset-inline: var(--gutter); width: auto; max-width: none; }
+}
+
+/* The suggestion: a slim bar above the header, in the suggested language, with a link and a way
+   to say no. app.js fills it in and takes it away; with no script it never appears. */
+.lang-suggest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 14px;
+  padding: 10px var(--gutter);
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  font-size: 0.94rem;
+  text-align: center;
+}
+.lang-suggest[hidden] { display: none; }
+.lang-suggest p { margin: 0; }
+.lang-suggest a { color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.lang-suggest button {
+  padding: 6px 12px;
+  border: 1px solid currentColor;
+  border-radius: var(--shape-full);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.86rem;
+  cursor: pointer;
+  opacity: 0.85;
+}
+.lang-suggest button:hover { opacity: 1; }
+
+/* "Now in ..." under the hero, and the footer's list of languages. */
+.hero-langs {
+  margin: 12px auto 0;
+  max-width: 60ch;
+  color: var(--on-surface-variant);
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+.hero-langs a { white-space: nowrap; }
+.footer-langs a { font-size: 0.9rem; }
+
+/* Fonts. Poppins is served from this domain as a Latin subset, so it covers English, Spanish,
+   Portuguese, French, German, Italian and Indonesian. Turkish, Vietnamese and the Cyrillic
+   languages would mix two fonts inside one word, so they skip it. The other scripts get the
+   faces every system already has for them: Noto on Android and Linux, the system's own faces on
+   Windows and Apple devices. Nothing extra is downloaded. Headings set a tight negative tracking
+   for Poppins, which breaks Arabic joining and crowds the other scripts, so those reset it. */
+:root:lang(tr), :root:lang(vi), :root:lang(ru), :root:lang(uk) {
+  --sans: "Noto Sans", Roboto, "Segoe UI", "Helvetica Neue", system-ui, Arial, sans-serif;
+}
+:root:lang(ar) {
+  --sans: "Noto Sans Arabic", "Segoe UI", "Geeza Pro", Tahoma, "Noto Sans", Roboto, system-ui, sans-serif;
+}
+:root:lang(zh) {
+  --sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", "Poppins", system-ui, sans-serif;
+}
+:root:lang(ja) {
+  --sans: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", Meiryo, "Noto Sans CJK JP", "Noto Sans JP", "Poppins", system-ui, sans-serif;
+}
+:root:lang(ko) {
+  --sans: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans CJK KR", "Noto Sans KR", "Poppins", system-ui, sans-serif;
+}
+:root:lang(hi) {
+  --sans: "Poppins", "Noto Sans Devanagari", "Nirmala UI", "Kohinoor Devanagari", Mangal, system-ui, sans-serif;
+}
+:root:lang(ml) {
+  --sans: "Poppins", "Noto Sans Malayalam", "Nirmala UI", "Malayalam Sangam MN", Kartika, system-ui, sans-serif;
+}
+:root:lang(ar) *, :root:lang(zh) *, :root:lang(ja) *, :root:lang(ko) *,
+:root:lang(hi) *, :root:lang(ml) * { letter-spacing: normal !important; }
+:root:lang(hi) body, :root:lang(ml) body { line-height: 1.75; }
+/* A language name in the picker or the footer is set in its own script on every page. */
+a[lang|="zh"] { font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", sans-serif; }
+a[lang="ja"] { font-family: "Hiragino Sans", "Yu Gothic", Meiryo, "Noto Sans CJK JP", sans-serif; }
+a[lang="ko"] { font-family: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans CJK KR", sans-serif; }
+a[lang="ar"] { font-family: "Noto Sans Arabic", "Segoe UI", Tahoma, sans-serif; }
+
+/* Right to left. The layout is flex and grid, which follow the direction on their own; what is
+   left are the arrows that point forward, and the few places that push with a left margin. */
+[dir="rtl"] .card-go svg,
+[dir="rtl"] .palette-go svg,
+[dir="rtl"] .btn-outline > svg:last-child:not(:first-child),
+[dir="rtl"] .action-arrow { transform: scaleX(-1); }
+[dir="rtl"] .nav-links { margin-left: 0; margin-right: auto; }
+[dir="rtl"] .lang-picker,
+[dir="rtl"] .theme-toggle,
+[dir="rtl"] .nav-icon { margin-left: 0; margin-right: 4px; }
+@media (max-width: 900px) {
+  [dir="rtl"] .nav { margin-left: 0; margin-right: auto; }
+}
+
+/* The list of languages on /translate/: each in its own name, then in English, then its code. */
+.panel .lang-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
+  gap: 14px 28px;
+}
+.panel .lang-list li { padding-left: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.lang-list .lang-name { color: var(--on-surface); font-weight: 600; font-size: 1.04rem; }
+.lang-list .muted { font-size: 0.9rem; }
+.lang-list code { font-size: 0.8rem; opacity: 0.75; }
+/* The skip link waits off the start edge. Parked at left: -9999px on a right to left page it would
+   sit past the far end of the line, which is overflow the page can scroll to, so it moves right. */
+[dir="rtl"] .skip { left: auto; right: -9999px; border-radius: 0 0 0 var(--shape-l); }
+[dir="rtl"] .skip:focus { right: 0; }

@@ -226,6 +226,9 @@ def shared_parts(template: str) -> dict:
     header = lift(template, r'<header class="site-header">.*?</header>', "site header")
     # This page is not in the menu as the current page; the download page's marker goes.
     header = header.replace(' aria-current="page"', "")
+    # The changelog is English only, so the language picker, which points at the download page
+    # in each language, goes too. The footer's language list links to home pages and can stay.
+    header = re.sub(r"<!-- i18n:picker -->.*?<!-- /i18n:picker -->\n?[ \t]*", "", header, flags=re.S)
     return {
         "bg": lift(template, r'<!-- Decorative background art.*?<div class="bg-art".*?</div>',
                    "background art"),
