@@ -136,7 +136,8 @@ def body_prose(body: str) -> str:
     for line in (body or "").replace("\r\n", "\n").split("\n"):
         stripped = line.strip()
         if (stripped.startswith(("#", "|", "**Full Changelog**", "<!--"))
-                or stripped.startswith("Installed copies update themselves")):
+                or stripped.startswith(("Installed copies update themselves",
+                                      "Installed copies offer each update"))):
             break
         kept.append(line)
     return "\n".join(kept).strip()
@@ -353,7 +354,7 @@ def page(releases: list, parts: dict) -> str:
     <div class="wrap page-head-wrap">
       <p class="crumbs"><a href="/">Home</a><span aria-hidden="true">/</span>Changelog</p>
       <h1>Every <em>release</em></h1>
-      <p class="page-lede">What changed in each TMPlayer release, newest first. Installed copies update themselves, so this is where to find out what just arrived.</p>
+      <p class="page-lede">What changed in each TMPlayer release, newest first. Installed copies offer each update, so this is where to find out what it brings.</p>
       <div class="page-actions">
         <a class="btn btn-filled" href="/download/">Download the latest</a>
         <a class="btn btn-outline" href="/changelog/feed.xml" type="application/rss+xml">

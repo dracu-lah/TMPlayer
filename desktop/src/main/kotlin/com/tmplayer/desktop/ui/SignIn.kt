@@ -47,6 +47,7 @@ import com.tmplayer.data.CodeDelivery
 import com.tmplayer.data.SignInMethod
 import com.tmplayer.data.Td
 import com.tmplayer.ui.auth.QrCode
+import com.tmplayer.ui.auth.UNOFFICIAL_NOTICE
 import com.tmplayer.ui.components.AppLogo
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
@@ -85,6 +86,12 @@ fun SignInScreen(auth: AuthState) {
                 is AuthState.Password -> PasswordPane(auth)
                 is AuthState.Failed -> FailedPane(auth.message)
             }
+            Text(
+                UNOFFICIAL_NOTICE,
+                style = MaterialTheme.typography.labelSmall,
+                color = Tone.muted,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }

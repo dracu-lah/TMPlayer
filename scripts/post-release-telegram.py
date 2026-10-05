@@ -6,7 +6,7 @@ went out before the job could, so every announcement has one format:
 
     TMPlayer X.Y.Z is out
     <the annotated tag's notes>
-    Download, full release notes, and "installed copies update themselves"
+    Download, full release notes, and "installed copies offer each update"
 
     scripts/post-release-telegram.py --version 1.22.0 --notes "$NOTES"
     scripts/post-release-telegram.py --version 1.16.0 --notes "..." --dry-run
@@ -41,7 +41,7 @@ def message(version: str, notes: str) -> str:
         f'⬇️ <a href="{DOWNLOAD}">Download</a>\n'
         f'📝 <a href="{release}">Full release notes</a>'
     )
-    parts.append("Installed copies update themselves.")
+    parts.append("Installed copies offer each update.")
     return "\n\n".join(parts)
 
 
