@@ -2,6 +2,7 @@ package com.tmplayer.desktop.player
 
 import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.ChatRepository
+import com.tmplayer.data.ContentProtection
 import com.tmplayer.data.DownloadRunner
 import com.tmplayer.desktop.DesktopPaths
 import com.tmplayer.data.Failures
@@ -71,6 +72,13 @@ interface PlayerMedia {
     /** The t.me link to the message, or null where the chat gives none (private groups, a file). */
     suspend fun messageLink(): String? = null
 
+    /**
+     * Whether the menu offers Save to Downloads and Open in another app: false for a chat with
+     * "restrict saving content", whose videos may be watched here and nothing more. It can turn
+     * false after [open], once Telegram has been asked about a video the caller knew little of.
+     */
+    val savable: StateFlow<Boolean> get() = NO_RESTRICTION
+
     /** Queues the whole file to be kept, and says what happened in words for a notice. */
     fun download(): String = "Only Telegram videos can be downloaded"
 
@@ -88,6 +96,7 @@ interface PlayerMedia {
 }
 
 private val NOTHING_TO_SAY: StateFlow<String?> = MutableStateFlow(null)
+private val NO_RESTRICTION: StateFlow<Boolean> = MutableStateFlow(true)
 
 /** Which Telegram files a player currently has open, so a late cancel never stops a new playback. */
 internal object ActiveStreams {
@@ -118,6 +127,9 @@ class TelegramPlayerMedia(
 
     override val fromTelegram: Boolean get() = true
 
+    private val _savable = MutableStateFlow(item.canBeSaved)
+    override val savable: StateFlow<Boolean> = _savable.asStateFlow()
+
     /** The file played straight off the disk, counted open in [ActiveStreams] until [release]. */
     @Volatile
     private var openedFromDisk: Int? = null
@@ -135,6 +147,11 @@ class TelegramPlayerMedia(
     private var playingId: Int = item.fileId
 
     override suspend fun open(): MediaData {
+        // An item rebuilt from a saved record (Continue watching, Downloads) carries no word on
+        // the chat's setting, so Telegram is asked once, off the path to the first frame.
+        if (item.canBeSaved) {
+            background.launch { if (!Td.maySave(item.chatId, item.messageId)) _savable.value = false }
+        }
         // A download plays from the Downloads folder (B3.5), before TDLib is asked anything: it is
         // not in TDLib's cache at all any more, and it plays with no connection.
         indexed(item.chatId, item.messageId)?.let { file ->
@@ -272,6 +289,7 @@ class TelegramPlayerMedia(
      */
     override fun download(): String {
         val runner = downloads ?: return "Downloads are not available here"
+        if (!_savable.value) return ContentProtection.NOT_SAVABLE
         if (downloadFile != null) return "Already in Downloads"
         val row = OfflineDownloads.active.value[playingId]
         if (row != null && row.busy) {

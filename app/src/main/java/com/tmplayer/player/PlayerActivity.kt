@@ -163,6 +163,17 @@ class PlayerActivity : FragmentActivity() {
     private var statusReload: android.widget.Button? = null
     private var statusOpenWith: android.widget.Button? = null
 
+    /**
+     * Whether Telegram lets this video be kept or handed on: false for a chat that restricts saving
+     * content, null until that is known.
+     *
+     * Every way out of Telegram's hands (Save to Downloads, another app) waits for a true. A false
+     * carried in on the intent is believed at once; a true is not, because Continue watching and
+     * the downloads list build their items from records that never knew, so it is asked again. A
+     * question Telegram cannot answer counts as yes, which is how the player behaved before.
+     */
+    private var savable: Boolean? = null
+
     /** The failure sheet's way out, and the video's own name on it. */
     private var statusBack: android.widget.Button? = null
     private var statusName: TextView? = null
@@ -347,6 +358,7 @@ class PlayerActivity : FragmentActivity() {
         chatTitle = intent.getStringExtra(EXTRA_CHAT_TITLE).orEmpty()
         fileSizeBytes = intent.getLongExtra(EXTRA_SIZE, 0)
         durationSec = intent.getIntExtra(EXTRA_DURATION, 0)
+        if (!intent.getBooleanExtra(EXTRA_CAN_BE_SAVED, true)) savable = false
 
         subtitleView = findViewById(R.id.subtitles)
         statusOverlay = findViewById(R.id.status_overlay)
@@ -419,6 +431,7 @@ class PlayerActivity : FragmentActivity() {
                 saveToDownloads = ::canSaveToDownloads,
                 markWatched = ::hasMessage,
                 watched = { onWatchedList },
+                openInAnotherApp = { savable == true },
                 onEntry = ::onTvMenuEntry,
                 onSpeed = ::setSpeed,
                 onClosed = { controls?.show(); controls?.focusRow() },
@@ -485,6 +498,13 @@ class PlayerActivity : FragmentActivity() {
                 player?.seekTo(resumeMs)
                 resumeNotice = "Resuming from ${StreamStats.formatClock(resumeMs)}"
                 renderStatusText()
+            }
+        }
+
+        if (savable == null) {
+            lifecycleScope.launch {
+                Td.awaitAuthorizedSession()
+                savable = Td.maySave(chatId, messageId)
             }
         }
 
@@ -2181,7 +2201,7 @@ class PlayerActivity : FragmentActivity() {
         }
         speeds.setGroupCheckable(1, true, true)
         items.add(0, MENU_START_OVER, 3, "Start over")
-        items.add(0, MENU_OPEN_WITH, 4, "Open in another app")
+        if (savable == true) items.add(0, MENU_OPEN_WITH, 4, "Open in another app")
         items.add(0, MENU_DETAILS, 5, "Playback details")
         items.add(0, MENU_SUBTITLE_FILE, 6, "Load a subtitle file")
         if (chatId != 0L && messageId != 0L) items.add(0, MENU_COPY_LINK, 7, "Copy Telegram link")
@@ -2229,7 +2249,7 @@ class PlayerActivity : FragmentActivity() {
      * not one the queue has, and not one with no message to download it from again.
      */
     private fun canSaveToDownloads(): Boolean =
-        downloadedFile == null && fileId > 0 && chatId != 0L && messageId != 0L &&
+        savable == true && downloadedFile == null && fileId > 0 && chatId != 0L && messageId != 0L &&
             !OfflineDownloads.isDownloading(fileId)
 
     /**
@@ -2238,7 +2258,14 @@ class PlayerActivity : FragmentActivity() {
      */
     private fun saveToDownloads() {
         if (!canSaveToDownloads()) {
-            showGestureFeedback(if (downloadedFile != null) "Already in Downloads" else "Already downloading")
+            showGestureFeedback(
+                when {
+                    savable == null -> CHECKING_FEEDBACK
+                    savable == false -> NOT_SAVABLE_FEEDBACK
+                    downloadedFile != null -> "Already in Downloads"
+                    else -> "Already downloading"
+                },
+            )
             return
         }
         val item = mediaItemForCache()
@@ -2822,6 +2849,7 @@ class PlayerActivity : FragmentActivity() {
             // Offered on the failure another app fixes, and left off the one it does not: a stream
             // that would not start has nothing on disk worth handing anywhere.
             if (retryable) return@launch
+            if (savable != true) return@launch
             statusOpenWith?.apply {
                 text = if (state == ExternalPlayer.Readiness.Complete) {
                     "Open in another app"
@@ -2900,6 +2928,11 @@ class PlayerActivity : FragmentActivity() {
      * than not offering this at all.
      */
     fun openInAnotherApp() {
+        // The menus leave the line off; this catches the held key, which has no menu to leave it off.
+        if (savable != true) {
+            showGestureFeedback(if (savable == null) CHECKING_FEEDBACK else NOT_SAVABLE_FEEDBACK)
+            return
+        }
         saveResumePosition()
         lifecycleScope.launch {
             val local = downloadedFile
@@ -3143,6 +3176,13 @@ class PlayerActivity : FragmentActivity() {
         private const val EXTRA_CHAT_TITLE = "chat_title"
         private const val EXTRA_THUMBNAIL_ID = "thumbnail_id"
         private const val EXTRA_MINI_THUMBNAIL = "mini_thumbnail"
+        private const val EXTRA_CAN_BE_SAVED = "can_be_saved"
+
+        /** Said when a press asks for a copy of a video Telegram does not let leave the app. */
+        private const val NOT_SAVABLE_FEEDBACK = "This chat does not allow saving its videos"
+
+        /** Said for the same press in the moment before Telegram has answered whether it may. */
+        private const val CHECKING_FEEDBACK = "Still checking this video with Telegram"
 
         private const val BUFFER_MIN_MS = 15_000
         private const val BUFFER_MAX_MS = 50_000
@@ -3306,6 +3346,7 @@ class PlayerActivity : FragmentActivity() {
                 // Telegram has been asked anything at all.
                 putExtra(EXTRA_THUMBNAIL_ID, item.thumbnailFileId)
                 putExtra(EXTRA_MINI_THUMBNAIL, item.miniThumbnail)
+                putExtra(EXTRA_CAN_BE_SAVED, item.canBeSaved)
                 putExtra(
                     EXTRA_SUBTITLE,
                     listOf(

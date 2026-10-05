@@ -2,6 +2,7 @@ package com.tmplayer.desktop
 
 import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.Connectivity
+import com.tmplayer.data.ContentProtection
 import com.tmplayer.data.NetworkStatus
 import com.tmplayer.data.DiskInfo
 import com.tmplayer.data.DownloadFiles
@@ -410,6 +411,22 @@ class DesktopDownloadRunner(
             while (isOpen(fileId)) delay(HOLD_POLL_MS)
         }
         OfflineDownloads.moving(fileId)
+
+        // Asked again at the last moment: the chat may have turned on "restrict saving content"
+        // since the download was queued. The file stays in TDLib's cache, counted there like any
+        // played video so the cache rules evict it in their turn, and the row goes, since trying
+        // again would only meet the same answer.
+        if (!Td.maySave(request.chatId, request.messageId)) {
+            Logger.i(TAG, "Not moving ${request.title} into Downloads: its chat does not allow saving")
+            withContext(NonCancellable) {
+                runCatching { settings.rememberCachedVideo(request.item(), request.chatTitle) }
+                synchronized(lock) { requests.remove(fileId) }
+                OfflineDownloads.forget(fileId)
+                persistNow()
+                notifier.fail(fileId.toLong(), request.title, ContentProtection.NOT_SAVABLE, retryable = false)
+            }
+            return
+        }
 
         val src = File(path)
         val dir = downloadsDir()

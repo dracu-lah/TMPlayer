@@ -86,6 +86,7 @@ import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.ChatSummary
+import com.tmplayer.data.ContentProtection
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.OfflineDownloads
@@ -178,6 +179,7 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 loadingMore = content.loadingMore,
                 // Search ignores the size limits, so the note would be wrong while one is typed.
                 hiddenBySize = if (query.isBlank()) content.hiddenBySize else 0,
+                hiddenSelfDestructing = content.hiddenSelfDestructing,
             )
         }
     }
@@ -199,9 +201,11 @@ internal fun VideoGrid(
     loadingMore: Boolean = false,
     /** Videos the size limits kept out; above zero, a quiet line over the posters says so. */
     hiddenBySize: Int = 0,
+    /** Self-destructing videos left out of the listing; counted in the same line. */
+    hiddenSelfDestructing: Int = 0,
 ) {
     val cells by rememberUpdatedState(items)
-    val note = WatchedWords.sizeLimitNote(hiddenBySize)
+    val note = WatchedWords.hiddenNote(hiddenBySize, hiddenSelfDestructing)
     val headerItems by rememberUpdatedState((if (header != null) 1 else 0) + (if (note != null) 1 else 0))
     val nav = rememberKeyboardNav(remember(grid) { GridSurface(grid, { headerItems }, { cells.size }) })
     LaunchedEffect(nav) { onNav(nav) }
@@ -224,7 +228,7 @@ internal fun VideoGrid(
             }
             if (note != null) {
                 item(key = "hidden-by-size", span = { GridItemSpan(maxLineSpan) }) {
-                    SizeLimitNote(note, onChange = { state.openSizeLimits() })
+                    SizeLimitNote(note, onChange = if (hiddenBySize > 0) ({ state.openSizeLimits() }) else null)
                 }
             }
             itemsIndexed(items, key = { _, it -> it.id }) { index, item ->
@@ -254,10 +258,11 @@ internal fun VideoGrid(
  * episode is explained rather than looking lost. Quiet on purpose: muted text and a text button.
  */
 @Composable
-private fun SizeLimitNote(text: String, onChange: () -> Unit) {
+private fun SizeLimitNote(text: String, onChange: (() -> Unit)?) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(text, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
-        TextButton(onClick = onChange) { Text("Change", style = MaterialTheme.typography.bodySmall) }
+        // Change opens the size limits, which is no answer to a self-destructing video.
+        if (onChange != null) TextButton(onClick = onChange) { Text("Change", style = MaterialTheme.typography.bodySmall) }
     }
 }
 
@@ -448,7 +453,8 @@ internal fun Poster(
     val scale by animateFloatAsState(if (lifted || focused) 1.05f else 1f)
     var menu by remember { mutableStateOf(false) }
     val requester = remember { FocusRequester() }
-    val selection = LocalGridSelection.current
+    // A video its chat will not let anyone keep cannot be picked for Download selected.
+    val selection = LocalGridSelection.current?.takeIf { item.canBeSaved }
     // Set by a Ctrl or Shift press just before the click it belongs to, so that click picks the
     // poster instead of playing it.
     var picking by remember { mutableStateOf(false) }
@@ -639,6 +645,9 @@ private fun TileMenu(
                     OfflineDownloads.cancel(state.downloads, item.fileId)
                 })
             }
+            // A chat with "restrict saving content" lets its videos be watched and nothing more,
+            // so neither a download nor, below, a hand off to another app is offered.
+            !item.canBeSaved -> Unit
             item.onDevice -> DropdownMenuItem(text = { Text("Save to Downloads") }, onClick = {
                 onDismiss()
                 OfflineDownloads.start(state.downloads, item, title)
@@ -650,10 +659,16 @@ private fun TileMenu(
                 toast("Downloading ${item.title}")
             })
         }
-        if (record != null || item.onDevice) {
+        if (item.canBeSaved && (record != null || item.onDevice)) {
             DropdownMenuItem(text = { Text("Open in another app") }, onClick = {
                 onDismiss()
                 scope.launch {
+                    // A tile built from a saved record (Continue watching) does not know the
+                    // chat's setting, so the cached copy is only handed over once Telegram agrees.
+                    if (record == null && !Td.maySave(item.chatId, item.messageId)) {
+                        toast(ContentProtection.NOT_SAVABLE)
+                        return@launch
+                    }
                     val file = record?.localPath?.let(::File)?.takeIf { it.isFile }
                         ?: runCatching { Td.localFilePath(Td.currentFileId(item.chatId, item.messageId, item.fileId)) }
                             .getOrNull()?.let(::File)

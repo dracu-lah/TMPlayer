@@ -8,7 +8,7 @@ import com.tmplayer.data.WatchedStore
 /**
  * The small decisions behind the desktop's Watched list, kept apart from Compose so they can be
  * tested: which way a menu's mark line reads, how full a poster's bar is, and the note under a
- * chat's grid when the size limits kept videos out.
+ * chat's grid when the size limits, or a video's own timer, kept videos out.
  */
 object WatchedWords {
 
@@ -34,6 +34,19 @@ object WatchedWords {
         hidden <= 0 -> null
         hidden == 1 -> "1 video hidden by the size limits"
         else -> "$hidden videos hidden by the size limits"
+    }
+
+    /**
+     * The same line with the self-destructing videos added. Those are left out of every listing,
+     * because they are meant to be seen once in Telegram itself, so the line says where to go.
+     */
+    fun hiddenNote(bySize: Int, selfDestructing: Int): String? {
+        val destructing = when {
+            selfDestructing <= 0 -> null
+            selfDestructing == 1 -> "1 self-destructing video not shown: open it in Telegram"
+            else -> "$selfDestructing self-destructing videos not shown: open them in Telegram"
+        }
+        return listOfNotNull(sizeLimitNote(bySize), destructing).joinToString(". ").ifEmpty { null }
     }
 }
 

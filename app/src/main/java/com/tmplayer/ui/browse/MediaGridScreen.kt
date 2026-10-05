@@ -425,7 +425,10 @@ fun MediaGridScreen(
      * plan: calling [OfflineDownloads.start] directly skips the watch cache eviction below, and the
      * service's late check then refuses the video on raw free space alone.
      */
-    fun downloadThese(chosen: List<MediaItem>) {
+    fun downloadThese(ticked: List<MediaItem>) {
+        // A chat that restricts saving content may be watched here but not kept, so its videos
+        // drop out of a selection quietly; the bar does not offer Download when only they are left.
+        val chosen = ticked.filter { it.canBeSaved }
         if (chosen.isEmpty()) return
         // Android 13 counts a download's progress notification as one the viewer has to have
         // agreed to. Asked here rather than at first launch, because here is the one moment the
@@ -534,9 +537,9 @@ fun MediaGridScreen(
                         horizontalArrangement = Arrangement.spacedBy(gap),
                         verticalArrangement = Arrangement.spacedBy(gap),
                     ) {
-                        if (list.hiddenBySize > 0) {
-                            item(key = "hidden-by-size", span = { GridItemSpan(maxLineSpan) }) {
-                                HiddenBySizeNote(list.hiddenBySize)
+                        if (list.hiddenBySize > 0 || list.hiddenSelfDestructing > 0) {
+                            item(key = "hidden-videos", span = { GridItemSpan(maxLineSpan) }) {
+                                HiddenVideosNote(list.hiddenBySize, list.hiddenSelfDestructing)
                             }
                         }
                         gridItems(
@@ -590,8 +593,10 @@ fun MediaGridScreen(
                         contentPadding = padding,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        if (list.hiddenBySize > 0) {
-                            item(key = "hidden-by-size") { HiddenBySizeNote(list.hiddenBySize) }
+                        if (list.hiddenBySize > 0 || list.hiddenSelfDestructing > 0) {
+                            item(key = "hidden-videos") {
+                                HiddenVideosNote(list.hiddenBySize, list.hiddenSelfDestructing)
+                            }
                         }
                         items(
                             items = feed,
@@ -730,6 +735,10 @@ fun MediaGridScreen(
         }
     }
 
+    // Null while every ticked video comes from a chat that restricts saving content.
+    val downloadSelected = { downloadThese(selected.values.toList()) }
+        .takeIf { selected.isEmpty() || selected.values.any { it.canBeSaved } }
+
     if (touch) {
         TouchMediaScaffold(
             chatTitle = chatTitle,
@@ -748,7 +757,7 @@ fun MediaGridScreen(
                 {
                     SelectionBar(
                         count = selected.size,
-                        onDownload = { downloadThese(selected.values.toList()) },
+                        onDownload = downloadSelected,
                         onSelectAll = { selected = listedItems.associateBy { it.id } },
                         onCancel = { leaveSelection() },
                         edge = edge,
@@ -778,7 +787,7 @@ fun MediaGridScreen(
             if (selecting) {
                 SelectionBar(
                     count = selected.size,
-                    onDownload = { downloadThese(selected.values.toList()) },
+                    onDownload = downloadSelected,
                     onSelectAll = { selected = listedItems.associateBy { it.id } },
                     onCancel = { leaveSelection() },
                     edge = edge,
@@ -1140,7 +1149,8 @@ internal fun Header(
 @Composable
 private fun SelectionBar(
     count: Int,
-    onDownload: () -> Unit,
+    /** Null while nothing ticked may be saved, which leaves the bar without a Download. */
+    onDownload: (() -> Unit)?,
     onSelectAll: () -> Unit,
     onCancel: () -> Unit,
     edge: Dp,
@@ -1159,7 +1169,7 @@ private fun SelectionBar(
                 TextButton(onClick = onSelectAll) { M3Text("Select all") }
                 // Words, not a bare arrow: this is the one control on the bar that acts on the
                 // ticked videos, and a corner glyph would say nothing about what it starts.
-                Button(
+                if (onDownload != null) Button(
                     onClick = onDownload,
                     enabled = count > 0,
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -1191,7 +1201,7 @@ private fun SelectionBar(
             color = Tone.text,
             modifier = Modifier.weight(1f),
         )
-        Pill("Download", TmIcons.Download, onClick = onDownload)
+        if (onDownload != null) Pill("Download", TmIcons.Download, onClick = onDownload)
         Pill("Select all", Icons.Filled.Check, onClick = onSelectAll)
         Pill("Cancel", Icons.Filled.Close, onClick = onCancel)
     }
@@ -2115,6 +2125,9 @@ private fun MediaActionsSheet(
                     ),
                 )
             }
+            // A chat that restricts saving content streams, and that is all: no copy of its own
+            // for the viewer, so neither of the two download lines below is offered.
+            !item.canBeSaved -> Unit
             cachedHere -> add(
                 MenuAction(
                     label = "Save to Downloads",
@@ -2140,15 +2153,19 @@ private fun MediaActionsSheet(
                 ),
             )
         }
-        add(
-            MenuAction(
-                label = "Select videos",
-                icon = Icons.Filled.Check,
-                detail = "Download several at once",
-                onSelect = { onDismiss(); onSelectVideos() },
-            ),
-        )
-        if (onDisk) {
+        // Selecting is for downloading, so a video that may not be saved does not start it.
+        if (item.canBeSaved) {
+            add(
+                MenuAction(
+                    label = "Select videos",
+                    icon = Icons.Filled.Check,
+                    detail = "Download several at once",
+                    onSelect = { onDismiss(); onSelectVideos() },
+                ),
+            )
+        }
+        // Both hand the file to somebody else's app, which is a copy leaving Telegram's hands.
+        if (onDisk && item.canBeSaved) {
             add(
                 MenuAction(
                     label = "Share",
@@ -2382,16 +2399,16 @@ private const val REFRESH_TIMEOUT_MS = 20_000L
 private const val FOCUS_SETTLE_MS = 150L
 
 /**
- * Says how many videos the size limits kept out of this chat.
+ * Says how many videos the size limits kept out of this chat, and how many self-destructing ones.
  *
  * At the top rather than the bottom: a remote only scrolls as far as the last focusable card, so a
  * line under the grid would never be seen on a TV. An episode missing with no word about why reads
  * as TMPlayer having lost it, which is what viewers reported.
  */
 @Composable
-private fun HiddenBySizeNote(count: Int) {
+private fun HiddenVideosNote(bySize: Int, selfDestructing: Int) {
     Text(
-        hiddenBySizeText(count),
+        hiddenVideosText(bySize, selfDestructing),
         style = MaterialTheme.typography.bodyMedium,
         color = Tone.muted,
         modifier = Modifier.padding(vertical = 4.dp),
@@ -2401,3 +2418,21 @@ private fun HiddenBySizeNote(count: Int) {
 internal fun hiddenBySizeText(count: Int): String =
     (if (count == 1) "1 video is" else "$count videos are") +
         " hidden by the video size limits. Change them in Settings to see everything."
+
+/**
+ * A self-destructing video is gone once it has been opened, which only Telegram itself can honour,
+ * so the listing leaves it out and says where it can be watched instead.
+ */
+internal fun hiddenSelfDestructingText(count: Int): String =
+    if (count == 1) {
+        "1 self-destructing video is not shown: open it in Telegram."
+    } else {
+        "$count self-destructing videos are not shown: open them in Telegram."
+    }
+
+/** Both sentences, each only when it has something to count. */
+internal fun hiddenVideosText(bySize: Int, selfDestructing: Int): String =
+    listOfNotNull(
+        hiddenBySizeText(bySize).takeIf { bySize > 0 },
+        hiddenSelfDestructingText(selfDestructing).takeIf { selfDestructing > 0 },
+    ).joinToString(" ")

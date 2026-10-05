@@ -69,6 +69,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tmplayer.data.ContentProtection
 import com.tmplayer.data.DiskInfo
 import com.tmplayer.data.DiskSpace
 import kotlinx.coroutines.Dispatchers
@@ -352,8 +353,15 @@ fun DownloadsScreen(
     // separate effects would interleave three passes of the audit above, each writing `rows` when
     // it finished, so the slowest could land last and put stale figures back on screen.
     LaunchedEffect(history, cached.map { it.fileId }, active.size) { refresh(history) }
-    fun share(these: List<DownloadRow>) {
+    fun share(ticked: List<DownloadRow>) {
         scope.launch {
+            // The records never knew whether their chat restricts saving content, and a channel can
+            // turn it on after the fact, so Telegram is asked at the moment of handing them on.
+            val these = ticked.filter { Td.maySave(it.record.chatId, it.record.messageId) }
+            if (these.isEmpty()) {
+                toast(ContentProtection.NOT_SAVABLE)
+                return@launch
+            }
             val files = these.mapNotNull { row ->
                 val record = row.record
                 // The download's own file when it has one; otherwise TDLib's, through the id this
@@ -407,9 +415,17 @@ fun DownloadsScreen(
      * or a part downloaded one, which finishes and then moves.
      */
     fun saveToDownloads(row: DownloadRow) {
-        OfflineDownloads.start(context, row.record.toMediaItem().copy(fileId = row.fileId), row.chatTitle)
-        toast(if (row.cached) "Saving ${row.title} to Downloads" else "Resuming ${row.title}")
-        if (row.cached) tab = ONGOING
+        scope.launch {
+            // Asked here for the same reason [share] asks: a cached video may come from a chat that
+            // lets it be watched and nothing more, and the cache record cannot say so.
+            if (!Td.maySave(row.record.chatId, row.record.messageId)) {
+                toast(ContentProtection.NOT_SAVABLE)
+                return@launch
+            }
+            OfflineDownloads.start(context, row.record.toMediaItem().copy(fileId = row.fileId), row.chatTitle)
+            toast(if (row.cached) "Saving ${row.title} to Downloads" else "Resuming ${row.title}")
+            if (row.cached) tab = ONGOING
+        }
     }
 
     fun delete(row: DownloadRow) {
@@ -1251,8 +1267,12 @@ private fun ActiveDownloadCard(
                     PrimaryAction("Pause", TmIcons.Pause, onPause)
                 OfflineDownloads.Stage.Paused ->
                     PrimaryAction("Resume", Icons.Filled.PlayArrow, onResume)
+                // Refused because the chat forbids keeping a copy: trying again is refused the
+                // same way, so the only offer left is Dismiss below.
                 OfflineDownloads.Stage.Failed ->
-                    PrimaryAction("Try again", Icons.Filled.Refresh, onResume)
+                    if (progress.failure != ContentProtection.NOT_SAVABLE) {
+                        PrimaryAction("Try again", Icons.Filled.Refresh, onResume)
+                    }
                 // It will start itself the moment the signal is back, so the useful offer is the
                 // other one: hold it, and do not.
                 OfflineDownloads.Stage.Offline, OfflineDownloads.Stage.NoWifi ->

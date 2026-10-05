@@ -34,11 +34,15 @@ object PlayerMenu {
      *
      * [markWatched] is whether the video came from a message: the Watched list is keyed by one,
      * so a file with none has nothing to mark.
+     *
+     * [openInAnotherApp] is false for a video from a chat that restricts saving content, whose
+     * file must not be handed to another app.
      */
     fun tvEntries(
         pictureInPicture: Boolean,
         saveToDownloads: Boolean = false,
         markWatched: Boolean = false,
+        openInAnotherApp: Boolean = true,
     ): List<PlayerMenuEntry> = buildList {
         add(PlayerMenuEntry.PlaybackDetails)
         add(PlayerMenuEntry.StartOver)
@@ -46,7 +50,7 @@ object PlayerMenu {
         if (saveToDownloads) add(PlayerMenuEntry.SaveToDownloads)
         if (markWatched) add(PlayerMenuEntry.MarkWatched)
         if (pictureInPicture) add(PlayerMenuEntry.PictureInPicture)
-        add(PlayerMenuEntry.OpenInAnotherApp)
+        if (openInAnotherApp) add(PlayerMenuEntry.OpenInAnotherApp)
         add(PlayerMenuEntry.RemoteKeys)
     }
 }

@@ -140,6 +140,8 @@ data class MediaPage(
     val items: List<MediaItem>,
     val cursors: MediaCursors,
     val endReached: Boolean,
+    /** Self-destructing videos this page left out, for the grid's "hidden" note. */
+    val hiddenSelfDestructing: Int = 0,
 )
 
 /**
@@ -355,17 +357,19 @@ class ChatRepository(private val td: TdlClient) {
         // belong on the thread drawing the grid.
         withContext(Dispatchers.IO) {
         coroutineScope {
+            // TDLib answers getChat from memory for any chat it has listed, so this is no round trip.
+            val chatProtected = td.getChat(chatId).valueOrNull?.hasProtectedContent ?: false
             val videos = async {
                 if (cursors.videoDone) null
-                else search(chatId, cursors.video, SearchMessagesFilterVideo(), query)
+                else search(chatId, cursors.video, SearchMessagesFilterVideo(), query, chatProtected)
             }
             val documents = async {
                 if (cursors.documentDone) null
-                else search(chatId, cursors.document, SearchMessagesFilterDocument(), query)
+                else search(chatId, cursors.document, SearchMessagesFilterDocument(), query, chatProtected)
             }
             val animations = async {
                 if (cursors.animationDone) null
-                else search(chatId, cursors.animation, SearchMessagesFilterAnimation(), query)
+                else search(chatId, cursors.animation, SearchMessagesFilterAnimation(), query, chatProtected)
             }
 
             val videoResult = videos.await()
@@ -386,7 +390,8 @@ class ChatRepository(private val td: TdlClient) {
                 documentDone = cursors.documentDone || documentResult?.done ?: true,
                 animationDone = cursors.animationDone || animationResult?.done ?: true,
             )
-            MediaPage(items, next, next.allDone)
+            val hidden = listOfNotNull(videoResult, documentResult, animationResult).sumOf { it.selfDestructing }
+            MediaPage(items, next, next.allDone, hidden)
         }
         }
 
@@ -477,13 +482,19 @@ class ChatRepository(private val td: TdlClient) {
         else -> ChatKind.Direct
     }
 
-    private class SearchResult(val items: List<MediaItem>, val next: Long, val done: Boolean)
+    private class SearchResult(
+        val items: List<MediaItem>,
+        val next: Long,
+        val done: Boolean,
+        val selfDestructing: Int,
+    )
 
     private suspend fun search(
         chatId: Long,
         fromMessageId: Long,
         filter: dev.g000sha256.tdl.dto.SearchMessagesFilter,
         query: String = "",
+        chatProtected: Boolean = false,
     ): SearchResult {
         val found = td.searchChatMessages(
             chatId = chatId,
@@ -498,10 +509,10 @@ class ChatRepository(private val td: TdlClient) {
             filter = filter,
         ).value()
 
-        val items = found.messages.mapNotNull { MediaMapper.fromMessage(it) }
+        val screened = MediaMapper.screen(found.messages.toList(), chatProtected)
         // nextFromMessageId is 0 once the chat has no older matches left.
         val done = found.messages.isEmpty() || found.nextFromMessageId == 0L
-        return SearchResult(items, found.nextFromMessageId, done)
+        return SearchResult(screened.items, found.nextFromMessageId, done, screened.selfDestructing)
     }
 
     companion object {

@@ -137,6 +137,11 @@ object OfflineDownloads {
      * already coming down does nothing rather than starting a second fetch of the same bytes.
      */
     fun start(runner: DownloadRunner, item: MediaItem, chatTitle: String) {
+        // The screens hide Download on these, so this is the backstop for a path that forgot.
+        if (!item.canBeSaved) {
+            Logger.i(TAG, "Not downloading ${item.title}: its chat does not allow saving")
+            return
+        }
         start(runner, DownloadRequest.from(item, chatTitle))
     }
 

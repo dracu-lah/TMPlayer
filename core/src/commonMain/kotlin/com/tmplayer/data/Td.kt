@@ -495,7 +495,18 @@ object Td {
     suspend fun refreshMedia(chatId: Long, messageId: Long): MediaItem? {
         val td = current ?: return null
         val message = td.getMessage(chatId, messageId).valueOrNull ?: return null
-        return MediaMapper.fromMessage(message)
+        val chatProtected = td.getChat(chatId).valueOrNull?.hasProtectedContent ?: false
+        return MediaMapper.fromMessage(message, chatProtected)
+    }
+
+    /**
+     * Whether the video's chat still allows keeping a copy, asked again at the moment a copy would
+     * be made: a channel can turn "restrict saving content" on after a download was queued. True
+     * when Telegram cannot be reached, because the download was allowed when it was asked for.
+     */
+    suspend fun maySave(chatId: Long, messageId: Long): Boolean {
+        if (chatId == 0L || messageId == 0L) return true
+        return runCatching { refreshMedia(chatId, messageId) }.getOrNull()?.canBeSaved ?: true
     }
 
     /** Verifies both TDLib's flag and the actual file before promising offline playback. */

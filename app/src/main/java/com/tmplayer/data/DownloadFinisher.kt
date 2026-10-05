@@ -21,6 +21,7 @@ import java.io.IOException
  * @param completePath where TDLib has a file, only once all of it is there.
  * @param isPlaying whether a player has the file open, which holds the move: a player streaming
  *   the file would lose it, and moving an open file is refused outright on some file systems.
+ * @param maySave whether Telegram still lets this message be kept, asked just before the move.
  */
 class DownloadFinisher(
     private val settings: SettingsStore,
@@ -28,6 +29,9 @@ class DownloadFinisher(
     private val td: TdFiles = TdFiles.Live,
     private val completePath: suspend (Int) -> String? = { Td.localFilePath(it) },
     private val isPlaying: (Int) -> Boolean = WatchCache::isPlaying,
+    private val maySave: suspend (chatId: Long, messageId: Long) -> Boolean = { chat, message ->
+        Td.maySave(chat, message)
+    },
     private val pollMs: Long = POLL_MS,
 ) {
     /** How a finish ended. */
@@ -58,6 +62,13 @@ class DownloadFinisher(
             while (isPlaying(fileId)) delay(pollMs)
         }
         OfflineDownloads.moving(fileId)
+
+        // Asked again at the last moment, since a channel can turn on "restrict saving content"
+        // while its video sits in the queue. Refused, the file stays where it is: TDLib's cache,
+        // which treats it like any watched video and evicts it in time.
+        if (!maySave(request.chatId, request.messageId)) {
+            return Outcome.Failed(ContentProtection.NOT_SAVABLE)
+        }
 
         val path = runCatching { completePath(fileId) }.getOrNull()
             ?: return Outcome.Failed(NOT_FOUND)

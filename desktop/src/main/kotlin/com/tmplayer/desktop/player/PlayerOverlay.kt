@@ -182,6 +182,8 @@ internal fun BoxScope.PlayerOverlay(
     miniPlayerAvailable: Boolean,
     alwaysOnTopAvailable: Boolean,
     fromTelegram: Boolean,
+    /** Whether Save to Downloads and Open in another app are offered; see [PlayerMedia.savable]. */
+    savable: Boolean = true,
     /** "Mark as watched" or "Mark as unwatched" for the menu, or null to leave the line out. */
     watchedLabel: String? = null,
     onHoverControls: (Boolean) -> Unit,
@@ -204,7 +206,7 @@ internal fun BoxScope.PlayerOverlay(
     // The right click menu hangs at the cursor whether or not the controls are up.
     if (menu?.anchor == MenuAt.Anchor.Cursor) {
         Box(Modifier.offset { IntOffset(menu.at.x.roundToInt(), menu.at.y.roundToInt()) }.size(1.dp)) {
-            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, watchedLabel, onOpenMenu, onCloseMenu, onMenuAction)
+            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, onOpenMenu, onCloseMenu, onMenuAction)
         }
     }
 
@@ -234,7 +236,7 @@ internal fun BoxScope.PlayerOverlay(
                 Box {
                     OverlayButton(PlayerIcons.MoreVert, "More", onClick = { onOpenMenu(MenuAt(MenuPage.Main, MenuAt.Anchor.Overflow)) })
                     if (menu?.anchor == MenuAt.Anchor.Overflow) {
-                        PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, watchedLabel, onOpenMenu, onCloseMenu, onMenuAction)
+                        PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, onOpenMenu, onCloseMenu, onMenuAction)
                     }
                 }
             }
@@ -294,13 +296,13 @@ internal fun BoxScope.PlayerOverlay(
                     Box {
                         OverlayButton(PlayerIcons.Subtitles, "Subtitles (S, C)", onClick = { onOpenMenu(MenuAt(MenuPage.Subtitles, MenuAt.Anchor.Subtitles)) })
                         if (menu?.anchor == MenuAt.Anchor.Subtitles) {
-                            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, watchedLabel, onOpenMenu, onCloseMenu, onMenuAction)
+                            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, onOpenMenu, onCloseMenu, onMenuAction)
                         }
                     }
                     Box {
                         OverlayButton(PlayerIcons.Audio, "Audio (A)", onClick = { onOpenMenu(MenuAt(MenuPage.Audio, MenuAt.Anchor.Audio)) })
                         if (menu?.anchor == MenuAt.Anchor.Audio) {
-                            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, watchedLabel, onOpenMenu, onCloseMenu, onMenuAction)
+                            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, onOpenMenu, onCloseMenu, onMenuAction)
                         }
                     }
                     Tip("Speed (] and [)") {
@@ -509,6 +511,7 @@ private fun PlayerMenu(
     miniPlayerAvailable: Boolean,
     alwaysOnTopAvailable: Boolean,
     fromTelegram: Boolean,
+    savable: Boolean,
     watchedLabel: String?,
     onOpenMenu: (MenuAt) -> Unit,
     onClose: () -> Unit,
@@ -554,8 +557,10 @@ private fun PlayerMenu(
                 Entry("Start over") { pick(MenuAction.StartOver) }
                 if (fromTelegram) {
                     Entry("Copy link") { pick(MenuAction.CopyLink) }
-                    Entry("Save to Downloads") { pick(MenuAction.Download) }
-                    Entry("Open in another app") { pick(MenuAction.OpenElsewhere) }
+                    if (savable) {
+                        Entry("Save to Downloads") { pick(MenuAction.Download) }
+                        Entry("Open in another app") { pick(MenuAction.OpenElsewhere) }
+                    }
                 }
                 if (watchedLabel != null) Entry(watchedLabel) { pick(MenuAction.ToggleWatched) }
                 Entry("Playback details", trailing = "I") { pick(MenuAction.Details) }

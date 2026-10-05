@@ -41,6 +41,11 @@ data class MediaItem(
      * unless told otherwise: a mapper that only knows TDLib's answer can say no more than cached.
      */
     val locality: Locality = if (onDevice) Locality.Cached else Locality.Remote,
+    /**
+     * False when the chat or the message has "restrict saving content" on. The video still streams,
+     * but every way of keeping a copy is withheld: see [ContentProtection].
+     */
+    val canBeSaved: Boolean = true,
 ) {
     /**
      * Where a video's bytes are, as far as the viewer is concerned.
@@ -92,6 +97,7 @@ data class MediaItem(
             fileName == other.fileName &&
             onDevice == other.onDevice &&
             locality == other.locality &&
+            canBeSaved == other.canBeSaved &&
             miniThumbnail.contentEquals(other.miniThumbnail)
     }
 
@@ -108,6 +114,7 @@ data class MediaItem(
         result = 31 * result + fileName.hashCode()
         result = 31 * result + onDevice.hashCode()
         result = 31 * result + locality.hashCode()
+        result = 31 * result + canBeSaved.hashCode()
         result = 31 * result + (miniThumbnail?.contentHashCode() ?: 0)
         return result
     }
@@ -128,7 +135,32 @@ object MediaMapper {
         "flv", "wmv", "mpg", "mpeg", "3gp", "ogv", "divx", "vob", "asf", "rmvb",
     )
 
-    fun fromMessage(message: Message): MediaItem? = when (val content = message.content) {
+    /**
+     * The video in [message], or null when there is none or it is self-destructing.
+     *
+     * [chatProtected] is the chat's "restrict saving content", for a caller that has the chat to
+     * hand; the message's own flag usually says the same, see [ContentProtection.verdict].
+     */
+    fun fromMessage(message: Message, chatProtected: Boolean = false): MediaItem? =
+        if (selfDestructs(message)) null else mapped(message, chatProtected)
+
+    /** A page of search results, with the self-destructing videos left out and counted. */
+    fun screen(messages: List<Message>, chatProtected: Boolean): ContentProtection.Screened =
+        ContentProtection.screen(messages, ::selfDestructs) { mapped(it, chatProtected) }
+
+    /** Media Telegram means to be seen once, in Telegram: a timer, or "view once". */
+    fun selfDestructs(message: Message): Boolean = message.selfDestructType != null
+
+    /** The video in [message] with its saving rule applied, whatever its timer says. */
+    private fun mapped(message: Message, chatProtected: Boolean): MediaItem? {
+        val item = video(message) ?: return null
+        return when (ContentProtection.verdict(message.canBeSaved, chatProtected, selfDestructs = false)) {
+            ContentProtection.Verdict.Full -> item
+            else -> item.copy(canBeSaved = false)
+        }
+    }
+
+    private fun video(message: Message): MediaItem? = when (val content = message.content) {
         is MessageVideo -> {
             val video = content.video
             MediaItem(

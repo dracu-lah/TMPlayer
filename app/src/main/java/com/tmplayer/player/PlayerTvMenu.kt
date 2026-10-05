@@ -77,6 +77,8 @@ class PlayerTvMenu(
     /** Whether Mark as watched is offered at all, and whether the video is on the list already. */
     private val markWatched: () -> Boolean = { false },
     private val watched: () -> Boolean = { false },
+    /** Whether Open in another app is offered, asked each time the menu opens. */
+    private val openInAnotherApp: () -> Boolean = { true },
     private val onEntry: (PlayerMenuEntry) -> Unit,
     private val onSpeed: (Float) -> Unit,
     private val onClosed: () -> Unit,
@@ -114,7 +116,12 @@ class PlayerTvMenu(
             Page.Main -> TvMenu(
                 title = "More",
                 subtitle = title().ifBlank { null },
-                actions = PlayerMenu.tvEntries(pictureInPicture(), saveToDownloads(), markWatched()).map { action(it) },
+                actions = PlayerMenu.tvEntries(
+                    pictureInPicture(),
+                    saveToDownloads(),
+                    markWatched(),
+                    openInAnotherApp(),
+                ).map { action(it) },
                 onDismiss = ::close,
             )
             Page.Speed -> TvMenu(

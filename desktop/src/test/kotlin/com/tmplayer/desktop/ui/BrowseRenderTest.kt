@@ -138,7 +138,7 @@ class BrowseRenderTest {
         shell.watched.markWatched(com.tmplayer.data.WatchedRecord.of(items[1], "Weekend series", now - 26 * 3_600_000L, manual = true))
         // A second viewing part way through: the tick stays, the bar shows where it is.
         settings.saveResumePosition(2, 2, 600_000, 2_400_000, "")
-        val grid = render { VideoGrid(shell, items, "Weekend series", hiddenBySize = 3) }
+        val grid = render { VideoGrid(shell, items, "Weekend series", hiddenBySize = 3, hiddenSelfDestructing = 1) }
         save("watched-grid.png", grid)
         val page = render { WatchedPage(shell) }
         save("watched-page.png", page)

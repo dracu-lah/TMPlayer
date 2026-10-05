@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.tmplayer.data.ContentProtection
 import com.tmplayer.data.LocalFileAvailability
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.OfflineDownloads
@@ -216,6 +217,12 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                         },
                         onSave = {
                             scope.launch {
+                                // A cached record does not say whether its chat allows keeping a
+                                // copy, so Telegram is asked before the file leaves the cache.
+                                if (!Td.maySave(record.chatId, record.messageId)) {
+                                    toast(ContentProtection.NOT_SAVABLE)
+                                    return@launch
+                                }
                                 val id = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }
                                     .getOrDefault(record.fileId)
                                 OfflineDownloads.start(state.downloads, record.toMediaItem().copy(fileId = id), record.chatTitle)

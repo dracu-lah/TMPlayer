@@ -38,6 +38,15 @@ class PlayerMenuTest {
     }
 
     @Test
+    fun `open in another app is left off a video that may not be saved`() {
+        assertFalse(
+            PlayerMenuEntry.OpenInAnotherApp in
+                PlayerMenu.tvEntries(pictureInPicture = true, openInAnotherApp = false),
+        )
+        assertTrue(PlayerMenuEntry.OpenInAnotherApp in PlayerMenu.tvEntries(pictureInPicture = true))
+    }
+
+    @Test
     fun `picture in picture is only offered where the device can do it`() {
         val entries = PlayerMenu.tvEntries(pictureInPicture = false, saveToDownloads = true, markWatched = true)
         assertFalse(PlayerMenuEntry.PictureInPicture in entries)

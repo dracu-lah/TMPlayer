@@ -171,6 +171,7 @@ fun PlayerScreen(
     var flash by remember { mutableStateOf<Flash?>(null) }
     var seekRun by remember { mutableStateOf(0L to 0L) } // (accumulated ms, last at)
     val downloaded by current.downloaded.collectAsState()
+    val savable by current.savable.collectAsState()
     // The Watched list as it stands, for which way the menu's mark line reads.
     val watchedKeys by remember(watched) { watched?.watched ?: flowOf(emptyMap()) }
         .collectAsState(initial = emptyMap())
@@ -531,6 +532,10 @@ fun PlayerScreen(
         }
     }
     fun openElsewhere() {
+        if (!current.savable.value) {
+            showFlash(Flash.Kind.Text, com.tmplayer.data.ContentProtection.NOT_SAVABLE)
+            return
+        }
         scope.launch {
             val file = current.localFile()
             if (file == null) {
@@ -626,6 +631,7 @@ fun PlayerScreen(
                 miniPlayerAvailable = onMiniPlayer != null,
                 alwaysOnTopAvailable = onToggleAlwaysOnTop != null,
                 fromTelegram = current.fromTelegram,
+                savable = savable,
                 watchedLabel = if (watched != null && current.fromTelegram && hasMessage(item)) {
                     WatchedWords.markLabel(SettingsStore.progressKey(item.chatId, item.messageId) in watchedKeys)
                 } else {

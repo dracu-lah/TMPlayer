@@ -102,7 +102,7 @@ internal fun SelectionBar(
         ) {
             val count = selection.ids.size
             Text(if (count == 1) "1 selected" else "$count selected", style = MaterialTheme.typography.titleSmall)
-            TextButton(onClick = { selection.selectAll(items.map { it.id }) }) { Text("Select all") }
+            TextButton(onClick = { selection.selectAll(items.filter { it.canBeSaved }.map { it.id }) }) { Text("Select all") }
             TextButton(onClick = { selection.clear() }) { Text("Clear") }
             Button(onClick = {
                 val chosen = items.filter { selection.isSelected(it.id) }
@@ -130,7 +130,7 @@ internal suspend fun downloadSelected(
     index: Map<String, ResumeRecord>,
 ): String {
     val active = OfflineDownloads.active.value
-    val wanted = chosen.filter { item -> item.id !in index && active[item.fileId]?.busy != true }
+    val wanted = chosen.filter { item -> item.canBeSaved && item.id !in index && active[item.fileId]?.busy != true }
     if (wanted.isEmpty()) return "Those are in Downloads already"
     val candidates = wanted.map { item ->
         CacheShelf.Candidate(
