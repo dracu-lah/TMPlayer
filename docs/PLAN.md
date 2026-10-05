@@ -39,7 +39,8 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 
 **Phase B. The "Player" release (earliest 2026-10-13, cadence guard)**
 - [x] CP06 Subtitle and audio delay, subtitle style (905d009, desktop verified; phone and TV not yet tested on a device)
-- [ ] CP07 Volume boost, sleep timer and "still watching?", TV next-up card
+- [ ] CP07a Volume boost, sleep timer and "still watching?" on Android, TV next-up card
+- [ ] CP07b Volume boost, sleep timer and "still watching?" on desktop
 - [ ] CP08 Resume rules, desktop player extras
 - [ ] CP09 Empty and error states with actions, recent searches
 - [ ] CP10 Remove after watching, free space, TV focus and labels
@@ -123,8 +124,16 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
   every new string goes into `en.json`.
 - **Bulk edits** use grep, sed, perl and jq (Design reference R9), not hand edits.
 - **Every CP's verification baseline:** `./gradlew build`, the `:core` jvmTest suite, and the dash grep.
-  Phone tests use the POCO over adb, TV tests the TV emulator, desktop tests
-  `./gradlew :desktop:runPlayerDev --args="--file clip.mkv"`. Screenshots use headless Chromium.
+  TV tests use the TV emulator, desktop tests `./gradlew :desktop:runPlayerDev --args="--file clip.mkv"`, site
+  screenshots use headless Chromium.
+- **Screenshots and device tests (user, 2026-10-06):** emulators first. Phone UI screenshots and checks run on the
+  phone emulator (`tmplayer_phone_api36`) with the promo flavor, TV on `tmplayer_tv_api36` with the promo flavor
+  (fake data, no login). Use the POCO (adb `d3f7da23`) only for what an emulator cannot show: real Telegram data
+  and login state, hardware decoding and codecs, audio output (volume boost, Dolby), real storage and battery.
+  On the POCO install only the release-signed APK with `adb install -r` (keeps the Telegram login) or the promo
+  build (`com.tmplayer.promo`, installs alongside); never the plain debug build, which would wipe the login.
+  Each CP's "Done when" names which screenshots it needs; keep them outside the repo unless they replace a
+  README or site screenshot (then WebP q88 per CLAUDE.md).
 
 ## Claude checkpoints
 
@@ -261,6 +270,11 @@ the app; the TV has no browser, so the Privacy and Lawful use links do nothing t
   autoplayed episodes (default 3) or 2 h with no input: a full-screen card that pauses playback and stops
   downloads.
 - Port `buildNextUpCard` to the TV branch with D-pad focus on "Play now".
+
+Split in two (2026-10-06): CP07a is everything above on Android (phone and TV) plus the shared rules
+in `:core` (`StillWatching`, `SleepTimer`, the `volume_boost` setting). CP07b is the desktop half:
+`volume-max=150` and `af=dynaudnorm` behind the same Volume boost toggle, the sleep timer in the
+player menu, and "Still watching?" from the same `StillWatching` rules, pausing mpv and the queue.
 **STOP**
 
 ### CP08 Resume rules, desktop player extras
