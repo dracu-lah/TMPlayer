@@ -40,7 +40,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 **Phase B. The "Player" release (earliest 2026-10-13, cadence guard)**
 - [x] CP06 Subtitle and audio delay, subtitle style (905d009, desktop verified; phone and TV not yet tested on a device)
 - [x] CP07a Volume boost, sleep timer and "still watching?" on Android, TV next-up card (cf88a64, TV card and menu checked on the emulator; phone and real audio not yet tested on a device)
-- [ ] CP07b Volume boost, sleep timer and "still watching?" on desktop
+- [x] CP07b Volume boost, sleep timer and "still watching?" on desktop (83b0789, menu and card checked in the dev player; the bundled FFmpeg has no dynaudnorm, so the boost is gain only for now)
 - [ ] CP08 Resume rules, desktop player extras
 - [ ] CP09 Empty and error states with actions, recent searches
 - [ ] CP10 Remove after watching, free space, TV focus and labels
