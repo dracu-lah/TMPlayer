@@ -43,6 +43,7 @@ private val MEDIA_LAYOUT = stringPreferencesKey("media_layout")
 private val CHAT_SNAPSHOT = stringPreferencesKey("chat_snapshot")
 private val ACCOUNT_SNAPSHOT = stringPreferencesKey("account_snapshot")
 private val THEME_CHOICE = stringPreferencesKey("theme_choice")
+private val LANGUAGE = stringPreferencesKey("language")
 private val DYNAMIC_COLOUR = booleanPreferencesKey("dynamic_colour")
 private val VIDEO_SCALE = stringPreferencesKey("video_scale")
 
@@ -837,6 +838,16 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
 
     suspend fun setThemeChoice(value: ThemeChoice) {
         prefs.edit { it[THEME_CHOICE] = value.name }
+    }
+
+    /**
+     * The UI language the viewer picked, as a tag from `Languages.tags`, or "" to follow the
+     * system's own list. `Translator.select` turns this and the system list into the language.
+     */
+    val language: Flow<String> = read { it[LANGUAGE] ?: "" }
+
+    suspend fun setLanguage(tag: String) {
+        prefs.edit { if (tag.isBlank()) it.remove(LANGUAGE) else it[LANGUAGE] = tag }
     }
 
     /**

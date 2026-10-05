@@ -29,11 +29,13 @@ import com.tmplayer.desktop.os.WindowMemory
 import com.tmplayer.desktop.os.WindowsTitleBar
 import com.tmplayer.desktop.ui.DesktopShell
 import com.tmplayer.desktop.ui.ShellState
+import com.tmplayer.i18n.Translator
 import com.tmplayer.platform.Background
 import com.tmplayer.ui.components.AppLogo
 import com.tmplayer.ui.theme.TmMaterialTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.Locale
 import org.jetbrains.skiko.SystemTheme
 import org.jetbrains.skiko.currentSystemTheme
 import kotlin.system.exitProcess
@@ -58,6 +60,12 @@ fun main(args: Array<String>) {
     // A storage move a crash or a kill cut short is finished first: it needs the settings store
     // and the disk, not TDLib, which is already starting over the new folders.
     Background.scope.launch { runCatching { DesktopStorage.relocation.resumePending() } }
+    // The UI language: the Settings choice, else the system's, else English. The en-XA
+    // pseudo-locale is for development runs only (-Dtmplayer.pseudo=true).
+    Translator.pseudoEnabled = System.getProperty("tmplayer.pseudo") == "true"
+    Background.scope.launch {
+        settings.language.collect { saved -> Translator.select(saved, listOf(Locale.getDefault().toLanguageTag())) }
+    }
     Background.scope.launch {
         Td.awaitAuthorizedSession()
         DesktopServices.downloads.restore()

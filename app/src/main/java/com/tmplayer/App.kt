@@ -1,6 +1,7 @@
 package com.tmplayer
 
 import android.app.Application
+import android.os.LocaleList
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import com.tmplayer.data.AndroidLogSink
@@ -18,6 +19,7 @@ import com.tmplayer.data.Updates
 import com.tmplayer.data.configureForAndroid
 import com.tmplayer.data.WatchCache
 import com.tmplayer.data.WatchedStore
+import com.tmplayer.i18n.Translator
 import com.tmplayer.platform.Logger
 import com.tmplayer.player.PlayerActivity
 import kotlinx.coroutines.CoroutineScope
@@ -34,6 +36,15 @@ class App : Application() {
         Logger.sink = AndroidLogSink
         Updates.configureForAndroid()
         SupportReminder.enabled = BuildConfig.SUPPORT_LINKS
+        // The UI language: the Settings choice, else the system's list, else English. Before the
+        // promo return, so the screenshot fixture speaks whatever the emulator is set to. Only a
+        // debug build may pick the en-XA pseudo-locale.
+        Translator.pseudoEnabled = BuildConfig.DEBUG
+        backgroundScope.launch {
+            SettingsStore(this@App).language.collect { saved ->
+                Translator.select(saved, LocaleList.getDefault().toLanguageTags().split(','))
+            }
+        }
         // The isolated screenshot fixture must never open TDLib or touch a Telegram account.
         // BuildConfig is variant-specific, and the promo package is never part of a release APK.
         if (BuildConfig.APPLICATION_ID.endsWith(".promo")) return

@@ -1,0 +1,24 @@
+{
+  "browse": {
+    "videos_count": "{count, plural, one {# video} other {# videos}}",
+    "videos_hidden": "{count, plural, =0 {No videos hidden} one {# video hidden by the size filter} other {# videos hidden by the size filter}}"
+  },
+  "common": {
+    "cancel": "Cancel",
+    "retry": "Retry"
+  },
+  "format": {
+    "hours_minutes": "{hours}h {minutes}m",
+    "minutes": "{minutes}m",
+    "size_gb": "{size} GB",
+    "size_kb": "{size} KB",
+    "size_mb": "{size} MB"
+  },
+  "player": {
+    "track_kind": "{kind, select, audio {Audio track} subtitle {Subtitle track} other {Track}}"
+  },
+  "settings": {
+    "language_switched": "Now in {language}. You can change it in Settings.",
+    "language_system": "System default"
+  }
+}

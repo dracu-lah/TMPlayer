@@ -8,6 +8,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import com.tmplayer.ui.i18n.ProvideStrings
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -204,8 +205,9 @@ fun TMPlayerTheme(content: @Composable () -> Unit) {
                 // inherits Compose's fallback, so a light theme would draw dark theme grey.
                 LocalContentColor provides scheme.onSurface,
                 LocalDarkTheme provides dark,
-                content = content,
-            )
+            ) {
+                ProvideStrings(content)
+            }
         }
     }
 }
