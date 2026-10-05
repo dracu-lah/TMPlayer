@@ -1,26 +1,11 @@
-<p>TMPlayer plays the videos in your own Telegram chats and channels on an Android TV, a Fire TV stick or a phone. It starts within seconds while the file is still downloading, and seeking re-aims the download instead of waiting for it.</p>
+TMPlayer plays the videos in your own Telegram chats and channels on an Android TV, a phone, or a Windows or Linux computer. It starts within seconds while the file is still downloading, and seeking re-aims the download instead of waiting for it.
 
-<p><b>TMPlayer is an unofficial app.</b> It is not made by, endorsed by or affiliated with Telegram. It uses the Telegram API through TDLib, and you need your own Telegram account to use it.</p>
+Sign in by scanning a QR code with your phone, pick a chat, and only its playable videos appear. No messages, no server, no account except yours.
 
-<p><b>What it does</b></p>
-<ul>
-<li>Sign in on a TV by scanning a QR code with Telegram on your phone, or with your phone number. Two-step verification works either way.</li>
-<li>Shows media, not messages: pick a chat and only its playable videos appear, including videos sent as files.</li>
-<li>Starts fast and seeks properly. Or, if your connection is slow, downloads the whole video first.</li>
-<li>Plays MKV, MP4, AVI, TS and more, with embedded subtitles (including PGS and VobSub) and switchable audio tracks. DTS, TrueHD and E-AC3 decode in software when the device cannot.</li>
-<li>Recognises episode names like S02E04, with previous and next episode controls and autoplay of the next one.</li>
-<li>Remembers where you stopped in every video, with Continue watching and favourite chats.</li>
-<li>Caches only the video you are watching, and keeps the ones you choose to download.</li>
-<li>One APK for TV and phone: a remote friendly TV interface, and a Material 3 phone interface with gestures for seeking, brightness and volume.</li>
-<li>Made for cheap hardware: tested on an 8 GB TV stick with 1 GB of RAM, Android 8.0 and up.</li>
-</ul>
+Features:
+- **Instant Playback**: Start watching within seconds, even for large files.
+- **Secure**: Communicates directly with Telegram's servers. No third-party analytics or developer-operated backends.
+- **Cross-Platform**: Available for Android TV, mobile, Windows, and Linux.
+- **Open Source**: Fully open-source and transparent.
 
-<p><b>Privacy</b></p>
-<ul>
-<li>No ads of its own, no analytics, no paid tier. TMPlayer runs no server: it talks to Telegram directly, as any Telegram app does.</li>
-<li>Telegram's own sponsored messages in public channels are shown, because Telegram's API terms require every third party app to show them.</li>
-<li>Optional crash reports: off on a fresh install. Only if you turn the switch on in Settings does the app start the open source Sentry SDK and send a crash's stack trace, app version, Android version and device model. No IP address, breadcrumbs, file names or chat names are sent.</li>
-<li>Update check: the app asks tmplayer.org (or, failing that, GitHub) whether a newer version exists, and tells you. It downloads nothing unless you press the button, the system installer still asks you to confirm, and turning the notice off in Settings stops the checks.</li>
-</ul>
-
-<p>Free and open source under the GPL-3.0. There are also Windows and Linux versions at https://tmplayer.org.</p>
+TMPlayer is an unofficial client. It is not affiliated with, endorsed by, or connected to Telegram FZ-LLC.
