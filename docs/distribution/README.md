@@ -1,21 +1,15 @@
 # Distribution channels
 
-Drafts for getting TMPlayer listed beyond GitHub and tmplayer.org. Nothing here has been submitted;
-each file says what to send and where. Facts were checked on 2026-10-05 against the 1.22.0 release
-(`site/latest.json`).
+Reference drafts for getting TMPlayer listed beyond GitHub and tmplayer.org. **Status and next steps
+live in [docs/PLAN.md](../PLAN.md)** (Phase C and the U tasks); this folder only keeps the material
+those steps use.
 
-| Channel | Platform | Status | Effort | What you do |
-| --- | --- | --- | --- | --- |
-| [Obtainium](izzyondroid.md#obtainium) | Android | Works today | None | Optionally add the "Get it on Obtainium" badge to the README and site |
-| [IzzyOnDroid](izzyondroid.md) | Android | Ready to request | Low | Decide on the updater (hide it for store installs, or add a sentence), then file the Codeberg issue from the draft |
-| [winget](winget.md) | Windows | Manifests ready ([winget/](winget/)) | Low | PR to microsoft/winget-pkgs, or `wingetcreate new <msi url>`; later a release.yml job |
-| [Awesome lists](awesome-lists.md) | All | Entries drafted for 7 lists | Low | One PR or issue per list; offa's list after IzzyOnDroid |
-| [AlternativeTo](telegram-apps.md#alternativeto) | All | Listing text drafted | Low | Create the entry, mark it as an alternative to Kodi, VLC, Telegram Desktop, Tevegram, Echogram |
-| [XDA thread](telegram-apps.md#xda-forums) | Android, desktop | Post drafted | Low | Post it, then answer the thread now and then |
-| [Uptodown](telegram-apps.md#uptodown) | Android | Notes | Low, but per release | Developers Console account, upload the APK each release |
-| [telegram.org/apps](telegram-apps.md#telegramorgapps) | All | No public path | n/a | Nothing; optional note to @PressBot |
-| [Flathub](flathub.md) | Linux | Not advisable now | High | Would need a from-source offline build of the app, TDLib, mpv and FFmpeg |
-| [F-Droid main](telegram-apps.md#f-droid-main-repository) | Android | Not recommended | High | IzzyOnDroid covers the same clients |
+| File | Used by |
+| --- | --- |
+| [winget/](winget/) and [winget.md](winget.md) | CP13, CP16, U13 |
+| [telegram-apps.md](telegram-apps.md) | U17 AlternativeTo, U18 Uptodown, U19 XDA (a fact list only) |
+| [flathub.md](flathub.md) | U16, Flathub PR #10513 |
+| [izzyondroid.md](izzyondroid.md) | Set aside (see PLAN), kept in case the policy changes |
 
 ## Already done in the repository
 

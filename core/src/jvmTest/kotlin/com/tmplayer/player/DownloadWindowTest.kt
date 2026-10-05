@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The seek matrix from PLAN.md §6, expressed against the arithmetic that decides whether a
+ * The seek matrix from docs/design/2026-08-07-v1-design.md §6, expressed against the arithmetic that decides whether a
  * read can be served or the download has to be moved.
  */
 class DownloadWindowTest {

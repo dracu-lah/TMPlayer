@@ -261,7 +261,7 @@ D5. **Episode navigation on phone.** `episodes` is only consumed by the TV fragm
     Wire prev/next into the touch controller. Depends on A1.
 
 D6. **Resume or restart.** The saved position applies silently (`PlayerActivity.kt:222-229`);
-    offer "start over" (controller affordance or one-time prompt). `PLAN.md:80` specified it.
+    offer "start over" (controller affordance or one-time prompt). `2026-08-07-v1-design.md:80` specified it.
 
 D7. **Playback speed parity and persistence.** Phone has it in the Media3 gear; TV has
     nothing (`player/TvPlayerGlue.kt:90-93`). Add a TV speed action and persist a default.
@@ -328,7 +328,7 @@ E5. **Thumbnail pipeline.** Per-cell subscriptions to the global `fileUpdates` f
 E6. **Resume store discipline.** The 10-second heartbeat rewrites and fsyncs the whole
     DataStore file, re-running full-map scans in `watchProgress`/`continueWatching` for every
     collector, against an unbounded history (`PlayerActivity.kt:814-823`,
-    `data/SettingsStore.kt:225-282`). Fix: cap history at 200 (LRU, as `PLAN.md:125`
+    `data/SettingsStore.kt:225-282`). Fix: cap history at 200 (LRU, as `2026-08-07-v1-design.md:125`
     intended), write only on meaningful delta, avoid rescanning per write.
 
 E7. **Throttle the download HUD.** `renderProgress` runs per TDLib `updateFile` (several per
@@ -384,7 +384,7 @@ E14. **Tests for the seams.** 169 pure-function tests exist; nothing covers
 - Android TV Watch Next channel fed from `continueWatching` (needs D3's session work).
 - Quality variants: read TDLib alternative video representations for weak connections
   (`data/MediaMapper.kt:53-69`).
-- External `.srt` from the same chat as `subtitleConfigurations` (deferred in `PLAN.md:26`).
+- External `.srt` from the same chat as `subtitleConfigurations` (deferred in `2026-08-07-v1-design.md:26`).
 - Localization: move strings to `strings.xml` with plurals (today: one string resource total).
 - Theme choice (light / follow-system), `values-night`.
 - Open source licences screen (attribution for the FFmpeg renderers is an obligation;

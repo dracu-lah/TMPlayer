@@ -27,7 +27,7 @@ universal APK is published for people who should not have to identify their CPU.
 
 ## Where to read more
 
-- The design specs under [superpowers/specs/](superpowers/specs/) record the reasoning behind
+- The design specs under [design/](design/) record the reasoning behind
   individual pieces of work.
 - The unit tests around the streaming data source are the executable version of the seek rules.
 - Version pins and why they exist: [BUILDING.md](BUILDING.md).
