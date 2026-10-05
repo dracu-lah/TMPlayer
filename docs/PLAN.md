@@ -38,7 +38,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [ ] U05 (optional) DMARC record
 
 **Phase B. The "Player" release (earliest 2026-10-13, cadence guard)**
-- [ ] CP06 Subtitle and audio delay, subtitle style
+- [x] CP06 Subtitle and audio delay, subtitle style (905d009, desktop verified; phone and TV not yet tested on a device)
 - [ ] CP07 Volume boost, sleep timer and "still watching?", TV next-up card
 - [ ] CP08 Resume rules, desktop player extras
 - [ ] CP09 Empty and error states with actions, recent searches
