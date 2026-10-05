@@ -46,7 +46,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [x] CP10 Remove after watching, free space, TV focus and labels (6d4d36f, toggle, free space, focus scale and 48/27 margins checked on the phone and TV emulator fixtures and the desktop render test; real deletion after a watched download not yet tested on a device)
 - [x] CP10a Sidebar: version beside the logo, compact accordion groups (phone, TV, desktop) (b5d6468, draft, awaiting user review; TV rail folded and open, D-pad walk, phone drawer and desktop light and dark checked on the emulator fixtures and the render test. The TV rail has no icons only mode, so none was added)
 - [ ] CP10b One theme on every platform: Android TV modal borders, surfaces and the rest match phone and desktop
-- [ ] CP10c Support the project: sponsor button and QR code on every platform, a gentle reminder, site section
+- [x] CP10c Support the project: sponsor button and QR code on every platform, a gentle reminder, site section (9c53d0e, entry, QR codes and forced card checked on the phone and TV emulator fixtures and the desktop render test, every code decoded with zbarimg; site section at 390 and 1440 in headless Chromium; the real 14 day and 10 play trigger not yet seen on a device)
 - [x] CP10d TV player: drop the on-screen play, back 5 s and forward 10 s buttons the remote already covers (ab2f4b9, row, paused cue, jump HUD, menu and D-pad walk checked on the TV emulator fixture; real playback keys not yet tested on a device)
 - [ ] CP11 Release prep and device verification
 - [ ] CP12 Release "Player" (only when the user says so) and post-release checks
