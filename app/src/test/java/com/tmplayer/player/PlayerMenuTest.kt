@@ -15,6 +15,8 @@ class PlayerMenuTest {
                 PlayerMenuEntry.PlaybackDetails,
                 PlayerMenuEntry.StartOver,
                 PlayerMenuEntry.Speed,
+                PlayerMenuEntry.VolumeBoost,
+                PlayerMenuEntry.SleepTimer,
                 PlayerMenuEntry.SaveToDownloads,
                 PlayerMenuEntry.MarkWatched,
                 PlayerMenuEntry.PictureInPicture,

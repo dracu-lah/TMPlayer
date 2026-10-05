@@ -66,6 +66,8 @@ import com.tmplayer.R
 import com.tmplayer.data.ChatRepository
 import com.tmplayer.data.LocalDownloads
 import com.tmplayer.data.start
+import com.tmplayer.data.pauseAll
+import com.tmplayer.data.resume
 import com.tmplayer.data.Failures
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaName
@@ -212,6 +214,19 @@ class PlayerActivity : FragmentActivity() {
     /** How subtitles are drawn. Shared with Settings and the desktop. */
     private var subtitleStyle = SubtitleStyle()
 
+    /** Volume boost as the viewer left it, read before the player is built. */
+    private var volumeBoostOn = false
+
+    /** The boost's processor, owned by the current player's sink. See [VolumeBoostProcessor]. */
+    private var volumeBoost: VolumeBoostProcessor? = null
+
+    /**
+     * True while "Still watching?" is up. Playback is stopped under it and so are the downloads,
+     * and [downloadsHeldForTheCard] are the queued ones it paused, to carry on when somebody answers.
+     */
+    private var stillWatchingUp = false
+    private var downloadsHeldForTheCard: List<Int> = emptyList()
+
     /**
      * Which way up the picture is held, and whether the viewer has said so themselves.
      *
@@ -306,8 +321,7 @@ class PlayerActivity : FragmentActivity() {
      * has been seen the end of the video goes straight to the next one; once it has been hidden the
      * end of the video stays put.
      */
-    private var nextUpCard: View? = null
-    private var nextUpText: TextView? = null
+    private var nextUpCard: NextUpCard? = null
     private var nextUpShown = false
     private var nextUpDismissed = false
 
@@ -439,7 +453,6 @@ class PlayerActivity : FragmentActivity() {
         controls?.setSkip(Skip.BACK_MS, Skip.FORWARD_MS)
         if (!FormFactor.isTv(this)) {
             feedback = PlayerFeedback(findViewById(R.id.player_root), findViewById(R.id.overlay_container))
-            buildNextUpCard()
         } else {
             tvMenu = PlayerTvMenu(
                 activity = this,
@@ -451,11 +464,16 @@ class PlayerActivity : FragmentActivity() {
                 markWatched = ::hasMessage,
                 watched = { onWatchedList },
                 openInAnotherApp = { savable == true },
+                volumeBoost = { volumeBoostOn },
+                sleepTimer = ::sleepTimerDetail,
+                onSleepTimer = ::setSleepTimer,
                 onEntry = ::onTvMenuEntry,
                 onSpeed = ::setSpeed,
                 onClosed = { controls?.show(); controls?.focusRow() },
             )
         }
+        buildNextUpCard()
+        startStillWatchingCounts()
         if (hasMessage()) {
             lifecycleScope.launch {
                 onWatchedList = runCatching { watchedStore.isWatched(chatId, messageId) }.getOrDefault(false)
@@ -554,6 +572,7 @@ class PlayerActivity : FragmentActivity() {
             tracks = runCatching { settings.trackChoice(seriesKey) }
                 .getOrDefault(TrackChoice())
             downmixChoice = runCatching { settings.downmixChoiceNow() }.getOrNull()
+            volumeBoostOn = runCatching { settings.volumeBoostNow() }.getOrDefault(false)
             subtitleStyle = runCatching { settings.subtitleStyleNow() }.getOrDefault(SubtitleStyle())
             applySubtitleStyle()
             // Only a video from a message has somewhere to keep an offset; a file opened from
@@ -674,9 +693,9 @@ class PlayerActivity : FragmentActivity() {
             )
             topBar.updatePadding(left = barLeft + safe.left, right = barRight + safe.right, top = safe.top)
             corner?.updatePadding(right = safe.right, top = safe.top + underTheBar)
-            nextUpCard?.updateLayoutParams<FrameLayout.LayoutParams> {
-                rightMargin = safe.right + NEXT_UP_MARGIN_PX
-                bottomMargin = safe.bottom + NEXT_UP_BOTTOM_PX
+            nextUpCard?.view?.updateLayoutParams<FrameLayout.LayoutParams> {
+                rightMargin = safe.right + NextUpCard.MARGIN_PX
+                bottomMargin = safe.bottom + NextUpCard.BOTTOM_PX
             }
             insets
         }
@@ -1101,8 +1120,13 @@ class PlayerActivity : FragmentActivity() {
                     it.offsetUs = syncDelays.audioMs * 1000
                     audioOffset = it
                 }
+                // After the fold, so the compressor hears the two channels that will be played.
+                val boost = VolumeBoostProcessor().also {
+                    it.enabled = volumeBoostOn
+                    volumeBoost = it
+                }
                 val processors = if (folds.isEmpty()) {
-                    arrayOf<AudioProcessor>(offset)
+                    arrayOf<AudioProcessor>(boost, offset)
                 } else {
                     val mixer = ChannelMixingAudioProcessor()
                     folds.forEach { fold ->
@@ -1132,7 +1156,7 @@ class PlayerActivity : FragmentActivity() {
                             },
                         )
                     }
-                    arrayOf<AudioProcessor>(mixer, offset)
+                    arrayOf<AudioProcessor>(mixer, boost, offset)
                 }
                 // Twice Media3's passthrough allowance, and four times its AC-3 multiplier: about
                 // two seconds of bitstream instead of half a second. The stock figure is what let
@@ -1326,6 +1350,12 @@ class PlayerActivity : FragmentActivity() {
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
+            // Started again from outside the card (a headset, the notification): the question
+            // has been answered.
+            if (isPlaying && stillWatchingUp) {
+                stillWatchingUp = false
+                hideStatus()
+            }
             // A long download before the first frame is still the viewer waiting on this screen,
             // so the loading sheet counts as something worth staying awake for.
             keepScreenOn(isPlaying || openingFilm)
@@ -1716,14 +1746,23 @@ class PlayerActivity : FragmentActivity() {
             val next = _episodes.value.next
             val autoplay = runCatching { settings.autoplayNextNow() }.getOrDefault(true)
             hideNextUp()
+            if (sleepAtTheEnd) {
+                sleepAtTheEnd = false
+                askStillWatching("The sleep timer stopped at the end of the video.", next)
+                return@launch
+            }
             if (next == null || !autoplay || nextUpDismissed) {
                 showFinished()
+                return@launch
+            }
+            if (StillWatching.askBeforeAutoplay(autoplayedInARow)) {
+                askStillWatching("${StillWatching.AUTOPLAY_LIMIT} episodes played in a row.", next)
                 return@launch
             }
             // The card already counted the last half minute down in front of the viewer; a second
             // countdown after it would be a wait for nothing.
             if (nextUpShown) {
-                playEpisode(next)
+                autoplay(next)
                 return@launch
             }
             for (second in AUTOPLAY_COUNTDOWN_SEC downTo 1) {
@@ -1734,8 +1773,15 @@ class PlayerActivity : FragmentActivity() {
                 )
                 delay(1_000)
             }
-            playEpisode(next)
+            autoplay(next)
         }
+    }
+
+    /** [playEpisode] for an episode nobody asked for, counted towards "Still watching?". */
+    private fun autoplay(next: MediaItem) {
+        autoplayedInARow++
+        openedByAutoplay = true
+        playEpisode(next)
     }
 
     /** The end of the last video there is: the picture stays, with a way to watch it again. */
@@ -1873,6 +1919,27 @@ class PlayerActivity : FragmentActivity() {
         }
 
         if (!FormFactor.isTv(this) && handleTouchDeviceKey(event)) return true
+
+        // The next-up card on a television: left, right and OK walk and press its two buttons,
+        // Back puts it away. Up and down still raise the row below.
+        if (nextUpHasTheRemote()) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
+                -> {
+                    if (nextUpCard?.view?.hasFocus() != true) {
+                        nextUpCard?.play?.requestFocus()
+                        return true
+                    }
+                    return super.dispatchKeyEvent(event)
+                }
+                KeyEvent.KEYCODE_BACK -> {
+                    nextUpDismissed = true
+                    hideNextUp()
+                    return true
+                }
+            }
+        }
 
         when (event.keyCode) {
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
@@ -2282,6 +2349,12 @@ class PlayerActivity : FragmentActivity() {
                 .setChecked(choice == playbackSpeed)
         }
         speeds.setGroupCheckable(1, true, true)
+        items.add(0, MENU_BOOST, 2, "Volume boost").setCheckable(true).setChecked(volumeBoostOn)
+        val sleep = items.addSubMenu(0, MENU_SLEEP, 2, sleepTimerDetail()?.let { "Sleep timer ($it)" } ?: "Sleep timer")
+        if (sleepTimerDetail() != null) sleep.add(2, MENU_SLEEP_OFF, 0, "Turn off")
+        SleepTimer.CHOICES.forEachIndexed { index, minutes ->
+            sleep.add(2, MENU_SLEEP_BASE + index, index + 1, SleepTimer.label(minutes))
+        }
         items.add(0, MENU_START_OVER, 3, "Start over")
         if (savable == true) items.add(0, MENU_OPEN_WITH, 4, "Open in another app")
         items.add(0, MENU_DETAILS, 5, "Playback details")
@@ -2302,6 +2375,10 @@ class PlayerActivity : FragmentActivity() {
                 MENU_START_OVER -> startOver()
                 MENU_OPEN_WITH -> openInAnotherApp()
                 MENU_DETAILS -> showPlaybackDetails()
+                MENU_BOOST -> toggleVolumeBoost()
+                MENU_SLEEP_OFF -> setSleepTimer(null)
+                in MENU_SLEEP_BASE until MENU_SLEEP_BASE + SleepTimer.CHOICES.size ->
+                    setSleepTimer(SleepTimer.CHOICES[item.itemId - MENU_SLEEP_BASE])
                 in MENU_SPEED_BASE until MENU_SPEED_BASE + PlaybackSpeed.CHOICES.size ->
                     setSpeed(PlaybackSpeed.CHOICES[item.itemId - MENU_SPEED_BASE])
                 else -> return@setOnMenuItemClickListener false
@@ -2321,9 +2398,146 @@ class PlayerActivity : FragmentActivity() {
             PlayerMenuEntry.OpenInAnotherApp -> openInAnotherApp()
             PlayerMenuEntry.SaveToDownloads -> saveToDownloads()
             PlayerMenuEntry.MarkWatched -> toggleWatched()
+            PlayerMenuEntry.VolumeBoost -> toggleVolumeBoost()
             // Pages of the menu itself, opened there.
-            PlayerMenuEntry.Speed, PlayerMenuEntry.RemoteKeys -> Unit
+            PlayerMenuEntry.Speed, PlayerMenuEntry.SleepTimer, PlayerMenuEntry.RemoteKeys -> Unit
         }
+    }
+
+    /** The menu's Volume boost: switched on the sound already playing, and kept for every video. */
+    private fun toggleVolumeBoost() {
+        val on = !volumeBoostOn
+        volumeBoostOn = on
+        volumeBoost?.enabled = on
+        showGestureFeedback(if (on) "Volume boost on" else "Volume boost off")
+        lifecycleScope.launch { runCatching { settings.setVolumeBoost(on) } }
+    }
+
+    /** What the menu says about a running sleep timer, or null when there is none. */
+    private fun sleepTimerDetail(): String? = when {
+        sleepAtTheEnd -> SleepTimer.label(SleepTimer.END_OF_VIDEO)
+        sleepAt > 0 -> SleepTimer.remaining(sleepAt - SystemClock.elapsedRealtime())
+        else -> null
+    }
+
+    /** Minutes from now, [SleepTimer.END_OF_VIDEO], or null to turn the timer off. */
+    private fun setSleepTimer(minutes: Int?) {
+        sleepAtTheEnd = minutes == SleepTimer.END_OF_VIDEO
+        sleepAt = if (minutes != null && minutes != SleepTimer.END_OF_VIDEO) {
+            SystemClock.elapsedRealtime() + minutes * 60_000L
+        } else {
+            0L
+        }
+        showGestureFeedback(
+            when (minutes) {
+                null -> "Sleep timer off"
+                SleepTimer.END_OF_VIDEO -> "Stops at the end of this video"
+                else -> "Stops in ${SleepTimer.label(minutes)}"
+            },
+        )
+    }
+
+    /**
+     * Starts or carries on the counts "Still watching?" keeps, and looks at them every
+     * [STILL_WATCHING_TICK_MS]: the sleep timer running out, and two hours of playback without a
+     * press. Not tied to the started state, since picture in picture stops the activity while the
+     * video carries on, and that is exactly when nobody may be watching.
+     */
+    private fun startStillWatchingCounts() {
+        if (!openedByAutoplay) {
+            autoplayedInARow = 0
+            sleepAt = 0L
+            sleepAtTheEnd = false
+            lastInputAt = SystemClock.elapsedRealtime()
+        }
+        openedByAutoplay = false
+        if (lastInputAt == 0L) lastInputAt = SystemClock.elapsedRealtime()
+        lifecycleScope.launch {
+            while (true) {
+                delay(STILL_WATCHING_TICK_MS)
+                if (stillWatchingUp) continue
+                val exo = player ?: continue
+                val now = SystemClock.elapsedRealtime()
+                if (sleepAt in 1..now) {
+                    sleepAt = 0L
+                    askStillWatching("The sleep timer paused the video.", next = null)
+                } else if (exo.isPlaying && StillWatching.askAfterIdle(now - lastInputAt)) {
+                    askStillWatching("Nothing pressed for two hours.", next = null)
+                }
+            }
+        }
+    }
+
+    /** Any key or touch is somebody watching. */
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        lastInputAt = SystemClock.elapsedRealtime()
+        autoplayedInARow = 0
+    }
+
+    /**
+     * "Still watching?": the whole screen, with playback stopped and every download held.
+     *
+     * The player is stopped rather than paused, which closes the stream: a paused player keeps
+     * reading ahead, and TDLib keeps fetching for it. Keep watching prepares it again where it
+     * was. [next] is the episode autoplay was about to start, which Keep watching starts instead.
+     */
+    private fun askStillWatching(why: String, next: MediaItem?) {
+        stillWatchingUp = true
+        hideNextUp()
+        controls?.hideAnimated()
+        player?.let {
+            it.pause()
+            it.stop()
+        }
+        // Not [stopDownload], which leaves alone a file this player is still holding, as it is here.
+        val id = fileId
+        if (!downloadComplete && id > 0 && !OfflineDownloads.isDownloading(id)) {
+            App.backgroundScope.launch { runCatching { Td.cancelDownload(id) } }
+        }
+        downloadsHeldForTheCard = OfflineDownloads.active.value.values.filter { it.busy }.map { it.fileId }
+        if (downloadsHeldForTheCard.isNotEmpty()) OfflineDownloads.pauseAll(this)
+
+        keepScreenOn(false)
+        statusOverlay.visibility = View.VISIBLE
+        statusIcon.visibility = View.GONE
+        rebufferChip.visibility = View.GONE
+        feedback?.buffering(false)
+        statusSpinner?.visibility = View.GONE
+        statusProgress.visibility = View.GONE
+        hideFailureActions()
+        layOutSheetForThisScreen()
+        statusTitle.text = "Still watching?"
+        statusText.text = why
+        statusDetail.visibility = View.VISIBLE
+        statusDetail.text = next?.let { "Next: ${it.title}" } ?: "Playback and downloads are paused."
+        statusBack?.visibility = View.VISIBLE
+        statusRetry?.apply {
+            text = "Keep watching"
+            visibility = View.VISIBLE
+            setOnClickListener {
+                text = "Try again"
+                setOnClickListener { retryPlayback() }
+                keepWatching(next)
+            }
+            requestFocus()
+        }
+        updateDownloadChip()
+    }
+
+    private fun keepWatching(next: MediaItem?) {
+        stillWatchingUp = false
+        downloadsHeldForTheCard.forEach { OfflineDownloads.resume(this, it) }
+        downloadsHeldForTheCard = emptyList()
+        if (next != null) {
+            playEpisode(next)
+            return
+        }
+        hideStatus()
+        val exo = player ?: return
+        if (exo.playbackState == Player.STATE_IDLE) exo.prepare()
+        exo.play()
+        keepScreenOn(true)
     }
 
     /**
@@ -2467,60 +2681,18 @@ class PlayerActivity : FragmentActivity() {
         controls?.show()
     }
 
-    /** The bottom-right card that offers the next episode before this one ends. Phone only. */
+    /** The next-up card, on a phone and a television alike. See [NextUpCard]. */
     private fun buildNextUpCard() {
-        val density = resources.displayMetrics.density
-        fun px(dp: Int) = (dp * density).toInt()
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = getDrawable(R.drawable.bg_player_chip)
-            setPadding(px(18), px(14), px(18), px(12))
-            visibility = View.GONE
-            isClickable = true
-        }
-        val text = TextView(this).apply {
-            setTextColor(getColor(R.color.text_primary))
-            textSize = 14f
-            maxLines = 2
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            maxWidth = px(260)
-        }
-        val buttons = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.END
-        }
-        fun button(label: String, action: () -> Unit) = android.widget.Button(
-            this, null, android.R.attr.borderlessButtonStyle,
-        ).apply {
-            this.text = label
-            setTextColor(getColor(R.color.accent))
-            isAllCaps = false
-            setOnClickListener { action() }
-        }
-        buttons.addView(button("Hide") {
-            nextUpDismissed = true
-            hideNextUp()
-        })
-        buttons.addView(button("Play now") {
-            _episodes.value.next?.let(::playEpisode)
-        })
-        card.addView(text)
-        card.addView(buttons)
-        val root = findViewById<FrameLayout>(R.id.player_root)
-        root.addView(
-            card,
-            root.indexOfChild(findViewById(R.id.overlay_container)),
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.END or Gravity.BOTTOM,
-            ).apply {
-                rightMargin = NEXT_UP_MARGIN_PX
-                bottomMargin = NEXT_UP_BOTTOM_PX
+        nextUpCard = NextUpCard(
+            root = findViewById(R.id.player_root),
+            below = findViewById(R.id.overlay_container),
+            tv = FormFactor.isTv(this),
+            onHide = {
+                nextUpDismissed = true
+                hideNextUp()
             },
+            onPlay = { _episodes.value.next?.let(::playEpisode) },
         )
-        nextUpCard = card
-        nextUpText = text
         watchForTheEnd()
     }
 
@@ -2539,16 +2711,18 @@ class PlayerActivity : FragmentActivity() {
                     val next = _episodes.value.next ?: continue
                     val duration = exo.duration
                     if (duration <= 0 || nextUpDismissed || locked || inPictureInPicture) continue
+                    // Autoplay is going to stop and ask, or the sleep timer to stop: nothing
+                    // is starting in thirty seconds, so nothing says it is.
+                    if (sleepAtTheEnd || StillWatching.askBeforeAutoplay(autoplayedInARow)) continue
                     val left = duration - exo.currentPosition
                     if (left in 1..NEXT_UP_LEAD_MS && statusOverlay.visibility != View.VISIBLE) {
                         val code = MediaName.parse(next.fileName.ifBlank { next.title }).episodeCode
                         val label = code ?: next.title
-                        nextUpText?.text = "Next: $label\nStarting in ${(left + 999) / 1000} s"
-                        if (nextUpCard?.visibility != View.VISIBLE) {
-                            nextUpCard?.visibility = View.VISIBLE
+                        if (nextUpCard?.show(label, (left + 999) / 1000) == true) {
                             nextUpShown = true
+                            if (FormFactor.isTv(this@PlayerActivity) && !controlsUp) nextUpCard?.play?.requestFocus()
                         }
-                    } else if (left > NEXT_UP_LEAD_MS && nextUpCard?.visibility == View.VISIBLE) {
+                    } else if (left > NEXT_UP_LEAD_MS && nextUpCard?.isShown == true) {
                         // Seeked back out of the last half minute: the offer goes, and comes back.
                         hideNextUp()
                         nextUpShown = false
@@ -2559,11 +2733,17 @@ class PlayerActivity : FragmentActivity() {
     }
 
     private fun hideNextUp() {
-        nextUpCard?.visibility = View.GONE
+        // Focus left on a gone view is focus nowhere; the next press would land on nothing.
+        if (nextUpCard?.hide() == true) controls?.focusRow()
     }
 
+    /** Whether the next-up card is up and the remote's arrows and OK belong to it. */
+    private fun nextUpHasTheRemote(): Boolean =
+        FormFactor.isTv(this) && nextUpCard?.isShown == true && !controlsUp &&
+            statusOverlay.visibility != View.VISIBLE
+
     private fun isOnNextUpCard(rawX: Float, rawY: Float): Boolean {
-        val card = nextUpCard ?: return false
+        val card = nextUpCard?.view ?: return false
         if (card.visibility != View.VISIBLE) return false
         val at = IntArray(2)
         card.getLocationInWindow(at)
@@ -2579,6 +2759,8 @@ class PlayerActivity : FragmentActivity() {
         setSystemBarsHidden(!visible)
         // The centre disc carries its own spinner while the row is up, so the bare one stands down.
         feedback?.controlsShown(visible)
+        // The row going away hands the remote back to the next-up card, if that is up.
+        if (!visible && nextUpHasTheRemote()) nextUpCard?.play?.requestFocus()
         // Subtitles climb clear of the raised row rather than being covered by it, and settle
         // back once it goes. Posted so the first raise measures a laid-out cluster rather than
         // the zero height it had while gone.
@@ -3293,8 +3475,9 @@ class PlayerActivity : FragmentActivity() {
 
         /** How long before the end the "Next episode" card comes up. */
         private const val NEXT_UP_LEAD_MS = 30_000L
-        private const val NEXT_UP_MARGIN_PX = 48
-        private const val NEXT_UP_BOTTOM_PX = 220
+
+        /** How often the sleep timer and the idle count are looked at. */
+        private const val STILL_WATCHING_TICK_MS = 5_000L
 
         /** How long the unlock pill stays up after a tap on the locked screen. */
         private const val UNLOCK_PILL_MS = 2_500L
@@ -3309,6 +3492,10 @@ class PlayerActivity : FragmentActivity() {
         private const val MENU_COPY_LINK = 8
         private const val MENU_SAVE = 9
         private const val MENU_WATCHED = 10
+        private const val MENU_BOOST = 11
+        private const val MENU_SLEEP = 12
+        private const val MENU_SLEEP_OFF = 13
+        private const val MENU_SLEEP_BASE = 200
         private const val MENU_SPEED_BASE = 100
 
         private const val RESUME_TICK_MS = 10_000L
@@ -3401,6 +3588,24 @@ class PlayerActivity : FragmentActivity() {
          * Disk persistence comes in through [primeOrientation].
          */
         private var lastOrientation = ScreenOrientation.DEFAULT
+
+        /**
+         * What "Still watching?" counts, for the length of the process: autoplay starts a new
+         * activity per episode, and a count that began again with each one would never reach the
+         * limit. [openedByAutoplay] tells the next activity it is one of those hops; any other way
+         * into the player is somebody choosing a video, which starts both counts again.
+         */
+        private var autoplayedInARow = 0
+        private var lastInputAt = 0L
+        private var openedByAutoplay = false
+
+        /**
+         * The sleep timer: when it runs out ([SystemClock.elapsedRealtime], zero for none), or
+         * whether it stops at the end of the video. Carried across autoplay for the same reason as
+         * the counts above, and dropped when the viewer opens a video themselves.
+         */
+        private var sleepAt = 0L
+        private var sleepAtTheEnd = false
 
         /**
          * The lock read back off disk at startup, so it survives more than one process.

@@ -11,6 +11,10 @@ enum class PlayerMenuEntry {
     PlaybackDetails,
     StartOver,
     Speed,
+    /** Night mode: quiet dialogue lifted, loud scenes held back. On or off, and the menu closes. */
+    VolumeBoost,
+    /** A page of lengths, and the time left on one that is running. */
+    SleepTimer,
     SaveToDownloads,
     /** "Mark as watched", or "Mark as unwatched" once it is on the list. */
     MarkWatched,
@@ -47,6 +51,8 @@ object PlayerMenu {
         add(PlayerMenuEntry.PlaybackDetails)
         add(PlayerMenuEntry.StartOver)
         add(PlayerMenuEntry.Speed)
+        add(PlayerMenuEntry.VolumeBoost)
+        add(PlayerMenuEntry.SleepTimer)
         if (saveToDownloads) add(PlayerMenuEntry.SaveToDownloads)
         if (markWatched) add(PlayerMenuEntry.MarkWatched)
         if (pictureInPicture) add(PlayerMenuEntry.PictureInPicture)

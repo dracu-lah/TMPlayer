@@ -30,6 +30,7 @@ private val OPEN_LAST_CHAT = booleanPreferencesKey("open_last_chat")
 private val DOWNLOAD_FIRST = booleanPreferencesKey("download_before_playing")
 private val AUTOPLAY_NEXT = booleanPreferencesKey("autoplay_next")
 private val DOWNMIX_STEREO = booleanPreferencesKey("downmix_stereo")
+private val VOLUME_BOOST = booleanPreferencesKey("volume_boost")
 private val WIFI_ONLY = booleanPreferencesKey("wifi_only_downloads")
 private val CRASH_REPORTS = booleanPreferencesKey("crash_reports")
 private val PLAYBACK_SPEED = floatPreferencesKey("playback_speed")
@@ -301,6 +302,19 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
 
     /** Read before the player is built, because the fold is fixed into its audio sink. */
     suspend fun downmixChoiceNow(): Boolean? = prefs.data.first()[DOWNMIX_STEREO]
+
+    /**
+     * Volume boost, the player menu's night mode: quiet dialogue lifted and loud scenes held back.
+     * Off until the viewer turns it on, and then kept for every video until they turn it off.
+     */
+    val volumeBoost: Flow<Boolean> = read { it[VOLUME_BOOST] ?: false }
+
+    suspend fun setVolumeBoost(value: Boolean) {
+        prefs.edit { it[VOLUME_BOOST] = value }
+    }
+
+    /** Read before the player is built, so the first second of sound is already at its level. */
+    suspend fun volumeBoostNow(): Boolean = prefs.data.first()[VOLUME_BOOST] ?: false
 
     // ---- the watch cache ---------------------------------------------------------------------
 

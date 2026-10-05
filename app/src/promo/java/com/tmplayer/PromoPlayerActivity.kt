@@ -17,7 +17,9 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaItem
 import com.tmplayer.player.PlayerControls
+import com.tmplayer.player.NextUpCard
 import com.tmplayer.player.PlayerFeedback
+import com.tmplayer.player.PlayerTvMenu
 import com.tmplayer.player.TapZone
 
 /**
@@ -27,6 +29,9 @@ import com.tmplayer.player.TapZone
  *
  *     adb shell am start -n com.tmplayer.promo/com.tmplayer.PromoPlayerActivity \
  *         [--ez tv true] [--ez playing true] [--es feedback ripple|level|scrub|hold|flash]
+ *         [--ez nextup true] [--ez menu true]
+ *
+ * `nextup` raises the next-up card over the bare picture, `menu` the television's More menu.
  *
  * Nothing here exists in a release build.
  */
@@ -94,6 +99,30 @@ class PromoPlayerActivity : FragmentActivity() {
                     controls.hideNow()
                     feedback?.flashPlayPause(false)
                 }
+            }
+            if (intent.getBooleanExtra("nextup", false)) {
+                controls.hideNow()
+                val card = NextUpCard(
+                    root = findViewById(R.id.player_root),
+                    below = findViewById(R.id.overlay_container),
+                    tv = tv,
+                    onHide = {},
+                    onPlay = {},
+                )
+                card.show("S01E05", 12)
+                if (tv) card.play.requestFocus()
+            }
+            if (intent.getBooleanExtra("menu", false)) {
+                PlayerTvMenu(
+                    activity = this,
+                    root = findViewById(R.id.player_root),
+                    title = { "The Coast S01E04" },
+                    pictureInPicture = { true },
+                    speed = { 1f },
+                    onEntry = {},
+                    onSpeed = {},
+                    onClosed = {},
+                ).open()
             }
         }, 600)
     }

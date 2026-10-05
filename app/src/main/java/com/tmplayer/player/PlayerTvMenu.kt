@@ -63,7 +63,8 @@ import com.tmplayer.ui.theme.focusRing
  * over the player. The menu draws in a dialog window of its own, which also takes the remote's
  * keys away from the activity while it is up: nothing behind it seeks or pauses by accident.
  *
- * Three pages: the list itself ([PlayerMenu.tvEntries]), the speeds, and the remote's keys.
+ * Four pages: the list itself ([PlayerMenu.tvEntries]), the speeds, the sleep timer's lengths,
+ * and the remote's keys.
  * The activity keeps every action; this only shows the lines and reports which one was chosen.
  */
 class PlayerTvMenu(
@@ -79,11 +80,17 @@ class PlayerTvMenu(
     private val watched: () -> Boolean = { false },
     /** Whether Open in another app is offered, asked each time the menu opens. */
     private val openInAnotherApp: () -> Boolean = { true },
+    /** Whether volume boost is on, for the line's detail. */
+    private val volumeBoost: () -> Boolean = { false },
+    /** The running sleep timer's detail ("23 minutes left"), or null when there is none. */
+    private val sleepTimer: () -> String? = { null },
+    /** A sleep timer chosen from its page: minutes, [SleepTimer.END_OF_VIDEO], or null for off. */
+    private val onSleepTimer: (Int?) -> Unit = {},
     private val onEntry: (PlayerMenuEntry) -> Unit,
     private val onSpeed: (Float) -> Unit,
     private val onClosed: () -> Unit,
 ) {
-    private enum class Page { Closed, Main, Speed, Keys }
+    private enum class Page { Closed, Main, Speed, Sleep, Keys }
 
     private val page = mutableStateOf(Page.Closed)
 
@@ -139,6 +146,27 @@ class PlayerTvMenu(
                 },
                 onDismiss = { page.value = Page.Main },
             )
+            Page.Sleep -> TvMenu(
+                title = "Sleep timer",
+                subtitle = sleepTimer(),
+                actions = buildList {
+                    if (sleepTimer() != null) {
+                        add(MenuAction("Turn off", Icons.Filled.Close, detail = "Keep playing") {
+                            onSleepTimer(null)
+                            close()
+                        })
+                    }
+                    SleepTimer.CHOICES.forEach { minutes ->
+                        add(
+                            MenuAction(SleepTimer.label(minutes), TmIcons.Clock) {
+                                onSleepTimer(minutes)
+                                close()
+                            },
+                        )
+                    }
+                },
+                onDismiss = { page.value = Page.Main },
+            )
             Page.Keys -> RemoteKeysSheet(onDismiss = { page.value = Page.Main })
         }
     }
@@ -152,6 +180,16 @@ class PlayerTvMenu(
             icon = ImageVector.vectorResource(R.drawable.ic_speed),
             detail = PlaybackSpeed.label(speed()),
         ) { page.value = Page.Speed }
+        PlayerMenuEntry.VolumeBoost -> MenuAction(
+            label = "Volume boost",
+            icon = ImageVector.vectorResource(R.drawable.ic_volume),
+            detail = if (volumeBoost()) "On: quiet speech lifted, loud scenes held back" else "Off",
+        ) { choose(entry) }
+        PlayerMenuEntry.SleepTimer -> MenuAction(
+            label = "Sleep timer",
+            icon = TmIcons.Clock,
+            detail = sleepTimer() ?: "Off",
+        ) { page.value = Page.Sleep }
         PlayerMenuEntry.SaveToDownloads -> MenuAction(
             label = "Save to Downloads",
             icon = TmIcons.Download,
