@@ -203,6 +203,11 @@ class BrowseRenderTest {
     }
 
     @Test
+    fun aboutPage() {
+        save("about.png", render { AboutPage("2.0.0", onBack = {}) })
+    }
+
+    @Test
     fun updatePopupOffers() {
         val release = Release("2.0.1", "page", notes = "Downloads leave the cache.")
         val png = render(update = NavUpdate("Update", "2.0.1")) {

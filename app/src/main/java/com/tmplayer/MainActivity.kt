@@ -81,6 +81,7 @@ import com.tmplayer.ui.components.ConnectionStatus
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.onboarding.OverviewScreen
 import com.tmplayer.ui.update.UpdateDialog
+import com.tmplayer.ui.settings.AboutScreen
 import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.theme.TMPlayerTheme
 import kotlinx.coroutines.Dispatchers
@@ -108,6 +109,7 @@ private sealed interface Screen {
     data class Media(val chat: ChatSummary) : Screen
     data object Settings : Screen
     data object Downloads : Screen
+    data object About : Screen
 }
 
 /**
@@ -123,6 +125,7 @@ private val ScreenSaver = listSaver<Screen, Any>(
             is Screen.Chats -> listOf(SCREEN_CHATS)
             is Screen.Settings -> listOf(SCREEN_SETTINGS)
             is Screen.Downloads -> listOf(SCREEN_DOWNLOADS)
+            is Screen.About -> listOf(SCREEN_ABOUT)
             is Screen.Media -> listOf(
                 SCREEN_MEDIA,
                 screen.chat.id,
@@ -145,6 +148,7 @@ private val ScreenSaver = listSaver<Screen, Any>(
             )
             SCREEN_SETTINGS -> Screen.Settings
             SCREEN_DOWNLOADS -> Screen.Downloads
+            SCREEN_ABOUT -> Screen.About
             else -> Screen.Chats
         }
     },
@@ -154,6 +158,7 @@ private const val SCREEN_CHATS = "chats"
 private const val SCREEN_MEDIA = "media"
 private const val SCREEN_SETTINGS = "settings"
 private const val SCREEN_DOWNLOADS = "downloads"
+private const val SCREEN_ABOUT = "about"
 
 /**
  * A video that will not fit, and what the device is holding that the viewer could do something
@@ -945,7 +950,14 @@ private fun Root() {
                         downloadsOnCached = true
                         screen = Screen.Downloads
                     },
+                    onOpenAbout = { screen = Screen.About },
                 )
+            }
+
+            is Screen.About -> {
+                val leaveAbout = { screen = Screen.Settings }
+                BackHandler(onBack = leaveAbout)
+                AboutScreen(onBack = leaveAbout)
             }
         }
 

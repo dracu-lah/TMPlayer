@@ -128,7 +128,10 @@ import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.rememberToast
+import com.tmplayer.ui.update.LinkQrDialog
 import com.tmplayer.ui.update.UpdateDialog
+import com.tmplayer.ui.update.openLink
+import com.tmplayer.ui.about.About
 import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
@@ -168,6 +171,8 @@ fun SettingsScreen(
     onBack: () -> Unit = {},
     /** The Cached videos row: the list of them, with Save to Downloads and Delete on each. */
     onOpenCachedVideos: () -> Unit = {},
+    /** Settings, then About: the licence, the notices and every link. */
+    onOpenAbout: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -207,6 +212,9 @@ fun SettingsScreen(
     val updateState by Updates.state.collectAsStateWithLifecycle()
     val updateNotify by settings.updateNotify.collectAsStateWithLifecycle(initialValue = true)
     var showUpdate by remember { mutableStateOf(false) }
+    // A link a TV cannot open, shown as a QR code instead: the address and what it is.
+    var qrLink by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val openPage = { url: String, what: String -> if (!openLink(context, url)) qrLink = url to what }
     // What TMPlayer is holding, split into downloads, cache and everything else. Worked out by
     // [StorageSplit], which is also what the Downloads screen reads, so the two panels cannot
     // quote different numbers for the same disk.
@@ -859,13 +867,7 @@ fun SettingsScreen(
                 title = "Privacy",
                 subtitle = "What stays on this $device and which services TMPlayer contacts",
                 icon = Icons.Filled.Info,
-                onClick = {
-                    runCatching {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, Uri.parse("https://tmplayer.org/privacy")),
-                        )
-                    }
-                },
+                onClick = { openPage(About.PRIVACY, "the privacy page") },
             )
         }
         // The one setting that sends anything anywhere except Telegram and GitHub, and it is off
@@ -896,13 +898,16 @@ fun SettingsScreen(
                 title = "Lawful use",
                 subtitle = "Use TMPlayer only with media you may access",
                 icon = Icons.Filled.Info,
-                onClick = {
-                    runCatching {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, Uri.parse("https://tmplayer.org/legal")),
-                        )
-                    }
-                },
+                onClick = { openPage(About.LEGAL, "the lawful use page") },
+            )
+        }
+
+        item {
+            ActionRow(
+                title = "About TMPlayer",
+                subtitle = "Version ${Updates.installedVersion}, licence, notices, contact and support",
+                icon = Icons.Filled.Info,
+                onClick = onOpenAbout,
             )
         }
 
@@ -963,6 +968,8 @@ fun SettingsScreen(
     } else {
         list()
     }
+
+    qrLink?.let { (url, what) -> LinkQrDialog(url = url, what = what, onClose = { qrLink = null }) }
 
     when (prompt) {
         Prompt.ClearCache -> TvConfirm(
@@ -1477,7 +1484,7 @@ private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SectionTitle(text: String) {
+internal fun SectionTitle(text: String) {
     val touch = isTouch()
     Text(
         text,
@@ -1850,7 +1857,7 @@ private fun StepperRow(
 }
 
 @Composable
-private fun ActionRow(
+internal fun ActionRow(
     title: String,
     subtitle: String,
     icon: ImageVector,

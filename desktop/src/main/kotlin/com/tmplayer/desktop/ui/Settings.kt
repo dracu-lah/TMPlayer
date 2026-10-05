@@ -50,6 +50,7 @@ import com.tmplayer.data.UpdateWords
 import com.tmplayer.data.Updates
 import com.tmplayer.data.release
 import com.tmplayer.desktop.os.OpenExternal
+import com.tmplayer.ui.about.About
 import com.tmplayer.player.TouchPrefs
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.theme.Tone
@@ -63,6 +64,11 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SettingsPage(state: ShellState, version: String = "") {
+    var showAbout by remember { mutableStateOf(false) }
+    if (showAbout) {
+        AboutPage(version, onBack = { showAbout = false })
+        return
+    }
     val settings = state.settings
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
@@ -285,10 +291,13 @@ fun SettingsPage(state: ShellState, version: String = "") {
 
                 Group("Help")
                 Setting("Privacy", "What stays on this computer and which services TMPlayer contacts") {
-                    OutlinedButton(onClick = { OpenExternal.browse(PRIVACY_URL) }) { Text("Open") }
+                    OutlinedButton(onClick = { OpenExternal.browse(About.PRIVACY) }) { Text("Open") }
                 }
                 Setting("Lawful use", "Use TMPlayer only with media you may access") {
-                    OutlinedButton(onClick = { OpenExternal.browse(LEGAL_URL) }) { Text("Open") }
+                    OutlinedButton(onClick = { OpenExternal.browse(About.LEGAL) }) { Text("Open") }
+                }
+                Setting("About TMPlayer", "Version $version, licence, notices, contact and support") {
+                    OutlinedButton(onClick = { showAbout = true }) { Text("Open") }
                 }
 
                 Group("Account")
@@ -332,10 +341,6 @@ fun SettingsPage(state: ShellState, version: String = "") {
 
 /** A clear waiting on its yes: what the prompt says, and what happens on Clear. */
 private class Confirm(val title: String, val message: String, val detail: String?, val action: () -> Unit)
-
-// The same pages the Android app opens from its Help group.
-private const val PRIVACY_URL = "https://tmplayer.org/privacy"
-private const val LEGAL_URL = "https://tmplayer.org/legal"
 
 @Composable
 internal fun Group(title: String) {

@@ -61,28 +61,36 @@ internal fun releasePageUrl(release: Release?): String =
 internal fun readableUrl(url: String): String = url.removePrefix("https://").removePrefix("http://")
 
 /**
- * Opens the release page, and says whether that worked.
+ * Opens a link (the release page, an About link), and says whether that worked.
  *
  * A phone hands it to the browser. A television mostly has none, and the ones that do have a
  * browser nobody wants to type into with a remote, so a TV answers false and the caller shows
  * [ReleasePageQrDialog] instead. So does a phone with no browser installed.
  */
-internal fun openReleasePage(context: Context, url: String): Boolean {
+internal fun openLink(context: Context, url: String): Boolean {
     if (FormFactor.isTv(context)) return false
     return runCatching {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }.isSuccess
 }
 
+/** The release page as a QR code, for a television without a browser. */
+@Composable
+fun ReleasePageQrDialog(url: String, onClose: () -> Unit) {
+    LinkQrDialog(url = url, what = "the release page", onClose = onClose)
+}
+
 /**
- * The release page as a QR code, for a television without a browser: the code, the address in
- * words for anybody who would rather type it, and Close, which holds the remote's focus.
+ * A link as a QR code, for a television without a browser: the code, the address in words for
+ * anybody who would rather type it, and Close, which holds the remote's focus.
  *
  * The code is the sign in screen's renderer, black on a white plate, for the same reason: it has
  * to read across a room.
+ *
+ * @param what the page, as it reads after "Open": "the release page", "the privacy page".
  */
 @Composable
-fun ReleasePageQrDialog(url: String, onClose: () -> Unit) {
+fun LinkQrDialog(url: String, what: String, onClose: () -> Unit) {
     val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = url) {
         value = withContext(Dispatchers.Default) { QrCode.render(url, QR_PIXELS) }
     }
@@ -111,7 +119,7 @@ fun ReleasePageQrDialog(url: String, onClose: () -> Unit) {
                     bitmap?.let {
                         Image(
                             bitmap = it,
-                            contentDescription = "QR code for the release page",
+                            contentDescription = "QR code for $what",
                             // A scanner needs a quiet margin of the code's own white to find it.
                             modifier = Modifier.fillMaxSize().padding(12.dp),
                         )
@@ -120,7 +128,7 @@ fun ReleasePageQrDialog(url: String, onClose: () -> Unit) {
             }
             val words: @Composable ColumnScope.() -> Unit = {
                 Text(
-                    "Open the release page on your phone",
+                    "Open $what on your phone",
                     style = MaterialTheme.typography.titleLarge,
                     color = Tone.text,
                 )
@@ -130,7 +138,7 @@ fun ReleasePageQrDialog(url: String, onClose: () -> Unit) {
                     style = MaterialTheme.typography.bodyLarge,
                     color = Tone.muted,
                 )
-                Text(readableUrl(url), style = MaterialTheme.typography.bodyLarge, color = Tone.text)
+                Text(readableUrl(url).removePrefix("mailto:"), style = MaterialTheme.typography.bodyLarge, color = Tone.text)
                 Spacer(Modifier.height(6.dp))
                 TmButton(onClick = onClose, modifier = Modifier.focusRequester(close)) { Text("Close") }
             }

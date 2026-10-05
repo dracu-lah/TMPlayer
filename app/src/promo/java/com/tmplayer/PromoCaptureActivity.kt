@@ -49,6 +49,7 @@ import com.tmplayer.ui.browse.MediaCard
 import com.tmplayer.ui.browse.TouchMediaScaffold
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.onboarding.OverviewScreen
+import com.tmplayer.ui.settings.AboutScreen
 import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.LocalDarkTheme
@@ -143,7 +144,9 @@ class PromoCaptureActivity : ComponentActivity() {
                             chats = promoChats(),
                             onLoggedOut = {},
                             onBack = { screen = "chats" },
+                            onOpenAbout = { screen = "about" },
                         )
+                        "about" -> AboutScreen(onBack = { screen = "settings" })
                         else -> PromoChatsScreen(
                             onOpenChat = { screen = "media" },
                             onOpenSettings = { screen = "settings" },

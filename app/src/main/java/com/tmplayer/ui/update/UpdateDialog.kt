@@ -137,7 +137,7 @@ fun UpdateDialog(onDismiss: () -> Unit) {
     var qrUrl by remember { mutableStateOf<String?>(null) }
     val releasePage: () -> Unit = {
         val url = releasePageUrl(release)
-        if (!openReleasePage(context, url)) qrUrl = url
+        if (!openLink(context, url)) qrUrl = url
     }
     // Offered where the popup has nothing else to do: after a failure, and when there is no update.
     val showReleasePage = state is UpdateState.Failed || state is UpdateState.Idle
