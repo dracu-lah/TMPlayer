@@ -1,6 +1,7 @@
 package com.tmplayer.ui.browse
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -815,16 +816,20 @@ fun MediaGridScreen(
 
     val target = reportTarget
     if (target != null && reportOptions.isNotEmpty()) {
+        // A plain List.map. Lint seems unable to resolve the option type, which lives in the KMP core
+        // module, so it falls back to this file's kotlinx.coroutines.flow.map import.
+        @SuppressLint("FlowOperatorInvokedInComposition")
+        val actions = reportOptions.map { option ->
+            MenuAction(
+                label = option.text,
+                icon = Icons.Filled.Close,
+                onSelect = { handleReport(target, option.id) },
+            )
+        }
         TvMenu(
             title = reportTitle.ifBlank { "Report sponsored message" },
             subtitle = "Telegram decides what happens after your report",
-            actions = reportOptions.map { option ->
-                MenuAction(
-                    label = option.text,
-                    icon = Icons.Filled.Close,
-                    onSelect = { handleReport(target, option.id) },
-                )
-            },
+            actions = actions,
             onDismiss = {
                 reportTarget = null
                 reportOptions = emptyList()

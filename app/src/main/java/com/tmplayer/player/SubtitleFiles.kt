@@ -3,6 +3,7 @@ package com.tmplayer.player
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.OptIn
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.C
@@ -10,6 +11,7 @@ import androidx.media3.common.MediaItem as Media3Item
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -34,6 +36,7 @@ import java.nio.charset.Charset
  * Built as a field of the activity, because the document picker's result has to be registered
  * before the activity starts.
  */
+@OptIn(UnstableApi::class)
 class SubtitleFiles(
     private val activity: FragmentActivity,
     private val player: () -> ExoPlayer?,

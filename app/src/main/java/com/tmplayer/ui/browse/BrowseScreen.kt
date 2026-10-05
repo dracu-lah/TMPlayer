@@ -73,6 +73,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -1491,7 +1492,8 @@ private fun TvStatusCluster() {
             delay(MS_PER_MINUTE - (date.time % MS_PER_MINUTE))
         }
     }
-    val locale = java.util.Locale.getDefault()
+    // Read through the configuration so a change of system language recomposes the cluster.
+    val locale = LocalConfiguration.current.locales[0]
     // The viewer's own choice of 12 or 24 hour, which is a setting on the device and not a taste
     // this app has any business overriding.
     val clock = remember(locale) { java.text.SimpleDateFormat("h:mm a", locale) }

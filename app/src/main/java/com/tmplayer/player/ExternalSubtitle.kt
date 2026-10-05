@@ -45,7 +45,7 @@ object ExternalSubtitle {
 
     /** True when [text] reads as MicroDVD: its first cue line opens with two frame numbers. */
     fun isMicroDvd(text: String): Boolean =
-        text.lineSequence().map { it.trim().trimStart('﻿') }.firstOrNull { it.isNotEmpty() }
+        text.lineSequence().map { it.trim().trimStart('\uFEFF') }.firstOrNull { it.isNotEmpty() }
             ?.let { CUE.matchEntire(it) != null } == true
 
     /**
@@ -59,7 +59,7 @@ object ExternalSubtitle {
      */
     fun microDvdToSrt(text: String, fps: Double = DEFAULT_FPS): String {
         val cues = text.lineSequence()
-            .map { it.trim().trimStart('﻿') }
+            .map { it.trim().trimStart('\uFEFF') }
             .mapNotNull { CUE.matchEntire(it) }
             .toList()
         var rate = fps.takeIf { it > 0 } ?: DEFAULT_FPS

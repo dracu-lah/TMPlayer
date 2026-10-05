@@ -4,8 +4,10 @@ import android.graphics.Color
 import android.view.View
 import android.widget.ImageButton
 import android.widget.TextView
+import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.DefaultTimeBar
 import androidx.media3.ui.TimeBar
 import com.tmplayer.R
@@ -42,6 +44,7 @@ import com.tmplayer.data.MediaItem
  * The activity stays the owner of every action. This class decides nothing about playback; it
  * raises, lowers and repaints the furniture, and forwards each press to the lambda wired for it.
  */
+@OptIn(UnstableApi::class)
 class PlayerControls(
     root: View,
     private val isTv: Boolean,

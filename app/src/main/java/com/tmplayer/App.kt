@@ -1,6 +1,8 @@
 package com.tmplayer
 
 import android.app.Application
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import com.tmplayer.data.AndroidLogSink
 import com.tmplayer.data.CrashReports
 import com.tmplayer.data.NetworkMonitor
@@ -20,6 +22,8 @@ import kotlinx.coroutines.launch
 
 class App : Application() {
 
+    // The player activity is Media3 unstable API; priming its orientation is only a static call.
+    @OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
         // The shared code logs through a facade; on Android it goes to logcat as it always has.
