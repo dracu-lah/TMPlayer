@@ -47,7 +47,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [ ] CP10a Sidebar: version beside the logo, compact accordion groups (phone, TV, desktop)
 - [ ] CP10b One theme on every platform: Android TV modal borders, surfaces and the rest match phone and desktop
 - [ ] CP10c Support the project: sponsor button and QR code on every platform, a gentle reminder, site section
-- [ ] CP10d TV player: drop the on-screen play, back 5 s and forward 10 s buttons the remote already covers
+- [x] CP10d TV player: drop the on-screen play, back 5 s and forward 10 s buttons the remote already covers (ab2f4b9, row, paused cue, jump HUD, menu and D-pad walk checked on the TV emulator fixture; real playback keys not yet tested on a device)
 - [ ] CP11 Release prep and device verification
 - [ ] CP12 Release "Player" (only when the user says so) and post-release checks
 - [ ] U06 Check the 1.22.1 post on @tmplayerapp went out
