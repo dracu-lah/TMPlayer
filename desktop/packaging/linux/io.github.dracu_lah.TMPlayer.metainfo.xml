@@ -54,6 +54,16 @@
     <content_attribute id="social-chat">intense</content_attribute>
     <content_attribute id="social-info">mild</content_attribute>
   </content_rating>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/docs/screenshots/tv-chats.webp</image>
+      <caption>Browse Telegram chats as a poster grid</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/dracu-lah/TMPlayer/main/docs/screenshots/devices.webp</image>
+      <caption>Watch video seamlessly across devices</caption>
+    </screenshot>
+  </screenshots>
   <!-- package.sh fills in the version being built and its date. -->
   <releases>
     <release version="@VERSION@" date="@DATE@">
