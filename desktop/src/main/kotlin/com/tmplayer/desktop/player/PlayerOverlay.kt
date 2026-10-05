@@ -47,6 +47,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.Button
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -59,6 +60,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -85,6 +88,7 @@ import androidx.compose.ui.unit.sp
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaName
 import com.tmplayer.player.PlaybackSpeed
+import com.tmplayer.player.SleepTimer
 import com.tmplayer.player.SubtitlePosition
 import com.tmplayer.player.SubtitleSize
 import com.tmplayer.player.SubtitleStyle
@@ -105,6 +109,10 @@ internal sealed interface MenuAction {
     data class Speed(val speed: Float) : MenuAction
     data class Shape(val scale: VideoScale) : MenuAction
     data object ToggleDownmix : MenuAction
+    data object ToggleVolumeBoost : MenuAction
+
+    /** Minutes from now, [SleepTimer.END_OF_VIDEO], or null to turn the timer off. */
+    data class Sleep(val minutes: Int?) : MenuAction
 
     /** One step later (1) or earlier (-1), or 0 for back in step. The menu stays open for more. */
     data class SubtitleDelay(val direction: Int) : MenuAction
@@ -197,6 +205,8 @@ internal fun BoxScope.PlayerOverlay(
     savable: Boolean = true,
     /** "Mark as watched" or "Mark as unwatched" for the menu, or null to leave the line out. */
     watchedLabel: String? = null,
+    /** A running sleep timer as the menu reads it ("25 minutes left"), or null for none. */
+    sleepTimer: String? = null,
     onHoverControls: (Boolean) -> Unit,
     onBack: () -> Unit,
     onTogglePlay: () -> Unit,
@@ -217,7 +227,7 @@ internal fun BoxScope.PlayerOverlay(
     // The right click menu hangs at the cursor whether or not the controls are up.
     if (menu?.anchor == MenuAt.Anchor.Cursor) {
         Box(Modifier.offset { IntOffset(menu.at.x.roundToInt(), menu.at.y.roundToInt()) }.size(1.dp)) {
-            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, onOpenMenu, onCloseMenu, onMenuAction)
+            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, onOpenMenu, onCloseMenu, onMenuAction)
         }
     }
 
@@ -247,7 +257,7 @@ internal fun BoxScope.PlayerOverlay(
                 Box {
                     OverlayButton(PlayerIcons.MoreVert, "More", onClick = { onOpenMenu(MenuAt(MenuPage.Main, MenuAt.Anchor.Overflow)) })
                     if (menu?.anchor == MenuAt.Anchor.Overflow) {
-                        PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, onOpenMenu, onCloseMenu, onMenuAction)
+                        PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, onOpenMenu, onCloseMenu, onMenuAction)
                     }
                 }
             }
@@ -307,13 +317,13 @@ internal fun BoxScope.PlayerOverlay(
                     Box {
                         OverlayButton(PlayerIcons.Subtitles, "Subtitles (S, C)", onClick = { onOpenMenu(MenuAt(MenuPage.Subtitles, MenuAt.Anchor.Subtitles)) })
                         if (menu?.anchor == MenuAt.Anchor.Subtitles) {
-                            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, onOpenMenu, onCloseMenu, onMenuAction)
+                            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, onOpenMenu, onCloseMenu, onMenuAction)
                         }
                     }
                     Box {
                         OverlayButton(PlayerIcons.Audio, "Audio (A)", onClick = { onOpenMenu(MenuAt(MenuPage.Audio, MenuAt.Anchor.Audio)) })
                         if (menu?.anchor == MenuAt.Anchor.Audio) {
-                            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, onOpenMenu, onCloseMenu, onMenuAction)
+                            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, onOpenMenu, onCloseMenu, onMenuAction)
                         }
                     }
                     Tip("Speed (] and [)") {
@@ -524,6 +534,7 @@ private fun PlayerMenu(
     fromTelegram: Boolean,
     savable: Boolean,
     watchedLabel: String?,
+    sleepTimer: String?,
     onOpenMenu: (MenuAt) -> Unit,
     onClose: () -> Unit,
     onAction: (MenuAction) -> Unit,
@@ -582,6 +593,8 @@ private fun PlayerMenu(
                 if (alwaysOnTopAvailable) Entry("Always on top", trailing = "Ctrl+T") { pick(MenuAction.Do(PlayerAction.AlwaysOnTop)) }
                 if (miniPlayerAvailable) Entry("Mini player", trailing = "Ctrl+P") { pick(MenuAction.Do(PlayerAction.MiniPlayer)) }
                 Entry("Downmix to stereo", checked = status.downmix) { pick(MenuAction.ToggleDownmix) }
+                Entry("Volume boost", checked = status.volumeBoost) { pick(MenuAction.ToggleVolumeBoost) }
+                Entry("Sleep timer", trailing = sleepTimer ?: "Off") { page(MenuPage.Sleep) }
                 Entry("Ignore clicks on the video", checked = ignoreClicks) { pick(MenuAction.ToggleIgnoreClicks) }
                 HorizontalDivider()
                 Entry("Start over") { pick(MenuAction.StartOver) }
@@ -626,6 +639,16 @@ private fun PlayerMenu(
                     places.getOrNull(style.position.ordinal - 1)?.let { p -> { look(style.copy(position = p)) } },
                     places.getOrNull(style.position.ordinal + 1)?.let { p -> { look(style.copy(position = p)) } })
                 Entry("Background box", checked = style.box) { look(style.copy(box = !style.box)) }
+            }
+            MenuPage.Sleep -> {
+                // Only here, never on the picture: the countdown stays off the screen (1.16.0).
+                if (sleepTimer != null) {
+                    Entry("Turn off", trailing = sleepTimer) { pick(MenuAction.Sleep(null)) }
+                    HorizontalDivider()
+                }
+                SleepTimer.CHOICES.forEach { minutes ->
+                    Entry(SleepTimer.label(minutes)) { pick(MenuAction.Sleep(minutes)) }
+                }
             }
             MenuPage.Speed -> PlaybackSpeed.CHOICES.forEach { s ->
                 Entry(PlaybackSpeed.label(s), checked = kotlin.math.abs(s - status.speed) < 0.001f) { pick(MenuAction.Speed(s)) }
@@ -780,7 +803,7 @@ internal fun BoxScope.DetailsPanel(rows: () -> List<Pair<String, String>>, onClo
     }
 }
 
-/** The loading, error, countdown and finished sheets over the picture. */
+/** The loading, error, countdown, "Still watching?" and finished sheets over the picture. */
 @Composable
 internal fun BoxScope.StatusSheet(
     phase: Phase,
@@ -791,6 +814,7 @@ internal fun BoxScope.StatusSheet(
     onWatchAgain: () -> Unit,
     onPlayNext: (MediaItem) -> Unit,
     onCancelNext: () -> Unit,
+    onKeepWatching: () -> Unit = {},
 ) {
     if (phase == Phase.Playing) return
     Box(Modifier.matchParentSize().background(Color(0xCC000000)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
@@ -831,6 +855,26 @@ internal fun BoxScope.StatusSheet(
                         TextButton(onClick = onWatchAgain) { Text("Watch again") }
                         TextButton(onClick = onBack) { Text("Back") }
                     }
+                }
+                is Phase.StillWatching -> {
+                    Text("Still watching?", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(6.dp))
+                    Text(phase.why, color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp, textAlign = TextAlign.Center)
+                    val code = phase.next?.let { MediaName.parse(it.fileName.ifBlank { it.title }).episodeCode ?: it.title }
+                    Text(
+                        code?.let { "Next: $it" } ?: "Playback and downloads are paused.",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 14.sp,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    val keep = remember { FocusRequester() }
+                    Row {
+                        Button(onClick = onKeepWatching, modifier = Modifier.focusRequester(keep)) { Text("Keep watching") }
+                        Spacer(Modifier.width(8.dp))
+                        TextButton(onClick = onBack) { Text("Back") }
+                    }
+                    // Enter answers it from the keyboard, as the remote's OK does on TV.
+                    LaunchedEffect(phase) { runCatching { keep.requestFocus() } }
                 }
                 Phase.Playing -> Unit
             }

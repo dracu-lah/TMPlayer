@@ -24,6 +24,7 @@ import org.openani.mediamp.mpv.MpvMediampPlayer
 import org.openani.mediamp.source.MediaData
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.SwingUtilities
+import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
 /** libmpv and its friends, unpacked once into the app's own folder rather than a fresh temp dir per launch. */
@@ -74,6 +75,10 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
 
     @Volatile
     private var closed = false
+
+    /** Volume boost, as last set; [mpvVolume] scales by it. */
+    @Volatile
+    private var boost = false
 
     init {
         MpvNatives.prepare()
@@ -153,7 +158,7 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
                 bufferedMs = cacheEnd?.let { s -> (s * 1000).toLong() } ?: it.bufferedMs,
                 durationMs = duration?.takeIf { d -> d > 0 }?.let { d -> (d * 1000).toLong() } ?: it.durationMs,
                 buffering = pausedForCache == true || it.seekPending || player.state.value.isBuffering,
-                volume = h.double("volume")?.toInt() ?: it.volume,
+                volume = h.double("volume")?.let { v -> (v / volumeScale()).roundToInt() } ?: it.volume,
                 muted = h.bool("mute") ?: it.muted,
                 speed = h.double("speed")?.toFloat() ?: it.speed,
                 videoWidth = h.int("dwidth")?.takeIf { w -> w > 0 } ?: it.videoWidth,
@@ -209,6 +214,7 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             downmix = prefs.downmix,
             volume = prefs.volume,
             muted = prefs.muted,
+            volumeBoost = prefs.volumeBoost,
             subtitleStyle = prefs.subtitleStyle,
             subtitleDelayMs = prefs.delays.subtitleMs,
             audioDelayMs = prefs.delays.audioMs,
@@ -222,11 +228,11 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             h.setPropertyString("sid", if (prefs.subtitlesOn == false) "no" else "auto")
             h.setPropertyString("aid", "auto")
             h.setPropertyDouble("speed", prefs.speed.toDouble())
-            h.setPropertyDouble("volume", prefs.volume.toDouble())
             h.setPropertyBoolean("mute", prefs.muted)
             h.setPropertyString("audio-channels", if (prefs.downmix) "stereo" else "auto-safe")
             h.setPropertyString("hwdec", prefs.hwdec)
         }
+        applyVolumeBoost(prefs.volumeBoost, prefs.volume)
         applyScale(prefs.scale)
         applySubtitleStyle(prefs.subtitleStyle)
         // Set before the file loads, so the first line is already in step; mpv keeps both across files.
@@ -245,6 +251,8 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
                 val pick = wanted.firstOrNull { it.language == prefs.subtitleLanguage } ?: wanted.firstOrNull()
                 if (pick != null && wanted.none { it.selected }) runCatching { h.setPropertyString("sid", pick.id.toString()) }
             }
+            // The leveller goes in once there is sound to put it on; see [addLeveller].
+            if (prefs.volumeBoost) addLeveller()
             tracksDirty = true
             _state.update { it.copy(opened = true, error = null, buffering = false) }
         } catch (e: CancellationException) {
@@ -264,6 +272,13 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
     override fun pause() {
         _state.update { it.copy(playing = false) }
         onEdt { player.pause() }
+    }
+
+    override fun stop() {
+        // mediamp puts its position back to zero on the way out; the state keeps where it was.
+        seekTarget = null
+        _state.update { it.copy(playing = false, opened = false, buffering = false, seekPending = false) }
+        onEdt { player.stopPlayback() }
     }
 
     override fun togglePlay() = if (_state.value.playing) pause() else play()
@@ -295,7 +310,7 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
 
     override fun setVolume(percent: Int) {
         val v = percent.coerceIn(0, 100)
-        runCatching { handle.setPropertyDouble("volume", v.toDouble()) }
+        runCatching { handle.setPropertyDouble("volume", mpvVolume(v)) }
         // Turning the volume up is a way out of mute, as in every other player.
         if (v > 0 && _state.value.muted) setMuted(false)
         _state.update { it.copy(volume = v) }
@@ -346,6 +361,50 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
     override fun setDownmix(stereo: Boolean) {
         runCatching { handle.setPropertyString("audio-channels", if (stereo) "stereo" else "auto-safe") }
         _state.update { it.copy(downmix = stereo) }
+    }
+
+    override fun setVolumeBoost(on: Boolean) {
+        applyVolumeBoost(on, _state.value.volume)
+        if (!_state.value.opened) {
+            _state.update { it.copy(volumeBoost = on) }
+            return
+        }
+        if (on) addLeveller() else runCatching { handle.command("af", "remove", LEVELLER_LABEL) }
+        _state.update { it.copy(volumeBoost = on) }
+    }
+
+    private fun volumeScale(): Double = if (boost) BOOSTED_VOLUME_MAX / 100.0 else 1.0
+
+    /** The volume the viewer set, 0 to 100, as mpv's own figure under the boost as it stands. */
+    private fun mpvVolume(percent: Int): Double = percent * volumeScale()
+
+    /**
+     * The gain half of the boost: mpv's ceiling and the volume itself, in the order that never
+     * leaves mpv holding a volume above its ceiling.
+     */
+    private fun applyVolumeBoost(on: Boolean, volume: Int) {
+        val h = handle
+        boost = on
+        if (on) {
+            runCatching { h.setPropertyDouble("volume-max", BOOSTED_VOLUME_MAX.toDouble()) }
+            runCatching { h.setPropertyDouble("volume", mpvVolume(volume)) }
+        } else {
+            runCatching { h.setPropertyDouble("volume", mpvVolume(volume)) }
+            runCatching { h.setPropertyDouble("volume-max", 100.0) }
+        }
+    }
+
+    /**
+     * The night mode half: `dynaudnorm`, which lifts quiet dialogue and holds back the loud scenes
+     * the way the Android boost's compressor does. The FFmpeg mediamp ships is built with
+     * `--disable-everything` and carries no such filter, so this is tried through mpv's `af`
+     * command, which puts the chain back as it was when the filter cannot be made, rather than
+     * through the property, which leaves a broken chain and no sound at all. Without it the boost
+     * is the gain alone.
+     */
+    private fun addLeveller() {
+        val added = runCatching { handle.command("af", "add", "$LEVELLER_LABEL:$LEVELLER") }.getOrDefault(false)
+        if (!added) Logger.i(TAG, "No dynaudnorm in this FFmpeg; Volume boost is the gain alone")
     }
 
     override fun setSubtitleStyle(style: SubtitleStyle) {
@@ -415,6 +474,13 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             )
             if (audio.isNotEmpty()) add("Sound" to audio.joinToString(", "))
             add("Downmix to stereo" to if (_state.value.downmix) "On" else "Off")
+            add(
+                "Volume boost" to when {
+                    !_state.value.volumeBoost -> "Off"
+                    h.string("af").orEmpty().contains("dynaudnorm") -> "On, levelled"
+                    else -> "On, gain only"
+                },
+            )
             // Read back from mpv rather than from the state, so the panel shows what is in force.
             h.double("sub-delay")?.let { add("Subtitle delay" to SyncDelays.label((it * 1000).roundToLong())) }
             h.double("audio-delay")?.let { add("Audio delay" to SyncDelays.label((it * 1000).roundToLong())) }
@@ -447,6 +513,10 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
 
         /** The subtitle box: black at 70 %, dark enough to read on snow, light enough to see through. */
         const val BOX_COLOR = "#B3000000"
+
+        /** Volume boost's leveller, through libavfilter at FFmpeg's own settings, and its label. */
+        const val LEVELLER = "lavfi=[dynaudnorm]"
+        const val LEVELLER_LABEL = "@boost"
     }
 }
 

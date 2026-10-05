@@ -108,6 +108,7 @@ fun PlayerHost(
         onQuit = onQuit,
         onPlayingItemChanged = { playing = it },
         onEngine = { engine = it },
+        downloads = DesktopServices.downloads,
     )
 
     LaunchedEffect(engine, playing) {

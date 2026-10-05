@@ -41,6 +41,10 @@ import kotlin.system.exitProcess
  * - `--size <W>x<H>` the window size.
  * - `--seek-after <ms> --seek-to <ms>` and `--pause-after <ms>` script a run, for screenshots.
  * - `--details` opens the Playback details panel from the start.
+ * - `--menu <page>` opens the menu at that page from the start (`Main`, `Sleep`, as in [MenuPage]).
+ * - `--idle-limit <ms>` asks "Still watching?" after that much playback without input, in place
+ *   of two hours, to see the card.
+ * - `--volume-boost on|off` sets the Volume boost setting before the player opens.
  * - `--mini-after <ms>` turns the mini player on, prints the window's bounds, and off again a second later.
  * - `--sub <file>` loads a subtitle file once playing, as dropping it on the picture does.
  * - `--fullscreen-after <ms>` goes fullscreen, prints the window's bounds, and back a second later.
@@ -88,6 +92,10 @@ fun main(argv: Array<String>) {
     val miniAfter = value("--mini-after")?.toLongOrNull()
     val fullscreenAfter = value("--fullscreen-after")?.toLongOrNull()
     val fullscreenRounds = value("--fullscreen-rounds")?.toIntOrNull() ?: 1
+    val menuPage = value("--menu")
+    val idleLimit = value("--idle-limit")?.toLongOrNull()
+    // Written before the player opens, as the menu's toggle would have left it.
+    value("--volume-boost")?.let { on -> kotlinx.coroutines.runBlocking { store.setVolumeBoost(on == "on") } }
 
     NonReparentingWm.applyIfNeeded()
     application {
@@ -121,6 +129,8 @@ fun main(argv: Array<String>) {
                 onEngine = { engine = it },
                 onMiniPlayer = mini::toggle,
                 detailsOpen = flag("--details"),
+                menuOpen = menuPage,
+                idleLimitMs = idleLimit ?: com.tmplayer.player.StillWatching.IDLE_LIMIT_MS,
             )
             LaunchedEffect(engine) {
                 val e = engine ?: return@LaunchedEffect

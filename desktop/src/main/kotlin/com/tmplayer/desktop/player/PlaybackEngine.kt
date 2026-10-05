@@ -21,6 +21,13 @@ interface PlaybackEngine {
 
     fun play()
     fun pause()
+
+    /**
+     * Stops playback and lets go of the stream, so nothing more is fetched for it; the state keeps
+     * the position it stopped at. [open] again to carry on. "Still watching?" uses it: a paused
+     * player keeps reading ahead, and TDLib keeps downloading for it.
+     */
+    fun stop()
     fun togglePlay()
     fun seekTo(positionMs: Long)
     fun seekBy(deltaMs: Long)
@@ -33,6 +40,12 @@ interface PlaybackEngine {
     fun selectTrack(type: TrackType, id: Int?)
     fun setScale(scale: VideoScale)
     fun setDownmix(stereo: Boolean)
+
+    /**
+     * The menu's Volume boost: the whole volume scale lifted, so full volume is mpv's
+     * [BOOSTED_VOLUME_MAX] rather than 100. The volume the viewer sees and sets stays 0 to 100.
+     */
+    fun setVolumeBoost(on: Boolean)
 
     /** Size, box and position for plain text subtitles; a file's own ASS styling is left alone. */
     fun setSubtitleStyle(style: SubtitleStyle)
@@ -63,6 +76,7 @@ data class OpenPrefs(
     val downmix: Boolean = false,
     val volume: Int = 100,
     val muted: Boolean = false,
+    val volumeBoost: Boolean = false,
     /** mpv's `hwdec`: [HWDEC_AUTO] or [HWDEC_SOFTWARE]. */
     val hwdec: String = HWDEC_AUTO,
     val subtitleStyle: SubtitleStyle = SubtitleStyle(),
@@ -98,12 +112,19 @@ data class PlaybackStatus(
     val speed: Float = 1f,
     val scale: VideoScale = VideoScale.Fit,
     val downmix: Boolean = false,
+    val volumeBoost: Boolean = false,
     val subtitleStyle: SubtitleStyle = SubtitleStyle(),
     val subtitleDelayMs: Long = 0,
     val audioDelayMs: Long = 0,
 ) {
     val delays: SyncDelays get() = SyncDelays(subtitleDelayMs, audioDelayMs)
 }
+
+/**
+ * mpv's `volume-max` with Volume boost on, and where full volume lands. mpv's volume curve is
+ * cubic, so 150 is about +10.6 dB, close to the Android boost's +9 dB.
+ */
+const val BOOSTED_VOLUME_MAX = 150
 
 enum class TrackType { Audio, Subtitle, Video }
 

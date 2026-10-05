@@ -55,7 +55,7 @@ class PlayerMouseTest {
     private val media = FakeMedia()
     private var fullscreenToggles = 0
 
-    private fun ComposeUiTest.open() {
+    private fun ComposeUiTest.open(idleLimitMs: Long = com.tmplayer.player.StillWatching.IDLE_LIMIT_MS) {
         setContent {
             Box(Modifier.size(1280.dp, 720.dp)) {
                 PlayerScreen(
@@ -67,6 +67,7 @@ class PlayerMouseTest {
                     settings = settings,
                     prefs = prefs,
                     engineFactory = { engine },
+                    idleLimitMs = idleLimitMs,
                 )
             }
         }
@@ -198,6 +199,50 @@ class PlayerMouseTest {
     }
 
     @Test
+    fun `the menu switches volume boost on and off, kept as the setting`() = runComposeUiTest {
+        open()
+        onNodeWithTag("video").performMouseInput { rightClick(onPicture) }
+        onNodeWithText("Volume boost").performClick()
+        waitForIdle()
+        assertEquals(1, engine.count("boost:true"))
+        waitUntil(timeoutMillis = 2_000) { runBlocking { settings.volumeBoostNow() } }
+        onNodeWithTag("video").performMouseInput { rightClick(onPicture) }
+        onNodeWithText("Volume boost").performClick()
+        waitForIdle()
+        assertEquals(1, engine.count("boost:false"))
+        waitUntil(timeoutMillis = 2_000) { runBlocking { !settings.volumeBoostNow() } }
+    }
+
+    @Test
+    fun `the sleep timer is a page of the menu and reads what is left`() = runComposeUiTest {
+        open()
+        onNodeWithTag("video").performMouseInput { rightClick(onPicture) }
+        onNodeWithText("Sleep timer").performClick()
+        waitForIdle()
+        onNodeWithText("End of this video").assertExists()
+        onNodeWithText("30 minutes").performClick()
+        waitForIdle()
+        onNodeWithTag("video").performMouseInput { rightClick(onPicture) }
+        onNodeWithText("30 minutes left").assertExists()
+    }
+
+    @Test
+    fun `still watching stops playback after the idle time, and keep watching opens it again`() = runComposeUiTest {
+        open(idleLimitMs = 10_000L)
+        mainClock.autoAdvance = false
+        mainClock.advanceTimeBy(16_000)
+        onNodeWithText("Still watching?").assertExists()
+        assertEquals(1, engine.count("stop"))
+        assertEquals(false, engine.state.value.playing)
+        onNodeWithText("Keep watching").performClick()
+        mainClock.autoAdvance = true
+        waitUntil(timeoutMillis = 5_000) { engine.state.value.opened }
+        waitForIdle()
+        onNodeWithText("Still watching?").assertDoesNotExist()
+        assertEquals(2, engine.count("open"))
+    }
+
+    @Test
     fun `question mark opens the shortcut sheet with the wheel as set`() = runComposeUiTest {
         prefs.update { it.copy(wheelSeeks = true) }
         open()
@@ -215,14 +260,17 @@ class PlayerMouseTest {
         override val tracks: StateFlow<List<MediaTrack>> = MutableStateFlow(emptyList())
 
         override suspend fun open(data: MediaData, startAtMs: Long, prefs: OpenPrefs) {
+            calls += "open"
             _state.value = PlaybackStatus(
                 opened = true, playing = true, durationMs = 600_000, positionMs = startAtMs,
-                volume = prefs.volume, muted = prefs.muted, downmix = prefs.downmix,
+                volume = prefs.volume, muted = prefs.muted, downmix = prefs.downmix, volumeBoost = prefs.volumeBoost,
             )
         }
 
         override fun play() { calls += "play"; _state.update { it.copy(playing = true) } }
         override fun pause() { calls += "pause"; _state.update { it.copy(playing = false) } }
+        override fun stop() { calls += "stop"; _state.update { it.copy(playing = false, opened = false) } }
+        override fun setVolumeBoost(on: Boolean) { calls += "boost:$on"; _state.update { it.copy(volumeBoost = on) } }
         override fun togglePlay() { calls += "toggle"; _state.update { it.copy(playing = !it.playing) } }
         override fun seekTo(positionMs: Long) { calls += "seekTo:$positionMs"; _state.update { it.copy(positionMs = positionMs) } }
         override fun seekBy(deltaMs: Long) { calls += "seekBy:$deltaMs" }

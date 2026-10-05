@@ -49,7 +49,11 @@ import com.tmplayer.data.WatchedRecord
 import com.tmplayer.data.WatchedStore
 import com.tmplayer.desktop.DesktopPrefs
 import com.tmplayer.desktop.WatchedWords
+import com.tmplayer.data.DownloadRunner
+import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.player.PlaybackSpeed
+import com.tmplayer.player.SleepTimer
+import com.tmplayer.player.StillWatching
 import com.tmplayer.player.SubtitleStyle
 import com.tmplayer.player.SyncDelays
 import com.tmplayer.player.TouchPrefs
@@ -78,6 +82,13 @@ internal sealed interface Phase {
     data class Failed(val message: String) : Phase
     data class Countdown(val next: MediaItem, val seconds: Int) : Phase
     data object Finished : Phase
+
+    /**
+     * "Still watching?", with playback stopped and the downloads held. [next] is the episode
+     * autoplay was about to start, which Keep watching starts instead; [ended] is a video that had
+     * already played to the end, where there is nothing to carry on with but the finished sheet.
+     */
+    data class StillWatching(val why: String, val next: MediaItem?, val ended: Boolean) : Phase
 }
 
 /** One flash of feedback over the picture; [id] restarts the animation for a repeat. */
@@ -85,7 +96,7 @@ internal data class Flash(val kind: Kind, val text: String, val id: Long) {
     enum class Kind { Play, Pause, SeekBack, SeekForward, Text, Volume }
 }
 
-internal enum class MenuPage { Main, Audio, Subtitles, Speed, Shape }
+internal enum class MenuPage { Main, Audio, Subtitles, Speed, Shape, Sleep }
 
 /** Where an open menu hangs: at the cursor for a right click, or under a button. */
 internal data class MenuAt(val page: MenuPage, val anchor: Anchor, val at: Offset = Offset.Zero) {
@@ -120,6 +131,9 @@ private val blankCursor: PointerIcon by lazy {
  *   player moved on to by itself.
  * @param onEngine hands the engine out once it exists, for the dev harness's scripted runs.
  * @param detailsOpen start with the Playback details panel up (the harness's `--details`).
+ * @param menuOpen start with the menu open at that page, by its name in [MenuPage] (the harness's `--menu`).
+ * @param downloads the download queue, held while "Still watching?" is up. Null leaves it be.
+ * @param idleLimitMs playback without input before "Still watching?" asks; the harness shortens it.
  * @param engineFactory the engine; libmpv in the app, a fake in the UI tests that drive the mouse.
  */
 @OptIn(ExperimentalComposeUiApi::class)
@@ -140,6 +154,9 @@ fun PlayerScreen(
     onPlayingItemChanged: (MediaItem) -> Unit = {},
     onEngine: (PlaybackEngine) -> Unit = {},
     detailsOpen: Boolean = false,
+    menuOpen: String? = null,
+    downloads: DownloadRunner? = null,
+    idleLimitMs: Long = StillWatching.IDLE_LIMIT_MS,
     engineFactory: () -> PlaybackEngine = { MpvPlaybackEngine(OpenPrefs.hwdecFor(prefs.now.softwareDecoding)) },
 ) {
     val engine = remember { engineFactory() }
@@ -168,7 +185,7 @@ fun PlayerScreen(
     var controlsUp by remember { mutableStateOf(true) }
     var activity by remember { mutableLongStateOf(0L) }
     var overControls by remember { mutableStateOf(false) }
-    var menu by remember { mutableStateOf<MenuAt?>(null) }
+    var menu by remember { mutableStateOf(MenuPage.entries.firstOrNull { it.name.equals(menuOpen, ignoreCase = true) }?.let { MenuAt(it, MenuAt.Anchor.Cursor, Offset(240f, 120f)) }) }
     var showDetails by remember { mutableStateOf(detailsOpen) }
     var showShortcuts by remember { mutableStateOf(false) }
     var flash by remember { mutableStateOf<Flash?>(null) }
@@ -181,6 +198,16 @@ fun PlayerScreen(
     // Videos marked watched from this player. Their position is forgotten on the way out rather
     // than saved, or leaving would put them straight back into Continue watching (as on Android).
     val markedHere = remember { mutableSetOf<String>() }
+
+    // "Still watching?" and the sleep timer (CP07). The counts live for the whole player session,
+    // so they carry across the episodes autoplay moves on to, and any input starts them again.
+    var autoplayedInARow by remember { mutableIntStateOf(0) }
+    var idleMs by remember { mutableLongStateOf(0L) }
+    var sleepAt by remember { mutableLongStateOf(0L) }
+    var sleepAtTheEnd by remember { mutableStateOf(false) }
+    var heldDownloads by remember { mutableStateOf(emptyList<Int>()) }
+    // Where Keep watching opens the video again, past the saved resume point and its rules.
+    var reopenAt by remember { mutableStateOf<Long?>(null) }
 
     val focus = remember { FocusRequester() }
     val item = current.item
@@ -205,9 +232,11 @@ fun PlayerScreen(
         launch { tdlibVersion = current.tdlibVersion() }
         autoplayNext = runCatching { settings.autoplayNextNow() }.getOrDefault(true)
         showRemaining = runCatching { settings.touchPrefsNow().showRemaining }.getOrDefault(false)
-        val start = if (ignoreSavedPosition) 0L else runCatching {
+        val start = reopenAt ?: if (ignoreSavedPosition) 0L else runCatching {
             settings.resumePosition(item.chatId, item.messageId)
         }.getOrDefault(0L)
+        val reopening = reopenAt != null
+        reopenAt = null
         trackChoice = runCatching { settings.trackChoice(seriesKey) }.getOrDefault(TrackChoice())
         // Offsets are remembered per message; a file on disk (the dev harness) starts in step.
         val delays = if (hasMessage(item)) {
@@ -224,6 +253,7 @@ fun PlayerScreen(
             downmix = prefs.now.downmix,
             volume = prefs.now.volume,
             muted = prefs.now.muted,
+            volumeBoost = runCatching { settings.volumeBoostNow() }.getOrDefault(false),
             hwdec = OpenPrefs.hwdecFor(prefs.now.softwareDecoding),
             subtitleStyle = runCatching { settings.subtitleStyleNow() }.getOrDefault(SubtitleStyle()),
             delays = delays,
@@ -251,7 +281,7 @@ fun PlayerScreen(
         }
         ignoreSavedPosition = false
         phase = Phase.Playing
-        if (start > 0) resumedFrom = start
+        if (start > 0 && !reopening) resumedFrom = start
         onPlayingItemChanged(item)
         refocus()
     }
@@ -321,26 +351,147 @@ fun PlayerScreen(
         current = current.episode(next)
     }
 
+    /** [switchTo] for an episode nobody asked for, counted towards "Still watching?". */
+    fun autoplay(next: MediaItem) {
+        autoplayedInARow++
+        switchTo(next)
+    }
+
+    /**
+     * Any key, click, wheel turn or movement over the player, or a menu pick: somebody is there,
+     * and both of "Still watching?"'s counts start again.
+     */
+    fun noteInput() {
+        idleMs = 0L
+        autoplayedInARow = 0
+    }
+
+    /**
+     * "Still watching?": the whole picture, with playback stopped and every download held.
+     *
+     * The engine is stopped rather than paused, which lets go of the stream: a paused mpv keeps
+     * reading ahead, and TDLib keeps fetching for it. Keep watching opens it again where it was.
+     */
+    fun askStillWatching(why: String, next: MediaItem?, ended: Boolean) {
+        val s = engine.state.value
+        if (!ended && s.opened) {
+            reopenAt = s.positionMs
+            saveResume(current, s)
+        }
+        menu = null
+        nextUpDismissed = true
+        engine.stop()
+        heldDownloads = downloads?.let { runner ->
+            OfflineDownloads.active.value.values.filter { it.busy && it.stage != OfflineDownloads.Stage.Moving }
+                .sortedBy { it.order }.map { it.fileId }
+                .also { if (it.isNotEmpty()) OfflineDownloads.pauseAll(runner) }
+        }.orEmpty()
+        phase = Phase.StillWatching(why, next, ended)
+    }
+
+    fun keepWatching(asked: Phase.StillWatching) {
+        noteInput()
+        downloads?.let { runner -> heldDownloads.forEach { OfflineDownloads.resume(runner, it) } }
+        heldDownloads = emptyList()
+        when {
+            asked.next != null -> switchTo(asked.next)
+            asked.ended -> phase = Phase.Finished
+            else -> {
+                nextUpDismissed = false
+                attempt++
+            }
+        }
+        refocus()
+    }
+
     // The end: the next episode after a countdown, or the last frame with a way to watch again.
     LaunchedEffect(status.ended) {
         if (!status.ended || phase != Phase.Playing) return@LaunchedEffect
         recordWatched(current, status.durationMs, manual = false)
         runCatching { settings.clearResumePosition(item.chatId, item.messageId) }
         val next = episodes.next
-        if (next == null || !autoplayNext || nextUpDismissed) {
+        val autoplays = next != null && autoplayNext && !nextUpDismissed
+        if (sleepAtTheEnd) {
+            sleepAtTheEnd = false
+            askStillWatching("The sleep timer stopped at the end of the video.", next.takeIf { autoplays }, ended = true)
+            return@LaunchedEffect
+        }
+        if (next == null || !autoplays) {
             phase = Phase.Finished
+            return@LaunchedEffect
+        }
+        if (StillWatching.askBeforeAutoplay(autoplayedInARow)) {
+            askStillWatching("${StillWatching.AUTOPLAY_LIMIT} episodes played in a row.", next, ended = true)
             return@LaunchedEffect
         }
         // The card already counted the last half minute down; a second countdown would be a wait for nothing.
         if (nextUpShown) {
-            switchTo(next)
+            autoplay(next)
             return@LaunchedEffect
         }
         for (second in AUTOPLAY_COUNTDOWN_SEC downTo 1) {
             phase = Phase.Countdown(next, second)
             delay(1_000)
         }
-        switchTo(next)
+        autoplay(next)
+    }
+
+    // The sleep timer running out, and two hours of playback without a press. Idle time is
+    // counted while playing only, so a video left paused overnight does not ask in the morning.
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(STILL_WATCHING_TICK_MS)
+            if (phase is Phase.StillWatching) continue
+            if (sleepAt > 0 && System.currentTimeMillis() >= sleepAt) {
+                sleepAt = 0L
+                askStillWatching("The sleep timer paused the video.", next = null, ended = phase == Phase.Finished)
+                continue
+            }
+            if (phase == Phase.Playing && engine.state.value.playing) {
+                idleMs += STILL_WATCHING_TICK_MS
+                if (idleMs >= idleLimitMs) {
+                    idleMs = 0L
+                    askStillWatching(
+                        if (idleLimitMs == StillWatching.IDLE_LIMIT_MS) "Nothing pressed for two hours." else "Nothing pressed for a while.",
+                        next = null,
+                        ended = false,
+                    )
+                }
+            }
+        }
+    }
+
+    /** What the menu says about a running sleep timer, or null when there is none. */
+    fun sleepTimerDetail(): String? = when {
+        sleepAtTheEnd -> SleepTimer.label(SleepTimer.END_OF_VIDEO)
+        sleepAt > 0 -> SleepTimer.remaining(sleepAt - System.currentTimeMillis())
+        else -> null
+    }
+
+    /** Minutes from now, [SleepTimer.END_OF_VIDEO], or null to turn the timer off. */
+    fun setSleepTimer(minutes: Int?) {
+        sleepAtTheEnd = minutes == SleepTimer.END_OF_VIDEO
+        sleepAt = if (minutes != null && minutes != SleepTimer.END_OF_VIDEO) {
+            System.currentTimeMillis() + minutes * 60_000L
+        } else {
+            0L
+        }
+        showFlash(
+            Flash.Kind.Text,
+            when (minutes) {
+                null -> "Sleep timer off"
+                SleepTimer.END_OF_VIDEO -> "Stops at the end of this video"
+                else -> "Stops in ${SleepTimer.label(minutes)}"
+            },
+        )
+    }
+
+    /** The menu's Volume boost: switched on the sound already playing, and kept for every video. */
+    fun toggleVolumeBoost() {
+        val on = !status.volumeBoost
+        engine.setVolumeBoost(on)
+        showFlash(Flash.Kind.Text, if (on) "Volume boost on" else "Volume boost off")
+        playerScope.launch { runCatching { settings.setVolumeBoost(on) } }
     }
 
     val left = status.durationMs - status.positionMs
@@ -614,6 +765,7 @@ fun PlayerScreen(
                 .background(Color.Black)
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    noteInput()
                     // Sheets peel off before Esc means anything else.
                     if (event.key == androidx.compose.ui.input.key.Key.Escape && (showShortcuts || showDetails)) {
                         showShortcuts = false
@@ -640,11 +792,13 @@ fun PlayerScreen(
                 .focusRequester(focus)
                 .focusable()
                 .onPointerEvent(PointerEventType.Move, PointerEventPass.Initial) { poke() }
+                .onPointerEvent(PointerEventType.Press, PointerEventPass.Initial) { noteInput() }
                 .onPointerEvent(PointerEventType.Enter, PointerEventPass.Initial) { poke() }
                 .onPointerEvent(PointerEventType.Exit, PointerEventPass.Initial) {
                     if (status.playing && menu == null) controlsUp = false
                 }
                 .onPointerEvent(PointerEventType.Scroll) { event ->
+                    noteInput()
                     if (phase != Phase.Playing) return@onPointerEvent
                     val delta = event.changes.firstOrNull()?.scrollDelta ?: return@onPointerEvent
                     SeekMath.wheelAction(delta.x, delta.y, event.keyboardModifiers.pointerShift, wheelSeeksNow)
@@ -716,7 +870,9 @@ fun PlayerScreen(
                     menu = null
                     refocus()
                 },
+                sleepTimer = sleepTimerDetail(),
                 onMenuAction = { action ->
+                    noteInput()
                     when (action) {
                         is MenuAction.Do -> dispatch(action.action)
                         is MenuAction.Track -> selectTrack(action.type, action.track)
@@ -728,6 +884,8 @@ fun PlayerScreen(
                             prefs.update { it.copy(downmix = on) }
                             showFlash(Flash.Kind.Text, if (on) "Downmix to stereo on" else "Downmix to stereo off")
                         }
+                        MenuAction.ToggleVolumeBoost -> toggleVolumeBoost()
+                        is MenuAction.Sleep -> setSleepTimer(action.minutes)
                         is MenuAction.SubtitleDelay -> stepSubtitleDelay(action.direction)
                         is MenuAction.AudioDelay -> stepAudioDelay(action.direction)
                         is MenuAction.SubtitleLook -> setSubtitleStyle(action.style)
@@ -802,6 +960,7 @@ fun PlayerScreen(
                 },
                 onPlayNext = { switchTo(it) },
                 onCancelNext = { phase = Phase.Finished },
+                onKeepWatching = { (phase as? Phase.StillWatching)?.let(::keepWatching) },
             )
 
             if (showShortcuts) {
@@ -850,3 +1009,4 @@ private const val RESUME_TICK_MS = 10_000L
 private const val NEXT_UP_LEAD_MS = 30_000L
 private const val AUTOPLAY_COUNTDOWN_SEC = 8
 private const val SEEK_RUN_MS = 1_000L
+private const val STILL_WATCHING_TICK_MS = 5_000L
