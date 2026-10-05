@@ -22,6 +22,7 @@ import com.tmplayer.data.SponsoredMessageRepository
 import com.tmplayer.data.SponsoredReportOutcome
 import com.tmplayer.data.Td
 import com.tmplayer.data.TdSession
+import com.tmplayer.ui.components.StateAction
 import com.tmplayer.ui.components.UiState
 import dev.g000sha256.tdl.TdlResult
 import dev.g000sha256.tdl.dto.ChatListArchive
@@ -51,8 +52,17 @@ data class BrowseData(
  */
 class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel() {
 
-    private val _state = MutableStateFlow<UiState<BrowseData>>(UiState.Loading("Loading your chats…"))
+    private val _state = MutableStateFlow<UiState<BrowseData>>(UiState.Loading(LOADING_CHATS))
     val state: StateFlow<UiState<BrowseData>> = _state.asStateFlow()
+
+    /**
+     * True once the store has said there is no list from an earlier launch, which makes this the
+     * first sync on this device: the slow one, worth a line explaining that it is only slow once.
+     */
+    private var firstLoad = false
+
+    private fun loading(): UiState.Loading =
+        UiState.Loading(LOADING_CHATS, tip = FIRST_LOAD_TIP.takeIf { firstLoad })
 
     init {
         paintFromSnapshot()
@@ -79,6 +89,10 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
                 publish()
             }
             val remembered = runCatching { store.cachedChatSnapshot() }.getOrDefault(emptyList())
+            if (remembered.isEmpty() && chats == null) {
+                firstLoad = true
+                if (_state.value is UiState.Loading) _state.value = loading()
+            }
             if (remembered.isEmpty() || chats != null) return@launch
             chats = remembered
             publish()
@@ -264,7 +278,7 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
 
     fun load() {
         loadJob?.cancel()
-        if (chats == null) _state.value = UiState.Loading("Loading your chats…")
+        if (chats == null) _state.value = loading()
         loadJob = viewModelScope.launch {
             val session = Td.awaitAuthorizedSession()
             val repository = ChatRepository(session.client)
@@ -405,7 +419,7 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
         account = null
         chats = null
         syncedAt = 0L
-        _state.value = UiState.Loading("Loading your chats…")
+        _state.value = loading()
         // The cold-start snapshots go with it: they exist so the next launch opens on the last
         // sync, and after a sign-out "the last sync" is somebody else's name, face and chats.
         settings?.let { store ->
@@ -425,6 +439,8 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
          * Telegram sends one per message, and a chat that is being typed in sends a run of them.
          */
         const val REORDER_SETTLE_MS = 400L
+
+        const val LOADING_CHATS = "Loading your chats…"
     }
 
     private fun publish() {
@@ -434,6 +450,37 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
         } else {
             UiState.Content(BrowseData(loaded, account))
         }
+    }
+}
+
+/**
+ * Shown under the first chat list on a device, which is the slow one: every launch after it opens
+ * on the list saved from the last.
+ */
+/**
+ * The walk back through a chat stops after a few empty pages rather than holding the screen for
+ * thousands of files the size limits all reject. Saying so is the point: the chat has not been
+ * read to the end, so "no videos in this chat" would be a guess, and Keep looking carries on from
+ * where the walk stopped.
+ */
+const val STILL_MORE_TO_SEARCH = "No videos yet in the newest part of this chat."
+
+const val FIRST_LOAD_TIP =
+    "Tip: the first visit fetches your whole chat list from Telegram, so it can take a minute. " +
+        "After this the app opens straight onto it."
+
+/**
+ * "No videos here between 100 MB and 2 GB.", with the open ends said in English rather than as
+ * the slider's "No minimum" and "No limit".
+ */
+fun noVideosWithin(minBytes: Long, maxBytes: Long): String {
+    val hasMin = minBytes > SizeFilter.FLOOR
+    val hasMax = maxBytes < SizeFilter.CEILING
+    return when {
+        hasMin && hasMax -> "No videos here between ${SizeFilter.label(minBytes)} and ${SizeFilter.label(maxBytes)}."
+        hasMin -> "No videos here of ${SizeFilter.label(minBytes)} or more."
+        hasMax -> "No videos here of ${SizeFilter.label(maxBytes)} or less."
+        else -> "No playable videos in this chat."
     }
 }
 
@@ -460,6 +507,11 @@ class MediaListViewModel(
     private val chatId: Long,
     private val minSizeBytes: Long,
     private val maxSizeBytes: Long,
+    /**
+     * Told about a search once it has found something and the viewer has stopped typing, so it can
+     * be offered again as a recent search. See [com.tmplayer.data.RecentSearches].
+     */
+    private val onSearched: (suspend (String) -> Unit)? = null,
     private val downloadedIds: (suspend () -> Set<String>)? = null,
 ) : ViewModel() {
 
@@ -467,6 +519,13 @@ class MediaListViewModel(
     private var pageJob: Job? = null
     private var availabilityJob: Job? = null
     private var sponsoredJob: Job? = null
+    private var recordJob: Job? = null
+
+    /**
+     * Set by [showHidden]: the viewer asked to see what the size limits hid, for this chat and for
+     * as long as it stays open. The limits in Settings are not touched.
+     */
+    private var showAllSizes = false
 
     /** What the viewer typed. Kept whole, because it is what results are ranked against. */
     private var query = ""
@@ -501,7 +560,48 @@ class MediaListViewModel(
     fun search(text: String) {
         if (text == query) return
         query = text
+        recordJob?.cancel()
         load(preserveContent = false)
+    }
+
+    /** The "Show them" beside "N videos hidden by the size limits". */
+    fun showHidden() {
+        if (showAllSizes) return
+        showAllSizes = true
+        load(preserveContent = true)
+    }
+
+    /** The button under an empty listing. */
+    fun act(action: StateAction) = when (action) {
+        StateAction.ShowHidden -> showHidden()
+        StateAction.KeepLooking -> keepLooking()
+    }
+
+    /**
+     * Carries on walking back through the chat from where the last walk gave up, rather than
+     * starting again at the newest message and reading the same empty pages a second time.
+     */
+    private fun keepLooking() {
+        if (_state.value !is UiState.Empty || pageJob?.isActive == true) return
+        _state.value = UiState.Loading(if (query.isNotBlank()) "Searching…" else "Finding videos…")
+        pageJob = viewModelScope.launch {
+            val session = Td.awaitAuthorizedSession()
+            pageMore(session, ChatRepository(session.client), emptyList(), endReached = false)
+        }
+    }
+
+    /**
+     * Remembers [searched] as a recent search, unless the viewer carries on typing first: on a
+     * phone every letter is a search of its own, and only the one they stopped at is worth a chip.
+     */
+    private fun recordSearch(searched: String) {
+        val record = onSearched ?: return
+        if (searched.isBlank()) return
+        recordJob?.cancel()
+        recordJob = viewModelScope.launch {
+            delay(RECORD_AFTER_MS)
+            if (searched == query) runCatching { record(searched) }
+        }
     }
 
     fun load() = load(preserveContent = true)
@@ -543,8 +643,9 @@ class MediaListViewModel(
                         pageMore(session, repository, emptyList(), page.endReached)
                         return@onSuccess
                     }
+                    if (page.items.isNotEmpty()) recordSearch(query)
                     _state.value = if (page.items.isEmpty() && sponsored == null) {
-                        UiState.Empty(emptyMessage())
+                        emptyState()
                     } else {
                         UiState.Content(
                             MediaListState(
@@ -615,9 +716,10 @@ class MediaListViewModel(
         // A search names the video the viewer is after, so the size limits stand aside for it: an
         // episode a little smaller than its neighbours is exactly the one a viewer goes looking for.
         if (query.isNotBlank()) return Fuzzy.rank(items, query) { it.fileName.ifBlank { it.title } }
-        val sized = items.filter(::withinSizeLimits)
-        hiddenBySize += items.size - sized.size
-        return sized
+        if (showAllSizes) return items
+        val split = SizeFilter.split(items, minSizeBytes, maxSizeBytes) { it.sizeBytes }
+        hiddenBySize += split.hidden
+        return split.kept
     }
 
     /** Downloaded videos told apart from cached ones, when the platform keeps an index. */
@@ -714,23 +816,26 @@ class MediaListViewModel(
         }
     }
 
-    /** Why this chat is showing nothing, in the terms the viewer can do something about. */
-    private fun emptyMessage(): String = when {
-        query.isNotBlank() -> "Nothing in this chat matches “$query”."
-        // Say which knob is hiding things, rather than claiming the chat is empty when it is
-        // the filter doing the work.
-        isFiltering -> "No videos here between " +
-            "${SizeFilter.label(minSizeBytes)} and " +
-            "${SizeFilter.label(maxSizeBytes)}.\n\n" +
-            "Change the video size limits in Settings to see more."
-        else -> "No playable videos in this chat."
+    /**
+     * Why this chat is showing nothing, in the terms the viewer can do something about.
+     *
+     * [reachedEnd] false means the walk back through the chat gave up before its start, so the
+     * honest answer is "nothing yet" with a way to keep going, unless the size limits are what
+     * emptied it, in which case showing what they hid is the better button.
+     */
+    private fun emptyState(reachedEnd: Boolean = true): UiState.Empty {
+        // Say which knob is hiding things, rather than claiming the chat is empty when it is the
+        // filter doing the work, and offer to lift it on the spot rather than send the viewer to
+        // Settings.
+        val hidden = if (query.isBlank() && hiddenBySize > 0) SizeFilter.hiddenLabel(hiddenBySize) + "." else null
+        return when {
+            query.isNotBlank() -> UiState.Empty("Nothing in this chat matches “$query”.")
+            !reachedEnd && hidden != null -> UiState.Empty("$STILL_MORE_TO_SEARCH\n\n$hidden", StateAction.ShowHidden)
+            !reachedEnd -> UiState.Empty(STILL_MORE_TO_SEARCH, StateAction.KeepLooking)
+            hidden != null -> UiState.Empty("${noVideosWithin(minSizeBytes, maxSizeBytes)}\n\n$hidden", StateAction.ShowHidden)
+            else -> UiState.Empty("No playable videos in this chat.")
+        }
     }
-
-    private val isFiltering: Boolean
-        get() = minSizeBytes > SizeFilter.FLOOR || maxSizeBytes < SizeFilter.CEILING
-
-    private fun withinSizeLimits(item: MediaItem) =
-        SizeFilter.matches(item.sizeBytes, minSizeBytes, maxSizeBytes)
 
     /** Revalidates badges after playback or a cache clear without rebuilding the whole grid. */
     fun refreshLocalAvailability() {
@@ -824,11 +929,12 @@ class MediaListViewModel(
         }
 
         if (!session.isCurrent()) return
+        if (startingFrom.isEmpty() && items.isNotEmpty()) recordSearch(query)
         // An empty listing has to say something, whether the chat ran out or the walk gave up
         // after MAX_EMPTY_PAGES. A Content with no items is a blank screen, and a blank screen
         // asks the viewer to guess which of the two happened.
         _state.value = if (items.isEmpty() && sponsored == null) {
-            UiState.Empty(if (reachedEnd) emptyMessage() else STILL_MORE_TO_SEARCH)
+            emptyState(reachedEnd)
         } else {
             UiState.Content(
                 MediaListState(
@@ -849,15 +955,8 @@ class MediaListViewModel(
     private companion object {
         const val MAX_EMPTY_PAGES = 8
 
-        /**
-         * The walk back through a chat stops after [MAX_EMPTY_PAGES] empty pages rather than
-         * holding the screen for thousands of files the size limits all reject. Saying so is the
-         * point: the chat has not been read to the end, so "no videos in this chat" would be a
-         * guess, and refreshing genuinely picks up from where the cursors were left.
-         */
-        const val STILL_MORE_TO_SEARCH =
-            "No videos yet in the newest part of this chat.\n\n" +
-                "Refresh to keep looking further back."
+        /** How long a search has to stand before it counts as one the viewer meant. */
+        const val RECORD_AFTER_MS = 1_500L
 
         /** Shorter than this and a word is "the" or "s02": it narrows nothing. */
         const val MIN_FALLBACK_WORD = 3

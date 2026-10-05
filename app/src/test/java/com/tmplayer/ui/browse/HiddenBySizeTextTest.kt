@@ -8,11 +8,11 @@ class HiddenBySizeTextTest {
     @Test
     fun `one video and several read as English`() {
         assertEquals(
-            "1 video is hidden by the video size limits. Change them in Settings to see everything.",
+            "1 video hidden by the size limits.",
             hiddenBySizeText(1),
         )
         assertEquals(
-            "3 videos are hidden by the video size limits. Change them in Settings to see everything.",
+            "3 videos hidden by the size limits.",
             hiddenBySizeText(3),
         )
     }

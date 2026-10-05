@@ -114,4 +114,20 @@ object SizeFilter {
             else -> "You'll see every video in the chat, whatever its size."
         }
     }
+
+    /** What the size limits let through, and how many they turned away. */
+    data class Split<T>(val kept: List<T>, val hidden: Int)
+
+    /**
+     * [items] through [matches], counting what was left out, so a listing can say "12 videos
+     * hidden by the size limits" rather than leaving an episode missing without a word.
+     */
+    fun <T> split(items: List<T>, minBytes: Long, maxBytes: Long, sizeOf: (T) -> Long): Split<T> {
+        val kept = items.filter { matches(sizeOf(it), minBytes, maxBytes) }
+        return Split(kept, items.size - kept.size)
+    }
+
+    /** "1 video hidden by the size limits", the line every platform puts beside Show them. */
+    fun hiddenLabel(count: Int): String =
+        if (count == 1) "1 video hidden by the size limits" else "$count videos hidden by the size limits"
 }

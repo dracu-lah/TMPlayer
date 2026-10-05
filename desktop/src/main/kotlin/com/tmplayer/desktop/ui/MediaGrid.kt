@@ -139,7 +139,7 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
             Centred { CircularProgressIndicator() }
             return@Column
         }
-        val model = rememberViewModel(Triple(chat.id, min, max)) { MediaListViewModel(chat.id, min, max) { DownloadIndex.presentIds(state.settings) } }
+        val model = rememberViewModel(Triple(chat.id, min, max)) { MediaListViewModel(chat.id, min, max, onSearched = { state.settings.addRecentSearch(it) }) { DownloadIndex.presentIds(state.settings) } }
         val ui by model.state.collectAsState()
         var query by remember(chat.id) { mutableStateOf("") }
         // The grid's keyboard focus, once the grid exists; the search field's Down arrow enters it.
@@ -165,7 +165,12 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 IconButton(onClick = { model.load() }) { Icon(Icons.Filled.Refresh, contentDescription = "Refresh") }
             },
         )
-        StateBox(ui, onRetry = { model.load() }) { content ->
+        val recent by state.settings.recentSearches.collectAsState(initial = emptyList())
+        val scope = rememberCoroutineScope()
+        if (query.isBlank()) {
+            RecentSearchRow(recent, onPick = { query = it }, onClear = { scope.launch { state.settings.clearRecentSearches() } })
+        }
+        StateBox(ui, onRetry = { model.load() }, onAction = model::act) { content ->
             val grid = rememberLazyGridState()
             LoadMoreNearEnd(grid, enabled = !content.endReached && !content.loadingMore) { model.loadMore() }
             val ad = content.sponsored?.messages?.firstOrNull()
@@ -180,6 +185,7 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 // Search ignores the size limits, so the note would be wrong while one is typed.
                 hiddenBySize = if (query.isBlank()) content.hiddenBySize else 0,
                 hiddenSelfDestructing = content.hiddenSelfDestructing,
+                onShowHidden = model::showHidden,
             )
         }
     }
@@ -203,6 +209,8 @@ internal fun VideoGrid(
     hiddenBySize: Int = 0,
     /** Self-destructing videos left out of the listing; counted in the same line. */
     hiddenSelfDestructing: Int = 0,
+    /** Lifts the size limits for this listing; offered beside the count. */
+    onShowHidden: () -> Unit = {},
 ) {
     val cells by rememberUpdatedState(items)
     val note = WatchedWords.hiddenNote(hiddenBySize, hiddenSelfDestructing)
@@ -228,7 +236,11 @@ internal fun VideoGrid(
             }
             if (note != null) {
                 item(key = "hidden-by-size", span = { GridItemSpan(maxLineSpan) }) {
-                    SizeLimitNote(note, onChange = if (hiddenBySize > 0) ({ state.openSizeLimits() }) else null)
+                    SizeLimitNote(
+                        note,
+                        onShow = if (hiddenBySize > 0) onShowHidden else null,
+                        onChange = if (hiddenBySize > 0) ({ state.openSizeLimits() }) else null,
+                    )
                 }
             }
             itemsIndexed(items, key = { _, it -> it.id }) { index, item ->
@@ -258,9 +270,11 @@ internal fun VideoGrid(
  * episode is explained rather than looking lost. Quiet on purpose: muted text and a text button.
  */
 @Composable
-private fun SizeLimitNote(text: String, onChange: (() -> Unit)?) {
+internal fun SizeLimitNote(text: String, onShow: (() -> Unit)?, onChange: (() -> Unit)?) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(text, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
+        // Show them lifts the limits for this chat while it is open; Change goes to Settings.
+        if (onShow != null) TextButton(onClick = onShow) { Text("Show them", style = MaterialTheme.typography.bodySmall) }
         // Change opens the size limits, which is no answer to a self-destructing video.
         if (onChange != null) TextButton(onClick = onChange) { Text("Change", style = MaterialTheme.typography.bodySmall) }
     }

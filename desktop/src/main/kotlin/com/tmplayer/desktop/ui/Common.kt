@@ -45,15 +45,26 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tmplayer.ui.components.MediaArt
+import com.tmplayer.ui.components.SlowAnswer
+import com.tmplayer.ui.components.StateAction
+import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.UiState
+import androidx.compose.material3.SuggestionChip
+import kotlinx.coroutines.delay
 import com.tmplayer.ui.nav.BackHandler
 import com.tmplayer.ui.theme.Tone
 
-/** One screen's worth of [UiState]: a spinner, an error with Try again, an empty line, or content. */
+/**
+ * One screen's worth of [UiState]: a spinner (with a first-time tip, and "Telegram is slow to
+ * answer" once the wait runs long), an error with Try again, an empty line with its one action,
+ * or content.
+ */
 @Composable
 fun <T> StateBox(
     state: UiState<T>,
     onRetry: (() -> Unit)? = null,
+    onAction: ((StateAction) -> Unit)? = null,
+    slowAfterMs: Long = SlowAnswer.AFTER_MS,
     content: @Composable (T) -> Unit,
 ) {
     when (state) {
@@ -61,14 +72,57 @@ fun <T> StateBox(
         is UiState.Loading -> Centred {
             CircularProgressIndicator()
             Text(state.label, color = Tone.muted)
+            state.tip?.let { Text(it, color = Tone.muted, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center) }
+            if (onRetry != null) SlowAnswerLine(state, onRetry, slowAfterMs)
         }
         is UiState.Empty -> Centred {
             Text(state.message, color = Tone.muted, textAlign = TextAlign.Center)
+            val action = state.action
+            if (action != null && onAction != null) OutlinedButton(onClick = { onAction(action) }) { Text(action.label) }
         }
         is UiState.Error -> Centred {
             Text(state.message, textAlign = TextAlign.Center)
             if (onRetry != null) OutlinedButton(onClick = onRetry) { Text("Try again") }
         }
+    }
+}
+
+/** Nothing until the wait for [key] passes [afterMs], then the line and a Retry button. */
+@Composable
+private fun SlowAnswerLine(key: Any, onRetry: () -> Unit, afterMs: Long) {
+    var slow by remember(key) { mutableStateOf(false) }
+    LaunchedEffect(key) {
+        delay(afterMs)
+        slow = true
+    }
+    if (!slow) return
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(SlowAnswer.MESSAGE)
+        OutlinedButton(onClick = onRetry) { Text(SlowAnswer.RETRY) }
+    }
+}
+
+/**
+ * The recent searches as a row of chips under a page header, with Clear at the end: shown while
+ * the search field is empty, since a chip is there to save typing a search again.
+ */
+@Composable
+fun RecentSearchRow(searches: List<String>, onPick: (String) -> Unit, onClear: () -> Unit, modifier: Modifier = Modifier) {
+    if (searches.isEmpty()) return
+    Row(
+        modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("Recent searches", style = MaterialTheme.typography.bodySmall, color = Tone.muted)
+        for (recent in searches) {
+            SuggestionChip(
+                onClick = { onPick(recent) },
+                label = { Text(recent, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                icon = { Icon(TmIcons.History, contentDescription = null, modifier = Modifier.size(18.dp)) },
+            )
+        }
+        TextButton(onClick = onClear) { Text("Clear") }
     }
 }
 

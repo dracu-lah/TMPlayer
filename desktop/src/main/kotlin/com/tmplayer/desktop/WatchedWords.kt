@@ -32,8 +32,7 @@ object WatchedWords {
     /** The quiet line at the end of a chat's grid, or null when nothing was kept out. */
     fun sizeLimitNote(hidden: Int): String? = when {
         hidden <= 0 -> null
-        hidden == 1 -> "1 video hidden by the size limits"
-        else -> "$hidden videos hidden by the size limits"
+        else -> com.tmplayer.data.SizeFilter.hiddenLabel(hidden)
     }
 
     /**

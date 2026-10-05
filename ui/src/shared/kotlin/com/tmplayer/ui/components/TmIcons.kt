@@ -24,6 +24,16 @@ object TmIcons {
     /** A minus sign, for the stepper buttons. */
     val Remove: ImageVector by lazy { icon("Remove", "M19,13H5V11H19V13Z") }
 
+    /** A clock face with an arrow running back round it: the recent searches. */
+    val History: ImageVector by lazy {
+        icon(
+            "History",
+            "M13,3A9,9 0 0,0 4,12H1L4.89,15.89L4.96,16.03L9,12H6A7,7 0 0,1 13,5A7,7 0 0,1 20,12" +
+                "A7,7 0 0,1 13,19C11.07,19 9.32,18.21 8.06,16.94L6.64,18.36C8.27,20 10.5,21 13,21" +
+                "A9,9 0 0,0 22,12A9,9 0 0,0 13,3M12,8V13L16.28,15.54L17,14.33L13.5,12.25V8H12Z",
+        )
+    }
+
     /** Wi-Fi with a slash, for the passive offline status chip. */
     val WifiOff: ImageVector by lazy {
         icon("WifiOff") {

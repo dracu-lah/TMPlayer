@@ -45,6 +45,9 @@ private val THEME_CHOICE = stringPreferencesKey("theme_choice")
 private val DYNAMIC_COLOUR = booleanPreferencesKey("dynamic_colour")
 private val VIDEO_SCALE = stringPreferencesKey("video_scale")
 
+/** The last few searches inside a chat, one per line, newest first. See [RecentSearches]. */
+private val RECENT_SEARCHES = stringPreferencesKey("recent_searches")
+
 // The update check's memory, shared by the phone, the TV and the desktop. See [UpdateScheduler].
 private val UPDATE_NOTIFY = booleanPreferencesKey("update_notify")
 private val UPDATE_LAST_CHECK = longPreferencesKey("update_last_check")
@@ -694,6 +697,26 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
             prefs.remove(CHAT_SNAPSHOT)
             prefs.remove(ACCOUNT_SNAPSHOT)
         }
+    }
+
+    // ---- recent searches --------------------------------------------------------------------
+
+    /**
+     * What was searched for inside a chat lately, newest first, at most [RecentSearches.LIMIT].
+     * One list for every chat: a viewer looking for a show looks for it wherever it was posted.
+     */
+    val recentSearches: Flow<List<String>> = read { RecentSearches.decode(it[RECENT_SEARCHES]) }
+
+    suspend fun addRecentSearch(query: String) {
+        prefs.edit { prefs ->
+            val before = RecentSearches.decode(prefs[RECENT_SEARCHES])
+            val after = RecentSearches.add(before, query)
+            if (after != before) prefs[RECENT_SEARCHES] = RecentSearches.encode(after)
+        }
+    }
+
+    suspend fun clearRecentSearches() {
+        prefs.edit { it.remove(RECENT_SEARCHES) }
     }
 
     // ---- card layout ------------------------------------------------------------------------

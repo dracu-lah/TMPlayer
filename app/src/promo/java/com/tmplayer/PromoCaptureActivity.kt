@@ -48,6 +48,16 @@ import com.tmplayer.ui.browse.Header
 import com.tmplayer.ui.browse.MediaCard
 import com.tmplayer.ui.browse.TouchMediaScaffold
 import com.tmplayer.ui.components.UiState
+import com.tmplayer.ui.components.StateScaffold
+import com.tmplayer.ui.components.StateAction
+import com.tmplayer.ui.components.MediaGridSkeleton
+import com.tmplayer.ui.browse.noVideosWithin
+import com.tmplayer.ui.browse.STILL_MORE_TO_SEARCH
+import com.tmplayer.ui.browse.HiddenVideosNote
+import com.tmplayer.ui.browse.FIRST_LOAD_TIP
+import com.tmplayer.data.SizeFilter
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.layout.padding
 import com.tmplayer.ui.onboarding.OverviewScreen
 import com.tmplayer.ui.settings.AboutScreen
 import com.tmplayer.ui.settings.SettingsScreen
@@ -59,7 +69,9 @@ import com.tmplayer.ui.theme.Tv
 /**
  * A promo-build-only fixture used to capture honest UI without exposing a real Telegram account.
  *
- * Start it with `--es screen chats`, `media` or `settings`. Add `--ez tv true` to capture the
+ * Start it with `--es screen chats`, `media` or `settings`. The empty, error and loading states have
+ * screens of their own: `chats-first` (the first chat list, with its tip, and after fifteen seconds
+ * the slow-answer line), and `media` with `--es variant hidden|empty-hidden|empty-more|slow|recent`. Add `--ez tv true` to capture the
  * television layout on a phone panel resized to 1920x1080, which is how the TV shots on the site
  * are taken now that the stick is not the only device this app has to look right on.
  *
@@ -126,11 +138,17 @@ class PromoCaptureActivity : ComponentActivity() {
                 // taken from this fixture was of something the app never draws.
                 Box(Modifier.fillMaxSize().background(Tone.background)) {
                     when (screen) {
-                        "media" -> if (tv) {
-                            TvMediaScreen()
-                        } else {
-                            PhoneMediaScreen(onBack = { screen = "chats" })
+                        "media" -> {
+                            val variant = intent.getStringExtra("variant") ?: "grid"
+                            if (tv) {
+                                TvMediaScreen(variant)
+                            } else {
+                                PhoneMediaScreen(variant, onBack = { screen = "chats" })
+                            }
                         }
+                        "chats-first" -> PromoChatsScreen(
+                            state = UiState.Loading("Loading your chats…", tip = FIRST_LOAD_TIP),
+                        )
                         // The number pane, not the QR one. A shipped picture of a real QR is a
                         // working key to an account, which is why the old shot had to be blurred;
                         // an empty number field says the same thing and hides nothing.
@@ -175,11 +193,15 @@ private fun promoChats(): List<ChatSummary> = listOf(
 )
 
 @Composable
-private fun PromoChatsScreen(onOpenChat: () -> Unit = {}, onOpenSettings: () -> Unit = {}) {
+private fun PromoChatsScreen(
+    onOpenChat: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    state: UiState<BrowseData>? = null,
+) {
     val chats = promoChats()
     val account = Account("Demo", "demo", null, 0)
     BrowseScreen(
-        state = UiState.Content(BrowseData(chats, account)),
+        state = state ?: UiState.Content(BrowseData(chats, account)),
         favorites = setOf(102, 104),
         continueWatching = emptyList(),
         onRetry = {},
@@ -201,7 +223,7 @@ private fun PromoChatsScreen(onOpenChat: () -> Unit = {}, onOpenSettings: () -> 
  * quietly disagree with what the app does.
  */
 @Composable
-private fun PhoneMediaScreen(onBack: () -> Unit = {}) {
+private fun PhoneMediaScreen(variant: String, onBack: () -> Unit = {}) {
     val media = promoMedia()
     TouchMediaScaffold(
         chatTitle = "Weekend Clips",
@@ -216,7 +238,19 @@ private fun PhoneMediaScreen(onBack: () -> Unit = {}) {
         layout = CardLayout.Grid,
         onToggleLayout = {},
         onRefresh = {},
+        recentSearches = PROMO_RECENT,
+        startSearching = variant == "recent",
     ) {
+        val state = promoState(variant)
+        if (state != null) {
+            StateScaffold(
+                state,
+                onRetry = {},
+                loading = { MediaGridSkeleton(layout = CardLayout.Grid) },
+                onAction = {},
+            ) {}
+            return@TouchMediaScaffold
+        }
         LazyVerticalGrid(
             // Three, which is what the real grid computes for a 393dp phone from its minimum
             // tile width. The fixture has to draw what the app draws or the screenshots are of a
@@ -233,6 +267,11 @@ private fun PhoneMediaScreen(onBack: () -> Unit = {}) {
             val tiles = (0 until 3).flatMap { pass ->
                 media.map { it.copy(messageId = it.messageId + pass * media.size) }
             }
+            if (variant == "hidden") {
+                item(key = "hidden", span = { GridItemSpan(maxLineSpan) }) {
+                    Box(Modifier.padding(horizontal = 12.dp)) { HiddenVideosNote(12, 0) {} }
+                }
+            }
             items(tiles, key = { it.messageId }) { item ->
                 MediaCard(item = item, watched = null, onClick = {}, onFocused = {}, dense = true)
             }
@@ -241,10 +280,11 @@ private fun PhoneMediaScreen(onBack: () -> Unit = {}) {
 }
 
 @Composable
-private fun TvMediaScreen() {
+private fun TvMediaScreen(variant: String) {
     val media = promoMedia()
     val first = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
+    val state = promoState(variant)
+    LaunchedEffect(Unit) { if (state == null) runCatching { first.requestFocus() } }
     Column(Modifier.fillMaxSize()) {
         Header(
             chatTitle = "Weekend Clips",
@@ -263,7 +303,18 @@ private fun TvMediaScreen() {
             // The fixture has nowhere to go back to. The pill is drawn, which is the point,
             // since the screenshots have to show the same header the app shows.
             onBack = {},
+            recentSearches = PROMO_RECENT,
+            alwaysShowRecent = variant == "recent",
         )
+        if (state != null) {
+            StateScaffold(
+                state,
+                onRetry = {},
+                loading = { MediaGridSkeleton(layout = CardLayout.Grid) },
+                onAction = {},
+            ) {}
+            return@Column
+        }
         LazyVerticalGrid(
             columns = GridCells.Fixed(4),
             contentPadding = PaddingValues(
@@ -274,6 +325,9 @@ private fun TvMediaScreen() {
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            if (variant == "hidden") {
+                item(key = "hidden", span = { GridItemSpan(maxLineSpan) }) { HiddenVideosNote(12, 0) {} }
+            }
             items(media, key = { it.id }) { item ->
                 MediaCard(
                     item = item,
@@ -326,3 +380,20 @@ private fun promoMedia(): List<MediaItem> {
 
 /** Telegram's grid gap, matched to [com.tmplayer.ui.browse] so the shot is the real spacing. */
 private val DENSE_GAP = 2.dp
+
+/** What the fixture's recent-search chips say: the kind of thing somebody types into a chat. */
+private val PROMO_RECENT = listOf("coast walk", "shelf part 2", "birthday", "recipe")
+
+/**
+ * The media screen's states, as the view model would publish them, for `--es variant`. Null for
+ * the variants that draw the grid itself.
+ */
+private fun promoState(variant: String): UiState<Unit>? = when (variant) {
+    "empty-hidden" -> UiState.Empty(
+        "${noVideosWithin(SizeFilter.DEFAULT_MIN, SizeFilter.DEFAULT_MAX)}\n\n${SizeFilter.hiddenLabel(12)}.",
+        StateAction.ShowHidden,
+    )
+    "empty-more" -> UiState.Empty(STILL_MORE_TO_SEARCH, StateAction.KeepLooking)
+    "slow" -> UiState.Loading("Finding videos…")
+    else -> null
+}

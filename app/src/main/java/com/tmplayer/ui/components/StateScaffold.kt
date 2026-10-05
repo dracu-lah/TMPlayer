@@ -9,6 +9,13 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,21 +63,60 @@ fun <T> StateScaffold(
     state: UiState<T>,
     onRetry: (() -> Unit)? = null,
     loading: (@Composable () -> Unit)? = null,
+    /** What the button under an empty state does; see [StateAction]. */
+    onAction: ((StateAction) -> Unit)? = null,
     content: @Composable (T) -> Unit,
 ) {
     when (state) {
-        is UiState.Loading -> if (loading != null) loading() else BigLoader(state.label)
+        is UiState.Loading -> if (loading != null) {
+            // The skeleton keeps its shape; the slow line floats over its lower half, where the
+            // remote can reach it without the outline of the listing jumping about.
+            Box(Modifier.fillMaxSize()) {
+                loading()
+                Column(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(start = 24.dp, end = 24.dp, bottom = 48.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    state.tip?.let { TipCard(it) }
+                    SlowAnswerNotice(key = state, onRetry = onRetry, card = true)
+                }
+            }
+        } else {
+            BigLoader(state.label, tip = state.tip, slowKey = state, onRetry = onRetry)
+        }
         is UiState.Error -> BigError(state.message, onRetry)
-        is UiState.Empty -> BigEmpty(state.message)
+        is UiState.Empty -> BigEmpty(
+            state.message,
+            actionLabel = state.action?.label,
+            onAction = state.action?.let { action -> onAction?.let { { it(action) } } },
+        )
         is UiState.Content -> content(state.value)
     }
 }
 
-/** Large centered spinner + label, readable from the couch. */
+/**
+ * Large centered spinner + label, readable from the couch.
+ *
+ * @param tip a line of advice under the label, for a wait the viewer has not met before.
+ * @param slowKey with [onRetry], the wait this loader stands for: once it has run longer than
+ *   [SlowAnswer.AFTER_MS], a line says Telegram is slow and offers to ask again.
+ */
 @Composable
-fun BigLoader(label: String? = null) {
+fun BigLoader(
+    label: String? = null,
+    tip: String? = null,
+    slowKey: Any? = null,
+    onRetry: (() -> Unit)? = null,
+) {
     val muted = Tone.muted
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    val touch = isTouch()
+    Box(
+        Modifier.fillMaxSize().padding(horizontal = if (touch) PhonePad.Side else 72.dp),
+        contentAlignment = Alignment.Center,
+    ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -84,8 +130,88 @@ fun BigLoader(label: String? = null) {
                     textAlign = TextAlign.Center,
                 )
             }
+            if (tip != null) {
+                Text(
+                    tip,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = muted.copy(alpha = 0.8f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.widthIn(max = 420.dp),
+                )
+            }
+            if (slowKey != null) SlowAnswerNotice(key = slowKey, onRetry = onRetry)
         }
     }
+}
+
+/** A first-time tip floated over a skeleton, on the same raised surface as the slow notice. */
+@Composable
+fun TipCard(tip: String) {
+    Box(
+        Modifier
+            .widthIn(max = 520.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(Tone.surfaceHigh)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+    ) {
+        Text(
+            tip,
+            style = MaterialTheme.typography.bodyMedium,
+            color = Tone.text,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/**
+ * "Telegram is slow to answer" and a Retry button, once the wait for [key] has gone on past
+ * [SlowAnswer.AFTER_MS]. Nothing at all before then, and nothing without [onRetry]: a line that
+ * only says the wait is long, with nothing to press, is no help to anybody.
+ *
+ * @param card drawn on a surface of its own, for when it floats over a skeleton.
+ */
+@Composable
+fun SlowAnswerNotice(
+    key: Any?,
+    onRetry: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    card: Boolean = false,
+    afterMs: Long = SlowAnswer.AFTER_MS,
+) {
+    if (onRetry == null) return
+    var slow by remember(key) { mutableStateOf(false) }
+    LaunchedEffect(key) {
+        delay(afterMs)
+        slow = true
+    }
+    if (!slow) return
+    val touch = isTouch()
+    val focus = remember { FocusRequester() }
+    val body: @Composable () -> Unit = {
+        Row(
+            Modifier.padding(horizontal = if (card) 20.dp else 0.dp, vertical = if (card) 10.dp else 0.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                SlowAnswer.MESSAGE,
+                style = MaterialTheme.typography.bodyLarge,
+                color = Tone.text,
+            )
+            TmButton(onClick = onRetry, modifier = Modifier.focusRequester(focus)) {
+                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(SlowAnswer.RETRY)
+            }
+        }
+    }
+    if (card) {
+        Box(modifier.clip(RoundedCornerShape(28.dp)).background(Tone.surfaceHigh)) { body() }
+    } else {
+        Box(modifier) { body() }
+    }
+    // The remote needs somewhere to land, as it does on the error state.
+    if (!touch) LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
 }
 
 /**
@@ -171,7 +297,13 @@ private const val MIN_SWEEP = 12f
  * is not the same situation as a tab with nothing in it yet.
  */
 @Composable
-fun BigEmpty(message: String, icon: ImageVector = Icons.Filled.Search) {
+fun BigEmpty(
+    message: String,
+    icon: ImageVector = Icons.Filled.Search,
+    /** The one button worth offering, such as "Show them" when the size limits emptied a chat. */
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
     val touch = isTouch()
     val muted = Tone.muted
     Box(
@@ -201,6 +333,16 @@ fun BigEmpty(message: String, icon: ImageVector = Icons.Filled.Search) {
                 // full width of a television and leaving three words underneath.
                 modifier = Modifier.widthIn(max = 400.dp),
             )
+            if (actionLabel != null && onAction != null) {
+                val focus = remember { FocusRequester() }
+                Spacer(Modifier.size(4.dp))
+                TmButton(onClick = onAction, modifier = Modifier.focusRequester(focus)) {
+                    Text(actionLabel)
+                }
+                if (!touch) {
+                    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+                }
+            }
         }
     }
 }

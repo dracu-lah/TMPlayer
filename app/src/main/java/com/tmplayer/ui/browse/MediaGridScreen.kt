@@ -62,6 +62,8 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -74,6 +76,7 @@ import androidx.compose.material3.MaterialTheme as M3MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text as M3Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -144,6 +147,7 @@ import com.tmplayer.data.Td
 import com.tmplayer.data.MediaFeedEntry
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.WatchedRecord
 import com.tmplayer.ui.components.WatchedBadge
 import com.tmplayer.data.SponsoredItem
@@ -162,6 +166,7 @@ import com.tmplayer.ui.components.pressable
 import com.tmplayer.ui.components.StateScaffold
 import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.components.TmIcons
+import com.tmplayer.ui.components.TmSecondaryButton
 import com.tmplayer.ui.components.TvSearchField
 import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.TvMenu
@@ -193,7 +198,12 @@ private class MediaListViewModelFactory(
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
         // The download index, so a downloaded video's tile says Downloaded rather than Cached.
-        MediaListViewModel(chatId, minSize, maxSize) { LocalDownloads.presentIds(settings) } as T
+        MediaListViewModel(
+            chatId,
+            minSize,
+            maxSize,
+            onSearched = { settings.addRecentSearch(it) },
+        ) { LocalDownloads.presentIds(settings) } as T
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -250,6 +260,10 @@ fun MediaGridScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
     var query by remember { mutableStateOf("") }
+    val recentStore = remember(context) { SettingsStore(context) }
+    val recentSearches by recentStore.recentSearches.collectAsStateWithLifecycle(initialValue = emptyList())
+    val recentScope = rememberCoroutineScope()
+    val clearRecent: () -> Unit = { recentScope.launch { recentStore.clearRecentSearches() } }
     // Whatever the remote is standing on, for the name strip along the bottom.
     var standingOn by remember { mutableStateOf<MediaItem?>(null) }
     val connectionOffset = if (connectionNotice == ConnectionNotice.Hidden) 0.dp else 56.dp
@@ -479,6 +493,7 @@ fun MediaGridScreen(
             state,
             onRetry = viewModel::load,
             loading = { MediaGridSkeleton(layout = layout) },
+            onAction = viewModel::act,
         ) { list ->
             // On a phone the column count follows the width, which follows the orientation.
             // Everything that counts in columns, the paging lead included, reads it from here so
@@ -540,7 +555,7 @@ fun MediaGridScreen(
                     ) {
                         if (list.hiddenBySize > 0 || list.hiddenSelfDestructing > 0) {
                             item(key = "hidden-videos", span = { GridItemSpan(maxLineSpan) }) {
-                                HiddenVideosNote(list.hiddenBySize, list.hiddenSelfDestructing)
+                                HiddenVideosNote(list.hiddenBySize, list.hiddenSelfDestructing, viewModel::showHidden)
                             }
                         }
                         gridItems(
@@ -596,7 +611,7 @@ fun MediaGridScreen(
                     ) {
                         if (list.hiddenBySize > 0 || list.hiddenSelfDestructing > 0) {
                             item(key = "hidden-videos") {
-                                HiddenVideosNote(list.hiddenBySize, list.hiddenSelfDestructing)
+                                HiddenVideosNote(list.hiddenBySize, list.hiddenSelfDestructing, viewModel::showHidden)
                             }
                         }
                         items(
@@ -754,6 +769,8 @@ fun MediaGridScreen(
             layout = layout,
             onToggleLayout = onToggleLayout,
             onRefresh = refresh,
+            recentSearches = recentSearches,
+            onClearRecent = clearRecent,
             selectionBar = if (!selecting) null else {
                 {
                     SelectionBar(
@@ -808,6 +825,8 @@ fun MediaGridScreen(
                     onToggleLayout = onToggleLayout,
                     onRefresh = refresh,
                     onBack = onBack,
+                    recentSearches = recentSearches,
+                    onClearRecent = clearRecent,
                 )
             }
             listing()
@@ -860,6 +879,11 @@ internal fun TouchMediaScaffold(
     layout: CardLayout,
     onToggleLayout: () -> Unit,
     onRefresh: () -> Unit,
+    /** Offered as chips while the search is open and still empty. */
+    recentSearches: List<String> = emptyList(),
+    onClearRecent: () -> Unit = {},
+    /** Opens with the search already showing, for the screenshot fixture. */
+    startSearching: Boolean = false,
     /**
      * The contextual bar shown while videos are being ticked, which takes the whole of the app bar
      * rather than sitting under it: that is what every phone list does when a selection starts, and
@@ -868,7 +892,7 @@ internal fun TouchMediaScaffold(
     selectionBar: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
-    var searching by rememberSaveable { mutableStateOf(false) }
+    var searching by rememberSaveable { mutableStateOf(startSearching) }
     val field = remember { FocusRequester() }
     // The bar is a lot of a phone screen to spend on chrome while scrolling, so it leaves on the
     // way down and comes back on the first flick up.
@@ -968,7 +992,19 @@ internal fun TouchMediaScaffold(
             )
         },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) { content() }
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            if (searching && query.isEmpty() && recentSearches.isNotEmpty()) {
+                TouchRecentSearches(
+                    searches = recentSearches,
+                    onPick = {
+                        onQuery(it)
+                        onSubmit()
+                    },
+                    onClear = onClearRecent,
+                )
+            }
+            Box(Modifier.fillMaxSize()) { content() }
+        }
     }
 
     LaunchedEffect(searching) {
@@ -1056,6 +1092,11 @@ internal fun Header(
     onToggleLayout: () -> Unit,
     onRefresh: () -> Unit,
     onBack: () -> Unit,
+    /** Offered as a row of pills while the remote is in the header and nothing is typed. */
+    recentSearches: List<String> = emptyList(),
+    onClearRecent: () -> Unit = {},
+    /** Shows the recent row whatever has focus, for the screenshot fixture. */
+    alwaysShowRecent: Boolean = false,
 ) {
     val startVoice = rememberVoiceSearch("Say a video name") {
         onQuery(it)
@@ -1092,11 +1133,15 @@ internal fun Header(
             }
         }
         Spacer(Modifier.height(12.dp))
+        val searchField = remember { FocusRequester() }
+        // The recent searches belong to the search, so they are shown only while the remote is up
+        // here with it: down in the grid they would cost a row of posters for nothing.
+        var headerFocused by remember { mutableStateOf(false) }
+        Column(Modifier.onFocusChanged { headerFocused = it.hasFocus }) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val searchField = remember { FocusRequester() }
 
             TvSearchField(
                 value = query,
@@ -1139,6 +1184,57 @@ internal fun Header(
             // Icon only, like the refresh on the chat list: a label costs the search field 90dp.
             Pill("Refresh", Icons.Filled.Refresh, showLabel = false, onClick = onRefresh)
         }
+        if (query.isBlank() && recentSearches.isNotEmpty() && (headerFocused || alwaysShowRecent)) {
+            Row(
+                Modifier.padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Recent", style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+                for (recent in recentSearches) {
+                    Pill(recent, TmIcons.History) {
+                        // The row goes as soon as there is a query, so focus moves first, as Clear does.
+                        runCatching { searchField.requestFocus() }
+                        onQuery(recent)
+                        onSubmit()
+                    }
+                }
+                Pill("Clear recent searches", Icons.Filled.Close, showLabel = false) {
+                    runCatching { searchField.requestFocus() }
+                    onClearRecent()
+                }
+            }
+        }
+        }
+    }
+}
+
+/**
+ * The phone's recent searches: a scrolling row of chips under the open search bar, with Clear at
+ * the end. Shown only while the field is empty, which is when a chip saves typing.
+ */
+@Composable
+private fun TouchRecentSearches(
+    searches: List<String>,
+    onPick: (String) -> Unit,
+    onClear: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = TOUCH_EDGE, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        for (recent in searches) {
+            SuggestionChip(
+                onClick = { onPick(recent) },
+                label = { M3Text(recent, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                icon = { M3Icon(TmIcons.History, contentDescription = null, modifier = Modifier.size(18.dp)) },
+            )
+        }
+        TextButton(onClick = onClear) { M3Text("Clear") }
     }
 }
 
@@ -2411,18 +2507,27 @@ private const val FOCUS_SETTLE_MS = 150L
  * as TMPlayer having lost it, which is what viewers reported.
  */
 @Composable
-private fun HiddenVideosNote(bySize: Int, selfDestructing: Int) {
-    Text(
-        hiddenVideosText(bySize, selfDestructing),
-        style = MaterialTheme.typography.bodyMedium,
-        color = Tone.muted,
-        modifier = Modifier.padding(vertical = 4.dp),
-    )
+internal fun HiddenVideosNote(bySize: Int, selfDestructing: Int, onShowHidden: () -> Unit) {
+    Row(
+        Modifier.padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text(
+            hiddenVideosText(bySize, selfDestructing),
+            style = MaterialTheme.typography.bodyMedium,
+            color = Tone.muted,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        // Lifts the limits for this chat only, for as long as it is open; Settings keeps them.
+        // A self-destructing video has nothing to show here, so only the size count earns it.
+        if (bySize > 0) {
+            TmSecondaryButton(onClick = onShowHidden) { Text("Show them") }
+        }
+    }
 }
 
-internal fun hiddenBySizeText(count: Int): String =
-    (if (count == 1) "1 video is" else "$count videos are") +
-        " hidden by the video size limits. Change them in Settings to see everything."
+internal fun hiddenBySizeText(count: Int): String = SizeFilter.hiddenLabel(count) + "."
 
 /**
  * A self-destructing video is gone once it has been opened, which only Telegram itself can honour,

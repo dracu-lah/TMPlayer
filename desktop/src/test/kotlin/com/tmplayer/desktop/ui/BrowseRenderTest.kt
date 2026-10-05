@@ -145,6 +145,52 @@ class BrowseRenderTest {
     }
 
     @Test
+    fun emptyErrorAndRecentStates() {
+        fun page(state: com.tmplayer.ui.components.UiState<Unit>, recent: List<String> = emptyList()) = render {
+            Column(Modifier.fillMaxSize()) {
+                PageHeader("Film Club", null)
+                RecentSearchRow(recent, onPick = {}, onClear = {})
+                StateBox(state, onRetry = {}, onAction = {}, slowAfterMs = 100) {}
+            }
+        }
+        val hidden = com.tmplayer.data.SizeFilter.hiddenLabel(12)
+        save(
+            "state-empty-hidden.png",
+            page(
+                com.tmplayer.ui.components.UiState.Empty(
+                    "${com.tmplayer.ui.browse.noVideosWithin(com.tmplayer.data.SizeFilter.DEFAULT_MIN, com.tmplayer.data.SizeFilter.DEFAULT_MAX)}\n\n$hidden.",
+                    com.tmplayer.ui.components.StateAction.ShowHidden,
+                ),
+            ),
+        )
+        save(
+            "state-empty-more.png",
+            page(
+                com.tmplayer.ui.components.UiState.Empty(
+                    com.tmplayer.ui.browse.STILL_MORE_TO_SEARCH,
+                    com.tmplayer.ui.components.StateAction.KeepLooking,
+                ),
+            ),
+        )
+        save(
+            "state-first-load-slow.png",
+            page(com.tmplayer.ui.components.UiState.Loading("Loading your chats…", tip = com.tmplayer.ui.browse.FIRST_LOAD_TIP)),
+        )
+        save(
+            "state-recent-searches.png",
+            page(com.tmplayer.ui.components.UiState.Loading("Finding videos…"), listOf("coast walk", "shelf part 2", "birthday", "recipe")),
+        )
+        val items = (1..4).map { at ->
+            MediaItem(
+                chatId = 2, messageId = at.toLong(), fileId = 0, title = "Harbour Lights S02E0$at",
+                sizeBytes = 400L * 1024 * 1024, durationSec = 2400, mimeType = "video/mp4", thumbnailFileId = 0,
+                miniThumbnail = jpeg(0xFF12A594.toInt()), date = 0, fileName = "Harbour Lights S02E0$at.mkv",
+            )
+        }
+        save("state-hidden-note.png", render { VideoGrid(shell, items, "Weekend series", hiddenBySize = 12) })
+    }
+
+    @Test
     fun downloadsPage() = kotlinx.coroutines.runBlocking {
         val folder = dir.resolve("Downloads/TMPlayer").apply { mkdirs() }
         fun item(id: Long, title: String, size: Long) = MediaItem(
