@@ -30,7 +30,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [x] CP02 Wording: "unofficial" everywhere, site titles, release notes text, legal Terms (ae52f5a)
 - [x] CP03 Third-party notices complete, a real desktop corresponding source script, notices inside every package (97a0f3f)
 - [x] CP04 Respect Telegram "restrict saving content" and self-destructing media (572287c, not yet tested on a protected channel)
-- [ ] CP05 About screen on phone, TV and desktop
+- [x] CP05 About screen on phone, TV and desktop (49b4c6f)
 - [ ] U01 Two Sentry settings, and tell Claude the DSN host
 - [ ] U02 Licence label and the player logo's source
 - [ ] U03 Budget decision ($0 only, or pay for Certum and Google Play)
