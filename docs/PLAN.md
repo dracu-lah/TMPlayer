@@ -43,6 +43,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [ ] CP08 Resume rules, desktop player extras
 - [ ] CP09 Empty and error states with actions, recent searches
 - [ ] CP10 Remove after watching, free space, TV focus and labels
+- [ ] CP10a Sidebar: version beside the logo, compact accordion groups (phone, TV, desktop)
 - [ ] CP11 Release prep and device verification
 - [ ] CP12 Release "Player" (only when the user says so) and post-release checks
 - [ ] U06 Check the 1.22.1 post on @tmplayerapp went out
@@ -275,6 +276,33 @@ the app; the TV has no browser, so the Privacy and Lawful use links do nothing t
   on the download action.
 - TV: 1.05 focus scale on tiles, check the 48/27 dp overscan margins, content descriptions for the actionable
   icons among the 54 null-labelled ones (decorative ones stay null).
+**STOP**
+
+### CP10a Sidebar: version beside the logo, compact accordion groups
+**Why:** the user asked on 2026-10-06 for the app version next to the icon in the sidebar, and for a more
+compact sidebar where related entries fold into groups like an accordion.
+**Where:** TV rail `NavRail`, `RailHeading`, `RailItem` in `app/.../ui/browse/BrowseScreen.kt`; phone drawer
+`DrawerBrand`, `DrawerDestinations`, `DrawerSeparator`, `DrawerFooter` in `app/.../ui/browse/TouchNav.kt`;
+desktop `Sidebar` and `Rail` in `desktop/.../ui/Shell.kt`; the tab list `BrowseTab` in
+`ui/src/shared/kotlin/com/tmplayer/ui/browse/BrowseSections.kt`.
+**Do:**
+- Version: the brand row shows the logo, "TMPlayer" and the version (`BuildConfig.VERSION_NAME` on Android,
+  the desktop app version) in a smaller muted style. When an update is available, the existing amber "Update"
+  entry stays where it is; the version text does not turn into a button.
+- Groups (proposal, show the user a screenshot before polishing): **Watch** (Continue, Watched, Favourites,
+  Downloads), **Chats** (Recent, Unread, Saved, Channels, Groups, People, All chats, Archived), **Folders** (the
+  account's Telegram folders, only when there are any), then Settings and Update pinned at the bottom.
+  Define the grouping once in `:ui` shared code, next to `BrowseTab`, so all three platforms use the same model.
+- Accordion: each group heading folds and unfolds with a chevron; the group holding the current destination
+  is always open; open or closed state is remembered in `SettingsStore`; Watch starts open, the rest closed.
+- Tighter rows: smaller vertical padding and a smaller icon to text gap, keeping TV targets at least 48 dp
+  high and text at least 14 sp (v1 design §4, `docs/design/2026-08-07-v1-design.md`).
+- TV: a group heading is focusable; OK toggles it; D-pad down from an open heading enters the group; the
+  collapsed rail (icons only) shows group icons and expands on focus as today. No focus traps.
+- Phone drawer: the same groups; the account footer stays.
+- Desktop: the same groups; the collapsed icon rail keeps working.
+**Done when:** screenshots of the rail on the TV emulator (collapsed and expanded), the phone drawer, and the
+desktop sidebar in light and dark, with one group closed; D-pad walk on TV reaches every entry.
 **STOP**
 
 ### CP11 Release prep and device verification
