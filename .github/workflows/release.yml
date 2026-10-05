@@ -360,7 +360,17 @@ jobs:
       # picks it up like any other push and the feed is live a minute later. Pushed with this
       # job's token, which starts no other workflow. A tag for an older version (a re-run, a
       # patch to an old line) leaves a newer feed alone.
-      - name: Publish the update feed on the site
+      #
+      # The changelog page and its RSS feed (site/changelog/) go up in the same commit, written by
+      # scripts/build-changelog.py from the release list, which by now includes this release. It
+      # runs for an older tag too, since a patch to an old line still belongs on the page, and it
+      # writes the same bytes for the same releases, so a re-run commits nothing. Its notes are the
+      # annotated tags' messages: this release's tag is here, as the checkout fetched it, and the
+      # older ones are asked of the API rather than fetched, which on a shallow clone would mean
+      # pulling a tree for every tag. gh reads GH_TOKEN for that and for the release list.
+      - name: Publish the update feed and the changelog on the site
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${{ needs.version.outputs.name }}"
           git config user.name "github-actions[bot]"
@@ -371,17 +381,61 @@ jobs:
             CURRENT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' site/latest.json 2>/dev/null || echo 0.0.0)"
             if [ "$(printf '%s\n%s\n' "$CURRENT" "$VERSION" | sort -V | tail -n1)" != "$VERSION" ]; then
               echo "The feed already names $CURRENT, newer than $VERSION; leaving it."
-              exit 0
+              MESSAGE="site: the changelog names $VERSION"
+            else
+              cp "$RUNNER_TEMP/latest.json" site/latest.json
+              MESSAGE="site: the update feed names $VERSION"
             fi
-            cp "$RUNNER_TEMP/latest.json" site/latest.json
-            git add site/latest.json
+            python3 scripts/build-changelog.py
+            git add site/latest.json site/changelog
             if git diff --cached --quiet; then
-              echo "The feed already names $VERSION."
+              echo "The site already names $VERSION."
               exit 0
             fi
-            git commit -m "site: the update feed names $VERSION"
+            git commit -m "$MESSAGE"
             if git push origin HEAD:main; then exit 0; fi
             echo "main moved while the feed was written; trying again."
           done
-          echo "::error::Could not push site/latest.json to main"
+          echo "::error::Could not push the update feed and the changelog to main"
           exit 1
+
+      # The announcement on the Telegram channel, by the release bot. It lives in this job rather
+      # than in a workflow of its own on `release: published` because the release above is made
+      # with this job's GITHUB_TOKEN, and GitHub starts no workflow for an event that token
+      # caused: such a workflow would simply never run.
+      #
+      # It is the last step and it cannot fail the release: by now the files are up and the site
+      # names them, and a Telegram outage or a revoked bot should cost the post, not a red run
+      # that invites a re-run of a release that already happened. A fork without the secret skips
+      # it quietly. So does a tag for a version older than the one the site's feed names (read
+      # from main as the step above left it, so this release's own version still posts): a patch
+      # to an old line is not news on the channel.
+      #
+      # To see the message before a release, run the script with --dry-run; it prints the post
+      # and sends nothing.
+      - name: Announce on Telegram
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
+        run: |
+          VERSION="${{ needs.version.outputs.name }}"
+          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+            echo "TELEGRAM_BOT_TOKEN is not set; not announcing $VERSION."
+            exit 0
+          fi
+          git fetch --depth=1 origin main
+          CURRENT="$(git show FETCH_HEAD:site/latest.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])' 2>/dev/null || echo 0.0.0)"
+          if [ "$(printf '%s\n%s\n' "$CURRENT" "$VERSION" | sort -V | tail -n1)" != "$VERSION" ]; then
+            echo "The site names $CURRENT, newer than $VERSION; not announcing an older version."
+            exit 0
+          fi
+          # The tag's notes without its "release: X.Y.Z" subject. A plain tag has no notes of its
+          # own (git would hand over the commit's message instead), so it posts without any.
+          NOTES=""
+          if [ "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME" 2>/dev/null)" = "tag" ]; then
+            NOTES="$(git tag -l --format='%(contents:body)' "$GITHUB_REF_NAME")"
+          fi
+          OUT="$(python3 scripts/post-release-telegram.py --version "$VERSION" --notes "$NOTES")"
+          echo "$OUT"
+          echo "Telegram: $OUT" >> "$GITHUB_STEP_SUMMARY"
