@@ -22,7 +22,7 @@ Never commit credentials.
 ## Ground rules
 
 - **Existing libraries first.** Before writing a component, check if TDLib, Media3, or an established GPL-compatible library already does it. Custom code needs a reason.
-- **License hygiene (important).** This project is GPL-3.0. Record the provenance and licence of every dependency or adapted implementation, preserve required notices, and do not copy code whose terms are incompatible with GPL-3.0. Reading other projects to understand a pattern is fine; clean-room implementations against documented APIs are still preferred.
+- **License hygiene (important).** This project is GPL-3.0-or-later. Record the provenance and licence of every dependency or adapted implementation, preserve required notices, and do not copy code whose terms are incompatible with GPL-3.0. Reading other projects to understand a pattern is fine; clean-room implementations against documented APIs are still preferred.
 - **The TV UX rules in [the v1 design §4](docs/design/2026-08-07-v1-design.md) are non-negotiable:** overscan-safe padding, at least 14 sp text, explicit focus handling, a loading/error state for every async surface, no typing after login.
 - **Low-spec first:** minSdk 26, `armeabi-v7a` must keep working, watch RAM (around 180 MB or less during playback) and the universal APK's size, since it is the only one published.
 - **Tests for core logic.** The auth state machine, the streaming `TdDataSource` (including the seek matrix in docs/design/2026-08-07-v1-design.md §6), and storage-cap policy are unit-tested with fakes, and PRs touching them must keep/extend the tests. UI is verified on-device instead.

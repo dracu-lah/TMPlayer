@@ -12,8 +12,8 @@ name: Release
 # APK, the Windows MSI, the Linux AppImage and the Linux tarball (which the AUR PKGBUILD builds
 # from), and nothing else. Each platform builds in its own job; the last job gathers them and
 # publishes. GitHub attaches the source archives to every release by itself and shows each file's
-# SHA-256 beside it, so the licence, the notices and the nextlib source are links in the notes and
-# there is no checksum file.
+# SHA-256 beside it, so the licence, the notices and the nextlib and mediamp sources are links in
+# the notes and there is no checksum file.
 on:
   push:
     tags: ["v*"]
@@ -337,6 +337,30 @@ jobs:
         env:
           NEXTLIB_SOURCE: https://github.com/${{ github.repository }}/releases/download/v1.21.0/nextlib-corresponding-source-1.21.0.tar.gz
 
+      # The same for the desktop builds' mpv runtime: libmpv, FFmpeg and the libraries bundled
+      # beside them come in through mediamp, and scripts/build-mediamp-source.sh packs their
+      # source for exactly one mediamp version. The archive is uploaded by hand, to the first
+      # release that carries this step, so TAG starts empty, which links this release's own copy.
+      # Once it is up, TAG names that release and every later one links there, checked like
+      # nextlib's. A mediamp bump stops the release until a new archive covers it.
+      - name: Check the mediamp source link still matches
+        id: mediamp
+        run: |
+          COVERED="0.5.0"
+          TAG=""
+          USED="$(sed -n 's/^mediamp = "\(.*\)"$/\1/p' gradle/libs.versions.toml)"
+          if [ "$USED" != "$COVERED" ]; then
+            echo "::error::mediamp is $USED but the linked corresponding source covers $COVERED. Update scripts/build-mediamp-source.sh for $USED, attach its archive, and update COVERED and TAG here."
+            exit 1
+          fi
+          URL="https://github.com/${{ github.repository }}/releases/download/${TAG:-$GITHUB_REF_NAME}/mediamp-corresponding-source-$COVERED.tar.gz"
+          if [ -n "$TAG" ]; then
+            curl --fail --silent --show-error --head --location --max-time 60 "$URL" > /dev/null
+          else
+            echo "::warning::Attach mediamp-corresponding-source-$COVERED.tar.gz (scripts/build-mediamp-source.sh) to this release, then set TAG to $GITHUB_REF_NAME in release.yml."
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
       # The update feed every installed copy reads (C1 of the storage and updates plan). Written
       # here, from the files about to go up, so each package's size and SHA-256 are the published
       # bytes'. It is only committed after the release exists, below, so the feed never points
@@ -369,7 +393,7 @@ jobs:
             | Linux, glibc 2.38 or newer | `TMPlayer-${{ needs.version.outputs.name }}-x86_64.AppImage` |
             | Arch Linux | [the PKGBUILD](https://github.com/${{ github.repository }}/tree/${{ github.ref_name }}/desktop/packaging/aur), from `TMPlayer-${{ needs.version.outputs.name }}-linux-x64.tar.xz` |
 
-            Installed copies offer each update. [How to install](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/INSTALL.md) · [Moving from the deb, rpm, Flatpak or Windows zip](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/INSTALL.md#moving-from-a-format-that-is-no-longer-published) · [GPL-3.0](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/LICENSE) · [Third party notices](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/THIRD_PARTY_NOTICES.md) · [nextlib source](https://github.com/${{ github.repository }}/releases/download/v1.21.0/nextlib-corresponding-source-1.21.0.tar.gz)
+            Installed copies offer each update. [How to install](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/INSTALL.md) · [Moving from the deb, rpm, Flatpak or Windows zip](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/INSTALL.md#moving-from-a-format-that-is-no-longer-published) · [GPL-3.0](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/LICENSE) · [Third party notices](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/THIRD_PARTY_NOTICES.md) · [nextlib source](https://github.com/${{ github.repository }}/releases/download/v1.21.0/nextlib-corresponding-source-1.21.0.tar.gz) · [mediamp source](${{ steps.mediamp.outputs.url }})
 
       # tmplayer.org is deployed by Vercel's git integration from main, with no build step and no
       # deploy hook, so a commit to main is the one way the site learns of the release: Vercel

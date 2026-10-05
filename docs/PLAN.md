@@ -317,8 +317,10 @@ desktop sidebar in light and dark, with one group closed; D-pad walk on TV reach
 ### CP12 Release "Player" and post-release checks
 **Needs:** the user saying "release" in that session, and the cadence guard passing (2026-10-13 or later).
 **Do:** tag with the annotated message, push, watch the run. Then, each only with the user's OK: upload
-`mediamp-corresponding-source-0.5.0.tar.gz` to that release; check the Telegram post, `site/latest.json` and the
-changelog commit; `gh attestation verify` one file; bump the AUR PKGBUILD.
+`mediamp-corresponding-source-0.5.0.tar.gz` (built by `scripts/build-mediamp-source.sh`) to that release, then set `TAG`
+in release.yml's mediamp step to that tag so later releases link there; check the Telegram post, `site/latest.json` and the
+changelog commit; `gh attestation verify` one file; bump the AUR PKGBUILD (from this release on its
+`package()` also installs the notices, which older tarballs lack).
 **STOP**
 
 ### CP13 winget manifests for the new release

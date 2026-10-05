@@ -57,6 +57,8 @@ mkdir -p "$share/metainfo"
 sed -e "s/@VERSION@/$version/" -e "s/@DATE@/$release_date/" \
   "$here/$id.metainfo.xml" > "$share/metainfo/$id.metainfo.xml"
 install -Dm644 "$root/LICENSE" "$share/doc/tmplayer/copyright"
+install -Dm644 "$root/LICENSE-OPENSSL-EXCEPTION.md" "$share/doc/tmplayer/LICENSE-OPENSSL-EXCEPTION.md"
+install -Dm644 "$root/THIRD_PARTY_NOTICES.md" "$share/doc/tmplayer/THIRD_PARTY_NOTICES.md"
 # Checked here rather than by appimagetool, which only knows the older .appdata.xml name.
 if command -v desktop-file-validate >/dev/null; then desktop-file-validate "$share/applications/$id.desktop"; fi
 if command -v appstreamcli >/dev/null; then appstreamcli validate --no-net "$share/metainfo/$id.metainfo.xml"; fi

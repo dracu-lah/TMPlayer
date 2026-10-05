@@ -7,7 +7,7 @@
 <p align="center">Your Telegram videos, on the TV, in your hand and on your computer. Start watching before the download finishes.</p>
 
 <p align="center">
-  <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-blue" />
+  <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue" />
   <img alt="Platform" src="https://img.shields.io/badge/platform-Android%208.0%2B%20(TV%20and%20phone)-3ddc84" />
   <img alt="Desktop" src="https://img.shields.io/badge/desktop-Windows%20%7C%20Linux-0078d4" />
   <img alt="Tests" src="https://img.shields.io/badge/tests-209%20passing-brightgreen" />
@@ -141,6 +141,8 @@ and [Lawful use](https://tmplayer.org/legal) pages.
 
 ## License
 
-[GNU GPL-3.0](LICENSE) © 2026 dracu-lah
+[GNU GPL-3.0-or-later](LICENSE) © 2026 dracu-lah, with an [additional permission for OpenSSL](LICENSE-OPENSSL-EXCEPTION.md)
+(the Android app's TDLib links OpenSSL 1.1.1w). Bundled libraries and their sources:
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Player mark via [SVG Repo](https://www.svgrepo.com), recoloured.
