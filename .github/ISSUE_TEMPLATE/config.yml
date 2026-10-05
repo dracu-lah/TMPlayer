@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and help
+    url: https://github.com/dracu-lah/TMPlayer/discussions
+    about: Ask how something works or share an idea in Discussions.
+  - name: Telegram group
+    url: https://t.me/tmplayer_chat
+    about: Chat with other users.
+  - name: Security problem
+    url: https://github.com/dracu-lah/TMPlayer/security/advisories/new
+    about: Please report security problems privately.

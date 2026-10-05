@@ -1,0 +1,26 @@
+name: Feature request
+description: An idea that would make TMPlayer better
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to do?
+      description: Describe the situation and what is missing today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could it work?
+      description: Any idea of how it should look or behave. Screenshots from other apps are welcome.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Where do you need it?
+      multiple: true
+      options:
+        - TV (Android TV, Google TV, Fire TV)
+        - Phone or tablet
+        - Windows
+        - Linux
