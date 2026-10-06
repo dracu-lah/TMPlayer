@@ -1,0 +1,28 @@
+name: diag windows log script
+on:
+  push:
+    branches: [diag/windows-logscript]
+jobs:
+  script:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install 1.22.1
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v1.22.1 -R $env:GITHUB_REPOSITORY -p "*windows-x64.msi" -D msi
+          $msi = (Get-ChildItem msi\*.msi).FullName
+          $p = Start-Process msiexec.exe -ArgumentList '/i', "`"$msi`"", '/qn' -Wait -PassThru; "install: $($p.ExitCode)"
+      - name: Run the script in Windows PowerShell 5.1, as a user would
+        shell: pwsh
+        run: |
+          $p = Start-Process powershell.exe -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "$env:GITHUB_WORKSPACE\tmplayer-log.ps1" -PassThru
+          Start-Sleep 120
+          Get-Process java -ErrorAction SilentlyContinue | Format-Table Id, MainWindowTitle -AutoSize | Out-String
+          Get-Process java -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep 3
+          $log = "$([Environment]::GetFolderPath('Desktop'))\tmplayer-log.txt"
+          "--- $log exists: $(Test-Path $log)"
+          Get-Content $log -ErrorAction SilentlyContinue | Select-Object -First 40
