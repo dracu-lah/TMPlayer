@@ -76,13 +76,28 @@ class PluralRulesTest {
     }
 
     @Test
-    fun `hindi counts 0 and 1 and the fractions below 1 as one`() {
-        check("hi", mapOf("one" to listOf(0, 1, 0.5, 1.0), "other" to listOf(2, 1.5, 10, 21)))
+    fun `hindi, bengali and persian count 0 and 1 and the fractions below 1 as one`() {
+        for (language in listOf("hi", "bn", "fa")) {
+            check(language, mapOf("one" to listOf(0, 1, 0.5, 1.0), "other" to listOf(2, 1.5, 10, 21)))
+        }
+    }
+
+    @Test
+    fun `polish has one few many and other`() {
+        check(
+            "pl",
+            mapOf(
+                "one" to listOf(1),
+                "few" to listOf(2, 3, 4, 22, 23, 24, 102, 1004),
+                "many" to listOf(0, 5, 11, 12, 13, 14, 21, 25, 100, 111, 112, 1000),
+                "other" to listOf(0.5, 1.5, 2.5),
+            ),
+        )
     }
 
     @Test
     fun `chinese, japanese, korean, vietnamese and indonesian have one form`() {
-        for (language in listOf("zh", "zh-CN", "ja", "ko", "vi", "id", "in")) {
+        for (language in listOf("zh", "zh-CN", "zh-TW", "ja", "ko", "vi", "id", "in")) {
             check(language, mapOf("other" to listOf(0, 1, 2, 5, 11, 21, 100, 1_000_000, 1.5)))
         }
     }

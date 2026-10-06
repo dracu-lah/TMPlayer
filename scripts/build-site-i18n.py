@@ -72,14 +72,31 @@ PAGES = {
     "guide_no_casting": "guides/telegram-on-tv-without-casting/",
 }
 
-# The languages besides English, in the order the picker lists them: Spanish (asked for in issue
-# #2) and Arabic for now, the others from docs/PLAN.md R1 to follow. `tag` is the
+# The languages besides English, in the order the picker lists them. `tag` is the
 # catalog file name, `path` the URL prefix, `hreflang` what search engines are told (the
 # language alone where one region stands for all, so es-CL and pt-PT readers find these too), `og`
 # the og:locale, `name` the language's name for itself, and `dir` the writing direction.
 LANGS = [
     {"tag": "es-419", "path": "es", "hreflang": "es", "og": "es_LA", "name": "Español"},
+    {"tag": "pt-BR", "path": "pt", "hreflang": "pt", "og": "pt_BR", "name": "Português"},
+    {"tag": "fr", "path": "fr", "hreflang": "fr", "og": "fr_FR", "name": "Français"},
+    {"tag": "de", "path": "de", "hreflang": "de", "og": "de_DE", "name": "Deutsch"},
+    {"tag": "it", "path": "it", "hreflang": "it", "og": "it_IT", "name": "Italiano"},
+    {"tag": "pl", "path": "pl", "hreflang": "pl", "og": "pl_PL", "name": "Polski"},
+    {"tag": "ru", "path": "ru", "hreflang": "ru", "og": "ru_RU", "name": "Русский"},
+    {"tag": "uk", "path": "uk", "hreflang": "uk", "og": "uk_UA", "name": "Українська"},
+    {"tag": "tr", "path": "tr", "hreflang": "tr", "og": "tr_TR", "name": "Türkçe"},
+    {"tag": "id", "path": "id", "hreflang": "id", "og": "id_ID", "name": "Bahasa Indonesia"},
+    {"tag": "vi", "path": "vi", "hreflang": "vi", "og": "vi_VN", "name": "Tiếng Việt"},
     {"tag": "ar", "path": "ar", "hreflang": "ar", "og": "ar_AR", "name": "العربية", "dir": "rtl"},
+    {"tag": "fa", "path": "fa", "hreflang": "fa", "og": "fa_IR", "name": "فارسی", "dir": "rtl"},
+    {"tag": "zh-CN", "path": "zh", "hreflang": "zh-Hans", "og": "zh_CN", "name": "简体中文"},
+    {"tag": "zh-TW", "path": "zh-tw", "hreflang": "zh-Hant", "og": "zh_TW", "name": "繁體中文"},
+    {"tag": "ja", "path": "ja", "hreflang": "ja", "og": "ja_JP", "name": "日本語"},
+    {"tag": "ko", "path": "ko", "hreflang": "ko", "og": "ko_KR", "name": "한국어"},
+    {"tag": "hi", "path": "hi", "hreflang": "hi", "og": "hi_IN", "name": "हिन्दी"},
+    {"tag": "bn", "path": "bn", "hreflang": "bn", "og": "bn_BD", "name": "বাংলা"},
+    {"tag": "ml", "path": "ml", "hreflang": "ml", "og": "ml_IN", "name": "മലയാളം"},
 ]
 ENGLISH = {"tag": "en", "path": "", "hreflang": "en", "og": "en_GB", "name": "English"}
 
