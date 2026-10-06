@@ -95,7 +95,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 
 **Phase F. The "Online" release**
 - [x] U24 Rotate the OpenSubtitles key (2026-10-06: new key in the `OPENSUBTITLES_API_KEY` repo secret and local.properties; TMDB_API_KEY was already a repo secret since 2026-08-07)
-- [ ] CP31 P12 OpenSubtitles
+- [x] CP31 P12 OpenSubtitles (a0c195b, hash and name search, download, quota from 429, 406 and remaining=0, revoked key, expired token, rate limits, cache hits, TTL and purge, SubDL fallback unit tested over a fake HTTP layer; one live search by name with the real key found 50 results, no sign in and no download; Settings section, sign in prompt, "Search online" in the picker, results and every disabled state checked on the phone and TV emulator fixtures and the desktop render test, a canned download loaded on the TV fixture. A real sign in, a real download and the hash of a real stream not yet tested on a device)
 - [ ] CP32 P13 TMDB, TVmaze, AniList, then release "Online" on request
 - [ ] U25 MSone reply (issue #5). If yes, add CP33 for an MSone provider
 
