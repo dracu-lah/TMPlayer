@@ -108,7 +108,8 @@ import com.tmplayer.ui.theme.Tv
  * the slow-answer line), and `media` with `--es variant hidden|empty-hidden|empty-more|slow|recent`.
  * `--es variant menu` opens the first video's menu over the grid, with its "x GB free" line, and
  * `--es screen downloads` is the Downloads screen, `--es screen support` the support codes over
- * Settings, and `--ez support_reminder true` the support card over the chat list. Add
+ * Settings, and `--ei support_rung 1` to `3` (or `--ez support_reminder true`) the support card over the chat list,
+ * and `--ez support_thanks true` the thank you state in Settings and About. Add
  * `--ez tv true` to capture the television layout on a phone panel resized to 1920x1080, which is
  * how the TV shots on the site are taken now that the stick is not the only device this app has to look right on.
  *
@@ -164,6 +165,12 @@ class PromoCaptureActivity : ComponentActivity() {
         // `--es online <state>` gives Settings an online subtitles section in that state.
         PromoOnline.install(applicationContext, intent.getStringExtra("online"))
 
+        // `--ez support_thanks true` marks this build's viewer as a supporter, so Settings and About
+        // show the thank you state; `--ei support_rung N` is the card of the Nth ask.
+        if (intent.getBooleanExtra("support_thanks", false)) {
+            runBlocking { SettingsStore(applicationContext).markSupporter() }
+        }
+
         val start = intent.getStringExtra("screen") ?: "chats"
         if (start == "signin") {
             // The number field takes focus the moment it appears, which is right in the app and
@@ -178,7 +185,10 @@ class PromoCaptureActivity : ComponentActivity() {
             // `--ez support_reminder true` puts the support card over the chat list.
             var screen by remember { mutableStateOf(if (start == "support") "settings" else start) }
             var supporting by remember { mutableStateOf(start == "support") }
-            var supportCard by remember { mutableStateOf(intent.getBooleanExtra("support_reminder", false)) }
+            var supportRung by remember {
+                mutableStateOf(intent.getIntExtra("support_rung", if (intent.getBooleanExtra("support_reminder", false)) 1 else 0))
+            }
+            val promoCounters = remember { com.tmplayer.data.SupportReminder.Counters(completedWatches = 7, watchTimeMs = 11L * 60 * 60 * 1000) }
             // `--ez confirm true` puts the sign out prompt over whatever screen is open, so the
             // confirm dialog can be captured beside the other modals.
             var confirming by remember { mutableStateOf(intent.getBooleanExtra("confirm", false)) }
@@ -266,18 +276,23 @@ class PromoCaptureActivity : ComponentActivity() {
                             layout = if (intent.getStringExtra("layout") == "grid") CardLayout.Grid else CardLayout.List,
                         )
                     }
-                    if (supportCard && screen == "chats") {
+                    if (supportRung > 0 && screen == "chats") {
+                        val rung = supportRung
                         SupportCard(
-                            onSupport = { supportCard = false; supporting = true },
-                            onNotNow = { supportCard = false },
-                            onNever = { supportCard = false },
+                            rung = rung,
+                            counters = promoCounters,
+                            onSupport = { supportRung = 0; supporting = true },
+                            onStar = { supportRung = 0 },
+                            onShare = { supportRung = 0 },
+                            onLater = { supportRung = 0 },
+                            onAlready = { supportRung = 0 },
                             modifier = Modifier
                                 .align(if (tv) Alignment.BottomEnd else Alignment.BottomCenter)
                                 .windowInsetsPadding(WindowInsets.safeDrawing)
                                 .padding(if (tv) 40.dp else 16.dp),
                         )
                     }
-                    if (supporting) SupportDialog(onClose = { supporting = false })
+                    if (supporting) SupportDialog(from = "card1", onClose = { supporting = false })
                     if (languageNotice && screen == "chats") {
                         val active by Translator.active.collectAsState()
                         LanguageNoticeCard(

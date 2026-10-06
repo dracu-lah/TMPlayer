@@ -144,6 +144,9 @@ class WatchedStore(private val store: DataStore<Preferences>) {
             prefs[key] = kept.encode()
             evictOldest(prefs)
         }
+        // The player saw it through to the end: a good moment, and a finished watch for the
+        // support ladder. A manual mark is neither.
+        if (!record.manual) SupportReminder.watchFinished(record.key)
     }
 
     suspend fun markUnwatched(chatId: Long, messageId: Long) {

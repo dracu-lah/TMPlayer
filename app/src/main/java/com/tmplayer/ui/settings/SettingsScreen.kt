@@ -83,6 +83,7 @@ import androidx.compose.material3.Text as M3Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -288,6 +289,7 @@ fun SettingsScreen(
     // A link a TV cannot open, shown as a QR code instead: the address and what it is.
     var qrLink by remember { mutableStateOf<Pair<String, String>?>(null) }
     var supporting by remember { mutableStateOf(false) }
+    val supportCounters by settings.supportCounters.collectAsState(initial = SupportReminder.Counters())
     // The language picker, the "What's new" sheet and "Report a problem", each over the list.
     var pickingLanguage by remember { mutableStateOf(false) }
     var stylingSubtitles by remember { mutableStateOf(false) }
@@ -1086,7 +1088,7 @@ fun SettingsScreen(
                 if (SupportReminder.enabled) {
                     item {
                         ActionRow(
-                            title = About.SUPPORT_TITLE,
+                            title = if (supportCounters.supporter) About.SUPPORT_THANKS_TITLE else About.SUPPORT_TITLE,
                             subtitle = s.settingsSupportDetail,
                             icon = Icons.Filled.Favorite,
                             onClick = { supporting = true },
@@ -1263,7 +1265,7 @@ fun SettingsScreen(
     }
 
     qrLink?.let { (url, what) -> LinkQrDialog(url = url, what = what, onClose = { qrLink = null }) }
-    if (supporting) SupportDialog(onClose = { supporting = false })
+    if (supporting) SupportDialog(from = "settings", onClose = { supporting = false })
     if (pickingLanguage) LanguageDialog(settings, onClose = { pickingLanguage = false })
     if (stylingSubtitles) {
         SubtitleStyleDialog(
