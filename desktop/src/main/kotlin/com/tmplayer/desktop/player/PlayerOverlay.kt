@@ -104,8 +104,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
 /** What a menu entry asks for, beyond the plain [PlayerAction]s. */
@@ -245,8 +243,6 @@ internal fun BoxScope.PlayerOverlay(
     onSeekTo: (Long) -> Unit,
     onEpisode: (MediaItem) -> Unit,
     onToggleRemaining: () -> Unit,
-    onCycleSpeed: () -> Unit,
-    onCycleScale: () -> Unit,
     onVolume: (Int) -> Unit,
     onToggleMute: () -> Unit,
     onToggleFullscreen: () -> Unit,
@@ -284,8 +280,6 @@ internal fun BoxScope.PlayerOverlay(
                         Text(subtitle, color = Color.White.copy(alpha = 0.9f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
-                WallClock()
-                Spacer(Modifier.width(8.dp))
                 Box {
                     OverlayButton(PlayerIcons.MoreVert, s.commonMore, onClick = { onOpenMenu(MenuAt(MenuPage.Main, MenuAt.Anchor.Overflow)) })
                     if (menu?.anchor == MenuAt.Anchor.Overflow) {
@@ -314,7 +308,6 @@ internal fun BoxScope.PlayerOverlay(
                 if (previous != null) {
                     OverlayButton(PlayerIcons.SkipPrevious, s.playerPreviousEpisodeHint(s.playerPreviousUp(episodes.labelFor(previous))), { onEpisode(previous) }, size = 56, tonal = true)
                 }
-                SkipButton(forward = false) { onSeekBy(-PlayerKeys.SEEK_MEDIUM_MS) }
                 Box(
                     Modifier.size(72.dp).clip(CircleShape).background(PlayerTonalButton).clickable(onClick = onTogglePlay),
                     contentAlignment = Alignment.Center,
@@ -325,7 +318,6 @@ internal fun BoxScope.PlayerOverlay(
                         Icon(if (status.playing) PlayerIcons.Pause else PlayerIcons.Play, if (status.playing) s.playerPause else s.playerPlay, tint = Color.White, modifier = Modifier.size(40.dp))
                     }
                 }
-                SkipButton(forward = true) { onSeekBy(PlayerKeys.SEEK_MEDIUM_MS) }
                 if (next != null) {
                     OverlayButton(PlayerIcons.SkipNext, s.playerNextEpisodeHint(s.playerNextUp(episodes.labelFor(next))), { onEpisode(next) }, size = 56, tonal = true)
                 }
@@ -379,13 +371,18 @@ internal fun BoxScope.PlayerOverlay(
                             PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, onOpenMenu, onCloseMenu, onMenuAction)
                         }
                     }
-                    Tip(s.playerSpeedHint) {
-                        Box(
-                            Modifier.height(36.dp).widthIn(min = 48.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick = onCycleSpeed).padding(horizontal = 10.dp),
-                            contentAlignment = Alignment.Center,
-                        ) { Text(SeekMath.speedLabel(status.speed), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
+                    Box {
+                        Tip(s.playerSpeedHint) {
+                            Box(
+                                Modifier.height(36.dp).widthIn(min = 48.dp).clip(RoundedCornerShape(18.dp))
+                                    .clickable { onOpenMenu(MenuAt(MenuPage.Speed, MenuAt.Anchor.Speed)) }.padding(horizontal = 10.dp),
+                                contentAlignment = Alignment.Center,
+                            ) { Text(SeekMath.speedLabel(status.speed), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
+                        }
+                        if (menu?.anchor == MenuAt.Anchor.Speed) {
+                            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, onOpenMenu, onCloseMenu, onMenuAction)
+                        }
                     }
-                    OverlayButton(PlayerIcons.AspectRatio, s.playerShapeHint(status.scale.label), onCycleScale)
                     Spacer(Modifier.weight(1f))
                     VolumeControl(status.volume, status.muted, onVolume, onToggleMute)
                     OverlayButton(PlayerIcons.PictureInPicture, s.playerMiniHint, onMiniPlayer)
@@ -414,18 +411,6 @@ internal fun Episodes.labelFor(item: MediaItem): String = when (item.id) {
     previous?.id -> previousTag?.label
     else -> null
 } ?: EpisodeNeighbours.tagOf(item)?.label ?: item.title
-
-@Composable
-private fun WallClock() {
-    var now by remember { mutableStateOf(LocalTime.now()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(15_000)
-            now = LocalTime.now()
-        }
-    }
-    Text(now.format(DateTimeFormatter.ofPattern("HH:mm")), color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp)
-}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -458,32 +443,6 @@ internal fun OverlayButton(icon: ImageVector, label: String, onClick: () -> Unit
             contentAlignment = Alignment.Center,
         ) {
             Icon(icon, label, tint = Color.White, modifier = Modifier.size((size * 0.6f).dp))
-        }
-    }
-}
-
-/** Back or forward ten seconds, with the figure inside the arrow as on the phone. */
-@Composable
-private fun SkipButton(forward: Boolean, onClick: () -> Unit) {
-    val s = LocalStrings.current
-    val hover = remember { MutableInteractionSource() }
-    val hovered by hover.collectIsHoveredAsState()
-    Tip(if (forward) s.playerForwardHint else s.playerBackHintSeek) {
-        Box(
-            Modifier.size(56.dp).clip(CircleShape)
-                .background(PlayerTonalButton)
-                .background(if (hovered) Color(0x33FFFFFF) else Color.Transparent)
-                .hoverable(hover)
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                PlayerIcons.Replay,
-                if (forward) s.playerForwardLabel else s.playerBackLabel,
-                tint = Color.White,
-                modifier = Modifier.size(32.dp).graphicsLayer { if (forward) scaleX = -1f },
-            )
-            Text(s.messages.formatter.number(10), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(y = 2.dp))
         }
     }
 }
@@ -665,29 +624,17 @@ internal fun PlayerMenu(
     }
 
     TmDropdownMenu(expanded = true, onDismissRequest = onClose, modifier = Modifier.widthIn(min = 240.dp, max = 420.dp)) {
-        if (menu.page != MenuPage.Main && menu.anchor != MenuAt.Anchor.Subtitles && menu.anchor != MenuAt.Anchor.Audio) {
-            Entry(s.commonBack) { page(MenuPage.Main) }
+        val parent = menu.parentPage()
+        if (parent != null) {
+            Entry(s.commonBack) { page(parent) }
             HorizontalDivider()
         }
         when (menu.page) {
             MenuPage.Main -> {
-                Entry(if (status.playing) s.playerPause else s.playerPlay, trailing = s.playerKeySpace) { pick(MenuAction.Do(PlayerAction.TogglePlay)) }
-                val audio = tracks.firstOrNull { it.type == TrackType.Audio && it.selected }
-                Entry(s.playerAudio, trailing = audio?.label?.take(18) ?: "") { page(MenuPage.Audio) }
-                val sub = tracks.firstOrNull { it.type == TrackType.Subtitle && it.selected }
-                Entry(s.playerSubtitles, trailing = sub?.label?.take(18) ?: s.commonOff) { page(MenuPage.Subtitles) }
-                Entry(s.playerSpeed, trailing = SeekMath.speedLabel(status.speed)) { page(MenuPage.Speed) }
-                Entry(s.playerShape, trailing = status.scale.label) { page(MenuPage.Shape) }
-                HorizontalDivider()
-                Entry(if (fullscreen) s.playerExitFullscreen else s.playerFullscreen, trailing = "F") { pick(MenuAction.Do(PlayerAction.ToggleFullscreen)) }
                 if (alwaysOnTopAvailable) Entry(s.playerAlwaysOnTop, trailing = s.playerKeyCtrlT) { pick(MenuAction.Do(PlayerAction.AlwaysOnTop)) }
-                if (miniPlayerAvailable) Entry(s.playerMini, trailing = s.playerKeyCtrlP) { pick(MenuAction.Do(PlayerAction.MiniPlayer)) }
-                Entry(s.playerDownmix, checked = status.downmix) { pick(MenuAction.ToggleDownmix) }
-                Entry(s.playerVolumeBoost, checked = status.volumeBoost) { pick(MenuAction.ToggleVolumeBoost) }
-                Entry(s.playerSleepTimer, trailing = sleepTimer ?: s.commonOff) { page(MenuPage.Sleep) }
-                Entry(s.playerIgnoreClicks, checked = ignoreClicks) { pick(MenuAction.ToggleIgnoreClicks) }
-                HorizontalDivider()
-                Entry(s.playerStartOver) { pick(MenuAction.StartOver) }
+                Entry(s.playerPlaybackOptions) { page(MenuPage.Options) }
+                Entry(s.playerSubtitleStyleAndTiming) { page(MenuPage.SubtitleStyle) }
+                if (fromTelegram || watchedLabel != null) HorizontalDivider()
                 if (fromTelegram) {
                     Entry(s.commonCopyLink) { pick(MenuAction.CopyLink) }
                     if (savable) {
@@ -696,8 +643,17 @@ internal fun PlayerMenu(
                     }
                 }
                 if (watchedLabel != null) Entry(watchedLabel) { pick(MenuAction.ToggleWatched) }
+                HorizontalDivider()
+                Entry(s.playerHelp, trailing = "?") { pick(MenuAction.Shortcuts) }
+            }
+            MenuPage.Options -> {
+                Entry(s.playerDownmix, checked = status.downmix) { pick(MenuAction.ToggleDownmix) }
+                Entry(s.playerVolumeBoost, checked = status.volumeBoost) { pick(MenuAction.ToggleVolumeBoost) }
+                Entry(s.playerSleepTimer, trailing = sleepTimer ?: s.commonOff) { page(MenuPage.Sleep) }
+                // The bar's button for this went, and it never had a key: this page is the way in.
+                Entry(s.playerShape, trailing = status.scale.label) { page(MenuPage.Shape) }
+                Entry(s.playerIgnoreClicks, checked = ignoreClicks) { pick(MenuAction.ToggleIgnoreClicks) }
                 Entry(s.playerDetails, trailing = "I") { pick(MenuAction.Details) }
-                Entry(s.playerShortcuts, trailing = "?") { pick(MenuAction.Shortcuts) }
             }
             MenuPage.Audio -> {
                 val list = tracks.filter { it.type == TrackType.Audio }
@@ -714,6 +670,9 @@ internal fun PlayerMenu(
                 list.forEach { t -> Entry(t.label, checked = t.selected) { pick(MenuAction.Track(TrackType.Subtitle, t)) } }
                 if (com.tmplayer.online.OnlineSubtitles.available) Entry(s.onlineSearchOnline) { pick(MenuAction.SearchOnline) }
                 HorizontalDivider()
+                Entry(s.playerSubtitleStyleAndTiming) { page(MenuPage.SubtitleStyle) }
+            }
+            MenuPage.SubtitleStyle -> {
                 Nudge(s.playerDelay, SyncDelays.label(status.subtitleDelayMs), s.playerEarlier, s.playerLater,
                     { onAction(MenuAction.SubtitleDelay(-1)) }, { onAction(MenuAction.SubtitleDelay(1)) })
                 if (status.subtitleDelayMs != 0L) Entry(s.playerResetDelay) { onAction(MenuAction.SubtitleDelay(0)) }
@@ -845,7 +804,12 @@ internal fun BoxScope.ResumeNotice(from: Long, lifted: Boolean, onStartOver: () 
     }
 }
 
-/** A4.7: the next episode, offered in the last half minute. */
+/**
+ * A4.7: the next episode, offered in the last half minute. The only next-episode prompt while the
+ * picture is still playing: the countdown in [StatusSheet] shows only when the video has ended
+ * without this card having been up (a seek to the very end, or no known length), see the end
+ * handler in PlayerScreen.
+ */
 @Composable
 internal fun BoxScope.NextUpCard(label: String, secondsLeft: Int, lifted: Boolean, onPlayNow: () -> Unit, onHide: () -> Unit) {
     val s = LocalStrings.current
@@ -989,7 +953,7 @@ internal fun BoxScope.ShortcutSheet(onClose: () -> Unit, mac: Boolean = false, w
         Modifier.matchParentSize().background(FloatingTone.scrim).clickable(onClick = onClose),
         contentAlignment = Alignment.Center,
     ) {
-        val rows = PlayerKeys.sheet(mac, wheelSeeks)
+        val groups = PlayerKeys.sheetGroups(mac, wheelSeeks)
         val twoColumns = maxWidth >= 900.dp
         // A dialog like any other, so it has the edge and corner the television's key sheet has.
         Surface(
@@ -1005,8 +969,9 @@ internal fun BoxScope.ShortcutSheet(onClose: () -> Unit, mac: Boolean = false, w
                 }
                 Spacer(Modifier.height(12.dp))
                 @Composable
-                fun Rows(part: List<Pair<String, String>>, modifier: Modifier) {
-                    Column(modifier) {
+                fun Group(heading: String, part: List<Pair<String, String>>) {
+                    Column(Modifier.fillMaxWidth().padding(bottom = 14.dp)) {
+                        Text(heading, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 4.dp))
                         part.forEach { (what, keys) ->
                             Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
                                 Text(what, color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f).padding(end = 12.dp))
@@ -1016,14 +981,14 @@ internal fun BoxScope.ShortcutSheet(onClose: () -> Unit, mac: Boolean = false, w
                     }
                 }
                 if (twoColumns) {
-                    val half = (rows.size + 1) / 2
+                    // The first two groups down the left, the window and the rarely used down the right.
                     Row {
-                        Rows(rows.take(half), Modifier.weight(1f))
+                        Column(Modifier.weight(1f)) { groups.take(2).forEach { (name, part) -> Group(name, part) } }
                         Spacer(Modifier.width(32.dp))
-                        Rows(rows.drop(half), Modifier.weight(1f))
+                        Column(Modifier.weight(1f)) { groups.drop(2).forEach { (name, part) -> Group(name, part) } }
                     }
                 } else {
-                    Rows(rows, Modifier.fillMaxWidth())
+                    groups.forEach { (name, part) -> Group(name, part) }
                 }
             }
         }

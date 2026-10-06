@@ -201,36 +201,52 @@ object PlayerKeys {
      * the "Mouse wheel seeks" setting has it. PlayerKeysTest reads every key here back through
      * [actionFor], so the sheet cannot promise a key the player does not have.
      */
-    fun sheet(mac: Boolean = false, wheelSeeks: Boolean = false): List<Pair<String, String>> {
+    fun sheet(mac: Boolean = false, wheelSeeks: Boolean = false): List<Pair<String, String>> =
+        sheetGroups(mac, wheelSeeks).flatMap { it.second }
+
+    /**
+     * [sheet] in the groups the "?" sheet draws: what a viewer reaches for first, then sound and
+     * subtitles, the window, and the keys that are rarely wanted. Every row of [sheet] is in
+     * exactly one group.
+     */
+    fun sheetGroups(mac: Boolean = false, wheelSeeks: Boolean = false): List<Pair<String, List<Pair<String, String>>>> {
         val cmd = if (mac) L.keysCmd else L.keysCtrl
         return listOf(
-            L.keysRowPlayPause to L.keysSpaceK,
-            L.keysRowSeek5s to L.keysLeftRight,
-            L.keysRowSeek10s to "J, L",
-            L.keysRowSeek1min to L.keysShiftLeftRight,
-            L.keysRowSeek5min to if (mac) L.keysSeek5minMac else L.keysSeek5min,
-            L.keysRowChapter to L.keysChapter(cmd),
-            L.keysRowFrameStep to L.keysCommaPeriod,
-            L.keysRowAbRepeat to "R",
-            L.keysRowJump to L.keysDigits,
-            L.keysRowStartEnd to L.keysHomeEnd,
-            L.keysRowVolume to if (wheelSeeks) L.keysVolumeShiftWheel else L.keysVolumeWheel,
-            L.keysRowWheelSeek to if (wheelSeeks) L.keysWheel else L.keysShiftWheel,
-            L.keysRowMute to "M",
-            L.keysRowFullscreen to L.keysFullscreenKeys,
-            L.keysRowSubtitles to L.keysSubtitlesKeys,
-            L.keysRowAudio to L.keysAudioKeys,
-            L.keysRowSubtitleDelay to "Z, X",
-            L.keysRowAudioDelay to L.keysAudioDelayKeys,
-            L.keysRowSpeed to L.keysSpeedKeys,
-            L.keysRowEpisodes to L.keysEpisodesKeys,
-            L.keysRowAlwaysOnTop to "$cmd+T",
-            L.keysRowMini to "$cmd+P",
-            L.keysRowScreenshot to L.keysScreenshotKeys,
-            L.keysRowDetails to "I",
-            L.keysRowBack to L.keysBackKeys,
-            L.keysRowQuit to "$cmd+Q",
-            L.keysRowThisSheet to "?",
+            L.keysGroupPlayback to listOf(
+                L.keysRowPlayPause to L.keysSpaceK,
+                L.keysRowSeek5s to L.keysLeftRight,
+                L.keysRowSeek10s to "J, L",
+                L.keysRowSeek1min to L.keysShiftLeftRight,
+                L.keysRowSpeed to L.keysSpeedKeys,
+                L.keysRowEpisodes to L.keysEpisodesKeys,
+                L.keysRowJump to L.keysDigits,
+                L.keysRowStartEnd to L.keysHomeEnd,
+            ),
+            L.keysGroupAudioSubtitles to listOf(
+                L.keysRowVolume to if (wheelSeeks) L.keysVolumeShiftWheel else L.keysVolumeWheel,
+                L.keysRowMute to "M",
+                L.keysRowSubtitles to L.keysSubtitlesKeys,
+                L.keysRowAudio to L.keysAudioKeys,
+                L.keysRowSubtitleDelay to "Z, X",
+                L.keysRowAudioDelay to L.keysAudioDelayKeys,
+            ),
+            L.keysGroupWindow to listOf(
+                L.keysRowFullscreen to L.keysFullscreenKeys,
+                L.keysRowAlwaysOnTop to "$cmd+T",
+                L.keysRowMini to "$cmd+P",
+                L.keysRowScreenshot to L.keysScreenshotKeys,
+                L.keysRowBack to L.keysBackKeys,
+                L.keysRowQuit to "$cmd+Q",
+                L.keysRowThisSheet to "?",
+            ),
+            L.keysGroupOther to listOf(
+                L.keysRowSeek5min to if (mac) L.keysSeek5minMac else L.keysSeek5min,
+                L.keysRowChapter to L.keysChapter(cmd),
+                L.keysRowFrameStep to L.keysCommaPeriod,
+                L.keysRowAbRepeat to "R",
+                L.keysRowWheelSeek to if (wheelSeeks) L.keysWheel else L.keysShiftWheel,
+                L.keysRowDetails to "I",
+            ),
         )
     }
 }

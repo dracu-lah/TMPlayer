@@ -424,8 +424,10 @@ None of them fire while a search field has focus.
 | **Esc**, **Backspace** | Back to the grid (also the mouse's back button) |
 | **Ctrl+Q** | Quit |
 
-Right click the picture for the player's menu: audio, subtitles, speed, picture shape and the
-rest. In the grid, **/** or **Ctrl+F** searches and **Ctrl+,** opens Settings. The media keys on
+Right click the picture, or use the three dots, for the player's menu: Always on top, Playback
+options (downmix, volume boost, sleep timer, picture shape, ignore clicks, details), Subtitle
+style and timing, the Telegram items and Help. Audio, subtitles and speed have their own buttons
+on the bar. In the grid, **/** or **Ctrl+F** searches and **Ctrl+,** opens Settings. The media keys on
 a keyboard work while the window has focus. On Linux the desktop's own media controls drive it
 through MPRIS; on Windows the video's title shows in the media flyout by the volume control (and on
 the lock screen), whose play, pause and stop buttons, like the media keys, reach the player even
