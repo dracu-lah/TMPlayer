@@ -115,6 +115,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [ ] CP38 Desktop player declutter: bar, main menu, shortcut sheet
 - [ ] CP39 Support asks v2: positive moments, three asks at most, thank-you state, tmplayer.org/support
 - [ ] CP40 Episodes button and modal in the player (phone, TV, desktop), after CP37 and CP38
+- [ ] CP41 Setting to hide Telegram's default chat groups everywhere, with warning prompts, plus a sweep for settings that lack one
 
 ## Standing rules
 
@@ -625,6 +626,39 @@ browse (`ui/src/shared/.../browse/`) so the modal matches the series view.
   order). Ask the user for their list before building.
 **Done when:** emulator screenshots of the button and modal on phone and TV (current episode highlighted, a
 season switch, a watched tick), the desktop render test, a D-pad walk, and tests green.
+**STOP**
+
+### CP41 Hide Telegram's default chat groups, and prompts where they are missing
+**Why:** the user asked on 2026-10-06 for a Settings option that hides the default Telegram grouping from the
+sidebar and from other places, removes favourites that this affects, shows proper alert prompts for features
+like it, and adds the same prompts where they are missing.
+**What "default grouping" means here (to confirm):** the fixed Chats group of the sidebar built by
+`browseSections` in `ui/src/shared/.../browse/BrowseSections.kt`: Recent, Unread, Saved, Channels, Groups, People,
+All and Archived (the `ChatKind` split in `ChatRepository.kt`). Watch (Home, Continue, Watched, Favourites,
+Downloads) and the account's own Telegram folders are not part of it. Alternative reading: hide only Channels,
+Groups and People. Ask before building if the user has not said.
+**Do:**
+- A Settings toggle "Hide Telegram's default groups" (name to settle), off by default, stored in `SettingsStore`.
+  When on, `browseSections` and `navGroups` leave the Chats group out on phone drawer, TV rail and desktop side
+  bar, and every other surface that lists those sections stops offering them (the section switchers in
+  `BrowseScreen`, the Home empty states and hints that point at "All" or "Channels", search scope, and the
+  desktop dropdown). With the group gone, chats are reached through Folders, Favourites, search and Home.
+- Favourites: chats are favourited by id (`favorite_chats`), so switching the option on must not leave a
+  favourite the viewer can no longer reach. Work out which favourited chats would become unreachable (in no
+  Telegram folder), list the count in the prompt and, on confirm, remove them from favourites in one write.
+  Switching it off does not bring them back, and the prompt says so.
+- Prompts: a confirm dialog before the switch takes effect, in the app's existing dialogs (`TmAlertDialog` on
+  touch, `TvConfirm` with focus on Cancel on TV, the desktop equivalent), with a plain explanation, the
+  favourites count, how to undo it, and a destructive Confirm label. Turning it off needs no prompt.
+- Sweep for missing prompts: audit Settings and the app for actions that remove data or are hard to undo and
+  have no confirm, for example sign out, clear cache or downloads, clear all favourites, mark all watched or
+  reset the watched list, change storage location, turn off crash reports, remove a downloaded file, language
+  change that restarts. Write the list into this section, add a prompt to each one that lacks it, reuse one
+  shared confirm component per platform.
+- Strings go into `en.json` only; leave other locales and never run langsync.
+**Done when:** unit tests for the section filtering and the unreachable favourites calculation, emulator
+screenshots on phone and TV of the toggle, the prompt with a favourites count and the shortened sidebar,
+the desktop render test, and the sweep list with each added prompt shown once.
 **STOP**
 
 ## Your tasks
