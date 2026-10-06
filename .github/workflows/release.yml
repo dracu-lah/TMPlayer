@@ -366,7 +366,7 @@ jobs:
         id: mediamp
         run: |
           COVERED="0.5.0"
-          TAG=""
+          TAG="v1.24.0"
           USED="$(sed -n 's/^mediamp = "\(.*\)"$/\1/p' gradle/libs.versions.toml)"
           if [ "$USED" != "$COVERED" ]; then
             echo "::error::mediamp is $USED but the linked corresponding source covers $COVERED. Update scripts/build-mediamp-source.sh for $USED, attach its archive, and update COVERED and TAG here."
