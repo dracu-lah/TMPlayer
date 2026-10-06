@@ -56,7 +56,7 @@ internal fun OnlineSubtitlesGroup() {
     when (status) {
         OnlineStatus.NotInBuild, OnlineStatus.Unavailable ->
             Setting(s.onlineTitle, OnlineWords.status(status), titleColor = Tone.muted) {}
-        OnlineStatus.SignedOut, is OnlineStatus.Expired -> Setting(s.onlineSignIn, OnlineWords.status(status)) {
+        OnlineStatus.SignedOut, is OnlineStatus.Expired, is OnlineStatus.FreeQuotaUsed -> Setting(s.onlineSignIn, OnlineWords.status(status)) {
             OutlinedButton(onClick = { signingIn = true }) { Text(s.onlineSignInButton) }
         }
         is OnlineStatus.SignedIn, is OnlineStatus.QuotaUsed -> Setting(

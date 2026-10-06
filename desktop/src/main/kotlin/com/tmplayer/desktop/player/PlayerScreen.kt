@@ -46,6 +46,10 @@ import com.tmplayer.data.MediaItem
 import com.tmplayer.online.OnlineSubtitles
 import com.tmplayer.online.SubtitleTarget
 import com.tmplayer.data.MediaName
+import com.tmplayer.data.EpisodeNeighbours
+import com.tmplayer.data.SeriesShelf
+import com.tmplayer.online.EpisodeNames
+import com.tmplayer.online.OnlineMetadata
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.ResumeRules
 import com.tmplayer.data.ResumeState
@@ -174,6 +178,8 @@ fun PlayerScreen(
     screenshotDir: () -> java.io.File = { java.io.File(UserDirs.pictures(), "TMPlayer") },
     engineFactory: () -> PlaybackEngine = { MpvPlaybackEngine(OpenPrefs.hwdecFor(prefs.now.softwareDecoding)) },
     backdrop: Color = Color.Black,
+    /** The loader's picture where there is no online metadata; for the fixtures, which have no TDLib. */
+    loaderThumbnail: androidx.compose.ui.graphics.ImageBitmap? = null,
     onlineOpen: Boolean = false,
     onlinePreset: com.tmplayer.online.SearchResult? = null,
 ) {
@@ -253,7 +259,17 @@ fun PlayerScreen(
         nextUpDismissed = false
         nextUpShown = false
         resumedFrom = null
-        launch { episodes = runCatching { current.episodes() }.getOrDefault(Episodes()) }
+        launch {
+            // What the file says of itself straight away, for the title; the chat's answer, then
+            // the providers' episode names where lookups are on.
+            episodes = Episodes(current = EpisodeNeighbours.tagOf(item))
+            val found = runCatching { current.episodes() }.getOrDefault(episodes)
+            episodes = found
+            val named = runCatching {
+                kotlinx.coroutines.withContext(Dispatchers.IO) { EpisodeNames.named(found, item, OnlineMetadata.current) }
+            }.getOrDefault(found)
+            if (named != found) episodes = named
+        }
         launch { tdlibVersion = current.tdlibVersion() }
         autoplayNext = runCatching { settings.autoplayNextNow() }.getOrDefault(true)
         showRemaining = runCatching { settings.touchPrefsNow().showRemaining }.getOrDefault(false)
@@ -892,9 +908,10 @@ fun PlayerScreen(
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     noteInput()
                     // Sheets peel off before Esc means anything else.
-                    if (event.key == androidx.compose.ui.input.key.Key.Escape && (showShortcuts || showDetails)) {
+                    if (event.key == androidx.compose.ui.input.key.Key.Escape && (showShortcuts || showDetails || showOnline)) {
                         showShortcuts = false
                         showDetails = false
+                        showOnline = false
                         return@onPreviewKeyEvent true
                     }
                     val press = KeyPress(
@@ -945,10 +962,12 @@ fun PlayerScreen(
                 scope = scope,
             )
 
-            val parsed = remember(item) { MediaName.parse(item.fileName.ifBlank { item.title }) }
-            val title = parsed.title.ifBlank { item.title }
+            // The show's name, with the episode under it ("S01E04  ·  The Lighthouse") and the chat.
+            val parsed = remember(item) { SeriesShelf.episodeOf(item) }
+            val episode = episodes.current
+            val title = (episode?.show ?: parsed.title).ifBlank { parsed.title }.ifBlank { item.title }
             val subtitle = listOfNotNull(
-                parsed.episodeCode,
+                episode?.label,
                 current.chatTitle.takeIf { it.isNotBlank() },
             ).joinToString("  ·  ")
 
@@ -960,6 +979,7 @@ fun PlayerScreen(
                 episodes = episodes,
                 tracks = tracks,
                 downloaded = downloaded,
+                isDownload = current.isDownload,
                 showRemaining = showRemaining,
                 fullscreen = fullscreen,
                 menu = menu,
@@ -1048,7 +1068,7 @@ fun PlayerScreen(
 
             if (nextUpVisible && next != null) {
                 NextUpCard(
-                    next = next,
+                    label = episodes.labelFor(next),
                     secondsLeft = ((left + 999) / 1000).toInt(),
                     lifted = showControls,
                     onPlayNow = { switchTo(next) },
@@ -1086,7 +1106,10 @@ fun PlayerScreen(
                             addAll(engine.details())
                             add(s.playerSpeed to SeekMath.speedLabel(engine.state.value.speed))
                             if (item.sizeBytes > 0) add(s.playerDetailsLabelFile to com.tmplayer.player.StreamStats.formatBytes(item.sizeBytes))
-                            downloaded?.let { add(s.playerDetailsLabelDownloaded to s.messages.formatter.percent(it.toDouble())) }
+                            downloaded?.let {
+                                val label = if (current.isDownload) s.playerDetailsLabelDownloaded else s.playerDetailsLabelCached
+                                add(label to s.messages.formatter.percent(it.toDouble()))
+                            }
                             add("TDLib" to (tdlibVersion ?: if (item.chatId != 0L) s.playerDetailsUnknown else s.playerDetailsNotUsed))
                         }
                     },
@@ -1096,6 +1119,16 @@ fun PlayerScreen(
                     },
                 )
             }
+
+            LoaderSheet(
+                phase = phase,
+                item = current.item,
+                downloaded = downloaded,
+                bufferedMs = (status.bufferedMs - status.positionMs).coerceAtLeast(0),
+                isDownload = current.isDownload,
+                onBack = onBack,
+                thumbnailOverride = loaderThumbnail,
+            )
 
             StatusSheet(
                 phase = phase,
@@ -1111,6 +1144,7 @@ fun PlayerScreen(
                 onPlayNext = { switchTo(it) },
                 onCancelNext = { phase = Phase.Finished },
                 onKeepWatching = { (phase as? Phase.StillWatching)?.let(::keepWatching) },
+                nextLabel = { episodes.labelFor(it) },
             )
 
             if (showShortcuts) {

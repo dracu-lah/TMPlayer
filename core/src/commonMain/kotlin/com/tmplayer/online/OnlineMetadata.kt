@@ -1,5 +1,6 @@
 package com.tmplayer.online
 
+import com.tmplayer.data.MediaItem
 import com.tmplayer.i18n.Translator
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +38,8 @@ class OnlineMetadata(
     private val now: () -> Long = System::currentTimeMillis,
     private val sleep: suspend (Long) -> Unit = { delay(it) },
     private val language: () -> String = { Translator.messages.tag },
+    /** The viewer's region, for the age rating: the device's country, else the US. */
+    private val region: () -> String = { MetaRules.region() },
 ) {
     private val userAgent = "TMPlayer/$appVersion (+https://tmplayer.org)"
     private val tmdb = TmdbApi(http, RateLimiter(TmdbApi.GAP_MS, now, sleep), userAgent)
@@ -215,13 +218,14 @@ class OnlineMetadata(
             }
             val first = search(query.year)
             trouble(MetaProvider.Tmdb, first, key)?.let { return it }
-            var found = (first as MetaReply.Ok).value.firstOrNull { MetaMatch.accepts(query.title, query.year, it.names, it.year) }
+            var found = (first as MetaReply.Ok).value.firstOrNull { MetaMatch.accepts(query.title, query.year, it.names, it.year, show = !film) }
             // A year one off (a festival date, a late release) is filtered out by TMDB's own year,
-            // so ask once more without it and let the match allow the difference.
+            // so ask once more without it and let the match allow the difference. So is a show's
+            // later season, whose file names carry the season's year rather than the premiere's.
             if (found == null && query.year != null) {
                 val again = search(null)
                 trouble(MetaProvider.Tmdb, again, key)?.let { return it }
-                found = (again as MetaReply.Ok).value.firstOrNull { MetaMatch.accepts(query.title, query.year, it.names, it.year) }
+                found = (again as MetaReply.Ok).value.firstOrNull { MetaMatch.accepts(query.title, query.year, it.names, it.year, show = !film) }
             }
             found ?: return Outcome.Nothing
         }
@@ -254,7 +258,7 @@ class OnlineMetadata(
         val reply = retrying { tvmaze.show(query.title) }
         trouble(MetaProvider.TvMaze, reply)?.let { return it }
         val show = (reply as MetaReply.Ok).value ?: return Outcome.Nothing
-        if (!MetaMatch.accepts(query.title, query.year, show.names, show.year)) return Outcome.Nothing
+        if (!MetaMatch.accepts(query.title, query.year, show.names, show.year, show = true)) return Outcome.Nothing
         return Outcome.Found(
             MetaInfo(
                 provider = MetaProvider.TvMaze,
@@ -275,7 +279,7 @@ class OnlineMetadata(
         val wantFilm = query.kind == MetaKind.Film
         val found = (reply as MetaReply.Ok).value
             .filter { (it.format == "MOVIE") == wantFilm }
-            .firstOrNull { MetaMatch.accepts(query.title, query.year, it.names, it.year) }
+            .firstOrNull { MetaMatch.accepts(query.title, query.year, it.names, it.year, show = !wantFilm) }
             ?: return Outcome.Nothing
         return Outcome.Found(
             MetaInfo(
@@ -327,6 +331,180 @@ class OnlineMetadata(
         }
     }
 
+    // ---- the detail page's extras -------------------------------------------------------------
+
+    private val extrasMemory = object : LinkedHashMap<String, MetaExtras>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, MetaExtras>?) = size > EXTRAS_MEMORY_ENTRIES
+    }
+
+    private fun extrasKey(info: MetaInfo, lang: String, region: String): String =
+        listOf("extras", info.provider.name, info.kind.name, info.id, lang, region).joinToString("|")
+
+    /** The extras for [info] already in memory, for the first frame. Never touches the disk or the network. */
+    fun peekExtras(info: MetaInfo): MetaExtras? {
+        if (!store.now.enabled) return null
+        return synchronized(extrasMemory) { extrasMemory[extrasKey(info, tmdbLanguage(), region())] }
+    }
+
+    /**
+     * The facts, cast, trailer and recommendations for a title already matched: one call to the
+     * provider it came from (TMDB with everything appended, TVmaze with the cast embedded, one
+     * AniList query), then kept as long as the match is. Null while off, or when the provider
+     * could not be asked; an empty [MetaExtras] when it had nothing.
+     */
+    suspend fun extras(info: MetaInfo): MetaExtras? {
+        if (!store.now.enabled) return null
+        val lang = tmdbLanguage()
+        val key = extrasKey(info, lang, region())
+        rememberedExtras(key)?.let { return it }
+        return lockFor(key).withLock {
+            rememberedExtras(key)?.let { return@withLock it }
+            val found = fetchExtras(info, lang) ?: return@withLock null
+            cache.putExtras(key, found)
+            synchronized(extrasMemory) { extrasMemory[key] = found }
+            found
+        }
+    }
+
+    private fun rememberedExtras(key: String): MetaExtras? {
+        synchronized(extrasMemory) { extrasMemory[key] }?.let { return it }
+        val stored = cache.extras(key) ?: return null
+        synchronized(extrasMemory) { extrasMemory[key] = stored }
+        return stored
+    }
+
+    /** The provider's answer, an empty one for a 404, or null when it could not be asked. */
+    private suspend fun fetchExtras(info: MetaInfo, lang: String): MetaExtras? {
+        if (paused(info.provider)) return null
+        val reply: MetaReply<MetaExtras>
+        var key: String? = null
+        when (info.provider) {
+            MetaProvider.Tmdb -> {
+                val s = store.now
+                if (!tmdbUsable(s)) return null
+                key = activeKey(s)
+                val k = key
+                reply = retrying { tmdb.extras(k, info.kind == MetaKind.Film, info.id, lang, region()) }
+            }
+            MetaProvider.TvMaze -> reply = retrying { tvmaze.extras(info.id) }
+            MetaProvider.AniList -> reply = retrying { anilist.extras(info.id) }
+        }
+        return when (trouble(info.provider, reply, key)) {
+            null -> (reply as MetaReply.Ok).value
+            Outcome.Nothing -> MetaExtras()
+            else -> null
+        }
+    }
+
+    // ---- a show's episode lists ----------------------------------------------------------------
+
+    private val seasonMemory = object : LinkedHashMap<String, List<MetaEpisode>>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<MetaEpisode>>?) = size > EXTRAS_MEMORY_ENTRIES
+    }
+
+    private fun seasonKey(info: MetaInfo, season: Int, lang: String): String =
+        listOf("season", info.provider.name, info.id, season, lang).joinToString("|")
+
+    /** [season]'s list already in memory, for the first frame. */
+    fun peekSeason(info: MetaInfo, season: Int): List<MetaEpisode>? {
+        if (!store.now.enabled || info.kind != MetaKind.Show) return null
+        return synchronized(seasonMemory) { seasonMemory[seasonKey(info, season, tmdbLanguage())] }
+    }
+
+    /**
+     * Every episode of [season] of the show [info], with names, pictures and air dates, so the
+     * detail page can list the ones the chat lacks and the ones still to air. TMDB asks for the
+     * season; TVmaze answers every season at once, which is kept per season. AniList numbers an
+     * anime's episodes without seasons and is not asked. Null while off or when nobody could be
+     * asked; kept a day (see [MetadataCache.season]).
+     */
+    suspend fun season(info: MetaInfo, season: Int): List<MetaEpisode>? {
+        if (!store.now.enabled || info.kind != MetaKind.Show || info.provider == MetaProvider.AniList) return null
+        val lang = tmdbLanguage()
+        val key = seasonKey(info, season, lang)
+        synchronized(seasonMemory) { seasonMemory[key] }?.let { return it }
+        return lockFor(key).withLock {
+            synchronized(seasonMemory) { seasonMemory[key] }?.let { return@withLock it }
+            cache.season(key)?.let { stored ->
+                synchronized(seasonMemory) { seasonMemory[key] = stored }
+                return@withLock stored
+            }
+            if (paused(info.provider)) return@withLock null
+            when (info.provider) {
+                MetaProvider.Tmdb -> {
+                    val s = store.now
+                    if (!tmdbUsable(s)) return@withLock null
+                    val k = activeKey(s)
+                    val reply = retrying { tmdb.season(k, info.id, season, lang) }
+                    val found = when (trouble(info.provider, reply, k)) {
+                        null -> (reply as MetaReply.Ok).value
+                        Outcome.Nothing -> emptyList()
+                        else -> return@withLock null
+                    }
+                    cache.putSeason(key, found)
+                    synchronized(seasonMemory) { seasonMemory[key] = found }
+                    found
+                }
+                MetaProvider.TvMaze -> {
+                    val reply = retrying { tvmaze.episodes(info.id) }
+                    val all = when (trouble(info.provider, reply)) {
+                        null -> (reply as MetaReply.Ok).value
+                        Outcome.Nothing -> emptyList()
+                        else -> return@withLock null
+                    }
+                    // One answer covers every season: keep each, so the next season is no call.
+                    all.groupBy { it.season }.forEach { (number, list) ->
+                        val k = seasonKey(info, number, lang)
+                        cache.putSeason(k, list)
+                        synchronized(seasonMemory) { seasonMemory[k] = list }
+                    }
+                    val found = all.filter { it.season == season }
+                    if (found.isEmpty()) {
+                        cache.putSeason(key, found)
+                        synchronized(seasonMemory) { seasonMemory[key] = found }
+                    }
+                    found
+                }
+                MetaProvider.AniList -> null
+            }
+        }
+    }
+
+    /**
+     * What is already known for [query], from memory or the disk, with no lookup: how "More like
+     * this" learns which title a video is without asking anyone about it.
+     */
+    fun cachedMatch(query: MetaQuery): MetaInfo? {
+        if (!store.now.enabled) return null
+        return (remembered(query.cacheKey(tmdbLanguage())) as? MetaResult.Found)?.info
+    }
+
+    /**
+     * [extras]' recommendations narrowed to [items] the viewer has, by the matches already made
+     * for them (no new lookups). A show is opened at its earliest episode. Run it off the main
+     * thread: a title not in memory is read from the disk.
+     */
+    fun moreLikeThis(self: MetaInfo, extras: MetaExtras, items: Collection<MediaItem>): List<KnownTitle> {
+        if (extras.similar.isEmpty() || items.isEmpty() || !store.now.enabled) return emptyList()
+        val wanted = extras.similar.mapTo(HashSet()) { it.matchKey }
+        val lang = tmdbLanguage()
+        val asked = HashMap<String, MetaInfo?>()
+        val best = LinkedHashMap<String, Pair<KnownTitle, Int>>()
+        for (item in items) {
+            val full = MetaQuery.of(item.fileName.ifBlank { item.title }, item.caption) ?: continue
+            val show = full.showOnly()
+            val cacheKey = show.cacheKey(lang)
+            val info = if (cacheKey in asked) asked[cacheKey] else cachedMatch(show).also { asked[cacheKey] = it }
+            info ?: continue
+            val match = MetaRef.matchKey(info.provider, info.kind, info.id)
+            if (match !in wanted) continue
+            val order = (full.season ?: 0) * 10_000 + (full.episode ?: 0)
+            val held = best[match]
+            if (held == null || order < held.second) best[match] = KnownTitle(item, info) to order
+        }
+        return MetaRules.moreLikeThis(extras.similar, self, best.values.map { it.first })
+    }
+
     // ---- pictures -----------------------------------------------------------------------------
 
     /**
@@ -359,6 +537,8 @@ class OnlineMetadata(
     fun purge() {
         cache.purge()
         synchronized(memory) { memory.clear() }
+        synchronized(extrasMemory) { extrasMemory.clear() }
+        synchronized(seasonMemory) { seasonMemory.clear() }
     }
 
     companion object {
@@ -371,6 +551,9 @@ class OnlineMetadata(
         const val RETRY_MS = 1_000L
         const val IMAGE_GAP_MS = 50L
         private const val MEMORY_ENTRIES = 600
+
+        /** A few detail pages' worth: each holds a cast list and a recommendation list. */
+        private const val EXTRAS_MEMORY_ENTRIES = 24
 
         /** Where posters may come from. Nothing else is fetched, whatever an answer says. */
         val IMAGE_HOSTS = setOf("image.tmdb.org", "static.tvmaze.com", "s4.anilist.co", "img.anili.st")

@@ -133,20 +133,36 @@ internal fun HomeRowsView(
                     is HomeRow.Chat -> row.title to { chats.firstOrNull { it.id == row.chatId }?.let(state::openChat); Unit }
                     is HomeRow.Recent -> s.homeRowRecent to null
                 }
-                val (title, seeAll) = heading
+                // Only a row that leaves something out offers the rest of it.
+                val title = heading.first
+                val seeAll = heading.second?.takeIf { row.hasMore }
                 Column {
                     Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                        if (seeAll != null) TextButton(onClick = seeAll) { Text(s.homeSeeAll) }
+                        if (seeAll != null) {
+                            TextButton(onClick = seeAll) {
+                                Text(s.homeSeeAll)
+                                Text(
+                                    "  ·  " + if (row.totalAtLeast) s.homeSeeAllCountAtLeast(row.total) else s.homeSeeAllCount(row.total),
+                                    color = Tone.muted,
+                                )
+                            }
+                        }
                     }
                     if (!loaded) {
-                        Row(Modifier.padding(start = 24.dp, top = 8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Row(Modifier.padding(start = 24.dp, top = 8.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            // A poster's art and its caption in the same type with nothing in it, so the
+                            // rows below stay put when this one fills.
                             repeat(4) {
-                                Box(
-                                    Modifier.width(state.posterWidth)
-                                        .aspectRatio(16f / 9f)
-                                        .background(Tone.surface, MaterialTheme.shapes.medium),
-                                )
+                                Column(Modifier.width(state.posterWidth), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Box(
+                                        Modifier.fillMaxWidth()
+                                            .aspectRatio(16f / 9f)
+                                            .background(Tone.surface, MaterialTheme.shapes.medium),
+                                    )
+                                    Text(" ", style = MaterialTheme.typography.titleSmall, minLines = 2, maxLines = 2)
+                                    Text(" ", style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                                }
                             }
                         }
                         return@Column

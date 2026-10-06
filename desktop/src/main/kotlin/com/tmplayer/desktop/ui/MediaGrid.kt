@@ -207,17 +207,9 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 onNav = { gridNav = it },
                 header = ad?.let { { SponsoredCard(it, model) } },
                 loadingMore = content.loadingMore,
-                // Search ignores the size limits, so the note would be wrong while one is typed.
-                hiddenBySize = if (query.isBlank()) content.hiddenBySize else 0,
-                hiddenSelfDestructing = content.hiddenSelfDestructing,
-                onShowHidden = model::showHidden,
-                shelf = if (hasShows && seriesView) arranged else null,
+                // Every file on its own, episodes included; no switch, no hidden count.
+                shelf = null,
                 onOpenSeries = { openSeries = it.key },
-                viewSwitch = if (hasShows) {
-                    { SeriesViewToggle(seriesView, { on -> scope.launch { state.settings.setSeriesView(on) } }) }
-                } else {
-                    null
-                },
             )
         }
     }
@@ -678,7 +670,8 @@ internal fun Poster(
                 }, extra = extraMenu, watchedToggle = if (markToggle) finished else null, fileMenu = fileMenu)
             }
         }
-        Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        // Two lines, always: a short name reserves the second so the subtitles across a row stay level.
+        Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis)
         Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Tone.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
@@ -851,7 +844,7 @@ private fun SponsoredCard(ad: SponsoredItem, model: MediaListViewModel) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (ad.miniThumbnail != null || ad.thumbnailFileId > 0) {
-                MediaArt(ad.miniThumbnail, ad.thumbnailFileId, Modifier.size(56.dp).clip(MaterialTheme.shapes.small)) {}
+                MediaArt(ad.miniThumbnail, ad.thumbnailFileId, Modifier.width(SPONSORED_ART).aspectRatio(16f / 9f).clip(MaterialTheme.shapes.small)) {}
             }
             Column(Modifier.weight(1f)) {
                 Text(ad.label.ifBlank { s.sponsoredLabel }, style = MaterialTheme.typography.labelMedium, color = Tone.muted)
@@ -901,3 +894,6 @@ private val IS_MAC = System.getProperty("os.name").orEmpty().lowercase().contain
 private const val HOVER_INTENT_MS = 300L
 private const val SEARCH_SETTLE_MS = 300L
 private const val LOAD_AHEAD = 8
+
+/** A sponsored message's picture: 16:9 like every other, about the height its three lines take. */
+private val SPONSORED_ART = 112.dp

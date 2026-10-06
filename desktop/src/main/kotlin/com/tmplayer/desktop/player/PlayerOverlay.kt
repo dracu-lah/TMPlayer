@@ -92,7 +92,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tmplayer.data.MediaItem
-import com.tmplayer.data.MediaName
+import com.tmplayer.data.EpisodeNeighbours
 import com.tmplayer.player.PlaybackSpeed
 import com.tmplayer.player.SleepTimer
 import com.tmplayer.player.SubtitlePosition
@@ -139,7 +139,22 @@ internal sealed interface MenuAction {
     data object SearchOnline : MenuAction
 }
 
-private val Scrim = Color(0xB3000000)
+/**
+ * The scrims behind the top bar and the bottom cluster. Three stops rather than a straight ramp,
+ * so the band the text sits in (the title, the times) is still at least 60 per cent dark and white
+ * text holds AA contrast on a white frame, and only then fades out.
+ */
+private val TopScrim = Brush.verticalGradient(0f to Color(0xD9000000), 0.6f to Color(0x8C000000), 1f to Color.Transparent)
+private val BottomScrim = Brush.verticalGradient(0f to Color.Transparent, 0.35f to Color(0x99000000), 1f to Color(0xE6000000))
+
+/**
+ * The player's tonal surfaces, the Android player's player_tonal and player_tonal_button: a
+ * near-black surface container let partly through. The caption tone carries small text (chips,
+ * flashes); the button tone sits under the round centre buttons.
+ */
+internal val PlayerTonal = Color(0xB3101014)
+internal val PlayerTonalButton = Color(0x8C101014)
+private val OnPlayerTonal = Color(0xF2FFFFFF)
 
 /** The A-B repeat on the timebar: amber, apart from the played blue and the buffered grey. */
 private val LoopColor = Color(0xFFFFC107)
@@ -206,6 +221,8 @@ internal fun BoxScope.PlayerOverlay(
     episodes: Episodes,
     tracks: List<MediaTrack>,
     downloaded: Float?,
+    /** Whether [downloaded] counts a real download ("Downloaded") or the watch cache ("Caching"). */
+    isDownload: Boolean = false,
     showRemaining: Boolean,
     fullscreen: Boolean,
     menu: MenuAt?,
@@ -254,7 +271,7 @@ internal fun BoxScope.PlayerOverlay(
             // Top bar.
             Row(
                 Modifier.align(Alignment.TopCenter).fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Scrim, Color.Transparent)))
+                    .background(TopScrim)
                     .hoverReport(onHoverControls)
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -264,7 +281,7 @@ internal fun BoxScope.PlayerOverlay(
                 Column(Modifier.weight(1f)) {
                     Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (subtitle.isNotBlank()) {
-                        Text(subtitle, color = Color.White.copy(alpha = 0.75f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(subtitle, color = Color.White.copy(alpha = 0.9f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
                 WallClock()
@@ -279,7 +296,11 @@ internal fun BoxScope.PlayerOverlay(
 
             // The download chip, top right under the bar.
             if (downloaded != null && downloaded < 1f) {
-                Chip(s.playerDownloadedChip(s.messages.formatter.percent(downloaded.toDouble())), Modifier.align(Alignment.TopEnd).padding(top = 72.dp, end = 16.dp))
+                val percent = s.messages.formatter.percent(downloaded.toDouble())
+                Chip(
+                    if (isDownload) s.playerDownloadedChip(percent) else s.playerCachedChip(percent),
+                    Modifier.align(Alignment.TopEnd).padding(top = 72.dp, end = 16.dp),
+                )
             }
 
             // Centre cluster.
@@ -291,11 +312,11 @@ internal fun BoxScope.PlayerOverlay(
                 val previous = episodes.previous
                 val next = episodes.next
                 if (previous != null) {
-                    OverlayButton(PlayerIcons.SkipPrevious, s.playerPreviousEpisodeHint(episodeLabel(s.playerPrevious, previous)), { onEpisode(previous) }, size = 48)
+                    OverlayButton(PlayerIcons.SkipPrevious, s.playerPreviousEpisodeHint(s.playerPreviousUp(episodes.labelFor(previous))), { onEpisode(previous) }, size = 56, tonal = true)
                 }
                 SkipButton(forward = false) { onSeekBy(-PlayerKeys.SEEK_MEDIUM_MS) }
                 Box(
-                    Modifier.size(72.dp).clip(CircleShape).background(Color(0x66000000)).clickable(onClick = onTogglePlay),
+                    Modifier.size(72.dp).clip(CircleShape).background(PlayerTonalButton).clickable(onClick = onTogglePlay),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (status.buffering) {
@@ -306,14 +327,14 @@ internal fun BoxScope.PlayerOverlay(
                 }
                 SkipButton(forward = true) { onSeekBy(PlayerKeys.SEEK_MEDIUM_MS) }
                 if (next != null) {
-                    OverlayButton(PlayerIcons.SkipNext, s.playerNextEpisodeHint(episodeLabel(s.playerNext, next)), { onEpisode(next) }, size = 48)
+                    OverlayButton(PlayerIcons.SkipNext, s.playerNextEpisodeHint(s.playerNextUp(episodes.labelFor(next))), { onEpisode(next) }, size = 56, tonal = true)
                 }
             }
 
             // Bottom: times, bar, button row.
             Column(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Scrim)))
+                    .background(BottomScrim)
                     .hoverReport(onHoverControls)
                     .padding(start = 16.dp, end = 16.dp, top = 32.dp, bottom = 8.dp),
             ) {
@@ -384,10 +405,15 @@ private fun Modifier.hoverReport(onHover: (Boolean) -> Unit): Modifier = this
     .onPointerEvent(PointerEventType.Enter) { onHover(true) }
     .onPointerEvent(PointerEventType.Exit) { onHover(false) }
 
-private fun episodeLabel(direction: String, item: MediaItem): String {
-    val code = MediaName.parse(item.fileName.ifBlank { item.title }).episodeCode ?: return direction
-    return "$direction $code"
-}
+/**
+ * What to call [item] as a step from the episode playing: "S01E05  ·  The Lighthouse" as the
+ * series view numbers it, else what its own name says, else its title.
+ */
+internal fun Episodes.labelFor(item: MediaItem): String = when (item.id) {
+    next?.id -> nextTag?.label
+    previous?.id -> previousTag?.label
+    else -> null
+} ?: EpisodeNeighbours.tagOf(item)?.label ?: item.title
 
 @Composable
 private fun WallClock() {
@@ -416,12 +442,16 @@ private fun Tip(text: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-internal fun OverlayButton(icon: ImageVector, label: String, onClick: () -> Unit, size: Int = 40) {
+internal fun OverlayButton(icon: ImageVector, label: String, onClick: () -> Unit, size: Int = 40, tonal: Boolean = false) {
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
+    // A centre button sits on the tonal disc whether or not the pointer is on it, so it does not
+    // vanish over a light frame; the bars' small buttons sit on their scrim and light up on hover.
+    val rest = if (tonal) PlayerTonalButton else Color.Transparent
     Tip(label) {
         Box(
             Modifier.size(size.dp).clip(CircleShape)
+                .background(rest)
                 .background(if (hovered) Color(0x33FFFFFF) else Color.Transparent)
                 .hoverable(hover)
                 .clickable(onClick = onClick),
@@ -441,6 +471,7 @@ private fun SkipButton(forward: Boolean, onClick: () -> Unit) {
     Tip(if (forward) s.playerForwardHint else s.playerBackHintSeek) {
         Box(
             Modifier.size(56.dp).clip(CircleShape)
+                .background(PlayerTonalButton)
                 .background(if (hovered) Color(0x33FFFFFF) else Color.Transparent)
                 .hoverable(hover)
                 .clickable(onClick = onClick),
@@ -450,7 +481,7 @@ private fun SkipButton(forward: Boolean, onClick: () -> Unit) {
                 PlayerIcons.Replay,
                 if (forward) s.playerForwardLabel else s.playerBackLabel,
                 tint = Color.White,
-                modifier = Modifier.size(36.dp).graphicsLayer { if (forward) scaleX = -1f },
+                modifier = Modifier.size(32.dp).graphicsLayer { if (forward) scaleX = -1f },
             )
             Text(s.messages.formatter.number(10), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(y = 2.dp))
         }
@@ -459,8 +490,8 @@ private fun SkipButton(forward: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun Chip(text: String, modifier: Modifier = Modifier) {
-    Box(modifier.clip(RoundedCornerShape(12.dp)).background(Color(0x99000000)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-        Text(text, color = Color.White, fontSize = 12.sp)
+    Box(modifier.clip(CircleShape).background(PlayerTonal).padding(horizontal = 12.dp, vertical = 6.dp)) {
+        Text(text, color = OnPlayerTonal, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -569,8 +600,8 @@ private fun TimeBar(
         if (labelX != null && duration > 0) {
             Box(
                 Modifier.align(Alignment.CenterStart)
-                    .offset { IntOffset(labelX.roundToInt() - 32.dp.roundToPx(), -28.dp.roundToPx()) }
-                    .width(64.dp),
+                    .offset { IntOffset(labelX.roundToInt() - 40.dp.roundToPx(), -30.dp.roundToPx()) }
+                    .width(80.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Chip(SeekMath.clock(SeekMath.timeAt(labelX, width, duration)))
@@ -749,7 +780,7 @@ internal fun BoxScope.FeedbackLayer(flash: Flash?, spinner: Boolean, chip: Strin
     }
     when (f.kind) {
         Flash.Kind.Play, Flash.Kind.Pause -> Box(
-            layer.align(Alignment.Center).size(72.dp).clip(CircleShape).background(Color(0x80000000)),
+            layer.align(Alignment.Center).size(72.dp).clip(CircleShape).background(PlayerTonalButton),
             contentAlignment = Alignment.Center,
         ) {
             Icon(if (f.kind == Flash.Kind.Play) PlayerIcons.Play else PlayerIcons.Pause, null, tint = Color.White, modifier = Modifier.size(40.dp))
@@ -767,14 +798,19 @@ internal fun BoxScope.FeedbackLayer(flash: Flash?, spinner: Boolean, chip: Strin
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // On a tonal pill: the side wash is pale, so bare white over a bright frame was
+                // white on white.
+                Column(
+                    Modifier.clip(RoundedCornerShape(24.dp)).background(PlayerTonal).padding(horizontal = 20.dp, vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
                     Text(if (back) "<<<" else ">>>", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Text(f.text, color = Color.White, fontSize = 15.sp)
+                    Text(f.text, color = OnPlayerTonal, fontSize = 15.sp)
                 }
             }
         }
         Flash.Kind.Volume -> Box(
-            layer.align(Alignment.TopCenter).padding(top = 80.dp).clip(RoundedCornerShape(20.dp)).background(Color(0x99000000))
+            layer.align(Alignment.TopCenter).padding(top = 80.dp).clip(CircleShape).background(PlayerTonal)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -784,7 +820,7 @@ internal fun BoxScope.FeedbackLayer(flash: Flash?, spinner: Boolean, chip: Strin
             }
         }
         Flash.Kind.Text -> Box(
-            layer.align(Alignment.TopCenter).padding(top = 80.dp).clip(RoundedCornerShape(20.dp)).background(Color(0x99000000))
+            layer.align(Alignment.TopCenter).padding(top = 80.dp).clip(CircleShape).background(PlayerTonal)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) { Text(f.text, color = Color.White, fontSize = 15.sp) }
     }
@@ -811,9 +847,8 @@ internal fun BoxScope.ResumeNotice(from: Long, lifted: Boolean, onStartOver: () 
 
 /** A4.7: the next episode, offered in the last half minute. */
 @Composable
-internal fun BoxScope.NextUpCard(next: MediaItem, secondsLeft: Int, lifted: Boolean, onPlayNow: () -> Unit, onHide: () -> Unit) {
+internal fun BoxScope.NextUpCard(label: String, secondsLeft: Int, lifted: Boolean, onPlayNow: () -> Unit, onHide: () -> Unit) {
     val s = LocalStrings.current
-    val code = MediaName.parse(next.fileName.ifBlank { next.title }).episodeCode
     AnimatedVisibility(
         true,
         Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = if (lifted) 120.dp else 24.dp),
@@ -822,7 +857,7 @@ internal fun BoxScope.NextUpCard(next: MediaItem, secondsLeft: Int, lifted: Bool
     ) {
         Surface(shape = RoundedCornerShape(12.dp), color = Color(0xE61C1C1E), modifier = Modifier.width(300.dp)) {
             Column(Modifier.padding(16.dp)) {
-                Text(s.playerNextUp(code ?: next.title), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(s.playerNextUp(label), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(s.playerNextIn(secondsLeft), color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
                 Spacer(Modifier.height(8.dp))
                 Row {
@@ -879,22 +914,19 @@ internal fun BoxScope.StatusSheet(
     onPlayNext: (MediaItem) -> Unit,
     onCancelNext: () -> Unit,
     onKeepWatching: () -> Unit = {},
+    /** What to call the episode a countdown or "Still watching?" offers: see [labelFor]. */
+    nextLabel: (MediaItem) -> String = { Episodes().labelFor(it) },
 ) {
     val s = LocalStrings.current
-    if (phase == Phase.Playing) return
+    if (phase == Phase.Playing || phase is Phase.Loading) return
     Box(Modifier.matchParentSize().background(Color(0xCC000000)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
         Column(Modifier.widthIn(max = 520.dp).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (subtitle.isNotBlank()) Text(subtitle, color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
             Spacer(Modifier.height(20.dp))
             when (phase) {
-                is Phase.Loading -> {
-                    CircularProgressIndicator(Modifier.size(40.dp), color = Color.White, strokeWidth = 3.dp)
-                    Spacer(Modifier.height(12.dp))
-                    Text(phase.message, color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp)
-                    Spacer(Modifier.height(12.dp))
-                    TextButton(onClick = onBack) { Text(s.commonBack) }
-                }
+                // The pre-roll has a screen of its own: see LoaderSheet.
+                is Phase.Loading -> Unit
                 is Phase.Failed -> {
                     Text(phase.message, color = Color.White, fontSize = 15.sp, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(12.dp))
@@ -904,8 +936,7 @@ internal fun BoxScope.StatusSheet(
                     }
                 }
                 is Phase.Countdown -> {
-                    val code = MediaName.parse(phase.next.fileName.ifBlank { phase.next.title }).episodeCode
-                    Text(s.playerNextUp(code ?: phase.next.title), color = Color.White, fontSize = 17.sp)
+                    Text(s.playerNextUp(nextLabel(phase.next)), color = Color.White, fontSize = 17.sp)
                     Text(s.playerStartingIn(phase.seconds), color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
                     Spacer(Modifier.height(12.dp))
                     Row {
@@ -925,7 +956,7 @@ internal fun BoxScope.StatusSheet(
                     Text(s.playerStillWatching, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(6.dp))
                     Text(phase.why, color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp, textAlign = TextAlign.Center)
-                    val code = phase.next?.let { MediaName.parse(it.fileName.ifBlank { it.title }).episodeCode ?: it.title }
+                    val code = phase.next?.let(nextLabel)
                     Text(
                         code?.let { s.playerNextUp(it) } ?: s.playerPausedEverything,
                         color = Color.White.copy(alpha = 0.7f),
@@ -968,7 +999,10 @@ internal fun BoxScope.ShortcutSheet(onClose: () -> Unit, mac: Boolean = false, w
             modifier = Modifier.widthIn(max = if (twoColumns) 1040.dp else 560.dp).padding(16.dp),
         ) {
             Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState())) {
-                Text(s.playerShortcuts, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(s.playerShortcuts, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    OverlayButton(PlayerIcons.Close, s.commonClose, onClose, size = 32)
+                }
                 Spacer(Modifier.height(12.dp))
                 @Composable
                 fun Rows(part: List<Pair<String, String>>, modifier: Modifier) {

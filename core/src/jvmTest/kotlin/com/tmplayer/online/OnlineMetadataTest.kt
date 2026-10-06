@@ -174,6 +174,47 @@ class OnlineMetadataTest {
         assertEquals(0, http.count("search"))
     }
 
+    private val lokiSearch = """{"results":[{"id":84958,"name":"Loki","original_name":"Loki",
+        "first_air_date":"2021-06-09","overview":"The god of mischief steps out.","poster_path":"/loki.jpg","backdrop_path":"/loki-wide.jpg"}]}"""
+
+    /** A chat with both seasons of a show whose second season's files carry that season's year. */
+    private fun lokiSeries(): com.tmplayer.data.Series {
+        var id = 1L
+        fun video(name: String) = com.tmplayer.data.MediaItem(
+            chatId = 7, messageId = id, fileId = 0, title = name, sizeBytes = 1, durationSec = 60, mimeType = "video/x-matroska",
+            thumbnailFileId = 0, miniThumbnail = null, date = (id++).toInt(), fileName = name, caption = "",
+        )
+        val files = (1..6).map { video("Loki 2021 S01E0$it 1080p BluRay x265 10bit DDP5.1.mkv") } +
+            (1..6).map { video("Loki 2023 S02E0$it 1080p BluRay x265 10bit DDP5.1.mkv") }
+        return com.tmplayer.data.SeriesShelf.arrange(files)
+            .filterIsInstance<com.tmplayer.data.ShelfEntry.Show>().single().series
+    }
+
+    @Test
+    fun aSeriesTileFindsItsShowWhenTheNewestFileCarriesALaterSeasonsYear() = runBlocking {
+        // TMDB files Loki under 2021, so a search filtered to 2023 comes back empty.
+        http.on("first_air_date_year=2023") { """{"results":[]}""" }
+        http.on("search/tv") { lokiSearch }
+        val series = lokiSeries()
+        assertEquals("Loki", series.title)
+        // The tile and the series page ask with the newest file, the last of season two.
+        val q = query(series.cover.fileName).showOnly()
+        assertEquals(2023, q.year)
+        val info = (metadata().lookup(q) as? MetaResult.Found)?.info ?: error("no match for ${q.title} ${q.year}")
+        assertEquals("84958", info.id)
+        assertEquals("The god of mischief steps out.", info.overview)
+        assertEquals("https://image.tmdb.org/t/p/w342/loki.jpg", info.posterUrl)
+    }
+
+    @Test
+    fun aSecondSeasonEpisodeFindsItsShowOnTvMazeToo() = runBlocking {
+        http.on("singlesearch/shows") {
+            """{"id":44,"name":"Loki","premiered":"2021-06-09","summary":"<p>The god of mischief.</p>","image":{"medium":"https://static.tvmaze.com/l.jpg"}}"""
+        }
+        val info = (metadata(key = "").lookup(query(lokiSeries().cover.fileName).showOnly()) as? MetaResult.Found)?.info
+        assertEquals("https://static.tvmaze.com/l.jpg", info?.posterUrl)
+    }
+
     // ---- no match, safely ---------------------------------------------------------------------
 
     @Test
@@ -197,6 +238,10 @@ class OnlineMetadataTest {
         assertTrue(MetaMatch.accepts("the office", null, listOf("The Office"), 2005))
         assertTrue("one year apart", MetaMatch.accepts("Night Train", 2019, listOf("Night Train"), 2020))
         assertFalse("years disagree", MetaMatch.accepts("Night Train", 2019, listOf("Night Train"), 1999))
+        assertTrue("a later season's year", MetaMatch.accepts("Loki", 2023, listOf("Loki"), 2021, show = true))
+        assertFalse("a show's year before its premiere", MetaMatch.accepts("Loki", 2018, listOf("Loki"), 2021, show = true))
+        assertFalse("a film's later year", MetaMatch.accepts("Loki", 2023, listOf("Loki"), 2021))
+        assertFalse("some words of a show, years apart", MetaMatch.accepts("Harbour Notes Revisited", 2025, listOf("Harbour Notes"), 2021, show = true))
         assertFalse("some words only, no year", MetaMatch.accepts("coast walk day", null, listOf("The Coast"), 1999))
         assertTrue("most words and the year", MetaMatch.accepts("Harbour Notes Revisited", 2021, listOf("Harbour Notes: Revisited"), 2021))
         assertTrue("accents", MetaMatch.accepts("Amelie", 2001, listOf("Amélie"), 2001))

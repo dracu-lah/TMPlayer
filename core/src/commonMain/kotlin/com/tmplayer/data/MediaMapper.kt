@@ -58,7 +58,16 @@ data class MediaItem(
      */
     val width: Int = 0,
     val height: Int = 0,
+    /**
+     * Every copy of this one film in the chat, this one among them, newest first, when the chat
+     * posted it more than once (a 720p and a 1080p): see [SeriesShelf.arrange]. Empty for a file
+     * that is the only copy, and for an episode, whose copies live on its [SeriesEpisode].
+     */
+    val versions: List<MediaItem> = emptyList(),
 ) {
+    /** This copy with the same [versions] list, for moving from one version to another. */
+    fun asVersion(of: MediaItem): MediaItem = if (of.versions.isEmpty()) this else copy(versions = of.versions)
+
     /**
      * Where a video's bytes are, as far as the viewer is concerned.
      *
@@ -80,6 +89,22 @@ data class MediaItem(
     /** This item with its copy described again, keeping [onDevice] and [locality] in step. */
     fun withLocality(locality: Locality): MediaItem =
         copy(onDevice = locality != Locality.Remote, locality = locality)
+
+    /**
+     * This item with its cached state read again from the disk: [wholeOnDevice] is TDLib's answer
+     * now, which may differ from the one it gave when the item was fetched.
+     *
+     * The watch cache holds one video, so playing another takes the last one's copy away, and a
+     * tile fetched before that went on saying Cached. Downloaded is left alone, since only the
+     * download index can say a download has gone. Returns this same instance when nothing moved,
+     * so a caller can tell a list that needs publishing from one that does not.
+     */
+    fun recheckedCache(wholeOnDevice: Boolean): MediaItem = when {
+        locality == Locality.Downloaded -> this
+        wholeOnDevice == (locality == Locality.Cached) -> this
+        wholeOnDevice -> withLocality(Locality.Cached)
+        else -> withLocality(Locality.Remote)
+    }
 
     /**
      * "4K", "1080p": read off the file name, which is where releases state it.
@@ -168,6 +193,16 @@ object MediaMapper {
 
     /** Media Telegram means to be seen once, in Telegram: a timer, or "view once". */
     fun selfDestructs(message: Message): Boolean = message.selfDestructType != null
+
+    /**
+     * Whether [content] is something [fromMessage] would list: a video, a silent clip, or a file
+     * that looks like a video. For an edit, where TDLib sends the new content without its message.
+     */
+    fun isVideoContent(content: dev.g000sha256.tdl.dto.MessageContent): Boolean = when (content) {
+        is MessageVideo, is MessageAnimation -> true
+        is MessageDocument -> looksLikeVideo(content.document.fileName.orEmpty(), content.document.mimeType.orEmpty())
+        else -> false
+    }
 
     /** The video in [message] with its saving rule applied, whatever its timer says. */
     private fun mapped(message: Message, chatProtected: Boolean): MediaItem? {

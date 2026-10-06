@@ -3,8 +3,11 @@ package com.tmplayer.ui.components
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.graphics.vector.group
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
@@ -553,6 +556,161 @@ object TmIcons {
                 "v-2h-2.09c0.05,-0.33 0.09,-0.66 0.09,-1v-1h2v-2h-2v-1c0,-0.34 -0.04,-0.67 -0.09,-1L20,10L20,8z" +
                 "M14,16h-4v-2h4v2zM14,12h-4v-2h4v2z",
         )
+    }
+
+    /** A painter's palette: the wallpaper colours switch. */
+    val Palette: ImageVector by lazy {
+        icon(
+            "Palette",
+            "M12,3c-4.97,0 -9,4.03 -9,9s4.03,9 9,9c0.83,0 1.5,-0.67 1.5,-1.5 0,-0.39 -0.15,-0.74" +
+                " -0.39,-1.01 -0.23,-0.26 -0.38,-0.61 -0.38,-0.99 0,-0.83 0.67,-1.5 1.5,-1.5H16" +
+                "c2.76,0 5,-2.24 5,-5 0,-4.42 -4.03,-8 -9,-8z" +
+                "M6.5,12c-0.83,0 -1.5,-0.67 -1.5,-1.5S5.67,9 6.5,9 8,9.67 8,10.5 7.33,12 6.5,12z" +
+                "M9.5,8C8.67,8 8,7.33 8,6.5S8.67,5 9.5,5s1.5,0.67 1.5,1.5S10.33,8 9.5,8z" +
+                "M14.5,8c-0.83,0 -1.5,-0.67 -1.5,-1.5S13.67,5 14.5,5s1.5,0.67 1.5,1.5S15.33,8 14.5,8z" +
+                "M17.5,12c-0.83,0 -1.5,-0.67 -1.5,-1.5S16.67,9 17.5,9s1.5,0.67 1.5,1.5 -0.67,1.5 -1.5,1.5z",
+        )
+    }
+
+    /**
+     * A crescent moon: the theme setting. Not the half-shaded sun, which the phone player already
+     * uses for its brightness swipe a few rows further down the same screen.
+     */
+    val Theme: ImageVector by lazy {
+        icon(
+            "Theme",
+            "M12,3c-4.97,0 -9,4.03 -9,9s4.03,9 9,9 9,-4.03 9,-9c0,-0.46 -0.04,-0.92 -0.1,-1.36" +
+                " -0.98,1.37 -2.58,2.26 -4.4,2.26 -2.98,0 -5.4,-2.42 -5.4,-5.4 0,-1.81 0.89,-3.42" +
+                " 2.26,-4.4C12.92,3.04 12.46,3 12,3z",
+        )
+    }
+
+    /** A framed picture: thumbnails, posters, anything that is an image rather than a video. */
+    val Image: ImageVector by lazy {
+        icon(
+            "Image",
+            "M21,19V5c0,-1.1 -0.9,-2 -2,-2H5c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h14" +
+                "c1.1,0 2,-0.9 2,-2zM8.5,13.5l2.5,3.01L14.5,12l4.5,6H5l3.5,-4.5z",
+        )
+    }
+
+    /**
+     * A stack of pictures: the frames shown over the scrub bar. Apart from [Image], which is the
+     * posters row, so two settings about different pictures do not wear the same glyph.
+     */
+    val Frames: ImageVector by lazy {
+        icon(
+            "Frames",
+            "M22,16V4c0,-1.1 -0.9,-2 -2,-2H8c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h12" +
+                "c1.1,0 2,-0.9 2,-2zM11,12l2.03,2.71L16,11l4,5H8l3,-4z" +
+                "M2,6v14c0,1.1 0.9,2 2,2h14v-2H4V6H2z",
+        )
+    }
+
+    /** A judge's gavel: the lawful use page. */
+    val Gavel: ImageVector by lazy {
+        icon(
+            "Gavel",
+            "M1,21h12v2H1v-2zM5.24,8.07l2.83,-2.83 14.14,14.14 -2.83,2.83L5.24,8.07z" +
+                "M12.32,1l5.66,5.66 -2.83,2.83 -5.66,-5.66L12.32,1z" +
+                "M3.83,9.48l5.66,5.66 -2.83,2.83L1,12.31l2.83,-2.83z",
+        )
+    }
+
+    /** An eye struck through: the controls going out of sight. */
+    val VisibilityOff: ImageVector by lazy {
+        icon(
+            "VisibilityOff",
+            "M12,7c2.76,0 5,2.24 5,5 0,0.65 -0.13,1.26 -0.36,1.83l2.92,2.92c1.51,-1.26 2.7,-2.89" +
+                " 3.43,-4.75 -1.73,-4.39 -6,-7.5 -11,-7.5 -1.4,0 -2.74,0.25 -3.98,0.7l2.16,2.16" +
+                "C10.74,7.13 11.35,7 12,7z" +
+                "M2,4.27l2.28,2.28 0.46,0.46C3.08,8.3 1.78,10.02 1,12c1.73,4.39 6,7.5 11,7.5" +
+                " 1.55,0 3.03,-0.3 4.38,-0.84l0.42,0.42L19.73,22 21,20.73 3.27,3 2,4.27z" +
+                "M7.53,9.8l1.55,1.55c-0.05,0.21 -0.08,0.43 -0.08,0.65 0,1.66 1.34,3 3,3" +
+                " 0.22,0 0.44,-0.03 0.65,-0.08l1.55,1.55c-0.67,0.33 -1.41,0.53 -2.2,0.53" +
+                " -2.76,0 -5,-2.24 -5,-5 0,-0.79 0.2,-1.53 0.53,-2.2z" +
+                "M11.84,9.02l3.15,3.15 0.02,-0.16c0,-1.66 -1.34,-3 -3,-3l-0.17,0.01z",
+        )
+    }
+
+    /** A phone between shake marks: the haptics switch. */
+    val Vibration: ImageVector by lazy {
+        icon(
+            "Vibration",
+            "M0,15h2V9H0v6zM3,17h2V7H3v10zM22,9v6h2V9h-2zM19,17h2V7h-2v10z" +
+                "M16.5,3h-9C6.67,3 6,3.67 6,4.5v15c0,0.83 0.67,1.5 1.5,1.5h9c0.83,0 1.5,-0.67 1.5,-1.5" +
+                "v-15c0,-0.83 -0.67,-1.5 -1.5,-1.5zM16,19H8V5h8v14z",
+        )
+    }
+
+    /** A question mark in a circle: the walkthrough, "how does this work". */
+    val Help: ImageVector by lazy {
+        icon(
+            "Help",
+            "M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2z" +
+                "M13,19h-2v-2h2v2z" +
+                "M15.07,11.25l-0.9,0.92C13.45,12.9 13,13.5 13,15h-2v-0.5c0,-1.1 0.45,-2.1 1.17,-2.83" +
+                "l1.24,-1.26c0.37,-0.36 0.59,-0.86 0.59,-1.41 0,-1.1 -0.9,-2 -2,-2s-2,0.9 -2,2H8" +
+                "c0,-2.21 1.79,-4 4,-4s4,1.79 4,4c0,0.88 -0.36,1.68 -0.93,2.25z",
+        )
+    }
+
+    /**
+     * Two ticked lines: picking several at once. Kept apart from the single tick that marks one
+     * video watched, which sits a row above it in the same menu.
+     */
+    val Checklist: ImageVector by lazy {
+        icon(
+            "Checklist",
+            "M22,7h-9v2h9V7zM22,15h-9v2h9v-2z" +
+                "M5.54,11L2,7.46l1.41,-1.41l2.12,2.12l4.24,-4.24l1.41,1.41L5.54,11z" +
+                "M5.54,19L2,15.46l1.41,-1.41l2.12,2.12l4.24,-4.24l1.41,1.41L5.54,19z",
+        )
+    }
+
+    /**
+     * A remote control under signal arcs: the remote's keys. Material's "settings remote", so it
+     * reads apart from the info mark on the playback details line beside it.
+     */
+    val Remote: ImageVector by lazy {
+        icon(
+            "Remote",
+            "M15,9H9c-0.55,0 -1,0.45 -1,1v12c0,0.55 0.45,1 1,1h6c0.55,0 1,-0.45 1,-1V10" +
+                "c0,-0.55 -0.45,-1 -1,-1zM12,15c-1.1,0 -2,-0.9 -2,-2s0.9,-2 2,-2 2,0.9 2,2 -0.9,2 -2,2z" +
+                "M7.05,6.05l1.41,1.41C9.37,6.56 10.62,6 12,6s2.63,0.56 3.54,1.46l1.41,-1.41" +
+                "C15.68,4.78 13.93,4 12,4s-3.68,0.78 -4.95,2.05z" +
+                "M12,0C8.96,0 6.21,1.23 4.22,3.22l1.41,1.41C7.26,3.01 9.51,2 12,2s4.74,1.01 6.36,2.64" +
+                "l1.41,-1.41C17.79,1.23 15.04,0 12,0z",
+        )
+    }
+
+    /**
+     * Episodes: three frames stacked one behind another, a season's worth. SVG Repo's "episodes"
+     * (343094), drawn in lines on its own 21 unit grid, as the source has it.
+     */
+    val Episodes: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Episodes",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 21f,
+            viewportHeight = 21f,
+        ).group(translationX = 1f, translationY = 4f) {
+            listOf(
+                "m13.5 12.5v-6c0-1.1045695-.8954305-2-2-2h-9c-1.1045695 0-2 .8954305-2 2v6c0 1.1045695.8954305 2 2 2h9c1.1045695 0 2-.8954305 2-2z",
+                "m15.5 12.5v-6.99481259c0-1.65685425-1.3431458-3-3-3-.0017276 0-.0034553 0-.0051829 0l-8.9948171.01554432",
+                "m17.5 10.5v-5.99308345c0-2.209139-1.790861-4-4-4-.0023035 0-.004607 0-.0069106 0l-7.9930894.01381519",
+            ).forEach { data ->
+                addPath(
+                    pathData = PathParser().parsePathString(data).toNodes(),
+                    fill = null,
+                    stroke = SolidColor(Color.Black),
+                    strokeLineWidth = 1.25f,
+                    strokeLineCap = StrokeCap.Round,
+                    strokeLineJoin = StrokeJoin.Round,
+                )
+            }
+        }.build()
     }
 
     /**

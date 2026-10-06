@@ -28,6 +28,7 @@ private val OVERVIEW_SEEN = booleanPreferencesKey("overview_seen")
 private val OPEN_LAST_CHAT = booleanPreferencesKey("open_last_chat")
 private val DOWNLOAD_FIRST = booleanPreferencesKey("download_before_playing")
 private val AUTOPLAY_NEXT = booleanPreferencesKey("autoplay_next")
+private val DETAIL_FIRST = booleanPreferencesKey("detail_first")
 private val DOWNMIX_STEREO = booleanPreferencesKey("downmix_stereo")
 private val VOLUME_BOOST = booleanPreferencesKey("volume_boost")
 private val WIFI_ONLY = booleanPreferencesKey("wifi_only_downloads")
@@ -56,7 +57,6 @@ private val DYNAMIC_COLOUR = booleanPreferencesKey("dynamic_colour")
 private val VIDEO_SCALE = stringPreferencesKey("video_scale")
 
 /** Which of the sidebar's folding groups the viewer left open. Absent until the first fold. */
-private val NAV_GROUPS_OPEN = stringSetPreferencesKey("nav_groups_open")
 
 /** The last few searches inside a chat, one per line, newest first. See [RecentSearches]. */
 private val RECENT_SEARCHES = stringPreferencesKey("recent_searches")
@@ -274,6 +274,16 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
 
     /** Read from disk at the end of a video, where a flow's placeholder would be a wrong answer. */
     suspend fun autoplayNextNow(): Boolean = prefs.data.first()[AUTOPLAY_NEXT] ?: true
+
+    /**
+     * Whether a tap on a video opens its page (poster, cast, Play) before playing. On by default;
+     * off plays at once, and the page is still a hold or the info key away.
+     */
+    val detailFirst: Flow<Boolean> = read { it[DETAIL_FIRST] ?: true }
+
+    suspend fun setDetailFirst(value: Boolean) {
+        prefs.edit { it[DETAIL_FIRST] = value }
+    }
 
     /** The chat opened most recently, or zero when there has not been one yet. */
     val lastChatId: Flow<Long> = read { it[LAST_CHAT] ?: 0L }
@@ -802,19 +812,6 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
             prefs.remove(CHAT_SNAPSHOT)
             prefs.remove(ACCOUNT_SNAPSHOT)
         }
-    }
-
-    // ---- sidebar groups ----------------------------------------------------------------------
-
-    /**
-     * The sidebar groups the viewer left open, by key, or null before anything was ever folded, in
-     * which case the sidebar uses its defaults. The keys belong to `NavGroup` in `:ui`.
-     */
-    val navGroupsOpen: Flow<Set<String>?> = read { it[NAV_GROUPS_OPEN] }
-
-    /** Rewrites the open groups from what is stored now, so two quick folds cannot undo each other. */
-    suspend fun updateNavGroupsOpen(transform: (Set<String>?) -> Set<String>) {
-        prefs.edit { it[NAV_GROUPS_OPEN] = transform(it[NAV_GROUPS_OPEN]) }
     }
 
     // ---- recent searches --------------------------------------------------------------------

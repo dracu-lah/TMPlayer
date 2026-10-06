@@ -4,6 +4,8 @@ import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.ChatRepository
 import com.tmplayer.data.ContentProtection
 import com.tmplayer.data.DownloadRunner
+import com.tmplayer.data.EpisodeNeighbours
+import com.tmplayer.data.EpisodeSteps
 import com.tmplayer.desktop.DesktopPaths
 import com.tmplayer.data.Failures
 import com.tmplayer.data.errorMessage
@@ -41,8 +43,8 @@ import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 
-/** The episodes either side of the one playing, nulls where there are none. */
-data class Episodes(val previous: MediaItem? = null, val next: MediaItem? = null)
+/** The episodes either side of the one playing, and what to call them: see [EpisodeNeighbours]. */
+typealias Episodes = EpisodeSteps
 
 /**
  * Where a [PlayerScreen] gets its bytes and its neighbours: Telegram in the app, a folder on disk
@@ -62,6 +64,13 @@ interface PlayerMedia {
 
     /** How much of the file is on disk, 0 to 1; null where that means nothing (a local file). */
     val downloaded: StateFlow<Float?>
+
+    /**
+     * True while the bytes coming down are a download the viewer asked for, rather than the
+     * watch cache filling for playback. Only then does the player say "downloaded"; otherwise it
+     * says caching, so nobody reads the cache as a download they never started.
+     */
+    val isDownload: Boolean get() = false
 
     suspend fun tdlibVersion(): String?
 
@@ -154,6 +163,8 @@ class TelegramPlayerMedia(
     /** The TDLib file id as this session knows it, once [open] has asked. */
     @Volatile
     private var playingId: Int = item.fileId
+
+    override val isDownload: Boolean get() = downloadFile != null || OfflineDownloads.isDownloading(playingId)
 
     override suspend fun open(): MediaData {
         // An item rebuilt from a saved record (Continue watching, Downloads) carries no word on
@@ -271,17 +282,25 @@ class TelegramPlayerMedia(
         }
     }
 
+    /**
+     * The chat searched for the show's name first, then listed plainly when that finds no
+     * neighbour. A video that names no episode, not even a bare "E5", is a film and asks nothing.
+     */
     override suspend fun episodes(): Episodes {
-        val name = item.fileName.ifBlank { item.title }
-        val here = MediaName.parse(name)
-        if (!here.isEpisode || item.chatId == 0L) return Episodes()
+        val tag = EpisodeNeighbours.tagOf(item)
+        val caption = item.caption.lineSequence().firstOrNull { it.isNotBlank() }
+        val show = tag?.show
+            ?: listOfNotNull(item.fileName.ifBlank { item.title }.ifBlank { null }, caption)
+                .firstNotNullOfOrNull { MediaName.looseEpisode(it) }?.title
+            ?: return Episodes()
+        if (item.chatId == 0L) return Episodes(current = tag)
         val session = Td.awaitAuthorizedSession()
-        val candidates = runCatching {
-            val repository = ChatRepository(session.client)
-            val narrowed = repository.mediaPage(item.chatId, query = here.title).items
-            narrowed.ifEmpty { repository.mediaPage(item.chatId).items }
-        }.onFailure { Logger.w(TAG, "Episode lookup failed", it) }.getOrNull().orEmpty()
-        return episodesAmong(name, candidates)
+        val repository = ChatRepository(session.client)
+        suspend fun page(query: String) = runCatching { repository.mediaPage(item.chatId, query = query).items }
+            .onFailure { Logger.w(TAG, "Episode lookup failed", it) }.getOrNull().orEmpty()
+        val steps = EpisodeNeighbours.around(item, page(show))
+        if (steps.previous != null || steps.next != null) return steps
+        return EpisodeNeighbours.around(item, page(""))
     }
 
     override fun episode(other: MediaItem): PlayerMedia =
@@ -376,14 +395,6 @@ class TelegramPlayerMedia(
     }
 }
 
-/** The neighbours of [name] among [candidates], by the same parser the phone uses. */
-fun episodesAmong(name: String, candidates: List<MediaItem>): Episodes {
-    fun nameOf(item: MediaItem) = item.fileName.ifBlank { item.title }
-    return Episodes(
-        previous = MediaName.previousEpisode(name, candidates, ::nameOf),
-        next = MediaName.nextEpisode(name, candidates, ::nameOf),
-    )
-}
 
 /**
  * A file on disk, for the dev harness. With [growingBytesPerSecond] set it is streamed through the
@@ -409,7 +420,7 @@ class LocalPlayerMedia(
     override suspend fun episodes(): Episodes {
         val siblings = file.parentFile?.listFiles { f -> f.isFile && f.extension.lowercase() in VIDEO_EXTENSIONS }
             .orEmpty().map(::itemFor)
-        return episodesAmong(file.name, siblings)
+        return EpisodeNeighbours.around(item, siblings)
     }
 
     override fun episode(other: MediaItem): PlayerMedia =

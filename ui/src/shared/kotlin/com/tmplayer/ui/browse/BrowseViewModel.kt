@@ -22,6 +22,9 @@ import com.tmplayer.data.SponsoredItem
 import com.tmplayer.data.SponsoredMessageRepository
 import com.tmplayer.data.SponsoredReportOutcome
 import com.tmplayer.data.Td
+import com.tmplayer.data.batched
+import com.tmplayer.data.VideoChanges
+import com.tmplayer.data.VideoBatch
 import com.tmplayer.data.TdSession
 import com.tmplayer.ui.components.StateAction
 import com.tmplayer.ui.components.UiState
@@ -89,8 +92,11 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
                 account = rememberedAccount
                 publish()
             }
-            val remembered = runCatching { store.cachedChatSnapshot() }.getOrDefault(emptyList())
-            if (remembered.isEmpty() && chats == null) {
+            // Null when the read itself failed, which says nothing about whether this install has
+            // seen the list before, so it is not taken for a first visit.
+            val read = runCatching { store.cachedChatSnapshot() }.getOrNull()
+            val remembered = read.orEmpty()
+            if (read != null && read.isEmpty() && chats == null) {
                 firstLoad = true
                 if (_state.value is UiState.Loading) _state.value = loading()
             }
@@ -551,8 +557,73 @@ class MediaListViewModel(
     private val _state = MutableStateFlow<UiState<MediaListState>>(UiState.Loading(L.browseFindingVideos))
     val state: StateFlow<UiState<MediaListState>> = _state.asStateFlow()
 
+    /** The chat held open in TDLib for as long as this listing lives; see [Td.watchChat]. */
+    private var watching: AutoCloseable? = null
+
     init {
         load()
+        followChanges()
+    }
+
+    override fun onCleared() {
+        watching?.close()
+        watching = null
+    }
+
+    /**
+     * Keeps the listing in step with the chat while it is open: a video posted in Telegram shows at
+     * the top, an edited one is read again, a deleted one goes. Applied to what is on screen rather
+     * than by loading again, so the pages already scrolled through, the scroll position and the
+     * remote's focus all stay where they are.
+     */
+    private fun followChanges() {
+        viewModelScope.launch {
+            Td.awaitAuthorizedSession()
+            val handle = Td.watchChat(chatId)
+            if (watching == null) watching = handle else handle.close()
+        }
+        viewModelScope.launch {
+            Td.videoChanges
+                .filter { it.chatId == chatId }
+                .batched(LIVE_WINDOW_MS)
+                .collect { batches -> batches.forEach { applyChanges(it) } }
+        }
+    }
+
+    private suspend fun applyChanges(batch: VideoBatch) {
+        val session = runCatching { Td.awaitAuthorizedSession() }.getOrNull() ?: return
+        val repository = ChatRepository(session.client)
+        // A search lists what matched, ranked: a new post is not part of it, a deleted one still goes.
+        val searching = query.isNotBlank()
+        val added = if (searching) emptyList() else marked(keepLive(batch.added))
+        val listed = (_state.value as? UiState.Content)?.value?.items.orEmpty().mapTo(HashSet()) { it.messageId }
+        val edits = batch.edited.filter { !searching || it in listed }.associateWith { id ->
+            runCatching { repository.mediaItem(chatId, id) }.getOrNull()?.let { marked(keepLive(listOf(it))).firstOrNull() }
+        }
+        if (!session.isCurrent()) return
+        when (val current = _state.value) {
+            is UiState.Content -> {
+                val items = VideoChanges.merge(current.value.items, batch, added, edits)
+                if (items !== current.value.items) {
+                    _state.value = UiState.Content(current.value.copy(items = items, hiddenBySize = hiddenBySize))
+                }
+            }
+            // A chat that had nothing to show has its first video.
+            is UiState.Empty -> if (added.isNotEmpty()) {
+                _state.value = UiState.Content(
+                    MediaListState(items = added, sponsored = sponsored, endReached = true, hiddenBySize = hiddenBySize),
+                )
+            }
+            else -> Unit
+        }
+    }
+
+    /** The size limits for a live post, as [keep] applies them to a page, without the search ranking. */
+    private fun keepLive(items: List<MediaItem>): List<MediaItem> {
+        if (items.isEmpty() || showAllSizes) return items
+        val split = SizeFilter.split(items, minSizeBytes, maxSizeBytes) { it.sizeBytes }
+        hiddenBySize += split.hidden
+        return split.kept
     }
 
     /** Re-runs the listing against [text]; blank means "everything in this chat". */
@@ -956,6 +1027,9 @@ class MediaListViewModel(
 
         /** How long a search has to stand before it counts as one the viewer meant. */
         const val RECORD_AFTER_MS = 1_500L
+
+        /** Live posts are gathered this long, so a burst of episodes lands as one redraw. */
+        const val LIVE_WINDOW_MS = 2_000L
 
         /** Shorter than this and a word is "the" or "s02": it narrows nothing. */
         const val MIN_FALLBACK_WORD = 3

@@ -31,6 +31,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
@@ -102,6 +106,46 @@ object Td {
      */
     private val _folders = MutableStateFlow<List<ChatFolderSummary>>(emptyList())
     val folders: StateFlow<List<ChatFolderSummary>> = _folders.asStateFlow()
+
+    /**
+     * Videos posted, edited into a message or deleted while the app is open, as TDLib reports
+     * them, for every chat. Nothing is fetched to produce these: a post arrives with its message,
+     * an edit is reported only when the new content is a video, and a deletion is passed on as the
+     * ids, for each listing to check against its own. A listing batches them ([batched]) so a burst
+     * of posts is one redraw.
+     *
+     * TDLib only follows a channel or supergroup closely while it is open; see [watchChat].
+     */
+    private val _videoChanges = MutableSharedFlow<VideoChange>(
+        extraBufferCapacity = VIDEO_CHANGE_BUFFER,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val videoChanges: SharedFlow<VideoChange> = _videoChanges.asSharedFlow()
+
+    /**
+     * Tells TDLib the viewer is looking at [chatId] until the returned handle is closed, which is
+     * what makes it deliver a channel's or a supergroup's new posts as they happen rather than on
+     * the next fetch. Counted, so two screens on the same chat do not close it under each other.
+     * Never marks anything read: that is a separate request this app does not make here.
+     */
+    suspend fun watchChat(chatId: Long): AutoCloseable {
+        val first = synchronized(watched) {
+            val count = watched.getOrDefault(chatId, 0)
+            watched[chatId] = count + 1
+            count == 0
+        }
+        if (first) current?.let { runCatching { it.openChat(chatId) } }
+        return AutoCloseable {
+            val last = synchronized(watched) {
+                val count = watched.getOrDefault(chatId, 0) - 1
+                if (count <= 0) watched.remove(chatId) else watched[chatId] = count
+                count <= 0
+            }
+            if (last) current?.let { client -> scope.launch { runCatching { client.closeChat(chatId) } } }
+        }
+    }
+
+    private val watched = HashMap<Long, Int>()
 
     /**
      * Where TDLib keeps its database and files, read by every new client in [sendParameters].
@@ -190,6 +234,28 @@ object Td {
                     }
                 }
             }
+            val posted = launch {
+                td.newMessageUpdates.collect { update ->
+                    MediaMapper.fromMessage(update.message)?.let { item ->
+                        _videoChanges.tryEmit(VideoChange.Added(update.message.chatId, item))
+                    }
+                }
+            }
+            val edited = launch {
+                td.messageContentUpdates.collect { update ->
+                    if (MediaMapper.isVideoContent(update.newContent)) {
+                        _videoChanges.tryEmit(VideoChange.Edited(update.chatId, update.messageId))
+                    }
+                }
+            }
+            val deleted = launch {
+                td.deleteMessagesUpdates.collect { update ->
+                    // fromCache is TDLib tidying its own storage, not anything the chat did.
+                    if (update.isPermanent && !update.fromCache && update.messageIds.isNotEmpty()) {
+                        _videoChanges.tryEmit(VideoChange.Removed(update.chatId, update.messageIds.toSet()))
+                    }
+                }
+            }
             val connection = launch {
                 td.connectionStateUpdates.collect { update ->
                     // "Updating" means the socket is up and TDLib is pulling in what it missed.
@@ -209,6 +275,10 @@ object Td {
 
             closed.await()
             updates.cancel()
+            posted.cancel()
+            edited.cancel()
+            deleted.cancel()
+            synchronized(watched) { watched.clear() }
             connection.cancel()
             folders.cancel()
             _folders.value = emptyList()
@@ -762,6 +832,9 @@ object Td {
             photoFileId = user.profilePhoto?.small?.id ?: 0,
         )
     }
+
+    /** Room for a burst of posts between two windows of a listing; the oldest give way after that. */
+    private const val VIDEO_CHANGE_BUFFER = 256
 
     /** Long enough for a slow stick on a cold morning, short enough not to read as a hang. */
     private const val CONNECT_TIMEOUT_MS = 30_000L

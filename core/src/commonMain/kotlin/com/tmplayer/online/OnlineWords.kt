@@ -13,6 +13,7 @@ object OnlineWords {
     fun notice(notice: SubtitleNotice): String = when (notice) {
         SubtitleNotice.SignInToDownload -> L.onlineNoticeSignIn
         is SubtitleNotice.QuotaUsed -> notice.resetAt?.let { L.onlineNoticeQuotaUntil(time(it)) } ?: L.onlineNoticeQuota
+        is SubtitleNotice.FreeQuotaUsed -> notice.resetAt?.let { L.onlineNoticeFreeQuotaUntil(time(it)) } ?: L.onlineNoticeFreeQuota
         SubtitleNotice.SignInExpired -> L.onlineNoticeExpired
         SubtitleNotice.Unavailable -> L.onlineNoticeUnavailable
         SubtitleNotice.Busy -> L.onlineNoticeBusy
@@ -36,6 +37,7 @@ object OnlineWords {
             status.username,
             status.resetAt?.let { L.onlineNoticeQuotaUntil(time(it)) } ?: L.onlineNoticeQuota,
         )
+        is OnlineStatus.FreeQuotaUsed -> status.resetAt?.let { L.onlineStatusFreeQuotaUntil(time(it)) } ?: L.onlineStatusFreeQuota
     }
 
     /** Today's downloads alone, for a screen that names the account on a line of its own. */

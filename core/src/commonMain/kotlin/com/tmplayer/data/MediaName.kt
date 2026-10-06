@@ -74,6 +74,47 @@ object MediaName {
         )
     }
 
+    /**
+     * The lenient reading of [text], for a file whose chat has already established the show: a
+     * bare "E05" or "E5" after the title, which [parse] turns down because, with nothing else to
+     * go on, it is too easy to find inside a title. Null unless there is a title before it and an
+     * episode number in it. [SeriesShelf] only accepts the answer when the title is a show the
+     * chat's other files name.
+     */
+    fun looseEpisode(text: String, maxYear: Int = thisYear() + 1): ParsedName? {
+        val strict = parse(text, maxYear)
+        if (strict.isEpisode) return strict
+        val normalised = stripDecoration(stripExtension(text)).replace(SEPARATORS, " ").replace(WHITESPACE, " ").trim()
+        val match = BARE_EPISODE.find(normalised)?.takeIf { it.range.first > 0 } ?: return null
+        val title = clean(read(normalised.substring(0, match.range.first), maxYear).parsed.title)
+        if (title.isEmpty()) return null
+        return ParsedName(title = title, year = strict.year, season = null, episode = match.groupValues[1].toInt())
+    }
+
+    /**
+     * The episode's own name, where the uploader wrote one after the code:
+     * "Harbour.Notes.S01E04.The.Lighthouse.1080p.mkv" gives "The Lighthouse", and
+     * "Show, E5. Vlog" gives "Vlog". Null when [text] names no episode, or when nothing but release
+     * tags, a year or a bracket follows the code.
+     */
+    fun episodeName(text: String): String? {
+        val normalised = stripDecoration(stripExtension(text)).replace(SEPARATORS, " ").replace(WHITESPACE, " ").trim()
+        val code = (PAIRED_EPISODE + EPISODE_ONLY + BARE_EPISODE)
+            .mapNotNull { it.find(normalised) }
+            .plus(listOfNotNull(DASHED_EPISODE.find(normalised)?.takeUnless { looksLikeYear(it) }))
+            .minByOrNull { it.range.first }
+            ?: return null
+        // A file that holds two episodes, "S01E01-E02", names the second straight after the first.
+        val rest = normalised.substring(code.range.last + 1).replace(EXTRA_EPISODE, "")
+        val cut = listOfNotNull(
+            TAGS.find(rest)?.range?.first,
+            BARE_YEAR.find(rest)?.range?.first,
+            rest.indexOfAny(charArrayOf('(', '[', '{')).takeIf { it >= 0 },
+        ).minOrNull() ?: rest.length
+        val name = clean(rest.substring(0, cut))
+        return name.takeIf { it.count(Char::isLetter) >= 2 }
+    }
+
     /** What [read] found, with the title left empty when nothing came before the first marker. */
     private class Read(val parsed: ParsedName, val whole: String)
 
@@ -114,18 +155,34 @@ object MediaName {
      * episode of the same season counts: rolling on to the next season would be guessing at where
      * a series ends.
      */
-    fun <T> nextEpisode(current: String, candidates: List<T>, nameOf: (T) -> String): T? =
-        episodeAt(current, candidates, step = 1, nameOf = nameOf)
+    fun <T> nextEpisode(
+        current: String,
+        candidates: List<T>,
+        currentSize: Long = 0,
+        sizeOf: (T) -> Long = { 0L },
+        nameOf: (T) -> String,
+    ): T? = episodeAt(current, candidates, step = 1, nameOf = nameOf, currentSize = currentSize, sizeOf = sizeOf)
 
     /** The episode before [current], found the same way [nextEpisode] finds the one after it. */
-    fun <T> previousEpisode(current: String, candidates: List<T>, nameOf: (T) -> String): T? =
-        episodeAt(current, candidates, step = -1, nameOf = nameOf)
+    fun <T> previousEpisode(
+        current: String,
+        candidates: List<T>,
+        currentSize: Long = 0,
+        sizeOf: (T) -> Long = { 0L },
+        nameOf: (T) -> String,
+    ): T? = episodeAt(current, candidates, step = -1, nameOf = nameOf, currentSize = currentSize, sizeOf = sizeOf)
 
+    /**
+     * When the chat holds several copies of the episode wanted (350 MB, 600 MB, 1.8 GB), the one
+     * most like [current] at [currentSize] bytes: see [EpisodeCopies.closest].
+     */
     private fun <T> episodeAt(
         current: String,
         candidates: List<T>,
         step: Int,
         nameOf: (T) -> String,
+        currentSize: Long,
+        sizeOf: (T) -> Long,
     ): T? {
         val here = parse(current)
         val season = here.season ?: return null
@@ -134,12 +191,13 @@ object MediaName {
         val wanted = episode + step
         if (wanted < 1) return null
 
-        return candidates.firstOrNull { candidate ->
+        val copies = candidates.filter { candidate ->
             val other = parse(nameOf(candidate))
             other.season == season &&
                 other.episode == wanted &&
                 other.title.lowercase() == title
         }
+        return EpisodeCopies.closest(current, currentSize, copies, nameOf, sizeOf)
     }
 
     /** A season and episode number, and where in the name the code starts. */
@@ -269,7 +327,8 @@ object MediaName {
 
     private val SEPARATORS = Regex("""[._]+""")
     private val WHITESPACE = Regex("""\s+""")
-    private val TRIM_CHARS = charArrayOf('-', '(', ')', '[', ']', '{', '}', ',', ':', '_', '.', '|')
+    /** Includes the long dashes, written as escapes: "Show \u2014 E5" ends in one once cut. */
+    private val TRIM_CHARS = charArrayOf('-', '\u2013', '\u2014', '(', ')', '[', ']', '{', '}', ',', ':', '_', '.', '|')
 
     /** An uploader's Telegram handle, wherever in the name they put it. */
     private val HANDLE = Regex("""@[A-Za-z0-9_]{3,}""")
@@ -314,6 +373,12 @@ object MediaName {
      * wrong turns a standalone video into episode four of a series that does not exist.
      */
     private val EPISODE_ONLY = Regex("""\bep(?:isode)?[\s-]?(\d{1,3})\b""", RegexOption.IGNORE_CASE)
+
+    /** "E05" with no word in front, which only [looseEpisode] reads. */
+    private val BARE_EPISODE = Regex("""\be(\d{1,3})\b""", RegexOption.IGNORE_CASE)
+
+    /** The second code of a two-episode file, "-E02" or "&E02", just after the first. */
+    private val EXTRA_EPISODE = Regex("""^\s*[-&+]?\s*e\d{1,3}\b""", RegexOption.IGNORE_CASE)
 
     /**
      * The technical vocabulary, used only to locate where the title stops.

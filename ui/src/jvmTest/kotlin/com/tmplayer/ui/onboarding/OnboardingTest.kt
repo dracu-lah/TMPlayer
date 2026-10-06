@@ -19,10 +19,16 @@ class OnboardingTest {
     @Test
     fun `the pages, in order`() {
         assertEquals(
-            listOf(OnboardingPage.Language, OnboardingPage.About, OnboardingPage.SignIn, OnboardingPage.Chats, OnboardingPage.Videos),
+            listOf(
+                OnboardingPage.Language, OnboardingPage.About, OnboardingPage.SignIn, OnboardingPage.Chats,
+                OnboardingPage.Videos, OnboardingPage.Posters,
+            ),
             Onboarding.pages,
         )
-        assertEquals(listOf(OnboardingPage.SignIn, OnboardingPage.Chats, OnboardingPage.Videos), Onboarding.pages.filter { it.illustrated })
+        assertEquals(
+            listOf(OnboardingPage.SignIn, OnboardingPage.Chats, OnboardingPage.Videos, OnboardingPage.Posters),
+            Onboarding.pages.filter { it.illustrated },
+        )
     }
 
     @Test
@@ -60,11 +66,13 @@ class OnboardingTest {
         assertTrue("Skip once About is read", tour.canSkip)
         assertTrue(tour.next())
         assertTrue(tour.next())
+        assertTrue(tour.next())
+        assertEquals(OnboardingPage.Posters, tour.page)
         assertTrue(tour.isLast)
         assertFalse("Start, not Skip, on the last page", tour.canSkip)
         assertFalse(tour.next())
         assertTrue(tour.back())
-        assertEquals(OnboardingPage.Chats, tour.page)
+        assertEquals(OnboardingPage.Videos, tour.page)
     }
 
     @Test
@@ -73,7 +81,7 @@ class OnboardingTest {
         assertTrue(tour.canSkip)
         assertTrue(tour.canLeave)
         assertFalse(tour.back())
-        assertEquals(OnboardingPage.Videos, TourState(firstRun = false, start = 99).page)
+        assertEquals(OnboardingPage.Posters, TourState(firstRun = false, start = 99).page)
     }
 
     @Test

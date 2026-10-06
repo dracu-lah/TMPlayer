@@ -5,12 +5,11 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import com.tmplayer.data.SettingsStore
 import com.tmplayer.i18n.L
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 // The sidebar's folding groups, shared by the phone's drawer, the television's rail and the
 // desktop's side bar, so all three fold the same entries under the same headings.
@@ -22,6 +21,13 @@ enum class NavGroup {
     Folders,
     ;
 
+    /**
+     * Whether the group draws a heading. Watch does not: it is the first thing in the sidebar and
+     * plainly the viewer's own, so a word over it only pushed the rows down. With no heading it has
+     * nothing to fold from, so it is always open.
+     */
+    val headed: Boolean get() = this != Watch
+
     /** The heading's words. */
     val label: String get() = when (this) {
         Watch -> L.navWatch
@@ -29,8 +35,6 @@ enum class NavGroup {
         Folders -> L.navFolders
     }
 
-    /** How the group is written down in [SettingsStore]: lower case, so a rename of the enum is visible. */
-    val key: String get() = name.lowercase()
 }
 
 /**
@@ -86,56 +90,56 @@ fun navGroups(sections: List<BrowseSection>, withDownloads: Boolean = true): Lis
 }
 
 /**
- * Which groups are open, as [SettingsStore] keeps them.
+ * Which groups are open.
  *
- * Only the viewer's choice is stored. The group holding the current destination is open on top of
- * that whatever was stored, so the highlighted row can never be folded out of sight, and closing
- * another group never moves the viewer.
+ * Only the viewer's choice is held, and only for as long as the app runs: every launch starts from
+ * [NavGroupState.DEFAULT_OPEN], so Chats and Folders are folded each time the app opens however they
+ * were left. The group holding the current destination is open on top of that, so the highlighted
+ * row can never be folded out of sight, and closing another group never moves the viewer.
  */
 object NavGroupState {
 
-    /** Watch starts open, because it is what somebody opening the app in the evening wants; the rest start closed. */
+    /** Watch is open, because it is what somebody opening the app in the evening wants; the rest start closed. */
     val DEFAULT_OPEN: Set<NavGroup> = setOf(NavGroup.Watch)
 
-    /** Null is a store that has never been written, which means the defaults. Unknown keys are ignored. */
-    fun decode(stored: Set<String>?): Set<NavGroup> =
-        stored?.mapNotNull { key -> NavGroup.entries.firstOrNull { it.key == key } }?.toSet() ?: DEFAULT_OPEN
+    /** The viewer's folds for this run of the app, shared by every sidebar on screen. */
+    private val held = MutableStateFlow(DEFAULT_OPEN)
 
-    fun encode(open: Set<NavGroup>): Set<String> = open.mapTo(mutableSetOf()) { it.key }
+    val open: StateFlow<Set<NavGroup>> = held.asStateFlow()
+
+    /** Folds or unfolds [group]. */
+    fun toggle(group: NavGroup) {
+        held.update { toggled(it, group) }
+    }
+
+    /** Back to the defaults, as on a fresh launch. */
+    fun reset() {
+        held.value = DEFAULT_OPEN
+    }
 
     fun toggled(open: Set<NavGroup>, group: NavGroup): Set<NavGroup> =
         if (group in open) open - group else open + group
 
-    /** What is drawn: the stored choice, plus the group the viewer is in. */
+    /** What is drawn: the viewer's choice, plus the group the viewer is in, plus a group with no heading. */
     fun isOpen(group: NavGroup, open: Set<NavGroup>, current: NavGroup?): Boolean =
-        group == current || group in open
+        !group.headed || group == current || group in open
 
-    /** The current group cannot be folded, so its heading offers no toggle. */
-    fun canToggle(group: NavGroup, current: NavGroup?): Boolean = group != current
+    /** The current group cannot be folded, so its heading offers no toggle; nor can one without a heading. */
+    fun canToggle(group: NavGroup, current: NavGroup?): Boolean = group.headed && group != current
 }
 
-/** Folds or unfolds [group] in the store, reading what is stored at the moment of writing. */
-suspend fun toggleNavGroup(settings: SettingsStore, group: NavGroup) {
-    settings.updateNavGroupsOpen { stored ->
-        NavGroupState.encode(NavGroupState.toggled(NavGroupState.decode(stored), group))
-    }
-}
-
-/** The open state for a sidebar on screen, read from and written to [SettingsStore]. */
+/** The open state for a sidebar on screen. */
 @Stable
 class NavGroupsHolder internal constructor(
-    private val stored: () -> Set<NavGroup>,
+    private val open: Set<NavGroup>,
     private val current: NavGroup?,
-    private val scope: CoroutineScope,
-    private val settings: SettingsStore,
 ) {
-    fun isOpen(group: NavGroup): Boolean = NavGroupState.isOpen(group, stored(), current)
+    fun isOpen(group: NavGroup): Boolean = NavGroupState.isOpen(group, open, current)
 
     fun canToggle(group: NavGroup): Boolean = NavGroupState.canToggle(group, current)
 
     fun toggle(group: NavGroup) {
-        if (!canToggle(group)) return
-        scope.launch { toggleNavGroup(settings, group) }
+        if (canToggle(group)) NavGroupState.toggle(group)
     }
 }
 
@@ -144,9 +148,7 @@ class NavGroupsHolder internal constructor(
  * current page is outside every group, such as Settings).
  */
 @Composable
-fun rememberNavGroups(settings: SettingsStore, current: NavGroup?): NavGroupsHolder {
-    val flow = remember(settings) { settings.navGroupsOpen.map(NavGroupState::decode) }
-    val open by flow.collectAsState(initial = NavGroupState.DEFAULT_OPEN)
-    val scope = rememberCoroutineScope()
-    return remember(settings, current, open, scope) { NavGroupsHolder({ open }, current, scope, settings) }
+fun rememberNavGroups(current: NavGroup?): NavGroupsHolder {
+    val open by NavGroupState.open.collectAsState()
+    return remember(current, open) { NavGroupsHolder(open, current) }
 }

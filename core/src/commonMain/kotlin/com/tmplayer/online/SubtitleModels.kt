@@ -33,6 +33,15 @@ data class SubtitleHit(
     val hearingImpaired: Boolean = false,
     /** Machine or AI translated, which a search leaves out unless the viewer has asked for them. */
     val machine: Boolean = false,
+    /**
+     * What OpenSubtitles itself files the subtitle under (`feature_details`): the show for an
+     * episode (its parent title), the film otherwise, with the season, episode and year it gives.
+     * Blank and null where it said nothing, or for a hit cached before these were kept.
+     */
+    val featureTitle: String = "",
+    val featureSeason: Int? = null,
+    val featureEpisode: Int? = null,
+    val featureYear: Int? = null,
 ) {
     internal fun toJson(): JSONObject = JSONObject()
         .put("provider", provider.name)
@@ -44,6 +53,12 @@ data class SubtitleHit(
         .put("hash", hashMatch)
         .put("hi", hearingImpaired)
         .put("machine", machine)
+        .put("feature", featureTitle)
+        .apply {
+            featureSeason?.let { put("feature_season", it) }
+            featureEpisode?.let { put("feature_episode", it) }
+            featureYear?.let { put("feature_year", it) }
+        }
 
     internal companion object {
         fun fromJson(o: JSONObject): SubtitleHit? = runCatching {
@@ -57,6 +72,10 @@ data class SubtitleHit(
                 hashMatch = o.optBoolean("hash"),
                 hearingImpaired = o.optBoolean("hi"),
                 machine = o.optBoolean("machine"),
+                featureTitle = o.optString("feature"),
+                featureSeason = o.optInt("feature_season", 0).takeIf { it > 0 },
+                featureEpisode = o.optInt("feature_episode", 0).takeIf { it > 0 },
+                featureYear = o.optInt("feature_year", 0).takeIf { it > 0 },
             )
         }.getOrNull()
 
@@ -73,11 +92,20 @@ data class SubtitleHit(
  * is still worth showing when downloading is what is blocked.
  */
 sealed interface SubtitleNotice {
-    /** Not signed in: searching works, downloading needs the viewer's own free account. */
+    /**
+     * OpenSubtitles turned down a download made without an account (a 401 where it usually
+     * answers): signing in under Settings is the way through.
+     */
     data object SignInToDownload : SubtitleNotice
 
-    /** The day's downloads are spent; [resetAt] is when more arrive, if OpenSubtitles said. */
+    /** The signed in viewer's downloads for the day are spent; [resetAt] is when more arrive, if OpenSubtitles said. */
     data class QuotaUsed(val resetAt: Long?) : SubtitleNotice
+
+    /**
+     * The downloads OpenSubtitles allows without an account are spent until [resetAt]. Signing in
+     * under Settings brings the viewer's own daily quota.
+     */
+    data class FreeQuotaUsed(val resetAt: Long?) : SubtitleNotice
 
     /** The viewer's sign in ran out, and has to be done again. */
     data object SignInExpired : SubtitleNotice

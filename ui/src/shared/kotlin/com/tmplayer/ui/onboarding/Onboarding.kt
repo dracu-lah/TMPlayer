@@ -21,10 +21,16 @@ enum class OnboardingPage {
     SignIn,
     Chats,
     Videos,
+
+    /**
+     * Posters, cast, ratings and trailers from TMDB, TVmaze and AniList: on unless the viewer turns
+     * it off here, since a lookup sends a video's cleaned title to them and they should know.
+     */
+    Posters,
     ;
 
     /** True for the pages illustrated with a screenshot of the app itself. */
-    val illustrated: Boolean get() = this == SignIn || this == Chats || this == Videos
+    val illustrated: Boolean get() = this == SignIn || this == Chats || this == Videos || this == Posters
 }
 
 /** Which screen the app opens on, from the two things that decide it. */
@@ -103,6 +109,7 @@ fun Strings.onboarding(page: OnboardingPage, form: DeviceForm): OnboardingCopy {
         OnboardingPage.SignIn -> OnboardingCopy(onboardingSigninTitle(f), onboardingSigninBody(f))
         OnboardingPage.Chats -> OnboardingCopy(onboardingChatsTitle(f), onboardingChatsBody(f))
         OnboardingPage.Videos -> OnboardingCopy(onboardingVideosTitle, onboardingVideosBody(f))
+        OnboardingPage.Posters -> OnboardingCopy(onboardingPostersTitle, onboardingPostersBody)
     }
 }
 

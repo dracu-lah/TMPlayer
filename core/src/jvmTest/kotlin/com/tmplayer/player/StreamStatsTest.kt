@@ -193,6 +193,31 @@ class SpeedMeterTest {
     }
 
     @Test
+    fun `cached bytes joining the prefix are not a burst of speed`() {
+        val meter = SpeedMeter()
+        meter.sample(0, 0)
+        // 4 GB already on the disk merges into the prefix 30 ms later.
+        assertEquals(0L, meter.sample(4_000_000_000, 30))
+        // Then a steady 2 MB/s from there.
+        var bytes = 4_000_000_000
+        for (step in 1..20) {
+            bytes += 200_000
+            meter.sample(bytes, 30 + step * 100L)
+        }
+        val measured = meter.bytesPerSec
+        assertTrue("expected ~2 MB/s, got $measured", measured in 1_800_000..2_200_000)
+    }
+
+    @Test
+    fun `no figure until the readings span long enough to mean something`() {
+        val meter = SpeedMeter()
+        meter.sample(0, 0)
+        assertEquals(0L, meter.sample(100_000, 50))
+        assertEquals(0L, meter.sample(200_000, 100))
+        assertTrue(meter.sample(1_000_000, SpeedMeter.MIN_SPAN_MS) > 0)
+    }
+
+    @Test
     fun `reset clears the baseline`() {
         val meter = SpeedMeter()
         meter.sample(0, 0)

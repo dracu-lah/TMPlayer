@@ -1,31 +1,25 @@
 package com.tmplayer.desktop.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextAlign
-import com.tmplayer.player.SubtitlePosition
-import com.tmplayer.player.SubtitleSize
-import com.tmplayer.player.SubtitleStyle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -39,38 +33,47 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.withFrameNanos
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.SizeFilter
-import com.tmplayer.ui.components.TmIcons
-import com.tmplayer.desktop.DesktopSettings
+import com.tmplayer.data.SupportReminder
 import com.tmplayer.data.ThemeChoice
 import com.tmplayer.data.UpdateState
 import com.tmplayer.data.UpdateWords
 import com.tmplayer.data.Updates
-import com.tmplayer.data.release
-import com.tmplayer.desktop.os.OpenExternal
-import com.tmplayer.ui.about.About
-import com.tmplayer.ui.i18n.LocalStrings
-import com.tmplayer.data.SupportReminder
 import com.tmplayer.data.WhatsNew
-import com.tmplayer.ui.i18n.languageRowDetail
+import com.tmplayer.data.release
+import com.tmplayer.desktop.DesktopSettings
+import com.tmplayer.desktop.os.OpenExternal
+import com.tmplayer.player.SubtitlePosition
+import com.tmplayer.player.SubtitleSize
+import com.tmplayer.player.SubtitleStyle
 import com.tmplayer.player.TouchPrefs
+import com.tmplayer.ui.about.About
+import com.tmplayer.ui.components.TmAlertDialog
+import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.rememberToast
+import com.tmplayer.ui.i18n.LocalStrings
+import com.tmplayer.ui.i18n.languageRowDetail
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.launch
 
@@ -95,8 +98,8 @@ fun SettingsPage(state: ShellState, version: String = "") {
     val autoplay by settings.autoplayNext.collectAsState(initial = true)
     val downloadFirst by settings.downloadBeforePlaying.collectAsState(initial = false)
     val openLast by settings.openLastChat.collectAsState(initial = false)
-    val minSize by settings.minSizeBytes.collectAsState(initial = SizeFilter.FLOOR)
-    val maxSize by settings.maxSizeBytes.collectAsState(initial = SizeFilter.CEILING)
+    val minSize by settings.minSizeBytes.collectAsState(initial = SizeFilter.DEFAULT_MIN)
+    val maxSize by settings.maxSizeBytes.collectAsState(initial = SizeFilter.DEFAULT_MAX)
     val desktop by state.extras.prefs.state.collectAsState()
     val notifyUpdates by settings.updateNotify.collectAsState(initial = true)
     val updateState by Updates.state.collectAsState()
@@ -112,6 +115,7 @@ fun SettingsPage(state: ShellState, version: String = "") {
     var confirmClearWatched by remember { mutableStateOf(false) }
     val language by settings.language.collectAsState(initial = "")
     var pickingLanguage by remember { mutableStateOf(false) }
+    var stylingSubtitles by remember { mutableStateOf(false) }
     var whatsNew by remember { mutableStateOf(false) }
     var reporting by remember { mutableStateOf(false) }
     // The "Change" under a chat's grid lands here, on the size limits.
@@ -186,29 +190,18 @@ fun SettingsPage(state: ShellState, version: String = "") {
                 ) { on -> state.extras.prefs.update { it.copy(softwareDecoding = on) } }
 
                 Group(s.playerSubtitles)
-                Setting(s.subtitlesSize, s.settingsSubtitleSizeHint(subtitleStyle.size.label)) {
-                    val sizes = SubtitleSize.entries
-                    fun size(by: Int) {
-                        val next = sizes[(subtitleStyle.size.ordinal + by).coerceIn(0, sizes.lastIndex)]
-                        scope.launch { settings.setSubtitleStyle(subtitleStyle.copy(size = next)) }
-                    }
-                    Stepper(onLess = { size(-1) }, onMore = { size(1) })
+                // One row saying what is set; the preview and the three choices open over the page
+                // (SubtitleStyleDialog), as on the phone and the TV.
+                Setting(
+                    s.settingsSubtitleStyle,
+                    listOf(
+                        subtitleStyle.size.label,
+                        if (subtitleStyle.box) s.settingsSubtitleStyleBox else s.settingsSubtitleStyleNoBox,
+                        subtitleStyle.position.label,
+                    ).joinToString("  ·  "),
+                ) {
+                    OutlinedButton(onClick = { stylingSubtitles = true }) { Text(s.commonChange) }
                 }
-                Toggle(s.subtitlesBox, s.settingsSubtitleBoxDetail, subtitleStyle.box) { on ->
-                    scope.launch { settings.setSubtitleStyle(subtitleStyle.copy(box = on)) }
-                }
-                Setting(s.subtitlesPosition, s.settingsSubtitlePositionHint) {
-                    SingleChoiceSegmentedButtonRow {
-                        SubtitlePosition.entries.forEachIndexed { index, place ->
-                            SegmentedButton(
-                                selected = subtitleStyle.position == place,
-                                onClick = { scope.launch { settings.setSubtitleStyle(subtitleStyle.copy(position = place)) } },
-                                shape = SegmentedButtonDefaults.itemShape(index, SubtitlePosition.entries.size),
-                            ) { Text(place.label) }
-                        }
-                    }
-                }
-                SubtitlePreview(subtitleStyle, Modifier.padding(vertical = 6.dp))
 
                 OnlineSubtitlesGroup()
                 OnlineMetadataGroup()
@@ -242,12 +235,19 @@ fun SettingsPage(state: ShellState, version: String = "") {
                     )
                 }
                 }
-                if (minSize != SizeFilter.FLOOR || maxSize != SizeFilter.CEILING) {
-                    Setting(s.settingsSizeLimitsReset, s.settingsSizeLimitsDetail) {
+                // Reset means the defaults, as on the phone and TV: offering it at the defaults and
+                // then clearing both ends contradicted the 50 MB the filter was still applying.
+                if (!SizeFilter.isDefault(minSize, maxSize)) {
+                    Setting(
+                        s.settingsSizeLimitsReset,
+                        s.settingsSizeLimitsResetDetail(SizeFilter.describe(SizeFilter.DEFAULT_MIN, SizeFilter.DEFAULT_MAX)),
+                    ) {
                         OutlinedButton(onClick = {
                             scope.launch {
-                                settings.setMinSizeBytes(SizeFilter.FLOOR)
-                                settings.setMaxSizeBytes(SizeFilter.CEILING)
+                                // Widen first, so the clamp that stops the ends crossing cannot
+                                // refuse the new floor on its way past the old ceiling.
+                                settings.setMaxSizeBytes(SizeFilter.DEFAULT_MAX)
+                                settings.setMinSizeBytes(SizeFilter.DEFAULT_MIN)
                             }
                         }) { Text(s.commonReset) }
                     }
@@ -384,6 +384,7 @@ fun SettingsPage(state: ShellState, version: String = "") {
     if (confirmSignOut) SignOutDialog(state, onDismiss = { confirmSignOut = false })
     if (supporting) SupportPopup(onClose = { supporting = false })
     if (pickingLanguage) LanguagePopup(settings, onClose = { pickingLanguage = false })
+    if (stylingSubtitles) SubtitleStyleDialog(settings, subtitleStyle, onClose = { stylingSubtitles = false })
     if (whatsNew) WhatsNewPopup(onClose = { whatsNew = false })
     if (reporting) FeedbackPopup(onClose = { reporting = false })
     if (confirmClearWatched) {
@@ -474,4 +475,47 @@ internal fun Stepper(onLess: () -> Unit, onMore: () -> Unit) {
         IconButton(onClick = onLess) { Icon(TmIcons.Remove, contentDescription = s.commonLess) }
         IconButton(onClick = onMore) { Icon(Icons.Filled.Add, contentDescription = s.commonMore) }
     }
+}
+
+/**
+ * Settings, Subtitle style, on the desktop: the preview at the top, where each change shows the
+ * moment it is made, and the size, the background box and the position under it. Each is saved as
+ * it changes; Close leaves.
+ */
+@Composable
+private fun SubtitleStyleDialog(settings: SettingsStore, subtitleStyle: SubtitleStyle, onClose: () -> Unit) {
+    val s = LocalStrings.current
+    val scope = rememberCoroutineScope()
+    TmAlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(s.settingsSubtitleStyle) },
+        text = {
+            Column(Modifier.widthIn(max = 520.dp)) {
+                SubtitlePreview(subtitleStyle, Modifier.padding(bottom = 8.dp))
+                Setting(s.subtitlesSize, s.settingsSubtitleSizeHint(subtitleStyle.size.label)) {
+                    val sizes = SubtitleSize.entries
+                    fun size(by: Int) {
+                        val next = sizes[(subtitleStyle.size.ordinal + by).coerceIn(0, sizes.lastIndex)]
+                        scope.launch { settings.setSubtitleStyle(subtitleStyle.copy(size = next)) }
+                    }
+                    Stepper(onLess = { size(-1) }, onMore = { size(1) })
+                }
+                Toggle(s.subtitlesBox, s.settingsSubtitleBoxDetail, subtitleStyle.box) { on ->
+                    scope.launch { settings.setSubtitleStyle(subtitleStyle.copy(box = on)) }
+                }
+                Setting(s.subtitlesPosition, s.settingsSubtitlePositionHint) {
+                    SingleChoiceSegmentedButtonRow {
+                        SubtitlePosition.entries.forEachIndexed { index, place ->
+                            SegmentedButton(
+                                selected = subtitleStyle.position == place,
+                                onClick = { scope.launch { settings.setSubtitleStyle(subtitleStyle.copy(position = place)) } },
+                                shape = SegmentedButtonDefaults.itemShape(index, SubtitlePosition.entries.size),
+                            ) { Text(place.label) }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text(s.commonClose) } },
+    )
 }

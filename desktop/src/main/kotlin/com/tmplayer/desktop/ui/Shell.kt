@@ -273,7 +273,7 @@ internal fun Sidebar(
     folders: List<ChatFolderSummary> = Td.folders.collectAsState().value,
 ) {
     val s = LocalStrings.current
-    val groups = rememberNavGroups(state.settings, state.currentGroup)
+    val groups = rememberNavGroups(state.currentGroup)
     val sections = remember(folders) { browseSections(folders, withWatched = true) }
     val inFlight = rememberDownloadsInFlight()
     Column(Modifier.width(240.dp).fillMaxHeight().padding(12.dp)) {
@@ -282,7 +282,7 @@ internal fun Sidebar(
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             navGroups(sections).forEach { (group, entries) ->
                 val open = groups.isOpen(group)
-                NavGroupHeading(
+                if (group.headed) NavGroupHeading(
                     group = group,
                     open = open,
                     toggleable = groups.canToggle(group),

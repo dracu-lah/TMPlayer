@@ -218,6 +218,34 @@ class MediaNameTest {
     }
 
     @Test
+    fun `of several copies of the next episode, the one most like this copy plays`() {
+        data class File(val name: String, val size: Long)
+        val mb = 1024L * 1024
+        val same = "Family_Full_House_With_Rohit_Sharma_S01E02_Mumbai_Punters_vs_Team.mp4"
+        // As posted: the biggest first, which is the copy auto next used to pick.
+        val chat = listOf(File(same, 1_843 * mb), File(same, 599 * mb), File(same, 360 * mb))
+        val current = "Family_Full_House_With_Rohit_Sharma_S01E01_Mumbai_Punters_vs_Team.mp4"
+        assertEquals(360 * mb, MediaName.nextEpisode(current, chat, 354 * mb, { it.size }) { it.name }?.size)
+        assertEquals(599 * mb, MediaName.nextEpisode(current, chat, 599 * mb, { it.size }) { it.name }?.size)
+
+        // A quality marker in the name beats a nearer size.
+        val tagged = listOf(File("Show.S01E03.1080p.x265.mkv", 400 * mb), File("Show.S01E03.720p.mkv", 700 * mb))
+        assertEquals(400 * mb, MediaName.nextEpisode("Show.S01E02.1080p.x265.mkv", tagged, 900 * mb, { it.size }) { it.name }?.size)
+        assertEquals(700 * mb, MediaName.nextEpisode("Show.S01E02.720p.mkv", tagged, 300 * mb, { it.size }) { it.name }?.size)
+    }
+
+    @Test
+    fun `a bare E number reads only the lenient way`() {
+        assertNull(MediaName.parse("Family Full House With Rohit Sharma \u2014 E5. Vlog.mp4").episode)
+        val loose = MediaName.looseEpisode("Family Full House With Rohit Sharma \u2014 E5. Vlog.mp4")!!
+        assertEquals("Family Full House With Rohit Sharma", loose.title)
+        assertEquals(5, loose.episode)
+        assertNull(loose.season)
+        assertNull(MediaName.looseEpisode("E05.mkv"))
+        assertNull(MediaName.looseEpisode("City.Archive.1999.1080p.mkv"))
+    }
+
+    @Test
     fun `the end of a season does not roll into the next one`() {
         val chat = listOf("Creative.Course.S02E08.1080p.mkv", "Creative.Course.S03E01.1080p.mkv")
         assertNull(MediaName.nextEpisode("Creative.Course.S02E08.1080p.mkv", chat) { it })

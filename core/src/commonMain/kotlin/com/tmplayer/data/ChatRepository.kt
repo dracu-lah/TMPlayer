@@ -140,6 +140,10 @@ data class ChatSync(val chats: List<ChatSummary>, val failure: String? = null) {
     val complete: Boolean get() = failure == null
 }
 
+/** TDLib's answer to `loadChats` once every chat in the list is already local: code 404. */
+internal fun isAllLoaded(code: Int, message: String): Boolean =
+    code == 404 || message.contains("404")
+
 /** One page of media, plus the cursors needed to ask for the next one. */
 data class MediaPage(
     val items: List<MediaItem>,
@@ -188,8 +192,10 @@ class ChatRepository(private val td: TdlClient) {
             if (result is TdlResult.Failure) {
                 // 404 is TDLib's documented "everything is already local". Everything else is a
                 // real failure and must be reported, or a dropped connection produces a short list
-                // that the screen presents as the whole library.
-                if (!result.message.contains("404")) failure = result.message
+                // that the screen presents as the whole library. The 404 is in the code: the
+                // message is "Not Found", so matching the text took every sync for a failed one,
+                // and the list was never written down for the next launch.
+                if (!isAllLoaded(result.code, result.message)) failure = result.message
                 break
             }
             loaded += CHAT_PAGE
@@ -398,13 +404,15 @@ class ChatRepository(private val td: TdlClient) {
                 animationDone = cursors.animationDone || animationResult?.done ?: true,
             )
             val hidden = listOfNotNull(videoResult, documentResult, animationResult).sumOf { it.selfDestructing }
+            // "More like this" offers only titles the viewer has; this is how it knows them.
+            com.tmplayer.online.KnownMedia.note(items)
             MediaPage(items, next, next.allDone, hidden)
         }
         }
 
     /**
      * The newest videos across every chat in the main list, newest first, for Home's "Recently
-     * added across chats" row.
+     * added in starred chats" row, which keeps the starred chats' share of them.
      *
      * One `searchMessages` per filter rather than a page per chat: Telegram answers across the
      * whole account in a single round trip, which is the only way this row can be cheap on a
@@ -426,6 +434,7 @@ class ChatRepository(private val td: TdlClient) {
                 MediaMapper.screen(messages, chatProtected).items
             }.distinctBy { it.id }
                 .sortedWith(compareByDescending<MediaItem> { it.date }.thenByDescending { it.messageId })
+                .also { com.tmplayer.online.KnownMedia.note(it) }
         }
     }
 

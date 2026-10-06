@@ -1,11 +1,7 @@
 package com.tmplayer.ui.theme
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.zIndex
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.LocalContentColor
@@ -54,9 +50,8 @@ object Tv {
     val SafeV = 27.dp
 
     /**
-     * Room a lazy list leaves around its tiles for [focusScale]: a list clips what it draws to its
-     * own bounds, so a tile against its edge would lose the grown part of its border. Enough for
-     * a tile up to 320dp across.
+     * Room a lazy list leaves around its tiles: a list clips what it draws to its own bounds, so a
+     * tile against its edge would lose its focus border and shadow.
      */
     val FocusClearance = 8.dp
 }
@@ -127,27 +122,6 @@ fun Modifier.focusRing(focused: Boolean, shape: Shape): Modifier =
     } else {
         this
     }
-
-/** How much a television tile grows under the remote: Android TV's own card figure. */
-const val TV_FOCUS_SCALE = 1.05f
-
-/**
- * Grows a television tile to [TV_FOCUS_SCALE] while the remote is on it, beside its focus border.
- *
- * Safe at the screen's edge because [Tv.SafeH] is wider than what a tile gains: a 210dp tile grows
- * about 5dp a side, inside the 48dp margin and the 16dp gap to its neighbour. The list holding it
- * leaves [Tv.FocusClearance] around its tiles so the grown edge is not clipped. Raised above the
- * tiles beside it while it is grown, so its border is never drawn under theirs.
- */
-@Composable
-fun Modifier.focusScale(focused: Boolean): Modifier {
-    val scale by animateFloatAsState(
-        targetValue = if (focused) TV_FOCUS_SCALE else 1f,
-        animationSpec = tween(140),
-        label = "focusScale",
-    )
-    return zIndex(if (focused) 1f else 0f).scale(scale)
-}
 
 /** The app's palette as complete Material 3 schemes, one per mode. */
 object TmSchemes {

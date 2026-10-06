@@ -146,13 +146,6 @@ fun ChatsPage(
                 }
             },
         )
-        if (!favouritesOnly) {
-            SearchScopeToggle(
-                scope = searchScope,
-                onChange = { searchScope = it },
-                modifier = Modifier.padding(start = 24.dp, bottom = 8.dp),
-            )
-        }
         if (!favouritesOnly && showSections && !allVideos) {
             LazyRow(
                 Modifier.fillMaxWidth().padding(horizontal = 24.dp),

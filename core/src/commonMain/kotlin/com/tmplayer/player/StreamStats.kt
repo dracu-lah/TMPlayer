@@ -99,14 +99,20 @@ object StreamStats {
 /**
  * Turns a series of "total bytes so far" readings into a download speed.
  *
- * Exponentially smoothed, because a raw delta between two TDLib updates swings wildly enough to
- * make the figure on screen unreadable. Resets rather than reporting nonsense when the byte count
- * goes backwards, which happens on a seek as the download window moves.
+ * Measured over a span of at least [MIN_SPAN_MS] and then exponentially smoothed, because a raw
+ * delta between two TDLib updates a few milliseconds apart swings wildly enough to make the
+ * figure on screen unreadable. Two kinds of reading are not a speed and only move the baseline:
+ * the count going backwards (a seek moved the download window), and a jump far larger than any
+ * connection could carry in the time since the last reading, which is bytes that were already on
+ * the disk (a cached run) joining the prefix. The second is what once put "4,004.1 MB/s" on the
+ * television's chip at the start of a video half in the watch cache.
  */
 class SpeedMeter(private val smoothing: Double = 0.3) {
 
     private var lastBytes = -1L
     private var lastAtMs = 0L
+    private var baseBytes = 0L
+    private var baseAtMs = 0L
     private var smoothed = 0.0
 
     val bytesPerSec: Long get() = smoothed.roundToLong()
@@ -117,22 +123,51 @@ class SpeedMeter(private val smoothing: Double = 0.3) {
         smoothed = 0.0
     }
 
-    /** Feed a cumulative byte count and the time it was observed; returns the smoothed speed. */
-    fun sample(totalBytes: Long, atMs: Long): Long {
-        val previousBytes = lastBytes
-        val previousAt = lastAtMs
+    private fun rebase(totalBytes: Long, atMs: Long) {
         lastBytes = totalBytes
         lastAtMs = atMs
+        baseBytes = totalBytes
+        baseAtMs = atMs
+    }
 
-        if (previousBytes < 0 || atMs <= previousAt) return bytesPerSec
-        if (totalBytes < previousBytes) {
+    /** Feed a cumulative byte count and the time it was observed; returns the smoothed speed. */
+    fun sample(totalBytes: Long, atMs: Long): Long {
+        if (lastBytes < 0) {
+            rebase(totalBytes, atMs)
+            return bytesPerSec
+        }
+        if (atMs <= lastAtMs) return bytesPerSec
+        if (totalBytes < lastBytes) {
             // The window jumped backwards (a seek): the old baseline says nothing about now.
             smoothed = 0.0
+            rebase(totalBytes, atMs)
             return 0
         }
-
-        val instant = (totalBytes - previousBytes) * 1000.0 / (atMs - previousAt)
+        val step = totalBytes - lastBytes
+        if (step > MAX_PLAUSIBLE_BYTES_PER_SEC * (atMs - lastAtMs) / 1000 + JUMP_SLACK_BYTES) {
+            // Bytes that were already here joined the prefix; nothing was fetched that fast.
+            rebase(totalBytes, atMs)
+            return bytesPerSec
+        }
+        lastBytes = totalBytes
+        lastAtMs = atMs
+        val span = atMs - baseAtMs
+        if (span < MIN_SPAN_MS) return bytesPerSec
+        val instant = (totalBytes - baseBytes) * 1000.0 / span
         smoothed = if (smoothed <= 0.0) instant else smoothed + smoothing * (instant - smoothed)
+        baseBytes = totalBytes
+        baseAtMs = atMs
         return bytesPerSec
+    }
+
+    companion object {
+        /** The shortest stretch a reading is taken over; shorter deltas are mostly timing noise. */
+        const val MIN_SPAN_MS = 500L
+
+        /** Faster than any Telegram download seen; a step beyond it was already on the disk. */
+        const val MAX_PLAUSIBLE_BYTES_PER_SEC = 64L * 1024 * 1024
+
+        /** Room for one late TDLib update carrying a few chunks at once. */
+        const val JUMP_SLACK_BYTES = 2L * 1024 * 1024
     }
 }

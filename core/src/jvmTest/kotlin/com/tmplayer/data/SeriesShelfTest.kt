@@ -11,12 +11,12 @@ class SeriesShelfTest {
     private var nextId = 1L
 
     /** A video as a chat lists it; [date] counts up so later files are newer. */
-    private fun video(fileName: String, caption: String = "", date: Int = nextId.toInt()) = MediaItem(
+    private fun video(fileName: String, caption: String = "", date: Int = nextId.toInt(), size: Long = 1) = MediaItem(
         chatId = 7,
         messageId = nextId++,
         fileId = 0,
         title = fileName.ifBlank { caption.lineSequence().firstOrNull().orEmpty() },
-        sizeBytes = 1,
+        sizeBytes = size,
         durationSec = 60,
         mimeType = "video/mp4",
         thumbnailFileId = 0,
@@ -85,18 +85,123 @@ class SeriesShelfTest {
     }
 
     @Test
-    fun `two copies of one episode sit together, the newer first`() {
+    fun `two copies of one episode are one episode, the newer copy first`() {
         val items = listOf(
             video("Studio.Sessions.S01E01.720p.mkv", date = 10),
             video("Studio.Sessions.S01E01.1080p.mkv", date = 20),
             video("Studio.Sessions.S01E02.1080p.mkv", date = 15),
         )
         val show = shows(SeriesShelf.arrange(items)).single()
+        assertEquals(2, show.episodeCount)
+        assertEquals(listOf("Studio.Sessions.S01E01.1080p.mkv", "Studio.Sessions.S01E02.1080p.mkv"), show.episodes.map { it.item.fileName })
         assertEquals(
-            listOf("Studio.Sessions.S01E01.1080p.mkv", "Studio.Sessions.S01E01.720p.mkv", "Studio.Sessions.S01E02.1080p.mkv"),
-            show.episodes.map { it.item.fileName },
+            listOf("Studio.Sessions.S01E01.1080p.mkv", "Studio.Sessions.S01E01.720p.mkv"),
+            show.episodes.first().copies.map { it.fileName },
         )
         assertEquals("Studio.Sessions.S01E01.1080p.mkv", show.cover.fileName)
+    }
+
+    @Test
+    fun `copies of one episode alone are not a show`() {
+        val items = listOf(
+            video("Studio.Sessions.S01E01.720p.mkv"),
+            video("Studio.Sessions.S01E01.1080p.mkv"),
+        )
+        assertTrue(shows(SeriesShelf.arrange(items)).isEmpty())
+    }
+
+    // ---- CP27 on a real chat: "Family Full House", every episode in three sizes ----------------
+
+    private val mb = 1024L * 1024
+
+    /** Episodes 1 to 4 at 354 MB, 599 MB and 1.8 GB, all under the same file name, as posted. */
+    private fun familyFullHouse(): List<MediaItem> = (1..4).flatMap { n ->
+        val name = "Family_Full_House_With_Rohit_Sharma_S01E0${n}_Mumbai_Punters_vs_Team.mp4"
+        listOf(
+            video(name, size = 354 * mb + n),
+            video(name, size = 599 * mb + n),
+            video(name, size = 1_843 * mb + n),
+        )
+    }.reversed()
+
+    private fun family(entries: List<ShelfEntry>) = shows(entries).single { it.key.startsWith("family full house") }
+
+    @Test
+    fun `every size of an episode is one row, and the count is of episodes`() {
+        val show = family(SeriesShelf.arrange(familyFullHouse()))
+        assertEquals(4, show.episodeCount)
+        assertEquals(listOf("S01E01", "S01E02", "S01E03", "S01E04"), show.episodes.map { it.code })
+        assertTrue(show.episodes.all { it.copies.size == 3 })
+        assertEquals(listOf(4), show.seasons.map { it.episodes.size })
+    }
+
+    @Test
+    fun `one copy watched marks the episode, and up next is the next episode in the same size`() {
+        val items = familyFullHouse()
+        val show = family(SeriesShelf.arrange(items))
+        val watchedCopy = show.episodes.first().copies.single { it.sizeBytes / mb == 354L }
+        val p = SeriesShelf.progress(show, { it.id == watchedCopy.id }, { 0f })
+        assertEquals(1, p.watched)
+        assertEquals(4, p.total)
+        assertEquals("S01E02", p.next?.code)
+        assertEquals(354L, p.next!!.item.sizeBytes / mb)
+        assertEquals(watchedCopy.id, p.like?.id)
+    }
+
+    @Test
+    fun `a copy partway through is the one to carry on with`() {
+        val show = family(SeriesShelf.arrange(familyFullHouse()))
+        val e2 = show.episodes[1]
+        val big = e2.copies.single { it.sizeBytes / mb == 1_843L }
+        val p = SeriesShelf.progress(show, { false }, { if (it.id == big.id) 0.3f else 0f })
+        assertEquals("S01E02", p.next?.code)
+        assertEquals(big.id, p.next!!.item.id)
+        // And the episode after it is offered in that size too.
+        assertEquals(1_843L, SeriesShelf.pick(show.episodes[2], { false }, { 0f }, p.like).sizeBytes / mb)
+    }
+
+    @Test
+    fun `episode 5 named in a bare E5 joins the show the chat established`() {
+        val items = familyFullHouse() + video("Family Full House With Rohit Sharma \u2014 E5. Vlog.mp4", size = 475 * mb)
+        val entries = SeriesShelf.arrange(items)
+        val show = family(entries)
+        assertEquals(5, show.episodeCount)
+        assertEquals("S01E05", show.episodes.last().code)
+        assertTrue(files(entries).isEmpty())
+        assertEquals("Family Full House With Rohit Sharma", show.title)
+    }
+
+    @Test
+    fun `the caption shapes episode 5 arrives in all join the show`() {
+        val shapes = listOf(
+            video("", caption = "Family Full House Episode 5\nJoin the channel"),
+            video("", caption = "Family Full House With Rohit Sharma E05"),
+            video("", caption = "Family Full House With Rohit Sharma Ep 5"),
+            video("Family Full House With Rohit Sharma.mp4", caption = "\u0D2B\u0D3E\u0D2E\u0D3F\u0D32\u0D3F \u0D2B\u0D41\u0D7E \u0D39\u0D57\u0D38\u0D4D Episode 5"),
+            video("Family Full House With Rohit Sharma.mp4", caption = "Episode 5"),
+            video("Family Full House With Rohit Sharma Malayalam E05 720p.mkv"),
+        )
+        for (shape in shapes) {
+            val entries = SeriesShelf.arrange(familyFullHouse() + shape)
+            val show = family(entries)
+            assertEquals("${shape.fileName} | ${shape.caption}", 5, show.episodeCount)
+            assertEquals(shape.id, show.episodes.last().item.id)
+            assertTrue(files(entries).isEmpty())
+        }
+    }
+
+    @Test
+    fun `a bare E number without an established show stays a file, and one word never joins`() {
+        val items = listOf(
+            video("Harbour E05.mkv"),
+            video("Harbour Notes S01E01.mkv"),
+            video("Harbour Notes S01E02.mkv"),
+            video("Harbour Ep 3.mkv"),
+            video("Kitchen Journal E04.mkv"),
+        )
+        val entries = SeriesShelf.arrange(items)
+        assertEquals(listOf(1, 2), shows(entries).single().episodes.map { it.episode })
+        assertEquals(listOf("Harbour E05.mkv", "Harbour Ep 3.mkv", "Kitchen Journal E04.mkv"), files(entries))
     }
 
     @Test
@@ -236,5 +341,26 @@ class SeriesShelfTest {
         val show = shows(SeriesShelf.arrange(items)).single()
         assertEquals("Sky Garden", show.title)
         assertEquals(listOf(1, 2), show.episodes.map { it.episode })
+    }
+
+    @Test
+    fun `copies of one film fold into one tile that knows every version`() {
+        val small = video("Night.Train.2019.720p.WEB.mkv", date = 10)
+        val large = video("Night Train (2019) 1080p x265.mkv", date = 20)
+        val other = video("Mountains.2021.1080p.mkv", date = 5)
+        val entries = SeriesShelf.arrange(listOf(small, other, large))
+        val tiles = entries.filterIsInstance<ShelfEntry.File>().map { it.item }
+        assertEquals(2, tiles.size)
+        val film = tiles.first()
+        assertEquals(listOf(large.id, small.id), film.versions.map { it.id })
+        assertEquals("Night Train (2019)", SeriesShelf.filmTitle(film))
+        assertTrue(tiles[1].versions.isEmpty())
+    }
+
+    @Test
+    fun `plain names with no year or quality are never taken for copies`() {
+        val entries = SeriesShelf.arrange(listOf(video("Lecture.mp4"), video("Lecture.mp4")))
+        assertEquals(2, entries.size)
+        assertTrue(entries.filterIsInstance<ShelfEntry.File>().all { it.item.versions.isEmpty() })
     }
 }

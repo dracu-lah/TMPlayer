@@ -1,6 +1,7 @@
 package com.tmplayer.online
 
 import com.tmplayer.data.MediaName
+import com.tmplayer.data.ParsedName
 import com.tmplayer.data.valueOrNull
 import com.tmplayer.i18n.L
 import com.tmplayer.i18n.Translator
@@ -19,11 +20,17 @@ import java.util.Locale
  * Subtitles from the internet, for a video that has none in the language wanted: the one place
  * phone, TV and desktop all go through, so the rules below hold the same everywhere.
  *
- * - **One app key, the viewer's own account.** The key is TMPlayer's, injected at build time
- *   (`OPENSUBTITLES_API_KEY`); a build without one has [inBuild] false and shows nothing of this.
- *   OpenSubtitles' terms forbid asking viewers for keys of their own. Downloads count against the
- *   viewer's free account, signed into under Settings, Online subtitles, and the quota they report
- *   ([OnlineAccount.remaining], [OnlineAccount.resetAt]) is respected before asking.
+ * - **One app key, an account if the viewer wants one.** The key is TMPlayer's, injected at build
+ *   time (`OPENSUBTITLES_API_KEY`); a build without one has [inBuild] false and shows nothing of
+ *   this. OpenSubtitles' terms forbid asking viewers for keys of their own.
+ * - **Downloads work without signing in.** A download with only the app key (no Authorization)
+ *   is answered like a signed in one, against an allowance of its own: 100 a day when this was
+ *   tried, whether counted per app key or per address OpenSubtitles does not say. What it reports
+ *   ([OnlineAccount.anonRemaining], [OnlineAccount.anonResetAt]) is respected before asking, and
+ *   once it is spent ([SubtitleNotice.FreeQuotaUsed]) the lists say when it renews and that a sign
+ *   in brings the viewer's own quota. A viewer signed in under Settings, Online subtitles downloads
+ *   with their token against their own quota ([OnlineAccount.remaining], [OnlineAccount.resetAt]),
+ *   exactly as before.
  * - **Search** by the file hash first, then by the parsed title (with season and episode). Machine
  *   and AI translations are left out unless the viewer has switched them on.
  * - **Never in the way.** A refused key turns the provider off with a sentence saying so
@@ -123,6 +130,7 @@ class OnlineSubtitles(
         a.signedIn && a.quotaUsed(now()) -> OnlineStatus.QuotaUsed(a.username, a.resetAt.takeIf { it > 0 })
         a.signedIn -> OnlineStatus.SignedIn(a.username, remainingNow(a), a.allowed)
         a.expired -> OnlineStatus.Expired(a.username)
+        a.anonQuotaUsed(now()) -> OnlineStatus.FreeQuotaUsed(a.anonResetAt.takeIf { it > 0 })
         else -> OnlineStatus.SignedOut
     }
 
@@ -164,6 +172,12 @@ class OnlineSubtitles(
         var hits = emptyList<SubtitleHit>()
         var fromCache = false
         var problem: SubtitleNotice? = null
+        // A search that matches nothing of this video can still answer, with other people's
+        // films: a hash nobody has seen brings back whatever is recent in the languages asked for,
+        // and a name with a year in it brings back every release of that year. Only an answer
+        // with something in it for this video ends the search; anything else is kept, lets the
+        // next query have its turn, and is judged on its words with the rest below.
+        fun settles(found: List<SubtitleHit>): Boolean = relevant(found, parsed).isNotEmpty()
         if (keyRefused(a)) {
             problem = SubtitleNotice.Unavailable
         } else {
@@ -171,17 +185,16 @@ class OnlineSubtitles(
                 val cached = cache.search(key)
                 if (cached != null) {
                     if (cached.isEmpty()) continue
-                    hits = cached
+                    hits = (hits + cached).distinctBy { it.id }
                     fromCache = true
-                    break
+                    if (settles(cached)) break
+                    continue
                 }
                 when (val reply = withBackoff { api.search(query, a.host) }) {
                     is Reply.Ok -> {
                         cache.putSearch(key, reply.value)
-                        if (reply.value.isNotEmpty()) {
-                            hits = reply.value
-                            break
-                        }
+                        hits = (hits + reply.value).distinctBy { it.id }
+                        if (settles(reply.value)) break
                     }
                     Reply.Forbidden, Reply.Unauthorized -> {
                         refuseKey()
@@ -208,7 +221,7 @@ class OnlineSubtitles(
         // hand over a file today.
         var subdlProblem: SubtitleNotice? = null
         val fallback = a.subdlKey.isNotBlank() && !a.subdlRefused && name.isNotBlank() &&
-            (hits.isEmpty() || problem != null || a.quotaUsed(now()))
+            (hits.isEmpty() || problem != null || a.quotaUsed(now()) || a.anonQuotaUsed(now()))
         if (fallback) {
             val key = "subdl|${name.lowercase(Locale.ROOT)}|${parsed.season}|${parsed.episode}$tail"
             val cached = cache.search(key)
@@ -231,8 +244,9 @@ class OnlineSubtitles(
         }
 
         val order = languages.withIndex().associate { (i, code) -> code to i }
-        val sorted = hits.sortedWith(
+        val sorted = relevant(hits, parsed).sortedWith(
             compareByDescending<SubtitleHit> { it.hashMatch }
+                .thenByDescending { relevance(it, parsed) }
                 .thenBy { order[iso1(it.language)] ?: order.size }
                 .thenBy { it.provider.ordinal }
                 .thenByDescending { it.downloads },
@@ -247,12 +261,19 @@ class OnlineSubtitles(
         return SearchResult(sorted, notice, fromCache)
     }
 
+    /**
+     * The line above OpenSubtitles results: a spent quota, the viewer's or the free one, or a sign
+     * in that ran out. An expired sign in does not block anything, downloads carry on without an
+     * account meanwhile; [downloadBlock] is what does.
+     */
+    private fun accountNotice(a: OnlineAccount): SubtitleNotice? =
+        downloadBlock(a) ?: SubtitleNotice.SignInExpired.takeIf { !a.signedIn && a.expired }
+
     /** What stands between the viewer and a download from OpenSubtitles, before asking. */
-    private fun accountNotice(a: OnlineAccount): SubtitleNotice? = when {
-        a.signedIn && a.quotaUsed(now()) -> SubtitleNotice.QuotaUsed(a.resetAt.takeIf { it > 0 })
-        a.signedIn -> null
-        a.expired -> SubtitleNotice.SignInExpired
-        else -> SubtitleNotice.SignInToDownload
+    private fun downloadBlock(a: OnlineAccount): SubtitleNotice? = when {
+        a.quotaUsed(now()) -> SubtitleNotice.QuotaUsed(a.resetAt.takeIf { it > 0 })
+        a.anonQuotaUsed(now()) -> SubtitleNotice.FreeQuotaUsed(a.anonResetAt.takeIf { it > 0 })
+        else -> null
     }
 
     // ---- download --------------------------------------------------------------------------
@@ -271,21 +292,20 @@ class OnlineSubtitles(
 
     /**
      * Why [hit] cannot be downloaded right now, or null when it can: kept on this device already,
-     * from SubDL, or from OpenSubtitles with a live sign in, downloads left and a key accepted.
+     * from SubDL, or from OpenSubtitles with downloads left (the account's, or the free ones
+     * without one) and a key accepted.
      * The lists grey out what this names, and say why above them.
      */
     fun blockedFor(hit: SubtitleHit, a: OnlineAccount = store.now): SubtitleNotice? {
         if (hit.provider != SubtitleProvider.OpenSubtitles || cache.file(hit.provider, hit.id) != null) return null
         if (keyRefused(a)) return SubtitleNotice.Unavailable
-        return accountNotice(a)
+        return downloadBlock(a)
     }
 
     private suspend fun downloadOpenSubtitles(hit: SubtitleHit): DownloadResult {
         val a = store.now
         if (keyRefused(a)) return DownloadResult.Failed(SubtitleNotice.Unavailable)
-        if (!a.signedIn) {
-            return DownloadResult.Failed(if (a.expired) SubtitleNotice.SignInExpired else SubtitleNotice.SignInToDownload)
-        }
+        if (!a.signedIn) return downloadAnonymously(hit, a)
         if (a.quotaUsed(now())) return DownloadResult.Failed(SubtitleNotice.QuotaUsed(a.resetAt.takeIf { it > 0 }))
         return when (val reply = withBackoff { api.download(hit.id, a.token, a.host) }) {
             is Reply.Ok -> {
@@ -319,6 +339,45 @@ class OnlineSubtitles(
         }
     }
 
+    /**
+     * The same download with the app key alone, against the allowance OpenSubtitles gives without
+     * an account. Its figures are kept apart from the account's, and a spent allowance says when it
+     * renews and that signing in brings the viewer's own.
+     */
+    private suspend fun downloadAnonymously(hit: SubtitleHit, a: OnlineAccount): DownloadResult {
+        if (a.anonQuotaUsed(now())) return DownloadResult.Failed(SubtitleNotice.FreeQuotaUsed(a.anonResetAt.takeIf { it > 0 }))
+        return when (val reply = withBackoff { api.download(hit.id, null, OpenSubtitlesApi.DEFAULT_HOST) }) {
+            is Reply.Ok -> {
+                val link = reply.value
+                store.update {
+                    val remaining = if (link.remaining >= 0) link.remaining else it.anonRemaining
+                    it.copy(
+                        anonRemaining = remaining,
+                        // A spent allowance with no time given is tried again a day later rather than never.
+                        anonResetAt = link.resetAt ?: if (remaining == 0) now() + SubtitleCache.DAY_MS else it.anonResetAt,
+                    )
+                }
+                when (val body = api.fetch(link.url)) {
+                    is Reply.Ok -> save(hit, SubtitleText.from(body.value, link.fileName.ifBlank { hit.fileName }))
+                    else -> DownloadResult.Failed(SubtitleNotice.Offline)
+                }
+            }
+            is Reply.Quota -> {
+                val reset = reply.resetAt ?: (now() + SubtitleCache.DAY_MS)
+                store.update { it.copy(anonRemaining = 0, anonResetAt = reset) }
+                DownloadResult.Failed(SubtitleNotice.FreeQuotaUsed(reset))
+            }
+            // OpenSubtitles asking for an account after all: signing in is the way through.
+            Reply.Unauthorized -> DownloadResult.Failed(SubtitleNotice.SignInToDownload)
+            Reply.Forbidden -> {
+                refuseKey()
+                DownloadResult.Failed(SubtitleNotice.Unavailable)
+            }
+            is Reply.Throttled -> DownloadResult.Failed(SubtitleNotice.Busy)
+            is Reply.Failed -> DownloadResult.Failed(SubtitleNotice.Offline)
+        }
+    }
+
     private suspend fun downloadSubdl(hit: SubtitleHit, target: SubtitleTarget?): DownloadResult {
         val parsed = target?.let { MediaName.parse(it.fileName, it.caption) }
         return when (val body = withBackoff { subdl.fetch(hit.id) }) {
@@ -334,6 +393,90 @@ class OnlineSubtitles(
     }
 
     // ---- shared ----------------------------------------------------------------------------
+
+    /**
+     * [hits] without the ones that are plainly another video: an OpenSubtitles release that
+     * shares not one word with the title. A hash match always stays, whatever it is called, and
+     * so does SubDL, which is asked for a film by name and answers with releases of that film.
+     *
+     * A title with no Latin letters in it ("ഹാർബർ നോട്ട്സ്") cannot be compared with release
+     * names, which are written in Latin letters, so nothing is dropped for one of those.
+     */
+    private fun relevant(hits: List<SubtitleHit>, parsed: ParsedName): List<SubtitleHit> {
+        val title = titleWords(parsed.title)
+        if (title.none { word -> word.any { it in 'a'..'z' } }) return hits
+        return hits.filter { hit ->
+            if (hit.hashMatch || hit.provider != SubtitleProvider.OpenSubtitles) return@filter true
+            val theirs = releaseTitle(hit)
+            if (hit.featureTitle.isBlank()) return@filter title.any { it in theirs }
+            // OpenSubtitles' own filing: the show or film has to be this one, word for word, or
+            // one name has to hold the other whole ("Thor & Loki Blood Brothers" stays, ranked
+            // under "Loki"; "Entourage" goes, whatever its release group is called).
+            title.any { it in theirs } && (theirs.containsAll(title) || title.containsAll(theirs))
+        }
+    }
+
+    /**
+     * The words of the title a hit is for. OpenSubtitles' own filing ([SubtitleHit.featureTitle])
+     * when it gave one; otherwise the release name read the way a file name is ([MediaName.parse]),
+     * what comes before its episode code or year, without a release group. "Entourage.S1E04.DVDRip-LOKi"
+     * is Entourage, and "Season 1 whole (AC3.DVDRip.XviD-LOKi)" names no show at all.
+     */
+    private fun releaseTitle(hit: SubtitleHit): Set<String> {
+        if (hit.featureTitle.isNotBlank()) return titleWords(hit.featureTitle)
+        return buildSet {
+            listOf(hit.release, hit.fileName).filter { it.isNotBlank() }.forEach {
+                addAll(titleWords(MediaName.parse(it.replace(SUBTITLE_EXTENSION, "").replace(RELEASE_GROUP, ""), maxYear = 2099).title))
+            }
+        }
+    }
+
+    /**
+     * How well [hit] fits the video, for the order of the list after hash matches. First the
+     * release's own title ([releaseTitle]) against the video's: the share of the video's title
+     * words it carries, then how little else it carries, so "Thor & Loki Blood Brothers" sits
+     * under "Loki" when the video is Loki, and a title that is exactly the video's gets a bonus on
+     * top. Then the right episode and the right year; a wrong one counts against it, so
+     * "Show S01E03" sits under "Show S01E02" when the video is the second episode. The exact title
+     * with the right episode outranks everything but a hash match.
+     */
+    private fun relevance(hit: SubtitleHit, parsed: ParsedName): Int {
+        val title = titleWords(parsed.title)
+        val release = hit.release.ifBlank { hit.fileName }
+        val words = releaseTitle(hit)
+        var score = 0
+        if (title.isNotEmpty()) {
+            val shared = title.count { it in words }
+            score += 100 * shared / title.size
+            score += 50 * shared / (title + words).size
+            if (words == title) score += 40
+        }
+        val read = MediaName.parse(release, maxYear = 2099)
+        // OpenSubtitles' own season, episode and year first, the release name's where it gave none.
+        val theirs = read.copy(
+            season = hit.featureSeason ?: read.season,
+            episode = hit.featureEpisode ?: read.episode,
+            year = hit.featureYear ?: read.year,
+        )
+        if (parsed.episode != null && theirs.episode != null) {
+            val sameSeason = parsed.season == null || theirs.season == null || parsed.season == theirs.season
+            // A wrong episode weighs more than the exact title, so it sits under a release that names no episode.
+            score += if (sameSeason && parsed.episode == theirs.episode) 50 else -100
+        }
+        if (parsed.year != null && theirs.year != null) {
+            score += if (parsed.year == theirs.year) 20 else -20
+        }
+        return score
+    }
+
+    private fun wordsOf(text: String): Set<String> =
+        text.lowercase(Locale.ROOT).split(NOT_WORD).filter { it.isNotEmpty() }.toSet()
+
+    /** The title's words that say something: "the" and "of" are in every other release name. */
+    private fun titleWords(title: String): Set<String> {
+        val all = wordsOf(title)
+        return (all - FILLER).ifEmpty { all }
+    }
 
     /** The cache's size on the disk, for the Settings row. */
     fun cacheBytes(): Long = cache.bytes()
@@ -356,6 +499,17 @@ class OnlineSubtitles(
 
     companion object {
         private const val TAG = "OnlineSubtitles"
+
+        private val NOT_WORD = Regex("""[^\p{L}\p{N}]+""")
+
+        /** A release group: the word after the last dash, at the end or before a closing bracket. */
+        private val RELEASE_GROUP = Regex("""-[A-Za-z0-9]+(?=\s*(?:$|[)\]]))""")
+
+        /** A subtitle file's own extension, off before the release group is looked for. */
+        private val SUBTITLE_EXTENSION = Regex("""\.(srt|ass|ssa|vtt|sub|txt)$""", RegexOption.IGNORE_CASE)
+
+        /** Words too common in release names to say that a release is this video. */
+        private val FILLER = setOf("the", "a", "an", "of", "and", "in", "on", "to", "with")
 
         /** The shortest title OpenSubtitles accepts as a query. */
         internal const val MIN_QUERY = 3
@@ -424,4 +578,7 @@ sealed interface OnlineStatus {
     data class Expired(val username: String) : OnlineStatus
     data class SignedIn(val username: String, val remaining: Int, val allowed: Int) : OnlineStatus
     data class QuotaUsed(val username: String, val resetAt: Long?) : OnlineStatus
+
+    /** Not signed in, and the downloads allowed without an account are spent until [resetAt]. */
+    data class FreeQuotaUsed(val resetAt: Long?) : OnlineStatus
 }

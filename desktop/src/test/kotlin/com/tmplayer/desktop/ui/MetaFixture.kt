@@ -49,6 +49,8 @@ internal object MetaFixture {
             val body = when {
                 "search/movie" in url && "Big Buck Bunny" in url -> """{"results":[$BUNNY]}"""
                 "search/tv" in url && "Harbour Lights" in url -> """{"results":[$HARBOUR]}"""
+                "/movie/10378?" in url -> BUNNY_EXTRAS
+                "/tv/7002?" in url -> HARBOUR_EXTRAS
                 "/tv/7002/season/" in url -> """{"name":"The Storm","overview":"The storm reaches the harbour, and Mara has to choose between the boat and the house.","still_path":null}"""
                 else -> """{"results":[]}"""
             }
@@ -61,6 +63,24 @@ internal object MetaFixture {
         "render-bbb-wide.webp" to "promo_bbb_backdrop.webp",
         "render-harbour.webp" to "promo_harbour_poster.webp",
     )
+
+    /** The detail page's extras (facts, cast, trailer) for the two titles, as TMDB appends them. Made up but for Bunny's facts. */
+    private const val BUNNY_EXTRAS = """{"id":10378,"genres":[{"name":"Animation"},{"name":"Comedy"},{"name":"Family"}],"runtime":10,"vote_average":6.5,"vote_count":200,
+        "credits":{"cast":[],"crew":[{"name":"Sacha Goedegebure","job":"Director"}]},
+        "videos":{"results":[{"site":"YouTube","key":"YE7VzlLtp-4","type":"Trailer","official":true,"iso_639_1":"en","published_at":"2008-05-20"}]},
+        "release_dates":{"results":[{"iso_3166_1":"US","release_dates":[{"certification":"G","type":3}]}]},
+        "recommendations":{"results":[]},"similar":{"results":[]}}"""
+
+    private const val HARBOUR_EXTRAS = """{"id":7002,"genres":[{"name":"Drama"},{"name":"Documentary"}],"episode_run_time":[42],"number_of_seasons":2,"vote_average":7.9,"vote_count":340,
+        "created_by":[{"name":"Mara Lindqvist"}],
+        "aggregate_credits":{"cast":[
+          {"name":"Mara Lindqvist","total_episode_count":12,"profile_path":null,"roles":[{"character":"Herself","episode_count":12}]},
+          {"name":"Tomas Berg","total_episode_count":10,"profile_path":null,"roles":[{"character":"Harbour master","episode_count":10}]},
+          {"name":"Ines Varga","total_episode_count":8,"profile_path":null,"roles":[{"character":"Net mender","episode_count":8}]},
+          {"name":"Ole Strand","total_episode_count":6,"profile_path":null,"roles":[{"character":"Lighthouse keeper","episode_count":6}]}]},
+        "content_ratings":{"results":[{"iso_3166_1":"US","rating":"TV-PG"}]},
+        "videos":{"results":[{"site":"YouTube","key":"promoharbour","type":"Trailer","official":true,"iso_639_1":"en","published_at":"2024-02-01"}]},
+        "recommendations":{"results":[]},"similar":{"results":[]}}"""
 
     private const val BUNNY = """{"id":10378,"title":"Big Buck Bunny","original_title":"Big Buck Bunny","release_date":"2008-04-10",
         "overview":"A gentle giant of a rabbit wakes to a perfect spring morning, until three bored rodents start picking on the forest's smallest creatures. Patience runs out, and the bunny plans a comeback worthy of a cartoon.",

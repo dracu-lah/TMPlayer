@@ -11,7 +11,8 @@ import java.util.Properties
  *
  * [token] is the session OpenSubtitles hands out at sign in; the password is never kept. The
  * quota figures are the last ones OpenSubtitles reported, which is what "N of M downloads left
- * today" reads. [rejectedKey] is a fingerprint of an app key OpenSubtitles refused, so the feature
+ * today" reads. [anonRemaining] and [anonResetAt] are the same figures for downloads made without
+ * an account, kept apart so signing in or out never mixes the two. [rejectedKey] is a fingerprint of an app key OpenSubtitles refused, so the feature
  * stays off for that key and comes back by itself when an update brings another.
  */
 data class OnlineAccount(
@@ -28,11 +29,17 @@ data class OnlineAccount(
     val subdlRefused: Boolean = false,
     val rejectedKey: String = "",
     val rejectedAt: Long = 0,
+    /** Downloads left without an account, as the last anonymous download reported; -1 unknown. */
+    val anonRemaining: Int = -1,
+    val anonResetAt: Long = 0,
 ) {
     val signedIn: Boolean get() = token.isNotBlank()
 
     /** No downloads left until [resetAt], as far as the last answer said. */
     fun quotaUsed(now: Long): Boolean = signedIn && remaining == 0 && (resetAt == 0L || now < resetAt)
+
+    /** Not signed in, and the downloads OpenSubtitles allows without an account are spent until [anonResetAt]. */
+    fun anonQuotaUsed(now: Long): Boolean = !signedIn && anonRemaining == 0 && (anonResetAt == 0L || now < anonResetAt)
 }
 
 /** [OnlineAccount] kept in a small properties file in the app's private storage. */
@@ -71,6 +78,8 @@ class OnlineSubtitlesStore(private val file: File) {
             subdlRefused = s("subdl_refused") == "true",
             rejectedKey = s("rejected_key"),
             rejectedAt = l("rejected_at"),
+            anonRemaining = i("anon_remaining", -1),
+            anonResetAt = l("anon_reset_at"),
         )
     }
 
@@ -88,6 +97,8 @@ class OnlineSubtitlesStore(private val file: File) {
         p["subdl_refused"] = a.subdlRefused.toString()
         p["rejected_key"] = a.rejectedKey
         p["rejected_at"] = a.rejectedAt.toString()
+        p["anon_remaining"] = a.anonRemaining.toString()
+        p["anon_reset_at"] = a.anonResetAt.toString()
         runCatching {
             file.parentFile?.mkdirs()
             val temp = File(file.parentFile, file.name + ".tmp")

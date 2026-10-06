@@ -219,15 +219,21 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
             )
             IconButton(onClick = { close() }) { Icon(Icons.Filled.Close, contentDescription = s.commonClose) }
         }
-        MediaDetailPanel(
-            item = item,
-            chatTitle = title,
-            watched = point,
-            finished = finished,
-            rows = rows,
-            firstAction = first,
-            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 24.dp),
-        )
+        // Keyed by the video, so "More like this" opening another starts it at the top.
+        androidx.compose.runtime.key(item.id) {
+            MediaDetailPanel(
+                item = item,
+                chatTitle = title,
+                watched = point,
+                finished = finished,
+                rows = rows,
+                firstAction = first,
+                contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 24.dp),
+                onOpenItem = { other ->
+                    state.openDetail(DetailRequest(other, state.chatTitleOf(other.chatId), outsideChat = true, onClosed = request.onClosed))
+                },
+            )
+        }
     }
     LaunchedEffect(item.id) { runCatching { first.requestFocus() } }
 }

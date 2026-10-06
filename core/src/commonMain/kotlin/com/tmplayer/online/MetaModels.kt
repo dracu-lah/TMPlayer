@@ -96,6 +96,9 @@ data class MetaEpisode(
     val name: String = "",
     val overview: String = "",
     val stillUrl: String? = null,
+    /** When it first aired (or will), as the provider writes it: `2026-10-14`. */
+    val airDate: String? = null,
+    val runtimeMin: Int? = null,
 )
 
 /**
@@ -207,12 +210,17 @@ object MetaMatch {
      * True when one of [names] is [wanted]: the same words, or most of them with the year agreeing
      * (within a year, since festival and release dates differ). With no year on either side only
      * the same words will do.
+     *
+     * For a [show], the year in an episode's file name is often its season's, not the premiere's
+     * ("Loki 2023 S02E01" for a show from 2021), so a later year does not rule out the same words.
+     * It still takes a year within one for most of the words to do.
      */
-    fun accepts(wanted: String, wantedYear: Int?, names: List<String>, year: Int?): Boolean {
+    fun accepts(wanted: String, wantedYear: Int?, names: List<String>, year: Int?, show: Boolean = false): Boolean {
         val target = normalise(wanted)
         if (target.isEmpty()) return false
         val yearAgrees = wantedYear != null && year != null && kotlin.math.abs(wantedYear - year) <= 1
-        if (wantedYear != null && year != null && !yearAgrees) return false
+        val laterSeason = show && wantedYear != null && year != null && wantedYear > year
+        if (wantedYear != null && year != null && !yearAgrees && !laterSeason) return false
         return names.filter { it.isNotBlank() }.any { name ->
             normalise(name) == target || (yearAgrees && overlap(wanted, name) >= 0.6)
         }

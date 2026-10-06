@@ -1,15 +1,10 @@
 package com.tmplayer.ui.browse
 
 import com.tmplayer.data.ChatFolderSummary
-import com.tmplayer.data.SettingsStore
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.nio.file.Files
 
 class NavGroupsTest {
 
@@ -67,7 +62,8 @@ class NavGroupsTest {
 
     @Test
     fun `Watch starts open and the rest closed`() {
-        val open = NavGroupState.decode(null)
+        NavGroupState.reset()
+        val open = NavGroupState.open.value
         assertEquals(setOf(NavGroup.Watch), open)
         assertTrue(NavGroupState.isOpen(NavGroup.Watch, open, current = null))
         assertFalse(NavGroupState.isOpen(NavGroup.Chats, open, current = null))
@@ -81,30 +77,30 @@ class NavGroupsTest {
             assertTrue(NavGroupState.isOpen(group, allClosed, current = group))
             assertFalse(NavGroupState.canToggle(group, current = group))
         }
-        assertTrue(NavGroupState.canToggle(NavGroup.Watch, current = NavGroup.Chats))
-        assertFalse(NavGroupState.isOpen(NavGroup.Watch, allClosed, current = NavGroup.Chats))
+        assertTrue(NavGroupState.canToggle(NavGroup.Chats, current = NavGroup.Watch))
+        assertFalse(NavGroupState.isOpen(NavGroup.Chats, allClosed, current = NavGroup.Watch))
     }
 
     @Test
-    fun `decode tolerates keys it does not know, and an empty set means all closed`() {
-        assertEquals(setOf(NavGroup.Chats), NavGroupState.decode(setOf("chats", "gone")))
-        assertEquals(emptySet<NavGroup>(), NavGroupState.decode(emptySet()))
-        assertEquals(setOf("watch", "folders"), NavGroupState.encode(setOf(NavGroup.Watch, NavGroup.Folders)))
+    fun `Watch has no heading, so it is always open and never folds`() {
+        assertFalse(NavGroup.Watch.headed)
+        assertTrue(NavGroup.Chats.headed && NavGroup.Folders.headed)
+        val allClosed = emptySet<NavGroup>()
+        assertTrue(NavGroupState.isOpen(NavGroup.Watch, allClosed, current = NavGroup.Chats))
+        assertTrue(NavGroupState.isOpen(NavGroup.Watch, allClosed, current = null))
+        assertFalse(NavGroupState.canToggle(NavGroup.Watch, current = NavGroup.Chats))
     }
 
     @Test
-    fun `open state is remembered in SettingsStore`() = runBlocking {
-        val file = Files.createTempDirectory("tm-navgroups").resolve(SettingsStore.FILE_NAME).toFile()
-        val settings = SettingsStore(SettingsStore.openDataStore(file))
-        assertNull(settings.navGroupsOpen.first())
+    fun `folds last for the run and a launch starts folded again`() {
+        NavGroupState.reset()
+        NavGroupState.toggle(NavGroup.Chats)
+        assertEquals(setOf(NavGroup.Watch, NavGroup.Chats), NavGroupState.open.value)
+        NavGroupState.toggle(NavGroup.Chats)
+        assertEquals(setOf(NavGroup.Watch), NavGroupState.open.value)
 
-        toggleNavGroup(settings, NavGroup.Chats)
-        assertEquals(setOf(NavGroup.Watch, NavGroup.Chats), NavGroupState.decode(settings.navGroupsOpen.first()))
-        toggleNavGroup(settings, NavGroup.Watch)
-        assertEquals(setOf(NavGroup.Chats), NavGroupState.decode(settings.navGroupsOpen.first()))
-
-        // Closing the last open group is stored as an empty set, not mistaken for "never set".
-        toggleNavGroup(settings, NavGroup.Chats)
-        assertEquals(emptySet<NavGroup>(), NavGroupState.decode(settings.navGroupsOpen.first()))
+        NavGroupState.toggle(NavGroup.Folders)
+        NavGroupState.reset()
+        assertEquals(NavGroupState.DEFAULT_OPEN, NavGroupState.open.value)
     }
 }

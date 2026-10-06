@@ -112,7 +112,7 @@ internal fun SeriesPoster(
         ) {
             SeriesArt(series, progress, Modifier.fillMaxWidth())
         }
-        Text(series.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(series.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis)
         Text(
             listOfNotNull(seriesSummary(series), seriesProgressLine(progress)).joinToString("  ·  "),
             style = MaterialTheme.typography.bodySmall,
@@ -153,6 +153,7 @@ internal fun SeriesPage(
             seasonPicker = { selected, onSelect ->
                 SeasonDropdown(series.seasons, selected, onSelect, startOpen)
             },
+            onOpenItem = { state.openDetail(DetailRequest(it, state.chatTitleOf(it.chatId), outsideChat = true)) },
         )
     }
 }

@@ -29,6 +29,8 @@ class MetadataCache(
 
     private val answers get() = File(dir, "answers")
     private val images get() = File(dir, "images")
+    private val extras get() = File(dir, "extras")
+    private val seasons get() = File(dir, "seasons")
 
     /** What was learnt the last time, if it is still fresh: a result, or null to ask again. */
     @Synchronized
@@ -56,6 +58,66 @@ class MetadataCache(
         val json = JSONObject().put("key", key).put("saved", now())
         if (info != null) json.put("info", info.toJson())
         write(File(answers, name(key) + ".json"), json.toString().toByteArray())
+    }
+
+    /** A detail page's extras learnt within [foundTtlMs], by [OnlineMetadata]'s extras key. */
+    @Synchronized
+    fun extras(key: String): MetaExtras? {
+        val file = File(extras, name(key) + ".json")
+        if (!file.isFile) return null
+        val json = runCatching { JSONObject(file.readText()) }.getOrNull() ?: return null
+        if (now() - json.optLong("saved") > foundTtlMs) {
+            file.delete()
+            return null
+        }
+        return json.optJSONObject("extras")?.let { MetaExtras.fromJson(it) }
+    }
+
+    @Synchronized
+    fun putExtras(key: String, value: MetaExtras) {
+        extras.mkdirs()
+        val json = JSONObject().put("key", key).put("saved", now()).put("extras", value.toJson())
+        write(File(extras, name(key) + ".json"), json.toString().toByteArray())
+    }
+
+    /**
+     * A season's episode list learnt within [SEASON_TTL_MS]: a day, since a running show gains an
+     * episode a week and the page should say so without waiting months.
+     */
+    @Synchronized
+    fun season(key: String): List<MetaEpisode>? {
+        val file = File(seasons, name(key) + ".json")
+        if (!file.isFile) return null
+        val json = runCatching { JSONObject(file.readText()) }.getOrNull() ?: return null
+        if (now() - json.optLong("saved") > SEASON_TTL_MS) {
+            file.delete()
+            return null
+        }
+        val list = json.optJSONArray("episodes") ?: return null
+        return (0 until list.length()).mapNotNull { list.optJSONObject(it) }.map {
+            MetaEpisode(
+                season = it.optInt("season"),
+                number = it.optInt("number"),
+                name = it.optString("name"),
+                overview = it.optString("overview"),
+                stillUrl = it.optString("still").ifBlank { null },
+                airDate = it.optString("airDate").ifBlank { null },
+                runtimeMin = it.optInt("runtime").takeIf { r -> r > 0 },
+            )
+        }
+    }
+
+    @Synchronized
+    fun putSeason(key: String, episodes: List<MetaEpisode>) {
+        seasons.mkdirs()
+        val list = org.json.JSONArray(
+            episodes.map {
+                JSONObject().put("season", it.season).put("number", it.number).put("name", it.name).put("overview", it.overview)
+                    .put("still", it.stillUrl.orEmpty()).put("airDate", it.airDate.orEmpty()).put("runtime", it.runtimeMin ?: 0)
+            },
+        )
+        val json = JSONObject().put("key", key).put("saved", now()).put("episodes", list)
+        write(File(seasons, name(key) + ".json"), json.toString().toByteArray())
     }
 
     /** A picture fetched within [imageTtlMs], by its address. */
@@ -87,6 +149,14 @@ class MetadataCache(
             val ttl = if (json?.has("info") == true) foundTtlMs else missTtlMs
             if (json == null || now() - json.optLong("saved") > ttl) f.delete()
         }
+        extras.listFiles()?.forEach { f ->
+            val json = runCatching { JSONObject(f.readText()) }.getOrNull()
+            if (json == null || now() - json.optLong("saved") > foundTtlMs) f.delete()
+        }
+        seasons.listFiles()?.forEach { f ->
+            val json = runCatching { JSONObject(f.readText()) }.getOrNull()
+            if (json == null || now() - json.optLong("saved") > SEASON_TTL_MS) f.delete()
+        }
         images.listFiles()?.forEach { f -> if (now() - f.lastModified() > imageTtlMs) f.delete() }
     }
 
@@ -113,6 +183,9 @@ class MetadataCache(
         MessageDigest.getInstance("SHA-256").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }
 
     companion object {
+        /** How long a season's episode list is trusted: see [season]. */
+        const val SEASON_TTL_MS = 24L * 60 * 60 * 1000
+
         const val DAY_MS = 24L * 60 * 60 * 1000
         const val MAX_TTL_MS = 180 * DAY_MS
         const val FOUND_TTL_MS = 60 * DAY_MS

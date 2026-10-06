@@ -115,10 +115,10 @@ class BrowseRenderTest {
             save(if (dark) "sidebar-dark.png" else "sidebar-light.png", png)
         }
         // Folding Watch as well leaves only the group the viewer is in, and the open state is
-        // what the store now says.
-        com.tmplayer.ui.browse.toggleNavGroup(settings, com.tmplayer.ui.browse.NavGroup.Watch)
+        // what the sidebar now holds.
+        com.tmplayer.ui.browse.NavGroupState.toggle(com.tmplayer.ui.browse.NavGroup.Watch)
         save("sidebar-watch-folded.png", render(dark = true, folders = folders) {})
-        com.tmplayer.ui.browse.toggleNavGroup(settings, com.tmplayer.ui.browse.NavGroup.Watch)
+        com.tmplayer.ui.browse.NavGroupState.toggle(com.tmplayer.ui.browse.NavGroup.Watch)
         shell.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.All))
     }
 
@@ -509,6 +509,11 @@ class BrowseRenderTest {
                 "https://image.tmdb.org/t/p/w342/render-harbour.webp" to 240,
                 "https://image.tmdb.org/t/p/w342/render-harbour.webp" to 480,
             )) com.tmplayer.data.Thumbnails.online(url, width) { online.image(url) }
+            // The detail page's extras (facts, cast, trailer), warmed the same way.
+            for (it in listOf(bunny, episodes[4])) {
+                val info = (online.lookup(com.tmplayer.online.MetaQuery.of(it.fileName)!!.showOnly()) as? com.tmplayer.online.MetaResult.Found)?.info
+                assertTrue("no match for ${it.fileName}", info != null && online.extras(info) != null)
+            }
 
             val chats = listOf(
                 chat(2, "Film Club", ChatKind.Channel, 0, 0xFFE5484D.toInt()),
@@ -530,8 +535,14 @@ class BrowseRenderTest {
             save("desktop-meta-detail-episode.png", render { Box(Modifier.fillMaxSize()) { VideoGrid(shell, episodes, "Weekend series"); DetailPaneHost(shell) } })
             shell.closeDetail()
 
+            // Tall enough for the facts line, the trailer and the cast under the synopsis.
+            shell.openDetail(DetailRequest(bunny, "Film Club"))
+            save("desktop-meta-detail-extras.png", render(height = 1500) { Box(Modifier.fillMaxSize()) { VideoGrid(shell, listOf(bunny) + clips, "Film Club"); DetailPaneHost(shell) } })
+            shell.closeDetail()
+
             val show = (com.tmplayer.data.SeriesShelf.arrange(episodes).first() as com.tmplayer.data.ShelfEntry.Show).series
             save("desktop-meta-series.png", render { SeriesPage(shell, show, rememberSeriesWatch(shell), onClose = {}) })
+            save("desktop-meta-series-cast.png", render(height = 1500) { SeriesPage(shell, show, rememberSeriesWatch(shell), onClose = {}) })
 
             val rows = com.tmplayer.data.HomeRows.build(
                 continueWatching = listOf(bunny).map {

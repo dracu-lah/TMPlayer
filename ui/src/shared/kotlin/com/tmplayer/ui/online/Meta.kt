@@ -88,7 +88,8 @@ fun MetaPicture(
 
 /**
  * A video tile's picture: [content] (the thumbnail, as a rule) with the show's or film's wide
- * picture over it once it arrives, where [LocalOnlineArt] allows it.
+ * picture over it once it arrives, where [LocalOnlineArt] allows it. Never the poster: every tile
+ * is 16:9, and the poster belongs to the detail panel.
  */
 @Composable
 fun OnlineArt(item: MediaItem, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
@@ -99,7 +100,9 @@ fun OnlineArt(item: MediaItem, modifier: Modifier = Modifier, content: @Composab
     val meta = rememberMeta(item, showOnly = true)
     Box(modifier) {
         content()
-        MetaPicture(meta?.wideUrl ?: meta?.posterUrl, Modifier.fillMaxSize())
+        // The wide picture only. A 2:3 poster cropped into a 16:9 tile is a band across its middle,
+        // so without a wide one the tile keeps the video's own frame.
+        MetaPicture(meta?.wideUrl, Modifier.fillMaxSize())
     }
 }
 

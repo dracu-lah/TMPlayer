@@ -60,7 +60,15 @@ import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.WatchedBadge
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.i18n.LocalStrings
+import com.tmplayer.ui.online.MetaCastRow
 import com.tmplayer.ui.online.MetaCredit
+import com.tmplayer.ui.online.MetaFactsLines
+import com.tmplayer.ui.online.MoreLikeThisRow
+import com.tmplayer.ui.online.TrailerIcon
+import com.tmplayer.ui.online.TrailerHost
+import com.tmplayer.ui.online.TrailerQr
+import com.tmplayer.ui.online.rememberMetaExtras
+import com.tmplayer.ui.online.rememberTrailerLauncher
 import com.tmplayer.ui.online.MetaPicture
 import com.tmplayer.ui.online.rememberMeta
 import com.tmplayer.online.MetaInfo
@@ -124,7 +132,7 @@ fun detailRow(
         DetailAction.InDownloads -> DetailRow(action, s.gridInDownloads, TmIcons.Download, s.gridInDownloadsDetail, onSelect = onSelect)
         DetailAction.RemoveDownload -> DetailRow(action, s.gridRemoveDownload, Icons.Filled.Close, destructive = true, onSelect = onSelect)
         DetailAction.CancelDownload -> DetailRow(action, s.gridCancelRunning, Icons.Filled.Close, onSelect = onSelect)
-        DetailAction.SelectVideos -> DetailRow(action, s.gridSelectVideos, Icons.Filled.Check, s.gridSelectVideosDetail, onSelect = onSelect)
+        DetailAction.SelectVideos -> DetailRow(action, s.gridSelectVideos, TmIcons.Checklist, s.gridSelectVideosDetail, onSelect = onSelect)
         DetailAction.Share -> DetailRow(action, s.commonShare, TmIcons.Share, onSelect = onSelect)
         DetailAction.OpenElsewhere -> DetailRow(action, s.gridOpenInOtherPlayer, Icons.AutoMirrored.Filled.ExitToApp, onSelect = onSelect)
         DetailAction.CopyLink -> DetailRow(action, s.gridCopyLink, TmIcons.Share, s.gridCopyLinkDetail, onSelect = onSelect)
@@ -156,11 +164,16 @@ fun MediaDetailPanel(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     firstAction: FocusRequester? = null,
-    /** The television's pane is narrow, so its picture is a strip rather than a full 16:9 frame. */
+    /** The television's narrow pane: a smaller poster beside the title. */
     compactArt: Boolean = false,
     poster: (@Composable () -> Unit)? = null,
     overview: String? = null,
     scroll: androidx.compose.foundation.ScrollState = rememberScrollState(),
+    /**
+     * Opens another video's detail, for "More like this". Null leaves that row out. The row only
+     * lists videos the viewer has in their chats.
+     */
+    onOpenItem: ((MediaItem) -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     val parsed = remember(item) { MediaName.parse(item.fileName.ifBlank { item.title }, item.caption) }
@@ -176,6 +189,10 @@ fun MediaDetailPanel(
         (parsed.year ?: meta?.year)?.toString(),
     ).joinToString("  ·  ")
     val metaOverview = meta?.let { it.episode?.overview?.takeIf { o -> o.isNotBlank() } ?: it.overview.takeIf { o -> o.isNotBlank() } }
+    // The facts line, cast, trailer and "More like this": only for the panel's own online match,
+    // never where a platform passed its own picture and words.
+    val extras = rememberMetaExtras(meta.takeIf { poster == null && overview == null })
+    val trailers = rememberTrailerLauncher()
 
     Column(
         modifier
@@ -186,7 +203,9 @@ fun MediaDetailPanel(
         Box(
             Modifier
                 .fillMaxWidth()
-                .then(if (compactArt) Modifier.height(DETAIL_ART_STRIP) else Modifier.aspectRatio(16f / 9f))
+                // 16:9 on every screen, the television's narrow pane included: a strip cut a
+                // video's frame down to its middle band, and every other picture of it is 16:9.
+                .aspectRatio(16f / 9f)
                 .clip(RoundedCornerShape(Corner.Medium))
                 .background(Tone.surfaceHigh),
         ) {
@@ -270,6 +289,8 @@ fun MediaDetailPanel(
             }
         }
 
+        MetaFactsLines(extras)
+
         if (!item.canBeSaved) {
             Text(
                 s.detailProtected,
@@ -292,6 +313,18 @@ fun MediaDetailPanel(
                     if (index == 0 && firstAction != null) Modifier.focusRequester(firstAction) else Modifier,
                 )
             }
+            extras?.trailer?.let { trailer ->
+                DetailActionRow(
+                    DetailRow(
+                        action = DetailAction.Play,
+                        label = s.metadataTrailer,
+                        icon = TrailerIcon,
+                        onSelect = { trailers.open(trailer) },
+                    ),
+                )
+                trailers.unopened?.takeIf { it == trailer }?.let { TrailerQr(it, Modifier.padding(vertical = 8.dp)) }
+                TrailerHost(trailers)
+            }
             // Posters and overviews are off: one line to turn them on from here, as Settings can.
             val online = OnlineMetadata.current
             if (online != null && poster == null && overview == null) {
@@ -311,6 +344,12 @@ fun MediaDetailPanel(
         }
 
         DetailFacts(item, facts, s, overview ?: metaOverview, meta.takeIf { overview == null && metaOverview != null })
+
+        if (meta != null && extras != null) {
+            MetaCastRow(extras.cast)
+            MoreLikeThisRow(meta, extras, onOpenItem)
+            if (metaOverview == null && (extras.cast.isNotEmpty() || extras.genres.isNotEmpty())) MetaCredit(meta)
+        }
     }
 }
 
@@ -319,7 +358,7 @@ fun MediaDetailPanel(
  * to it: without a stop of its own it would sit under the last button, out of reach.
  */
 @Composable
-private fun DetailFacts(item: MediaItem, facts: MediaFacts, s: Messages, overview: String?, credit: MetaInfo? = null) {
+internal fun DetailFacts(item: MediaItem, facts: MediaFacts, s: Messages, overview: String?, credit: MetaInfo? = null, showSynopsis: Boolean = true) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val shape = RoundedCornerShape(Corner.Medium)
@@ -346,7 +385,8 @@ private fun DetailFacts(item: MediaItem, facts: MediaFacts, s: Messages, overvie
         if (item.durationSec > 0) add(s.detailLength to s.formatter.duration(item.durationSec.toLong()))
         if (item.date > TELEGRAM_LAUNCH) add(s.detailPosted to s.formatter.date(item.date * 1000L))
     }
-    val synopsis = overview?.takeIf { it.isNotBlank() } ?: item.caption.takeIf { it.isNotBlank() }
+    val synopsis = (overview?.takeIf { it.isNotBlank() } ?: item.caption.takeIf { it.isNotBlank() })
+        ?.takeIf { showSynopsis }
     val fromName = facts.videoCodec != null || facts.audio != null || facts.tracks.isNotEmpty()
 
     Column(
@@ -439,7 +479,6 @@ private fun DetailActionRow(row: DetailRow, modifier: Modifier = Modifier) {
 /** How wide the side pane is on a television and a desktop. */
 val DETAIL_PANE_WIDTH = 440.dp
 
-private val DETAIL_ART_STRIP = 150.dp
 private val DETAIL_POSTER = 84.dp
 private val DETAIL_POSTER_TV = 72.dp
 private val FACT_LABEL = 112.dp

@@ -143,6 +143,13 @@ class OpenSubtitlesApi(
                 val attributes = data.optJSONObject(index)?.optJSONObject("attributes") ?: return@mapNotNull null
                 val file = attributes.optJSONArray("files")?.optJSONObject(0) ?: return@mapNotNull null
                 val fileId = file.optLong("file_id").takeIf { it > 0 } ?: return@mapNotNull null
+                // An episode is filed under its own title ("The Nexus Event") with the show as the
+                // parent ("Loki"); a film under its title alone.
+                val feature = attributes.optJSONObject("feature_details")
+                val featureTitle = feature?.let { f ->
+                    f.optString("parent_title").takeIf { it.isNotBlank() && it != "null" }
+                        ?: f.optString("title").takeIf { it.isNotBlank() && it != "null" }
+                }.orEmpty()
                 SubtitleHit(
                     provider = SubtitleProvider.OpenSubtitles,
                     id = fileId.toString(),
@@ -153,13 +160,20 @@ class OpenSubtitlesApi(
                     hashMatch = attributes.optBoolean("moviehash_match"),
                     hearingImpaired = attributes.optBoolean("hearing_impaired"),
                     machine = attributes.optBoolean("ai_translated") || attributes.optBoolean("machine_translated"),
+                    featureTitle = featureTitle,
+                    featureSeason = feature?.optInt("season_number", 0)?.takeIf { it > 0 },
+                    featureEpisode = feature?.optInt("episode_number", 0)?.takeIf { it > 0 },
+                    featureYear = feature?.optInt("year", 0)?.takeIf { it > 0 },
                 )
             }
         }
     }
 
-    /** Asks for a file's download link. This is the call that spends one of the day's downloads. */
-    suspend fun download(fileId: String, token: String, host: String): Reply<Link> {
+    /**
+     * Asks for a file's download link. This is the call that spends one of the day's downloads:
+     * the account's with a [token], or the allowance OpenSubtitles gives the app key without one.
+     */
+    suspend fun download(fileId: String, token: String?, host: String): Reply<Link> {
         val body = JSONObject().put("file_id", fileId.toLong()).toString()
         return call("POST", url(host, "download"), token = token, body = body, quotaCall = true) { json ->
             val link = json.optString("link")

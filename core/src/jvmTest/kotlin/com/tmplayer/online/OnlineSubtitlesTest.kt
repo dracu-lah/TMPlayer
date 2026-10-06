@@ -60,7 +60,7 @@ class OnlineSubtitlesTest {
     private fun json(code: Int, body: String, headers: Map<String, String> = emptyMap()) =
         HttpResponse(code, headers, body.toByteArray())
 
-    private fun hit(fileId: Int, lang: String = "en", release: String = "Release.$fileId", hash: Boolean = false, downloads: Int = 10, machine: Boolean = false) = """
+    private fun hit(fileId: Int, lang: String = "en", release: String = "Night.Sky.S01E02.WEB.$fileId", hash: Boolean = false, downloads: Int = 10, machine: Boolean = false) = """
         {"id":"$fileId","type":"subtitle","attributes":{"language":"$lang","release":"$release","download_count":$downloads,
          "hearing_impaired":false,"moviehash_match":$hash,"ai_translated":$machine,"machine_translated":false,
          "files":[{"file_id":$fileId,"file_name":"$release.srt"}]}}
@@ -103,7 +103,8 @@ class OnlineSubtitlesTest {
         // Hash match first, then the wanted languages in order, then downloads.
         assertEquals(listOf("2", "3", "1"), result.hits.map { it.id })
         assertTrue(result.hits.first().hashMatch)
-        assertEquals(SubtitleNotice.SignInToDownload, result.notice)
+        assertNull("not signed in is no reason to hold a download back", result.notice)
+        assertNull(o.blockedFor(result.hits.first()))
     }
 
     @Test
@@ -120,6 +121,138 @@ class OnlineSubtitlesTest {
         assertTrue(byName, "episode_number=2" in byName)
         assertFalse(byName, "moviehash" in byName)
         assertEquals(listOf("7"), result.hits.map { it.id })
+    }
+
+    // ---- ranking: the video's own subtitles above other people's films ------------------------
+
+    @Test
+    fun `a name search with a year drops the other films of that year and keeps the match`() = runBlocking {
+        val o = online()
+        // OpenSubtitles matches the year as a word, so every 2026 release comes back, the most
+        // downloaded first. This is the list the TV showed, with Supergirl on top.
+        http.on(
+            "/subtitles",
+            page(
+                hit(1, release = "Supergirl.2026.1080P.WEB.H264-POKE", downloads = 18_485),
+                hit(2, release = "Bethlehem.Kudumba.Unit.2026.2160p.JHS.WEB-DL.MULTi.DDP5.1.H.265-LRTX", downloads = 9_435),
+                hit(3, release = "They.Will.Kill.You.2026.1080P.WEB.H264-POKE.engSDH", downloads = 3_784),
+            ),
+        )
+        val result = o.search(SubtitleTarget("Bethlehem Kudumba Unit (2026) Malayalam 1080p WEB-DL.mkv", 0, languages = listOf("en")))
+        assertEquals(listOf("2"), result.hits.map { it.id })
+    }
+
+    @Test
+    fun `a hash nobody has seen does not end the search, the name still runs and wins`() = runBlocking {
+        val o = online()
+        http.on("moviehash=", page(hit(1, release = "Supergirl.2026.1080P.WEB.H264-POKE", downloads = 18_485)))
+        http.on("query=", page(hit(7, release = "Night.Sky.S01E02.720p.WEB")))
+        val result = o.search(episode)
+        assertEquals(2, http.requests.size)
+        assertEquals(listOf("7"), result.hits.map { it.id })
+
+        // The same again comes from the cache, both queries of it, with the same answer.
+        val again = o.search(episode)
+        assertEquals(2, http.requests.size)
+        assertEquals(listOf("7"), again.hits.map { it.id })
+    }
+
+    @Test
+    fun `the right episode and year rank above a more downloaded wrong one`() = runBlocking {
+        val o = online()
+        http.on(
+            "/subtitles",
+            page(
+                hit(1, release = "Night.Sky.S01E03.1080p.WEB", downloads = 5_000),
+                hit(2, release = "Night.Sky.S01E02.1080p.WEB", downloads = 40),
+                hit(3, release = "Night.Sky.Live.2019.1080p", downloads = 9_000),
+            ),
+        )
+        assertEquals(listOf("2", "3", "1"), o.search(episode).hits.map { it.id })
+    }
+
+    @Test
+    fun `a release group named like the show is not the show, and the exact title outranks a longer one`() = runBlocking {
+        val o = online()
+        // The list a real search for Loki S01E04 gave on the phone, in OpenSubtitles' own order.
+        http.on(
+            "/subtitles",
+            page(
+                hit(1, release = "Loki.S01E04.720p.WEB.H264-EXPLOIT", downloads = 69_863),
+                hit(2, release = "Entourage.S1E04.DVDRip-LOKi", downloads = 10_305),
+                hit(3, release = "Thor & Loki Blood Brothers - 01x04 - Episode 4.Unspecified", downloads = 5_283),
+                hit(4, release = "Loki.S01E04.The.Nexus.Event.1080p.TrueHD.Atmos.7.1.AVC.HYBRID.REMUX-FraMeSToR", downloads = 3_278),
+                hit(5, release = "loki ep04_engcp", downloads = 2_119),
+                hit(6, release = "Thief s01e04 No Direction Home Dsr-Loki", downloads = 728),
+            ),
+        )
+        val ids = o.search(SubtitleTarget("Loki.S01E04.1080p.WEB.mkv", 0, languages = listOf("en"))).hits.map { it.id }
+
+        // Entourage and Thief carry Loki only as the release group after the dash.
+        assertFalse(ids.toString(), "2" in ids)
+        assertFalse(ids.toString(), "6" in ids)
+        // Both real Loki S01E04 releases first, then the rest.
+        assertEquals(ids.toString(), setOf("1", "4"), ids.take(2).toSet())
+        assertTrue(ids.toString(), ids.indexOf("3") > ids.indexOf("4"))
+    }
+
+    /** A hit as OpenSubtitles files it: [show] is the feature's parent title for an episode. */
+    private fun filed(fileId: Int, release: String, show: String, season: Int? = 1, episode: Int? = 4, downloads: Int = 10) = """
+        {"id":"$fileId","type":"subtitle","attributes":{"language":"en","release":"$release","download_count":$downloads,
+         "hearing_impaired":false,"moviehash_match":false,"ai_translated":false,"machine_translated":false,
+         "feature_details":{"feature_type":"Episode","title":"Episode $fileId","parent_title":"$show",
+           "season_number":${season ?: 0},"episode_number":${episode ?: 0},"year":2021},
+         "files":[{"file_id":$fileId,"file_name":"$release.srt"}]}}
+    """.trimIndent()
+
+    @Test
+    fun `OpenSubtitles' own filing decides which show a release is, not its release group`() = runBlocking {
+        val o = online()
+        // The tail of a real search for Loki S01E04: LOKi is a release group of other shows'
+        // rips, and the real episode also comes under names that never say Loki.
+        http.on(
+            "/subtitles",
+            page(
+                filed(1, "Loki.S01E04.720p.WEB.H264-EXPLOIT", "Loki", downloads = 69_863),
+                filed(2, "1080p.DSNP.WEB-DL.DDP5.1.H.264-EVO", "Loki", downloads = 770_100),
+                filed(3, "DSRip.XviD-LOKi", "Entourage", downloads = 2_911),
+                filed(4, "Season 1 whole (AC3.DVDRip.XviD-LOKi)", "Entourage", episode = null, downloads = 6_124),
+                filed(5, "Project.Loki.S01E04.1080p.VMX.WEB-DL.AAC2.0.H.264", "Loki", downloads = 393),
+                filed(6, "Thor & Loki Blood Brothers - 01x04 - Episode 4.Unspecified", "Thor & Loki: Blood Brothers", downloads = 5_283),
+            ),
+        )
+        val ids = o.search(SubtitleTarget("Loki.S01E04.1080p.WEB.mkv", 0, languages = listOf("en"))).hits.map { it.id }
+
+        assertFalse(ids.toString(), "3" in ids)
+        assertFalse(ids.toString(), "4" in ids)
+        // Filed under Loki S01E04, whatever the release is called; the longer show under it.
+        assertEquals(ids.toString(), setOf("1", "2", "5"), ids.take(3).toSet())
+        assertEquals(ids.toString(), "6", ids.last())
+    }
+
+    @Test
+    fun `without OpenSubtitles' filing, a release group and a season pack are not the show`() = runBlocking {
+        val o = online()
+        http.on(
+            "/subtitles",
+            page(
+                hit(1, release = "Loki.S01E04.720p.WEB.H264-EXPLOIT"),
+                hit(2, release = "DSRip.XviD-LOKi"),
+                hit(3, release = "Season 1 whole (AC3.DVDRip.XviD-LOKi)"),
+                hit(4, release = "Project.Loki.S01E04.1080p.VMX.WEB-DL.AAC2.0.H.264", downloads = 9_000),
+            ),
+        )
+        val ids = o.search(SubtitleTarget("Loki.S01E04.1080p.WEB.mkv", 0, languages = listOf("en"))).hits.map { it.id }
+        // The exact title first, the longer one after it, the release groups gone.
+        assertEquals(listOf("1", "4"), ids)
+    }
+
+    @Test
+    fun `a title in another script keeps every result, since release names cannot be compared with it`() = runBlocking {
+        val o = online()
+        http.on("/subtitles", page(hit(1, release = "Harbour.Notes.2026.1080p.WEB")))
+        val result = o.search(SubtitleTarget("ഹാർബർ നോട്ട്സ് (2026).mkv", 0, languages = listOf("en")))
+        assertEquals(listOf("1"), result.hits.map { it.id })
     }
 
     @Test
@@ -185,7 +318,7 @@ class OnlineSubtitlesTest {
     fun `requests are spaced to five a second`() = runBlocking {
         val o = online()
         repeat(5) { i ->
-            http.on("/subtitles", page(hit(i + 1)))
+            http.on("/subtitles", page(hit(i + 1, release = "Film$i.WEB")))
             o.search(episode.copy(hash = "%016x".format(i + 1L), fileName = "Film$i.mkv"))
         }
         assertEquals(5, http.requests.size)
@@ -270,7 +403,7 @@ class OnlineSubtitlesTest {
         val lines = logged {
             val result = runBlocking { o.search(episode) }
             assertEquals(listOf("7"), result.hits.map { it.id })
-            assertEquals(SubtitleNotice.SignInToDownload, result.notice)
+            assertNull(result.notice)
         }
         assertTrue(lines.single().contains("HTTP 400"))
         assertTrue(Reply.Failed(400).refusedRequest)
@@ -405,10 +538,103 @@ class OnlineSubtitlesTest {
     }
 
     @Test
-    fun `not signed in, a download asks for a sign in and sends nothing`() = runBlocking {
+    fun `not signed in, a download goes with the app key alone and keeps the free quota apart`() = runBlocking {
         val o = online()
+        // The answer a live download without an account gave on 2026-10-06.
+        http.on(
+            "/download",
+            json(200, """{"link":"https://dl.opensubtitles.org/x/4242.srt","file_name":"Night.Sky.S01E02.srt","requests":1,"remaining":99,"message":"Your quota will be renewed in 07 hours","reset_time":"07 hours","reset_time_utc":"2027-01-15T23:59:59.999Z","uk":"app_ud_1"}"""),
+        )
+        http.on("dl.opensubtitles.org", HttpResponse(200, body = srt.toByteArray()))
+        val done = o.download(osHit) as DownloadResult.Done
+
+        val ask = http.requests.first { "/download" in it.url }
+        assertEquals("POST", ask.method)
+        assertEquals("https://api.opensubtitles.com/api/v1/download", ask.url)
+        assertNull("no account, no Authorization", ask.headers["Authorization"])
+        assertEquals("test-key", ask.headers["Api-Key"])
+        assertEquals("TMPlayer v1.0.0", ask.headers["User-Agent"])
+        assertTrue(done.file.readText().contains("Hola"))
+        assertEquals(99, store.now.anonRemaining)
+        assertEquals(java.time.Instant.parse("2027-01-15T23:59:59.999Z").toEpochMilli(), store.now.anonResetAt)
+        // The account's own figures are not touched.
+        assertEquals(-1, store.now.remaining)
+        assertEquals(OnlineStatus.SignedOut, o.status())
+    }
+
+    @Test
+    fun `the free quota spent says when it renews, offers a sign in, and sends nothing more`() = runBlocking {
+        val o = online()
+        http.on(
+            "/download",
+            json(429, """{"requests":101,"remaining":0,"message":"You have downloaded your allowed 100 subtitles for 24h","reset_time_utc":"2027-01-15T23:59:59.999Z"}"""),
+        )
+        val reset = java.time.Instant.parse("2027-01-15T23:59:59.999Z").toEpochMilli()
+        assertEquals(DownloadResult.Failed(SubtitleNotice.FreeQuotaUsed(reset)), o.download(osHit))
+        assertEquals(0, store.now.anonRemaining)
+        assertEquals(OnlineStatus.FreeQuotaUsed(reset), o.status())
+
+        // Before the reset: refused here, the results greyed out, and the search says why.
+        val before = http.requests.size
+        assertEquals(DownloadResult.Failed(SubtitleNotice.FreeQuotaUsed(reset)), o.download(osHit.copy(id = "5555")))
+        assertEquals(before, http.requests.size)
+        assertEquals(SubtitleNotice.FreeQuotaUsed(reset), o.blockedFor(osHit.copy(id = "5555")))
+        http.on("/subtitles", page(hit(1)))
+        assertEquals(SubtitleNotice.FreeQuotaUsed(reset), o.search(episode).notice)
+        assertTrue(OnlineWords.notice(SubtitleNotice.FreeQuotaUsed(null)).contains("Sign in"))
+
+        // Signing in brings the viewer's own quota, whatever the free one says.
+        signIn(o)
+        assertNull(o.blockedFor(osHit.copy(id = "5555")))
+        http.on("/download", json(200, """{"link":"https://dl.opensubtitles.org/c","file_name":"c.srt","remaining":19}"""))
+        http.on("dl.opensubtitles.org", HttpResponse(200, body = srt.toByteArray()))
+        assertTrue(o.download(osHit.copy(id = "5555")) is DownloadResult.Done)
+        assertEquals("Bearer tok-1", http.requests.last { "/download" in it.url }.headers["Authorization"])
+
+        // Signed out again after the reset: the free downloads are back.
+        http.on("/logout", json(200, "{}"))
+        o.signOut()
+        clock = reset + 1
+        assertEquals(OnlineStatus.SignedOut, o.status())
+        assertNull(o.blockedFor(osHit.copy(id = "6666")))
+    }
+
+    @Test
+    fun `406 and remaining zero spend the free quota too`() = runBlocking {
+        val o = online()
+        http.on("/download", json(406, """{"message":"You have downloaded your allowed 100 subtitles for 24h","remaining":0}"""))
+        val failed = o.download(osHit) as DownloadResult.Failed
+        // No time in the answer: a day from now.
+        assertEquals(SubtitleNotice.FreeQuotaUsed(clock + SubtitleCache.DAY_MS), failed.notice)
+
+        clock += SubtitleCache.DAY_MS + 1
+        http.on("/download", json(200, """{"link":"https://dl.opensubtitles.org/b","file_name":"b.srt","remaining":0}"""))
+        http.on("dl.opensubtitles.org", HttpResponse(200, body = srt.toByteArray()))
+        assertTrue(o.download(osHit) is DownloadResult.Done)
+        assertTrue((o.download(osHit.copy(id = "5555")) as DownloadResult.Failed).notice is SubtitleNotice.FreeQuotaUsed)
+        assertEquals(2, http.count("/download"))
+    }
+
+    @Test
+    fun `a 429 without the quota on a download without an account backs off and tries once more`() = runBlocking {
+        val o = online()
+        http.on(
+            "/download",
+            json(429, "{}", mapOf("Retry-After" to "2")),
+            json(200, """{"link":"https://dl.opensubtitles.org/a","file_name":"a.srt","remaining":98}"""),
+        )
+        http.on("dl.opensubtitles.org", HttpResponse(200, body = srt.toByteArray()))
+        assertTrue(o.download(osHit) is DownloadResult.Done)
+        assertEquals(listOf(2_000L), sleeps.filter { it >= 1_000 })
+        assertEquals(98, store.now.anonRemaining)
+    }
+
+    @Test
+    fun `a download without an account that OpenSubtitles refuses with a 401 asks for a sign in`() = runBlocking {
+        val o = online()
+        http.on("/download", json(401, """{"message":"You must be logged in"}"""))
         assertEquals(DownloadResult.Failed(SubtitleNotice.SignInToDownload), o.download(osHit))
-        assertTrue(http.requests.isEmpty())
+        assertFalse(store.now.expired)
     }
 
     @Test
@@ -469,11 +695,15 @@ class OnlineSubtitlesTest {
         assertEquals(DownloadResult.Failed(SubtitleNotice.SignInExpired), o.download(osHit))
         assertFalse(store.now.signedIn)
         assertEquals(OnlineStatus.Expired("viewer"), o.status())
-        // The next download does not try the dead token again.
-        assertEquals(DownloadResult.Failed(SubtitleNotice.SignInExpired), o.download(osHit))
-        assertEquals(1, http.count("/download"))
+        // The next download does not try the dead token again: it goes without an account.
+        http.on("/download", json(200, """{"link":"https://dl.opensubtitles.org/a","file_name":"a.srt","remaining":99}"""))
+        http.on("dl.opensubtitles.org", HttpResponse(200, body = srt.toByteArray()))
+        assertTrue(o.download(osHit) is DownloadResult.Done)
+        assertNull(http.requests.last { "/download" in it.url }.headers["Authorization"])
         http.on("/subtitles", page(hit(1)))
-        assertEquals(SubtitleNotice.SignInExpired, o.search(episode).notice)
+        val result = o.search(episode)
+        assertEquals(SubtitleNotice.SignInExpired, result.notice)
+        assertNull("an expired sign in greys nothing out", o.blockedFor(osHit.copy(id = "5555")))
     }
 
     // ---- a revoked key ---------------------------------------------------------------------
@@ -501,7 +731,7 @@ class OnlineSubtitlesTest {
         // An update with a new key works at once.
         val updated = online(key = "new-key")
         assertEquals(OnlineStatus.SignedOut, updated.status())
-        http.on("/subtitles", page(hit(3)))
+        http.on("/subtitles", page(hit(3, release = "Fourth.1080p.WEB")))
         assertEquals(listOf("3"), updated.search(episode.copy(hash = "0000000000000004", fileName = "Fourth.mkv")).hits.map { it.id })
         assertEquals("new-key", http.requests.last().headers["Api-Key"])
     }
