@@ -140,6 +140,11 @@
     </LinearLayout>
 
     <!--
+      Right to left (Arabic): the words and the top bar mirror, but the transport, the times and
+      the scrub bar stay left to right, as Material's bidirectionality guidance has it for media:
+      time on a video runs the same way in every language.
+    -->
+    <!--
       The phone's big transport in the middle of the picture, where a thumb expects it; a
       television shows only the disc, as its paused cue. On a phone the spinner sits inside the
       play disc and takes its place while the video is buffering, so the middle of the screen
@@ -147,6 +152,7 @@
     -->
     <LinearLayout
         android:id="@+id/controls_center"
+        android:layoutDirection="ltr"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
@@ -303,6 +309,7 @@
              the time remaining. -->
         <LinearLayout
             android:id="@+id/controls_times"
+            android:layoutDirection="ltr"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
@@ -332,6 +339,7 @@
 
         <androidx.media3.ui.DefaultTimeBar
             android:id="@+id/controls_timebar"
+            android:layoutDirection="ltr"
             android:layout_width="match_parent"
             android:layout_height="@dimen/player_timebar_touch"
             android:layout_marginTop="@dimen/player_timebar_gap"
@@ -349,6 +357,7 @@
 
         <LinearLayout
             android:layout_width="match_parent"
+            android:layoutDirection="ltr"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:gravity="center_vertical"
@@ -598,6 +607,7 @@
                  the scrub bar's pill. -->
             <TextView
                 android:id="@+id/controls_time"
+                android:textDirection="ltr"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"

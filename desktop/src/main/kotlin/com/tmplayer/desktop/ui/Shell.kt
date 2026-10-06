@@ -226,6 +226,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         }
 
         UpdatePopupHost(state)
+        ShellNotices(state, Modifier.align(Alignment.BottomEnd).padding(24.dp))
         if (SupportReminder.enabled) {
             SupportCardHost(state, Modifier.align(Alignment.BottomEnd).padding(24.dp))
         }

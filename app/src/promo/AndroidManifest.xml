@@ -5,13 +5,13 @@
         <activity
             android:name=".PromoCaptureActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode" />
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|locale|layoutDirection" />
         <!-- The player overlay over a demo picture, for checking and capturing the controls. -->
         <activity
             android:name=".PromoPlayerActivity"
             android:exported="true"
             android:screenOrientation="fullUser"
             android:theme="@style/Theme.TMPlayer.Player"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode" />
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|locale|layoutDirection" />
     </application>
 </manifest>

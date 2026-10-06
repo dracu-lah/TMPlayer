@@ -22,6 +22,13 @@ object OpenExternal {
         run(command(OsInfo.osTag, url))
     }
 
+    /** A `mailto:` link in the mail program, with the shell's opener when AWT has no mail action. */
+    fun mail(mailto: String) = launch("mail") {
+        val desktop = desktopFor(Desktop.Action.MAIL)
+        if (desktop != null && runCatching { desktop.mail(URI(mailto)) }.isSuccess) return@launch true
+        run(command(OsInfo.osTag, mailto))
+    }
+
     /** Opens [file] with its default app, or a folder in the file manager. */
     fun open(file: File) = launch("open $file") {
         val desktop = desktopFor(Desktop.Action.OPEN)

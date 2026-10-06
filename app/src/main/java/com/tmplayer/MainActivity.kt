@@ -90,15 +90,25 @@ import com.tmplayer.ui.components.ConnectionStatus
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.onboarding.OnboardingScreen
 import com.tmplayer.ui.update.UpdateDialog
+import com.tmplayer.ui.update.LinkQrDialog
+import com.tmplayer.ui.update.openLink
 import com.tmplayer.ui.settings.AboutScreen
 import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.settings.SupportCard
+import com.tmplayer.ui.settings.LanguageDialog
+import com.tmplayer.ui.settings.LanguageNoticeCard
+import com.tmplayer.ui.settings.WhatsNewDialog
+import com.tmplayer.ui.i18n.rememberLanguageNotice
+import com.tmplayer.ui.i18n.rememberWhatsNew
+import com.tmplayer.data.WhatsNew
+import com.tmplayer.data.AppLocales
 import com.tmplayer.ui.settings.SupportDialog
 import com.tmplayer.ui.theme.TMPlayerTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -205,6 +215,18 @@ class MainActivity : ComponentActivity() {
         noteRequestedScreen(intent)
         setContent {
             TMPlayerTheme { Root() }
+        }
+    }
+
+    /**
+     * A language picked on Android's own page for this app (Android 13 and later) while it was in
+     * the background becomes the in-app choice. See [AppLocales].
+     */
+    override fun onResume() {
+        super.onResume()
+        lifecycleScope.launch {
+            val store = SettingsStore(this@MainActivity)
+            runCatching { AppLocales.adopt(this@MainActivity, store.language.first())?.let { store.setLanguage(it) } }
         }
     }
 
@@ -319,6 +341,14 @@ private fun Root() {
             showUpdate = true
         }
     }
+
+    // The one-time "Now in Español" card, the language picker it offers, and "What's new" on the
+    // first run of a version with highlights. All three wait for the shell: none of them is for
+    // the tour or the sign in screens.
+    val languageNotice = rememberLanguageNotice(settings)
+    var pickingLanguage by remember { mutableStateOf(false) }
+    val whatsNew = rememberWhatsNew(settings, BuildConfig.VERSION_NAME, hold = !inShell)
+    var changelogQr by remember { mutableStateOf(false) }
 
     // The support card: rare, after real use, never over the player or the update popup. The rule
     // and its counters are SupportReminder's; showing it starts the 60 day snooze.
@@ -1053,7 +1083,34 @@ private fun Root() {
             UpdateDialog(onDismiss = { showUpdate = false; Updates.dismiss() })
         }
 
-        if (supportCard && screen is Screen.Chats && !showUpdate) {
+        val noticeLanguage = languageNotice.language
+        if (noticeLanguage != null && inShell && screen is Screen.Chats && !showUpdate) {
+            LanguageNoticeCard(
+                language = noticeLanguage,
+                onKeep = languageNotice.dismiss,
+                onChange = {
+                    languageNotice.dismiss()
+                    pickingLanguage = true
+                },
+                modifier = Modifier
+                    .align(if (FormFactor.isTv(context)) Alignment.BottomEnd else Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(if (FormFactor.isTv(context)) 40.dp else 16.dp),
+            )
+        }
+        if (pickingLanguage) LanguageDialog(settings, onClose = { pickingLanguage = false })
+        if (whatsNew.showing && !showUpdate) {
+            WhatsNewDialog(
+                onClose = { whatsNew.showing = false },
+                onChangelog = {
+                    whatsNew.showing = false
+                    if (!openLink(context, WhatsNew.CHANGELOG)) changelogQr = true
+                },
+            )
+        }
+        if (changelogQr) LinkQrDialog(WhatsNew.CHANGELOG, s.settingsQrChangelogPage, onClose = { changelogQr = false })
+
+        if (supportCard && noticeLanguage == null && screen is Screen.Chats && !showUpdate) {
             SupportCard(
                 onSupport = { supportCard = false; supporting = true },
                 onNotNow = { supportCard = false },

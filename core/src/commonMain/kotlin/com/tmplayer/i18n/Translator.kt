@@ -106,6 +106,10 @@ object Translator {
         return out
     }
 
+    /** Whether [tag] has text of its own: English always, any other language once its catalog ships. */
+    fun hasCatalog(tag: String): Boolean =
+        tag == Languages.ENGLISH || Translator::class.java.getResource("/i18n/$tag.json") != null
+
     /** `i18n/<tag>.json` from the classpath, or null when that language has no catalog yet. */
     fun resource(tag: String): String? =
         Translator::class.java.getResourceAsStream("/i18n/$tag.json")?.use { it.readBytes().decodeToString() }

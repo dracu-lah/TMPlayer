@@ -420,6 +420,17 @@
     "wrong_code": "Wrong code",
     "wrong_password": "Wrong password"
   },
+  "feedback": {
+    "body_desktop": "Your browser opens a bug report on GitHub with the app version, the system and the language already filled in. Nothing else is sent: say what happened, and attach a screenshot if you can.",
+    "body_touch": "GitHub opens a bug report with the app version, the device and the language already filled in. Nothing else is sent: say what happened, and attach a screenshot if you can.",
+    "body_tv": "Scan the code with your phone. It opens a bug report on GitHub with this TV's app version, model and language already filled in. Nothing else is sent.",
+    "email": "Send an email instead",
+    "email_detail": "No GitHub account? Write to {email}, the details are already in the message.",
+    "email_detail_tv": "No GitHub account? Write to {email} and mention version {version}.",
+    "open_github": "Open on GitHub",
+    "qr": "QR code for the bug report on GitHub",
+    "title": "Report a problem"
+  },
   "format": {
     "eta_almost": "almost there",
     "eta_hours": "about {hours}h {minutes}m left",
@@ -588,6 +599,13 @@
     "volume_wheel": "Up, Down, wheel",
     "wheel": "wheel"
   },
+  "language": {
+    "keep": "Keep it",
+    "now_in": "Now in {language}",
+    "now_in_body": "TMPlayer follows the language your device uses. You can change it at any time in Settings.",
+    "picker_note": "Languages other than English start out machine translated and get better as people correct them.",
+    "picker_title": "Language"
+  },
   "login": {
     "change": "Change",
     "change_number": "Change number",
@@ -675,6 +693,10 @@
     "untitled_clip": "Clip",
     "untitled_file": "File",
     "untitled_video": "Video"
+  },
+  "meta": {
+    "generic_name": "Video Player",
+    "summary": "Watch the videos in your Telegram chats while they download"
   },
   "nav": {
     "chats": "Chats",
@@ -1045,6 +1067,8 @@
     "cached_none": "Nothing cached. Playing a video keeps it here until the next one.",
     "cached_one": "\"{title}\", {size}",
     "cached_videos": "Cached videos",
+    "changelog": "Changelog",
+    "changelog_detail": "Every change in every version, on tmplayer.org",
     "check": "Check",
     "check_updates": "Check for updates",
     "check_updates_detail": "This is TMPlayer {version}, from {page}",
@@ -1130,6 +1154,8 @@
     "history_cleared": "{count, plural, =1 {Continue watching cleared} one {# videos forgotten} other {# videos forgotten}}",
     "hold_speed": "Hold to speed up",
     "hold_speed_detail": "Plays fast for as long as a finger is held on the picture",
+    "language": "Language",
+    "language_detail_system": "System default, {language} right now",
     "language_switched": "Now in {language}. You can change it in Settings.",
     "language_system": "System default",
     "largest": "Largest video shown",
@@ -1154,11 +1180,14 @@
     "privacy_computer": "What stays on this computer and which services TMPlayer contacts",
     "privacy_detail": "{device, select, tv {What stays on this TV and which services TMPlayer contacts} other {What stays on this phone and which services TMPlayer contacts}}",
     "privacy_note": "TMPlayer talks directly to Telegram for your chats and videos, and to tmplayer.org, or GitHub when the site cannot be reached, to see whether a newer version is out. That check reads one static file, the same for everyone, and sends nothing about you. TMPlayer has no account or backend of its own, and no analytics or advertising SDK.",
+    "qr_changelog_page": "the changelog",
     "qr_lawful_use_page": "the lawful use page",
     "qr_privacy_page": "the privacy page",
     "range_from": "From",
     "range_hint": "change {current}   ·   OK switches to {other}",
     "range_up_to": "Up to",
+    "report_problem": "Report a problem",
+    "report_problem_detail": "A bug report on GitHub with the version and device filled in",
     "saves_as_you_go": "Changes save as you make them.",
     "seek_gesture": "Swipe sideways to seek",
     "seek_gesture_detail": "Drag across the picture to travel through the video",
@@ -1228,6 +1257,8 @@
     "wallpaper_colours_on": "TMPlayer takes its colours from your phone's wallpaper",
     "watched_cleared": "{count, plural, =1 {Watched list cleared} one {# videos unmarked} other {# videos unmarked}}",
     "watched_empty": "Nothing in Previously watched",
+    "whats_new": "What's new",
+    "whats_new_detail": "The highlights of version {version}",
     "wheel_seeks": "Mouse wheel seeks",
     "wheel_seeks_off": "The wheel changes the volume; Shift and the wheel skip 10 s",
     "wheel_seeks_on": "The wheel skips 10 s; Shift and the wheel change the volume",
@@ -1546,5 +1577,15 @@
     "today_phrase": "Watched today",
     "yesterday": "Yesterday",
     "yesterday_phrase": "Watched yesterday"
+  },
+  "whatsnew": {
+    "full_changelog": "Full changelog",
+    "highlight_boost": "Volume boost, a sleep timer and a \"still watching?\" check",
+    "highlight_delay": "Subtitle and audio delay, and subtitles in the size, box and position you like",
+    "highlight_downloads": "Remove a download once it is watched, and see how much space is free",
+    "highlight_languages": "TMPlayer in your language, picked in Settings",
+    "highlight_series": "Series view: episodes grouped by season, with tabs for each one",
+    "subtitle": "The highlights of this version",
+    "title": "What's new in {version}"
   }
 }

@@ -2,7 +2,6 @@ package com.tmplayer
 
 import android.content.pm.ActivityInfo
 import android.os.Bundle
-import android.os.LocaleList
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -17,6 +16,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -81,6 +81,10 @@ import com.tmplayer.ui.settings.AboutScreen
 import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.settings.SupportCard
 import com.tmplayer.ui.settings.SupportDialog
+import com.tmplayer.ui.settings.LanguageDialog
+import com.tmplayer.ui.settings.LanguageNoticeCard
+import com.tmplayer.ui.settings.WhatsNewDialog
+import com.tmplayer.ui.settings.FeedbackDialog
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -160,6 +164,11 @@ class PromoCaptureActivity : ComponentActivity() {
             // `--ez confirm true` puts the sign out prompt over whatever screen is open, so the
             // confirm dialog can be captured beside the other modals.
             var confirming by remember { mutableStateOf(intent.getBooleanExtra("confirm", false)) }
+            // `--es overlay language|whatsnew|feedback` opens the language picker, the "What's new"
+            // sheet or "Report a problem" over the screen, and `--ez language_notice true` puts
+            // the "Now in ..." card over the chat list, in whatever language is active.
+            var overlay by remember { mutableStateOf(intent.getStringExtra("overlay")) }
+            var languageNotice by remember { mutableStateOf(intent.getBooleanExtra("language_notice", false)) }
             TMPlayerTheme {
                 // The real app does this from MainActivity, which the fixture does not run
                 // through. Without it a light shot carries a white clock on a white status bar,
@@ -247,6 +256,23 @@ class PromoCaptureActivity : ComponentActivity() {
                         )
                     }
                     if (supporting) SupportDialog(onClose = { supporting = false })
+                    if (languageNotice && screen == "chats") {
+                        val active by Translator.active.collectAsState()
+                        LanguageNoticeCard(
+                            language = active.tag,
+                            onKeep = { languageNotice = false },
+                            onChange = { languageNotice = false; overlay = "language" },
+                            modifier = Modifier
+                                .align(if (tv) Alignment.BottomEnd else Alignment.BottomCenter)
+                                .windowInsetsPadding(WindowInsets.safeDrawing)
+                                .padding(if (tv) 40.dp else 16.dp),
+                        )
+                    }
+                    when (overlay) {
+                        "language" -> LanguageDialog(SettingsStore(applicationContext), onClose = { overlay = null })
+                        "whatsnew" -> WhatsNewDialog(onClose = { overlay = null }, onChangelog = { overlay = null })
+                        "feedback" -> FeedbackDialog(onClose = { overlay = null })
+                    }
                     if (confirming) {
                         TvConfirm(
                             title = "Sign out of Telegram?",
@@ -718,8 +744,9 @@ private fun promoState(variant: String): UiState<Unit>? = when (variant) {
 }
 
 /** Saves [tag] as the UI language and switches to it now, ahead of the first composition. */
-internal fun ComponentActivity.promoLanguage(tag: String?) {
-    if (tag == null) return
+internal fun ComponentActivity.promoLanguage(asked: String?) {
+    // `--es lang system` follows the system again: adb cannot pass an empty string.
+    val tag = if (asked == "system") "" else asked ?: return
     runBlocking { SettingsStore(applicationContext).setLanguage(tag) }
-    Translator.select(tag, LocaleList.getDefault().toLanguageTags().split(','))
+    Translator.select(tag, com.tmplayer.data.AppLocales.system(applicationContext))
 }

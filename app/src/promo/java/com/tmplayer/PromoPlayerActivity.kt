@@ -52,6 +52,7 @@ class PromoPlayerActivity : FragmentActivity() {
         if (tv) FormFactor.override(true)
         promoLanguage(intent.getStringExtra("lang"))
         setContentView(R.layout.activity_player)
+        findViewById<View>(android.R.id.content).layoutDirection = com.tmplayer.player.layoutDirectionFor(com.tmplayer.i18n.Translator.messages.rtl)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).hide(WindowInsetsCompat.Type.systemBars())
 

@@ -275,9 +275,11 @@ fun systemLanguageName(): String? =
 /**
  * Every language, each named in itself, with "System default" first and picked until somebody
  * picks another. The choice is the Settings one, so the app switches the moment a row is chosen.
+ * The tour and the Settings picker on a phone and a computer both draw this. [helpTranslate] adds
+ * the "Help translate" link under the list.
  */
 @Composable
-private fun LanguageList(settings: SettingsStore, columns: Int) {
+fun LanguageList(settings: SettingsStore, columns: Int, helpTranslate: Boolean = true) {
     val s = LocalStrings.current
     val scope = rememberCoroutineScope()
     val uri = LocalUriHandler.current
@@ -299,7 +301,7 @@ private fun LanguageList(settings: SettingsStore, columns: Int) {
             }
         }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    if (helpTranslate) Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         TextButton(onClick = { runCatching { uri.openUri(Onboarding.TRANSLATE_URL) } }) { Text(s.onboardingHelpTranslate) }
         Text(s.onboardingHelpTranslateBody, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
     }

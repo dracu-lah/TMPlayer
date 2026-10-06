@@ -67,6 +67,8 @@ import com.tmplayer.desktop.os.OpenExternal
 import com.tmplayer.ui.about.About
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.data.SupportReminder
+import com.tmplayer.data.WhatsNew
+import com.tmplayer.ui.i18n.languageRowDetail
 import com.tmplayer.player.TouchPrefs
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.theme.Tone
@@ -108,6 +110,10 @@ fun SettingsPage(state: ShellState, version: String = "") {
     val favourites by settings.favorites.collectAsState(initial = emptySet())
     val watchedList by state.watched.history.collectAsState(initial = emptyList())
     var confirmClearWatched by remember { mutableStateOf(false) }
+    val language by settings.language.collectAsState(initial = "")
+    var pickingLanguage by remember { mutableStateOf(false) }
+    var whatsNew by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf(false) }
     // The "Change" under a chat's grid lands here, on the size limits.
     val sizeLimits = remember { BringIntoViewRequester() }
     LaunchedEffect(state.showSizeLimits) {
@@ -137,6 +143,10 @@ fun SettingsPage(state: ShellState, version: String = "") {
                             ) { Text(choice.label) }
                         }
                     }
+                }
+
+                Setting(s.settingsLanguage, s.languageRowDetail(language)) {
+                    OutlinedButton(onClick = { pickingLanguage = true }) { Text(s.commonChange) }
                 }
 
                 Group(s.settingsPlayback)
@@ -329,6 +339,15 @@ fun SettingsPage(state: ShellState, version: String = "") {
                 Setting(s.settingsWalkthrough, s.settingsWalkthroughBody) {
                     OutlinedButton(onClick = { scope.launch { settings.replayOverview() } }) { Text(s.commonShow) }
                 }
+                Setting(s.settingsWhatsNew, s.settingsWhatsNewDetail(WhatsNew.VERSION)) {
+                    OutlinedButton(onClick = { whatsNew = true }) { Text(s.commonShow) }
+                }
+                Setting(s.settingsChangelog, s.settingsChangelogDetail) {
+                    OutlinedButton(onClick = { OpenExternal.browse(WhatsNew.CHANGELOG) }) { Text(s.commonOpen) }
+                }
+                Setting(s.settingsReportProblem, s.settingsReportProblemDetail) {
+                    OutlinedButton(onClick = { reporting = true }) { Text(s.commonOpen) }
+                }
                 Setting(s.settingsPrivacy, s.settingsPrivacyComputer) {
                     OutlinedButton(onClick = { OpenExternal.browse(About.PRIVACY) }) { Text(s.commonOpen) }
                 }
@@ -361,6 +380,9 @@ fun SettingsPage(state: ShellState, version: String = "") {
 
     if (confirmSignOut) SignOutDialog(state, onDismiss = { confirmSignOut = false })
     if (supporting) SupportPopup(onClose = { supporting = false })
+    if (pickingLanguage) LanguagePopup(settings, onClose = { pickingLanguage = false })
+    if (whatsNew) WhatsNewPopup(onClose = { whatsNew = false })
+    if (reporting) FeedbackPopup(onClose = { reporting = false })
     if (confirmClearWatched) {
         ClearWatchedDialog(state, watchedList.size, scope, onDismiss = { confirmClearWatched = false })
     }

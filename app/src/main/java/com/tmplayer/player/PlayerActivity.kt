@@ -390,6 +390,9 @@ class PlayerActivity : FragmentActivity() {
         // opens in, and a portrait clip turns once, later.
         applyOrientation()
         setContentView(R.layout.activity_player)
+        // The views follow the app's language, not the device's: Arabic mirrors the words and the
+        // top bar, on an Android too old for a per-app language as well (see player_controls.xml).
+        findViewById<View>(android.R.id.content).layoutDirection = layoutDirectionFor(Translator.messages.rtl)
 
         keepScreenOn(true)
         // Edge to edge, so the picture reaches the corners of the screen rather than sitting in a

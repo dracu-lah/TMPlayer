@@ -44,6 +44,12 @@ private val CHAT_SNAPSHOT = stringPreferencesKey("chat_snapshot")
 private val ACCOUNT_SNAPSHOT = stringPreferencesKey("account_snapshot")
 private val THEME_CHOICE = stringPreferencesKey("theme_choice")
 private val LANGUAGE = stringPreferencesKey("language")
+
+/** The language the "Now in ..." card last announced. See [com.tmplayer.i18n.LanguageNotice]. */
+private val LANGUAGE_ANNOUNCED = stringPreferencesKey("language_announced")
+
+/** The version whose "What's new" has been dealt with. See [WhatsNew]. */
+private val LAST_SEEN_VERSION = stringPreferencesKey("last_seen_version")
 private val DYNAMIC_COLOUR = booleanPreferencesKey("dynamic_colour")
 private val VIDEO_SCALE = stringPreferencesKey("video_scale")
 
@@ -858,6 +864,23 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
 
     suspend fun setLanguage(tag: String) {
         prefs.edit { if (tag.isBlank()) it.remove(LANGUAGE) else it[LANGUAGE] = tag }
+    }
+
+    /**
+     * The language the one-time "Now in Español" card was shown for, or "" before any. Kept so the
+     * card comes once per language the system hands the app, not once per launch.
+     */
+    val languageAnnounced: Flow<String> = read { it[LANGUAGE_ANNOUNCED] ?: "" }
+
+    suspend fun setLanguageAnnounced(tag: String) {
+        prefs.edit { it[LANGUAGE_ANNOUNCED] = tag }
+    }
+
+    /** The newest version this install has opened, for "What's new". "" before the first. */
+    val lastSeenVersion: Flow<String> = read { it[LAST_SEEN_VERSION] ?: "" }
+
+    suspend fun setLastSeenVersion(version: String) {
+        prefs.edit { it[LAST_SEEN_VERSION] = version }
     }
 
     /**

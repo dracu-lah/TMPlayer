@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import com.tmplayer.data.DeviceForm
 import com.tmplayer.i18n.Languages
 import com.tmplayer.i18n.Strings
+import com.tmplayer.i18n.Translator
 
 /**
  * The tour's pages, in the order every device shows them. Shown once before signing in, and again
@@ -54,9 +55,17 @@ object Onboarding {
         DeviceForm.Phone -> "phone"
     }
 
-    /** The Language page's choices: the system's own first (tag ""), then each language by its own name. */
-    fun languages(): List<LanguageChoice> =
-        listOf(LanguageChoice("", null)) + Languages.all.map { LanguageChoice(it.tag, it.name) }
+    /**
+     * The Language page's choices: the system's own first (tag ""), then each language by its own
+     * name. Every shipped language is offered, machine translated or reviewed. A debug build adds
+     * the en-XA pseudo-locale last, for checking that text fits and comes from the catalog.
+     */
+    fun languages(pseudo: Boolean = Translator.pseudoEnabled): List<LanguageChoice> =
+        listOf(LanguageChoice("", null)) + Languages.all.map { LanguageChoice(it.tag, it.name) } +
+            if (pseudo) listOf(LanguageChoice(Languages.PSEUDO, PSEUDO_NAME)) else emptyList()
+
+    /** The pseudo-locale's row, debug builds only, so not in the catalog. */
+    const val PSEUDO_NAME = "Pseudo-locale (en-XA)"
 }
 
 /** One row of the Language page. [name] is null for "System default". */

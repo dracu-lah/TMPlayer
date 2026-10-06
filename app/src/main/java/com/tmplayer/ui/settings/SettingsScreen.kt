@@ -61,6 +61,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
@@ -143,6 +144,8 @@ import com.tmplayer.ui.update.UpdateDialog
 import com.tmplayer.ui.update.openLink
 import com.tmplayer.ui.about.About
 import com.tmplayer.data.SupportReminder
+import com.tmplayer.data.WhatsNew
+import com.tmplayer.ui.i18n.languageRowDetail
 import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
@@ -228,6 +231,11 @@ fun SettingsScreen(
     // A link a TV cannot open, shown as a QR code instead: the address and what it is.
     var qrLink by remember { mutableStateOf<Pair<String, String>?>(null) }
     var supporting by remember { mutableStateOf(false) }
+    // The language picker, the "What's new" sheet and "Report a problem", each over the list.
+    var pickingLanguage by remember { mutableStateOf(false) }
+    var whatsNew by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf(false) }
+    val language by settings.language.collectAsStateWithLifecycle(initialValue = "")
     val openPage = { url: String, what: String -> if (!openLink(context, url)) qrLink = url to what }
     // What TMPlayer is holding, split into downloads, cache and everything else. Worked out by
     // [StorageSplit], which is also what the Downloads screen reads, so the two panels cannot
@@ -375,6 +383,16 @@ fun SettingsScreen(
                     },
                 )
             }
+        }
+
+        // The language, under the theme: both are how the app looks before anything it shows.
+        item {
+            ActionRow(
+                title = s.settingsLanguage,
+                subtitle = s.languageRowDetail(language),
+                icon = TmIcons.Language,
+                onClick = { pickingLanguage = true },
+            )
         }
 
         if (touch) {
@@ -912,6 +930,30 @@ fun SettingsScreen(
         }
         item {
             ActionRow(
+                title = s.settingsWhatsNew,
+                subtitle = s.settingsWhatsNewDetail(WhatsNew.VERSION),
+                icon = Icons.Filled.Star,
+                onClick = { whatsNew = true },
+            )
+        }
+        item {
+            ActionRow(
+                title = s.settingsChangelog,
+                subtitle = s.settingsChangelogDetail,
+                icon = Icons.Filled.Info,
+                onClick = { openPage(WhatsNew.CHANGELOG, s.settingsQrChangelogPage) },
+            )
+        }
+        item {
+            ActionRow(
+                title = s.settingsReportProblem,
+                subtitle = s.settingsReportProblemDetail,
+                icon = TmIcons.Bug,
+                onClick = { reporting = true },
+            )
+        }
+        item {
+            ActionRow(
                 title = s.aboutPrivacy,
                 subtitle = s.settingsPrivacyDetail(device),
                 icon = Icons.Filled.Info,
@@ -1025,6 +1067,17 @@ fun SettingsScreen(
 
     qrLink?.let { (url, what) -> LinkQrDialog(url = url, what = what, onClose = { qrLink = null }) }
     if (supporting) SupportDialog(onClose = { supporting = false })
+    if (pickingLanguage) LanguageDialog(settings, onClose = { pickingLanguage = false })
+    if (whatsNew) {
+        WhatsNewDialog(
+            onClose = { whatsNew = false },
+            onChangelog = {
+                whatsNew = false
+                openPage(WhatsNew.CHANGELOG, s.settingsQrChangelogPage)
+            },
+        )
+    }
+    if (reporting) FeedbackDialog(onClose = { reporting = false })
 
     when (prompt) {
         Prompt.ClearCache -> TvConfirm(

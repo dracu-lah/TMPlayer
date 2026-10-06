@@ -151,7 +151,7 @@ private fun TvTour(settings: SettingsStore, tour: TourState, onDone: () -> Unit)
 
 /** The languages as a list the D-pad walks, the chosen one ticked; OK picks one at once. */
 @Composable
-private fun TvLanguages(settings: SettingsStore, modifier: Modifier) {
+internal fun TvLanguages(settings: SettingsStore, modifier: Modifier) {
     val s = LocalStrings.current
     val scope = rememberCoroutineScope()
     val saved by settings.language.collectAsState(initial = "")

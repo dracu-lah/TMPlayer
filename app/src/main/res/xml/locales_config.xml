@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The languages Android 13 and later offer for TMPlayer under Settings, Apps, Language. The same
+  list as Languages.all in :core; LocalesConfigTest keeps the two in step. A choice made there
+  reaches the app through LocaleManager and becomes the in-app setting (see AppLocales).
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="es-419" />
+    <locale android:name="pt-BR" />
+    <locale android:name="fr" />
+    <locale android:name="de" />
+    <locale android:name="it" />
+    <locale android:name="ru" />
+    <locale android:name="uk" />
+    <locale android:name="tr" />
+    <locale android:name="id" />
+    <locale android:name="vi" />
+    <locale android:name="ar" />
+    <locale android:name="zh-CN" />
+    <locale android:name="ja" />
+    <locale android:name="ko" />
+    <locale android:name="hi" />
+    <locale android:name="ml" />
+</locale-config>

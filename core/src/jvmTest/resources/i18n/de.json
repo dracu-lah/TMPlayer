@@ -1,0 +1,8 @@
+{
+  "common": {
+    "retry": "Wiederholen"
+  },
+  "language": {
+    "now_in": "Jetzt auf {language}"
+  }
+}

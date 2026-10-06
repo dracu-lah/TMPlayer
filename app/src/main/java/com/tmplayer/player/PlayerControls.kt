@@ -648,3 +648,7 @@ class PlayerControls(
         const val TICK_MS = 500L
     }
 }
+
+/** A view's layout direction for a language that is, or is not, written right to left. */
+internal fun layoutDirectionFor(rtl: Boolean): Int =
+    if (rtl) android.view.View.LAYOUT_DIRECTION_RTL else android.view.View.LAYOUT_DIRECTION_LTR

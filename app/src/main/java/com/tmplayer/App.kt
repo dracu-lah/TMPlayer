@@ -1,10 +1,10 @@
 package com.tmplayer
 
 import android.app.Application
-import android.os.LocaleList
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import com.tmplayer.data.AndroidLogSink
+import com.tmplayer.data.AppLocales
 import com.tmplayer.data.CrashReports
 import com.tmplayer.data.LocalDownloads
 import com.tmplayer.data.NetworkMonitor
@@ -26,6 +26,7 @@ import com.tmplayer.platform.Logger
 import com.tmplayer.player.PlayerActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class App : Application() {
@@ -42,9 +43,14 @@ class App : Application() {
         // promo return, so the screenshot fixture speaks whatever the emulator is set to. Only a
         // debug build may pick the en-XA pseudo-locale.
         Translator.pseudoEnabled = BuildConfig.DEBUG
+        // Android 13 and later also keep a per-app language of their own, which AppLocales holds
+        // in step with this one in both directions.
         backgroundScope.launch {
-            SettingsStore(this@App).language.collect { saved ->
-                Translator.select(saved, LocaleList.getDefault().toLanguageTags().split(','))
+            val store = SettingsStore(this@App)
+            AppLocales.adopt(this@App, store.language.first())?.let { store.setLanguage(it) }
+            store.language.collect { saved ->
+                Translator.select(saved, AppLocales.system(this@App))
+                AppLocales.apply(this@App, saved)
             }
         }
         // The tour's pictures are this app's drawables, which the shared :ui code cannot name.
