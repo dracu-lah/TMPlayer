@@ -52,6 +52,12 @@ data class MediaItem(
      * does not carry one: see [MediaName.parse].
      */
     val caption: String = "",
+    /**
+     * The picture's size in pixels as Telegram states it, or 0 where it does not: a video sent as
+     * a file carries no dimensions, and the detail panel then reads the resolution off its name.
+     */
+    val width: Int = 0,
+    val height: Int = 0,
 ) {
     /**
      * Where a video's bytes are, as far as the viewer is concerned.
@@ -105,6 +111,8 @@ data class MediaItem(
             locality == other.locality &&
             canBeSaved == other.canBeSaved &&
             caption == other.caption &&
+            width == other.width &&
+            height == other.height &&
             miniThumbnail.contentEquals(other.miniThumbnail)
     }
 
@@ -123,6 +131,8 @@ data class MediaItem(
         result = 31 * result + locality.hashCode()
         result = 31 * result + canBeSaved.hashCode()
         result = 31 * result + caption.hashCode()
+        result = 31 * result + width
+        result = 31 * result + height
         result = 31 * result + (miniThumbnail?.contentHashCode() ?: 0)
         return result
     }
@@ -185,6 +195,8 @@ object MediaMapper {
                 date = message.date,
                 onDevice = onDevice(video.video),
                 caption = captionOf(content.caption?.text),
+                width = video.width,
+                height = video.height,
             )
         }
 
@@ -226,6 +238,8 @@ object MediaMapper {
                 date = message.date,
                 onDevice = onDevice(animation.animation),
                 caption = captionOf(content.caption?.text),
+                width = animation.width,
+                height = animation.height,
             )
         }
 

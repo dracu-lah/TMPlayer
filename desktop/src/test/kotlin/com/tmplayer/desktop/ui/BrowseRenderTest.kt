@@ -199,6 +199,133 @@ class BrowseRenderTest {
         shell.go(Destination.Chats)
     }
 
+    /** A chat's posters with real release names, for the detail pane and the search shots. */
+    private fun releaseItems(chatId: Long = 2, canBeSaved: Boolean = true): List<MediaItem> {
+        val names = listOf(
+            "Harbour.Lights.S02E05.1080p.WEB-DL.DDP5.1.x265-DEMO.mkv",
+            "Night.Train.2019.2160p.BluRay.DV.HDR10.TrueHD.Atmos.7.1.HEVC.mkv",
+            "Mountains (2024) Dual Audio 720p WEBRip AAC2.0 x264 ESub.mp4",
+            "Lecture 7 Compilers.mp4",
+            "Harbour.Lights.S02E06.1080p.WEB-DL.DDP5.1.x265-DEMO.mkv",
+            "The.Quiet.Year.2023.1080p.WEB-DL.AAC2.0.H.264.mkv",
+        )
+        val colours = listOf(0xFF12A594, 0xFF2AABEE, 0xFF46A758, 0xFF8E4EC6, 0xFFE5484D, 0xFFF5A524)
+        return names.mapIndexed { at, name ->
+            MediaItem(
+                chatId = chatId, messageId = 100L + at, fileId = 0, title = name,
+                sizeBytes = (900L + at * 310L) * 1024 * 1024, durationSec = 2600 + at * 300,
+                mimeType = "video/x-matroska", thumbnailFileId = 0, miniThumbnail = jpeg(colours[at].toInt()),
+                date = 1_790_000_000 - at * 86_400, fileName = name,
+                caption = if (at == 0) "Season two, episode five. The storm reaches the harbour and Mara has to choose." else "",
+                width = if (at == 0) 1920 else 0, height = if (at == 0) 1080 else 0,
+                canBeSaved = canBeSaved,
+            )
+        }
+    }
+
+    /** The detail pane over a chat's grid, as a right click opens it; light and dark. */
+    @Test
+    fun detailPane() = kotlinx.coroutines.runBlocking {
+        val items = releaseItems()
+        val chats = listOf(chat(2, "Weekend series", ChatKind.Group, 0, 0xFFF5A524.toInt()))
+        shell.noteChatTitles(chats)
+        // 34:10 into the first, so the pane offers "Resume 34:10" and Start over.
+        settings.saveResumePosition(2, 100, 2_050_000, 2_600_000, "")
+        try {
+            for (dark in listOf(true, false)) {
+                shell.openDetail(DetailRequest(items[0], "Weekend series", selectThis = {}))
+                save(if (dark) "desktop-detail-grid-dark.png" else "desktop-detail-grid-light.png", render(dark = dark) {
+                    Box(Modifier.fillMaxSize()) {
+                        VideoGrid(shell, items, "Weekend series")
+                        DetailPaneHost(shell)
+                    }
+                })
+            }
+            // A video never started, with the facts of a 4K release.
+            shell.openDetail(DetailRequest(items[1], "Weekend series"))
+            save("desktop-detail-fresh.png", render { Box(Modifier.fillMaxSize()) { VideoGrid(shell, items, "Weekend series"); DetailPaneHost(shell) } })
+            // A chat that restricts saving content: no download, select, hand off or link.
+            val locked = releaseItems(canBeSaved = false)
+            shell.openDetail(DetailRequest(locked[2], "Weekend series", selectThis = null))
+            save("desktop-detail-protected.png", render { Box(Modifier.fillMaxSize()) { VideoGrid(shell, locked, "Weekend series"); DetailPaneHost(shell) } })
+        } finally {
+            shell.closeDetail()
+            settings.clearResumePosition(2, 100)
+        }
+    }
+
+    /** Home with a starred chat's poster opened: the pane offers to go to that chat. */
+    @Test
+    fun detailPaneFromHome() {
+        val chats = listOf(chat(2, "Weekend series", ChatKind.Group, 0, 0xFFF5A524.toInt()))
+        shell.noteChatTitles(chats)
+        val items = releaseItems()
+        val rows = com.tmplayer.data.HomeRows.build(
+            continueWatching = emptyList(),
+            favourites = com.tmplayer.data.HomeRows.favouriteChats(chats, setOf(2L)),
+            loaded = mapOf(2L to items),
+            recent = emptyList(),
+        )
+        shell.go(Destination.Home)
+        shell.openDetail(DetailRequest(items[5], "Weekend series", outsideChat = true))
+        try {
+            for (dark in listOf(true, false)) {
+                save(if (dark) "desktop-detail-home-dark.png" else "desktop-detail-home-light.png", render(dark = dark) {
+                    Box(Modifier.fillMaxSize()) {
+                        HomeRowsView(shell, rows, chats, emptyMap(), onRowShown = {}, onArtWanted = {}, onRefresh = {})
+                        DetailPaneHost(shell)
+                    }
+                })
+            }
+        } finally {
+            shell.closeDetail()
+            shell.go(Destination.Chats)
+        }
+    }
+
+    /** "Videos in all chats": matching chats, then the videos a fake searchMessages found. */
+    @Test
+    fun allChatsSearch() = kotlinx.coroutines.runBlocking {
+        val chats = listOf(
+            chat(2, "Harbour Lights fans", ChatKind.Group, 0, 0xFFF5A524.toInt()),
+            chat(3, "Film Club", ChatKind.Channel, 0, 0xFFE5484D.toInt()),
+            chat(7, "Harbour photos", ChatKind.Channel, 0, 0xFF0090FF.toInt()),
+        )
+        shell.noteChatTitles(chats)
+        val found = releaseItems(chatId = 3).filter { it.fileName.startsWith("Harbour") } +
+            releaseItems(chatId = 2).take(1).map {
+                val name = it.fileName.replace("S02E05", "S02E04")
+                it.copy(messageId = 900, fileName = name, title = name, date = it.date - 7 * 86_400)
+            }
+        val source = com.tmplayer.ui.browse.VideoSearchSource { query, _ ->
+            com.tmplayer.data.AllChatsPage(
+                found.filter { com.tmplayer.data.Fuzzy.score(it.fileName, query) > 0 },
+                com.tmplayer.data.AllChatsCursor(videoDone = true, documentDone = true),
+            )
+        }
+        val page = source.page("harbour", com.tmplayer.data.AllChatsCursor())
+        val results = com.tmplayer.ui.browse.VideoSearchState(
+            query = "harbour",
+            videos = com.tmplayer.data.AllChatsSearch.merge(emptyList(), page.items),
+            endReached = page.cursor.done,
+        )
+        fun shot(videos: com.tmplayer.ui.browse.VideoSearchState, dark: Boolean = true) = render(dark = dark) {
+            Column(Modifier.fillMaxSize()) {
+                PageHeader("All chats", null)
+                com.tmplayer.ui.browse.SearchScopeToggle(
+                    com.tmplayer.data.SearchScope.AllVideos,
+                    {},
+                    Modifier.padding(start = 24.dp, bottom = 8.dp),
+                )
+                AllChatsResults(shell, "harbour", chats, setOf(2L), videos, onStar = {}, onLoadMore = {}, onRetry = {})
+            }
+        }
+        save("desktop-search-all-dark.png", shot(results))
+        save("desktop-search-all-light.png", shot(results, dark = false))
+        save("desktop-search-all-searching.png", shot(com.tmplayer.ui.browse.VideoSearchState(query = "harbour", loading = true)))
+        save("desktop-search-all-none.png", shot(com.tmplayer.ui.browse.VideoSearchState(query = "harbour", endReached = true)))
+    }
+
     @Test
     fun watchedTicksAndSizeNote() = kotlinx.coroutines.runBlocking {
         val items = (1..6).map { at ->

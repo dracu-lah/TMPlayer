@@ -112,6 +112,22 @@ import com.tmplayer.data.HomeRow
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.WatchedRecord
 import com.tmplayer.data.WatchedWhen
+import com.tmplayer.data.AllChatsSearch
+import com.tmplayer.data.SearchResults
+import com.tmplayer.data.SearchScope
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.snapshotFlow
+import com.tmplayer.ui.components.Spinner
+import com.tmplayer.ui.components.TmSecondaryButton
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.MenuAction
 import com.tmplayer.ui.components.holdable
@@ -226,6 +242,14 @@ fun BrowseScreen(
     /** Plays a video from one of Home's rows; the second argument is its chat's name. */
     onPlayMedia: (MediaItem, String) -> Unit = { _, _ -> },
     onRefreshHome: () -> Unit = {},
+    /** "Mark as watched" (true) or back (false) from a detail panel opened here; the third is the chat's name. */
+    onSetMediaWatched: (MediaItem, String, Boolean) -> Unit = { _, _, _ -> },
+    /** One line for the viewer, such as what a Download from a detail panel did. */
+    onMessage: (String) -> Unit = {},
+    /** Where "Videos in all chats" asks: Telegram, or the promo fixture's demo results. */
+    videoSearch: VideoSearchSource = VideoSearchSource.Telegram,
+    /** Remembers a search that found videos, for the recent-search chips. */
+    onSearched: (suspend (String) -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     // An unfinished video wins the landing tab, otherwise Recent, so the first screen is never
@@ -259,6 +283,25 @@ fun BrowseScreen(
     var confirmClearHistory by remember { mutableStateOf(false) }
     var confirmClearWatched by remember { mutableStateOf(false) }
     var confirmClearFavorites by remember { mutableStateOf(false) }
+    // The video whose detail panel is open, with its chat's name, from Home or the search.
+    var detail by remember { mutableStateOf<Pair<MediaItem, String>?>(null) }
+    var searchScope by rememberSaveable { mutableStateOf(SearchScope.Chats) }
+    val allSearch: AllChatsSearchViewModel = viewModel(
+        key = "all-chats-search",
+        factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                AllChatsSearchViewModel(videoSearch, onSearched) as T
+        },
+    )
+    val searchingVideos = searchScope == SearchScope.AllVideos && !tab.isHome && !tab.listsVideos
+    LaunchedEffect(searchingVideos, query) {
+        allSearch.search(if (searchingVideos) query else "")
+    }
+    val videoResults by allSearch.state.collectAsState()
+    val panelScope = rememberCoroutineScope()
+    val panelContext = LocalContext.current
+    val holdMedia: (MediaItem, String) -> Unit = { item, title -> detail = item to title }
 
     // One question decides the whole shape of this screen: a permanent rail beside the listing on
     // a television, a drawer behind a hamburger on a phone. Everything below the chrome is the
@@ -298,6 +341,7 @@ fun BrowseScreen(
                             onResume = onResumeMedia,
                             onHoldRecord = { mediaMenu = it },
                             onPlay = onPlayMedia,
+                            onHoldMedia = holdMedia,
                             onSeeContinue = { onPickTab(BrowseSection.of(BrowseTab.Continue)); query = "" },
                             onOpenChat = { id -> data.chats.firstOrNull { it.id == id }?.let(onOpenChat) },
                         )
@@ -380,11 +424,47 @@ fun BrowseScreen(
                                     )
                                 }
                             }
-                            SearchRow(query = query, insets = insets, onQuery = { query = it })
+                            SearchRow(
+                                query = query,
+                                insets = insets,
+                                onQuery = { query = it },
+                                scope = searchScope,
+                                onScope = { searchScope = it },
+                            )
                             Spacer(Modifier.height(20.dp))
                         }
 
-                        if (visible.isEmpty()) {
+                        if (touch && query.isNotBlank()) {
+                            SearchScopeToggle(
+                                scope = searchScope,
+                                onChange = { searchScope = it },
+                                modifier = Modifier.padding(start = insets.start, top = 8.dp, bottom = 8.dp),
+                            )
+                        }
+                        if (searchingVideos && query.isNotBlank()) {
+                            AllChatsResults(
+                                results = remember(data.chats, query, videoResults) {
+                                    AllChatsSearch.split(
+                                        query = query,
+                                        chats = data.chats,
+                                        videos = videoResults.videos,
+                                        loadingVideos = videoResults.loading,
+                                        endReached = videoResults.endReached,
+                                    )
+                                },
+                                state = videoResults,
+                                watch = homeWatch,
+                                chatTitle = { id -> data.chats.firstOrNull { it.id == id }?.title.orEmpty() },
+                                favorites = favorites,
+                                insets = insets,
+                                onOpenChat = onOpenChat,
+                                onHoldChat = { chatMenu = it },
+                                onPlay = onPlayMedia,
+                                onHold = holdMedia,
+                                onLoadMore = allSearch::loadMore,
+                                onRetry = allSearch::retry,
+                            )
+                        } else if (visible.isEmpty()) {
                             EmptyTab(tab, query)
                         } else {
                             ChatSection(
@@ -414,6 +494,27 @@ fun BrowseScreen(
                         }
                     }
                 }
+        }
+    }
+
+    val chatsNow = (state as? UiState.Content)?.value?.chats.orEmpty()
+    val openDetail: @Composable () -> Unit = {
+        detail?.let { (item, title) ->
+            MediaDetailOpened(
+                item = item,
+                chatTitle = title,
+                watched = homeWatch.point(item),
+                finished = homeWatch.finished(item),
+                onPlay = { onPlayMedia(item, title) },
+                onSetWatched = { onSetMediaWatched(item, title, it) },
+                onDownload = {
+                    panelScope.launch {
+                        queueDownloads(panelContext, SettingsStore(panelContext), listOf(item)) { title }?.let(onMessage)
+                    }
+                },
+                onOpenChat = chatsNow.firstOrNull { it.id == item.chatId }?.let { chat -> { onOpenChat(chat) } },
+                onDismiss = { detail = null },
+            )
         }
     }
 
@@ -526,6 +627,8 @@ fun BrowseScreen(
             Column(Modifier.fillMaxSize().padding(end = Tv.SafeH)) { pane() }
         }
     }
+
+    openDetail()
 
     chatMenu?.let { chat ->
         val favorite = chat.id in favorites
@@ -1662,7 +1765,13 @@ private fun TvStatusCluster() {
 private const val MS_PER_MINUTE = 60_000L
 
 @Composable
-private fun SearchRow(query: String, insets: BrowseInsets, onQuery: (String) -> Unit) {
+private fun SearchRow(
+    query: String,
+    insets: BrowseInsets,
+    onQuery: (String) -> Unit,
+    scope: SearchScope = SearchScope.Chats,
+    onScope: (SearchScope) -> Unit = {},
+) {
     val s = LocalStrings.current
     val startVoice = rememberVoiceSearch(s.browseVoicePromptChat, onQuery)
     val searchField = remember { FocusRequester() }
@@ -1690,6 +1799,9 @@ private fun SearchRow(query: String, insets: BrowseInsets, onQuery: (String) -> 
                 onQuery("")
             }
         }
+        // Beside the field rather than under it: a row of its own would push the list down a
+        // whole line on a 540 dp television for a choice made once per search.
+        SearchScopeToggle(scope = scope, onChange = onScope)
     }
 }
 
@@ -2241,6 +2353,124 @@ private fun EmptyTab(tab: BrowseSection, query: String) {
     // the glyph follows whichever one the viewer is looking at.
     BigEmpty(message, icon = if (query.isNotBlank()) Icons.Filled.Search else tab.icon)
 }
+
+/**
+ * "Videos in all chats", answered in two parts: the chats whose names match, as the rows they are
+ * everywhere else, then the videos Telegram found across every chat, as the tiles a chat's grid
+ * uses. A video plays on OK or a tap; holding it, or the info key, opens its detail panel.
+ */
+@Composable
+private fun AllChatsResults(
+    results: SearchResults,
+    state: VideoSearchState,
+    watch: SeriesWatch,
+    chatTitle: (Long) -> String,
+    favorites: Set<Long>,
+    insets: BrowseInsets,
+    onOpenChat: (ChatSummary) -> Unit,
+    onHoldChat: (ChatSummary) -> Unit,
+    onPlay: (MediaItem, String) -> Unit,
+    onHold: (MediaItem, String) -> Unit,
+    onLoadMore: () -> Unit,
+    onRetry: () -> Unit,
+) {
+    val s = LocalStrings.current
+    val touch = isTouch()
+    val gridState = rememberLazyGridState()
+    val gap = if (touch) 8.dp else 16.dp
+    LazyVerticalGrid(
+        columns = if (touch) GridCells.Adaptive(RESULT_TILE_MIN) else GridCells.Fixed(RESULT_COLUMNS),
+        state = gridState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = insets.start,
+            end = insets.end,
+            top = if (touch) 0.dp else Tv.FocusClearance,
+            bottom = insets.bottom,
+        ),
+        horizontalArrangement = Arrangement.spacedBy(gap),
+        verticalArrangement = Arrangement.spacedBy(gap),
+    ) {
+        if (results.chats.isNotEmpty()) {
+            item(key = "h-chats", span = { GridItemSpan(maxLineSpan) }) { ResultsHeading(s.browseSearchResultsChats) }
+            gridItems(results.chats, key = { "c-${it.id}" }, span = { GridItemSpan(maxLineSpan) }) { chat ->
+                ChatRow(
+                    chat = chat,
+                    favorite = chat.id in favorites,
+                    opensOnLaunch = false,
+                    onClick = { onOpenChat(chat) },
+                    onHold = { onHoldChat(chat) },
+                )
+            }
+        }
+        item(key = "h-videos", span = { GridItemSpan(maxLineSpan) }) { ResultsHeading(s.browseSearchResultsVideos) }
+        val error = state.error
+        when {
+            error != null -> item(key = "failed", span = { GridItemSpan(maxLineSpan) }) {
+                ResultsNote(s.browseSearchVideosFailed(error)) {
+                    TmSecondaryButton(onClick = onRetry) { M3Text(s.commonRetry) }
+                }
+            }
+            state.loading -> item(key = "searching", span = { GridItemSpan(maxLineSpan) }) {
+                ResultsNote(s.browseSearchVideosSearching, spinner = true)
+            }
+            results.videos.isEmpty() -> item(key = "none", span = { GridItemSpan(maxLineSpan) }) {
+                ResultsNote(s.browseSearchVideosNone(results.query))
+            }
+            else -> gridItems(results.videos, key = { "v-${it.id}" }) { item ->
+                MediaCard(
+                    item = item,
+                    watched = watch.point(item),
+                    finished = watch.finished(item),
+                    dense = touch,
+                    onClick = { onPlay(item, chatTitle(item.chatId)) },
+                    onLongClick = { onHold(item, chatTitle(item.chatId)) },
+                    onFocused = {},
+                )
+            }
+        }
+        if (state.loadingMore) {
+            item(key = "more", span = { GridItemSpan(maxLineSpan) }) { ResultsNote(s.gridLoadingMore, spinner = true) }
+        }
+    }
+    // The next page well before the last row, the way a chat's grid pages.
+    val nearEnd by remember {
+        derivedStateOf {
+            val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            last >= gridState.layoutInfo.totalItemsCount - RESULT_LEAD
+        }
+    }
+    LaunchedEffect(gridState, results.videos.size) {
+        snapshotFlow { nearEnd }.collect { if (it && results.videos.isNotEmpty()) onLoadMore() }
+    }
+}
+
+@Composable
+private fun ResultsHeading(text: String) {
+    if (isTouch()) {
+        M3Text(text, style = M3MaterialTheme.typography.titleMedium, color = Tone.text, modifier = Modifier.padding(top = 8.dp))
+    } else {
+        Text(text, style = MaterialTheme.typography.titleLarge, color = Tone.text, modifier = Modifier.padding(top = 8.dp))
+    }
+}
+
+@Composable
+private fun ResultsNote(text: String, spinner: Boolean = false, action: (@Composable () -> Unit)? = null) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (spinner) Spinner(size = 20.dp, strokeWidth = 2.dp)
+        M3Text(text, style = M3MaterialTheme.typography.bodyLarge, color = Tone.muted, modifier = Modifier.weight(1f, fill = false))
+        action?.invoke()
+    }
+}
+
+/** The search's video tiles: a phone's dense grid, four across on a television. */
+private val RESULT_TILE_MIN = 120.dp
+private const val RESULT_COLUMNS = 4
+private const val RESULT_LEAD = 8
 
 private const val RECENT_COUNT = 8
 private const val FOCUS_FADE_MS = 140

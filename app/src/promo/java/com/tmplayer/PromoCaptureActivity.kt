@@ -59,7 +59,12 @@ import com.tmplayer.ui.browse.BrowseScreen
 import com.tmplayer.ui.browse.BrowseSection
 import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.browse.Header
-import com.tmplayer.ui.browse.MediaActionsSheet
+import com.tmplayer.ui.browse.MediaDetailOpened
+import com.tmplayer.ui.browse.VideoSearchSource
+import com.tmplayer.data.AllChatsCursor
+import com.tmplayer.data.AllChatsPage
+import com.tmplayer.data.Fuzzy
+import kotlinx.coroutines.delay
 import com.tmplayer.ui.browse.MediaCard
 import com.tmplayer.ui.downloads.DownloadsScreen
 import com.tmplayer.ui.browse.TouchMediaScaffold
@@ -354,8 +359,41 @@ private fun PromoChatsScreen(
         folders = folders,
         layout = layout,
         updateVersion = updateVersion,
+        videoSearch = promoVideoSearch(),
     )
 }
+
+/**
+ * Telegram's `searchMessages` across every chat, faked over the demo videos: the shows and the
+ * clips spread over the demo chats, matched forgivingly against the file name, eight to a page
+ * after a short wait, so "Searching every chat", the results and paging can all be captured.
+ */
+@Composable
+private fun promoVideoSearch(): VideoSearchSource {
+    val media = promoMedia()
+    val shows = promoSeriesMedia()
+    return remember(media, shows) {
+        val chats = listOf(101L, 102L, 103L, 104L, 105L, 106L)
+        var id = 5_000L
+        val pool = (shows + media + media.reversed()).mapIndexed { index, item ->
+            item.copy(chatId = chats[index % chats.size], messageId = id++, date = 20_000 - index)
+        }
+        VideoSearchSource { query, cursor ->
+            delay(PROMO_SEARCH_WAIT_MS)
+            val hits = Fuzzy.rank(pool, query) { it.fileName.ifBlank { it.title } }
+            val start = cursor.videoOffset.toIntOrNull() ?: 0
+            val page = hits.drop(start).take(PROMO_SEARCH_PAGE)
+            val next = start + page.size
+            AllChatsPage(
+                items = page,
+                cursor = AllChatsCursor(videoOffset = next.toString(), videoDone = next >= hits.size, documentDone = true),
+            )
+        }
+    }
+}
+
+private const val PROMO_SEARCH_WAIT_MS = 600L
+private const val PROMO_SEARCH_PAGE = 8
 
 /** Everything Home is built from, as the view model would have it once every row has answered. */
 private class PromoHome(
@@ -417,6 +455,7 @@ private fun promoHome(variant: String?): PromoHome? {
 private fun PhoneMediaScreen(variant: String, onBack: () -> Unit = {}) {
     val media = promoMedia()
     val series = promoSeries(variant)
+    var held by remember { mutableStateOf(detailVariant(variant, media)) }
     TouchMediaScaffold(
         chatTitle = "Weekend Clips",
         chatPhotoFileId = 0,
@@ -481,38 +520,63 @@ private fun PhoneMediaScreen(variant: String, onBack: () -> Unit = {}) {
                 }
             } else {
                 items(tiles, key = { it.messageId }) { item ->
-                    MediaCard(item = item, watched = null, onClick = {}, onFocused = {}, dense = true)
+                    MediaCard(
+                        item = item,
+                        watched = PROMO_RESUME[item.messageId],
+                        onClick = {},
+                        onFocused = {},
+                        dense = true,
+                        onLongClick = { held = item },
+                    )
                 }
             }
         }
         series?.Opened()
-        if (variant == "menu") PromoMenu(media.first())
+        held?.let { PromoDetail(it) { held = null } }
     }
 }
 
-/** The menu a long press or a held OK opens, for the first video, in the state a fresh one is in. */
+/**
+ * The detail panel a long press, a held OK or the info key opens, in the grid's own context (it
+ * offers Select videos). `--es variant menu` opens it on the first video as a fresh one is,
+ * `resume` on one stopped at 34:10, and `protected` on one from a chat that restricts saving.
+ */
 @Composable
-private fun PromoMenu(item: MediaItem) {
-    var open by remember { mutableStateOf(true) }
-    if (!open) return
-    MediaActionsSheet(
+private fun PromoDetail(item: MediaItem, onDismiss: () -> Unit) {
+    PromoDetail(item, PROMO_WATCH.point(item) ?: PROMO_RESUME[item.messageId], PROMO_WATCH.finished(item), onDismiss)
+}
+
+@Composable
+private fun PromoDetail(item: MediaItem, watched: WatchPoint?, finished: Boolean, onDismiss: () -> Unit) {
+    MediaDetailOpened(
         item = item,
         chatTitle = "Weekend Clips",
-        watched = null,
-        finished = false,
-        onSetWatched = {},
+        watched = watched,
+        finished = finished,
         onPlay = {},
+        onSetWatched = {},
+        onDownload = {},
         onSelectVideos = {},
-        onDownloadForLater = {},
-        onRemoved = {},
-        onDismiss = { open = false },
+        onDismiss = onDismiss,
     )
 }
+
+/** The variant's video for the panel: the first, stopped part way, or in a protected chat. */
+private fun detailVariant(variant: String, media: List<MediaItem>): MediaItem? = when (variant) {
+    "menu" -> media.first()
+    "resume" -> media[2]
+    "protected" -> media[1].copy(canBeSaved = false)
+    else -> null
+}
+
+/** "Resume 34:10" for the third demo video, the shelf it stopped part way through. */
+private val PROMO_RESUME = mapOf(3L to WatchPoint(positionMs = 34 * 60_000L + 10_000L, durationMs = 2_115_000L))
 
 @Composable
 private fun TvMediaScreen(variant: String) {
     val media = promoMedia()
     val series = promoSeries(variant)
+    var held by remember { mutableStateOf(detailVariant(variant, media)) }
     val first = remember { FocusRequester() }
     val state = promoState(variant)
     LaunchedEffect(Unit) { if (state == null) runCatching { first.requestFocus() } }
@@ -580,9 +644,10 @@ private fun TvMediaScreen(variant: String) {
                 items(media, key = { it.id }) { item ->
                     MediaCard(
                         item = item,
-                        watched = null,
+                        watched = PROMO_RESUME[item.messageId],
                         onClick = {},
                         onFocused = {},
+                        onLongClick = { held = item },
                         modifier = if (item === media.first()) {
                             Modifier.focusRequester(first)
                         } else {
@@ -594,7 +659,7 @@ private fun TvMediaScreen(variant: String) {
         }
     }
     series?.Opened()
-    if (variant == "menu") PromoMenu(media.first())
+    held?.let { PromoDetail(it) { held = null } }
 }
 
 @Composable
@@ -670,12 +735,15 @@ private fun promoSeries(variant: String): PromoSeries? {
 /** A video's tile in the fixture, with the demo watch state on it. */
 @Composable
 private fun PromoCard(item: MediaItem, modifier: Modifier = Modifier, dense: Boolean = false) {
+    var held by remember { mutableStateOf(false) }
+    if (held) PromoDetail(item) { held = false }
     MediaCard(
         item = item,
         watched = PROMO_WATCH.point(item),
         finished = PROMO_WATCH.finished(item),
         onClick = {},
         onFocused = {},
+        onLongClick = { held = true },
         dense = dense,
         modifier = modifier,
     )

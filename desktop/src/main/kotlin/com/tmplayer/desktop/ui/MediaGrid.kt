@@ -334,7 +334,7 @@ internal fun SizeLimitNote(text: String, onShow: (() -> Unit)?, onChange: (() ->
 
 /** Calls [loadMore] once the last few posters are on screen. */
 @Composable
-private fun LoadMoreNearEnd(grid: LazyGridState, enabled: Boolean, loadMore: () -> Unit) {
+internal fun LoadMoreNearEnd(grid: LazyGridState, enabled: Boolean, loadMore: () -> Unit) {
     LaunchedEffect(grid, enabled) {
         if (!enabled) return@LaunchedEffect
         snapshotFlow {
@@ -450,8 +450,18 @@ private fun ContinueTile(
 
 /** A video in a chat's grid. */
 @Composable
-internal fun MediaTile(state: ShellState, item: MediaItem, chatTitle: String, nav: KeyboardNav? = null, index: Int = 0) {
+internal fun MediaTile(
+    state: ShellState,
+    item: MediaItem,
+    chatTitle: String,
+    nav: KeyboardNav? = null,
+    index: Int = 0,
+    /** On Home or in the search across chats, where the pane offers to go to the chat. */
+    outsideChat: Boolean = false,
+) {
     val s = LocalStrings.current
+    // The grid's selection, when there is one, so the pane can start one with this poster.
+    val selection = LocalGridSelection.current?.takeIf { item.canBeSaved }
     val progress by state.settings.watchProgress.collectAsState(initial = emptyMap())
     val key = SettingsStore.progressKey(item.chatId, item.messageId)
     val point: WatchPoint? = progress[key]
@@ -465,6 +475,17 @@ internal fun MediaTile(state: ShellState, item: MediaItem, chatTitle: String, na
         chatTitle = chatTitle,
         progress = WatchedWords.posterProgress(point?.fraction, finished),
         finished = finished,
+        onDetails = { refocus ->
+            state.openDetail(
+                DetailRequest(
+                    item = item,
+                    chatTitle = chatTitle,
+                    outsideChat = outsideChat,
+                    selectThis = selection?.let { picking -> { if (!picking.isSelected(item.id)) picking.toggle(index) } },
+                    onClosed = refocus,
+                ),
+            )
+        },
         art = {
             MediaArt(item.miniThumbnail, item.thumbnailFileId, Modifier.fillMaxSize()) {
                 Text(item.title.take(1).uppercase(), style = MaterialTheme.typography.headlineSmall, color = Tone.muted)
@@ -506,6 +527,12 @@ internal fun Poster(
     markToggle: Boolean = true,
     /** The menu's play, download and link lines; off for a page whose [extraMenu] is the menu. */
     fileMenu: Boolean = true,
+    /**
+     * Opens the detail pane in place of the menu: a right click, the context menu key, I and the
+     * overflow button all come here. Handed a way to put focus back on this poster when it closes.
+     * Null keeps the menu, as Continue watching and Watched do.
+     */
+    onDetails: ((refocus: () -> Unit) -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     val interaction = remember { MutableInteractionSource() }
@@ -540,13 +567,21 @@ internal fun Poster(
     val download = downloads[item.fileId]
     val record = LocalDownloadIndex.current[item.id]
     val selected = selection?.isSelected(item.id) == true
+    val details: (() -> Unit)? = onDetails?.let { open -> { open { runCatching { requester.requestFocus() } } } }
+    val openMenu: () -> Unit = {
+        if (details != null) {
+            details()
+        } else {
+            menu = true
+        }
+    }
 
     Column(
         Modifier
             .hoverable(interaction)
             .onPointerEvent(PointerEventType.Press) { event ->
                 val macContext = IS_MAC && event.keyboardModifiers.isCtrlPressed && event.buttons.isPrimaryPressed
-                if (event.buttons.isSecondaryPressed || macContext) menu = true
+                if (event.buttons.isSecondaryPressed || macContext) openMenu()
             }
             .onPointerEvent(PointerEventType.Press, PointerEventPass.Initial) { event ->
                 if (selection == null || !event.buttons.isPrimaryPressed) return@onPointerEvent
@@ -569,7 +604,13 @@ internal fun Poster(
             .onPreviewKeyEvent { event ->
                 when {
                     GridNav.isMenuKey(event) -> {
-                        menu = true
+                        openMenu()
+                        true
+                    }
+                    // I for "info", the detail pane, as the remote's info key opens it on a TV.
+                    details != null && event.type == KeyEventType.KeyDown && event.key == Key.I && !event.keyCtrl &&
+                        !event.isAltPressed && !event.isMetaPressed && !event.isShiftPressed -> {
+                        details()
                         true
                     }
                     event.type == KeyEventType.KeyDown && event.key in PLAY_KEYS && !event.keyCtrl &&
@@ -621,12 +662,12 @@ internal fun Poster(
                     Icon(Icons.Filled.PlayArrow, contentDescription = s.playerPlay, tint = Tone.onAccent, modifier = Modifier.padding(10.dp))
                 }
                 Box(Modifier.align(Alignment.TopEnd)) {
-                    IconButton(onClick = { menu = true }) {
+                    IconButton(onClick = { openMenu() }) {
                         Icon(Icons.Filled.MoreVert, contentDescription = s.commonMore, tint = Color.White)
                     }
                 }
             }
-            Box(Modifier.align(Alignment.TopEnd)) {
+            if (details == null) Box(Modifier.align(Alignment.TopEnd)) {
                 TileMenu(state, item, chatTitle, expanded = menu, onDismiss = {
                     menu = false
                     // Back to the poster, so the arrows carry on from where the menu was opened.

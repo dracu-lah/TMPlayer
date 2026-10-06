@@ -964,6 +964,9 @@ private fun Root() {
                         homeViewModel.refresh()
                         chatsViewModel.refreshUnlessRateLimited()
                     },
+                    onSetMediaWatched = { item, chatTitle, watched -> setWatched(item, chatTitle, watched) },
+                    onMessage = toast,
+                    onSearched = { settings.addRecentSearch(it) },
                 )
             }
 

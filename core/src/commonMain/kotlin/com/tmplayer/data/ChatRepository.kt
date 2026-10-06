@@ -430,6 +430,45 @@ class ChatRepository(private val td: TdlClient) {
     }
 
     /**
+     * One page of the "Videos in all chats" search: Telegram's `searchMessages` across the main
+     * list, with the video filter and, beside it, the document filter, since most long videos are
+     * posted as files and Telegram matches a document search against the file name. Each keeps its
+     * own offset in [cursor]. A failure is thrown, so the caller can say the search failed rather
+     * than that nothing matched.
+     */
+    suspend fun searchAllChats(
+        query: String,
+        cursor: AllChatsCursor = AllChatsCursor(),
+        limit: Int = AllChatsSearch.PAGE_SIZE,
+    ): AllChatsPage = withContext(Dispatchers.IO) {
+        coroutineScope {
+            fun ask(filter: dev.g000sha256.tdl.dto.SearchMessagesFilter, offset: String, done: Boolean) =
+                if (done) null else async { td.searchMessages(ChatListMain(), query, offset, limit, filter, null, 0, 0).value() }
+            val videos = ask(SearchMessagesFilterVideo(), cursor.videoOffset, cursor.videoDone)
+            val documents = ask(SearchMessagesFilterDocument(), cursor.documentOffset, cursor.documentDone)
+            val videoFound = videos?.await()
+            val documentFound = documents?.await()
+            val messages = listOfNotNull(videoFound, documentFound).flatMap { it.messages.toList() }
+            val items = messages.groupBy { it.chatId }.flatMap { (chatId, inChat) ->
+                val chatProtected = td.getChat(chatId).valueOrNull?.hasProtectedContent ?: false
+                MediaMapper.screen(inChat, chatProtected).items
+            }
+            fun finished(found: dev.g000sha256.tdl.dto.FoundMessages?, was: Boolean) =
+                was || found == null || found.messages.isEmpty() || found.nextOffset.isEmpty()
+            AllChatsPage(
+                items = items.distinctBy { it.id }
+                    .sortedWith(compareByDescending<MediaItem> { it.date }.thenByDescending { it.messageId }),
+                cursor = AllChatsCursor(
+                    videoOffset = videoFound?.nextOffset ?: cursor.videoOffset,
+                    documentOffset = documentFound?.nextOffset ?: cursor.documentOffset,
+                    videoDone = finished(videoFound, cursor.videoDone),
+                    documentDone = finished(documentFound, cursor.documentDone),
+                ),
+            )
+        }
+    }
+
+    /**
      * One message as a video, for a Continue watching tile's picture: a resume record keeps no
      * artwork, and TDLib answers this from its own database for anything already seen.
      */

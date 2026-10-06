@@ -92,6 +92,8 @@ internal fun HomePane(
     onResume: (ResumeRecord) -> Unit,
     onHoldRecord: (ResumeRecord) -> Unit,
     onPlay: (MediaItem, String) -> Unit,
+    /** A long press, a held OK or the info key on a video's tile: its detail panel. */
+    onHoldMedia: (MediaItem, String) -> Unit,
     onSeeContinue: () -> Unit,
     onOpenChat: (Long) -> Unit,
 ) {
@@ -153,8 +155,8 @@ internal fun HomePane(
                                     .then(if (isFirst && record === row.records.first()) Modifier.focusRequester(first) else Modifier),
                             )
                         }
-                        is HomeRow.Chat -> entries(row.entries, watch, touch, isFirst, first, { row.title }, onPlay) { openSeries = it }
-                        is HomeRow.Recent -> entries(row.entries, watch, touch, isFirst, first, chatTitle, onPlay) { openSeries = it }
+                        is HomeRow.Chat -> entries(row.entries, watch, touch, isFirst, first, { row.title }, onPlay, onHoldMedia) { openSeries = it }
+                        is HomeRow.Recent -> entries(row.entries, watch, touch, isFirst, first, chatTitle, onPlay, onHoldMedia) { openSeries = it }
                     }
                     if (!touch && seeAll != null) {
                         item(key = "see-all", contentType = "see-all") { SeeAllTile(onClick = seeAll) }
@@ -182,6 +184,7 @@ internal fun HomePane(
             watch = watch,
             onPlay = { onPlay(it, chatTitle(it.chatId)) },
             onDismiss = { openSeries = null },
+            onLongClick = { onHoldMedia(it, chatTitle(it.chatId)) },
         )
     }
 }
@@ -194,6 +197,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.entries(
     first: FocusRequester,
     chatTitle: (Long) -> String,
     onPlay: (MediaItem, String) -> Unit,
+    onHold: (MediaItem, String) -> Unit,
     onOpenSeries: (Series) -> Unit,
 ) {
     items(entries, key = { it.key }, contentType = { it::class }) { entry ->
@@ -205,6 +209,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.entries(
                 watched = watch.point(entry.item),
                 finished = watch.finished(entry.item),
                 onClick = { onPlay(entry.item, chatTitle(entry.item.chatId)) },
+                onLongClick = { onHold(entry.item, chatTitle(entry.item.chatId)) },
                 onFocused = {},
                 dense = touch,
                 modifier = modifier,

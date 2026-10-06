@@ -63,6 +63,12 @@ fun Modifier.holdable(
             onLongClick { onHold(); true }
         }
         .onKeyEvent { event ->
+            // The remote's info key, where it has one, is the same request as a hold: tell me
+            // about this. One press, on the way down; the release lands in the window it opened.
+            if (event.key in INFO_KEYS) {
+                if (event.type == KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount == 0) onHold()
+                return@onKeyEvent true
+            }
             if (event.key !in OK_KEYS) return@onKeyEvent false
             when (event.type) {
                 KeyEventType.KeyDown -> {
@@ -145,3 +151,9 @@ fun Modifier.ignoreStrayRelease(): Modifier {
  * as a keyboard Enter, and from anything plugged into the stick's USB port.
  */
 private val OK_KEYS = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)
+
+/**
+ * What "tell me about this" arrives as: the info key most remotes carry (an "i", or a Guide key
+ * on some), and the keyboard's context menu key on anything with a keyboard plugged in.
+ */
+private val INFO_KEYS = setOf(Key.Info, Key.Menu)

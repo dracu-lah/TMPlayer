@@ -200,7 +200,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.shelf(
     items(entries, key = { it.key }, contentType = { it::class }) { entry ->
         Box(Modifier.width(state.posterWidth)) {
             when (entry) {
-                is ShelfEntry.File -> MediaTile(state, entry.item, chatTitle(entry.item.chatId))
+                is ShelfEntry.File -> MediaTile(state, entry.item, chatTitle(entry.item.chatId), outsideChat = true)
                 is ShelfEntry.Show -> SeriesPoster(entry.series, rememberSeriesWatch(state), onOpen = { onOpenSeries(entry.series) })
             }
         }

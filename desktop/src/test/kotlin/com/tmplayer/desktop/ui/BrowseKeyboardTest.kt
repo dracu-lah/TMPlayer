@@ -19,6 +19,9 @@ import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.test.rightClick
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.runComposeUiTest
@@ -99,13 +102,76 @@ class BrowseKeyboardTest {
         onNode(poster(1)).assertIsFocused()
     }
 
+    /** The grid with the shell's detail pane over it, as the window draws them. */
+    private fun androidx.compose.ui.test.ComposeUiTest.gridWithPane() = setContent {
+        TmMaterialTheme(dark = true) {
+            Box(Modifier.size(1000.dp, 640.dp)) {
+                VideoGrid(shell, videos, "Film Club")
+                DetailPaneHost(shell)
+            }
+        }
+    }
+
     @Test
-    fun `shift F10 opens the overflow of the focused poster`() = runComposeUiTest {
-        setContent { TmMaterialTheme(dark = true) { Box(Modifier.size(1000.dp, 640.dp)) { VideoGrid(shell, videos, "Film Club") } } }
-        onNode(poster(2)).requestFocus()
-        onNode(isFocused()).performKeyInput { withKeyDown(Key.ShiftLeft) { pressKey(Key.F10) } }
-        onNodeWithText("Play from start").assertExists()
-        onNodeWithText("Copy link").assertExists()
+    fun `shift F10 the menu key and I open the detail pane, and Esc closes it back onto the poster`() = runComposeUiTest {
+        gridWithPane()
+        for (open in listOf<androidx.compose.ui.test.KeyInjectionScope.() -> Unit>(
+            { withKeyDown(Key.ShiftLeft) { pressKey(Key.F10) } },
+            { pressKey(Key.Menu) },
+            { pressKey(Key.I) },
+        )) {
+            onNode(poster(2)).requestFocus()
+            onNode(isFocused()).performKeyInput(open)
+            waitForIdle()
+            assertEquals("Video 2", shell.detail?.item?.title)
+            onNodeWithText("Details").assertExists()
+            onNodeWithText("Copy Telegram link").assertExists()
+            // The first action takes focus, so Enter would play from the pane at once.
+            onNode(isFocused()).assert(hasText("Play"))
+            onNode(isFocused()).performKeyInput { pressKey(Key.Escape) }
+            waitForIdle()
+            assertEquals(null, shell.detail)
+            onNode(poster(2)).assertIsFocused()
+        }
+    }
+
+    @Test
+    fun `a right click opens the pane, a click on the scrim closes it, and its actions act`() = runComposeUiTest {
+        gridWithPane()
+        onNode(poster(5)).performMouseInput { rightClick() }
+        waitForIdle()
+        assertEquals("Video 5", shell.detail?.item?.title)
+        onNodeWithText("Play").performClick()
+        waitForIdle()
+        assertEquals(null, shell.detail)
+        assertEquals("Video 5", shell.nowPlaying?.item?.title)
+        shell.closePlayer()
+        onNode(poster(1)).performMouseInput { rightClick() }
+        waitForIdle()
+        onNode(poster(1)).performMouseInput { click(androidx.compose.ui.geometry.Offset(10f, 10f)) }
+        waitForIdle()
+        assertEquals(null, shell.detail)
+    }
+
+    @Test
+    fun `a protected video's pane offers no way to keep a copy`() = runComposeUiTest {
+        val locked = videos.map { it.copy(canBeSaved = false) }
+        setContent {
+            TmMaterialTheme(dark = true) {
+                Box(Modifier.size(1000.dp, 640.dp)) {
+                    VideoGrid(shell, locked, "Film Club")
+                    DetailPaneHost(shell)
+                }
+            }
+        }
+        onNode(poster(0)).performMouseInput { rightClick() }
+        waitForIdle()
+        onNodeWithText("Play").assertExists()
+        onNodeWithText("Mark as watched").assertExists()
+        for (gone in listOf("Download", "Copy Telegram link", "Open in another player", "Select videos")) {
+            onNodeWithText(gone, substring = true).assertDoesNotExist()
+        }
+        shell.closeDetail()
     }
 
     @Test

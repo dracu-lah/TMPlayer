@@ -50,6 +50,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -117,6 +118,36 @@ fun SeriesViewToggle(
     ) {
         Segment(s.seriesSeries, chosen = seriesView, tv = tv) { onChange(true) }
         Segment(s.seriesAllFiles, chosen = !seriesView, tv = tv) { onChange(false) }
+    }
+}
+
+/**
+ * Where a chat-list search looks: the chats by name, or the videos in every chat as well (see
+ * [com.tmplayer.data.SearchScope]). The same two-segment pill as [SeriesViewToggle].
+ */
+@Composable
+fun SearchScopeToggle(
+    scope: com.tmplayer.data.SearchScope,
+    onChange: (com.tmplayer.data.SearchScope) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val s = LocalStrings.current
+    val tv = !isTouch()
+    Row(
+        modifier
+            .wrapContentWidth(Alignment.Start)
+            .clip(CircleShape)
+            .background(Tone.surfaceHigh)
+            .padding(3.dp)
+            .semantics { contentDescription = s.browseSearchScope },
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Segment(s.browseSearchScopeChats, chosen = scope == com.tmplayer.data.SearchScope.Chats, tv = tv) {
+            onChange(com.tmplayer.data.SearchScope.Chats)
+        }
+        Segment(s.browseSearchScopeAllVideos, chosen = scope == com.tmplayer.data.SearchScope.AllVideos, tv = tv) {
+            onChange(com.tmplayer.data.SearchScope.AllVideos)
+        }
     }
 }
 

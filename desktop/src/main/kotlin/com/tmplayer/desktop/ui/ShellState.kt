@@ -76,6 +76,21 @@ data class PlayRequest(
 )
 
 /**
+ * A video's detail pane, asked for by a right click, the context menu key or I on its poster.
+ *
+ * @param outsideChat opened from Home or the search across chats, where "Go to" the chat is a step.
+ * @param selectThis starts a selection with this poster; null where the page has no selection.
+ * @param onClosed hands focus back to the poster the pane was opened from.
+ */
+class DetailRequest(
+    val item: MediaItem,
+    val chatTitle: String,
+    val outsideChat: Boolean = false,
+    val selectThis: (() -> Unit)? = null,
+    val onClosed: () -> Unit = {},
+)
+
+/**
  * Everything the desktop window's navigation knows: where it is, which chat is open, what is
  * playing, and the keys that move between them.
  *
@@ -150,6 +165,26 @@ class ShellState(
     /** Chat titles by id, so a video opened from anywhere can say where it came from. */
     private val chatTitles = mutableMapOf<Long, String>()
 
+    /** The chats the list has shown, by id, so a pane opened from Home or search can go to one. */
+    private val knownChats = mutableMapOf<Long, ChatSummary>()
+
+    /** The detail pane over the page, or null while none is open. */
+    var detail by mutableStateOf<DetailRequest?>(null)
+        private set
+
+    fun openDetail(request: DetailRequest) {
+        detail = request
+    }
+
+    /** Closes the pane and gives focus back to the poster it came from. */
+    fun closeDetail() {
+        val open = detail ?: return
+        detail = null
+        open.onClosed()
+    }
+
+    fun chatOf(chatId: Long): ChatSummary? = knownChats[chatId]
+
     /**
      * Set by the "Change" under a chat's grid, so Settings opens scrolled to the size limits.
      * Settings clears it once it has scrolled.
@@ -163,11 +198,14 @@ class ShellState(
 
     fun go(to: Destination) {
         openChat = null
+        detail = null
         destination = to
     }
 
     fun openChat(chat: ChatSummary) {
         chatTitles[chat.id] = chat.title
+        knownChats[chat.id] = chat
+        detail = null
         openChat = chat
     }
 
@@ -176,7 +214,10 @@ class ShellState(
     }
 
     fun noteChatTitles(chats: List<ChatSummary>) {
-        chats.forEach { chatTitles[it.id] = it.title }
+        chats.forEach {
+            chatTitles[it.id] = it.title
+            knownChats[it.id] = it
+        }
     }
 
     fun noteChatTitle(chatId: Long, title: String) {

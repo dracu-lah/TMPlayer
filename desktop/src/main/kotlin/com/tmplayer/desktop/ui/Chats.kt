@@ -80,6 +80,9 @@ import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.theme.Avatar
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.launch
+import com.tmplayer.data.SearchScope
+import com.tmplayer.ui.browse.AllChatsSearchViewModel
+import com.tmplayer.ui.browse.SearchScopeToggle
 
 /**
  * The chat list: the shared [ChatListViewModel], the phone's tabs and the account's own Telegram
@@ -99,6 +102,14 @@ fun ChatsPage(
     val favourites by state.settings.favorites.collectAsState(initial = emptySet())
     val folders by Td.folders.collectAsState()
     var query by rememberSaveable(favouritesOnly) { mutableStateOf("") }
+    // Where the search looks: the chats by name, or the videos in every chat as well.
+    var searchScope by rememberSaveable(favouritesOnly) { mutableStateOf(SearchScope.Chats) }
+    val allVideos = searchScope == SearchScope.AllVideos && query.isNotBlank()
+    val videoSearch = rememberViewModel(Unit) { AllChatsSearchViewModel(onSearched = { state.settings.addRecentSearch(it) }) }
+    val videoState by videoSearch.state.collectAsState()
+    LaunchedEffect(query, searchScope) {
+        videoSearch.search(if (searchScope == SearchScope.AllVideos) query else "")
+    }
     val toast = rememberToast()
     val scope = rememberCoroutineScope()
     val listState = if (favouritesOnly) androidx.compose.foundation.lazy.rememberLazyListState() else state.chatListState
@@ -122,7 +133,7 @@ fun ChatsPage(
                 SearchField(
                     query = query,
                     onQuery = { query = it },
-                    placeholder = s.chatsSearch,
+                    placeholder = if (searchScope == SearchScope.AllVideos) s.browseSearchAllChats else s.chatsSearch,
                     focus = state.searchFocus,
                     modifier = Modifier.width(320.dp),
                     onDown = { nav.focus(0) },
@@ -135,7 +146,14 @@ fun ChatsPage(
                 }
             },
         )
-        if (!favouritesOnly && showSections) {
+        if (!favouritesOnly) {
+            SearchScopeToggle(
+                scope = searchScope,
+                onChange = { searchScope = it },
+                modifier = Modifier.padding(start = 24.dp, bottom = 8.dp),
+            )
+        }
+        if (!favouritesOnly && showSections && !allVideos) {
             LazyRow(
                 Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -152,6 +170,19 @@ fun ChatsPage(
         }
         StateBox(ui, onRetry = { model.load() }) { data ->
             LaunchedEffect(data.chats) { state.noteChatTitles(data.chats) }
+            if (allVideos) {
+                AllChatsResults(
+                    state = state,
+                    query = query,
+                    chats = data.chats,
+                    favourites = favourites,
+                    videos = videoState,
+                    onStar = { chat -> scope.launch { state.settings.toggleFavorite(chat.id) } },
+                    onLoadMore = videoSearch::loadMore,
+                    onRetry = videoSearch::retry,
+                )
+                return@StateBox
+            }
             val visible = remember(data.chats, section, favourites, query) {
                 filterChats(data.chats, section, favourites, query)
             }

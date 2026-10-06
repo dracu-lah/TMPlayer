@@ -221,6 +221,8 @@ private fun Browse(state: ShellState, player: PlayerContent) {
                             Destination.Settings -> SettingsPage(state, BuildInfo.VERSION)
                         }
                     }
+                    // Over the page only, so the side bar stays reachable while a pane is open.
+                    DetailPaneHost(state)
                 }
             }
         }
