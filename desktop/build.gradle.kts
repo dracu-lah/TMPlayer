@@ -42,8 +42,11 @@ val generateBuildInfo by tasks.registering {
     val out = layout.buildDirectory.dir("generated/buildinfo")
     val apiId = localProps.getProperty("TG_API_ID") ?: "0"
     val apiHash = localProps.getProperty("TG_API_HASH") ?: ""
+    // Optional: without it the desktop hides online subtitles, as the Android build does.
+    val openSubtitlesKey = localProps.getProperty("OPENSUBTITLES_API_KEY") ?: System.getenv("OPENSUBTITLES_API_KEY") ?: ""
     inputs.property("apiId", apiId)
     inputs.property("apiHash", apiHash)
+    inputs.property("openSubtitlesKey", openSubtitlesKey)
     inputs.property("version", desktopVersion)
     outputs.dir(out)
     doLast {
@@ -56,6 +59,7 @@ val generateBuildInfo by tasks.registering {
             |    const val VERSION = "$desktopVersion"
             |    const val TG_API_ID = $apiId
             |    const val TG_API_HASH = "$apiHash"
+            |    const val OPENSUBTITLES_API_KEY = "$openSubtitlesKey"
             |}
             |""".trimMargin(),
         )

@@ -43,6 +43,8 @@ import androidx.compose.ui.input.pointer.isShiftPressed as pointerShift
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import com.tmplayer.data.MediaItem
+import com.tmplayer.online.OnlineSubtitles
+import com.tmplayer.online.SubtitleTarget
 import com.tmplayer.data.MediaName
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.ResumeRules
@@ -142,6 +144,8 @@ private val blankCursor: PointerIcon by lazy {
  * @param shortcutsOpen start with the "?" sheet up (the harness's `--shortcuts`).
  * @param screenshotDir where S puts its pictures: Pictures/TMPlayer, or a temp folder in the tests.
  * @param engineFactory the engine; libmpv in the app, a fake in the UI tests that drive the mouse.
+ * @param onlineOpen start with the online subtitle panel up; [onlinePreset] fills it without a
+ *   search, for the render test.
  * @param backdrop what is painted behind the overlay; the promo fixture leaves it clear so the
  *   still it draws underneath shows where libmpv's picture would.
  */
@@ -170,6 +174,8 @@ fun PlayerScreen(
     screenshotDir: () -> java.io.File = { java.io.File(UserDirs.pictures(), "TMPlayer") },
     engineFactory: () -> PlaybackEngine = { MpvPlaybackEngine(OpenPrefs.hwdecFor(prefs.now.softwareDecoding)) },
     backdrop: Color = Color.Black,
+    onlineOpen: Boolean = false,
+    onlinePreset: com.tmplayer.online.SearchResult? = null,
 ) {
     val s = LocalStrings.current
     val engine = remember { engineFactory() }
@@ -200,6 +206,7 @@ fun PlayerScreen(
     var overControls by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(MenuPage.entries.firstOrNull { it.name.equals(menuOpen, ignoreCase = true) }?.let { MenuAt(it, MenuAt.Anchor.Cursor, Offset(240f, 120f)) }) }
     var showDetails by remember { mutableStateOf(detailsOpen) }
+    var showOnline by remember { mutableStateOf(onlineOpen) }
     var showShortcuts by remember { mutableStateOf(shortcutsOpen) }
     var flash by remember { mutableStateOf<Flash?>(null) }
     var seekRun by remember { mutableStateOf(0L to 0L) } // (accumulated ms, last at)
@@ -1019,6 +1026,7 @@ fun PlayerScreen(
                         MenuAction.Details -> showDetails = true
                         MenuAction.Shortcuts -> showShortcuts = true
                         MenuAction.ToggleWatched -> toggleWatched()
+                        MenuAction.SearchOnline -> showOnline = true
                     }
                 },
             )
@@ -1045,6 +1053,29 @@ fun PlayerScreen(
                     lifted = showControls,
                     onPlayNow = { switchTo(next) },
                     onHide = { nextUpDismissed = true },
+                )
+            }
+
+            if (showOnline) {
+                OnlineSubtitlesPanel(
+                    target = {
+                        SubtitleTarget(
+                            fileName = item.fileName.ifBlank { item.title },
+                            sizeBytes = item.sizeBytes,
+                            hash = current.onlineHash(),
+                            caption = item.caption.ifBlank { null },
+                            languages = OnlineSubtitles.languagesFor(null),
+                        )
+                    },
+                    onLoaded = { file, label ->
+                        if (engine.addSubtitle(file.absolutePath)) showFlash(Flash.Kind.Text, L.tracksFileLoaded(label))
+                        else showFlash(Flash.Kind.Text, L.playerSubtitleLoadFailed(label))
+                    },
+                    onClose = {
+                        showOnline = false
+                        refocus()
+                    },
+                    preset = onlinePreset,
                 )
             }
 

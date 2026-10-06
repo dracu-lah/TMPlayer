@@ -146,6 +146,7 @@ import com.tmplayer.ui.update.UpdateDialog
 import com.tmplayer.ui.update.openLink
 import com.tmplayer.ui.about.About
 import com.tmplayer.data.SupportReminder
+import com.tmplayer.online.OnlineSubtitles
 import com.tmplayer.data.WhatsNew
 import com.tmplayer.ui.i18n.languageRowDetail
 import com.tmplayer.ui.components.Spinner
@@ -241,6 +242,7 @@ fun SettingsScreen(
     var pickingLanguage by remember { mutableStateOf(false) }
     var whatsNew by remember { mutableStateOf(false) }
     var reporting by remember { mutableStateOf(false) }
+    var onlineDialog by remember { mutableStateOf<OnlineDialog?>(null) }
     val language by settings.language.collectAsStateWithLifecycle(initialValue = "")
     val openPage = { url: String, what: String -> if (!openLink(context, url)) qrLink = url to what }
     // What TMPlayer is holding, split into downloads, cache and everything else. Worked out by
@@ -716,6 +718,10 @@ fun SettingsScreen(
             )
         }
 
+        // ---- online subtitles ------------------------------------------------------------------
+        // Only in a build that carries the OpenSubtitles key; a fork or a CI build has none.
+        if (OnlineSubtitles.available) onlineSubtitlesSection(onDialog = { onlineDialog = it })
+
         // ---- the phone player ------------------------------------------------------------------
         // Touch only: a remote has buttons for every one of these, and its key model is settled.
         if (touch) {
@@ -1125,6 +1131,7 @@ fun SettingsScreen(
         )
     }
     if (reporting) FeedbackDialog(onClose = { reporting = false })
+    onlineDialog?.let { OnlineSubtitlesDialog(it, onClose = { onlineDialog = null }) }
 
     when (prompt) {
         Prompt.ClearCache -> TvConfirm(
@@ -2100,7 +2107,7 @@ internal fun ActionRow(
 }
 
 @Composable
-private fun ToggleRow(
+internal fun ToggleRow(
     title: String,
     subtitle: String,
     icon: ImageVector,

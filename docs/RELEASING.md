@@ -77,6 +77,9 @@ gh secret set KEY_PASSWORD       # from keystore.properties
 base64 -w0 release.keystore | gh secret set KEYSTORE_BASE64
 ```
 
+Two more are optional, and a release without them only lacks the feature: `SENTRY_DSN` (opted-in
+crash reports) and `OPENSUBTITLES_API_KEY` (online subtitles, on every platform).
+
 GitHub secrets are write-only: once set, nobody can read them back through the UI or API.
 Gate the `release` environment behind required reviewers in repository settings so that only
 a reviewed tag can reach the signing key and the credentials. Every job that uses that

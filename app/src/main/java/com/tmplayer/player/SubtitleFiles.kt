@@ -81,6 +81,16 @@ class SubtitleFiles(
             .build()
     }
 
+    /** A subtitle already on the disk as UTF-8, such as one downloaded from online, loaded as is. */
+    fun attachFile(file: File, label: String) {
+        val mime = ExternalSubtitle.mimeTypeOf(ExternalSubtitle.extensionOf(file.name))
+        if (mime == null) {
+            say(L.onlineNoticeUnreadable)
+            return
+        }
+        attach(Copy.Done(file, mime), label)
+    }
+
     private fun load(uri: Uri) {
         activity.lifecycleScope.launch {
             val name = withContext(Dispatchers.IO) { displayName(uri) } ?: L.tracksFileFallbackName

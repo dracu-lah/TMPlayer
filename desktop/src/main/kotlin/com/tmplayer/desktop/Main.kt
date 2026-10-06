@@ -1,5 +1,8 @@
 package com.tmplayer.desktop
 
+import com.tmplayer.online.OnlineSubtitles
+import com.tmplayer.online.OnlineSubtitlesStore
+import com.tmplayer.online.SubtitleCache
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,6 +57,7 @@ fun main(args: Array<String>) {
     if (!SingleInstance.acquire(args.toList()) { java.awt.EventQueue.invokeLater { raise() } }) return
     NativeInventory.log()
     Td.start(DesktopPaths, desktopDeviceInfo(), desktopCredentials())
+    OnlineSubtitles.current = desktopOnlineSubtitles()
     val settings = DesktopServices.settings
     // What an earlier run was in the middle of comes back paused, once there is an account to
     // ask TDLib about.
@@ -199,3 +203,14 @@ fun DesktopTheme(settings: SettingsStore, content: @Composable () -> Unit) {
     }
     TmMaterialTheme(dark = dark, content = content)
 }
+
+/**
+ * Online subtitles with this build's OpenSubtitles key: the account beside the settings in the
+ * data directory, the cache in the cache directory. A build without a key gets one that says so.
+ */
+internal fun desktopOnlineSubtitles(): OnlineSubtitles = OnlineSubtitles(
+    apiKey = BuildInfo.OPENSUBTITLES_API_KEY,
+    store = OnlineSubtitlesStore(java.io.File(DesktopPaths.dataDir, "online-subtitles.properties")),
+    cache = SubtitleCache(java.io.File(DesktopPaths.cacheDir, "online-subtitles")),
+    appVersion = BuildInfo.VERSION,
+).also { online -> Background.scope.launch { runCatching { online.cache.prune() } } }

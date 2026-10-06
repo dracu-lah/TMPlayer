@@ -134,6 +134,9 @@ internal sealed interface MenuAction {
     data object Details : MenuAction
     data object Shortcuts : MenuAction
     data object ToggleWatched : MenuAction
+
+    /** The subtitle menu's "Search online", in a build with the OpenSubtitles key. */
+    data object SearchOnline : MenuAction
 }
 
 private val Scrim = Color(0xB3000000)
@@ -678,6 +681,7 @@ internal fun PlayerMenu(
                 val list = tracks.filter { it.type == TrackType.Subtitle }
                 Entry(s.commonOff, checked = list.none { it.selected }) { pick(MenuAction.Track(TrackType.Subtitle, null)) }
                 list.forEach { t -> Entry(t.label, checked = t.selected) { pick(MenuAction.Track(TrackType.Subtitle, t)) } }
+                if (com.tmplayer.online.OnlineSubtitles.available) Entry(s.onlineSearchOnline) { pick(MenuAction.SearchOnline) }
                 HorizontalDivider()
                 Nudge(s.playerDelay, SyncDelays.label(status.subtitleDelayMs), s.playerEarlier, s.playerLater,
                     { onAction(MenuAction.SubtitleDelay(-1)) }, { onAction(MenuAction.SubtitleDelay(1)) })

@@ -11,6 +11,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import com.tmplayer.i18n.L
 import com.tmplayer.i18n.Translator
+import com.tmplayer.online.OnlineSubtitles
 import java.util.Locale
 
 /**
@@ -22,6 +23,8 @@ import java.util.Locale
  * Below the tracks sit the timing lines (earlier, later, reset) and, for subtitles, their look.
  * Those act in place and leave the picker open, so a line can be nudged a tenth at a time while it
  * plays behind the list, and the look changes on the subtitles as they are chosen.
+ *
+ * For subtitles, "Search online" sits under the tracks and opens [OnlineSubtitlesFragment].
  */
 @UnstableApi
 class TrackPickerFragment : GuidedStepSupportFragment() {
@@ -42,7 +45,7 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
     }
 
     override fun onCreateActions(actions: MutableList<GuidedAction>, savedInstanceState: Bundle?) {
-        val player = (activity as? PlayerActivity)?.player ?: return
+        val player = (activity as? TrackPickerHost)?.player ?: return
         options.clear()
 
         // Subtitles need an explicit "off"; audio always has at least one track playing.
@@ -67,6 +70,8 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
             actions.add(GuidedAction.Builder(requireContext()).id(ID_NONE).title(none).build())
             // Sound can still be out of step with only the one track to choose from.
             if (trackType == C.TRACK_TYPE_AUDIO && options.isNotEmpty()) addTimingActions(actions)
+            // No subtitles in the file is exactly when looking online is worth it.
+            if (trackType == C.TRACK_TYPE_TEXT) addOnlineAction(actions)
             return
         }
 
@@ -82,8 +87,19 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
                     .build(),
             )
         }
+        if (trackType == C.TRACK_TYPE_TEXT) addOnlineAction(actions)
         addTimingActions(actions)
         if (trackType == C.TRACK_TYPE_TEXT) addStyleActions(actions)
+    }
+
+    /** "Search online", in a build that carries the OpenSubtitles key. */
+    private fun addOnlineAction(actions: MutableList<GuidedAction>) {
+        if (!OnlineSubtitles.available) return
+        actions += GuidedAction.Builder(requireContext())
+            .id(ID_ONLINE)
+            .title(L.onlineSearchOnline)
+            .description(L.onlineSearchOnlineDetail)
+            .build()
     }
 
     private fun addTimingActions(actions: MutableList<GuidedAction>) {
@@ -106,7 +122,7 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
 
     /** The offset now in force, under each timing line, so a press shows where it got to. */
     private fun describeTiming(action: GuidedAction) {
-        val delays = (activity as? PlayerActivity)?.syncDelaysNow() ?: return
+        val delays = (activity as? TrackPickerHost)?.syncDelaysNow() ?: return
         val ms = if (trackType == C.TRACK_TYPE_TEXT) delays.subtitleMs else delays.audioMs
         when (action.id) {
             ID_EARLIER, ID_LATER -> action.description = L.tracksDelayStep(SyncDelays.label(ms))
@@ -118,7 +134,7 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
     }
 
     private fun describeStyle(action: GuidedAction) {
-        val style = (activity as? PlayerActivity)?.subtitleStyleNow() ?: return
+        val style = (activity as? TrackPickerHost)?.subtitleStyleNow() ?: return
         when (action.id) {
             ID_SIZE -> action.description = style.size.label
             ID_BOX -> action.description = if (style.box) L.commonOn else L.commonOff
@@ -127,10 +143,14 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
     }
 
     override fun onGuidedActionClicked(action: GuidedAction) {
-        val activity = activity as? PlayerActivity
+        val activity = activity as? TrackPickerHost
         val player = activity?.player
         if (activity != null && action.id in IN_PLACE) {
             actOnPlace(activity, action.id)
+            return
+        }
+        if (action.id == ID_ONLINE) {
+            GuidedStepSupportFragment.add(parentFragmentManager, OnlineSubtitlesFragment(), id)
             return
         }
         if (player == null || action.id == ID_NONE) {
@@ -157,7 +177,7 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
     }
 
     /** A timing or look line: applied at once, the picker stays where it is. */
-    private fun actOnPlace(activity: PlayerActivity, id: Long) {
+    private fun actOnPlace(activity: TrackPickerHost, id: Long) {
         when (id) {
             ID_EARLIER -> activity.stepDelay(trackType, -1)
             ID_LATER -> activity.stepDelay(trackType, 1)
@@ -239,6 +259,7 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
         private const val ID_SIZE = 1_010L
         private const val ID_BOX = 1_011L
         private const val ID_POSITION = 1_012L
+        private const val ID_ONLINE = 1_020L
         private val IN_PLACE = setOf(ID_EARLIER, ID_LATER, ID_RESET, ID_SIZE, ID_BOX, ID_POSITION)
 
         // Spelled several ways depending on whether the id came from the MP4 sample entry or

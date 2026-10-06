@@ -117,6 +117,12 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import com.tmplayer.online.MovieHash
+import com.tmplayer.online.OnlineSubtitles
+import com.tmplayer.online.SubtitleTarget
 import java.io.File
 
 /**
@@ -126,9 +132,9 @@ import java.io.File
  * interrupting the stream.
  */
 @UnstableApi
-class PlayerActivity : FragmentActivity() {
+class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
-    var player: ExoPlayer? = null
+    override var player: ExoPlayer? = null
         private set
 
     lateinit var mediaTitle: String
@@ -1988,13 +1994,13 @@ class PlayerActivity : FragmentActivity() {
     }
 
     /** The offsets now in force, for the track picker's timing lines. */
-    fun syncDelaysNow(): SyncDelays = syncDelays
+    override fun syncDelaysNow(): SyncDelays = syncDelays
 
     /**
      * Moves subtitles ([C.TRACK_TYPE_TEXT]) or sound one step later ([direction] 1) or earlier
      * (-1), or back to none ([direction] 0), and keeps the result for this file.
      */
-    fun stepDelay(trackType: Int, direction: Int) {
+    override fun stepDelay(trackType: Int, direction: Int) {
         syncDelays = if (trackType == C.TRACK_TYPE_TEXT) {
             syncDelays.copy(subtitleMs = if (direction == 0) 0 else SyncDelays.step(syncDelays.subtitleMs, direction))
         } else {
@@ -2008,10 +2014,10 @@ class PlayerActivity : FragmentActivity() {
         }
     }
 
-    fun subtitleStyleNow(): SubtitleStyle = subtitleStyle
+    override fun subtitleStyleNow(): SubtitleStyle = subtitleStyle
 
     /** Applies [style] to the subtitles on screen at once, and keeps it for every video after. */
-    fun changeSubtitleStyle(style: SubtitleStyle) {
+    override fun changeSubtitleStyle(style: SubtitleStyle) {
         subtitleStyle = style
         applySubtitleStyle()
         lifecycleScope.launch { runCatching { settings.setSubtitleStyle(style) } }
@@ -2035,6 +2041,37 @@ class PlayerActivity : FragmentActivity() {
             ),
         )
     }
+
+    /**
+     * This video for an online subtitle search: its name, its size, the subtitle language last
+     * chosen for the series, and the OpenSubtitles hash when both ends of the file are on the disk
+     * (always for a download; for a stream, once TDLib has fetched them).
+     */
+    override suspend fun onlineTarget(): SubtitleTarget? {
+        if (mediaTitle.isBlank()) return null
+        val local = downloadedFile
+        val id = fileId
+        val size = fileSizeBytes
+        val hash = withContext(Dispatchers.IO) {
+            runCatching {
+                when {
+                    local != null -> MovieHash.of(local)
+                    id != 0 -> withTimeoutOrNull(3_000) {
+                        OnlineSubtitles.hashFromTdlib(Td.awaitConnectedSession().client, id, size)
+                    }
+                    else -> null
+                }
+            }.getOrNull()
+        }
+        return SubtitleTarget(
+            fileName = mediaTitle,
+            sizeBytes = size,
+            hash = hash,
+            languages = OnlineSubtitles.languagesFor(tracks.textLanguage),
+        )
+    }
+
+    override fun attachOnlineSubtitle(file: File, label: String) = subtitleFiles.attachFile(file, label)
 
     fun showTrackPicker(trackType: Int) {
         GuidedStepSupportFragment.add(

@@ -312,6 +312,35 @@ class PromoShots {
         }
     }
 
+    @org.junit.After
+    fun forgetOnline() {
+        com.tmplayer.online.OnlineSubtitles.current = null
+    }
+
+    /** The subtitle menu with "Search online" in it, in a build that has the OpenSubtitles key. */
+    @Test
+    fun playerSubtitleMenu() = both("player-subtitles-online", darkOnly = true, before = {
+        runBlocking { settings.updateTouchPrefs { it.copy(controlsTimeoutMs = 0L) } }
+        com.tmplayer.desktop.ui.OnlineFixture.install("signed_in")
+    }) {
+        val frame = remember { SkImage.makeFromEncoded(demo("coast")).toComposeImageBitmap() }
+        Box(Modifier.fillMaxSize()) {
+            Image(frame, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            PlayerScreen(
+                media = PromoMedia(videos.first().copy(fileName = "Coast walk, day 2.mp4")),
+                startFromBeginning = false,
+                onBack = {},
+                fullscreen = false,
+                onToggleFullscreen = {},
+                settings = settings,
+                prefs = prefs,
+                engineFactory = { StillEngine() },
+                backdrop = androidx.compose.ui.graphics.Color.Transparent,
+                menuOpen = "Subtitles",
+            )
+        }
+    }
+
     /** The tour as the desktop shows it before sign in, page by page; not shipped anywhere, only checked. */
     @Test
     fun tour() {

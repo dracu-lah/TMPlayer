@@ -106,6 +106,14 @@ fun main(argv: Array<String>) {
     // Written before the player opens, as the menu's toggle would have left it.
     value("--volume-boost")?.let { on -> kotlinx.coroutines.runBlocking { store.setVolumeBoost(on == "on") } }
 
+    // Online subtitles with this build's key, its account kept with the harness's settings.
+    com.tmplayer.online.OnlineSubtitles.current = com.tmplayer.online.OnlineSubtitles(
+        apiKey = com.tmplayer.desktop.BuildInfo.OPENSUBTITLES_API_KEY,
+        store = com.tmplayer.online.OnlineSubtitlesStore(File(settingsDir, "online-subtitles.properties")),
+        cache = com.tmplayer.online.SubtitleCache(File(settingsDir, "online-subtitles")),
+        appVersion = com.tmplayer.desktop.BuildInfo.VERSION,
+    )
+
     NonReparentingWm.applyIfNeeded()
     application {
         val state = rememberWindowState(

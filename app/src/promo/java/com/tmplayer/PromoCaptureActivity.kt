@@ -157,6 +157,8 @@ class PromoCaptureActivity : ComponentActivity() {
         // `--es lang en-XA` (or any shipped tag) pins the UI language for the shot, the same way
         // the Settings choice would; "" goes back to following the system.
         promoLanguage(intent.getStringExtra("lang"))
+        // `--es online <state>` gives Settings an online subtitles section in that state.
+        PromoOnline.install(applicationContext, intent.getStringExtra("online"))
 
         val start = intent.getStringExtra("screen") ?: "chats"
         if (start == "signin") {

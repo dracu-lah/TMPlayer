@@ -2,6 +2,7 @@ package com.tmplayer.ui.about
 
 import com.tmplayer.data.SupportReminder
 import com.tmplayer.i18n.L
+import com.tmplayer.online.OnlineSubtitles
 
 /**
  * What the About screen says, the same on phone, TV and desktop: the licence line, every link it
@@ -25,6 +26,8 @@ object About {
     const val EMAIL = "hello@tmplayer.org"
     const val SPONSORS = "https://github.com/sponsors/dracu-lah"
     const val COFFEE = "https://buymeacoffee.com/nevil.dev"
+    const val OPENSUBTITLES = "https://www.opensubtitles.com"
+    const val SUBDL = "https://subdl.com"
 
     /** The heading, the Settings row and the card's title. */
     val SUPPORT_TITLE: String get() = L.aboutSupportTitle
@@ -61,9 +64,15 @@ object About {
     /**
      * Every link About offers, in order. The third-party notices are not among them: those are read
      * inside the app, so each screen puts that row first under "Licence" itself. With
-     * [SupportReminder.enabled] off (the future Play build), the support group is left out.
+     * [SupportReminder.enabled] off (the future Play build), the support group is left out. The
+     * online extras group is the credit OpenSubtitles' terms ask for, shown in every build that
+     * carries the feature ([OnlineSubtitles.available]).
      */
-    fun groups(version: String, support: Boolean = SupportReminder.enabled): List<Group> = listOfNotNull(
+    fun groups(
+        version: String,
+        support: Boolean = SupportReminder.enabled,
+        online: Boolean = OnlineSubtitles.available,
+    ): List<Group> = listOfNotNull(
         Group(
             L.aboutLicence,
             listOf(
@@ -91,6 +100,17 @@ object About {
                 Link("GitHub Discussions", L.aboutDiscussionsDetail, "$SOURCE/discussions"),
             ),
         ),
+        if (online) {
+            Group(
+                L.onlineAboutGroup,
+                listOf(
+                    Link("OpenSubtitles.com", L.onlineAboutDetail, OPENSUBTITLES),
+                    Link("SubDL", L.onlineAboutSubdlDetail, SUBDL),
+                ),
+            )
+        } else {
+            null
+        },
         if (support) Group(SUPPORT_TITLE, supportLinks, note = SUPPORT_NOTE) else null,
     )
 

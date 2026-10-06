@@ -28,6 +28,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import com.tmplayer.online.OnlineSubtitles
+import com.tmplayer.online.OnlineSubtitlesStore
+import com.tmplayer.online.SubtitleCache
 
 class App : Application() {
 
@@ -58,6 +61,15 @@ class App : Application() {
         // The isolated screenshot fixture must never open TDLib or touch a Telegram account.
         // BuildConfig is variant-specific, and the promo package is never part of a release APK.
         if (BuildConfig.APPLICATION_ID.endsWith(".promo")) return
+        // Online subtitles: the build's OpenSubtitles key, the viewer's account in private files,
+        // and the cache under the app's cache. A build without a key gets an instance that says
+        // so (inBuild false), and nothing of the feature is drawn.
+        OnlineSubtitles.current = OnlineSubtitles(
+            apiKey = BuildConfig.OPENSUBTITLES_API_KEY,
+            store = OnlineSubtitlesStore(java.io.File(filesDir, "online/account.properties")),
+            cache = SubtitleCache(java.io.File(cacheDir, "online-subtitles")),
+            appVersion = BuildConfig.VERSION_NAME,
+        ).also { online -> backgroundScope.launch { runCatching { online.cache.prune() } } }
         // Before anything else that could throw: a crash reporter that starts after the crash is
         // worth nothing. It reads one flag off the disk on a background thread and stays inert
         // unless that flag is true, so no SDK is initialised and no endpoint is contacted on a

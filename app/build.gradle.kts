@@ -75,6 +75,14 @@ android {
             ?: ""
         buildConfigField("String", "SENTRY_DSN", "\"$sentryDsn\"")
 
+        // The OpenSubtitles app key for online subtitles. Like the DSN, optional: a build without
+        // it hides the feature (OnlineSubtitles.inBuild). Set OPENSUBTITLES_API_KEY in
+        // local.properties or the environment; CI takes it from the repository secret.
+        val openSubtitlesKey = localProps.getProperty("OPENSUBTITLES_API_KEY")
+            ?: System.getenv("OPENSUBTITLES_API_KEY")
+            ?: ""
+        buildConfigField("String", "OPENSUBTITLES_API_KEY", "\"$openSubtitlesKey\"")
+
         // Donation links and the support card, all behind one switch (SupportReminder.enabled).
         // The `play` flavor planned in CP35 sets this to false: Play does not allow donation links
         // that bypass its billing.

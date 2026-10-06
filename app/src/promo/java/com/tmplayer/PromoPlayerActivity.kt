@@ -24,6 +24,15 @@ import com.tmplayer.player.NextUpCard
 import com.tmplayer.player.PlayerFeedback
 import com.tmplayer.player.PlayerTvMenu
 import com.tmplayer.player.TapZone
+import com.tmplayer.player.OnlineSubtitlesFragment
+import com.tmplayer.player.SubtitleStyle
+import com.tmplayer.player.SyncDelays
+import com.tmplayer.player.TrackPickerFragment
+import com.tmplayer.player.TrackPickerHost
+import com.tmplayer.online.OnlineSubtitles
+import com.tmplayer.online.SubtitleTarget
+import androidx.leanback.app.GuidedStepSupportFragment
+import androidx.media3.common.C
 
 /**
  * Screenshot fixture for the player's overlay. Draws the real controls layout over a demo picture,
@@ -33,6 +42,8 @@ import com.tmplayer.player.TapZone
  *     adb shell am start -n com.tmplayer.promo/com.tmplayer.PromoPlayerActivity \
  *         [--ez tv true] [--ez playing true] [--es feedback ripple|level|scrub|hold|flash|jump]
  *         [--ez nextup true] [--ez menu true] [--ez trickplay true] [--el scrub_at 1265000]
+ *         [--es picker subtitles|online]
+ *         [--es online signed_out|signed_in|quota|expired|unavailable|empty|offline|subdl|none]
  *
  * `nextup` raises the next-up card over the bare picture, `menu` the television's More menu,
  * `jump` the remote's side figure for a ten second jump. The stand-in player really plays and
@@ -41,16 +52,38 @@ import com.tmplayer.player.TapZone
  * Nothing here exists in a release build.
  */
 @UnstableApi
-class PromoPlayerActivity : FragmentActivity() {
+class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
 
     private var controls: PlayerControls? = null
     private var standIn: StandInPlayer? = null
+    private var delays = SyncDelays()
+    private var style = SubtitleStyle()
+
+    override val player: Player? get() = standIn
+    override fun syncDelaysNow() = delays
+    override fun stepDelay(trackType: Int, direction: Int) {
+        delays = delays.copy(subtitleMs = if (direction == 0) 0 else SyncDelays.step(delays.subtitleMs, direction))
+    }
+    override fun subtitleStyleNow() = style
+    override fun changeSubtitleStyle(style: SubtitleStyle) {
+        this.style = style
+    }
+    override suspend fun onlineTarget() = SubtitleTarget(
+        fileName = "The.Coast.S01E04.1080p.WEB.H264.mkv",
+        sizeBytes = 1_400_000_000,
+        hash = "8e245d9679d31e12",
+        languages = OnlineSubtitles.languagesFor(null),
+    )
+    override fun attachOnlineSubtitle(file: java.io.File, label: String) {
+        android.widget.Toast.makeText(this, L.tracksFileLoaded(label), android.widget.Toast.LENGTH_SHORT).show()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val tv = intent.getBooleanExtra("tv", false)
         if (tv) FormFactor.override(true)
         promoLanguage(intent.getStringExtra("lang"))
+        PromoOnline.install(applicationContext, intent.getStringExtra("online"))
         setContentView(R.layout.activity_player)
         findViewById<View>(android.R.id.content).layoutDirection = com.tmplayer.player.layoutDirectionFor(com.tmplayer.i18n.Translator.messages.rtl)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -162,6 +195,13 @@ class PromoPlayerActivity : FragmentActivity() {
                     onSpeed = {},
                     onClosed = {},
                 ).open()
+            }
+            // `--es picker subtitles` opens the subtitle picker, `online` its "Search online" list.
+            when (intent.getStringExtra("picker")) {
+                "subtitles" -> GuidedStepSupportFragment.add(
+                    supportFragmentManager, TrackPickerFragment.forType(C.TRACK_TYPE_TEXT), R.id.overlay_container,
+                )
+                "online" -> GuidedStepSupportFragment.add(supportFragmentManager, OnlineSubtitlesFragment(), R.id.overlay_container)
             }
         }, 600)
     }

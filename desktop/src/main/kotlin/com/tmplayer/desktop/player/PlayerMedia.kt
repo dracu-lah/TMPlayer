@@ -29,6 +29,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -88,6 +89,13 @@ interface PlayerMedia {
      * TDLib's complete copy. Null while any of it is still to come.
      */
     suspend fun localFile(): java.io.File? = null
+
+    /**
+     * The OpenSubtitles hash of this video, for an online subtitle search: from the whole file
+     * when it is on the disk, else null and the search goes by name.
+     */
+    suspend fun onlineHash(): String? =
+        localFile()?.let { withContext(Dispatchers.IO) { com.tmplayer.online.MovieHash.of(it) } }
 
     /**
      * What [open] is doing while it takes its time, for the loading screen ("Downloading the
@@ -305,6 +313,14 @@ class TelegramPlayerMedia(
         return runCatching { Td.localFilePath(playingId) }.getOrNull()?.let(::File)
     }
 
+    /** A stream is hashed from TDLib's partial file once both ends are there, without moving it. */
+    override suspend fun onlineHash(): String? = localFile()?.let { withContext(Dispatchers.IO) { com.tmplayer.online.MovieHash.of(it) } }
+        ?: runCatching {
+            withTimeoutOrNull(3_000) {
+                com.tmplayer.online.OnlineSubtitles.hashFromTdlib(Td.awaitConnectedSession().client, playingId, item.sizeBytes)
+            }
+        }.getOrNull()
+
     /**
      * Makes room on the cache's drive before a stream starts (B8): the least recently played
      * cached videos go if that is what it takes, and a video that cannot fit even then is refused
@@ -400,6 +416,8 @@ class LocalPlayerMedia(
         LocalPlayerMedia(File(file.parentFile, other.fileName), growingBytesPerSecond, scratch)
 
     override suspend fun tdlibVersion(): String? = null
+
+    override suspend fun onlineHash(): String? = withContext(Dispatchers.IO) { com.tmplayer.online.MovieHash.of(file) }
 
     override fun release() = Unit
 

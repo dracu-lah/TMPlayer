@@ -28,6 +28,14 @@ Desktop's own `api_id` is public in its source. Register a **dedicated** app at 
 for this project rather than reusing credentials tied to a personal account, because an `api_id`
 that gets abused is acted on by Telegram, and it traces back to whoever registered it.
 
+## Online subtitles (optional)
+
+Online subtitles come from OpenSubtitles.com through one app key, `OPENSUBTITLES_API_KEY` in
+`local.properties` (or the environment). Without it the build simply has no online subtitles: no
+Settings section, no "Search online" in the subtitle picker. A fork should register its own key at
+[opensubtitles.com/consumers](https://www.opensubtitles.com/consumers). Viewers never enter a key;
+they sign in with their own free account, and downloads count against it.
+
 ## The commands
 
 ```bash
