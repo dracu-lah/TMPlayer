@@ -783,6 +783,12 @@ aapt2 (see the stale versionCode note) before trusting a test.
      empty. Fine with more items, but worth a wider card or a second row (hint plus Favourites) at this size.
   6. The "Sign out of Telegram" row on TV Settings is the default focus on arrival at the bottom of the list and
      has no visible confirm on a single OK; CP41's prompt sweep covers it.
+**Fixes after the first pass (2026-10-06, user: fix all, defaults taken):** 1 and 2: the subtitle cue stands down
+(fades) while the controls are up when it cannot climb clear of the row or would reach the centre buttons and
+their episode captions; 3: the phone overflow drops Copy link and Picture shape (the pinch is the shortcut), 9
+entries left; 4: a lone Continue card is 1.5 times wider, and the empty controls slot stays for CP40's Episodes
+button; 5: already covered, Sign out opens a confirm with Cancel focused first, so only the landing focus remains,
+which is ordinary D-pad scrolling. Not yet seen on a device.
 - Not tested: real gestures and pinch, the resume offer pill and the first-run hint over a real resume (the
   first resume here showed the loader line "Resuming from 13:52", not the offer; check whether the offer shows
   once playback is ready), the TV rungs of the support card (they need the forced debug flag), phone

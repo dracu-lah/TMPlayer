@@ -41,13 +41,10 @@ enum class PlayerMenuEntry {
 enum class PhoneMenuEntry {
     LockScreen,
     PictureInPicture,
-    /** Opens the fit, crop and stretch sheet; the pinch stays as the shortcut. */
-    PictureShape,
     VolumeBoost,
     SleepTimer,
     OpenInAnotherApp,
     LoadSubtitleFile,
-    CopyLink,
     SaveToDownloads,
     MarkWatched,
     /** Last: a line for bug reports, not for watching. */
@@ -61,12 +58,10 @@ enum class PhoneMenuEntry {
 fun PhoneMenuEntry.label(sleepDetail: String? = null, watched: Boolean = false): String = when (this) {
     PhoneMenuEntry.LockScreen -> L.playerLockScreen
     PhoneMenuEntry.PictureInPicture -> L.playerPictureInPicture
-    PhoneMenuEntry.PictureShape -> L.playerPictureShape
     PhoneMenuEntry.VolumeBoost -> L.playerVolumeBoost
     PhoneMenuEntry.SleepTimer -> sleepDetail?.let { L.playerSleepTimerNow(it) } ?: L.playerSleepTimer
     PhoneMenuEntry.OpenInAnotherApp -> L.playerOpenInAnotherApp
     PhoneMenuEntry.LoadSubtitleFile -> L.playerLoadSubtitleFile
-    PhoneMenuEntry.CopyLink -> L.playerCopyLink
     PhoneMenuEntry.SaveToDownloads -> L.playerSaveToDownloads
     PhoneMenuEntry.MarkWatched -> if (watched) L.playerMarkUnwatched else L.playerMarkWatched
     PhoneMenuEntry.PlaybackDetails -> L.playerPlaybackDetails
@@ -118,24 +113,21 @@ object PlayerMenu {
 
     /**
      * The phone's overflow, in the order it draws. [pictureInPicture] is whether the device can do
-     * it; [openInAnotherApp] false for a chat that restricts saving; [copyLink] and [markWatched]
-     * need a message to point at; [saveToDownloads] only while the video can still become one.
+     * it; [openInAnotherApp] false for a chat that restricts saving; [markWatched]
+     * needs a message to point at; [saveToDownloads] only while the video can still become one.
      */
     fun phoneEntries(
         pictureInPicture: Boolean,
         openInAnotherApp: Boolean,
-        copyLink: Boolean,
         saveToDownloads: Boolean,
         markWatched: Boolean,
     ): List<PhoneMenuEntry> = buildList {
         add(PhoneMenuEntry.LockScreen)
         if (pictureInPicture) add(PhoneMenuEntry.PictureInPicture)
-        add(PhoneMenuEntry.PictureShape)
         add(PhoneMenuEntry.VolumeBoost)
         add(PhoneMenuEntry.SleepTimer)
         if (openInAnotherApp) add(PhoneMenuEntry.OpenInAnotherApp)
         add(PhoneMenuEntry.LoadSubtitleFile)
-        if (copyLink) add(PhoneMenuEntry.CopyLink)
         if (saveToDownloads) add(PhoneMenuEntry.SaveToDownloads)
         if (markWatched) add(PhoneMenuEntry.MarkWatched)
         add(PhoneMenuEntry.PlaybackDetails)

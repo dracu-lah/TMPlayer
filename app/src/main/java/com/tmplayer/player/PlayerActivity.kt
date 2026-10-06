@@ -1177,11 +1177,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
     }
 
-    /** The overflow's Picture shape: the three shapes to pick from. The pinch is the shortcut. */
-    private fun pickShape() {
-        showSheet { it.showShape(videoScale, ::applyScale) }
-    }
-
     /**
      * The PlayerView owns the picture's shape on every device now, so the codec's own scaling
      * stays on plain fit: the view sizes its surface to the chosen shape, and the codec scaling
@@ -2749,7 +2744,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val entries = PlayerMenu.phoneEntries(
             pictureInPicture = packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE),
             openInAnotherApp = savable == true,
-            copyLink = chatId != 0L && messageId != 0L,
             saveToDownloads = canSaveToDownloads(),
             markWatched = hasMessage(),
         )
@@ -2764,12 +2758,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             when (PhoneMenuEntry.entries[item.itemId]) {
                 PhoneMenuEntry.LockScreen -> lockScreen()
                 PhoneMenuEntry.PictureInPicture -> enterPictureInPictureNow()
-                PhoneMenuEntry.PictureShape -> pickShape()
                 PhoneMenuEntry.VolumeBoost -> toggleVolumeBoost()
                 PhoneMenuEntry.SleepTimer -> showSheet { it.showSleep(sleepTimerDetail(), sleepChoice(), ::setSleepTimer) }
                 PhoneMenuEntry.OpenInAnotherApp -> openInAnotherApp()
                 PhoneMenuEntry.LoadSubtitleFile -> subtitleFiles.pick()
-                PhoneMenuEntry.CopyLink -> lifecycleScope.launch { MessageLink.copy(this@PlayerActivity, chatId, messageId) }
                 PhoneMenuEntry.SaveToDownloads -> saveToDownloads()
                 PhoneMenuEntry.MarkWatched -> toggleWatched()
                 PhoneMenuEntry.PlaybackDetails -> showPlaybackDetails()
@@ -3237,8 +3229,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         cluster.post {
             val reach = (cluster.height - subtitleGapBelow).coerceAtLeast(0)
             val room = roomUnderCentre()
-            val lift = if (room == null) reach else reach.coerceAtMost(room)
+            val lift = if (room == null) reach else reach.coerceAtMost(room.coerceAtLeast(0))
+            // Where the climb cannot clear the row, or the cue would sit among the centre buttons
+            // and their episode captions, the cue stands down while the row is up rather than
+            // running through the timebar. It comes back with the row.
+            val blocked = controlsUp && room != null && (room < 0 || room < reach)
             subtitleView.animate()
+                .alpha(if (blocked) 0f else 1f)
                 .translationY(if (controlsUp) -lift.toFloat() else 0f)
                 .setDuration(SUBTITLE_LIFT_MS)
                 .start()
@@ -3266,7 +3263,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val textBottom = viewTop + height * (1f - subtitleStyle.position.bottomFraction)
         val twoLines = 2.5f * subtitleTextFraction() * height
         val gap = 8 * resources.displayMetrics.density
-        return (textBottom - twoLines - gap - centreBottom).toInt().coerceAtLeast(0)
+        return (textBottom - twoLines - gap - centreBottom).toInt()
     }
 
     /**

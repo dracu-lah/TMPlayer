@@ -216,7 +216,6 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
                 com.tmplayer.player.PlayerMenu.phoneEntries(
                     pictureInPicture = true,
                     openInAnotherApp = true,
-                    copyLink = true,
                     saveToDownloads = true,
                     markWatched = true,
                 ).forEachIndexed { order, entry -> popup.menu.add(0, entry.ordinal, order, entry.label()) }

@@ -170,7 +170,9 @@ internal fun HomePane(
                                     // row alone read as a different app.
                                     onLongClick = { onHoldMedia(item, record.chatTitle.ifEmpty { chatTitle(record.chatId) }) },
                                     dense = touch,
-                                    modifier = Modifier.width(tileWidth(touch))
+                                    // A lone card takes more of the row, so it does not sit in a third of the
+                                    // width with the rest empty.
+                                    modifier = Modifier.width(tileWidth(touch) * if (row.records.size == 1 && !row.hasMore) 1.5f else 1f)
                                         .then(if (isFirst && record === row.records.first()) Modifier.focusRequester(first) else Modifier),
                                 )
                             }

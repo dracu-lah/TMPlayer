@@ -100,12 +100,10 @@ class PlayerMenuTest {
             listOf(
                 PhoneMenuEntry.LockScreen,
                 PhoneMenuEntry.PictureInPicture,
-                PhoneMenuEntry.PictureShape,
                 PhoneMenuEntry.VolumeBoost,
                 PhoneMenuEntry.SleepTimer,
                 PhoneMenuEntry.OpenInAnotherApp,
                 PhoneMenuEntry.LoadSubtitleFile,
-                PhoneMenuEntry.CopyLink,
                 PhoneMenuEntry.SaveToDownloads,
                 PhoneMenuEntry.MarkWatched,
                 PhoneMenuEntry.PlaybackDetails,
@@ -113,12 +111,11 @@ class PlayerMenuTest {
             PlayerMenu.phoneEntries(
                 pictureInPicture = true,
                 openInAnotherApp = true,
-                copyLink = true,
                 saveToDownloads = true,
                 markWatched = true,
             ),
         )
-        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, true).toSet())
+        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true).toSet())
     }
 
     @Test
@@ -126,14 +123,12 @@ class PlayerMenuTest {
         val bare = PlayerMenu.phoneEntries(
             pictureInPicture = false,
             openInAnotherApp = false,
-            copyLink = false,
             saveToDownloads = false,
             markWatched = false,
         )
         assertEquals(
             listOf(
                 PhoneMenuEntry.LockScreen,
-                PhoneMenuEntry.PictureShape,
                 PhoneMenuEntry.VolumeBoost,
                 PhoneMenuEntry.SleepTimer,
                 PhoneMenuEntry.LoadSubtitleFile,
