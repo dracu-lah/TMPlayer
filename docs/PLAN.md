@@ -115,6 +115,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [ ] CP38 Desktop player declutter: bar, main menu, shortcut sheet
 - [ ] CP39 Support asks v2: positive moments, three asks at most, thank-you state, tmplayer.org/support
 - [ ] CP40 Episodes button and modal in the player (phone, TV, desktop), after CP37 and CP38
+- [ ] CP43 Sidebar with fewer entries: fold the eight chat sections into two entries with filter chips (before CP41)
 - [ ] CP41 Setting to hide Telegram's default chat groups everywhere, with warning prompts, plus a sweep for settings that lack one
 - [ ] CP42 Minimal onboarding: six tour pages down to two, one first-sign-in card, deferred hints
 
@@ -630,6 +631,7 @@ season switch, a watched tick), the desktop render test, a D-pad walk, and tests
 **STOP**
 
 ### CP41 Hide Telegram's default chat groups, and prompts where they are missing
+**Order:** after CP43, so it hides the shorter Chats group (see CP43).
 **Why:** the user asked on 2026-10-06 for a Settings option that hides the default Telegram grouping from the
 sidebar and from other places, removes favourites that this affects, shows proper alert prompts for features
 like it, and adds the same prompts where they are missing.
@@ -707,6 +709,35 @@ seeing the explanation.
 folders) and the first-run empty state, the desktop render test of the tour, a check that a skipped or finished
 tour leaves posters exactly as the switch says, unit tests for the tour state, and the old `Onboarding` page
 count updated in docs and the site's first-run description if it lists steps.
+**STOP**
+
+### CP43 Sidebar with fewer entries
+**Why:** the user asked on 2026-10-06 whether sidebar sections can be grouped instead of hidden, so there are
+fewer menu entries. CP10a already made the groups fold like an accordion; this goes further and removes
+entries rather than only tucking them away. Run it before CP41, which then hides a smaller group.
+**Today:** `browseSections` lists Home, Continue, Watched, Favourites, Recent, Unread, Saved, Channels, Groups,
+People, All, Archived, then the folders, plus Downloads. Six of the eight Chats entries are only filters of the
+same chat list (`filterChats` in `BrowseSections.kt`: Recent is a sort, Unread, Channels, Groups and People
+filter by `unreadCount` or `ChatKind`).
+**Do:**
+- Chats group becomes two entries: "Chats" (one list) and "Saved messages" (kept apart because it is the
+  video library most people use). Inside "Chats" a row of filter chips: All, Unread, Channels, Groups, People,
+  with a sort toggle for Recent, and Archived as a last chip. The chosen chip is remembered in `SettingsStore`.
+- Watch group: Continue and Watched become one "History" entry with two tabs (Continue, Watched), since both are
+  lists of videos you already played. Home, Favourites and Downloads stay. Net: eleven fixed entries plus
+  folders become six.
+- Keep the shared model: define the entries and chips once in `:ui` shared code next to `BrowseTab`, so phone
+  drawer, TV rail and desktop side bar stay identical. `BrowseSection`, saved screen state, deep links, empty
+  states and hints that name a removed tab (All, Channels, Recent) are updated to point at the chip.
+- TV: the chip row is D-pad reachable (Up from the list header, Left and Right between chips, OK selects),
+  no dead focus, and it keeps the 48 dp target and 14 sp text floor.
+- Folders group unchanged. CP41 then hides "Chats" and "Saved messages" (the default grouping) and leaves
+  History, Watch and the folders; update its text if the entries differ when it starts.
+- CP10a's accordion state and the drawer, rail and desktop layouts stay; remove unused headings only if a
+  group ends up with one entry.
+- Strings go into `en.json` only; leave other locales and never run langsync.
+**Done when:** unit tests for the chip filters and the saved selection, screenshots of the shorter sidebar and
+the chip row on phone and TV, the desktop render test, a D-pad walk, and the old tab names gone from docs.
 **STOP**
 
 ## Your tasks
