@@ -1371,6 +1371,8 @@ kbd {
 
 .shot .device-phone { max-width: 280px; width: 100%; margin: 0 auto; }
 .shot .device-tv { width: 100%; }
+/* A computer's window is 16:10, not a television's 16:9; the same monitor frame, a taller panel. */
+.device-desktop .screen { aspect-ratio: 16 / 10; }
 
 .shot figcaption { color: var(--on-surface-variant); font-size: 0.98rem; max-width: 56ch; }
 .shot figcaption b {

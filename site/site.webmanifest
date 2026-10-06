@@ -54,6 +54,20 @@
       "type": "image/webp",
       "form_factor": "narrow",
       "label": "Playable videos in a Telegram chat, on a phone"
+    },
+    {
+      "src": "/screenshots/desktop-grid.webp",
+      "sizes": "1920x1200",
+      "type": "image/webp",
+      "form_factor": "wide",
+      "label": "Playable videos in a Telegram chat, in the desktop app"
+    },
+    {
+      "src": "/screenshots/desktop-player.webp",
+      "sizes": "1920x1200",
+      "type": "image/webp",
+      "form_factor": "wide",
+      "label": "The desktop player, with its controls up"
     }
   ]
 }

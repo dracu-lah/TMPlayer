@@ -234,7 +234,7 @@
     "from_github_on_android_windows": "{strong1} from GitHub, on Android, Windows and Linux. Signing out clears your history and favourites; your downloads stay unless you choose otherwise.",
     "from_github_on_android_windows__strong1": "Updates itself",
     "what_it_looks_like": "What it looks like",
-    "four_screens_in_the_order": "Four screens in the order you meet them, filled with demo content.",
+    "four_screens_in_the_order": "Six screens on the phone, the TV and the computer, filled with demo content.",
     "every_chat_and_channel_you": "{b1}Every chat and channel you are in, recent ones on top. Messages never appear.",
     "every_chat_and_channel_you__b1": "Step one: pick a chat",
     "tiles_with_running_time_and": "{b1}Tiles with running time and resolution. Press one and it starts in seconds.",
@@ -243,6 +243,10 @@
     "a_rail_for_the_remote__b1": "The same account, on the TV",
     "hide_small_clips_autoplay_the": "{b1}Hide small clips, autoplay the next episode, or download first on a poor connection.",
     "hide_small_clips_autoplay_the__b1": "Settings, if you want them",
+    "a_sidebar_and_a_grid": "{b1}A sidebar and a grid, built for a mouse and a keyboard. Click a poster and it plays.",
+    "a_sidebar_and_a_grid__b1": "On a computer",
+    "played_through_mpv_with_the": "{b1}Played through mpv, with the keys YouTube uses and every subtitle and audio track one click away.",
+    "played_through_mpv_with_the__b1": "The desktop player",
     "on_windows_and_linux": "On Windows and Linux",
     "the_same_account_library_and": "The same account, library and streaming as the TV, in a window built for mouse and keyboard. macOS later.",
     "the_window": "The window",
@@ -310,7 +314,9 @@
     "tmplayer_on_a_phone_listing": "TMPlayer on a phone, listing demo chats: Weekend Clips, Home Projects, Recipe Notes, Travel Diary, Design Study and Family Archive.",
     "a_dense_grid_of_demo": "A dense grid of demo videos from a Telegram chat on a phone, each tile carrying its resolution and running time.",
     "the_same_chat_list_on": "The same chat list on a television, with a navigation rail down the left for Continue, Favourites, Recent, Channels, Groups, People and All chats.",
-    "tmplayer_settings_on_a_television": "TMPlayer settings on a television, showing the video size limits, autoplay of the next episode and how much storage is free."
+    "tmplayer_settings_on_a_television": "TMPlayer settings on a television, showing the video size limits, autoplay of the next episode and how much storage is free.",
+    "the_tmplayer_desktop_app_on": "The TMPlayer desktop app on Windows or Linux: a sidebar of chat sections beside a grid of demo videos, each poster carrying its running time, size and resolution.",
+    "the_tmplayer_desktop_player_over": "The TMPlayer desktop player over a demo video: the title and chat at the top, a timebar, and buttons for subtitles, audio, speed, picture shape, volume, the mini player and fullscreen."
   },
   "download": {
     "download_tmplayer_for_android_tv": "Download TMPlayer for Android TV, phones, Windows and Linux",
