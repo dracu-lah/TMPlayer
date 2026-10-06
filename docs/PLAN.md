@@ -87,7 +87,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [ ] U22 Review hi and ml; ask the issue #2 author to review es
 
 **Phase E. The "Browse" release**
-- [ ] CP27 P9 series view
+- [x] CP27 P9 series view (5fb2c07, MediaName and grouping unit tested on real name shapes; series tiles, season tabs, episode list, phone sheet, TV page with a D-pad walk and the Series and All files switch checked on the phone and TV emulator fixtures, desktop dropdown on the render test, light and dark; real chats and caption-only uploads not yet seen on a device)
 - [ ] CP28 P10 Home rows
 - [ ] CP29 P10 detail panel and search across all chats
 - [ ] CP30 P11 Fire TV, trickplay, Watch Next, then release "Browse" on request
