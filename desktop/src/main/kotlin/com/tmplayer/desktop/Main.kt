@@ -23,6 +23,7 @@ import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import com.tmplayer.data.ThemeChoice
 import com.tmplayer.desktop.os.AppExit
+import com.tmplayer.desktop.os.DesktopLog
 import com.tmplayer.desktop.os.DesktopTransferNotifier
 import com.tmplayer.desktop.os.NativeFullscreen
 import com.tmplayer.desktop.os.NonReparentingWm
@@ -58,6 +59,8 @@ fun main(args: Array<String>) {
     // A second launch hands its arguments (later, tg: links) to the first and leaves.
     var raise: () -> Unit = {}
     if (!SingleInstance.acquire(args.toList()) { java.awt.EventQueue.invokeLater { raise() } }) return
+    // Only the first instance, so a second launch never rotates the log of the one running.
+    DesktopLog.install(java.io.File(DesktopPaths.dataDir, "logs"))
     NativeInventory.log()
     Td.start(DesktopPaths, desktopDeviceInfo(), desktopCredentials())
     OnlineSubtitles.current = desktopOnlineSubtitles()

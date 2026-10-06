@@ -16,6 +16,8 @@ import kotlin.system.exitProcess
  */
 object AppExit {
 
+    private const val HALT_AFTER_MS = 5_000L
+
     private interface CLib : Library {
         @Suppress("FunctionName")
         fun _exit(status: Int)
@@ -23,6 +25,14 @@ object AppExit {
 
     fun now(code: Int = 0): Nothing {
         runCatching { SingleInstance.close() }
+        // Everywhere else `System.exit` runs the shutdown hooks first, and one that never returns
+        // (a native library waiting on its own thread) would leave a process with no window that
+        // still holds the single instance lock, so every later launch hands over to it and quits.
+        // Past the grace period the process is halted, hooks or not.
+        Thread {
+            Thread.sleep(HALT_AFTER_MS)
+            Runtime.getRuntime().halt(code)
+        }.apply { isDaemon = true }.start()
         if (OsInfo.isLinux) {
             System.out.flush()
             System.err.flush()
