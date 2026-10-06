@@ -93,6 +93,8 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           # Optional too: without it online subtitles are hidden in that build.
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+          # Optional too: without it films get no posters in that build.
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
         run: |
           if [ -z "$TG_API_ID" ]; then
             echo "::error::TG_API_ID is not set, so the released APK would not be able to sign in"
@@ -103,12 +105,15 @@ jobs:
           fi
           if [ -z "$OPENSUBTITLES_API_KEY" ]; then
             echo "::notice::OPENSUBTITLES_API_KEY is not set. This build ships without online subtitles."
+          if [ -z "$TMDB_API_KEY" ]; then
+            echo "::notice::TMDB_API_KEY is not set. This build has no TMDB key of its own."
           fi
           cat > local.properties <<EOF
           TG_API_ID=$TG_API_ID
           TG_API_HASH=$TG_API_HASH
           SENTRY_DSN=$SENTRY_DSN
           OPENSUBTITLES_API_KEY=$OPENSUBTITLES_API_KEY
+          TMDB_API_KEY=$TMDB_API_KEY
           EOF
 
       - name: Run unit tests
@@ -195,6 +200,7 @@ jobs:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
         run: |
           if [ -z "$TG_API_ID" ]; then
             echo "::error::TG_API_ID is not set, so the released app would not be able to sign in"
@@ -204,6 +210,7 @@ jobs:
           TG_API_ID=$TG_API_ID
           TG_API_HASH=$TG_API_HASH
           OPENSUBTITLES_API_KEY=$OPENSUBTITLES_API_KEY
+          TMDB_API_KEY=$TMDB_API_KEY
           EOF
 
       - name: Package and self-test
@@ -247,12 +254,14 @@ jobs:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
         run: |
           if [ -z "$TG_API_ID" ]; then
             echo "::error::TG_API_ID is not set, so the released app would not be able to sign in"
             exit 1
           fi
           printf 'TG_API_ID=%s\nTG_API_HASH=%s\nOPENSUBTITLES_API_KEY=%s\n' "$TG_API_ID" "$TG_API_HASH" "$OPENSUBTITLES_API_KEY" > local.properties
+          printf 'TG_API_ID=%s\nTG_API_HASH=%s\nTMDB_API_KEY=%s\n' "$TG_API_ID" "$TG_API_HASH" "$TMDB_API_KEY" > local.properties
 
       - name: Package and self-test
         uses: ./.github/actions/desktop-windows

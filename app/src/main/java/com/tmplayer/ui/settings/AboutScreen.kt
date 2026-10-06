@@ -127,16 +127,22 @@ fun AboutScreen(onBack: () -> Unit) {
                 item { SectionTitle(group.title) }
                 group.note?.let { note ->
                     item {
-                        Text(
-                            note,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Tone.muted,
-                            modifier = Modifier.padding(
+                        Column(
+                            Modifier.padding(
                                 start = if (touch) 16.dp else 0.dp,
                                 end = if (touch) 16.dp else 0.dp,
                                 bottom = 8.dp,
                             ),
-                        )
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            // TMDB's logo with its notice, smaller than TMPlayer's own mark.
+                            if (group.tmdbLogo) com.tmplayer.ui.about.TmdbMark(height = if (touch) 14.dp else 18.dp)
+                            Text(
+                                note,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Tone.muted,
+                            )
+                        }
                     }
                 }
                 // The notices lead the first group: they are read here, not in a browser.

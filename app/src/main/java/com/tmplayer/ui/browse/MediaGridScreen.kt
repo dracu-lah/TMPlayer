@@ -1847,12 +1847,15 @@ private fun MediaArt(
     val plateV = if (compact) 1.dp else 2.dp
     val inset = if (compact) 4.dp else 6.dp
     Box(modifier) {
-        MediaPreview(
-            miniThumbnail = item.miniThumbnail,
-            thumbnailFileId = item.thumbnailFileId,
-            fallbackLabel = item.title,
-            modifier = Modifier.fillMaxSize(),
-        )
+        // On Home, the show's or the film's own picture over the frame once a match arrives.
+        com.tmplayer.ui.online.OnlineArt(item, Modifier.fillMaxSize()) {
+            MediaPreview(
+                miniThumbnail = item.miniThumbnail,
+                thumbnailFileId = item.thumbnailFileId,
+                fallbackLabel = item.title,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         val tags = item.qualityTags
 
         // What the download queue is doing with this video, if anything. Read through

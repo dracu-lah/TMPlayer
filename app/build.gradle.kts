@@ -82,6 +82,13 @@ android {
             ?: System.getenv("OPENSUBTITLES_API_KEY")
             ?: ""
         buildConfigField("String", "OPENSUBTITLES_API_KEY", "\"$openSubtitlesKey\"")
+        // The TMDB key for posters and overviews. Optional: a build without it still finds shows on
+        // TVmaze and anime on AniList, and Settings asks for a key of the viewer's own for films.
+        // Set TMDB_API_KEY in local.properties or the environment; CI takes it from the secret.
+        val tmdbKey = localProps.getProperty("TMDB_API_KEY")
+            ?: System.getenv("TMDB_API_KEY")
+            ?: ""
+        buildConfigField("String", "TMDB_API_KEY", "\"$tmdbKey\"")
 
         // Donation links and the support card, all behind one switch (SupportReminder.enabled).
         // The `play` flavor planned in CP35 sets this to false: Play does not allow donation links

@@ -479,13 +479,113 @@ class BrowseRenderTest {
         save("update-popup.png", png)
     }
 
+    /**
+     * Posters and overviews (CP32) over [MetaFixture]'s canned TMDB: the detail pane with a film's
+     * poster and overview, a show's page with its poster, Home with posters, the Settings group in
+     * each key state, About's attribution, and the line that offers lookups while they are off.
+     */
+    @Test
+    fun onlineMetadata() = kotlinx.coroutines.runBlocking {
+        val online = MetaFixture.install("on")
+        try {
+            fun item(id: Long, chatId: Long, name: String, colour: Long, date: Int) = MediaItem(
+                chatId = chatId, messageId = id, fileId = 0, title = name, sizeBytes = 885L * 1024 * 1024,
+                durationSec = 596 + (id % 10).toInt() * 300, mimeType = "video/x-matroska", thumbnailFileId = 0,
+                miniThumbnail = jpeg(colour.toInt()), date = date, fileName = name, width = 1920, height = 1080,
+            )
+            val bunny = item(500, 2, "Big.Buck.Bunny.2008.1080p.BluRay.x264.mkv", 0xFF46A758, 1_790_000_000)
+            val episodes = (1..6).map { n -> item(600L + n, 4, "Harbour.Lights.S02E%02d.1080p.WEB-DL.mkv".format(n), 0xFF2AABEE, 1_790_000_000 + n) }
+            val clips = listOf("Lecture 7 Compilers.mp4", "coast-walk-day-2-1080p.mp4").mapIndexed { at, n -> item(700L + at, 2, n, 0xFFF5A524, 1_780_000_000) }
+            // Warm the answers and the pictures, so the frames below show them rather than the wait.
+            for (it in listOf(bunny, episodes[4], clips[0], clips[1])) {
+                val q = com.tmplayer.online.MetaQuery.of(it.fileName)!!
+                online.lookup(q)
+                online.lookup(q.showOnly())
+            }
+            for ((url, width) in listOf(
+                "https://image.tmdb.org/t/p/w780/render-bbb-wide.webp" to 800,
+                "https://image.tmdb.org/t/p/w780/render-bbb-wide.webp" to 480,
+                "https://image.tmdb.org/t/p/w342/render-bbb.webp" to 240,
+                "https://image.tmdb.org/t/p/w342/render-harbour.webp" to 240,
+                "https://image.tmdb.org/t/p/w342/render-harbour.webp" to 480,
+            )) com.tmplayer.data.Thumbnails.online(url, width) { online.image(url) }
+
+            val chats = listOf(
+                chat(2, "Film Club", ChatKind.Channel, 0, 0xFFE5484D.toInt()),
+                chat(4, "Weekend series", ChatKind.Group, 0, 0xFFF5A524.toInt()),
+            )
+            shell.noteChatTitles(chats)
+            for (dark in listOf(true, false)) {
+                shell.openDetail(DetailRequest(bunny, "Film Club"))
+                save(if (dark) "desktop-meta-detail-dark.png" else "desktop-meta-detail-light.png", render(dark = dark) {
+                    Box(Modifier.fillMaxSize()) {
+                        VideoGrid(shell, listOf(bunny) + clips, "Film Club")
+                        DetailPaneHost(shell)
+                    }
+                })
+                shell.closeDetail()
+            }
+            // An episode: the show's poster, the episode's own name and words.
+            shell.openDetail(DetailRequest(episodes[4], "Weekend series"))
+            save("desktop-meta-detail-episode.png", render { Box(Modifier.fillMaxSize()) { VideoGrid(shell, episodes, "Weekend series"); DetailPaneHost(shell) } })
+            shell.closeDetail()
+
+            val show = (com.tmplayer.data.SeriesShelf.arrange(episodes).first() as com.tmplayer.data.ShelfEntry.Show).series
+            save("desktop-meta-series.png", render { SeriesPage(shell, show, rememberSeriesWatch(shell), onClose = {}) })
+
+            val rows = com.tmplayer.data.HomeRows.build(
+                continueWatching = listOf(bunny).map {
+                    com.tmplayer.data.ResumeRecord(
+                        chatId = it.chatId, messageId = it.messageId, fileId = 1, title = it.title, chatTitle = "Film Club",
+                        sizeBytes = it.sizeBytes, durationSec = it.durationSec, positionMs = 200_000L,
+                        durationMs = it.durationSec * 1000L, updatedAt = 10L,
+                    )
+                },
+                favourites = com.tmplayer.data.HomeRows.favouriteChats(chats, setOf(2L, 4L)),
+                loaded = mapOf(2L to listOf(bunny) + clips, 4L to episodes),
+                recent = clips,
+            )
+            shell.go(Destination.Home)
+            val art = mapOf(SettingsStore.progressKey(bunny.chatId, bunny.messageId) to bunny)
+            for (dark in listOf(true, false)) {
+                save(if (dark) "desktop-meta-home-dark.png" else "desktop-meta-home-light.png", render(dark = dark) {
+                    HomeRowsView(shell, rows, chats, art, onRowShown = {}, onArtWanted = {}, onRefresh = {})
+                })
+            }
+            shell.go(Destination.Chats)
+
+            for (state in listOf("on", "off", "none", "refused")) {
+                MetaFixture.install(state)
+                save("desktop-meta-settings-$state.png", render {
+                    androidx.compose.foundation.layout.Column(Modifier.padding(24.dp)) { OnlineMetadataGroup() }
+                })
+            }
+            MetaFixture.install("none")
+            save("desktop-meta-key-dialog.png", render { MetadataKeyDialog(onClose = {}) })
+
+            MetaFixture.install("on")
+            assertTrue(com.tmplayer.ui.about.About.groups("2.0.0").any { it.tmdbLogo && it.links.any { l -> l.url == com.tmplayer.ui.about.About.TVMAZE } })
+            save("desktop-meta-about.png", render(height = 1900) { AboutPage("2.0.0", onBack = {}) })
+
+            // Off: the pane offers to turn lookups on, and shows the video's own picture.
+            MetaFixture.install("off")
+            shell.openDetail(DetailRequest(bunny, "Film Club"))
+            save("desktop-meta-detail-off.png", render { Box(Modifier.fillMaxSize()) { VideoGrid(shell, listOf(bunny), "Film Club"); DetailPaneHost(shell) } })
+            shell.closeDetail()
+        } finally {
+            com.tmplayer.online.OnlineMetadata.current = null
+            shell.go(Destination.Chats)
+        }
+    }
+
     private fun render(
         update: NavUpdate? = null,
         dark: Boolean = true,
         folders: List<com.tmplayer.data.ChatFolderSummary> = emptyList(),
+        height: Int = HEIGHT,
         page: @androidx.compose.runtime.Composable () -> Unit,
     ): ByteArray =
-        ImageComposeScene(WIDTH, HEIGHT, Density(1f)) {
+        ImageComposeScene(WIDTH, height, Density(1f)) {
             TmMaterialTheme(dark = dark) {
                 Surface(Modifier.fillMaxSize(), color = Tone.background) {
                     Row(Modifier.fillMaxSize()) {

@@ -3,6 +3,7 @@ package com.tmplayer.ui.about
 import com.tmplayer.data.SupportReminder
 import com.tmplayer.i18n.L
 import com.tmplayer.online.OnlineSubtitles
+import com.tmplayer.online.OnlineMetadata
 
 /**
  * What the About screen says, the same on phone, TV and desktop: the licence line, every link it
@@ -28,6 +29,9 @@ object About {
     const val COFFEE = "https://buymeacoffee.com/nevil.dev"
     const val OPENSUBTITLES = "https://www.opensubtitles.com"
     const val SUBDL = "https://subdl.com"
+    const val TMDB = "https://www.themoviedb.org"
+    const val TVMAZE = "https://www.tvmaze.com"
+    const val ANILIST = "https://anilist.co"
 
     /** The heading, the Settings row and the card's title. */
     val SUPPORT_TITLE: String get() = L.aboutSupportTitle
@@ -38,8 +42,11 @@ object About {
     /** A link and the sentence under it. */
     data class Link(val title: String, val detail: String, val url: String)
 
-    /** A heading and the links under it. [note] is a line drawn under the heading, if any. */
-    data class Group(val title: String, val links: List<Link>, val note: String? = null)
+    /**
+     * A heading and the links under it. [note] is a line drawn under the heading, if any, and
+     * [tmdbLogo] asks for TMDB's logo beside it ([TmdbMark]), as TMDB's terms require.
+     */
+    data class Group(val title: String, val links: List<Link>, val note: String? = null, val tmdbLogo: Boolean = false)
 
     /** The two ways to chip in, in the order every screen shows them. */
     val supportLinks: List<Link> get() = listOf(
@@ -66,12 +73,15 @@ object About {
      * inside the app, so each screen puts that row first under "Licence" itself. With
      * [SupportReminder.enabled] off (the future Play build), the support group is left out. The
      * online extras group is the credit OpenSubtitles' terms ask for, shown in every build that
-     * carries the feature ([OnlineSubtitles.available]).
+     * carries the feature ([OnlineSubtitles.available]). The
+     * posters and details group is the attribution TMDB, TVmaze and AniList ask for, in every build
+     * that has the feature ([OnlineMetadata.current]), whether or not the viewer turned it on.
      */
     fun groups(
         version: String,
         support: Boolean = SupportReminder.enabled,
         online: Boolean = OnlineSubtitles.available,
+        metadata: Boolean = OnlineMetadata.current != null,
     ): List<Group> = listOfNotNull(
         Group(
             L.aboutLicence,
@@ -107,6 +117,20 @@ object About {
                     Link("OpenSubtitles.com", L.onlineAboutDetail, OPENSUBTITLES),
                     Link("SubDL", L.onlineAboutSubdlDetail, SUBDL),
                 ),
+            )
+        } else {
+            null
+        },
+        if (metadata) {
+            Group(
+                L.metadataAboutGroup,
+                listOf(
+                    Link("TMDB", L.metadataAboutTmdbDetail, TMDB),
+                    Link("TVmaze", L.metadataAboutTvmazeDetail, TVMAZE),
+                    Link("AniList", L.metadataAboutAnilistDetail, ANILIST),
+                ),
+                note = L.metadataAboutNotice,
+                tmdbLogo = true,
             )
         } else {
             null

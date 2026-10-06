@@ -72,6 +72,22 @@ object Thumbnails {
         }
     }
 
+    /** A poster already decoded, for the first frame. See [online]. */
+    fun peekOnline(url: String, maxWidth: Int): ImageBitmap? = cache.get("online:$maxWidth:$url")
+
+    /**
+     * A poster from the online metadata providers: [fetch] puts it on the disk (or finds it there),
+     * and it is decoded here at [maxWidth] and kept beside the thumbnails, under the same budget.
+     */
+    suspend fun online(url: String, maxWidth: Int, fetch: suspend () -> java.io.File?): ImageBitmap? {
+        val key = "online:$maxWidth:$url"
+        cache.get(key)?.let { return it }
+        return withContext(Dispatchers.IO) {
+            val file = runCatching { fetch() }.getOrNull() ?: return@withContext null
+            runCatching { decodeImageFile(file.path, maxWidth) }.getOrNull()?.also { cache.put(key, it) }
+        }
+    }
+
     private suspend fun downloadThumbnail(fileId: Int): String? {
         val td = Td.awaitAuthorizedSession().client
         val file = td.getFile(fileId).valueOrNull ?: return null

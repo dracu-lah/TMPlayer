@@ -487,8 +487,11 @@ internal fun MediaTile(
             )
         },
         art = {
-            MediaArt(item.miniThumbnail, item.thumbnailFileId, Modifier.fillMaxSize()) {
-                Text(item.title.take(1).uppercase(), style = MaterialTheme.typography.headlineSmall, color = Tone.muted)
+            // On Home, the show's or the film's own picture over the frame once a match arrives.
+            com.tmplayer.ui.online.OnlineArt(item, Modifier.fillMaxSize()) {
+                MediaArt(item.miniThumbnail, item.thumbnailFileId, Modifier.fillMaxSize()) {
+                    Text(item.title.take(1).uppercase(), style = MaterialTheme.typography.headlineSmall, color = Tone.muted)
+                }
             }
         },
         subtitle = buildString {

@@ -126,6 +126,9 @@ class PromoCaptureActivity : ComponentActivity() {
         // one part way through and one at the end, through the real rules and the real writer, so
         // the home screen's "Play next" row can be checked without a Telegram account.
         if (intent.getBooleanExtra("watchnext", false)) promoWatchNext()
+        // `--ez meta true` turns posters and overviews on over a canned TMDB and AniList, and
+        // `--es metakey none|refused|own` sets the TMDB key's state. See [PromoMeta].
+        PromoMeta.install(applicationContext, intent.getBooleanExtra("meta", false), intent.getStringExtra("metakey"))
         requestedOrientation = if (tv) {
             ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         } else {
@@ -424,11 +427,13 @@ private fun promoHome(variant: String?): PromoHome? {
         // The six demo clips again under other chats and later dates, so each row has its own.
         fun from(chatId: Long, items: List<MediaItem>, newest: Int) =
             items.mapIndexed { index, item -> item.copy(chatId = chatId, messageId = id++, date = newest - index) }
-        val projects = from(102, media + media.reversed(), newest = 9_000)
+        // With posters on, a real film leads the starred chat and Continue, so Home shows one.
+        val film = if (PromoMeta.on) listOf(PromoMeta.bunny) else emptyList()
+        val projects = from(102, film + media + media.reversed(), newest = 9_000)
         val travel = from(104, shows.take(10), newest = 8_000) + from(104, media.take(2), newest = 7_000)
         val elsewhere = from(101, media, newest = 6_500) + from(103, media.reversed(), newest = 6_400) +
             from(106, media.take(3), newest = 6_300)
-        val started = listOf(projects[2], elsewhere[1], travel[11])
+        val started = projects.take(film.size) + listOf(projects[2 + film.size], elsewhere[1], travel[11])
         val resume = started.mapIndexed { index, item ->
             ResumeRecord(
                 chatId = item.chatId,
@@ -573,6 +578,8 @@ private fun PromoDetail(item: MediaItem, watched: WatchPoint?, finished: Boolean
 /** The variant's video for the panel: the first, stopped part way, or in a protected chat. */
 private fun detailVariant(variant: String, media: List<MediaItem>): MediaItem? = when (variant) {
     "menu" -> media.first()
+    // Big Buck Bunny, for its poster and overview with `--ez meta true`, or the line offering them without.
+    "meta" -> PromoMeta.bunny
     "resume" -> media[2]
     "protected" -> media[1].copy(canBeSaved = false)
     else -> null

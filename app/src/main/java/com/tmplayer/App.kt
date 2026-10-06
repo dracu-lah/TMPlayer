@@ -22,6 +22,9 @@ import com.tmplayer.data.WatchedStore
 import com.tmplayer.i18n.Translator
 import com.tmplayer.ui.onboarding.OnboardingImages
 import com.tmplayer.ui.onboarding.OnboardingPage
+import com.tmplayer.online.MetadataCache
+import com.tmplayer.online.MetadataStore
+import com.tmplayer.online.OnlineMetadata
 import com.tmplayer.platform.Logger
 import com.tmplayer.player.PlayerActivity
 import kotlinx.coroutines.CoroutineScope
@@ -85,6 +88,14 @@ class App : Application() {
         // order of magnitude apart, and one fixed figure is wrong for both.
         val memory = (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).memoryClass
         Thumbnails.sizeFor(memory)
+        // Posters and overviews: the build's TMDB key, the switches in private files, the answers
+        // and pictures under the app's cache. Off until the viewer turns it on in Settings.
+        OnlineMetadata.current = OnlineMetadata(
+            buildKey = BuildConfig.TMDB_API_KEY,
+            store = MetadataStore(java.io.File(filesDir, "online/metadata.properties")),
+            cache = MetadataCache(java.io.File(cacheDir, "online-metadata")),
+            appVersion = BuildConfig.VERSION_NAME,
+        ).also { metadata -> backgroundScope.launch { runCatching { metadata.cache.prune() } } }
         Thumbnails.connectivity = NetworkMonitor
         NetworkMonitor.start(this)
         // TDLib takes a moment to open its database; starting here means the login screen is

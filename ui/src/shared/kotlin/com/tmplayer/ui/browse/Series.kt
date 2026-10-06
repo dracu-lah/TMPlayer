@@ -68,6 +68,9 @@ import com.tmplayer.data.SeriesShelf
 import com.tmplayer.data.WatchPoint
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.MediaArt
+import com.tmplayer.ui.online.MetaCredit
+import com.tmplayer.ui.online.MetaPicture
+import com.tmplayer.ui.online.rememberMeta
 import com.tmplayer.ui.components.WatchedBadge
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.i18n.LocalStrings
@@ -205,7 +208,8 @@ fun seriesProgressLine(progress: SeriesProgress): String? {
 /**
  * A show's picture: the newest episode's thumbnail with a stack of edges behind it, so a tile that
  * opens onto many videos does not look like one video. The episode count sits in the corner, the
- * share watched runs along the bottom, and the tick appears once every episode is watched.
+ * share watched runs along the bottom, and the tick appears once every episode is watched. With
+ * posters and overviews on, the show's own wide picture (or its poster) replaces the episode's.
  */
 @Composable
 fun SeriesArt(
@@ -216,6 +220,7 @@ fun SeriesArt(
 ) {
     val s = LocalStrings.current
     val cover = series.cover
+    val meta = rememberMeta(cover, showOnly = true)
     val edge = if (compact) 3.dp else 4.dp
     // The whole thing keeps a video tile's 16:9, edges included, so a show sits level with the
     // videos beside it in a row.
@@ -250,6 +255,7 @@ fun SeriesArt(
                     color = Tone.muted,
                 )
             }
+            MetaPicture(meta?.backdropUrl ?: meta?.posterUrl, Modifier.fillMaxSize())
             Plate(
                 s.seriesEpisodesCount(series.episodeCount),
                 compact,
@@ -527,27 +533,51 @@ fun SeriesPanel(
     val playFocus = remember { FocusRequester() }
     LaunchedEffect(series.key) { if (tv) runCatching { playFocus.requestFocus() } }
 
+    val meta = rememberMeta(series.cover, showOnly = true)
+
     Column(modifier) {
         Row(
             Modifier.fillMaxWidth().padding(contentPadding.horizontalOnly()),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = if (meta?.posterUrl != null) Alignment.Top else Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            meta?.posterUrl?.let { url ->
+                Box(
+                    Modifier
+                        .width(if (tv) SERIES_POSTER_TV else SERIES_POSTER)
+                        .aspectRatio(2f / 3f)
+                        .clip(RoundedCornerShape(Corner.Small))
+                        .background(Tone.surfaceHigh),
+                ) {
+                    MetaPicture(url, Modifier.fillMaxSize(), maxWidth = 240, contentDescription = s.metadataPoster)
+                }
+            }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    series.title,
+                    meta?.title?.takeIf { it.isNotBlank() } ?: series.title,
                     style = if (tv) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleLarge,
                     color = Tone.text,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    listOfNotNull(seriesSummary(series), seriesProgressLine(progress)).joinToString("  ·  "),
+                    listOfNotNull(meta?.year?.toString(), seriesSummary(series), seriesProgressLine(progress)).joinToString("  ·  "),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Tone.muted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                meta?.overview?.takeIf { it.isNotBlank() }?.let { overview ->
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        overview,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Tone.text,
+                        maxLines = if (tv) 3 else 4,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    MetaCredit(meta, Modifier.padding(top = 2.dp))
+                }
             }
             trailing()
         }
@@ -617,5 +647,7 @@ private fun PaddingValues.horizontalOnly(): PaddingValues =
         end = calculateRightPadding(androidx.compose.ui.unit.LayoutDirection.Ltr),
     )
 
+private val SERIES_POSTER: Dp = 96.dp
+private val SERIES_POSTER_TV: Dp = 112.dp
 private val EPISODE_ART_TOUCH: Dp = 128.dp
 private val EPISODE_ART_TV: Dp = 176.dp

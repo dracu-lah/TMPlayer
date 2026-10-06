@@ -27,12 +27,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -58,6 +60,11 @@ import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.WatchedBadge
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.i18n.LocalStrings
+import com.tmplayer.ui.online.MetaCredit
+import com.tmplayer.ui.online.MetaPicture
+import com.tmplayer.ui.online.rememberMeta
+import com.tmplayer.online.MetaInfo
+import com.tmplayer.online.OnlineMetadata
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.Tone
@@ -69,6 +76,10 @@ import com.tmplayer.ui.theme.focusRing
  * Each platform puts its own chrome round it: a bottom sheet on the phone, a side pane in a window
  * of its own on the television, a side pane over the page on the desktop. Which actions it offers
  * is decided by [com.tmplayer.data.DetailActions], not here.
+ *
+ * With posters and overviews on ([OnlineMetadata]), a match adds the provider's picture over the
+ * video's own, a poster beside the title, the episode's name, and the overview in place of the
+ * caption, credited underneath. With them off, one more line offers to turn them on.
  */
 
 /** One action line, worded and wired by the platform that opened the panel. */
@@ -132,8 +143,8 @@ fun detailRow(
  * D-pad reaches the facts and the synopsis below the actions instead of stopping at the last button.
  *
  * @param firstAction focused when the panel opens on a remote or a keyboard; null leaves focus be.
- * @param poster CP32's TMDB poster, when there is one. The video's own picture stands in until then.
- * @param overview CP32's TMDB overview. The post's caption is the synopsis until then.
+ * @param poster a picture to show instead of the video's own. Left null, the online match's is used.
+ * @param overview words to show instead of the caption. Left null, the online match's are used.
  */
 @Composable
 fun MediaDetailPanel(
@@ -154,10 +165,17 @@ fun MediaDetailPanel(
     val s = LocalStrings.current
     val parsed = remember(item) { MediaName.parse(item.fileName.ifBlank { item.title }, item.caption) }
     val facts = remember(item) { MediaFacts.of(item) }
+    val meta = rememberMeta(item)
     // "small-shelf-part-1" reads as a title once its joiners are spaces; a name with spaces in it
-    // already chose its own punctuation and keeps it.
-    val heading = parsed.title.ifBlank { item.title }.let { if (' ' in it) it else it.replace(JOINERS, " ") }
-    val episodeLine = listOfNotNull(parsed.episodeCode, parsed.year?.toString()).joinToString("  ·  ")
+    // already chose its own punctuation and keeps it. A match's own title wins, in the UI language.
+    val heading = meta?.title?.takeIf { it.isNotBlank() }
+        ?: parsed.title.ifBlank { item.title }.let { if (' ' in it) it else it.replace(JOINERS, " ") }
+    val episodeLine = listOfNotNull(
+        parsed.episodeCode,
+        meta?.episode?.name?.takeIf { it.isNotBlank() },
+        (parsed.year ?: meta?.year)?.toString(),
+    ).joinToString("  ·  ")
+    val metaOverview = meta?.let { it.episode?.overview?.takeIf { o -> o.isNotBlank() } ?: it.overview.takeIf { o -> o.isNotBlank() } }
 
     Column(
         modifier
@@ -178,6 +196,8 @@ fun MediaDetailPanel(
                 MediaArt(item.miniThumbnail, item.thumbnailFileId, Modifier.fillMaxSize()) {
                     Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Tone.muted, modifier = Modifier.size(40.dp))
                 }
+                // The episode's still or the wide picture, over the frame once it has arrived.
+                MetaPicture(meta?.wideUrl, Modifier.fillMaxSize(), maxWidth = 800)
             }
             val fraction = when {
                 finished -> 1f
@@ -198,42 +218,55 @@ fun MediaDetailPanel(
             if (finished) WatchedBadge(Modifier.align(Alignment.TopEnd).padding(8.dp))
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                heading,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = Tone.text,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.semantics { heading() },
-            )
-            if (episodeLine.isNotEmpty()) {
-                Text(episodeLine, style = MaterialTheme.typography.titleSmall, color = Tone.accent, maxLines = 1)
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            meta?.posterUrl?.let { url ->
+                Box(
+                    Modifier
+                        .width(if (compactArt) DETAIL_POSTER_TV else DETAIL_POSTER)
+                        .aspectRatio(2f / 3f)
+                        .clip(RoundedCornerShape(Corner.Small))
+                        .background(Tone.surfaceHigh),
+                ) {
+                    MetaPicture(url, Modifier.fillMaxSize(), maxWidth = 240, contentDescription = s.metadataPoster)
+                }
             }
-            if (chatTitle.isNotBlank()) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    s.detailInChat(chatTitle),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Tone.muted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            val quick = listOfNotNull(
-                facts.resolution,
-                item.durationSec.takeIf { it > 0 }?.let { s.formatter.duration(it.toLong()) },
-                item.sizeBytes.takeIf { it > 0 }?.let { s.formatter.size(it) },
-                s.detailWatchedLine.takeIf { finished },
-            )
-            if (quick.isNotEmpty()) {
-                Text(
-                    quick.joinToString("  ·  "),
-                    style = MaterialTheme.typography.bodyMedium,
+                    heading,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
                     color = Tone.text,
-                    maxLines = 1,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics { heading() },
                 )
+                if (episodeLine.isNotEmpty()) {
+                    Text(episodeLine, style = MaterialTheme.typography.titleSmall, color = Tone.accent, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+                if (chatTitle.isNotBlank()) {
+                    Text(
+                        s.detailInChat(chatTitle),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Tone.muted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                val quick = listOfNotNull(
+                    facts.resolution,
+                    item.durationSec.takeIf { it > 0 }?.let { s.formatter.duration(it.toLong()) },
+                    item.sizeBytes.takeIf { it > 0 }?.let { s.formatter.size(it) },
+                    s.detailWatchedLine.takeIf { finished },
+                )
+                if (quick.isNotEmpty()) {
+                    Text(
+                        quick.joinToString("  ·  "),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Tone.text,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
 
@@ -259,9 +292,25 @@ fun MediaDetailPanel(
                     if (index == 0 && firstAction != null) Modifier.focusRequester(firstAction) else Modifier,
                 )
             }
+            // Posters and overviews are off: one line to turn them on from here, as Settings can.
+            val online = OnlineMetadata.current
+            if (online != null && poster == null && overview == null) {
+                val settings by online.settings.collectAsState()
+                if (!settings.enabled) {
+                    DetailActionRow(
+                        DetailRow(
+                            action = DetailAction.Play,
+                            label = s.metadataTurnOn,
+                            icon = Icons.Filled.Info,
+                            detail = s.metadataTurnOnDetail,
+                            onSelect = { online.setEnabled(true) },
+                        ),
+                    )
+                }
+            }
         }
 
-        DetailFacts(item, facts, s, overview)
+        DetailFacts(item, facts, s, overview ?: metaOverview, meta.takeIf { overview == null && metaOverview != null })
     }
 }
 
@@ -270,7 +319,7 @@ fun MediaDetailPanel(
  * to it: without a stop of its own it would sit under the last button, out of reach.
  */
 @Composable
-private fun DetailFacts(item: MediaItem, facts: MediaFacts, s: Messages, overview: String?) {
+private fun DetailFacts(item: MediaItem, facts: MediaFacts, s: Messages, overview: String?, credit: MetaInfo? = null) {
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val shape = RoundedCornerShape(Corner.Medium)
@@ -334,6 +383,7 @@ private fun DetailFacts(item: MediaItem, facts: MediaFacts, s: Messages, overvie
             Spacer(Modifier.height(4.dp))
             Text(s.detailAbout, style = MaterialTheme.typography.titleSmall, color = Tone.text)
             Text(synopsis, style = MaterialTheme.typography.bodyMedium, color = Tone.text)
+            credit?.let { MetaCredit(it) }
         }
     }
 }
@@ -390,6 +440,8 @@ private fun DetailActionRow(row: DetailRow, modifier: Modifier = Modifier) {
 val DETAIL_PANE_WIDTH = 440.dp
 
 private val DETAIL_ART_STRIP = 150.dp
+private val DETAIL_POSTER = 84.dp
+private val DETAIL_POSTER_TV = 72.dp
 private val FACT_LABEL = 112.dp
 private val JOINERS = Regex("[-_.]+")
 

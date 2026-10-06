@@ -47,6 +47,9 @@ val generateBuildInfo by tasks.registering {
     inputs.property("apiId", apiId)
     inputs.property("apiHash", apiHash)
     inputs.property("openSubtitlesKey", openSubtitlesKey)
+    // Optional: without it films get no posters, as on Android; shows still come from TVmaze.
+    val tmdbKey = localProps.getProperty("TMDB_API_KEY") ?: System.getenv("TMDB_API_KEY") ?: ""
+    inputs.property("tmdbKey", tmdbKey)
     inputs.property("version", desktopVersion)
     outputs.dir(out)
     doLast {
@@ -60,6 +63,7 @@ val generateBuildInfo by tasks.registering {
             |    const val TG_API_ID = $apiId
             |    const val TG_API_HASH = "$apiHash"
             |    const val OPENSUBTITLES_API_KEY = "$openSubtitlesKey"
+            |    const val TMDB_API_KEY = "$tmdbKey"
             |}
             |""".trimMargin(),
         )

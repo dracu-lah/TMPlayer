@@ -169,6 +169,12 @@ packaged in any build.
   volume glyphs are Material Symbols paths: Apache License 2.0:
   <https://github.com/google/material-design-icons>. The phone's morphing play and pause glyph
   (`PlayPauseIcon.kt`) is drawn in code by TMPlayer.
+- The TMDB logo in About is TMDB's own (<https://www.themoviedb.org/about/logos-attribution>),
+  shown with the notice their terms ask for: this product uses the TMDB API but is not endorsed or
+  certified by TMDB.
+- The screenshot fixture's (promo build only, never released) Big Buck Bunny poster and landscape
+  (`promo_bbb_*.webp`) are (c) Blender Foundation, peach.blender.org, CC BY 3.0
+  (<https://creativecommons.org/licenses/by/3.0/>), via Wikimedia Commons, scaled down.
 
 ## Licence texts
 
@@ -188,5 +194,6 @@ packaged in any build.
 - libpng: <http://www.libpng.org/pub/png/src/libpng-LICENSE.txt>
 - OpenSSL 1.1.1 (OpenSSL and SSLeay): <https://www.openssl.org/source/license-openssl-ssleay.txt>
 - Boost-1.0: <https://www.boost.org/LICENSE_1_0.txt>
+- CC BY 3.0: <https://creativecommons.org/licenses/by/3.0/legalcode>
 - CC BY 4.0: <https://creativecommons.org/licenses/by/4.0/legalcode>
 - SIL OFL-1.1: <https://openfontlicense.org>

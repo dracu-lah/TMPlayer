@@ -90,6 +90,8 @@ private fun Links(version: String, onRead: () -> Unit) {
 
     About.groups(version).forEachIndexed { index, group ->
         Group(group.title)
+        // TMDB's logo with its notice, smaller than TMPlayer's own mark.
+        if (group.tmdbLogo) com.tmplayer.ui.about.TmdbMark(Modifier.padding(bottom = 6.dp))
         group.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Tone.muted) }
         if (index == 0) {
             Setting(s.aboutNoticesTitle, s.aboutNoticesDetail) {

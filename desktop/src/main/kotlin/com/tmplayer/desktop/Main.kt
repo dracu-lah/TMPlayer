@@ -33,6 +33,9 @@ import com.tmplayer.desktop.os.WindowsTitleBar
 import com.tmplayer.desktop.ui.DesktopShell
 import com.tmplayer.desktop.ui.ShellState
 import com.tmplayer.i18n.Translator
+import com.tmplayer.online.MetadataCache
+import com.tmplayer.online.MetadataStore
+import com.tmplayer.online.OnlineMetadata
 import com.tmplayer.platform.Background
 import com.tmplayer.ui.components.AppLogo
 import com.tmplayer.ui.theme.TmMaterialTheme
@@ -59,6 +62,7 @@ fun main(args: Array<String>) {
     Td.start(DesktopPaths, desktopDeviceInfo(), desktopCredentials())
     OnlineSubtitles.current = desktopOnlineSubtitles()
     val settings = DesktopServices.settings
+    OnlineMetadata.current = desktopOnlineMetadata()
     // What an earlier run was in the middle of comes back paused, once there is an account to
     // ask TDLib about.
     // A storage move a crash or a kill cut short is finished first: it needs the settings store
@@ -214,3 +218,14 @@ internal fun desktopOnlineSubtitles(): OnlineSubtitles = OnlineSubtitles(
     cache = SubtitleCache(java.io.File(DesktopPaths.cacheDir, "online-subtitles")),
     appVersion = BuildInfo.VERSION,
 ).also { online -> Background.scope.launch { runCatching { online.cache.prune() } } }
+
+/**
+ * Posters and overviews with this build's TMDB key: the switches beside the settings in the data
+ * directory, the answers and pictures in the cache directory. Off until the viewer turns it on.
+ */
+internal fun desktopOnlineMetadata(): OnlineMetadata = OnlineMetadata(
+    buildKey = BuildInfo.TMDB_API_KEY,
+    store = MetadataStore(java.io.File(DesktopPaths.dataDir, "online-metadata.properties")),
+    cache = MetadataCache(java.io.File(DesktopPaths.cacheDir, "online-metadata")),
+    appVersion = BuildInfo.VERSION,
+).also { metadata -> Background.scope.launch { runCatching { metadata.cache.prune() } } }

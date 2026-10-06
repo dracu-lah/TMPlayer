@@ -211,6 +211,7 @@ fun SettingsPage(state: ShellState, version: String = "") {
                 SubtitlePreview(subtitleStyle, Modifier.padding(vertical = 6.dp))
 
                 OnlineSubtitlesGroup()
+                OnlineMetadataGroup()
 
                 Group(s.settingsLibrary)
                 Toggle(s.settingsOpenLast, s.settingsOpenLastDetail, openLast) {

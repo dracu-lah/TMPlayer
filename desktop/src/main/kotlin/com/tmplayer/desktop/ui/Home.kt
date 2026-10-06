@@ -170,9 +170,11 @@ internal fun HomeRowsView(
                                         chatTitle = record.chatTitle,
                                         progress = record.fraction,
                                         art = {
-                                            MediaArt(item.miniThumbnail, item.thumbnailFileId, Modifier.fillMaxSize()) {
-                                                Text(item.title.take(1).uppercase(), style = MaterialTheme.typography.headlineSmall, color = Tone.muted)
-                                            }
+                                            OnHome { com.tmplayer.ui.online.OnlineArt(item, Modifier.fillMaxSize()) {
+                                                MediaArt(item.miniThumbnail, item.thumbnailFileId, Modifier.fillMaxSize()) {
+                                                    Text(item.title.take(1).uppercase(), style = MaterialTheme.typography.headlineSmall, color = Tone.muted)
+                                                }
+                                            } }
                                         },
                                         subtitle = listOf(
                                             record.chatTitle,
@@ -200,9 +202,15 @@ private fun androidx.compose.foundation.lazy.LazyListScope.shelf(
     items(entries, key = { it.key }, contentType = { it::class }) { entry ->
         Box(Modifier.width(state.posterWidth)) {
             when (entry) {
-                is ShelfEntry.File -> MediaTile(state, entry.item, chatTitle(entry.item.chatId), outsideChat = true)
+                is ShelfEntry.File -> OnHome { MediaTile(state, entry.item, chatTitle(entry.item.chatId), outsideChat = true) }
                 is ShelfEntry.Show -> SeriesPoster(entry.series, rememberSeriesWatch(state), onOpen = { onOpenSeries(entry.series) })
             }
         }
     }
+}
+
+/** Home's tiles may wear the show's or the film's picture (see LocalOnlineArt); a chat's grid keeps frames. */
+@Composable
+private fun OnHome(content: @Composable () -> Unit) {
+    androidx.compose.runtime.CompositionLocalProvider(com.tmplayer.ui.online.LocalOnlineArt provides true, content = content)
 }

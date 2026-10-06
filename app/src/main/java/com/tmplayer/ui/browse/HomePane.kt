@@ -107,59 +107,62 @@ internal fun HomePane(
     var openSeries by remember { mutableStateOf<Series?>(null) }
     val listState = rememberLazyListState()
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = if (touch) 4.dp else Tv.FocusClearance, bottom = bottom),
-        verticalArrangement = Arrangement.spacedBy(if (touch) 16.dp else 20.dp),
-    ) {
-        items(rows, key = { it.key }, contentType = { it::class }) { row ->
-            val loaded = when (row) {
-                is HomeRow.Continue -> true
-                is HomeRow.Chat -> row.loaded
-                is HomeRow.Recent -> row.loaded
-            }
-            // Asked for when the row first comes on screen, and again after a refresh empties it.
-            LaunchedEffect(row.key, loaded) { if (!loaded) onRowShown(row) }
-            val isFirst = row === rows.first()
-            val title = when (row) {
-                is HomeRow.Continue -> s.homeRowContinue
-                is HomeRow.Chat -> row.title
-                is HomeRow.Recent -> s.homeRowRecent
-            }
-            val seeAll: (() -> Unit)? = when (row) {
-                is HomeRow.Continue -> onSeeContinue
-                is HomeRow.Chat -> { { onOpenChat(row.chatId) } }
-                is HomeRow.Recent -> null
-            }
-            Column {
-                RowHeading(title, start = start, end = end, seeAll = seeAll.takeIf { touch })
-                if (!loaded) {
-                    PlaceholderRow(start)
-                    return@Column
+    // Tiles here may wear the show's or the film's picture (see LocalOnlineArt); a chat's grid keeps frames.
+    androidx.compose.runtime.CompositionLocalProvider(com.tmplayer.ui.online.LocalOnlineArt provides true) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = if (touch) 4.dp else Tv.FocusClearance, bottom = bottom),
+            verticalArrangement = Arrangement.spacedBy(if (touch) 16.dp else 20.dp),
+        ) {
+            items(rows, key = { it.key }, contentType = { it::class }) { row ->
+                val loaded = when (row) {
+                    is HomeRow.Continue -> true
+                    is HomeRow.Chat -> row.loaded
+                    is HomeRow.Recent -> row.loaded
                 }
-                TileRow(start = start, end = end) {
-                    when (row) {
-                        is HomeRow.Continue -> items(row.records, key = { "r-${it.chatId}_${it.messageId}" }) { record ->
-                            val key = SettingsStore.progressKey(record.chatId, record.messageId)
-                            LaunchedEffect(key) { onArtWanted(record) }
-                            val item = art[key] ?: remember(record) { record.toMediaItem() }
-                            MediaCard(
-                                item = item,
-                                watched = WatchPoint(record.positionMs, record.durationMs),
-                                onClick = { onResume(record) },
-                                onFocused = {},
-                                onLongClick = { onHoldRecord(record) },
-                                dense = touch,
-                                modifier = Modifier.width(tileWidth(touch))
-                                    .then(if (isFirst && record === row.records.first()) Modifier.focusRequester(first) else Modifier),
-                            )
-                        }
-                        is HomeRow.Chat -> entries(row.entries, watch, touch, isFirst, first, { row.title }, onPlay, onHoldMedia) { openSeries = it }
-                        is HomeRow.Recent -> entries(row.entries, watch, touch, isFirst, first, chatTitle, onPlay, onHoldMedia) { openSeries = it }
+                // Asked for when the row first comes on screen, and again after a refresh empties it.
+                LaunchedEffect(row.key, loaded) { if (!loaded) onRowShown(row) }
+                val isFirst = row === rows.first()
+                val title = when (row) {
+                    is HomeRow.Continue -> s.homeRowContinue
+                    is HomeRow.Chat -> row.title
+                    is HomeRow.Recent -> s.homeRowRecent
+                }
+                val seeAll: (() -> Unit)? = when (row) {
+                    is HomeRow.Continue -> onSeeContinue
+                    is HomeRow.Chat -> { { onOpenChat(row.chatId) } }
+                    is HomeRow.Recent -> null
+                }
+                Column {
+                    RowHeading(title, start = start, end = end, seeAll = seeAll.takeIf { touch })
+                    if (!loaded) {
+                        PlaceholderRow(start)
+                        return@Column
                     }
-                    if (!touch && seeAll != null) {
-                        item(key = "see-all", contentType = "see-all") { SeeAllTile(onClick = seeAll) }
+                    TileRow(start = start, end = end) {
+                        when (row) {
+                            is HomeRow.Continue -> items(row.records, key = { "r-${it.chatId}_${it.messageId}" }) { record ->
+                                val key = SettingsStore.progressKey(record.chatId, record.messageId)
+                                LaunchedEffect(key) { onArtWanted(record) }
+                                val item = art[key] ?: remember(record) { record.toMediaItem() }
+                                MediaCard(
+                                    item = item,
+                                    watched = WatchPoint(record.positionMs, record.durationMs),
+                                    onClick = { onResume(record) },
+                                    onFocused = {},
+                                    onLongClick = { onHoldRecord(record) },
+                                    dense = touch,
+                                    modifier = Modifier.width(tileWidth(touch))
+                                        .then(if (isFirst && record === row.records.first()) Modifier.focusRequester(first) else Modifier),
+                                )
+                            }
+                            is HomeRow.Chat -> entries(row.entries, watch, touch, isFirst, first, { row.title }, onPlay, onHoldMedia) { openSeries = it }
+                            is HomeRow.Recent -> entries(row.entries, watch, touch, isFirst, first, chatTitle, onPlay, onHoldMedia) { openSeries = it }
+                        }
+                        if (!touch && seeAll != null) {
+                            item(key = "see-all", contentType = "see-all") { SeeAllTile(onClick = seeAll) }
+                        }
                     }
                 }
             }
