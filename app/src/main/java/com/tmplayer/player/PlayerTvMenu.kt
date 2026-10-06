@@ -9,7 +9,9 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -26,9 +28,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -42,7 +46,7 @@ import androidx.tv.material3.Text
 import com.tmplayer.R
 import com.tmplayer.ui.components.FloatingWindow
 import com.tmplayer.ui.components.MenuAction
-import com.tmplayer.ui.components.PhonePad
+import com.tmplayer.ui.components.SheetCloseButton
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvMenu
 import com.tmplayer.ui.i18n.LocalStrings
@@ -50,6 +54,7 @@ import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.FloatingTone
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.Tv
 import com.tmplayer.ui.theme.floatingSurface
 import com.tmplayer.ui.theme.focusRing
 
@@ -84,6 +89,8 @@ class PlayerTvMenu(
     private val sleepTimer: () -> String? = { null },
     /** A sleep timer chosen from its page: minutes, [SleepTimer.END_OF_VIDEO], or null for off. */
     private val onSleepTimer: (Int?) -> Unit = {},
+    /** The length the running sleep timer was started with, for its tick. */
+    private val sleepChoice: () -> Int? = { null },
     /** The episode steps' labels ("Next S01E03"), or null where the chat has no such episode. */
     private val nextEpisode: () -> String? = { null },
     private val previousEpisode: () -> String? = { null },
@@ -134,44 +141,30 @@ class PlayerTvMenu(
                     previousEpisode = previousEpisode() != null,
                 ).map { action(it) },
                 onDismiss = ::close,
+                onClose = ::close,
             )
-            Page.Speed -> TvMenu(
-                title = s.playerPlaybackSpeed,
-                actions = PlaybackSpeed.CHOICES.map { choice ->
-                    val current = choice == speed()
-                    MenuAction(
-                        label = PlaybackSpeed.label(choice),
-                        icon = if (current) Icons.Filled.Check else ImageVector.vectorResource(R.drawable.ic_speed),
-                        detail = if (current) s.playerSpeedCurrent else null,
-                    ) {
-                        onSpeed(choice)
-                        close()
-                    }
+            // Pick one of a few, so the pickers' panel, as the subtitles and the phone's overflow
+            // draw it; Back steps back to the menu, Close shuts it.
+            Page.Speed -> SpeedSheet(
+                current = speed(),
+                onPick = { choice ->
+                    onSpeed(choice)
+                    close()
                 },
                 onDismiss = { page.value = Page.Main },
+                onClose = ::close,
             )
-            Page.Sleep -> TvMenu(
-                title = s.playerSleepTimer,
-                subtitle = sleepTimer(),
-                actions = buildList {
-                    if (sleepTimer() != null) {
-                        add(MenuAction(s.playerTurnOff, Icons.Filled.Close, detail = s.playerKeepPlaying) {
-                            onSleepTimer(null)
-                            close()
-                        })
-                    }
-                    SleepTimer.CHOICES.forEach { minutes ->
-                        add(
-                            MenuAction(SleepTimer.label(minutes), TmIcons.Clock) {
-                                onSleepTimer(minutes)
-                                close()
-                            },
-                        )
-                    }
+            Page.Sleep -> SleepSheet(
+                running = sleepTimer(),
+                chosen = sleepChoice(),
+                onPick = { minutes ->
+                    onSleepTimer(minutes)
+                    close()
                 },
                 onDismiss = { page.value = Page.Main },
+                onClose = ::close,
             )
-            Page.Keys -> RemoteKeysSheet(onDismiss = { page.value = Page.Main })
+            Page.Keys -> RemoteKeysSheet(onDismiss = { page.value = Page.Main }, onClose = ::close)
         }
     }
 
@@ -227,7 +220,7 @@ class PlayerTvMenu(
             PlayerMenuEntry.OpenInAnotherApp ->
                 MenuAction(s.playerOpenInAnotherApp, Icons.AutoMirrored.Filled.ExitToApp) { choose(entry) }
             PlayerMenuEntry.RemoteKeys ->
-                MenuAction(s.playerRemoteKeys, Icons.Filled.Info, detail = s.playerRemoteKeysDetail) { page.value = Page.Keys }
+                MenuAction(s.playerRemoteKeys, TmIcons.Remote, detail = s.playerRemoteKeysDetail) { page.value = Page.Keys }
         }
     }
 
@@ -245,14 +238,16 @@ class PlayerTvMenu(
  * table taller than the screen: focus moving down scrolls the row it lands on into view.
  */
 @Composable
-private fun RemoteKeysSheet(onDismiss: () -> Unit) {
+private fun RemoteKeysSheet(onDismiss: () -> Unit, onClose: () -> Unit) {
     val s = LocalStrings.current
     val first = remember { FocusRequester() }
     FloatingWindow(onDismiss = onDismiss) {
-        val panel = min(maxWidth - PhonePad.Side * 2, KEYS_MAX)
+        val panel = min(maxWidth - Tv.SafeH * 2, KEYS_MAX)
         Column(
             Modifier
                 .width(panel)
+                // Inside the overscan, as every TvMenu is, and scrolling inside that.
+                .heightIn(max = maxHeight - Tv.SafeV * 2)
                 .floatingSurface(FloatingTone.sheet)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 20.dp),
@@ -267,12 +262,19 @@ private fun RemoteKeysSheet(onDismiss: () -> Unit) {
             RemoteKeys.ROWS.forEachIndexed { index, (key, does) ->
                 KeyRow(key, does, if (index == 0) Modifier.focusRequester(first) else Modifier)
             }
-            Text(
-                s.playerRemoteKeysClose,
-                style = MaterialTheme.typography.bodySmall,
-                color = Tone.muted,
-                modifier = Modifier.padding(start = 4.dp, top = 8.dp),
-            )
+            // The hint and Close share the last line, as in every TvMenu: Close at the end.
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    s.playerRemoteKeysClose,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Tone.muted,
+                    modifier = Modifier.weight(1f).padding(start = 4.dp, end = 12.dp),
+                )
+                SheetCloseButton(onClose)
+            }
         }
         LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
     }

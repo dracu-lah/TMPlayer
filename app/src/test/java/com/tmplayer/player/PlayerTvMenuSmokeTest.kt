@@ -72,4 +72,19 @@ class PlayerTvMenuSmokeTest {
         shadowOf(Looper.getMainLooper()).idle()
         assertTrue(menu.isOpen)
     }
+
+    @Test
+    fun `the speed, sleep timer and details sheets compose`() {
+        val sheets = PlayerSheets(activity, root, onClosed = {})
+        shadowOf(Looper.getMainLooper()).idle()
+        assertFalse(sheets.isOpen)
+        sheets.showSpeed(1.5f) {}
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(sheets.isOpen)
+        sheets.showSleep(running = "23 minutes left", chosen = 30) {}
+        shadowOf(Looper.getMainLooper()).idle()
+        sheets.showDetails("Bethlehem Kudumba Unit", listOf("Picture 1920 x 1080", "File 1.4 GB"))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(sheets.isOpen)
+    }
 }

@@ -33,4 +33,17 @@
     <dimen name="player_timebar_touch">48dp</dimen>
     <!-- Space over the scrub bar. A phone's 48dp touch strip already carries its own air. -->
     <dimen name="player_timebar_gap">0dp</dimen>
+    <!--
+      The line under each of the phone's episode steps naming where it goes ("S01E05"), and the
+      equal spacer over it that keeps the button level with the play disc.
+    -->
+    <dimen name="player_episode_caption">22dp</dimen>
+    <!-- The air between an episode step and the caption pill under it. -->
+    <dimen name="player_episode_caption_gap">4dp</dimen>
+    <!--
+      How far the scrims reach in from each edge while the controls are up. The phone's top one
+      clears the status bar plus the 56dp top bar with its title and subtitle.
+    -->
+    <dimen name="player_scrim_top">160dp</dimen>
+    <dimen name="player_scrim_bottom">240dp</dimen>
 </resources>

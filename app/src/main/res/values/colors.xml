@@ -10,4 +10,14 @@
     <color name="window_background">#F6FAFD</color>
     <color name="accent">#2AABEE</color>
     <color name="text_primary">#EDEDF2</color>
+
+    <!--
+      The player's tonal surfaces. The picture is always dark chrome whatever the system theme, so
+      these are fixed: a near-black surface container let partly through, with on surface text on
+      it. The caption tone (70 per cent) carries small text, the episode codes and the jump figure,
+      and holds white text above 7:1 even over a white frame. The button tone (55 per cent) sits
+      under the round centre buttons, where a glyph needs 3:1 and a little more of the frame shows.
+    -->
+    <color name="player_tonal">#B3101014</color>
+    <color name="player_tonal_button">#8C101014</color>
 </resources>

@@ -13,6 +13,9 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.tmplayer.ui.theme.Floating
 import com.tmplayer.ui.theme.LocalOnFloating
 
@@ -36,16 +39,31 @@ import com.tmplayer.ui.theme.LocalOnFloating
 fun FloatingWindow(
     onDismiss: () -> Unit,
     ignoreRelease: Boolean = false,
+    /**
+     * Lay the window under the system bars and keep them hidden, for a panel that fills the
+     * screen over the player (a full-screen [ChoiceSheet]); it pads itself clear of a cutout.
+     */
+    immersive: Boolean = false,
     content: @Composable BoxWithConstraintsScope.() -> Unit,
 ) {
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = !immersive),
     ) {
-        val window = (LocalView.current.parent as? DialogWindowProvider)?.window
+        val view = LocalView.current
+        val window = (view.parent as? DialogWindowProvider)?.window
         SideEffect {
             window?.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
             window?.setDimAmount(Floating.SCRIM_ALPHA)
+            if (immersive && window != null) {
+                window.attributes = window.attributes.apply {
+                    layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
+                WindowCompat.getInsetsController(window, view).apply {
+                    hide(WindowInsetsCompat.Type.systemBars())
+                    systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
+            }
         }
         CompositionLocalProvider(LocalOnFloating provides true) {
             BoxWithConstraints(

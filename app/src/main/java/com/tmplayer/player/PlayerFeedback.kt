@@ -61,6 +61,14 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
     private val spinner = ProgressBar(context).apply {
         isIndeterminate = true
         indeterminateTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+        // The same tonal disc as the play button it stands in for, so a white ring still reads
+        // on a bright frame; the ring is drawn inside the padding.
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(ContextCompat.getColor(context, R.color.player_tonal_button))
+        }
+        val inset = dp(12f)
+        setPadding(inset, inset, inset, inset)
     }
 
     init {
@@ -79,7 +87,7 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
         flash.layoutParams = FrameLayout.LayoutParams(dp(88f), dp(88f), Gravity.CENTER)
         level.layoutParams = FrameLayout.LayoutParams(dp(36f), dp(196f), Gravity.CENTER_VERTICAL)
         scrub.layoutParams = FrameLayout.LayoutParams(wrap, wrap, Gravity.CENTER)
-        spinner.layoutParams = FrameLayout.LayoutParams(dp(56f), dp(56f), Gravity.CENTER)
+        spinner.layoutParams = FrameLayout.LayoutParams(dp(72f), dp(72f), Gravity.CENTER)
     }
 
     // ---- waiting -----------------------------------------------------------------------------
@@ -203,7 +211,7 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
         init {
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(0x73000000)
+                setColor(ContextCompat.getColor(context, R.color.player_tonal_button))
             }
             addView(icon, LayoutParams(dp(44f), dp(44f), Gravity.CENTER))
         }
@@ -235,8 +243,17 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
             textAlign = Paint.Align.CENTER
             textSize = 14f * density
             typeface = Typeface.DEFAULT_BOLD
-            setShadowLayer(4f * density, 0f, 0f, 0x80000000.toInt())
         }
+
+        /**
+         * The tonal pill the chevrons and the figure sit on. The half-moon is pale on purpose, so
+         * on a bright frame white chevrons and a white figure over it were white on white; the
+         * pill is the player's caption tone, the same as every other small text over the picture.
+         */
+        private val plate = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = ContextCompat.getColor(context, R.color.player_tonal)
+        }
+        private val plateRect = RectF()
         private val oval = RectF()
         private val path = Path()
 
@@ -315,6 +332,12 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
             val cy = h / 2f - 14f * density
             val size = 9f * density
             val phase = ticker?.animatedValue as? Float ?: 0f
+            val text = L.playerSeekSeconds(seconds)
+            val baseline = cy + size + 22f * density
+            val halfWidth = maxOf(label.measureText(text), size * 4.2f) / 2f + 16f * density
+            plateRect.set(cx - halfWidth, cy - size / 2f - 12f * density, cx + halfWidth, baseline + label.descent() + 10f * density)
+            val corner = 24f * density
+            canvas.drawRoundRect(plateRect, corner, corner, plate)
             for (i in 0 until 3) {
                 val order = if (left) 2 - i else i
                 val lit = ((phase * 3f) - order).let { if (it in 0f..1f) 1f - it else 0f }
@@ -333,7 +356,7 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
                 path.close()
                 canvas.drawPath(path, chevron)
             }
-            canvas.drawText(L.playerSeekSeconds(seconds), cx, cy + size + 22f * density, label)
+            canvas.drawText(text, cx, baseline, label)
         }
     }
 

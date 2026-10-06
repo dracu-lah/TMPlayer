@@ -1,0 +1,18 @@
+<!--
+  The television's time readout under focus: a solid white pill with the text turned near-black
+  (player_control_icon), the same answer the round buttons give in their own shape. The faint
+  pill it borrowed from the scrub bar disappeared over a bright frame.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#FFFFFFFF" />
+            <corners android:radius="100dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#00000000" />
+        </shape>
+    </item>
+</selector>

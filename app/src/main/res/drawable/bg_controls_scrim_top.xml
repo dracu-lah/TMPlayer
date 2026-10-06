@@ -1,7 +1,12 @@
-<!-- The top edge's lighter answer to the bottom scrim: it carries only the corner chips. -->
+<!--
+  The dark the top edge reads against: the phone's back arrow, title and overflow, the
+  television's clock. Three stops, so it holds dark through the band the text sits in and only
+  then lets go, instead of fading from the very first pixel the way a two stop ramp does.
+-->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <gradient
         android:angle="270"
-        android:startColor="#99000000"
+        android:startColor="#D9000000"
+        android:centerColor="#8C000000"
         android:endColor="#00000000" />
 </shape>

@@ -1,0 +1,30 @@
+<!--
+  The seat of every round button in the phone's centre cluster: previous, back, play or pause,
+  forward, next. One tonal disc for all of them, so none of the five vanishes on a light frame
+  while its neighbour stays, and the play disc differs only in size. A keyboard or D-pad focus
+  rings the disc in white rather than filling it, so the white glyph inside stays as it is; a
+  thumb gets a bounded ripple.
+-->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#33FFFFFF">
+    <item android:id="@android:id/mask">
+        <shape android:shape="oval">
+            <solid android:color="#FFFFFFFF" />
+        </shape>
+    </item>
+    <item>
+        <selector>
+            <item android:state_focused="true">
+                <shape android:shape="oval">
+                    <solid android:color="@color/player_tonal_button" />
+                    <stroke android:width="2dp" android:color="#FFFFFFFF" />
+                </shape>
+            </item>
+            <item>
+                <shape android:shape="oval">
+                    <solid android:color="@color/player_tonal_button" />
+                </shape>
+            </item>
+        </selector>
+    </item>
+</ripple>

@@ -28,7 +28,6 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
 import androidx.fragment.app.FragmentActivity
-import androidx.leanback.app.GuidedStepSupportFragment
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem as Media3Item
@@ -37,6 +36,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
+import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.ChannelMixingAudioProcessor
@@ -77,6 +77,10 @@ import com.tmplayer.data.Trickplay
 import com.tmplayer.data.WatchNext
 import com.tmplayer.data.WatchNextPublisher
 import com.tmplayer.data.MediaName
+import com.tmplayer.data.EpisodeNeighbours
+import com.tmplayer.data.EpisodeSteps
+import com.tmplayer.data.EpisodeTag
+import com.tmplayer.data.SeriesShelf
 import com.tmplayer.data.MessageLink
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
@@ -121,6 +125,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import com.tmplayer.online.MovieHash
+import com.tmplayer.online.EpisodeNames
+import com.tmplayer.online.OnlineMetadata
 import com.tmplayer.online.OnlineSubtitles
 import com.tmplayer.online.SubtitleTarget
 import java.io.File
@@ -141,6 +147,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         private set
     lateinit var mediaSubtitle: String
         private set
+
+    /**
+     * The file's own name and the post's caption, which [mediaTitle] is one or the other of. The
+     * series view reads both to place an episode, and so does [findEpisodes].
+     */
+    private var mediaFileName = ""
+    private var mediaCaption = ""
 
     private var chatId = 0L
     private var messageId = 0L
@@ -213,6 +226,24 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** The television's More menu, the phone's overflow in its own form. Null on a phone. */
     private var tvMenu: PlayerTvMenu? = null
+
+    /** The speed, sleep timer and playback details sheets, on a phone and a television alike. */
+    private var sheets: PlayerSheets? = null
+
+    /** The overflow or the television's More menu is open. */
+    private var menuOpen = false
+
+    /**
+     * One of [sheets] (speed, sleep timer, playback details) is open. Its own flag, because it is
+     * opened from the overflow, whose dismissal arrives after the sheet is already up.
+     */
+    private var detailsOpen = false
+
+    /** How far the picture stops short of the screen's bottom edge; see [fitSubtitlesTo]. */
+    private var subtitleGapBelow = 0
+
+    /** A track picker, or the online subtitle list above one, is open. */
+    private var pickerOpen = false
 
     /** What this device's remote does differently: Fire TV's Menu key and held seeks. */
     private val remoteQuirks: RemoteQuirks by lazy { DeviceQuirks.remote(this) }
@@ -303,13 +334,25 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * The episodes either side of this one, once the chat has been asked about them.
      *
      * Empty for a standalone video, and for an episode whose neighbours are not in the chat. The
-     * transport row watches this and grows its two extra buttons when they arrive.
+     * transport row watches this and grows its two extra buttons when they arrive; the title reads
+     * the playing episode's code and name off it. See [EpisodeNeighbours].
      */
-    private val _episodes = MutableStateFlow(Episodes())
-    val episodes: StateFlow<Episodes> = _episodes.asStateFlow()
+    private val _episodes = MutableStateFlow(EpisodeSteps())
+    val episodes: StateFlow<EpisodeSteps> = _episodes.asStateFlow()
 
-    /** True until the picture first appears; after that a stall is a chip, not a full sheet. */
+    /**
+     * True until the picture first appears; after that a stall is a chip, not a full sheet. The
+     * pre-roll loader rides with it: up while the film is opening, faded off the moment this goes
+     * false, for the first frame or for a failure sheet underneath.
+     */
     private var openingFilm = true
+        set(value) {
+            field = value
+            syncLoader()
+        }
+
+    /** The pre-roll over the opening wait. See [PlayerLoaderHost]. */
+    private var loaderHost: PlayerLoaderHost? = null
     private val speed = SpeedMeter()
 
     /**
@@ -434,6 +477,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         messageId = intent.getLongExtra(EXTRA_MESSAGE_ID, 0)
         mediaTitle = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         mediaSubtitle = intent.getStringExtra(EXTRA_SUBTITLE).orEmpty()
+        mediaFileName = intent.getStringExtra(EXTRA_FILE_NAME).orEmpty()
+        mediaCaption = intent.getStringExtra(EXTRA_CAPTION).orEmpty()
         chatTitle = intent.getStringExtra(EXTRA_CHAT_TITLE).orEmpty()
         fileSizeBytes = intent.getLongExtra(EXTRA_SIZE, 0)
         durationSec = intent.getIntExtra(EXTRA_DURATION, 0)
@@ -469,6 +514,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         statusOpenWith?.text = L.playerOpenInAnotherApp
         statusBack?.text = L.playerGoBack
         statusName = findViewById(R.id.status_name)
+        loaderHost = PlayerLoaderHost(
+            root = findViewById(R.id.player_root),
+            above = statusOverlay,
+            tv = FormFactor.isTv(this),
+            fileName = mediaFileName,
+            caption = mediaCaption.ifBlank { null },
+            fallbackTitle = mediaTitle,
+            durationSec = durationSec,
+        )
         rebufferChip = findViewById(R.id.rebuffer_chip)
         rebufferText = findViewById(R.id.rebuffer_text)
         downloadChip = findViewById(R.id.download_chip)
@@ -482,7 +536,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             onSkip = ::skipBy,
             onPickSubtitles = { showTrackPicker(C.TRACK_TYPE_TEXT) },
             onPickAudio = { showTrackPicker(C.TRACK_TYPE_AUDIO) },
-            onCycleSpeed = ::cycleSpeed,
+            onPickSpeed = ::pickSpeed,
             onCycleScale = ::cycleScale,
             onCycleOrientation = ::cycleOrientation,
             onPlayEpisode = ::playEpisode,
@@ -518,12 +572,21 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 volumeBoost = { volumeBoostOn },
                 sleepTimer = ::sleepTimerDetail,
                 onSleepTimer = ::setSleepTimer,
-                nextEpisode = { _episodes.value.next?.let { episodeLabel(next = true, it) } },
-                previousEpisode = { _episodes.value.previous?.let { episodeLabel(next = false, it) } },
+                sleepChoice = ::sleepChoice,
+                nextEpisode = { _episodes.value.takeIf { it.next != null }?.let { episodeLabel(next = true, it.nextTag) } },
+                previousEpisode = { _episodes.value.takeIf { it.previous != null }?.let { episodeLabel(next = false, it.previousTag) } },
                 onEntry = ::onTvMenuEntry,
                 onSpeed = ::setSpeed,
-                onClosed = { controls?.show(); controls?.focusRow() },
+                onClosed = { menuOpen = false; holdControls(); controls?.show(); controls?.focusRow() },
             )
+        }
+        sheets = PlayerSheets(this, findViewById(R.id.player_root)) {
+            detailsOpen = false
+            holdControls()
+            if (tvMenu != null) {
+                controls?.show()
+                controls?.focusRow()
+            }
         }
         buildNextUpCard()
         startTrickplay()
@@ -543,8 +606,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // When a track picker closes, focus falls off its fragment and the scrub bar catches it,
         // so the next D-pad press seeks instead of walking the row. Hand it back to the buttons.
         supportFragmentManager.addOnBackStackChangedListener {
-            val pickerOpen =
-                GuidedStepSupportFragment.getCurrentGuidedStepSupportFragment(supportFragmentManager) != null
+            pickerOpen =
+                TrackPickerFragment.isOpen(supportFragmentManager)
+            holdControls()
             if (!pickerOpen) controls?.focusRow()
         }
         subtitleView.setApplyEmbeddedStyles(true)
@@ -699,6 +763,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         findViewById<FrameLayout>(R.id.playback_container).addView(view)
         touchSurface = view
         view.resizeMode = videoScale.resizeMode
+        if (!FormFactor.isTv(this)) {
+            view.findViewById<View>(androidx.media3.ui.R.id.exo_content_frame)
+                ?.addOnLayoutChangeListener { frame, _, _, _, _, _, _, _, _ -> fitSubtitlesTo(frame) }
+        }
 
         if (!FormFactor.isTv(this)) {
             // Fed from dispatchTouchEvent rather than attached here: see [PlayerGestures].
@@ -911,37 +979,58 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     controls?.setEpisodes(
                         previousEpisode = found.previous,
                         nextEpisode = found.next,
-                        previousLabel = episodeLabel(next = false, found.previous),
-                        nextLabel = episodeLabel(next = true, found.next),
+                        previousLabel = episodeLabel(next = false, found.previousTag),
+                        nextLabel = episodeLabel(next = true, found.nextTag),
+                        previousCaption = found.previousTag?.code.orEmpty(),
+                        nextCaption = found.nextTag?.code.orEmpty(),
                     )
+                    renderControlsTitle()
                 }
             }
         }
     }
 
-    /** The name over the scrub bar: the parsed title, with the episode code and source under it. */
+    /**
+     * The name over the scrub bar: the show's title, with the episode under it ("S01E04  ·  The
+     * Lighthouse") and then the source. The episode is the series view's numbering once the chat
+     * has answered, and what the file says of itself before then.
+     */
     private fun renderControlsTitle() {
-        val parsed = MediaName.parse(mediaTitle)
-        val name = parsed.title.ifBlank { mediaTitle }
+        val here = currentItem()
+        val parsed = SeriesShelf.episodeOf(here)
+        val episode = _episodes.value.current ?: EpisodeNeighbours.tagOf(here)
+        val name = (episode?.show ?: parsed.title).ifBlank { parsed.title }.ifBlank { mediaTitle }
         val detail = listOfNotNull(
-            parsed.episodeCode,
+            episode?.label,
             mediaSubtitle.ifBlank { chatTitle }.takeIf { it.isNotBlank() },
         ).joinToString("  ·  ")
         controls?.setTitle(name, detail)
     }
 
     /**
-     * "Next S01E02", falling back to a bare "Next" when the name carries no episode code.
-     *
-     * The fallback is not dead wood: a series can be numbered in a way the parser reads well enough
-     * to order but not well enough to name, and a bare "Next" beats a label made of a guess.
+     * "Next: S01E02  ·  The Lighthouse", falling back to a bare "Next" when there is no episode to
+     * name.
      */
-    fun episodeLabel(next: Boolean, item: MediaItem?): String {
-        val bare = if (next) L.playerNext else L.playerPrevious
-        val name = item?.fileName?.ifBlank { item.title } ?: return bare
-        val code = MediaName.parse(name).episodeCode ?: return bare
-        return if (next) L.playerNextCode(code) else L.playerPreviousCode(code)
+    fun episodeLabel(next: Boolean, tag: EpisodeTag?): String {
+        tag ?: return if (next) L.playerNext else L.playerPrevious
+        return if (next) L.playerNextUp(tag.label) else L.playerPreviousUp(tag.label)
     }
+
+    /** The video playing, as the chat lists it, for the series view's grouping. */
+    private fun currentItem(): MediaItem = MediaItem(
+        chatId = chatId,
+        messageId = messageId,
+        fileId = fileId,
+        title = mediaTitle,
+        sizeBytes = fileSizeBytes,
+        durationSec = durationSec,
+        mimeType = "",
+        thumbnailFileId = 0,
+        miniThumbnail = null,
+        date = 0,
+        fileName = mediaFileName,
+        caption = mediaCaption,
+    )
 
     /**
      * Every touch in the window is offered to the gestures before any view sees it.
@@ -961,7 +1050,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     override fun dispatchTouchEvent(event: android.view.MotionEvent): Boolean {
         val surface = touchSurface
         val pickerOpen =
-            GuidedStepSupportFragment.getCurrentGuidedStepSupportFragment(supportFragmentManager) != null
+            TrackPickerFragment.isOpen(supportFragmentManager)
         if (locked) {
             // The shield over everything takes the touch; it offers the way out and nothing else.
             return super.dispatchTouchEvent(event)
@@ -1042,6 +1131,57 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         )
     }
 
+    /**
+     * Lays the subtitles over the picture rather than over the whole screen, on a phone.
+     *
+     * Media3 places and sizes a cue as a share of the view it draws in. Spread over a phone held
+     * upright, that view is a tall strip with the picture a band across its middle: picture
+     * subtitles (PGS and the like) came out squeezed sideways and stretched tall, and lines
+     * positioned near the bottom landed in the black under the picture. Fitted to the picture,
+     * they keep their shape and sit where the film put them, the same upright as sideways.
+     *
+     * The bottom margin is clearance from the screen's edge, so it applies only where the picture
+     * runs down to that edge. A television keeps the full-screen view: its screen is the shape
+     * of the picture, and a letterboxed film's subtitles stay in the bar below it.
+     */
+    private fun fitSubtitlesTo(frame: View) {
+        val root = findViewById<View>(R.id.player_root)
+        if (root.width == 0 || frame.width == 0) return
+        val at = IntArray(2)
+        val origin = IntArray(2)
+        frame.getLocationInWindow(at)
+        root.getLocationInWindow(origin)
+        // Clamped to the screen, for Zoom, where the picture runs off both sides.
+        val left = (at[0] - origin[0]).coerceIn(0, root.width)
+        val top = (at[1] - origin[1]).coerceIn(0, root.height)
+        val right = (at[0] - origin[0] + frame.width).coerceIn(left, root.width)
+        val bottom = (at[1] - origin[1] + frame.height).coerceIn(top, root.height)
+        val clearance = resources.getDimensionPixelSize(R.dimen.player_subtitle_bottom)
+        val margin = (clearance - (root.height - bottom)).coerceAtLeast(0)
+        val params = subtitleView.layoutParams as FrameLayout.LayoutParams
+        val width = right - left
+        val height = (bottom - top - margin).coerceAtLeast(0)
+        if (
+            params.width == width && params.height == height && subtitleGapBelow == root.height - bottom &&
+            params.leftMargin == left && params.topMargin == top && params.bottomMargin == 0
+        ) {
+            return
+        }
+        subtitleGapBelow = root.height - bottom
+        params.gravity = Gravity.TOP or Gravity.LEFT
+        params.width = width
+        params.height = height
+        params.leftMargin = left
+        params.topMargin = top
+        params.bottomMargin = 0
+        // Set from inside a layout pass, so the change is posted rather than lost.
+        subtitleView.post {
+            subtitleView.layoutParams = params
+            applySubtitleStyle()
+            liftSubtitles()
+        }
+    }
+
     /** The next picture shape along. The button's press flashes the new name over the picture. */
     fun cycleScale() = applyScale(videoScale.next())
 
@@ -1058,13 +1198,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         lifecycleScope.launch { runCatching { settings.setVideoScale(scale.name) } }
     }
 
-    /** The next speed along, applied now and remembered for the next video. */
-    fun cycleSpeed() {
-        val next = PlaybackSpeed.next(playbackSpeed)
-        playbackSpeed = next
-        player?.setPlaybackSpeed(next)
-        showGestureFeedback(PlaybackSpeed.label(next))
-        lifecycleScope.launch { runCatching { settings.setPlaybackSpeed(next) } }
+    /** The speed button: every speed to pick from at once, rather than stepping through them. */
+    fun pickSpeed() {
+        showSheet { it.showSpeed(playbackSpeed, ::setSpeed) }
     }
 
     /**
@@ -1433,7 +1569,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     private val playerListener = object : Player.Listener {
         override fun onCues(cueGroup: CueGroup) {
-            subtitleView.setCues(cueGroup.cues)
+            subtitleView.setCues(scaledForPicture(cueGroup.cues))
         }
 
         /**
@@ -1789,30 +1925,37 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     /**
-     * Asks the chat what comes before and after this episode.
+     * Asks the chat what comes before and after this episode, the way the Series view orders it:
+     * see [EpisodeNeighbours].
      *
      * Off the critical path on purpose: it costs a search, and the video starts without it. The
-     * search is narrowed to the series name, which is what Telegram matches document file names
-     * against, and falls back to the plain listing for a chat that names its files some other way.
+     * search is narrowed to the series name, which Telegram matches file names and captions
+     * against, and falls back to the plain listing when that finds no neighbour, for a chat that
+     * names its files some other way. A video whose name and caption name no episode, not even a
+     * bare "E5", is a film and asks nothing.
      */
     private fun findEpisodes() {
-        val here = MediaName.parse(mediaTitle)
-        if (!here.isEpisode || chatId == 0L) return
+        val here = currentItem()
+        val show = EpisodeNeighbours.tagOf(here)?.show
+            ?: listOfNotNull(mediaFileName.ifBlank { mediaTitle }.ifBlank { null }, mediaCaption.lineSequence().firstOrNull { it.isNotBlank() })
+                .firstNotNullOfOrNull { MediaName.looseEpisode(it) }?.title
+            ?: return
+        _episodes.value = EpisodeSteps(current = EpisodeNeighbours.tagOf(here))
+        if (chatId == 0L) return
 
         lifecycleScope.launch {
             val session = Td.awaitAuthorizedSession()
-            val candidates = runCatching {
-                val repository = ChatRepository(session.client)
-                val narrowed = repository.mediaPage(chatId, query = here.title).items
-                narrowed.ifEmpty { repository.mediaPage(chatId).items }
-            }.getOrNull().orEmpty()
-            if (candidates.isEmpty()) return@launch
-
-            fun nameOf(item: MediaItem) = item.fileName.ifBlank { item.title }
-            _episodes.value = Episodes(
-                previous = MediaName.previousEpisode(mediaTitle, candidates, ::nameOf),
-                next = MediaName.nextEpisode(mediaTitle, candidates, ::nameOf),
-            )
+            val repository = ChatRepository(session.client)
+            suspend fun page(query: String) =
+                runCatching { repository.mediaPage(chatId, query = query).items }.getOrNull().orEmpty()
+            var steps = EpisodeNeighbours.around(here, page(show))
+            if (steps.previous == null && steps.next == null) {
+                steps = EpisodeNeighbours.around(here, page(""))
+            }
+            _episodes.value = steps
+            // The providers' episode names, where lookups are on: a label first, then a better one.
+            val named = withContext(Dispatchers.IO) { EpisodeNames.named(steps, here, OnlineMetadata.current) }
+            if (named != steps) _episodes.value = named
         }
     }
 
@@ -1937,7 +2080,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 return@launch
             }
             for (second in AUTOPLAY_COUNTDOWN_SEC downTo 1) {
-                showStatus(L.playerNextTitle(next.title))
+                showStatus(L.playerNextTitle(_episodes.value.nextTag?.label ?: next.title))
                 statusDetail.text = L.playerAutoplayCountdown(second)
                 showLoadingProgress(
                     (AUTOPLAY_COUNTDOWN_SEC - second).toFloat() / AUTOPLAY_COUNTDOWN_SEC,
@@ -2024,11 +2167,46 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     /**
+     * How much larger than its share of the picture subtitle text is drawn, for a small picture.
+     *
+     * Once the view is fitted to the picture ([fitSubtitlesTo]), a share of its height is a share
+     * of the picture's, which upright on a phone is a band a few hundred pixels tall, and the
+     * lines came out too small to read. They are drawn no smaller than they would be over a
+     * picture [UPRIGHT_TEXT_SHARE] of the screen's short side high; sideways the picture is
+     * taller than that, and this is 1.
+     */
+    private fun subtitleTextScale(): Float {
+        val height = subtitleView.layoutParams?.height ?: 0
+        if (height <= 0) return 1f
+        val root = findViewById<View>(R.id.player_root)
+        return maxOf(1f, minOf(root.width, root.height) * UPRIGHT_TEXT_SHARE / height)
+    }
+
+    private fun subtitleTextFraction(): Float = subtitleStyle.size.fraction * subtitleTextScale()
+
+    /**
+     * The same floor for a cue that brings its own size, as an SSA line does: scaled with the
+     * rest, or it alone would stay too small to read. Picture cues are left at the shape the film
+     * gave them.
+     */
+    private fun scaledForPicture(cues: List<Cue>): List<Cue> {
+        val scale = subtitleTextScale()
+        if (scale == 1f) return cues
+        return cues.map { cue ->
+            if (cue.bitmap != null || cue.textSizeType == Cue.TYPE_UNSET || cue.textSize == Cue.DIMEN_UNSET) {
+                cue
+            } else {
+                cue.buildUpon().setTextSize(cue.textSize * scale, cue.textSizeType).build()
+            }
+        }
+    }
+
+    /**
      * Draws subtitles the way [subtitleStyle] says. White with a black outline either way: the
      * outline is what survives a bright frame, and the optional box is for a busy one.
      */
     private fun applySubtitleStyle() {
-        subtitleView.setFractionalTextSize(subtitleStyle.size.fraction)
+        subtitleView.setFractionalTextSize(subtitleTextFraction())
         subtitleView.setBottomPaddingFraction(subtitleStyle.position.bottomFraction)
         subtitleView.setStyle(
             CaptionStyleCompat(
@@ -2074,11 +2252,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     override fun attachOnlineSubtitle(file: File, label: String) = subtitleFiles.attachFile(file, label)
 
     fun showTrackPicker(trackType: Int) {
-        GuidedStepSupportFragment.add(
-            supportFragmentManager,
-            TrackPickerFragment.forType(trackType),
-            R.id.overlay_container,
-        )
+        TrackPickerFragment.show(supportFragmentManager, R.id.overlay_container, trackType)
     }
 
     /**
@@ -2110,7 +2284,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             }
         }
         if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
-        val pickerOpen = GuidedStepSupportFragment.getCurrentGuidedStepSupportFragment(supportFragmentManager) != null
+        val pickerOpen = TrackPickerFragment.isOpen(supportFragmentManager)
         if (pickerOpen) return super.dispatchKeyEvent(event)
 
         // Before anything else claims the same key. A held select on a remote, or the menu key, is
@@ -2420,8 +2594,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 StreamStats.secondsForBytes(remaining, speed.bytesPerSec),
             )
             showLoadingProgress(downloadedFraction)
+            loaderHost?.progress = downloadedFraction
+            renderLoaderStatus()
+            val percent = Translator.messages.formatter.percent(downloadedFraction.toDouble())
             statusDetail.text = listOf(
-                L.playerDownloadedPercent(Translator.messages.formatter.percent(downloadedFraction.toDouble())),
+                // Under "Downloading the whole video", which is the mode's own name, so it stays
+                // "downloaded" here even though the bytes land in the watch cache.
+                L.playerDownloadedPercent(percent),
                 rate,
                 left,
             ).filter { it.isNotBlank() }.joinToString("  ·  ")
@@ -2443,6 +2622,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         if (openingFilm) {
             showLoadingProgress(fraction)
+            loaderHost?.progress = fraction
+            renderLoaderStatus()
             statusDetail.text = listOf(rate, left).filter { it.isNotBlank() }.joinToString("  ·  ")
         } else {
             rebufferText.text = L.playerLoadingRate(rate)
@@ -2576,6 +2757,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * handover to another app, which used to be reachable only through a held key.
      */
     private fun showOverflow(anchor: View) {
+        menuOpen = true
+        holdControls()
         tvMenu?.let { it.open(); return }
         val menu = android.widget.PopupMenu(this, anchor, Gravity.END)
         val items = menu.menu
@@ -2583,19 +2766,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
             items.add(0, MENU_PIP, 1, L.playerPictureInPicture)
         }
-        val speeds = items.addSubMenu(0, MENU_SPEED, 2, L.playerPlaybackSpeedNow(PlaybackSpeed.label(playbackSpeed)))
-        PlaybackSpeed.CHOICES.forEachIndexed { index, choice ->
-            speeds.add(1, MENU_SPEED_BASE + index, index, PlaybackSpeed.label(choice))
-                .setCheckable(true)
-                .setChecked(choice == playbackSpeed)
-        }
-        speeds.setGroupCheckable(1, true, true)
+        // Speed and the sleep timer open the pickers' sheet rather than a submenu, so a choice
+        // of one of several looks the same here as the subtitle and audio pickers.
+        items.add(0, MENU_SPEED, 2, L.playerPlaybackSpeedNow(PlaybackSpeed.label(playbackSpeed)))
         items.add(0, MENU_BOOST, 2, L.playerVolumeBoost).setCheckable(true).setChecked(volumeBoostOn)
-        val sleep = items.addSubMenu(0, MENU_SLEEP, 2, sleepTimerDetail()?.let { L.playerSleepTimerNow(it) } ?: L.playerSleepTimer)
-        if (sleepTimerDetail() != null) sleep.add(2, MENU_SLEEP_OFF, 0, L.playerTurnOff)
-        SleepTimer.CHOICES.forEachIndexed { index, minutes ->
-            sleep.add(2, MENU_SLEEP_BASE + index, index + 1, SleepTimer.label(minutes))
-        }
+        items.add(0, MENU_SLEEP, 2, sleepTimerDetail()?.let { L.playerSleepTimerNow(it) } ?: L.playerSleepTimer)
         items.add(0, MENU_START_OVER, 3, L.playerStartOver)
         if (savable == true) items.add(0, MENU_OPEN_WITH, 4, L.playerOpenInAnotherApp)
         items.add(0, MENU_DETAILS, 5, L.playerPlaybackDetails)
@@ -2617,16 +2792,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 MENU_OPEN_WITH -> openInAnotherApp()
                 MENU_DETAILS -> showPlaybackDetails()
                 MENU_BOOST -> toggleVolumeBoost()
-                MENU_SLEEP_OFF -> setSleepTimer(null)
-                in MENU_SLEEP_BASE until MENU_SLEEP_BASE + SleepTimer.CHOICES.size ->
-                    setSleepTimer(SleepTimer.CHOICES[item.itemId - MENU_SLEEP_BASE])
-                in MENU_SPEED_BASE until MENU_SPEED_BASE + PlaybackSpeed.CHOICES.size ->
-                    setSpeed(PlaybackSpeed.CHOICES[item.itemId - MENU_SPEED_BASE])
+                MENU_SPEED -> showSheet { it.showSpeed(playbackSpeed, ::setSpeed) }
+                MENU_SLEEP -> showSheet { it.showSleep(sleepTimerDetail(), sleepChoice(), ::setSleepTimer) }
                 else -> return@setOnMenuItemClickListener false
             }
             true
         }
-        menu.setOnDismissListener { controls?.poke() }
+        menu.setOnDismissListener { menuOpen = false; holdControls() }
         menu.show()
     }
 
@@ -2663,8 +2835,27 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         else -> null
     }
 
+    /** The length the running sleep timer was started with, or null when there is none. */
+    private fun sleepChoice(): Int? = when {
+        sleepAtTheEnd -> SleepTimer.END_OF_VIDEO
+        sleepAt > 0 -> sleepMinutes
+        else -> null
+    }
+
+    /**
+     * Opens one of [sheets], holding the controls while it is up. Its own flag, like the details
+     * dialog's was, because the overflow it opens from closes after it is already up.
+     */
+    private fun showSheet(open: (PlayerSheets) -> Unit) {
+        val host = sheets ?: return
+        open(host)
+        detailsOpen = true
+        holdControls()
+    }
+
     /** Minutes from now, [SleepTimer.END_OF_VIDEO], or null to turn the timer off. */
     private fun setSleepTimer(minutes: Int?) {
+        sleepMinutes = minutes ?: 0
         sleepAtTheEnd = minutes == SleepTimer.END_OF_VIDEO
         sleepAt = if (minutes != null && minutes != SleepTimer.END_OF_VIDEO) {
             SystemClock.elapsedRealtime() + minutes * 60_000L
@@ -2854,14 +3045,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 audio.sampleMimeType?.let { add(L.playerDetailsAudioCodec(it.substringAfter('/'))) }
             }
             if (fileSizeBytes > 0) add(L.playerDetailsFile(Translator.messages.formatter.bytes(fileSizeBytes)))
-            add(L.playerDetailsDownloaded(Translator.messages.formatter.percent(downloadedFraction.toDouble())))
+            val here = Translator.messages.formatter.percent(downloadedFraction.toDouble())
+            add(if (isRealDownload()) L.playerDetailsDownloaded(here) else L.playerDetailsCached(here))
             add(L.playerDetailsSpeed(PlaybackSpeed.label(playbackSpeed)))
         }
-        android.app.AlertDialog.Builder(this)
-            .setTitle(mediaTitle.ifBlank { L.playerPlaybackDetails })
-            .setMessage(lines.joinToString("\n"))
-            .setPositiveButton(L.commonClose, null)
-            .show()
+        showSheet { it.showDetails(mediaTitle.ifBlank { L.playerPlaybackDetails }, lines) }
     }
 
     /**
@@ -2964,8 +3152,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     if (sleepAtTheEnd || StillWatching.askBeforeAutoplay(autoplayedInARow)) continue
                     val left = duration - exo.currentPosition
                     if (left in 1..NEXT_UP_LEAD_MS && statusOverlay.visibility != View.VISIBLE) {
-                        val code = MediaName.parse(next.fileName.ifBlank { next.title }).episodeCode
-                        val label = code ?: next.title
+                        val label = _episodes.value.nextTag?.label ?: next.title
                         if (nextUpCard?.show(label, (left + 999) / 1000) == true) {
                             nextUpShown = true
                             if (FormFactor.isTv(this@PlayerActivity) && !controlsUp) nextUpCard?.play?.requestFocus()
@@ -2998,6 +3185,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         return rawX >= at[0] && rawX < at[0] + card.width && rawY >= at[1] && rawY < at[1] + card.height
     }
 
+    /** Keeps the row up while anything opened from it is still on screen; see [PlayerControls.held]. */
+    private fun holdControls() {
+        controls?.held = menuOpen || detailsOpen || pickerOpen
+    }
+
     /** The transport row coming or going; the chips and the system bars ride with it. */
     fun onControlsVisibilityChanged(visible: Boolean) {
         controlsUp = visible
@@ -3009,17 +3201,56 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         feedback?.controlsShown(visible)
         // The row going away hands the remote back to the next-up card, if that is up.
         if (!visible && nextUpHasTheRemote()) nextUpCard?.play?.requestFocus()
-        // Subtitles climb clear of the raised row rather than being covered by it, and settle
-        // back once it goes. Posted so the first raise measures a laid-out cluster rather than
-        // the zero height it had while gone.
+        liftSubtitles()
+        updateDownloadChip()
+    }
+
+    /**
+     * Subtitles climb clear of the raised row rather than being covered by it, and settle back
+     * once it goes. Only as far as the row actually reaches over them: a picture that stops well
+     * above the row, as on a phone held upright, leaves them where they are. Posted so the first
+     * raise measures a laid-out cluster rather than the zero height it had while gone.
+     *
+     * Never into the centre buttons, though: a phone held sideways has little room between the
+     * bar and the transport, and two lines of large subtitles lifted clear of the bar landed in
+     * the middle of the picture among the buttons. The climb stops two lines' height below the
+     * centre cluster, and whatever of the cue is still low sits under the bottom scrim.
+     */
+    private fun liftSubtitles() {
         val cluster = findViewById<View>(R.id.controls_cluster)
         cluster.post {
+            val reach = (cluster.height - subtitleGapBelow).coerceAtLeast(0)
+            val room = roomUnderCentre()
+            val lift = if (room == null) reach else reach.coerceAtMost(room)
             subtitleView.animate()
-                .translationY(if (visible && controlsUp) -cluster.height.toFloat() else 0f)
+                .translationY(if (controlsUp) -lift.toFloat() else 0f)
                 .setDuration(SUBTITLE_LIFT_MS)
                 .start()
         }
-        updateDownloadChip()
+    }
+
+    /**
+     * How far subtitles can climb before two lines of them would reach the centre cluster, in
+     * pixels, or null when the cluster is not showing. Measured from where the view draws its
+     * bottom line: its height less the bottom padding fraction, with each line about 1.25 times
+     * the fractional text size.
+     */
+    private fun roomUnderCentre(): Int? {
+        val centre = findViewById<View>(R.id.controls_center)
+        if (centre.visibility != View.VISIBLE || centre.height == 0) return null
+        val root = findViewById<View>(R.id.player_root)
+        val at = IntArray(2)
+        val origin = IntArray(2)
+        root.getLocationInWindow(origin)
+        centre.getLocationInWindow(at)
+        val centreBottom = at[1] - origin[1] + centre.height
+        subtitleView.getLocationInWindow(at)
+        val height = subtitleView.height
+        val viewTop = at[1] - origin[1] - subtitleView.translationY.toInt()
+        val textBottom = viewTop + height * (1f - subtitleStyle.position.bottomFraction)
+        val twoLines = 2.5f * subtitleTextFraction() * height
+        val gap = 8 * resources.displayMetrics.density
+        return (textBottom - twoLines - gap - centreBottom).toInt().coerceAtLeast(0)
     }
 
     /**
@@ -3027,25 +3258,38 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      *
      * It gives way to the rebuffering chip, which occupies the same corner and is the more urgent
      * of the two, and it stays off entirely while a full-screen status sheet is up.
+     *
+     * A video that is all here says nothing. Complete usually means the watch cache has the whole
+     * file, not that it is in Downloads, and "Download completed" pinned to every raise of the row
+     * for the rest of the film read as a download that had never been asked for.
      */
     private fun updateDownloadChip() {
         val show = controlsUp &&
             statusOverlay.visibility != View.VISIBLE &&
             rebufferChip.visibility != View.VISIBLE &&
-            (fileSizeBytes > 0 || downloadComplete)
+            fileSizeBytes > 0 &&
+            !downloadComplete
         downloadChip.visibility = if (show) View.VISIBLE else View.GONE
         if (!show) return
 
+        val percent = Translator.messages.formatter.percent(downloadedFraction.toDouble())
+        val rate = Translator.messages.formatter.speed(speed.bytesPerSec)
+        val moving = speed.bytesPerSec >= StreamStats.MIN_MEANINGFUL_SPEED
         downloadChip.text = when {
-            downloadComplete -> L.playerDownloadCompleted
-            speed.bytesPerSec >= StreamStats.MIN_MEANINGFUL_SPEED ->
-                L.playerDownloadedPercentSpeed(
-                    Translator.messages.formatter.percent(downloadedFraction.toDouble()),
-                    Translator.messages.formatter.speed(speed.bytesPerSec),
-                )
-            else -> L.playerDownloadedPercent(Translator.messages.formatter.percent(downloadedFraction.toDouble()))
+            isRealDownload() && moving -> L.playerDownloadedPercentSpeed(percent, rate)
+            isRealDownload() -> L.playerDownloadedPercent(percent)
+            moving -> L.playerCachingPercentSpeed(percent, rate)
+            else -> L.playerCachingPercent(percent)
         }
     }
+
+    /**
+     * Whether the bytes coming down are a download the viewer asked for (in Downloads, or queued
+     * for it) rather than the watch cache filling for playback. Only a real download says
+     * "downloaded"; the cache says caching, or a viewer reads it as a download they never started.
+     */
+    private fun isRealDownload(): Boolean =
+        downloadedFile != null || (fileId > 0 && OfflineDownloads.isDownloading(fileId))
 
     /**
      * Puts the video's own artwork behind the wait.
@@ -3069,7 +3313,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val thumbnailId = intent.getIntExtra(EXTRA_THUMBNAIL_ID, 0)
         if (thumbnailId <= 0) return
         lifecycleScope.launch {
-            val full = runCatching { Thumbnails.full(thumbnailId) }.getOrNull()?.asAndroidBitmap() ?: return@launch
+            val frame = runCatching { Thumbnails.full(thumbnailId) }.getOrNull() ?: return@launch
+            // The loader takes the thumbnail only when it is shaped like a frame of the film. A
+            // square or upright one is, as a rule, the channel's logo, and a logo blown up across
+            // the screen is exactly what the loader is not to show.
+            if (frame.height > 0 && frame.width.toFloat() / frame.height >= REAL_FRAME_ASPECT) {
+                loaderHost?.thumbnail = frame
+            }
+            val full = frame.asAndroidBitmap()
             statusPoster?.setImageBitmap(full)
             // Where there was a minithumbnail the backdrop keeps it: stretching a real thumbnail
             // across 1080p is a soft, ugly photograph, while stretching a forty-pixel one is a
@@ -3101,7 +3352,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             poster.clipToOutline = true
             poster.animate().alpha(1f).translationY(0f).setDuration(ART_FADE_MS).start()
         }
-        if (artDrift == null) {
+        // Under the loader nobody sees the old sheet's drift; it would only cost frames.
+        if (artDrift == null && loaderHost?.shown != true) {
             artDrift = android.animation.ObjectAnimator.ofPropertyValuesHolder(
                 art,
                 android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, ART_DRIFT_SCALE),
@@ -3258,6 +3510,41 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun renderStatusText() {
         statusText.text = listOfNotNull(statusMessage.takeIf { it.isNotBlank() }, resumeNotice)
             .joinToString("  ·  ")
+        renderLoaderStatus()
+    }
+
+    /** Puts the loader up or takes it down with [openingFilm]. */
+    private fun syncLoader() {
+        val host = loaderHost ?: return
+        if (openingFilm) {
+            host.show(SystemClock.elapsedRealtime())
+            stopArtDrift()
+            renderLoaderStatus()
+        } else {
+            host.hide()
+        }
+    }
+
+    /**
+     * The loader's one status line and its slow-wait note. The stages that only mean "working"
+     * (connecting, starting, loading) all read as the resume point or "Starting"; anything else
+     * (offline, trying again, the next episode's name) is news and says itself. The speed joins
+     * only once the wait has run past [LOADER_SLOW_MS], small and muted, and says caching unless
+     * the bytes are a real download.
+     */
+    private fun renderLoaderStatus() {
+        val host = loaderHost ?: return
+        val routine = statusMessage.isBlank() || statusMessage == L.playerConnecting ||
+            statusMessage == L.playerStarting || statusMessage == L.commonLoading
+        host.status = if (routine) resumeNotice ?: L.playerLoaderStarting else statusMessage
+        val slow = SystemClock.elapsedRealtime() - host.shownAt > LOADER_SLOW_MS
+        val rate = speed.bytesPerSec
+        host.note = if (slow && rate >= StreamStats.MIN_MEANINGFUL_SPEED && !downloadComplete) {
+            val figure = Translator.messages.formatter.speed(rate)
+            if (isRealDownload()) L.playerDownloadingRate(figure) else L.playerCachingRate(figure)
+        } else {
+            null
+        }
     }
 
     /** A stall after playback has begun: a small chip, so the video stays on screen. */
@@ -3719,15 +4006,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
     }
 
-    /** What the transport row offers either side of the video: nulls where there is nothing. */
-    data class Episodes(val previous: MediaItem? = null, val next: MediaItem? = null)
-
     companion object {
         private const val EXTRA_FILE_ID = "file_id"
         private const val EXTRA_CHAT_ID = "chat_id"
         private const val EXTRA_MESSAGE_ID = "message_id"
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_SUBTITLE = "subtitle"
+        private const val EXTRA_FILE_NAME = "file_name"
+        private const val EXTRA_CAPTION = "caption"
         private const val EXTRA_SIZE = "size"
         private const val EXTRA_DURATION = "duration"
         private const val EXTRA_CHAT_TITLE = "chat_title"
@@ -3772,6 +4058,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         /** How often the sleep timer and the idle count are looked at. */
         private const val STILL_WATCHING_TICK_MS = 5_000L
 
+        /** The smallest picture height, as a share of the screen's short side, subtitles are sized for. */
+        private const val UPRIGHT_TEXT_SHARE = 0.6f
+
         /** How long the unlock pill stays up after a tap on the locked screen. */
         private const val UNLOCK_PILL_MS = 2_500L
 
@@ -3787,14 +4076,17 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         private const val MENU_WATCHED = 10
         private const val MENU_BOOST = 11
         private const val MENU_SLEEP = 12
-        private const val MENU_SLEEP_OFF = 13
-        private const val MENU_SLEEP_BASE = 200
-        private const val MENU_SPEED_BASE = 100
 
         private const val RESUME_TICK_MS = 10_000L
 
         /** The captions' climb out from under the raised transport row, and back. */
         private const val SUBTITLE_LIFT_MS = 200L
+
+        /** A thumbnail at least this wide for its height is a frame of the film, not a logo. */
+        private const val REAL_FRAME_ASPECT = 1.3f
+
+        /** How long the opening wait runs before the loader adds the speed. */
+        private const val LOADER_SLOW_MS = 3_000L
 
         /** Twice a second: faster than the eye needs and slower than TDLib talks. */
         private const val PROGRESS_RENDER_MS = 500L
@@ -3900,6 +4192,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         private var sleepAt = 0L
         private var sleepAtTheEnd = false
 
+        /** The minutes the running timer was started with, for its tick in the sleep timer's sheet. */
+        private var sleepMinutes = 0
+
         /**
          * The lock read back off disk at startup, so it survives more than one process.
          *
@@ -3921,6 +4216,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 putExtra(EXTRA_CHAT_ID, item.chatId)
                 putExtra(EXTRA_MESSAGE_ID, item.messageId)
                 putExtra(EXTRA_TITLE, item.title)
+                putExtra(EXTRA_FILE_NAME, item.fileName)
+                putExtra(EXTRA_CAPTION, item.caption)
                 putExtra(EXTRA_CHAT_TITLE, chatTitle)
                 // The picture the grid was already showing, carried across rather than fetched
                 // again: it is the one thing that can be on screen in the first frame, before

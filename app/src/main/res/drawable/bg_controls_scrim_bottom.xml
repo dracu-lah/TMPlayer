@@ -1,10 +1,12 @@
 <!--
-  The dark the bottom cluster reads against. Deep enough that white text survives a snow scene,
-  gone by half way up so the picture is never dimmed wholesale.
+  The dark the bottom cluster reads against. Three stops: deep at the edge, still 60 per cent at
+  half height where the times and the television's title sit, so white text holds AA contrast on
+  a snow scene, and gone by the top so the picture is never dimmed wholesale.
 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <gradient
         android:angle="90"
-        android:startColor="#D9000000"
+        android:startColor="#E6000000"
+        android:centerColor="#99000000"
         android:endColor="#00000000" />
 </shape>

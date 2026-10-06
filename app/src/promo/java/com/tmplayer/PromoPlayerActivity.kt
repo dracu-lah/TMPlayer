@@ -1,5 +1,6 @@
 package com.tmplayer
 
+import androidx.compose.ui.graphics.asImageBitmap
 import android.os.Bundle
 import android.os.Looper
 import android.view.KeyEvent
@@ -29,14 +30,12 @@ import com.tmplayer.player.NextUpCard
 import com.tmplayer.player.PlayerFeedback
 import com.tmplayer.player.PlayerTvMenu
 import com.tmplayer.player.TapZone
-import com.tmplayer.player.OnlineSubtitlesFragment
 import com.tmplayer.player.SubtitleStyle
 import com.tmplayer.player.SyncDelays
 import com.tmplayer.player.TrackPickerFragment
 import com.tmplayer.player.TrackPickerHost
 import com.tmplayer.online.OnlineSubtitles
 import com.tmplayer.online.SubtitleTarget
-import androidx.leanback.app.GuidedStepSupportFragment
 import androidx.media3.common.C
 
 /**
@@ -114,19 +113,17 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
             onTogglePlay = { player.playWhenReady = !player.playWhenReady },
             onSkip = {},
             onPickSubtitles = {
-                GuidedStepSupportFragment.add(
-                    supportFragmentManager, TrackPickerFragment.forType(C.TRACK_TYPE_TEXT), R.id.overlay_container,
-                )
+                TrackPickerFragment.show(supportFragmentManager, R.id.overlay_container, C.TRACK_TYPE_TEXT)
             },
             onPickAudio = {},
-            onCycleSpeed = {},
+            onPickSpeed = {},
             onCycleScale = {},
             onCycleOrientation = {},
             onPlayEpisode = {},
         )
         controls.setTitle("The Coast", "S01E04 · Nature Channel · 1.4 GB")
         if (!tv) controls.setSkip(10_000, 10_000)
-        controls.setEpisodes(demoEpisode(3), demoEpisode(5), L.playerPreviousCode("S01E03"), L.playerNextCode("S01E05"))
+        controls.setEpisodes(demoEpisode(3), demoEpisode(5), L.playerPreviousUp("S01E03"), L.playerNextUp("S01E05"), "S01E03", "S01E05")
         controls.timeoutMs = 0
         // `--ez trickplay true`: scrub thumbnails from a fake download of the first 1,520 seconds,
         // the same run the bar draws as buffered, so a D-pad scrub shows pictures up to there and
@@ -137,6 +134,9 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
             controls.thumbnails = PromoThumbnails(this)
         }
         controls.show()
+        // `--ez loader true`: the pre-roll loader over everything, with the sample film's art
+        // standing in for the online metadata, as the desktop's PlayerLoaderRenderTest draws it.
+        if (intent.getBooleanExtra("loader", false)) showPromoLoader(tv)
         this.controls = controls
         standIn = player
         player.addListener(object : Player.Listener {
@@ -201,8 +201,8 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
                     title = { "The Coast S01E04" },
                     pictureInPicture = { true },
                     speed = { 1f },
-                    nextEpisode = { L.playerNextCode("S01E05") },
-                    previousEpisode = { L.playerPreviousCode("S01E03") },
+                    nextEpisode = { L.playerNextUp("S01E05") },
+                    previousEpisode = { L.playerPreviousUp("S01E03") },
                     onEntry = {},
                     onSpeed = {},
                     onClosed = {},
@@ -210,10 +210,8 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
             }
             // `--es picker subtitles` opens the subtitle picker, `online` its "Search online" list.
             when (intent.getStringExtra("picker")) {
-                "subtitles" -> GuidedStepSupportFragment.add(
-                    supportFragmentManager, TrackPickerFragment.forType(C.TRACK_TYPE_TEXT), R.id.overlay_container,
-                )
-                "online" -> GuidedStepSupportFragment.add(supportFragmentManager, OnlineSubtitlesFragment(), R.id.overlay_container)
+                "subtitles" -> TrackPickerFragment.show(supportFragmentManager, R.id.overlay_container, C.TRACK_TYPE_TEXT)
+                "online" -> TrackPickerFragment.show(supportFragmentManager, R.id.overlay_container, C.TRACK_TYPE_TEXT, online = true)
             }
         }, 600)
     }
@@ -231,6 +229,35 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    private fun showPromoLoader(tv: Boolean) {
+        fun art(id: Int) = android.graphics.BitmapFactory.decodeResource(resources, id).asImageBitmap()
+        val content = com.tmplayer.ui.player.LoaderContent(
+            words = com.tmplayer.ui.player.LoaderWords(
+                title = "Big Buck Bunny",
+                line = "2008  ·  10m",
+                overview = "A large and lovable rabbit deals with three tiny bullies, led by a flying squirrel, " +
+                    "who are determined to squelch his happiness.",
+            ),
+            backdrop = art(R.drawable.promo_bbb_backdrop),
+            poster = art(R.drawable.promo_bbb_poster),
+        )
+        findViewById<FrameLayout>(R.id.player_root).addView(
+            androidx.compose.ui.platform.ComposeView(this).apply {
+                setContent {
+                    com.tmplayer.ui.theme.TmMaterialTheme(dark = true) {
+                        com.tmplayer.ui.player.PlayerLoader(
+                            content = content,
+                            progress = 0.42f,
+                            status = L.playerResumingFrom("13:54"),
+                            note = L.playerCachingRate("160 KB/s"),
+                            tv = tv,
+                        )
+                    }
+                }
+            },
+        )
     }
 
     private fun demoEpisode(number: Int) = MediaItem(

@@ -41,9 +41,11 @@ import com.tmplayer.i18n.Translator
  * next), and an elapsed and total line over the bar. With the transport moved there, the bottom row
  * keeps five buttons, which fit a phone held upright without scrolling; lock and picture in
  * picture join them when the row is wide enough. A television shows none of the phone pieces and
- * keeps one row, but without the transport: the remote already plays, pauses and jumps, and the
- * episode steps are its media keys and lines in More. What a television keeps of the centre is
- * the play disc as a cue rather than a button, drawn only while the video is paused.
+ * keeps one row, but without play, pause and the jumps: the remote already does those. The
+ * episode steps do get a seat at the head of the row, since a remote's media keys are not on
+ * every remote and the button can say where it goes: focused, it puts "Next: S01E05" in the line
+ * under the title. What a television keeps of the centre is the play disc as a cue rather than a
+ * button, drawn only while the video is paused.
  *
  * The activity stays the owner of every action. This class decides nothing about playback; it
  * raises, lowers and repaints the furniture, and forwards each press to the lambda wired for it.
@@ -58,7 +60,7 @@ class PlayerControls(
     private val onSkip: (Long) -> Unit,
     private val onPickSubtitles: () -> Unit,
     private val onPickAudio: () -> Unit,
-    private val onCycleSpeed: () -> Unit,
+    private val onPickSpeed: () -> Unit,
     private val onCycleScale: () -> Unit,
     private val onCycleOrientation: () -> Unit,
     private val onPlayEpisode: (MediaItem) -> Unit,
@@ -94,6 +96,8 @@ class PlayerControls(
     private val center: View = root.findViewById(R.id.controls_center)
     private val centerPrevious: ImageButton = root.findViewById(R.id.center_previous)
     private val centerNext: ImageButton = root.findViewById(R.id.center_next)
+    private val centerPreviousCaption: TextView = root.findViewById(R.id.center_previous_caption)
+    private val centerNextCaption: TextView = root.findViewById(R.id.center_next_caption)
     private val centerPlay: View = root.findViewById(R.id.center_play_pause)
     private val centerIcon: PlayPauseIcon = root.findViewById(R.id.center_play_icon)
     private val centerBuffering: View = root.findViewById(R.id.center_buffering)
@@ -114,6 +118,18 @@ class PlayerControls(
     /** How long the row stays up while playing; zero keeps it up until tapped away. */
     var timeoutMs = TIMEOUT_MS
 
+    /**
+     * True while a menu or sheet opened from the row is up: the overflow, a track picker, the
+     * television's More menu. The row stays while it is, whatever the timeout says, and the clock
+     * starts again once it closes. Hiding underneath an open menu left it pointing at nothing.
+     */
+    var held = false
+        set(value) {
+            if (field == value) return
+            field = value
+            poke()
+        }
+
     /** True while buffering mid-play, which the phone draws as a spinner in the play disc. */
     private var buffering = false
 
@@ -122,7 +138,15 @@ class PlayerControls(
 
     private val accent = ContextCompat.getColor(root.context, R.color.accent)
 
-    val visible: Boolean get() = container.visibility == View.VISIBLE
+    /**
+     * Whether the row is up, as the viewer and the activity's touch handling understand it.
+     * Not the view's visibility: the row stays VISIBLE through its fade out, and a tap in that
+     * fifth of a second was swallowed, the activity already treating the row as down while
+     * [show] still thought it was up and did nothing.
+     */
+    val visible: Boolean get() = shown
+
+    private var shown = container.visibility == View.VISIBLE
 
     /** True while a finger or the D-pad is on the bar; the clock leaves the bar alone then. */
     private var scrubbing = false
@@ -143,7 +167,7 @@ class PlayerControls(
         wire(root.findViewById(R.id.control_forward)) { onSkip(Skip.FORWARD_MS) }
         wire(root.findViewById(R.id.control_subtitles)) { onPickSubtitles() }
         wire(root.findViewById(R.id.control_audio)) { onPickAudio() }
-        wire(root.findViewById(R.id.control_speed)) { onCycleSpeed() }
+        wire(root.findViewById(R.id.control_speed)) { onPickSpeed() }
         wire(root.findViewById(R.id.control_scale)) { onCycleScale() }
         wire(rotate) { onCycleOrientation() }
         rotate.visibility = if (isTv) View.GONE else View.VISIBLE
@@ -368,7 +392,10 @@ class PlayerControls(
         wire(pip) { onPictureInPicture() }
         timeText.isFocusable = true
         timeText.isClickable = true
-        timeText.setBackgroundResource(R.drawable.bg_timebar_focus)
+        // Focus fills the readout with a white pill and darkens its text, the buttons' own cue in
+        // the readout's shape; the bar's faint pill was lost over a bright frame.
+        timeText.setBackgroundResource(R.drawable.bg_tv_focus_pill)
+        timeText.setTextColor(ContextCompat.getColorStateList(root.context, R.color.player_control_icon))
         wire(timeText) {
             showRemaining = !showRemaining
             onRemainingToggled(showRemaining)
@@ -482,27 +509,43 @@ class PlayerControls(
         }
     }
 
+    /** The line under the title as [setTitle] last wrote it, for when a focused step lets it go. */
+    private var detail = ""
+
     fun setTitle(name: String, detail: String) {
         val tv = isTv
+        this.detail = detail
         topTitle.text = name
         topSubtitle.text = detail
         topSubtitle.visibility = if (detail.isBlank()) View.GONE else View.VISIBLE
         if (!tv) return
         title.text = name
         title.visibility = if (name.isBlank()) View.GONE else View.VISIBLE
-        subtitle.text = detail
-        subtitle.visibility = if (detail.isBlank()) View.GONE else View.VISIBLE
+        if (previous.hasFocus() || next.hasFocus()) return
+        showDetail(detail)
+    }
+
+    private fun showDetail(text: String) {
+        subtitle.text = text
+        subtitle.visibility = if (text.isBlank()) View.GONE else View.VISIBLE
     }
 
     /**
      * Offers the episode steps once the chat search has answered, and never before: a button that
      * does nothing is worse than no button.
+     *
+     * [previousLabel] and [nextLabel] are the whole name ("Next: S01E05  ·  The Lighthouse"): the
+     * button's description and tooltip, and on a television the line under the title while the
+     * button has focus. [previousCaption] and [nextCaption] are the short form ("S01E05") the
+     * phone writes under its buttons, where the whole name would crowd a phone held upright.
      */
     fun setEpisodes(
         previousEpisode: MediaItem?,
         nextEpisode: MediaItem?,
         previousLabel: String,
         nextLabel: String,
+        previousCaption: String = "",
+        nextCaption: String = "",
     ) {
         previous.visibility = if (previousEpisode != null) View.VISIBLE else View.GONE
         describe(previous, previousLabel)
@@ -515,10 +558,11 @@ class PlayerControls(
             nextEpisode?.let(onPlayEpisode)
         }
         if (isTv) {
-            // The remote's media keys and the More menu carry the steps; the row has no seat for
-            // them.
-            previous.visibility = View.GONE
-            next.visibility = View.GONE
+            // On the row, ahead of subtitles, where Left from subtitles reaches them; Down from the
+            // bar still lands on subtitles, so Down and OK never start another episode by habit.
+            // Focus names the target in the line under the title, and leaving gives it back.
+            labelOnFocus(previous, previousLabel)
+            labelOnFocus(next, nextLabel)
             return
         }
         // The phone's transport lives in the centre; the row's two copies stay hidden. Invisible
@@ -528,9 +572,28 @@ class PlayerControls(
         centerPrevious.visibility = if (previousEpisode != null) View.VISIBLE else View.INVISIBLE
         describe(centerPrevious, previousLabel)
         centerPrevious.setOnClickListener { previousEpisode?.let(onPlayEpisode) }
+        caption(centerPreviousCaption, previousCaption.takeIf { previousEpisode != null })
         centerNext.visibility = if (nextEpisode != null) View.VISIBLE else View.INVISIBLE
         describe(centerNext, nextLabel)
         centerNext.setOnClickListener { nextEpisode?.let(onPlayEpisode) }
+        caption(centerNextCaption, nextCaption.takeIf { nextEpisode != null })
+    }
+
+    private fun caption(view: TextView, text: String?) {
+        view.text = text.orEmpty()
+        view.visibility = if (text.isNullOrBlank()) View.INVISIBLE else View.VISIBLE
+    }
+
+    private fun labelOnFocus(button: View, label: String) {
+        button.onFocusChangeListener = View.OnFocusChangeListener { _, focused ->
+            if (focused) {
+                showDetail(label)
+                poke()
+            } else if (!previous.hasFocus() && !next.hasFocus()) {
+                showDetail(detail)
+            }
+        }
+        if (button.hasFocus()) showDetail(label)
     }
 
     /** The orientation button carries its current state, drawn by the activity that owns it. */
@@ -541,7 +604,10 @@ class PlayerControls(
 
     fun show() {
         container.removeCallbacks(hide)
-        if (!visible) {
+        if (!shown) {
+            shown = true
+            // Cancels a fade out still running, and the GONE at its end with it.
+            container.animate().cancel()
             container.visibility = View.VISIBLE
             container.animate().alpha(1f).setDuration(FADE_MS).start()
             onVisibility(true)
@@ -586,9 +652,10 @@ class PlayerControls(
     fun hideAnimated() {
         container.removeCallbacks(hide)
         container.removeCallbacks(tick)
-        if (!visible) return
+        if (!shown) return
+        shown = false
         container.animate().alpha(0f).setDuration(FADE_MS)
-            .withEndAction { container.visibility = View.GONE }
+            .withEndAction { if (!shown) container.visibility = View.GONE }
             .start()
         onVisibility(false)
     }
@@ -597,6 +664,7 @@ class PlayerControls(
     fun hideNow() {
         container.removeCallbacks(hide)
         container.removeCallbacks(tick)
+        shown = false
         container.animate().cancel()
         container.alpha = 0f
         container.visibility = View.GONE
@@ -615,7 +683,7 @@ class PlayerControls(
     /** Buys the row its timeout again. Called by every interaction, however it arrived. */
     fun poke() {
         container.removeCallbacks(hide)
-        if (player()?.isPlaying == true && timeoutMs > 0) container.postDelayed(hide, timeoutMs)
+        if (!held && player()?.isPlaying == true && timeoutMs > 0) container.postDelayed(hide, timeoutMs)
     }
 
     /**

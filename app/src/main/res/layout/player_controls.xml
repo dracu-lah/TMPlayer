@@ -43,14 +43,14 @@
     <View
         android:id="@+id/controls_scrim_top"
         android:layout_width="match_parent"
-        android:layout_height="120dp"
+        android:layout_height="@dimen/player_scrim_top"
         android:layout_gravity="top"
         android:background="@drawable/bg_controls_scrim_top" />
 
     <View
         android:id="@+id/controls_scrim_bottom"
         android:layout_width="match_parent"
-        android:layout_height="240dp"
+        android:layout_height="@dimen/player_scrim_bottom"
         android:layout_gravity="bottom"
         android:background="@drawable/bg_controls_scrim_bottom" />
 
@@ -122,7 +122,7 @@
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#CCFFFFFF"
+                android:textColor="#E6FFFFFF"
                 android:textSize="13sp"
                 android:visibility="gone" />
         </LinearLayout>
@@ -149,6 +149,14 @@
       television shows only the disc, as its paused cue. On a phone the spinner sits inside the
       play disc and takes its place while the video is buffering, so the middle of the screen
       always says what the video is doing.
+
+      The episode steps carry the code of the episode they lead to under them ("S01E05"), so the
+      button says where it goes before it is pressed, on a tonal pill (bg_player_caption) so the
+      code reads on any frame. A spacer of the caption's height above each keeps the buttons level
+      with the play disc.
+
+      Every button here sits on the same tonal disc (bg_center_button): the four steps at 56dp,
+      play at 72dp. Bare glyphs beside one backed disc vanished on a light frame.
     -->
     <LinearLayout
         android:id="@+id/controls_center"
@@ -160,31 +168,60 @@
         android:orientation="horizontal"
         android:visibility="gone">
 
-        <ImageButton
-            android:id="@+id/center_previous"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginEnd="8dp"
-            android:background="@drawable/bg_control_button"
-            android:contentDescription="Previous episode"
-            android:padding="10dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_player_previous"
-            android:tint="@color/player_control_icon"
-            android:visibility="invisible" />
+        <LinearLayout
+            android:layout_width="64dp"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/player_episode_caption"
+                android:layout_marginBottom="@dimen/player_episode_caption_gap" />
+
+            <ImageButton
+                android:id="@+id/center_previous"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/bg_center_button"
+                android:contentDescription="Previous episode"
+                android:padding="14dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_player_previous"
+                android:tint="@color/player_control_icon"
+                android:visibility="invisible" />
+
+            <TextView
+                android:id="@+id/center_previous_caption"
+                android:layout_width="wrap_content"
+                android:layout_height="@dimen/player_episode_caption"
+                android:layout_marginTop="@dimen/player_episode_caption_gap"
+                android:background="@drawable/bg_player_caption"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:importantForAccessibility="no"
+                android:maxLines="1"
+                android:maxWidth="64dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:textColor="#F2FFFFFF"
+                android:textSize="12sp"
+                android:visibility="invisible" />
+        </LinearLayout>
 
         <FrameLayout
             android:id="@+id/center_rewind"
             android:layout_width="56dp"
             android:layout_height="56dp"
-            android:background="@drawable/bg_control_button"
+            android:background="@drawable/bg_center_button"
             android:clickable="true"
             android:contentDescription="Back 10 seconds"
             android:focusable="true">
 
             <ImageView
-                android:layout_width="34dp"
-                android:layout_height="34dp"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
                 android:layout_gravity="center"
                 android:importantForAccessibility="no"
                 android:src="@drawable/ic_player_rewind"
@@ -209,7 +246,7 @@
             android:layout_height="72dp"
             android:layout_marginStart="16dp"
             android:layout_marginEnd="16dp"
-            android:background="@drawable/bg_center_play"
+            android:background="@drawable/bg_center_button"
             android:clickable="true"
             android:contentDescription="Pause"
             android:focusable="true">
@@ -234,14 +271,14 @@
             android:id="@+id/center_forward"
             android:layout_width="56dp"
             android:layout_height="56dp"
-            android:background="@drawable/bg_control_button"
+            android:background="@drawable/bg_center_button"
             android:clickable="true"
             android:contentDescription="Forward 10 seconds"
             android:focusable="true">
 
             <ImageView
-                android:layout_width="34dp"
-                android:layout_height="34dp"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
                 android:layout_gravity="center"
                 android:importantForAccessibility="no"
                 android:src="@drawable/ic_player_forward"
@@ -260,18 +297,47 @@
                 android:translationY="1dp" />
         </FrameLayout>
 
-        <ImageButton
-            android:id="@+id/center_next"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_control_button"
-            android:contentDescription="Next episode"
-            android:padding="10dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_player_next"
-            android:tint="@color/player_control_icon"
-            android:visibility="invisible" />
+        <LinearLayout
+            android:layout_width="64dp"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical">
+
+            <Space
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/player_episode_caption"
+                android:layout_marginBottom="@dimen/player_episode_caption_gap" />
+
+            <ImageButton
+                android:id="@+id/center_next"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/bg_center_button"
+                android:contentDescription="Next episode"
+                android:padding="14dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_player_next"
+                android:tint="@color/player_control_icon"
+                android:visibility="invisible" />
+
+            <TextView
+                android:id="@+id/center_next_caption"
+                android:layout_width="wrap_content"
+                android:layout_height="@dimen/player_episode_caption"
+                android:layout_marginTop="@dimen/player_episode_caption_gap"
+                android:background="@drawable/bg_player_caption"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:importantForAccessibility="no"
+                android:maxLines="1"
+                android:maxWidth="64dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:textColor="#F2FFFFFF"
+                android:textSize="12sp"
+                android:visibility="invisible" />
+        </LinearLayout>
     </LinearLayout>
 
     <LinearLayout
@@ -604,7 +670,7 @@
             </HorizontalScrollView>
 
             <!-- On a television OK here flips the total to the time left, and its focus cue is
-                 the scrub bar's pill. -->
+                 a white pill with the text turned dark (bg_tv_focus_pill), like the buttons. -->
             <TextView
                 android:id="@+id/controls_time"
                 android:textDirection="ltr"

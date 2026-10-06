@@ -1,0 +1,10 @@
+<!--
+  A small caption over the picture ("S01E05" under an episode step): a fully rounded tonal pill
+  in the player's caption tone, the same family as the status chips (bg_player_chip) but sized
+  for a label rather than a sentence. Plain text with a shadow vanished on a bright frame.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/player_tonal" />
+    <corners android:radius="100dp" />
+</shape>
