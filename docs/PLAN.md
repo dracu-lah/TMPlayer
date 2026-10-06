@@ -23,7 +23,9 @@ removed in the commit that added this file), the listing plan artifact
 
 ## Status board
 
-Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claude's.
+Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claude's. `[-]` is set aside.
+
+**Order (user, 2026-10-06):** every code checkpoint first (CP24, CP26, CP17, CP13, CP18, then CP11 and CP25), releases held until that is done, then the outside tasks.
 
 **Phase A. Compliance before any more listings (no release needed to commit; ships with the next release)**
 - [x] CP01 Crash reports and privacy page match each other (c6b3e22)
@@ -32,8 +34,8 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [x] CP04 Respect Telegram "restrict saving content" and self-destructing media (572287c, not yet tested on a protected channel)
 - [x] CP05 About screen on phone, TV and desktop (49b4c6f)
 - [ ] U01 Two Sentry settings, and tell Claude the DSN host
-- [ ] U02 Licence label and the player logo's source
-- [ ] U03 Budget decision ($0 only, or pay for Certum and Google Play)
+- [ ] U02 Player logo's source (label settled 2026-10-06: GPL-3.0-or-later everywhere, already true in README, winget, AUR, metainfo and the MSI; libraries keep their own licences)
+- [x] U03 Budget decision: $0 only (2026-10-06). Phase G dropped, no Certum
 - [ ] U04 (optional) Commit email `hello@tmplayer.org`
 - [ ] U05 (optional) DMARC record
 
@@ -54,17 +56,17 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 
 **Phase C. Distribution (each submission only on the user's go-ahead)**
 - [ ] CP13 winget manifests for the new release
-- [ ] CP14 Windows signing in release.yml (needs U10 or U11, and U12)
+- [-] CP14 Windows signing in release.yml (set aside 2026-10-06: installers stay unsigned)
 - [ ] CP15 Android verification token in the APK (needs U08)
 - [ ] CP16 winget auto-update job (needs the first winget PR merged and U14)
 - [ ] CP17 F-Droid MR: get the pipeline green
 - [ ] CP18 Obtainium badge on README and download page
 - [ ] U07 Android developer account and identity check
 - [ ] U08 Register `com.tmplayer` and the signing key, send Claude the token
-- [ ] U09 Pick the Windows signing route
-- [ ] U10 SignPath Foundation: send them references (they asked on 2026-10-05)
-- [ ] U11 Certum: buy and validate (only if U03 allows paying)
-- [ ] U12 Signing secrets in the GitHub `release` environment
+- [x] U09 Pick the Windows signing route: stay unsigned (2026-10-06)
+- [-] U10 SignPath Foundation: send them references (set aside with CP14)
+- [-] U11 Certum: buy and validate (dropped, U03 is $0)
+- [-] U12 Signing secrets in the GitHub `release` environment (set aside with CP14)
 - [ ] U13 wingetcreate on a Windows PC, submit, sign the CLA
 - [ ] U14 `WINGET_CREATE_GITHUB_TOKEN` secret
 - [ ] U15 Awesome lists: watch the 7 open PRs, file the Android TV FOSS issue
@@ -99,14 +101,14 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [x] CP32 P13 TMDB, TVmaze, AniList, then release "Online" on request (3cab226, release not done, on request. Matching (film by title and year, series with season and episode, anime via AniList, `{tmdb-123}`), the strict no match, a 429 pause, a refused key, cache hits, TTL, purge and the English fallback unit tested over a fake HTTP layer; live calls found Big Buck Bunny on TMDB with the real key (overview fell back to English from ml), Breaking Bad S01E02 on TVmaze and Frieren on AniList, and a bad key was refused; detail panel with poster and overview, series page with its poster, Home with posters, the Settings section with the key override and its states, and About with the TMDB logo and notice checked on the phone and TV emulator fixtures and the desktop render test. Off by default, turned on from Settings or the detail panel. Real chats, real poster loads on a 1 GB stick and a viewer's own key not yet tested on a device)
 - [ ] U25 MSone reply (issue #5). If yes, add CP33 for an MSone provider
 
-**Phase G. Google Play (only if U03 says pay)**
-- [ ] U26 Line up 15 testers (start early, it gates production)
-- [ ] CP34 Store flavor without the updater, targetSdk 36, AAB in the release
-- [ ] CP35 Reviewer demo mode, TV ad links as QR, TV banner with the name, Report and sensitive media
-- [ ] CP36 Play listing images (outside the repo)
-- [ ] U27 Create the app in Play Console and fill in the forms
-- [ ] U28 Closed test for 14 days
-- [ ] U29 Production, then opt in to Android TV
+**Phase G. Google Play (dropped 2026-10-06, U03 is $0; kept for reference)**
+- [-] U26 Line up 15 testers (start early, it gates production)
+- [-] CP34 Store flavor without the updater, targetSdk 36, AAB in the release
+- [-] CP35 Reviewer demo mode, TV ad links as QR, TV banner with the name, Report and sensitive media
+- [-] CP36 Play listing images (outside the repo)
+- [-] U27 Create the app in Play Console and fill in the forms
+- [-] U28 Closed test for 14 days
+- [-] U29 Production, then opt in to Android TV
 
 ## Standing rules
 
