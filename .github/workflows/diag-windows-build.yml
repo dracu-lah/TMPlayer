@@ -1,0 +1,35 @@
+name: diag windows test build
+on:
+  push:
+    branches: [diag/windows-test-build]
+jobs:
+  msi:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Write credentials
+        shell: bash
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+        run: printf 'TG_API_ID=%s\nTG_API_HASH=%s\nTMDB_API_KEY=%s\n' "$TG_API_ID" "$TG_API_HASH" "$TMDB_API_KEY" > local.properties
+      - name: Package and self-test
+        uses: ./.github/actions/desktop-windows
+        with:
+          version: 1.22.2
+      - name: Shred credentials
+        if: always()
+        shell: bash
+        run: rm -f local.properties
+      - uses: actions/upload-artifact@v7
+        with:
+          name: TMPlayer-test-windows
+          path: dist/*.msi
+          retention-days: 14
+          if-no-files-found: error
