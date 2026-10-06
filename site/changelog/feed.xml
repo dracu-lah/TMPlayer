@@ -5,8 +5,15 @@
     <link>https://tmplayer.org/changelog/</link>
     <description>What changed in every TMPlayer release, newest first: Android TV, phones, Windows and Linux, all from one release.</description>
     <language>en-gb</language>
-    <lastBuildDate>Mon, 05 Oct 2026 18:48:31 GMT</lastBuildDate>
+    <lastBuildDate>Tue, 06 Oct 2026 20:48:44 GMT</lastBuildDate>
     <atom:link href="https://tmplayer.org/changelog/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>TMPlayer 1.24.0</title>
+      <link>https://tmplayer.org/changelog/#v1.24.0</link>
+      <guid isPermaLink="false">tmplayer-v1.24.0</guid>
+      <pubDate>Tue, 06 Oct 2026 20:48:44 GMT</pubDate>
+      <description>&lt;p&gt;TMPlayer now speaks 21 languages (machine translated for now, corrections welcome on GitHub). Home has rows, series get their own page, and search covers all your chats. Optional posters and overviews come from TMDB, TVmaze and AniList, and subtitles can be found online through OpenSubtitles. The player adds volume boost, a sleep timer, a &quot;still watching?&quot; check, subtitle and audio delay, subtitle size and position, and simpler controls on phone, TV and desktop. Downloads can be removed after watching. On TV: Fire TV remotes, Watch Next and seek previews. On desktop the QR sign in works in release builds, and there is a new About screen everywhere.&lt;/p&gt;</description>
+    </item>
     <item>
       <title>TMPlayer 1.22.1</title>
       <link>https://tmplayer.org/changelog/#v1.22.1</link>
