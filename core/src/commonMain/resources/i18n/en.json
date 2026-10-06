@@ -153,6 +153,9 @@
     "tab_groups": "Groups",
     "tab_groups_blurb": "Groups you're in",
     "tab_groups_heading": "Groups",
+    "tab_home": "Home",
+    "tab_home_blurb": "What to watch next, from every chat",
+    "tab_home_heading": "Home",
     "tab_people": "People",
     "tab_people_blurb": "Your one-to-one chats",
     "tab_people_heading": "People",
@@ -513,6 +516,14 @@
     "stopped_at": "Stopped at {time}",
     "videos_from_chat": "Videos from this chat",
     "voice_prompt_video": "Say a video name"
+  },
+  "home": {
+    "empty": "Nothing to show yet. Star a chat to give it a row here, and videos you start will wait at the top.",
+    "open_chat": "Open {title}",
+    "row_continue": "Continue watching",
+    "row_recent": "Recently added across chats",
+    "row_recent_blurb": "Newest videos from chats you have not starred",
+    "see_all": "See all"
   },
   "install": {
     "appimage": "AppImage",

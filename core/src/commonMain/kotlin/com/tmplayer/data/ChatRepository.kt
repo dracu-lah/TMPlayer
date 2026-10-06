@@ -355,6 +355,8 @@ class ChatRepository(private val td: TdlClient) {
         chatId: Long,
         cursors: MediaCursors = MediaCursors(),
         query: String = "",
+        /** Messages asked for per search. Home's rows want a handful, the chat grid a full page. */
+        pageSize: Int = PAGE_SIZE,
     ): MediaPage =
         // Off Main for the whole page. The mapper asks the filesystem twice per message to decide
         // whether the file is already on disk, and this runs three searches of forty messages each
@@ -366,15 +368,15 @@ class ChatRepository(private val td: TdlClient) {
             val chatProtected = td.getChat(chatId).valueOrNull?.hasProtectedContent ?: false
             val videos = async {
                 if (cursors.videoDone) null
-                else search(chatId, cursors.video, SearchMessagesFilterVideo(), query, chatProtected)
+                else search(chatId, cursors.video, SearchMessagesFilterVideo(), query, chatProtected, pageSize)
             }
             val documents = async {
                 if (cursors.documentDone) null
-                else search(chatId, cursors.document, SearchMessagesFilterDocument(), query, chatProtected)
+                else search(chatId, cursors.document, SearchMessagesFilterDocument(), query, chatProtected, pageSize)
             }
             val animations = async {
                 if (cursors.animationDone) null
-                else search(chatId, cursors.animation, SearchMessagesFilterAnimation(), query, chatProtected)
+                else search(chatId, cursors.animation, SearchMessagesFilterAnimation(), query, chatProtected, pageSize)
             }
 
             val videoResult = videos.await()
@@ -399,6 +401,43 @@ class ChatRepository(private val td: TdlClient) {
             MediaPage(items, next, next.allDone, hidden)
         }
         }
+
+    /**
+     * The newest videos across every chat in the main list, newest first, for Home's "Recently
+     * added across chats" row.
+     *
+     * One `searchMessages` per filter rather than a page per chat: Telegram answers across the
+     * whole account in a single round trip, which is the only way this row can be cheap on a
+     * 1 GB television. Videos sent as files come in through the document search and are screened
+     * by name like everywhere else. Each chat's "restrict saving content" is read from TDLib's
+     * memory, as [mediaPage] does for one chat.
+     */
+    suspend fun recentMedia(limit: Int = RECENT_LIMIT): List<MediaItem> = withContext(Dispatchers.IO) {
+        coroutineScope {
+            val filters = listOf(SearchMessagesFilterVideo(), SearchMessagesFilterDocument())
+            val found = filters.map { filter ->
+                async {
+                    td.searchMessages(ChatListMain(), "", "", limit, filter, null, 0, 0)
+                        .valueOrNull?.messages?.toList().orEmpty()
+                }
+            }.flatMap { it.await() }
+            found.groupBy { it.chatId }.flatMap { (chatId, messages) ->
+                val chatProtected = td.getChat(chatId).valueOrNull?.hasProtectedContent ?: false
+                MediaMapper.screen(messages, chatProtected).items
+            }.distinctBy { it.id }
+                .sortedWith(compareByDescending<MediaItem> { it.date }.thenByDescending { it.messageId })
+        }
+    }
+
+    /**
+     * One message as a video, for a Continue watching tile's picture: a resume record keeps no
+     * artwork, and TDLib answers this from its own database for anything already seen.
+     */
+    suspend fun mediaItem(chatId: Long, messageId: Long): MediaItem? = withContext(Dispatchers.IO) {
+        val message = td.getMessage(chatId, messageId).valueOrNull ?: return@withContext null
+        val chatProtected = td.getChat(chatId).valueOrNull?.hasProtectedContent ?: false
+        MediaMapper.fromMessage(message, chatProtected)
+    }
 
     /**
      * Pins or unpins a chat, in whichever of the two lists it currently lives in.
@@ -500,6 +539,7 @@ class ChatRepository(private val td: TdlClient) {
         filter: dev.g000sha256.tdl.dto.SearchMessagesFilter,
         query: String = "",
         chatProtected: Boolean = false,
+        pageSize: Int = PAGE_SIZE,
     ): SearchResult {
         val found = td.searchChatMessages(
             chatId = chatId,
@@ -510,7 +550,7 @@ class ChatRepository(private val td: TdlClient) {
             senderId = null,
             fromMessageId = fromMessageId,
             offset = 0,
-            limit = PAGE_SIZE,
+            limit = pageSize,
             filter = filter,
         ).value()
 
@@ -530,6 +570,9 @@ class ChatRepository(private val td: TdlClient) {
         private const val MUTE_FOREVER = Int.MAX_VALUE
 
         const val PAGE_SIZE = 40
+
+        /** Per filter, for [recentMedia]: enough to fill a row of ten after screening and dedupe. */
+        const val RECENT_LIMIT = 40
         const val CHAT_LIMIT = 300
 
         /**

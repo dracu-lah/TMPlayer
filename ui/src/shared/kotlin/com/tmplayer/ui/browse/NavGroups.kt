@@ -51,8 +51,11 @@ sealed interface NavEntry {
 @androidx.compose.runtime.Immutable
 data class NavGroupEntries(val group: NavGroup, val entries: List<NavEntry>)
 
-/** The tabs about the viewer's own watching, in the order the Watch group lists them. */
-private val WATCH_TABS = listOf(BrowseTab.Continue, BrowseTab.Watched, BrowseTab.Favorites)
+/**
+ * The tabs about the viewer's own watching, in the order the Watch group lists them. Home leads:
+ * it is the first destination on every device, and its rows are made of the other three.
+ */
+private val WATCH_TABS = listOf(BrowseTab.Home, BrowseTab.Continue, BrowseTab.Watched, BrowseTab.Favorites)
 
 /** Which group a section sits in. Every section has exactly one. */
 fun navGroupOf(section: BrowseSection): NavGroup = when (section) {

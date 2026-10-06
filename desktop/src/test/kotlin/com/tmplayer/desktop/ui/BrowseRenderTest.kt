@@ -155,6 +155,51 @@ class BrowseRenderTest {
     }
 
     @Test
+    fun home() {
+        val colours = listOf(0xFF2AABEE, 0xFFE5484D, 0xFF46A758, 0xFFF5A524, 0xFF8E4EC6, 0xFF0090FF, 0xFF12A594, 0xFFD6409F)
+        var id = 1L
+        fun video(chatId: Long, title: String, date: Int) = MediaItem(
+            chatId = chatId, messageId = id++, fileId = 0, title = title,
+            sizeBytes = (300L + id * 37L) * 1024 * 1024, durationSec = 1500 + (id * 131 % 2000).toInt(),
+            mimeType = "video/mp4", thumbnailFileId = 0, miniThumbnail = jpeg(colours[(id % colours.size).toInt()].toInt()),
+            date = date, fileName = "$title.mkv",
+        )
+        val chats = listOf(
+            chat(2, "Film Club", ChatKind.Channel, 0, 0xFFE5484D.toInt()),
+            chat(4, "Weekend series", ChatKind.Group, 0, 0xFFF5A524.toInt()),
+            chat(6, "Old lectures", ChatKind.Channel, 0, 0xFF0090FF.toInt()),
+        )
+        val film = listOf("Night Train (2019) 1080p", "Mountains, a film", "The Quiet Year", "Paper Moons", "Low Tide", "Salt and Iron", "North Window")
+            .mapIndexed { at, title -> video(2, title, 900 - at) }
+        val series = (1..6).map { video(4, "Harbour.Lights.S02E%02d".format(it), 800 + it) } +
+            (1..3).map { video(4, "The.Long.Road.S01E%02d".format(it), 700 + it) } + video(4, "Garden party", 650)
+        val lectures = (1..9).map { video(6, "Lecture $it: Compilers", 500 - it) }
+        val resume = listOf(film[1], series[2]).mapIndexed { at, item ->
+            com.tmplayer.data.ResumeRecord(
+                chatId = item.chatId, messageId = item.messageId, fileId = 1, title = item.title,
+                chatTitle = chats.first { it.id == item.chatId }.title, sizeBytes = item.sizeBytes,
+                durationSec = item.durationSec, positionMs = (at + 1) * 400_000L, durationMs = item.durationSec * 1000L,
+                updatedAt = 10L - at,
+            )
+        }
+        val art = listOf(film[1], series[2]).associateBy { com.tmplayer.data.SettingsStore.progressKey(it.chatId, it.messageId) }
+        val rows = com.tmplayer.data.HomeRows.build(
+            continueWatching = resume,
+            favourites = com.tmplayer.data.HomeRows.favouriteChats(chats, setOf(2L, 4L)),
+            loaded = mapOf(2L to film, 4L to series),
+            recent = lectures,
+        )
+        shell.go(Destination.Home)
+        for (dark in listOf(true, false)) {
+            val png = render(dark = dark) {
+                HomeRowsView(shell, rows, chats, art, onRowShown = {}, onArtWanted = {}, onRefresh = {})
+            }
+            save(if (dark) "home-dark.png" else "home-light.png", png)
+        }
+        shell.go(Destination.Chats)
+    }
+
+    @Test
     fun watchedTicksAndSizeNote() = kotlinx.coroutines.runBlocking {
         val items = (1..6).map { at ->
             MediaItem(

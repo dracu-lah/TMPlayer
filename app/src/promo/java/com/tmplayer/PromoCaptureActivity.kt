@@ -44,6 +44,8 @@ import com.tmplayer.data.ChatFolderSummary
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaItem
+import com.tmplayer.data.HomeRows
+import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.Series
 import com.tmplayer.data.SeriesShelf
 import com.tmplayer.data.ShelfEntry
@@ -211,6 +213,16 @@ class PromoCaptureActivity : ComponentActivity() {
                         // The Downloads screen as it is, over this build's own empty index: the
                         // storage panel and the "Remove after watching" row.
                         "downloads" -> DownloadsScreen(onPlay = {}, onBack = { screen = "chats" })
+                        // Home's rows over demo chats: Continue, two starred chats (one of them
+                        // a show), and the newest videos from the rest. `--es variant loading`
+                        // leaves the starred rows and Recent waiting, `--es variant empty` is an
+                        // account with nothing starred, played or posted.
+                        "home" -> PromoChatsScreen(
+                            onOpenChat = { screen = "media" },
+                            onOpenSettings = { screen = "settings" },
+                            onOpenDownloads = { screen = "downloads" },
+                            home = intent.getStringExtra("variant") ?: "rows",
+                        )
                         else -> PromoChatsScreen(
                             onOpenChat = { screen = "media" },
                             onOpenSettings = { screen = "settings" },
@@ -278,15 +290,32 @@ private fun PromoChatsScreen(
     layout: CardLayout = CardLayout.List,
     folders: List<ChatFolderSummary> = emptyList(),
     updateVersion: String? = null,
+    /** Null for the chat list; otherwise Home, in the named variant (see the "home" screen). */
+    home: String? = null,
 ) {
     val chats = promoChats()
     // Picking a tab moves the highlight, so a walk down the sidebar shows its groups following.
-    var picked by remember { mutableStateOf<BrowseSection>(BrowseSection.of(BrowseTab.Recent)) }
+    var picked by remember {
+        mutableStateOf<BrowseSection>(BrowseSection.of(if (home != null) BrowseTab.Home else BrowseTab.Recent))
+    }
     val account = Account("Demo", "demo", null, 0)
+    val homeData = promoHome(home)
     BrowseScreen(
         state = state ?: UiState.Content(BrowseData(chats, account)),
-        favorites = setOf(102, 104),
-        continueWatching = emptyList(),
+        favorites = homeData?.favourites ?: setOf(102, 104),
+        continueWatching = homeData?.continueWatching.orEmpty(),
+        homeRows = homeData?.let {
+            remember(it) {
+                HomeRows.build(
+                    it.continueWatching,
+                    HomeRows.favouriteChats(chats, it.favourites),
+                    it.loaded,
+                    it.recent,
+                )
+            }
+        }.orEmpty(),
+        homeArt = homeData?.art.orEmpty(),
+        homeWatch = PROMO_WATCH,
         onRetry = {},
         onRefresh = {},
         onOpenChat = { onOpenChat() },
@@ -300,6 +329,56 @@ private fun PromoChatsScreen(
         layout = layout,
         updateVersion = updateVersion,
     )
+}
+
+/** Everything Home is built from, as the view model would have it once every row has answered. */
+private class PromoHome(
+    val favourites: Set<Long>,
+    val continueWatching: List<ResumeRecord>,
+    val loaded: Map<Long, List<MediaItem>>,
+    val recent: List<MediaItem>?,
+    val art: Map<String, MediaItem>,
+)
+
+@Composable
+private fun promoHome(variant: String?): PromoHome? {
+    variant ?: return null
+    if (variant == "empty") return PromoHome(emptySet(), emptyList(), emptyMap(), emptyList(), emptyMap())
+    val media = promoMedia()
+    val shows = promoSeriesMedia()
+    return remember(variant) {
+        var id = 1_000L
+        // The six demo clips again under other chats and later dates, so each row has its own.
+        fun from(chatId: Long, items: List<MediaItem>, newest: Int) =
+            items.mapIndexed { index, item -> item.copy(chatId = chatId, messageId = id++, date = newest - index) }
+        val projects = from(102, media + media.reversed(), newest = 9_000)
+        val travel = from(104, shows.take(10), newest = 8_000) + from(104, media.take(2), newest = 7_000)
+        val elsewhere = from(101, media, newest = 6_500) + from(103, media.reversed(), newest = 6_400) +
+            from(106, media.take(3), newest = 6_300)
+        val started = listOf(projects[2], elsewhere[1], travel[11])
+        val resume = started.mapIndexed { index, item ->
+            ResumeRecord(
+                chatId = item.chatId,
+                messageId = item.messageId,
+                fileId = item.fileId,
+                title = item.title,
+                chatTitle = "",
+                sizeBytes = item.sizeBytes,
+                durationSec = item.durationSec,
+                positionMs = item.durationSec * 1000L * (index + 1) / 4,
+                durationMs = item.durationSec * 1000L,
+                updatedAt = 100L - index,
+            )
+        }
+        val loading = variant == "loading"
+        PromoHome(
+            favourites = setOf(102, 104),
+            continueWatching = resume,
+            loaded = if (loading) mapOf(102L to projects) else mapOf(102L to projects, 104L to travel),
+            recent = if (loading) null else elsewhere,
+            art = started.associateBy { SettingsStore.progressKey(it.chatId, it.messageId) },
+        )
+    }
 }
 
 /**

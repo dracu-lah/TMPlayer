@@ -160,7 +160,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         val chat = chats.state
             .mapNotNull { (it as? UiState.Content)?.value?.chats?.firstOrNull { chat -> chat.id == target } }
             .first()
-        if (state.openChat == null && state.destination == Destination.Chats) state.openChat(chat)
+        if (state.openChat == null && (state.destination == Destination.Home || state.destination == Destination.Chats)) state.openChat(chat)
     }
 
     // Housekeeping once signed in: the strays streaming left behind, after the first screen has
@@ -196,8 +196,9 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     }
 
     BackHandler(enabled = state.openChat != null) { state.closeChat() }
-    BackHandler(enabled = state.openChat == null && state.destination != Destination.Chats) {
-        state.go(Destination.Chats)
+    // Back from any page lands on Home, the first destination, as on the phone and the TV.
+    BackHandler(enabled = state.openChat == null && state.destination != Destination.Home) {
+        state.go(Destination.Home)
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -211,6 +212,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
                     when {
                         open != null -> MediaGridPage(state, open)
                         else -> when (state.destination) {
+                            Destination.Home -> HomePage(state, chats)
                             Destination.Chats -> ChatsPage(state, chats, favouritesOnly = false, showSections = !wide)
                             Destination.Favourites -> ChatsPage(state, chats, favouritesOnly = true)
                             Destination.Continue -> ContinuePage(state)
@@ -247,7 +249,8 @@ private val SIDEBAR_FROM = 1000.dp
 private const val HOUSEKEEPING_DELAY_MS = 20_000L
 
 private fun Destination.icon(): ImageVector = when (this) {
-    Destination.Chats -> Icons.Filled.Home
+    Destination.Home -> Icons.Filled.Home
+    Destination.Chats -> BrowseTab.All.icon
     Destination.Favourites -> Icons.Filled.Star
     Destination.Continue -> Icons.Filled.PlayArrow
     Destination.Watched -> BrowseTab.Watched.icon
@@ -333,6 +336,7 @@ internal fun Sidebar(
 private fun NavEntry.destination(): Destination? = when (this) {
     NavEntry.Downloads -> Destination.Downloads
     is NavEntry.Section -> when (section) {
+        BrowseSection.of(BrowseTab.Home) -> Destination.Home
         BrowseSection.of(BrowseTab.Continue) -> Destination.Continue
         BrowseSection.of(BrowseTab.Watched) -> Destination.Watched
         BrowseSection.of(BrowseTab.Favorites) -> Destination.Favourites

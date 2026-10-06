@@ -3,6 +3,7 @@ package com.tmplayer.ui.browse
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
@@ -19,6 +20,8 @@ import com.tmplayer.ui.components.TmIcons
 
 /** The rail's built-in sections, in the order they appear. */
 enum class BrowseTab(val icon: ImageVector) {
+    /** The landing page: rows of videos rather than a list of chats. See [com.tmplayer.data.HomeRows]. */
+    Home(Icons.Filled.Home),
     Continue(Icons.Filled.PlayArrow),
     Watched(Icons.Filled.Check),
     Favorites(Icons.Filled.Star),
@@ -36,6 +39,7 @@ enum class BrowseTab(val icon: ImageVector) {
 
     /** The rail's short name. */
     val label: String get() = when (this) {
+        Home -> L.browseTabHome
         Continue -> L.browseTabContinue
         Watched -> L.browseTabWatched
         Favorites -> L.browseTabFavourites
@@ -51,6 +55,7 @@ enum class BrowseTab(val icon: ImageVector) {
 
     /** The heading over the list. */
     val heading: String get() = when (this) {
+        Home -> L.browseTabHomeHeading
         Continue -> L.browseTabContinueHeading
         Watched -> L.browseTabWatchedHeading
         Favorites -> L.browseTabFavouritesHeading
@@ -66,6 +71,7 @@ enum class BrowseTab(val icon: ImageVector) {
 
     /** The line under the heading. */
     val blurb: String get() = when (this) {
+        Home -> L.browseTabHomeBlurb
         Continue -> L.browseTabContinueBlurb
         Watched -> L.browseTabWatchedBlurb
         Favorites -> L.browseTabFavouritesBlurb
@@ -111,6 +117,9 @@ sealed interface BrowseSection {
         override val icon get() = TmIcons.Folder
     }
 
+    /** Home's rows, which are neither a list of chats nor one list of videos. */
+    val isHome: Boolean get() = this is Tab && tab == BrowseTab.Home
+
     /** True for the one section that lists videos held on this device rather than chats. */
     val isContinue: Boolean get() = this is Tab && tab == BrowseTab.Continue
 
@@ -154,7 +163,7 @@ sealed interface BrowseSection {
 }
 
 /**
- * Every place the rail offers, with the viewer's folders after the chat tabs.
+ * Every place the rail offers, Home first, with the viewer's folders after the chat tabs.
  *
  * [withWatched] adds "Previously watched" right after Continue watching. It is opt in so a screen
  * that has not learned to draw that list yet (and filters out [BrowseSection.isContinue] to keep
@@ -168,6 +177,7 @@ fun browseSections(
     folders: List<ChatFolderSummary>,
     withWatched: Boolean = false,
 ): List<BrowseSection> = buildList {
+    add(BrowseSection.of(BrowseTab.Home))
     add(BrowseSection.of(BrowseTab.Continue))
     if (withWatched) add(BrowseSection.of(BrowseTab.Watched))
     add(BrowseSection.of(BrowseTab.Favorites))
@@ -211,7 +221,7 @@ fun filterChats(
             }
             // Continue watching and Watched are lists of videos, not chats; they never reach this
             // filter.
-            BrowseTab.Continue, BrowseTab.Watched, BrowseTab.Recent, BrowseTab.All, BrowseTab.Archived -> listed
+            BrowseTab.Home, BrowseTab.Continue, BrowseTab.Watched, BrowseTab.Recent, BrowseTab.All, BrowseTab.Archived -> listed
         }
     }
     // Ranked rather than filtered: a chat whose title is exactly what was typed belongs at the

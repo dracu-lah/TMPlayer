@@ -17,7 +17,7 @@ class NavGroupsTest {
 
     @Test
     fun `every tab sits in the group the plan gives it`() {
-        val watch = listOf(BrowseTab.Continue, BrowseTab.Watched, BrowseTab.Favorites)
+        val watch = listOf(BrowseTab.Home, BrowseTab.Continue, BrowseTab.Watched, BrowseTab.Favorites)
         for (entry in BrowseTab.entries) {
             val expected = if (entry in watch) NavGroup.Watch else NavGroup.Chats
             assertEquals(entry.name, expected, navGroupOf(BrowseSection.of(entry)))
@@ -31,7 +31,7 @@ class NavGroupsTest {
         val groups = navGroups(browseSections(emptyList(), withWatched = true))
         assertEquals(listOf(NavGroup.Watch, NavGroup.Chats), groups.map { it.group })
         assertEquals(
-            listOf(tab(BrowseTab.Continue), tab(BrowseTab.Watched), tab(BrowseTab.Favorites), NavEntry.Downloads),
+            listOf(tab(BrowseTab.Home), tab(BrowseTab.Continue), tab(BrowseTab.Watched), tab(BrowseTab.Favorites), NavEntry.Downloads),
             groups[0].entries,
         )
         assertEquals(
@@ -62,7 +62,7 @@ class NavGroupsTest {
         val groups = navGroups(browseSections(emptyList()), withDownloads = false)
         assertFalse(NavEntry.Downloads in groups[0].entries)
         // Without the Watched tab the group still holds what there is.
-        assertEquals(listOf(tab(BrowseTab.Continue), tab(BrowseTab.Favorites)), groups[0].entries)
+        assertEquals(listOf(tab(BrowseTab.Home), tab(BrowseTab.Continue), tab(BrowseTab.Favorites)), groups[0].entries)
     }
 
     @Test

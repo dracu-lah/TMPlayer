@@ -76,6 +76,10 @@ import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.auth.LoginScreen
 import com.tmplayer.ui.browse.BrowseScreen
 import com.tmplayer.ui.browse.BrowseSection
+import com.tmplayer.ui.browse.HomeViewModel
+import com.tmplayer.ui.browse.SeriesWatch
+import com.tmplayer.ui.browse.rememberHomeRows
+import com.tmplayer.data.HomeRow
 import com.tmplayer.ui.browse.ChatListViewModel
 import com.tmplayer.ui.browse.MediaGridScreen
 import com.tmplayer.ui.components.TvConfirm
@@ -276,6 +280,13 @@ private fun Root() {
     val minSize by settings.minSizeBytes.collectAsStateWithLifecycle(initialValue = SizeFilter.DEFAULT_MIN)
     val maxSize by settings.maxSizeBytes.collectAsStateWithLifecycle(initialValue = SizeFilter.DEFAULT_MAX)
     val chatLayout by settings.chatLayout.collectAsStateWithLifecycle(initialValue = CardLayout.List)
+    val seriesView by settings.seriesView.collectAsStateWithLifecycle(initialValue = true)
+    val homeWatch = remember(watchProgress, watchedVideos) {
+        SeriesWatch(
+            point = { watchProgress[SettingsStore.progressKey(it.chatId, it.messageId)] },
+            finished = { SettingsStore.progressKey(it.chatId, it.messageId) in watchedVideos },
+        )
+    }
     val mediaLayout by settings.mediaLayout.collectAsStateWithLifecycle(initialValue = CardLayout.Grid)
 
     val toast = rememberToast()
@@ -375,6 +386,15 @@ private fun Root() {
         },
     )
     val chatsState by chatsViewModel.state.collectAsStateWithLifecycle()
+    // Home's rows, fetched a row at a time as they come on screen, with the size limits a chat's
+    // grid uses.
+    val homeViewModel: HomeViewModel = viewModel(
+        factory = object : androidx.lifecycle.ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
+                HomeViewModel(sizeLimits = { settings.minSizeBytes.first() to settings.maxSizeBytes.first() }) as T
+        },
+    )
     val accountHeader by chatsViewModel.accountHeader.collectAsStateWithLifecycle()
     val chats = (chatsState as? UiState.Content)?.value?.chats.orEmpty()
 
@@ -387,7 +407,11 @@ private fun Root() {
             // TDLib, the exact thing the snapshot exists to avoid. Failed is left alone for the
             // same reason: a transient error over a drawn list is better read than a blank one.
             is AuthState.Connecting, is AuthState.Failed -> Unit
-            else -> chatsViewModel.reset()
+            else -> {
+                chatsViewModel.reset()
+                // Another account's starred chats must not stay on Home behind a sign out.
+                homeViewModel.refresh()
+            }
         }
     }
 
@@ -409,6 +433,7 @@ private fun Root() {
                 wasOffline = false
                 if (auth is AuthState.Ready) {
                     chatsViewModel.load()
+                    homeViewModel.refresh()
                     updates.checkIfDue()
                     toast(L.mainBackOnline)
                 }
@@ -893,6 +918,22 @@ private fun Root() {
                     folders = folders,
                     onToggleLayout = { scope.launch { settings.setChatLayout(chatLayout.toggled()) } },
                     layout = chatLayout,
+                    homeRows = rememberHomeRows(homeViewModel, chats, favorites, continueWatching, seriesView),
+                    homeArt = homeViewModel.art.collectAsStateWithLifecycle().value,
+                    homeWatch = homeWatch,
+                    onHomeRowShown = { row ->
+                        when (row) {
+                            is HomeRow.Chat -> homeViewModel.request(row.chatId)
+                            is HomeRow.Recent -> homeViewModel.requestRecent()
+                            is HomeRow.Continue -> Unit
+                        }
+                    },
+                    onHomeArtWanted = homeViewModel::requestArt,
+                    onPlayMedia = { item, chatTitle -> play(item, chatTitle = chatTitle) },
+                    onRefreshHome = {
+                        homeViewModel.refresh()
+                        chatsViewModel.refreshUnlessRateLimited()
+                    },
                 )
             }
 

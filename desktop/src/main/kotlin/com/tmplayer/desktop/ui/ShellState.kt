@@ -50,6 +50,7 @@ val POSTER_STEPS = listOf(160.dp, 208.dp, 264.dp, 320.dp)
 
 /** The places the sidebar (or the rail, in a narrow window) goes to. */
 enum class Destination(private val labelText: () -> String) {
+    Home({ L.browseTabHome }),
     Chats({ L.navChats }),
     Favourites({ L.navFavourites }),
     Continue({ L.navContinue }),
@@ -91,7 +92,7 @@ class ShellState(
     /** The desktop's own settings, cache and update check; opened on first use, so tests that never touch them pay nothing. */
     val extras: DesktopExtras by lazy(services)
 
-    var destination by mutableStateOf(Destination.Chats)
+    var destination by mutableStateOf(Destination.Home)
         private set
 
     /**

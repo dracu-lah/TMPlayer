@@ -108,6 +108,8 @@ import com.tmplayer.ui.components.MediaPreview
 import com.tmplayer.ui.components.ChatListSkeleton
 import com.tmplayer.ui.components.StateScaffold
 import com.tmplayer.data.ResumeRecord
+import com.tmplayer.data.HomeRow
+import com.tmplayer.data.MediaItem
 import com.tmplayer.data.WatchedRecord
 import com.tmplayer.data.WatchedWhen
 import com.tmplayer.player.StreamStats
@@ -213,6 +215,17 @@ fun BrowseScreen(
     /** The newer version on GitHub, if there is one. Shown on the rail, in amber. */
     updateVersion: String? = null,
     onUpdate: () -> Unit = {},
+    /** Home's rows, built by [com.tmplayer.data.HomeRows] from what has loaded so far. */
+    homeRows: List<HomeRow> = emptyList(),
+    /** Continue watching videos as Telegram describes them, by progress key, for their pictures. */
+    homeArt: Map<String, MediaItem> = emptyMap(),
+    homeWatch: SeriesWatch = SeriesWatch.None,
+    /** A row came on screen without its videos: fetch them. */
+    onHomeRowShown: (HomeRow) -> Unit = {},
+    onHomeArtWanted: (ResumeRecord) -> Unit = {},
+    /** Plays a video from one of Home's rows; the second argument is its chat's name. */
+    onPlayMedia: (MediaItem, String) -> Unit = { _, _ -> },
+    onRefreshHome: () -> Unit = {},
 ) {
     val s = LocalStrings.current
     // An unfinished video wins the landing tab, otherwise Recent, so the first screen is never
@@ -235,12 +248,9 @@ fun BrowseScreen(
                 .firstOrNull { it.id == chosen.id }
                 ?: chosen.takeIf { folders.isEmpty() }
         }
-    } ?: when {
-        // Favourites is a place to go, not a place to be put: the app opens on what is half
-        // watched, and otherwise on the full listing.
-        continueWatching.isNotEmpty() -> BrowseSection.of(BrowseTab.Continue)
-        else -> BrowseSection.of(BrowseTab.Recent)
-    }
+    // Home is the first destination on every device: it leads with what is half watched, so it
+    // is never a worse landing than Continue watching was, and it is never empty for long.
+    } ?: BrowseSection.of(BrowseTab.Home)
     var query by remember { mutableStateOf("") }
     // What the viewer held OK on. Only ever one at a time, so two nullable slots cover both lists.
     var chatMenu by remember { mutableStateOf<ChatSummary?>(null) }
@@ -270,7 +280,28 @@ fun BrowseScreen(
             }
 
             Column(Modifier.fillMaxSize()) {
-                    if (tab.isContinue) {
+                    if (tab.isHome) {
+                        if (!touch) {
+                            TabHeading(tab, 0, insets) { RefreshAction(onRefreshHome) }
+                        }
+                        val titles = remember(data.chats) { data.chats.associate { it.id to it.title } }
+                        HomePane(
+                            rows = homeRows,
+                            watch = homeWatch,
+                            art = homeArt,
+                            chatTitle = { titles[it].orEmpty() },
+                            start = insets.start,
+                            end = insets.end,
+                            bottom = insets.bottom,
+                            onRowShown = onHomeRowShown,
+                            onArtWanted = onHomeArtWanted,
+                            onResume = onResumeMedia,
+                            onHoldRecord = { mediaMenu = it },
+                            onPlay = onPlayMedia,
+                            onSeeContinue = { onPickTab(BrowseSection.of(BrowseTab.Continue)); query = "" },
+                            onOpenChat = { id -> data.chats.firstOrNull { it.id == id }?.let(onOpenChat) },
+                        )
+                    } else if (tab.isContinue) {
                         // On a phone the heading, the count and the actions live in the app bar, so
                         // the content area starts with the content.
                         if (!touch) {
@@ -392,7 +423,9 @@ fun BrowseScreen(
         // chat count remembered: the same filter and fuzzy ranking already run inside the pane
         // below, and an unremembered copy here costs a second full pass on every keystroke.
         val chats = (state as? UiState.Content)?.value?.chats
-        val count = if (tab.isContinue) {
+        val count = if (tab.isHome) {
+            0
+        } else if (tab.isContinue) {
             continueWatching.size
         } else if (tab.isWatched) {
             watchedHistory.size
@@ -416,10 +449,15 @@ fun BrowseScreen(
             title = tab.heading,
             // Continue watching is a list of videos held on this device, and the box searches
             // chats. Offering it there would be a field that filters nothing.
-            searchQuery = if (tab.listsVideos) null else query,
+            searchQuery = if (tab.listsVideos || tab.isHome) null else query,
             onSearchQueryChange = { query = it },
             onVoiceSearch = voiceSearch,
-            actions = {
+            actions = actions@{
+                // Home is rows of tiles whatever the arrangement, so it only offers a refresh.
+                if (tab.isHome) {
+                    BarIcon(s.commonRefresh, Icons.Filled.Refresh, onRefreshHome)
+                    return@actions
+                }
                 BarIcon(
                     label = if (layout == CardLayout.Grid) s.browseShowAsRows else s.browseShowAsTiles,
                     icon = if (layout == CardLayout.Grid) {

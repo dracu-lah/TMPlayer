@@ -106,7 +106,7 @@ fun ChatsPage(
 
     // The Continue tab lists videos and has a page of its own; Favourites has its own page too.
     val sections = remember(folders) {
-        browseSections(folders).filterNot { it.isContinue || it == BrowseSection.of(BrowseTab.Favorites) }
+        browseSections(folders).filterNot { it.isHome || it.isContinue || it == BrowseSection.of(BrowseTab.Favorites) }
     }
     val section = if (favouritesOnly) {
         BrowseSection.of(BrowseTab.Favorites)
