@@ -1,13 +1,13 @@
 package com.tmplayer.desktop.player
 
 import androidx.compose.ui.input.key.Key
+import com.tmplayer.ui.theme.TmMaterialTheme
 import com.tmplayer.desktop.os.MediaKeyEcho
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -866,7 +866,7 @@ fun PlayerScreen(
 
     // ---- layout ------------------------------------------------------------------------------
 
-    MaterialTheme(colorScheme = playerColors) {
+    PlayerTheme {
         Box(
             modifier
                 .fillMaxSize()
@@ -1128,13 +1128,13 @@ private val OUTSIDE_PLAYBACK = setOf(
     PlayerAction.ShortcutSheet,
 )
 
-private val playerColors = darkColorScheme(
-    primary = Color(0xFF8AB4F8),
-    onPrimary = Color(0xFF0B1A2E),
-    surface = Color(0xFF1C1C1E),
-    onSurface = Color.White,
-    surfaceContainer = Color(0xFF242426),
-)
+/**
+ * The player's theme: the app's own dark scheme whatever the window is in, because a picture is
+ * watched in the dark. The same palette as the phone's and the television's player menus, rather
+ * than the grey and the stock blue the desktop player used to carry on its own.
+ */
+@Composable
+internal fun PlayerTheme(content: @Composable () -> Unit) = TmMaterialTheme(dark = true, content = content)
 
 private const val RESUME_TICK_MS = 10_000L
 private const val NEXT_UP_LEAD_MS = 30_000L

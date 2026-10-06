@@ -1,5 +1,6 @@
 package com.tmplayer.ui.downloads
 
+import com.tmplayer.ui.theme.Focus
 import com.tmplayer.ui.nav.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.LocalIndication
@@ -34,7 +35,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AlertDialog
+import com.tmplayer.ui.components.TmAlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -717,7 +718,7 @@ fun DownloadsScreen(
     }
 
     confirmingDelete?.let { row ->
-        AlertDialog(
+        TmAlertDialog(
             onDismissRequest = { confirmingDelete = null },
             title = {
                 Text(if (row.cached) "Delete this cached video?" else "Delete this download?")
@@ -742,7 +743,7 @@ fun DownloadsScreen(
     }
 
     if (confirmingDeleteMany) {
-        AlertDialog(
+        TmAlertDialog(
             onDismissRequest = { confirmingDeleteMany = false },
             title = {
                 Text(
@@ -772,7 +773,7 @@ fun DownloadsScreen(
     }
 
     if (confirmingClearAll) {
-        AlertDialog(
+        TmAlertDialog(
             onDismissRequest = { confirmingClearAll = false },
             title = { Text("Delete every download?") },
             text = {
@@ -832,7 +833,7 @@ private fun Modifier.tvFocusRing(
         .focusRing(focused, shape)
         .then(
             if (focused && LocalDarkTheme.current) {
-                Modifier.border(2.dp, Tone.accent, shape)
+                Modifier.border(Focus.Ring, Tone.accent, shape)
             } else {
                 Modifier
             },

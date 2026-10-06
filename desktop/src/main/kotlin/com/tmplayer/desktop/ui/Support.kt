@@ -2,7 +2,6 @@ package com.tmplayer.desktop.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +15,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material3.AlertDialog
+import com.tmplayer.ui.theme.Corner
+import com.tmplayer.ui.theme.floatingSurface
+import com.tmplayer.ui.components.TmAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -56,7 +57,7 @@ import kotlinx.coroutines.withContext
  */
 @Composable
 fun SupportPopup(onClose: () -> Unit) {
-    AlertDialog(
+    TmAlertDialog(
         onDismissRequest = onClose,
         icon = { Icon(Icons.Filled.Favorite, contentDescription = null, tint = Tone.accent) },
         title = { Text(About.SUPPORT_TITLE) },
@@ -84,7 +85,7 @@ private fun SupportCode(link: About.Link, modifier: Modifier) {
     }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(
-            Modifier.size(PLATE).clip(RoundedCornerShape(16.dp)).background(Color.White),
+            Modifier.size(PLATE).clip(RoundedCornerShape(Corner.Large)).background(Color.White),
             contentAlignment = Alignment.Center,
         ) {
             bitmap?.let {
@@ -111,9 +112,7 @@ fun SupportCard(onSupport: () -> Unit, onNotNow: () -> Unit, onNever: () -> Unit
     Column(
         modifier
             .width(420.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(Tone.surfaceHigh)
-            .border(1.dp, Tone.outline, RoundedCornerShape(20.dp))
+            .floatingSurface()
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {

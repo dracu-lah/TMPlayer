@@ -11,6 +11,7 @@ import android.content.Intent
 import android.util.Log
 import android.widget.Toast
 import android.net.Uri
+import com.tmplayer.ui.theme.Focus
 import com.tmplayer.ui.nav.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -1666,7 +1667,7 @@ internal fun MediaCard(
             // somewhere else. In daylight the fill alone is a near-white panel on a near-white
             // page, and the edge is what says where one tile ends.
             .border(1.dp, Tone.outline, RoundedCornerShape(Corner.Medium))
-            .border(3.dp, border, RoundedCornerShape(Corner.Medium))
+            .border(Focus.Edge, border, RoundedCornerShape(Corner.Medium))
             .holdOrPress(interactions, onClick, onLongClick),
     ) {
         MediaCardBody(item, watched, selected, finished)
@@ -1744,7 +1745,7 @@ private fun MediaRow(
                         Modifier
                             .clip(RoundedCornerShape(Corner.Medium))
                             .background(if (focused) Tone.surfaceHigh else Tone.surface)
-                            .border(3.dp, border, RoundedCornerShape(Corner.Medium))
+                            .border(Focus.Edge, border, RoundedCornerShape(Corner.Medium))
                             .selectionEdge(selected, RoundedCornerShape(Corner.Medium))
                             .holdOrPress(interactions, onClick, onLongClick)
                     },

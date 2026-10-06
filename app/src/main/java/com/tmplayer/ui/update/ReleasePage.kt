@@ -5,10 +5,8 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -33,18 +31,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.ui.components.FloatingWindow
+import com.tmplayer.ui.theme.floatingSurface
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.Release
 import com.tmplayer.data.UpdateFeed
 import com.tmplayer.ui.auth.QrCode
 import com.tmplayer.ui.components.PhonePad
 import com.tmplayer.ui.components.TmButton
-import com.tmplayer.ui.components.ignoreStrayRelease
-import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.Dispatchers
@@ -96,74 +92,61 @@ fun LinkQrDialog(url: String, what: String, onClose: () -> Unit) {
     }
     val close = remember { FocusRequester() }
 
-    Dialog(
-        onDismissRequest = onClose,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        BoxWithConstraints(
-            Modifier
-                .fillMaxSize()
-                .ignoreStrayRelease()
-                .background(Color.Black.copy(alpha = 0.82f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            val panel = min(maxWidth - PhonePad.Side * 2, PANEL_MAX)
-            val plate: @Composable () -> Unit = {
-                Box(
-                    Modifier
-                        .size(PLATE)
-                        .clip(RoundedCornerShape(Corner.ExtraLarge))
-                        .background(Color.White),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    bitmap?.let {
-                        Image(
-                            bitmap = it,
-                            contentDescription = "QR code for $what",
-                            // A scanner needs a quiet margin of the code's own white to find it.
-                            modifier = Modifier.fillMaxSize().padding(12.dp),
-                        )
-                    }
+    FloatingWindow(onDismiss = onClose, ignoreRelease = true) {
+        val panel = min(maxWidth - PhonePad.Side * 2, PANEL_MAX)
+        val plate: @Composable () -> Unit = {
+            Box(
+                Modifier
+                    .size(PLATE)
+                    .clip(RoundedCornerShape(Corner.ExtraLarge))
+                    .background(Color.White),
+                contentAlignment = Alignment.Center,
+            ) {
+                bitmap?.let {
+                    Image(
+                        bitmap = it,
+                        contentDescription = "QR code for $what",
+                        // A scanner needs a quiet margin of the code's own white to find it.
+                        modifier = Modifier.fillMaxSize().padding(12.dp),
+                    )
                 }
             }
-            val words: @Composable ColumnScope.() -> Unit = {
-                Text(
-                    "Open $what on your phone",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Tone.text,
-                )
-                Text(
-                    "This TV has no browser to open it in. Point your phone's camera at the code, " +
-                        "or type the address.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Tone.muted,
-                )
-                Text(readableUrl(url).removePrefix("mailto:"), style = MaterialTheme.typography.bodyLarge, color = Tone.text)
-                Spacer(Modifier.height(6.dp))
-                TmButton(onClick = onClose, modifier = Modifier.focusRequester(close)) { Text("Close") }
-            }
+        }
+        val words: @Composable ColumnScope.() -> Unit = {
+            Text(
+                "Open $what on your phone",
+                style = MaterialTheme.typography.titleLarge,
+                color = Tone.text,
+            )
+            Text(
+                "This TV has no browser to open it in. Point your phone's camera at the code, " +
+                    "or type the address.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = Tone.muted,
+            )
+            Text(readableUrl(url).removePrefix("mailto:"), style = MaterialTheme.typography.bodyLarge, color = Tone.text)
+            Spacer(Modifier.height(6.dp))
+            TmButton(onClick = onClose, modifier = Modifier.focusRequester(close)) { Text("Close") }
+        }
 
-            val frame = Modifier
-                .width(panel)
-                .clip(RoundedCornerShape(Corner.ExtraLarge))
-                .background(Tone.surface)
-                .border(1.dp, Caution.copy(alpha = 0.35f), RoundedCornerShape(Corner.ExtraLarge))
-                .padding(28.dp)
-            // Side by side on a television, which is wide and short; stacked on a phone held upright.
-            if (panel >= SIDE_BY_SIDE) {
-                Row(frame, horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
-                    plate()
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp), content = words)
-                }
-            } else {
-                Column(
-                    frame,
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    plate()
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp), content = words)
-                }
+        val frame = Modifier
+            .width(panel)
+            .floatingSurface()
+            .padding(28.dp)
+        // Side by side on a television, which is wide and short; stacked on a phone held upright.
+        if (panel >= SIDE_BY_SIDE) {
+            Row(frame, horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
+                plate()
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp), content = words)
+            }
+        } else {
+            Column(
+                frame,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                plate()
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp), content = words)
             }
         }
     }

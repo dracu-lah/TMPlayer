@@ -53,6 +53,7 @@ import com.tmplayer.ui.browse.TouchMediaScaffold
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.components.StateScaffold
 import com.tmplayer.ui.components.StateAction
+import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.MediaGridSkeleton
 import com.tmplayer.ui.browse.noVideosWithin
 import com.tmplayer.ui.browse.STILL_MORE_TO_SEARCH
@@ -139,6 +140,9 @@ class PromoCaptureActivity : ComponentActivity() {
             var screen by remember { mutableStateOf(if (start == "support") "settings" else start) }
             var supporting by remember { mutableStateOf(start == "support") }
             var supportCard by remember { mutableStateOf(intent.getBooleanExtra("support_reminder", false)) }
+            // `--ez confirm true` puts the sign out prompt over whatever screen is open, so the
+            // confirm dialog can be captured beside the other modals.
+            var confirming by remember { mutableStateOf(intent.getBooleanExtra("confirm", false)) }
             TMPlayerTheme {
                 // The real app does this from MainActivity, which the fixture does not run
                 // through. Without it a light shot carries a white clock on a white status bar,
@@ -216,6 +220,16 @@ class PromoCaptureActivity : ComponentActivity() {
                         )
                     }
                     if (supporting) SupportDialog(onClose = { supporting = false })
+                    if (confirming) {
+                        TvConfirm(
+                            title = "Sign out of Telegram?",
+                            message = "You'll be signed out and taken back to the sign-in screen. The cache, your " +
+                                "favourites, your watched list and everything you were part-way through go with it.",
+                            confirmLabel = "Sign out",
+                            onConfirm = { confirming = false },
+                            onDismiss = { confirming = false },
+                        )
+                    }
                 }
             }
         }

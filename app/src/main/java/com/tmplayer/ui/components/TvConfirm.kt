@@ -1,12 +1,8 @@
 package com.tmplayer.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -14,8 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
+import com.tmplayer.ui.components.TmAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon as M3Icon
@@ -27,20 +22,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.floatingSurface
 
 /**
  * The one prompt shape used everywhere something is about to be deleted, signed out of, or
@@ -70,7 +61,7 @@ fun TvConfirm(
     // tap on the scrim dismisses it, the predictive-back animation works, and a screen reader
     // announces it as a dialog rather than as a column of text that appeared.
     if (touch) {
-        AlertDialog(
+        TmAlertDialog(
             onDismissRequest = onDismiss,
             // No colours stated: the scheme already answers the container, the title, the body and
             // the error red a destructive press is entitled to.
@@ -120,66 +111,52 @@ fun TvConfirm(
         return
     }
 
-    // In its own window, not a Box on top of the layout. Drawn inline, a prompt is an ordinary
-    // sibling and anything composed after it would cover it. A Dialog is a separate window, so
-    // every prompt sits over the whole app, the navigation rail included.
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        BoxWithConstraints(
+    // In its own window, so every prompt sits over the whole app, the navigation rail included.
+    FloatingWindow(onDismiss = onDismiss) {
+        // Sized to the words, not to the screen. These prompts carry one line of question and
+        // two buttons; a panel wide enough for a paragraph just leaves the viewer's eye
+        // travelling across empty space to find the answer.
+        val panel = min(maxWidth - PhonePad.Side * 2, PANEL_MAX)
+
+        Column(
             Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.82f)),
-            contentAlignment = Alignment.Center,
+                .width(panel)
+                .floatingSurface()
+                .padding(horizontal = 32.dp, vertical = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // Sized to the words, not to the screen. These prompts carry one line of question and
-            // two buttons; a panel wide enough for a paragraph just leaves the viewer's eye
-            // travelling across empty space to find the answer.
-            val panel = min(maxWidth - PhonePad.Side * 2, PANEL_MAX)
-
-            Column(
-                Modifier
-                    .width(panel)
-                    .clip(RoundedCornerShape(Corner.ExtraLarge))
-                    .background(Tone.surface)
-                    .border(1.dp, Tone.muted.copy(alpha = 0.25f), RoundedCornerShape(Corner.ExtraLarge))
-                    .padding(horizontal = 32.dp, vertical = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = if (destructive) Danger else Tone.accent,
-                        modifier = Modifier.size(28.dp),
-                    )
-                    Text(title, style = MaterialTheme.typography.titleLarge, color = Tone.text)
-                }
-                Text(message, style = MaterialTheme.typography.bodyMedium, color = Tone.text)
-                if (detail != null) {
-                    Text(detail, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
-                }
-                extra?.invoke()
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (destructive) Danger else Tone.accent,
+                    modifier = Modifier.size(28.dp),
+                )
+                Text(title, style = MaterialTheme.typography.titleLarge, color = Tone.text)
+            }
+            Text(message, style = MaterialTheme.typography.bodyMedium, color = Tone.text)
+            if (detail != null) {
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
+            }
+            extra?.invoke()
 
-                // Cancel is the quiet one and confirm the loud one, stated by which button is used
-                // rather than by a colour table each caller passes in.
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.padding(top = 4.dp),
+            // Cancel is the quiet one and confirm the loud one, stated by which button is used
+            // rather than by a colour table each caller passes in.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(top = 4.dp),
+            ) {
+                TmSecondaryButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.focusRequester(cancelFocus),
                 ) {
-                    TmSecondaryButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.focusRequester(cancelFocus),
-                    ) {
-                        Text(cancelLabel)
-                    }
-                    TmButton(onClick = onConfirm, destructive = destructive) {
-                        Text(confirmLabel)
-                    }
+                    Text(cancelLabel)
+                }
+                TmButton(onClick = onConfirm, destructive = destructive) {
+                    Text(confirmLabel)
                 }
             }
         }

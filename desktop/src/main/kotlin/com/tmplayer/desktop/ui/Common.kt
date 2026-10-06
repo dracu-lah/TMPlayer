@@ -12,7 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog
+import com.tmplayer.ui.components.TmAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -233,7 +233,7 @@ fun ConfirmDialog(
     destructive: Boolean = true,
 ) {
     val cancelFocus = remember { FocusRequester() }
-    AlertDialog(
+    TmAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {

@@ -105,7 +105,7 @@ private val typography = Typography(
  */
 @Composable
 fun tmButtonColors() = ButtonDefaults.colors(
-    containerColor = Tone.surfaceHigh,
+    containerColor = FloatingTone.control,
     contentColor = Tone.text,
     focusedContainerColor = Tone.focusFill,
     focusedContentColor = Tone.onFocusFill,

@@ -1,26 +1,24 @@
 package com.tmplayer.ui.update
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AlertDialog
+import com.tmplayer.ui.components.FloatingWindow
+import com.tmplayer.ui.theme.floatingSurface
+import com.tmplayer.ui.components.TmAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon as M3Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -42,8 +40,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
@@ -63,10 +59,8 @@ import com.tmplayer.data.updateScheduler
 import com.tmplayer.platform.Background
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.PhonePad
-import com.tmplayer.ui.components.ignoreStrayRelease
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.theme.Caution
-import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.launch
 import com.tmplayer.ui.components.TmButton
@@ -153,101 +147,88 @@ fun UpdateDialog(onDismiss: () -> Unit) {
         return
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        BoxWithConstraints(
+    FloatingWindow(onDismiss = onDismiss, ignoreRelease = true) {
+        // A ceiling rather than a width: 620dp is a comfortable paragraph on a television.
+        val panel = min(maxWidth - PhonePad.Side * 2, PANEL_MAX)
+
+        Column(
             Modifier
-                .fillMaxSize()
-                .ignoreStrayRelease()
-                .background(Color.Black.copy(alpha = 0.82f)),
-            contentAlignment = Alignment.Center,
+                .width(panel)
+                .floatingSurface()
+                .padding(28.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            // A ceiling rather than a width: 620dp is a comfortable paragraph on a television.
-            val panel = min(maxWidth - PhonePad.Side * 2, PANEL_MAX)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.Refresh,
+                    contentDescription = null,
+                    tint = Caution,
+                    modifier = Modifier.size(28.dp),
+                )
+                Spacer(Modifier.width(14.dp))
+                Text(
+                    title(state, offer),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Tone.text,
+                )
+            }
 
-            Column(
-                Modifier
-                    .width(panel)
-                    .clip(RoundedCornerShape(Corner.ExtraLarge))
-                    .background(Tone.surface)
-                    .border(1.dp, Caution.copy(alpha = 0.35f), RoundedCornerShape(Corner.ExtraLarge))
-                    .padding(28.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+            body(state, offer, device = "TV").forEach { paragraph ->
+                Text(
+                    paragraph,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (state is UpdateState.Failed) Tone.danger else Tone.muted,
+                )
+            }
+
+            (state as? UpdateState.Downloading)?.let { downloading ->
+                Spacer(Modifier.height(6.dp))
+                ProgressBar(downloading.fraction)
+            }
+
+            Spacer(Modifier.height(10.dp))
+            // A remote steps along a row; nothing here while the download runs, so a stray
+            // press cannot abandon it. Four buttons are wider than the panel, so the row wraps.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Filled.Refresh,
-                        contentDescription = null,
-                        tint = Caution,
-                        modifier = Modifier.size(28.dp),
-                    )
-                    Spacer(Modifier.width(14.dp))
-                    Text(
-                        title(state, offer),
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Tone.text,
-                    )
-                }
-
-                body(state, offer, device = "TV").forEach { paragraph ->
-                    Text(
-                        paragraph,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (state is UpdateState.Failed) Tone.danger else Tone.muted,
-                    )
-                }
-
-                (state as? UpdateState.Downloading)?.let { downloading ->
-                    Spacer(Modifier.height(6.dp))
-                    ProgressBar(downloading.fraction)
-                }
-
-                Spacer(Modifier.height(10.dp))
-                // A remote steps along a row; nothing here while the download runs, so a stray
-                // press cannot abandon it. Four buttons are wider than the panel, so the row wraps.
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    when {
-                        state is UpdateState.Downloading -> Unit
-                        offer != null -> {
-                            TmButton(
-                                onClick = primary,
-                                enabled = offer.allowed.not() || !offer.waitsForWifi,
-                                modifier = Modifier.focusRequester(confirm).paneAction(),
-                            ) { Text(primaryLabel(state, offer)) }
-                            if (showReleasePage) {
-                                TmSecondaryButton(onClick = releasePage, modifier = Modifier.paneAction()) {
-                                    Text(RELEASE_PAGE)
-                                }
-                            }
-                            TmSecondaryButton(onClick = later, modifier = Modifier.paneAction()) {
-                                Text(UpdateWords.LATER)
-                            }
-                            TmSecondaryButton(onClick = skip, modifier = Modifier.paneAction()) {
-                                Text(UpdateWords.SKIP)
+                when {
+                    state is UpdateState.Downloading -> Unit
+                    offer != null -> {
+                        TmButton(
+                            onClick = primary,
+                            enabled = offer.allowed.not() || !offer.waitsForWifi,
+                            modifier = Modifier.focusRequester(confirm).paneAction(),
+                        ) { Text(primaryLabel(state, offer)) }
+                        if (showReleasePage) {
+                            TmSecondaryButton(onClick = releasePage, modifier = Modifier.paneAction()) {
+                                Text(RELEASE_PAGE)
                             }
                         }
-                        // The button names the check while it runs, not just the body: the button
-                        // is what the remote is pointed at, so a slow answer must show there.
-                        else -> {
-                            TmButton(
-                                onClick = primary,
-                                loading = state is UpdateState.Checking,
-                                busyLabel = "Checking…",
-                                modifier = Modifier.focusRequester(confirm).paneAction(),
-                            ) { Text("Check again") }
-                            if (showReleasePage) {
-                                TmSecondaryButton(onClick = releasePage, modifier = Modifier.paneAction()) {
-                                    Text(RELEASE_PAGE)
-                                }
+                        TmSecondaryButton(onClick = later, modifier = Modifier.paneAction()) {
+                            Text(UpdateWords.LATER)
+                        }
+                        TmSecondaryButton(onClick = skip, modifier = Modifier.paneAction()) {
+                            Text(UpdateWords.SKIP)
+                        }
+                    }
+                    // The button names the check while it runs, not just the body: the button
+                    // is what the remote is pointed at, so a slow answer must show there.
+                    else -> {
+                        TmButton(
+                            onClick = primary,
+                            loading = state is UpdateState.Checking,
+                            busyLabel = "Checking…",
+                            modifier = Modifier.focusRequester(confirm).paneAction(),
+                        ) { Text("Check again") }
+                        if (showReleasePage) {
+                            TmSecondaryButton(onClick = releasePage, modifier = Modifier.paneAction()) {
+                                Text(RELEASE_PAGE)
                             }
-                            TmSecondaryButton(onClick = onDismiss, modifier = Modifier.paneAction()) {
-                                Text("Close")
-                            }
+                        }
+                        TmSecondaryButton(onClick = onDismiss, modifier = Modifier.paneAction()) {
+                            Text("Close")
                         }
                     }
                 }
@@ -291,7 +272,7 @@ private fun TouchUpdateDialog(
     onReleasePage: (() -> Unit)?,
 ) {
     val downloading = state as? UpdateState.Downloading
-    AlertDialog(
+    TmAlertDialog(
         // A download in progress is the one state that must not be dismissed by a stray tap
         // outside it: the dialog is what is holding the download's own progress on screen.
         onDismissRequest = { if (downloading == null) onDismiss() },
@@ -322,7 +303,7 @@ private fun TouchUpdateDialog(
             }
         },
         confirmButton = {
-            if (downloading != null) return@AlertDialog
+            if (downloading != null) return@TmAlertDialog
             // A dialog's button row is too narrow for a spinner beside the words, so the label
             // names the check while it runs, and the button is disabled against a second press.
             val checking = state is UpdateState.Checking
@@ -340,7 +321,7 @@ private fun TouchUpdateDialog(
             }
         },
         dismissButton = {
-            if (downloading != null) return@AlertDialog
+            if (downloading != null) return@TmAlertDialog
             Row {
                 if (offer != null) {
                     TextButton(onClick = onSkip) { M3Text(UpdateWords.SKIP) }

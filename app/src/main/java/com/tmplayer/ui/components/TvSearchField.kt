@@ -42,6 +42,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.Canvas
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.ui.theme.Focus
+import com.tmplayer.ui.theme.Floating
 import com.tmplayer.ui.theme.Tone
 
 /**
@@ -96,8 +98,8 @@ fun TvSearchField(
             // control either fills with Accent or draws a 3dp border.
             .background(if (active) Tone.surfaceHigh else Tone.surface)
             .border(
-                width = if (active) 3.dp else 1.dp,
-                color = if (active) Tone.accent else Tone.muted.copy(alpha = 0.35f),
+                width = if (active) Focus.Edge else Floating.Border,
+                color = if (active) Tone.accent else Tone.outline,
                 shape = CircleShape,
             )
             .then(

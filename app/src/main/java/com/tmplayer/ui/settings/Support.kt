@@ -3,10 +3,8 @@ package com.tmplayer.ui.settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -39,17 +37,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.ui.components.FloatingWindow
+import com.tmplayer.ui.theme.floatingSurface
+import com.tmplayer.ui.theme.LocalOnFloating
+import androidx.compose.runtime.CompositionLocalProvider
 import com.tmplayer.ui.about.About
 import com.tmplayer.ui.auth.QrCode
 import com.tmplayer.ui.components.PhonePad
 import com.tmplayer.ui.components.TmButton
 import com.tmplayer.ui.components.TmSecondaryButton
-import com.tmplayer.ui.components.ignoreStrayRelease
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
@@ -71,52 +70,42 @@ fun SupportDialog(onClose: () -> Unit) {
     val context = LocalContext.current
     val close = remember { FocusRequester() }
 
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        BoxWithConstraints(
+    FloatingWindow(onDismiss = onClose, ignoreRelease = true) {
+        val panel = min(maxWidth - PhonePad.Side * 2, if (touch) 560.dp else 860.dp)
+        Column(
             Modifier
-                .fillMaxSize()
-                .ignoreStrayRelease()
-                .background(Color.Black.copy(alpha = 0.82f)),
-            contentAlignment = Alignment.Center,
+                .width(panel)
+                .floatingSurface()
+                .verticalScroll(rememberScrollState())
+                .padding(if (touch) 20.dp else 28.dp),
+            verticalArrangement = Arrangement.spacedBy(if (touch) 12.dp else 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            val panel = min(maxWidth - PhonePad.Side * 2, if (touch) 560.dp else 860.dp)
-            Column(
-                Modifier
-                    .width(panel)
-                    .clip(RoundedCornerShape(Corner.ExtraLarge))
-                    .background(Tone.surface)
-                    .border(1.dp, Tone.outline, RoundedCornerShape(Corner.ExtraLarge))
-                    .verticalScroll(rememberScrollState())
-                    .padding(if (touch) 20.dp else 28.dp),
-                verticalArrangement = Arrangement.spacedBy(if (touch) 12.dp else 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+            Text(About.SUPPORT_TITLE, style = MaterialTheme.typography.headlineSmall, color = Tone.text)
+            Text(
+                About.SUPPORT_NOTE + if (touch) {
+                    " Open a link here, or scan a code on another device."
+                } else {
+                    " Point your phone's camera at a code."
+                },
+                style = MaterialTheme.typography.bodyLarge,
+                color = Tone.muted,
+                textAlign = TextAlign.Center,
+            )
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(if (touch) 12.dp else 32.dp),
             ) {
-                Text(About.SUPPORT_TITLE, style = MaterialTheme.typography.headlineSmall, color = Tone.text)
-                Text(
-                    About.SUPPORT_NOTE + if (touch) {
-                        " Open a link here, or scan a code on another device."
-                    } else {
-                        " Point your phone's camera at a code."
-                    },
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Tone.muted,
-                    textAlign = TextAlign.Center,
-                )
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(if (touch) 12.dp else 32.dp),
-                ) {
-                    About.supportLinks.forEach { link ->
-                        SupportCode(
-                            link,
-                            modifier = Modifier.weight(1f),
-                            onOpen = if (touch) ({ openLink(context, link.url) }) else null,
-                        )
-                    }
+                About.supportLinks.forEach { link ->
+                    SupportCode(
+                        link,
+                        modifier = Modifier.weight(1f),
+                        onOpen = if (touch) ({ openLink(context, link.url) }) else null,
+                    )
                 }
-                Spacer(Modifier.height(4.dp))
-                TmSecondaryButton(onClick = onClose, modifier = Modifier.focusRequester(close)) { Label("Close") }
             }
+            Spacer(Modifier.height(4.dp))
+            TmSecondaryButton(onClick = onClose, modifier = Modifier.focusRequester(close)) { Label("Close") }
         }
     }
 
@@ -177,9 +166,7 @@ fun SupportCard(
     Column(
         modifier
             .widthIn(max = if (touch) 520.dp else 560.dp)
-            .clip(RoundedCornerShape(Corner.ExtraLarge))
-            .background(Tone.surfaceHigh)
-            .border(1.dp, Tone.outline, RoundedCornerShape(Corner.ExtraLarge))
+            .floatingSurface()
             .padding(if (touch) 16.dp else 24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -197,14 +184,17 @@ fun SupportCard(
             }
             TmSecondaryButton(onClick = onNever, modifier = Modifier.fillMaxWidth()) { Label("Don't ask again") }
         } else {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TmSecondaryButton(onClick = onNever) { Label("Don't ask again") }
-                TmSecondaryButton(onClick = onNotNow, modifier = Modifier.focusRequester(notNow)) { Label("Not now") }
-                TmButton(onClick = onSupport) { Label("Support") }
+            // The card floats, so a button at rest takes the step above its fill (see FloatingTone.control).
+            CompositionLocalProvider(LocalOnFloating provides true) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TmSecondaryButton(onClick = onNever) { Label("Don't ask again") }
+                    TmSecondaryButton(onClick = onNotNow, modifier = Modifier.focusRequester(notNow)) { Label("Not now") }
+                    TmButton(onClick = onSupport) { Label("Support") }
+                }
             }
         }
     }

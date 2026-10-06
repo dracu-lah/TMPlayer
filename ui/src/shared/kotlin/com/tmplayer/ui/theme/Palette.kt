@@ -123,7 +123,7 @@ val LocalDarkTheme = staticCompositionLocalOf { true }
 @Composable
 fun Modifier.focusRing(focused: Boolean, shape: Shape): Modifier =
     if (focused && !LocalDarkTheme.current) {
-        border(width = 2.dp, color = Tone.accent, shape = shape)
+        border(width = Focus.Ring, color = Tone.accent, shape = shape)
     } else {
         this
     }

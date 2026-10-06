@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AlertDialog
+import com.tmplayer.ui.components.TmAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -143,7 +143,7 @@ fun UpdatePopup(
     onClose: () -> Unit,
 ) {
     val busy = progress is UpdateProgress.Downloading || progress == UpdateProgress.Verifying || progress == UpdateProgress.Installing
-    AlertDialog(
+    TmAlertDialog(
         onDismissRequest = onClose,
         icon = { Icon(Icons.Filled.Refresh, contentDescription = null, tint = Tone.caution) },
         title = { Text(UpdateWords.title(release, skipped)) },

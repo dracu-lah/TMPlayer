@@ -9,12 +9,9 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.draw.clip
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +45,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.ui.theme.floatingSurface
 import com.tmplayer.ui.theme.Tone
 
 // UiState lives in :ui (UiState.kt), shared with the desktop.
@@ -150,8 +148,7 @@ fun TipCard(tip: String) {
     Box(
         Modifier
             .widthIn(max = 520.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(Tone.surfaceHigh)
+            .floatingSurface()
             .padding(horizontal = 20.dp, vertical = 14.dp),
     ) {
         Text(
@@ -206,7 +203,7 @@ fun SlowAnswerNotice(
         }
     }
     if (card) {
-        Box(modifier.clip(RoundedCornerShape(28.dp)).background(Tone.surfaceHigh)) { body() }
+        Box(modifier.floatingSurface()) { body() }
     } else {
         Box(modifier) { body() }
     }

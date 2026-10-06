@@ -9,11 +9,9 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -43,8 +41,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -52,6 +48,10 @@ import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.focusRing
+import com.tmplayer.ui.theme.Floating
+import com.tmplayer.ui.theme.FloatingTone
+import com.tmplayer.ui.theme.floatingBorder
+import com.tmplayer.ui.theme.floatingSurface
 
 /** One line of a [TvMenu]. [detail] says what the action will do when the label cannot. */
 data class MenuAction(
@@ -86,72 +86,58 @@ fun TvMenu(
         return
     }
 
-    // A separate window, for the same reason TvConfirm uses one: drawn inline this would sit
-    // behind anything composed after it.
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        BoxWithConstraints(
-            Modifier
-                .fillMaxSize()
-                // This menu is opened by a hold, so OK is still down as it appears; without this
-                // the release would choose the first action on the viewer's behalf.
-                .ignoreStrayRelease()
-                .background(Color.Black.copy(alpha = 0.82f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            val panel = min(maxWidth - PhonePad.Side * 2, MENU_MAX)
+    // This menu is opened by a hold, so OK is still down as it appears; without ignoreRelease
+    // the release would choose the first action on the viewer's behalf.
+    FloatingWindow(onDismiss = onDismiss, ignoreRelease = true) {
+        val panel = min(maxWidth - PhonePad.Side * 2, MENU_MAX)
 
+        // The phone's sheet, in the middle of the screen: the sheet's fill, edge and corner.
+        Column(
+            Modifier
+                .width(panel)
+                .floatingSurface(FloatingTone.sheet)
+                // A list longer than the screen (the player's seven speeds, on a 540 dp
+                // television) scrolls, and focus moving down brings each row into view.
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Column(
                 Modifier
-                    .width(panel)
-                    .clip(RoundedCornerShape(Corner.ExtraLarge))
-                    .background(Tone.surface)
-                    .border(1.dp, Tone.muted.copy(alpha = 0.25f), RoundedCornerShape(Corner.ExtraLarge))
-                    // A list longer than the screen (the player's seven speeds, on a 540 dp
-                    // television) scrolls, and focus moving down brings each row into view.
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(start = 4.dp, bottom = 8.dp)
+                    // Focus has to live somewhere for the D-pad to work at all, so it starts
+                    // here, on something that does nothing when pressed.
+                    .focusRequester(heading)
+                    .focusable(),
             ) {
-                Column(
-                    Modifier
-                        .padding(start = 4.dp, bottom = 8.dp)
-                        // Focus has to live somewhere for the D-pad to work at all, so it starts
-                        // here, on something that does nothing when pressed.
-                        .focusRequester(heading)
-                        .focusable(),
-                ) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Tone.text,
+                    // A video is named by its file name, and one line of that is a prefix and
+                    // three dots. The panel is bounded, so three lines is where it stops.
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (subtitle != null) {
                     Text(
-                        title,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Tone.text,
-                        // A video is named by its file name, and one line of that is a prefix and
-                        // three dots. The panel is bounded, so three lines is where it stops.
-                        maxLines = 3,
+                        subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Tone.muted,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (subtitle != null) {
-                        Text(
-                            subtitle,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Tone.muted,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
                 }
-
-                actions.forEach { action -> MenuRow(action = action, touch = false) }
-
-                Text(
-                    "Press Down to choose, or Back to close this.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Tone.muted,
-                    modifier = Modifier.padding(start = 4.dp, top = 8.dp),
-                )
             }
+
+            actions.forEach { action -> MenuRow(action = action, touch = false) }
+
+            Text(
+                "Press Down to choose, or Back to close this.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Tone.muted,
+                modifier = Modifier.padding(start = 4.dp, top = 8.dp),
+            )
         }
 
         LaunchedEffect(Unit) { runCatching { heading.requestFocus() } }
@@ -175,7 +161,13 @@ private fun TouchMenuSheet(
     // No container colour and no drag handle of our own: the sheet's defaults are the scheme's,
     // and the handle it draws is the one every other sheet on the phone draws, which is how a
     // thumb already knows this thing can be pulled down.
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        // The hairline every floating surface carries, here as on the television's menu.
+        modifier = Modifier.border(floatingBorder(), Floating.SheetShape),
+        shape = Floating.SheetShape,
+        containerColor = FloatingTone.sheet,
+    ) {
         Column(Modifier.padding(bottom = 24.dp)) {
             // The heading is what the sheet is about rather than something that can be chosen, so
             // it sits in a section header's padding, not in a row, and it takes the scheme's text

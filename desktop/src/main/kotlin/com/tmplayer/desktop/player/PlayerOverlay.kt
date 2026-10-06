@@ -39,7 +39,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
+import com.tmplayer.ui.theme.Floating
+import com.tmplayer.ui.theme.FloatingTone
+import com.tmplayer.ui.theme.floatingBorder
+import com.tmplayer.ui.components.TmDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -570,7 +573,7 @@ private fun TimeBar(
 
 /** One menu for the right click, the overflow button and the two track buttons, paged. */
 @Composable
-private fun PlayerMenu(
+internal fun PlayerMenu(
     menu: MenuAt,
     status: PlaybackStatus,
     tracks: List<MediaTrack>,
@@ -621,7 +624,7 @@ private fun PlayerMenu(
         }
     }
 
-    DropdownMenu(expanded = true, onDismissRequest = onClose, modifier = Modifier.widthIn(min = 240.dp, max = 420.dp)) {
+    TmDropdownMenu(expanded = true, onDismissRequest = onClose, modifier = Modifier.widthIn(min = 240.dp, max = 420.dp)) {
         if (menu.page != MenuPage.Main && menu.anchor != MenuAt.Anchor.Subtitles && menu.anchor != MenuAt.Anchor.Audio) {
             Entry("Back") { page(MenuPage.Main) }
             HorizontalDivider()
@@ -936,14 +939,16 @@ internal fun BoxScope.StatusSheet(
 @Composable
 internal fun BoxScope.ShortcutSheet(onClose: () -> Unit, mac: Boolean = false, wheelSeeks: Boolean = false) {
     BoxWithConstraints(
-        Modifier.matchParentSize().background(Color(0x99000000)).clickable(onClick = onClose),
+        Modifier.matchParentSize().background(FloatingTone.scrim).clickable(onClick = onClose),
         contentAlignment = Alignment.Center,
     ) {
         val rows = PlayerKeys.sheet(mac, wheelSeeks)
         val twoColumns = maxWidth >= 900.dp
+        // A dialog like any other, so it has the edge and corner the television's key sheet has.
         Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = Color(0xF21C1C1E),
+            shape = Floating.DialogShape,
+            color = FloatingTone.dialog,
+            border = floatingBorder(),
             modifier = Modifier.widthIn(max = if (twoColumns) 1040.dp else 560.dp).padding(16.dp),
         ) {
             Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState())) {

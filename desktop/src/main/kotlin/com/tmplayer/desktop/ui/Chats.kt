@@ -37,7 +37,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.DropdownMenu
+import com.tmplayer.ui.theme.Focus
+import com.tmplayer.ui.components.TmDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -267,7 +268,7 @@ internal fun ChatRow(
             .fillMaxWidth()
             .widthIn(max = 960.dp)
             .clip(MaterialTheme.shapes.medium)
-            .then(if (focused) Modifier.border(2.dp, Tone.accent, MaterialTheme.shapes.medium) else Modifier)
+            .then(if (focused) Modifier.border(Focus.Edge, Tone.accent, MaterialTheme.shapes.medium) else Modifier)
             .onPointerEvent(PointerEventType.Press) { event ->
                 val macContext = CHATS_ON_MAC && event.keyboardModifiers.isCtrlPressed && event.buttons.isPrimaryPressed
                 if (event.buttons.isSecondaryPressed || macContext) menu = true
@@ -367,7 +368,7 @@ private fun ChatRowMenu(
             },
         )
     }
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+    TmDropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         entry("Open", "Enter", TmIcons.Folder, onOpen)
         entry(
             if (favourite) "Remove from favourites" else "Add to favourites",

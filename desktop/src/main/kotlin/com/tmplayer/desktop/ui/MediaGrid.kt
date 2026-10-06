@@ -3,6 +3,7 @@ package com.tmplayer.desktop.ui
 import androidx.compose.runtime.produceState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.tmplayer.ui.theme.Focus
 import com.tmplayer.data.DiskInfo
 import com.tmplayer.desktop.DesktopPaths
 import androidx.compose.animation.core.animateFloatAsState
@@ -56,9 +57,9 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AlertDialog
+import com.tmplayer.ui.components.TmAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
+import com.tmplayer.ui.components.TmDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -537,7 +538,7 @@ internal fun Poster(
                 .aspectRatio(16f / 9f)
                 .graphicsLayer { scaleX = scale; scaleY = scale }
                 .clip(MaterialTheme.shapes.medium)
-                .then(if (focused || selected) Modifier.border(3.dp, Tone.accent, MaterialTheme.shapes.medium) else Modifier),
+                .then(if (focused || selected) Modifier.border(Focus.Edge, Tone.accent, MaterialTheme.shapes.medium) else Modifier),
         ) {
             art()
             if (progress != null && progress > 0f) {
@@ -611,7 +612,7 @@ internal fun withFree(label: String, freeBytes: Long): String =
  * and Remove from Downloads once it is kept), Open in another app for a whole file, Copy link.
  */
 @Composable
-private fun TileMenu(
+internal fun TileMenu(
     state: ShellState,
     item: MediaItem,
     chatTitle: String,
@@ -633,7 +634,7 @@ private fun TileMenu(
         if (expanded) value = withContext(Dispatchers.IO) { DiskInfo.of(DesktopPaths.downloadsDir).freeBytes }
     }
 
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+    TmDropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
       if (!fileMenu) {
         extra?.invoke(onDismiss)
       } else {
@@ -776,7 +777,7 @@ private fun SponsoredCard(ad: SponsoredItem, model: MediaListViewModel) {
     // Telegram answers a first report with the reasons it accepts; the chosen one is sent back
     // the same way, and may itself be answered with a narrower list.
     reportOptions?.let { (title, options) ->
-        AlertDialog(
+        TmAlertDialog(
             onDismissRequest = { reportOptions = null },
             title = { Text(title.ifBlank { "Why are you reporting this?" }) },
             text = {

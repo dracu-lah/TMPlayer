@@ -3,7 +3,7 @@ package com.tmplayer.desktop.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.material3.AlertDialog
+import com.tmplayer.ui.components.TmAlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,7 +41,7 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
     LaunchedEffect(Unit) {
         size = withContext(Dispatchers.IO) { DownloadIndex.bytesOnDisk(runCatching { settings.downloadsNow() }.getOrDefault(emptyList())) }
     }
-    AlertDialog(
+    TmAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Sign out of Telegram?") },
         text = {

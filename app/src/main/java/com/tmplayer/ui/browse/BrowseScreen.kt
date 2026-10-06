@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import com.tmplayer.ui.theme.Focus
 import com.tmplayer.data.SettingsStore
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.CircleShape
@@ -61,7 +62,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
+import com.tmplayer.ui.components.TmDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon as M3Icon
@@ -697,7 +698,7 @@ internal fun RowScope.BarOverflow(items: List<Pair<String, () -> Unit>>) {
     IconButton(onClick = { open = true }) {
         M3Icon(Icons.Filled.MoreVert, contentDescription = "More options")
     }
-    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+    TmDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
         items.forEach { (label, action) ->
             DropdownMenuItem(
                 text = { M3Text(label) },
@@ -888,7 +889,7 @@ private fun ContinueTile(
                 .focusScale(focused)
                 .clip(RoundedCornerShape(Corner.Medium))
                 .background(if (focused) Tone.surfaceHigh else Tone.surface)
-                .border(3.dp, border, RoundedCornerShape(Corner.Medium))
+                .border(Focus.Edge, border, RoundedCornerShape(Corner.Medium))
                 .holdable(
                     interactionSource = interactions,
                     onClick = onResume,
@@ -1029,7 +1030,7 @@ private fun ContinueCard(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(Corner.Large))
                 .background(Tone.surface)
-                .border(2.dp, border, RoundedCornerShape(Corner.Large))
+                .border(Focus.Edge, border, RoundedCornerShape(Corner.Large))
                 .holdable(
                     interactionSource = interactions,
                     onClick = onResume,
@@ -1921,7 +1922,7 @@ private fun ChatTile(
                 .clip(RoundedCornerShape(Corner.Large))
                 .background(if (focused) Tone.surfaceHigh else Tone.surface)
                 .border(
-                    width = 3.dp,
+                    width = Focus.Edge,
                     color = if (focused) Tone.accent else Color.Transparent,
                     shape = RoundedCornerShape(Corner.Large),
                 )
@@ -1968,7 +1969,7 @@ private fun ChatRow(
             .clip(RoundedCornerShape(Corner.Large))
             .background(if (focused) Tone.surfaceHigh else Tone.surface)
             .border(
-                width = 3.dp,
+                width = Focus.Edge,
                 color = if (focused) Tone.accent else Color.Transparent,
                 shape = RoundedCornerShape(Corner.Large),
             )

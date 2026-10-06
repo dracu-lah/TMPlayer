@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
+import com.tmplayer.ui.components.TmAlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -163,7 +163,7 @@ internal fun StorageGroup(state: ShellState) {
 
     when (val d = dialog) {
         null -> Unit
-        is StorageDialog.Refused -> AlertDialog(
+        is StorageDialog.Refused -> TmAlertDialog(
             onDismissRequest = { dialog = null },
             title = { Text("Choose another folder") },
             text = { Text(d.reason) },
