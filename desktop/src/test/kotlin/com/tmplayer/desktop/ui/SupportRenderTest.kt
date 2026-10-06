@@ -67,7 +67,7 @@ class SupportRenderTest {
     fun `each support QR code reads back as its own link`() {
         assertEquals("https://github.com/sponsors/dracu-lah", About.SPONSORS)
         assertEquals("https://buymeacoffee.com/nevil.dev", About.COFFEE)
-        for (link in About.supportLinks) {
+        for (link in About.supportLinks("card1") + About.supportLinks("settings") + About.supportLinks("about")) {
             val bitmap = requireNotNull(QrCode.render(link.url, 400))
             val pixels = IntArray(bitmap.width * bitmap.height)
             bitmap.readPixels(pixels)
@@ -79,13 +79,14 @@ class SupportRenderTest {
     @Test
     fun settingsRowAndCodes() {
         save("support-settings.png", render(dark = true, height = 3200) { SettingsPage(shell, "2.0.0") })
-        save("support-codes.png", render(dark = true) { SupportPopup(onClose = {}) })
-        save("support-codes-light.png", render(dark = false) { SupportPopup(onClose = {}) })
+        save("support-codes.png", render(dark = true) { SupportPopup(from = "settings", onClose = {}) })
+        save("support-codes-light.png", render(dark = false) { SupportPopup(from = "settings", onClose = {}) })
     }
 
     @Test
     fun aboutRow() {
         save("support-about.png", render(dark = true, height = 1400) { AboutPage("2.0.0", onBack = {}) })
+        save("support-about-thanks.png", render(dark = true, height = 1400) { AboutPage("2.0.0", supporter = true, onBack = {}) })
     }
 
     @Test
@@ -95,19 +96,32 @@ class SupportRenderTest {
             ChatSummary(id = 2, title = "Film Club", miniThumbnail = null, photoFileId = 0, kind = ChatKind.Channel, unreadCount = 12),
             ChatSummary(id = 3, title = "Weekend series", miniThumbnail = null, photoFileId = 0, kind = ChatKind.Group),
         )
+        val counters = com.tmplayer.data.SupportReminder.Counters(completedWatches = 7, watchTimeMs = 11L * 60 * 60 * 1000)
         for (dark in listOf(true, false)) {
-            save(
-                if (dark) "support-card.png" else "support-card-light.png",
-                render(dark = dark) {
-                    Box(Modifier.fillMaxSize()) {
-                        Column(Modifier.fillMaxSize()) {
-                            PageHeader("Chats", "Everything, newest first")
-                            chats.forEach { ChatRow(it, favourite = false, onOpen = {}, onStar = {}) }
+            for (rung in 1..3) {
+                val name = "support-card-rung$rung" + if (dark) "" else "-light"
+                save(
+                    "$name.png",
+                    render(dark = dark) {
+                        Box(Modifier.fillMaxSize()) {
+                            Column(Modifier.fillMaxSize()) {
+                                PageHeader("Chats", "Everything, newest first")
+                                chats.forEach { ChatRow(it, favourite = false, onOpen = {}, onStar = {}) }
+                            }
+                            SupportCard(
+                                rung = rung,
+                                counters = counters,
+                                onSupport = {},
+                                onStar = {},
+                                onShare = {},
+                                onLater = {},
+                                onAlready = {},
+                                modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
+                            )
                         }
-                        SupportCard(onSupport = {}, onNotNow = {}, onNever = {}, modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp))
-                    }
-                },
-            )
+                    },
+                )
+            }
         }
     }
 

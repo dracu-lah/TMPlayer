@@ -74,7 +74,14 @@ private val SUPPORT_FIRST_SEEN = longPreferencesKey("support_first_seen")
 private val SUPPORT_PLAYS = longPreferencesKey("support_plays")
 private val SUPPORT_SNOOZED_UNTIL = longPreferencesKey("support_snoozed_until")
 private val SUPPORT_NEVER = booleanPreferencesKey("support_never")
-private val SUPPORT_KEYS = listOf(SUPPORT_FIRST_SEEN, SUPPORT_PLAYS, SUPPORT_SNOOZED_UNTIL)
+private val SUPPORT_WATCHES = longPreferencesKey("support_watches")
+private val SUPPORT_WATCH_MS = longPreferencesKey("support_watch_ms")
+private val SUPPORT_ASKED = longPreferencesKey("support_asked")
+private val SUPPORT_SUPPORTER = booleanPreferencesKey("support_supporter")
+private val SUPPORT_RECENT = stringPreferencesKey("support_recent")
+private val SUPPORT_KEYS = listOf(
+    SUPPORT_FIRST_SEEN, SUPPORT_PLAYS, SUPPORT_SNOOZED_UNTIL, SUPPORT_WATCHES, SUPPORT_WATCH_MS, SUPPORT_ASKED,
+)
 
 /**
  * The one video the watch cache is holding: which message it came from, and what it is called.
@@ -220,6 +227,8 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
             val migrated = prefs[DOWNLOADS_MIGRATED]
             val support = SUPPORT_KEYS.mapNotNull { key -> prefs[key]?.let { Pair(key, it) } }
             val supportNever = prefs[SUPPORT_NEVER]
+            val supporter = prefs[SUPPORT_SUPPORTER]
+            val recent = prefs[SUPPORT_RECENT]
             val kept = if (keepDownloads) {
                 prefs.asMap().mapNotNull { (key, value) ->
                     val ids = key.name.removePrefixOrNull("dl_") ?: return@mapNotNull null
@@ -234,6 +243,8 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
             dynamic?.let { prefs[DYNAMIC_COLOUR] = it }
             for ((key, value) in support) prefs[key] = value
             supportNever?.let { prefs[SUPPORT_NEVER] = it }
+            supporter?.let { prefs[SUPPORT_SUPPORTER] = it }
+            recent?.let { prefs[SUPPORT_RECENT] = it }
             if (keepDownloads) {
                 for ((key, value) in kept) prefs[key] = value
                 migrated?.let { prefs[DOWNLOADS_MIGRATED] = it }
@@ -504,9 +515,12 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
 
     private fun supportCountersOf(prefs: Preferences) = SupportReminder.Counters(
         firstSeenAt = prefs[SUPPORT_FIRST_SEEN] ?: 0L,
-        plays = (prefs[SUPPORT_PLAYS] ?: 0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+        completedWatches = (prefs[SUPPORT_WATCHES] ?: 0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+        watchTimeMs = prefs[SUPPORT_WATCH_MS] ?: 0L,
+        asked = (prefs[SUPPORT_ASKED] ?: 0L).coerceIn(0L, SupportReminder.MAX_ASKS.toLong()).toInt(),
         snoozedUntil = prefs[SUPPORT_SNOOZED_UNTIL] ?: 0L,
         neverAgain = prefs[SUPPORT_NEVER] ?: false,
+        supporter = prefs[SUPPORT_SUPPORTER] ?: false,
     )
 
     /**
@@ -517,7 +531,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
         prefs.edit { if ((it[SUPPORT_FIRST_SEEN] ?: 0L) <= 0L) it[SUPPORT_FIRST_SEEN] = now }
     }
 
-    /** One more video started. Also starts the day count, if launch somehow did not. */
+    /** One more video started. Only informational now: the ladder counts finished videos. */
     suspend fun noteSupportPlay(now: Long) {
         prefs.edit {
             if ((it[SUPPORT_FIRST_SEEN] ?: 0L) <= 0L) it[SUPPORT_FIRST_SEEN] = now
@@ -525,12 +539,42 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
         }
     }
 
-    /** The card was shown, or "Not now" pressed: away for [SupportReminder.SNOOZE_DAYS] days. */
-    suspend fun snoozeSupport(now: Long) {
-        prefs.edit { it[SUPPORT_SNOOZED_UNTIL] = SupportReminder.snoozedUntil(now) }
+    /**
+     * A video watched to the end ([SupportReminder.Finished]). Counts once per hour for the same
+     * video, however often it is opened again.
+     */
+    suspend fun noteSupportCompleted(key: String, now: Long) {
+        prefs.edit {
+            val (recent, counts) = SupportReminder.stepCompleted(SupportReminder.decodeRecent(it[SUPPORT_RECENT]), key, now)
+            it[SUPPORT_RECENT] = SupportReminder.encodeRecent(recent)
+            if (counts) it[SUPPORT_WATCHES] = (it[SUPPORT_WATCHES] ?: 0L) + 1
+        }
     }
 
-    /** "Don't ask again". The Settings row and About keep the links. */
+    /** Adds the time watched since the last progress report of [key] to the running total. */
+    private fun noteSupportProgress(prefs: MutablePreferences, key: String, positionMs: Long, now: Long) {
+        val (recent, added) = SupportReminder.stepTime(SupportReminder.decodeRecent(prefs[SUPPORT_RECENT]), key, positionMs, now)
+        prefs[SUPPORT_RECENT] = SupportReminder.encodeRecent(recent)
+        if (added > 0L) prefs[SUPPORT_WATCH_MS] = (prefs[SUPPORT_WATCH_MS] ?: 0L) + added
+    }
+
+    /**
+     * A card of [rung] was shown, whatever the viewer did with it: the ladder moves up one step and
+     * the next card waits its gap (see [SupportReminder.snoozedUntil]).
+     */
+    suspend fun recordSupportAsk(now: Long, rung: Int) {
+        prefs.edit {
+            it[SUPPORT_ASKED] = rung.toLong().coerceIn(1L, SupportReminder.MAX_ASKS.toLong())
+            it[SUPPORT_SNOOZED_UNTIL] = SupportReminder.snoozedUntil(now, rung)
+        }
+    }
+
+    /** "I already support", or the last ask's "Done": no more cards, and About says thank you. */
+    suspend fun markSupporter() {
+        prefs.edit { it[SUPPORT_SUPPORTER] = true }
+    }
+
+    /** The old "Don't ask again". The Settings row and About keep the links. */
     suspend fun neverAskSupport() {
         prefs.edit { it[SUPPORT_NEVER] = true }
     }
@@ -1145,6 +1189,8 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
     ) {
         prefs.edit { prefs ->
             val key = resumeKey(chatId, messageId)
+            // Watch time for the support ladder, read off the same heartbeat.
+            noteSupportProgress(prefs, progressKey(chatId, messageId), positionMs, System.currentTimeMillis())
             // In the first three minutes, or in the credits: there is nothing worth resuming.
             if (!ResumeRules.keeps(positionMs, durationMs)) {
                 prefs.remove(key)

@@ -128,13 +128,13 @@ class ThemeAuditRenderTest {
             shot("support") {
                 Box(Modifier.fillMaxSize()) {
                     SettingsPage(shell, "2.0.0")
-                    SupportPopup(onClose = {})
+                    SupportPopup(from = "settings", onClose = {})
                 }
             }
             shot("card") {
                 Box(Modifier.fillMaxSize()) {
                     ChatsList()
-                    SupportCard(onSupport = {}, onNotNow = {}, onNever = {}, modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp))
+                    SupportCard(rung = 1, counters = com.tmplayer.data.SupportReminder.Counters(completedWatches = 7, watchTimeMs = 11L * 60 * 60 * 1000), onSupport = {}, onStar = {}, onShare = {}, onLater = {}, onAlready = {}, modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp))
                 }
             }
             shot("signin", sidebar = false) { SignInScreen(AuthState.Phone()) }

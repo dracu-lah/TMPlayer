@@ -41,6 +41,8 @@ import androidx.compose.ui.unit.min
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.data.SupportReminder
+import com.tmplayer.i18n.L
 import com.tmplayer.ui.about.About
 import com.tmplayer.ui.auth.QrCode
 import com.tmplayer.ui.components.FloatingWindow
@@ -59,21 +61,23 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * "Support TMPlayer": both ways to chip in, each as a QR code with its address under it.
+ * "Support TMPlayer": one QR code for the support page, which lists both donate links, the star
+ * and the share, with its address under it. [from] tags the visit (`card1`, `settings`, `about`).
  *
- * A TV has no browser, so the codes are the point there and Close holds the remote. A phone gets an
- * Open button under each code as well; the code is still useful on a phone for somebody who would
+ * A TV has no browser, so the code is the point there and Close holds the remote. A phone gets an
+ * Open button under the code as well; the code is still useful on a phone for somebody who would
  * rather pay from another device.
  */
 @Composable
-fun SupportDialog(onClose: () -> Unit) {
+fun SupportDialog(from: String, onClose: () -> Unit) {
     val s = LocalStrings.current
     val touch = isTouch()
     val context = LocalContext.current
     val close = remember { FocusRequester() }
+    val link = remember(from) { About.supportLinks(from).first() }
 
     FloatingWindow(onDismiss = onClose, ignoreRelease = true) {
-        val panel = min(maxWidth - PhonePad.Side * 2, if (touch) 560.dp else 860.dp)
+        val panel = min(maxWidth - PhonePad.Side * 2, if (touch) 440.dp else 520.dp)
         Column(
             Modifier
                 .width(panel)
@@ -90,18 +94,7 @@ fun SupportDialog(onClose: () -> Unit) {
                 color = Tone.muted,
                 textAlign = TextAlign.Center,
             )
-            Row(
-                Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(if (touch) 12.dp else 32.dp),
-            ) {
-                About.supportLinks.forEach { link ->
-                    SupportCode(
-                        link,
-                        modifier = Modifier.weight(1f),
-                        onOpen = if (touch) ({ openLink(context, link.url) }) else null,
-                    )
-                }
-            }
+            SupportCode(link, onOpen = if (touch) ({ openLink(context, link.url) }) else null)
             Spacer(Modifier.height(4.dp))
             TmSecondaryButton(onClick = onClose, modifier = Modifier.focusRequester(close)) { Label(s.commonClose) }
         }
@@ -110,17 +103,17 @@ fun SupportDialog(onClose: () -> Unit) {
     if (!touch) LaunchedEffect(Unit) { runCatching { close.requestFocus() } }
 }
 
-/** One link: its code on a white plate, what it is, and the address to type instead. */
+/** The link's code on a white plate, what it is, and the address to type instead. */
 @Composable
-private fun SupportCode(link: About.Link, modifier: Modifier, onOpen: (() -> Unit)?) {
+private fun SupportCode(link: About.Link, onOpen: (() -> Unit)?) {
     val s = LocalStrings.current
     val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = link.url) {
         value = withContext(Dispatchers.Default) { QrCode.render(link.url, QR_PIXELS) }
     }
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(
             Modifier
-                .widthIn(max = if (isTouch()) 260.dp else 210.dp)
+                .widthIn(max = if (isTouch()) 260.dp else 230.dp)
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(Corner.Large))
@@ -138,30 +131,58 @@ private fun SupportCode(link: About.Link, modifier: Modifier, onOpen: (() -> Uni
         }
         Spacer(Modifier.height(2.dp))
         Text(link.title, style = MaterialTheme.typography.titleMedium, color = Tone.text, textAlign = TextAlign.Center)
-        Text(readableUrl(link.url), style = MaterialTheme.typography.bodyMedium, color = Tone.muted, textAlign = TextAlign.Center)
+        Text(readableUrl(link.url.substringBefore('?')), style = MaterialTheme.typography.bodyMedium, color = Tone.muted, textAlign = TextAlign.Center)
         if (onOpen != null) {
             TmButton(onClick = onOpen) { Label(s.commonOpen) }
         }
     }
 }
 
+/** The system share sheet with a line about TMPlayer and its site, for the second rung's "Share". */
+fun shareTmplayer(context: android.content.Context) {
+    val text = L.supportShareText(About.SITE)
+    val send = android.content.Intent(android.content.Intent.ACTION_SEND)
+        .setType("text/plain")
+        .putExtra(android.content.Intent.EXTRA_TEXT, text)
+    runCatching {
+        context.startActivity(
+            android.content.Intent.createChooser(send, L.supportShareTitle)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+}
+
 /**
- * The gentle reminder: a small card over the chat list, never over the player, shown at most once
- * every 60 days after real use (see [com.tmplayer.data.SupportReminder]). Nothing behind it is
- * blocked. On a TV it takes the remote's focus, on "Not now", since a card the D-pad cannot reach
- * could not be dismissed; Back is "Not now" too.
+ * The gentle ask: a small card over the chat list or Downloads, never over the player, at a good
+ * moment and at most three times for good (see [com.tmplayer.data.SupportReminder]). [rung] is
+ * which of the three it is. Nothing behind it is blocked. On a TV it takes the remote's focus, on
+ * the calm button, since a card the D-pad cannot reach could not be dismissed; Back is "Later".
  */
 @Composable
 fun SupportCard(
+    rung: Int,
+    counters: SupportReminder.Counters,
     onSupport: () -> Unit,
-    onNotNow: () -> Unit,
-    onNever: () -> Unit,
+    onStar: () -> Unit,
+    onShare: () -> Unit,
+    onLater: () -> Unit,
+    onAlready: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val s = LocalStrings.current
     val touch = isTouch()
-    val notNow = remember { FocusRequester() }
-    if (!touch) BackHandler(onBack = onNotNow)
+    val calm = remember { FocusRequester() }
+    if (!touch) BackHandler(onBack = onLater)
+
+    // Rung 1 and 3 ask for money; rung 2 asks for a star or a share, which a TV cannot do, so a
+    // TV's second card opens the codes for the page that has both. The last card ends with "Done".
+    val primaries: List<Pair<String, () -> Unit>> = when {
+        rung == 2 && touch -> listOf(s.supportStar to onStar, s.supportShare to onShare)
+        rung == 2 -> listOf(s.supportStarOrShare to onSupport)
+        else -> listOf(s.supportSupport to onSupport)
+    }
+    val secondaries: List<Pair<String, () -> Unit>> =
+        if (rung == 3) listOf(s.supportDone to onAlready) else listOf(s.supportLater to onLater, s.supportAlready to onAlready)
 
     Column(
         modifier
@@ -172,17 +193,22 @@ fun SupportCard(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Icon(Icons.Filled.Favorite, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(24.dp))
-            Text(About.REMINDER_TITLE, style = MaterialTheme.typography.titleMedium, color = Tone.text)
+            Text(About.reminderTitle(rung), style = MaterialTheme.typography.titleMedium, color = Tone.text)
         }
-        Text(About.REMINDER_TEXT, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+        Text(About.reminderText(rung, counters), style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
         if (touch) {
-            // A phone held upright has no room for three buttons in a row: the two everyday
-            // answers share the width, and the final one sits under them.
+            // A phone held upright has no room for four buttons in a row: what the card asks for
+            // shares the first row, the two quiet answers the second.
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TmSecondaryButton(onClick = onNotNow, modifier = Modifier.weight(1f)) { Label(s.supportNotNow) }
-                TmButton(onClick = onSupport, modifier = Modifier.weight(1f)) { Label(s.supportSupport) }
+                primaries.forEach { (label, action) ->
+                    TmButton(onClick = action, modifier = Modifier.weight(1f)) { Label(label) }
+                }
             }
-            TmSecondaryButton(onClick = onNever, modifier = Modifier.fillMaxWidth()) { Label(s.supportNever) }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                secondaries.forEach { (label, action) ->
+                    TmSecondaryButton(onClick = action, modifier = Modifier.weight(1f)) { Label(label) }
+                }
+            }
         } else {
             // The card floats, so a button at rest takes the step above its fill (see FloatingTone.control).
             CompositionLocalProvider(LocalOnFloating provides true) {
@@ -191,15 +217,21 @@ fun SupportCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TmSecondaryButton(onClick = onNever) { Label(s.supportNever) }
-                    TmSecondaryButton(onClick = onNotNow, modifier = Modifier.focusRequester(notNow)) { Label(s.supportNotNow) }
-                    TmButton(onClick = onSupport) { Label(s.supportSupport) }
+                    // "I already support" first, then the calm button, which holds the focus.
+                    secondaries.asReversed().forEachIndexed { index, (label, action) ->
+                        val isCalm = index == secondaries.lastIndex
+                        TmSecondaryButton(
+                            onClick = action,
+                            modifier = if (isCalm) Modifier.focusRequester(calm) else Modifier,
+                        ) { Label(label) }
+                    }
+                    primaries.forEach { (label, action) -> TmButton(onClick = action) { Label(label) } }
                 }
             }
         }
     }
 
-    if (!touch) LaunchedEffect(Unit) { runCatching { notNow.requestFocus() } }
+    if (!touch) LaunchedEffect(Unit) { runCatching { calm.requestFocus() } }
 }
 
 /**

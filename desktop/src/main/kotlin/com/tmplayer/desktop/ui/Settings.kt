@@ -87,8 +87,9 @@ import kotlinx.coroutines.launch
 fun SettingsPage(state: ShellState, version: String = "") {
     val s = LocalStrings.current
     var showAbout by remember { mutableStateOf(false) }
+    val supportCounters by state.settings.supportCounters.collectAsState(initial = SupportReminder.Counters())
     if (showAbout) {
-        AboutPage(version, onBack = { showAbout = false })
+        AboutPage(version, supporter = supportCounters.supporter, onBack = { showAbout = false })
         return
     }
     val settings = state.settings
@@ -358,7 +359,7 @@ fun SettingsPage(state: ShellState, version: String = "") {
                     OutlinedButton(onClick = { OpenExternal.browse(About.LEGAL) }) { Text(s.commonOpen) }
                 }
                 if (SupportReminder.enabled) {
-                    Setting(About.SUPPORT_TITLE, s.settingsSupportDetail) {
+                    Setting(if (supportCounters.supporter) About.SUPPORT_THANKS_TITLE else About.SUPPORT_TITLE, s.settingsSupportDetail) {
                         OutlinedButton(onClick = { supporting = true }) { Text(s.commonShow) }
                     }
                 }
@@ -382,7 +383,7 @@ fun SettingsPage(state: ShellState, version: String = "") {
     }
 
     if (confirmSignOut) SignOutDialog(state, onDismiss = { confirmSignOut = false })
-    if (supporting) SupportPopup(onClose = { supporting = false })
+    if (supporting) SupportPopup(from = "settings", onClose = { supporting = false })
     if (pickingLanguage) LanguagePopup(settings, onClose = { pickingLanguage = false })
     if (stylingSubtitles) SubtitleStyleDialog(settings, subtitleStyle, onClose = { stylingSubtitles = false })
     if (whatsNew) WhatsNewPopup(onClose = { whatsNew = false })

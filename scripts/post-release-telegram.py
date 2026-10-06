@@ -7,6 +7,7 @@ went out before the job could, so every announcement has one format:
     TMPlayer X.Y.Z is out
     <the annotated tag's notes>
     Download, full release notes, and "installed copies offer each update"
+    One closing line about supporting the project, voluntary and tagged ?from=telegram
 
     scripts/post-release-telegram.py --version 1.22.0 --notes "$NOTES"
     scripts/post-release-telegram.py --version 1.16.0 --notes "..." --dry-run
@@ -25,6 +26,7 @@ import urllib.request
 
 REPO = "dracu-lah/TMPlayer"
 DOWNLOAD = "https://tmplayer.org/download/"
+SUPPORT = "https://tmplayer.org/support/?from=telegram"
 # Telegram allows 4,096 characters in a message; the frame around the notes takes the rest.
 NOTES_LIMIT = 3500
 
@@ -42,6 +44,7 @@ def message(version: str, notes: str) -> str:
         f'📝 <a href="{release}">Full release notes</a>'
     )
     parts.append("Installed copies offer each update.")
+    parts.append(f'💛 TMPlayer is free for everyone. <a href="{SUPPORT}">Ways to support it</a>, if you like. It is voluntary.')
     return "\n\n".join(parts)
 
 

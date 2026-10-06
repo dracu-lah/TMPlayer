@@ -107,6 +107,7 @@ import com.tmplayer.ui.i18n.rememberWhatsNew
 import com.tmplayer.data.WhatsNew
 import com.tmplayer.data.AppLocales
 import com.tmplayer.ui.settings.SupportDialog
+import com.tmplayer.ui.settings.shareTmplayer
 import com.tmplayer.ui.theme.TMPlayerTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -216,6 +217,10 @@ class MainActivity : ComponentActivity() {
         if (BuildConfig.DEBUG && intent?.getBooleanExtra(EXTRA_SUPPORT_REMINDER, false) == true) {
             SupportReminder.forced = true
         }
+        // `--ei support_rung 2` forces the second rung's card, and so on (1 to 3).
+        if (BuildConfig.DEBUG) {
+            intent?.getIntExtra(EXTRA_SUPPORT_RUNG, 0)?.takeIf { it > 0 }?.let { SupportReminder.forcedRung = it }
+        }
         noteRequestedScreen(intent)
         setContent {
             TMPlayerTheme { Root() }
@@ -271,6 +276,9 @@ class MainActivity : ComponentActivity() {
 
         /** Debug and promo builds only: show the support card now. See [SupportReminder.forced]. */
         const val EXTRA_SUPPORT_REMINDER = "support_reminder"
+
+        /** Debug and promo builds only: `--ei support_rung N` shows rung N's card (1 to 3). */
+        const val EXTRA_SUPPORT_RUNG = "support_rung"
 
         const val OPEN_DOWNLOADS = SCREEN_DOWNLOADS
 
@@ -380,16 +388,18 @@ private fun Root() {
     val whatsNew = rememberWhatsNew(settings, BuildConfig.VERSION_NAME, hold = !inShell)
     var changelogQr by remember { mutableStateOf(false) }
 
-    // The support card: rare, after real use, never over the player or the update popup. The rule
-    // and its counters are SupportReminder's; showing it starts the 60 day snooze.
-    var supportCard by remember { mutableStateOf(false) }
-    var supporting by remember { mutableStateOf(false) }
+    // The support ask: at most three for good, and only at a good moment (a video watched to the
+    // end, a download finished) while this list or Downloads is up, never in the player. The
+    // ladder and its counters are SupportReminder's. [supportRung] is the card on screen, 0 for none.
+    var supportRung by remember { mutableStateOf(0) }
+    var supportCounters by remember { mutableStateOf(SupportReminder.Counters()) }
+    var supporting by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { runCatching { settings.noteSupportFirstSeen(System.currentTimeMillis()) } }
-    LaunchedEffect(inShell) {
-        if (!inShell || supportCard) return@LaunchedEffect
-        delay(SUPPORT_CARD_DELAY_MS)
-        if (!showUpdate && runCatching { SupportReminder.claim(settings, System.currentTimeMillis()) }.getOrDefault(false)) {
-            supportCard = true
+    // Finished videos are counted here, in the process, so a watch counts even while a screen is
+    // being rebuilt behind the player.
+    LaunchedEffect(Unit) {
+        SupportReminder.finished.collect { done ->
+            runCatching { settings.noteSupportCompleted(done.key, done.at) }
         }
     }
 
@@ -544,6 +554,34 @@ private fun Root() {
         downloadsOnCached = false
         screen = Screen.Downloads
         MainActivity.requestedScreen.value = null
+    }
+    val supportMoment by SupportReminder.moment.collectAsStateWithLifecycle()
+    val supportScreen = screen is Screen.Chats || screen is Screen.Downloads
+    var supportForcedShown by remember { mutableStateOf(false) }
+    LaunchedEffect(supportMoment, supportScreen, inShell, showUpdate, languageNotice.language, supportRung) {
+        if (!inShell || !supportScreen || showUpdate || languageNotice.language != null || supportRung != 0) {
+            return@LaunchedEffect
+        }
+        val forced = SupportReminder.forcedRung
+        if (forced > 0) {
+            // A debug build asked for this rung's card: once, after the list has settled.
+            if (supportForcedShown) return@LaunchedEffect
+            delay(SUPPORT_CARD_DELAY_MS)
+            supportForcedShown = true
+            supportCounters = SupportReminder.Counters(completedWatches = 7, watchTimeMs = 11L * 60 * 60 * 1000)
+            supportRung = forced
+            return@LaunchedEffect
+        }
+        if (supportMoment == 0L) return@LaunchedEffect
+        delay(SUPPORT_CARD_DELAY_MS)
+        if (!SupportReminder.takeMoment(System.currentTimeMillis())) return@LaunchedEffect
+        val now = System.currentTimeMillis()
+        val counters = runCatching { settings.supportCountersNow() }.getOrNull() ?: return@LaunchedEffect
+        val rung = runCatching { SupportReminder.claim(settings, now) }.getOrDefault(0)
+        if (rung > 0) {
+            supportCounters = counters
+            supportRung = rung
+        }
     }
     // Saveable, not just remembered. Playing a video puts a second activity in front of this one
     // and a 1 GB stick will kill what is behind it, so this composable is routinely rebuilt on the
@@ -1165,13 +1203,21 @@ private fun Root() {
         }
         if (changelogQr) LinkQrDialog(WhatsNew.CHANGELOG, s.settingsQrChangelogPage, onClose = { changelogQr = false })
 
-        if (supportCard && noticeLanguage == null && screen is Screen.Chats && !showUpdate) {
+        if (supportRung > 0 && noticeLanguage == null && (screen is Screen.Chats || screen is Screen.Downloads) && !showUpdate) {
+            val rung = supportRung
             SupportCard(
-                onSupport = { supportCard = false; supporting = true },
-                onNotNow = { supportCard = false },
-                onNever = {
-                    supportCard = false
-                    scope.launch { runCatching { settings.neverAskSupport() } }
+                rung = rung,
+                counters = supportCounters,
+                onSupport = { supportRung = 0; supporting = "card$rung" },
+                onStar = {
+                    supportRung = 0
+                    if (!openLink(context, com.tmplayer.ui.about.About.SOURCE)) supporting = "card$rung"
+                },
+                onShare = { supportRung = 0; shareTmplayer(context) },
+                onLater = { supportRung = 0 },
+                onAlready = {
+                    supportRung = 0
+                    if (SupportReminder.forcedRung == 0) scope.launch { runCatching { settings.markSupporter() } }
                 },
                 modifier = Modifier
                     .align(if (FormFactor.isTv(context)) Alignment.BottomEnd else Alignment.BottomCenter)
@@ -1179,7 +1225,7 @@ private fun Root() {
                     .padding(if (FormFactor.isTv(context)) 40.dp else 16.dp),
             )
         }
-        if (supporting) SupportDialog(onClose = { supporting = false })
+        supporting?.let { from -> SupportDialog(from = from, onClose = { supporting = null }) }
 
         ConnectionStatus(
             notice = connectionNotice,

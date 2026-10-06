@@ -3601,6 +3601,12 @@
     <priority>0.5</priority>
   </url>
   <url>
+    <loc>https://tmplayer.org/support/</loc>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://tmplayer.org/changelog/</loc>
     <lastmod>2026-10-05</lastmod>
     <changefreq>weekly</changefreq>

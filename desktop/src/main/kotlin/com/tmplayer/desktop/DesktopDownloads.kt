@@ -463,6 +463,7 @@ class DesktopDownloadRunner(
 
         withContext(NonCancellable) {
             settings.noteDownload(request.item(), request.chatTitle, target.absolutePath)
+            com.tmplayer.data.SupportReminder.downloadFinished()
             // It belongs to the viewer now: no cache rule may count it, and TDLib, whose copy has
             // just left its directory, is told so instead of finding out on the next stream.
             runCatching { settings.forgetCachedVideo(request.chatId, request.messageId) }

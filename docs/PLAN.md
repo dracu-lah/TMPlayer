@@ -113,7 +113,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 **Phase H. Player declutter and support asks (planned 2026-10-06, design: docs/design/2026-10-06-player-declutter-and-support-asks-plan.md)**
 - [ ] CP37 Android player declutter: one visible path per action on phone and TV
 - [x] CP38 Desktop player declutter: bar, main menu, shortcut sheet (e07f7cb; the NextUpCard and Countdown sheet were already exclusive, no cut; Picture shape moved into Playback options; unused en.json strings kept until langsync prunes the locales)
-- [ ] CP39 Support asks v2: positive moments, three asks at most, thank-you state, tmplayer.org/support
+- [x] CP39 Support asks v2: positive moments, three asks at most, thank-you state, tmplayer.org/support (45d6037, ladder, counters, triggers and the site page done; ladder unit tested, phone rungs 1 to 3 on the emulator, desktop render test, site at 390 and 1440; TV and the phone thank-you state not shot on an emulator, none was free; the site page is English only, like legal)
 - [ ] CP40 Episodes button and modal in the player (phone, TV, desktop), after CP37 and CP38
 - [ ] CP43 Sidebar with fewer entries: fold the eight chat sections into two entries with filter chips (before CP41)
 - [ ] CP41 Setting to hide Telegram's default chat groups everywhere, with warning prompts, plus a sweep for settings that lack one

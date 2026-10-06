@@ -45,7 +45,7 @@ import com.tmplayer.ui.theme.Tone
  * page itself rather than in a browser, so they read the same offline.
  */
 @Composable
-fun AboutPage(version: String, onBack: () -> Unit) {
+fun AboutPage(version: String, supporter: Boolean = false, onBack: () -> Unit) {
     val s = LocalStrings.current
     var reading by remember { mutableStateOf(false) }
     val scroll = rememberScrollState()
@@ -67,7 +67,7 @@ fun AboutPage(version: String, onBack: () -> Unit) {
                 Modifier.widthIn(max = 760.dp).padding(horizontal = 24.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (reading) Notices() else Links(version, onRead = { reading = true })
+                if (reading) Notices() else Links(version, supporter, onRead = { reading = true })
             }
         }
         VerticalScrollbar(rememberScrollbarAdapter(scroll), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
@@ -75,10 +75,10 @@ fun AboutPage(version: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun Links(version: String, onRead: () -> Unit) {
+private fun Links(version: String, supporter: Boolean, onRead: () -> Unit) {
     val s = LocalStrings.current
     var supporting by remember { mutableStateOf(false) }
-    if (supporting) SupportPopup(onClose = { supporting = false })
+    if (supporting) SupportPopup(from = "about", onClose = { supporting = false })
     Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
         Image(AppLogo.Mark, contentDescription = null, modifier = Modifier.size(72.dp).clip(RoundedCornerShape(16.dp)))
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -88,7 +88,7 @@ private fun Links(version: String, onRead: () -> Unit) {
         }
     }
 
-    About.groups(version).forEachIndexed { index, group ->
+    About.groups(version, supporter = supporter).forEachIndexed { index, group ->
         Group(group.title)
         // TMDB's logo with its notice, smaller than TMPlayer's own mark.
         if (group.tmdbLogo) com.tmplayer.ui.about.TmdbMark(Modifier.padding(bottom = 6.dp))
@@ -98,7 +98,7 @@ private fun Links(version: String, onRead: () -> Unit) {
                 OutlinedButton(onClick = onRead) { Text(s.aboutRead) }
             }
         }
-        if (group.title == About.SUPPORT_TITLE) {
+        if (group.support) {
             Setting(s.aboutShowQr, s.aboutShowQrDetail) {
                 OutlinedButton(onClick = { supporting = true }) { Text(s.commonShow) }
             }

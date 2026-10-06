@@ -88,6 +88,7 @@ class DownloadFinisher(
         // the size a message advertises can be an estimate.
         val item = request.item().copy(sizeBytes = target.length())
         settings.noteDownload(item, request.chatTitle, target.absolutePath)
+        com.tmplayer.data.SupportReminder.downloadFinished()
         // Played before it was downloaded: the cache's record of it would have the next play
         // delete a file that is no longer the cache's.
         runCatching { settings.forgetCachedVideo(request.chatId, request.messageId) }

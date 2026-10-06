@@ -63,13 +63,22 @@ class AboutTest {
     @Test
     fun `the support group follows the one switch`() {
         assertEquals(About.SUPPORT_TITLE, About.groups("1.22.1").last().title)
-        assertEquals(listOf(About.SPONSORS, About.COFFEE), About.groups("1.22.1").last().links.map { it.url })
-        assertTrue(About.groups("1.22.1", support = false).none { it.title == About.SUPPORT_TITLE })
+        assertEquals(listOf(About.supportUrl("about")), About.groups("1.22.1").last().links.map { it.url })
+        assertEquals("https://tmplayer.org/support/?from=about", About.supportUrl("about"))
+        assertTrue(About.groups("1.22.1", support = false).none { it.support })
         try {
             SupportReminder.enabled = false
-            assertTrue(About.groups("1.22.1").none { group -> group.links.any { it.url == About.SPONSORS } })
+            assertTrue(About.groups("1.22.1").none { it.support })
         } finally {
             SupportReminder.enabled = true
         }
+    }
+
+    @Test
+    fun `a supporter is thanked in the heading`() {
+        val group = About.groups("1.22.1", supporter = true).last()
+        assertTrue(group.support)
+        assertEquals(About.SUPPORT_THANKS_TITLE, group.title)
+        assertEquals(About.SUPPORT_THANKS_NOTE, group.note)
     }
 }

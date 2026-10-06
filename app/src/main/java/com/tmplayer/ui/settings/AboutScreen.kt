@@ -42,6 +42,7 @@ import androidx.compose.material3.Icon as M3Icon
 import androidx.compose.material3.Text as M3Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -99,6 +100,8 @@ fun AboutScreen(onBack: () -> Unit) {
     val touch = isTouch()
     var qr by remember { mutableStateOf<About.Link?>(null) }
     var supporting by remember { mutableStateOf(false) }
+    val supporter by remember { com.tmplayer.data.SettingsStore(context).supportCounters }
+        .collectAsState(initial = com.tmplayer.data.SupportReminder.Counters())
     val first = remember { FocusRequester() }
     val insets = WindowInsets.safeDrawing.asPaddingValues()
     val open = { link: About.Link -> if (!openLink(context, link.url)) qr = link }
@@ -123,7 +126,7 @@ fun AboutScreen(onBack: () -> Unit) {
         ) {
             item { Masthead() }
 
-            About.groups(Updates.installedVersion).forEachIndexed { index, group ->
+            About.groups(Updates.installedVersion, supporter = supporter.supporter).forEachIndexed { index, group ->
                 item { SectionTitle(group.title) }
                 group.note?.let { note ->
                     item {
@@ -158,7 +161,7 @@ fun AboutScreen(onBack: () -> Unit) {
                     }
                 }
                 // Both support links as codes on one screen, to scan from any device.
-                if (group.title == About.SUPPORT_TITLE) {
+                if (group.support) {
                     item {
                         ActionRow(
                             title = s.aboutSupportQr,
@@ -204,7 +207,7 @@ fun AboutScreen(onBack: () -> Unit) {
         }
     }
 
-    if (supporting) SupportDialog(onClose = { supporting = false })
+    if (supporting) SupportDialog(from = "about", onClose = { supporting = false })
 
     qr?.let { link ->
         LinkQrDialog(url = link.url, what = link.title.replaceFirstChar { it.lowercase() }.let { s.aboutLinkQrWhat(it) }) {
@@ -260,7 +263,7 @@ private fun Masthead() {
 
 private fun iconFor(group: String): ImageVector = when (group) {
     L.aboutContact -> Icons.Filled.Email
-    About.SUPPORT_TITLE -> Icons.Filled.Favorite
+    About.SUPPORT_TITLE, About.SUPPORT_THANKS_TITLE -> Icons.Filled.Favorite
     L.aboutDataAndLaw -> Icons.Filled.Lock
     else -> Icons.Filled.Info
 }
