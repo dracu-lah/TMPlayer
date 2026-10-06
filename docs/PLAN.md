@@ -110,6 +110,12 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [-] U28 Closed test for 14 days
 - [-] U29 Production, then opt in to Android TV
 
+**Phase H. Player declutter and support asks (planned 2026-10-06, design: docs/design/2026-10-06-player-declutter-and-support-asks-plan.md)**
+- [ ] CP37 Android player declutter: one visible path per action on phone and TV
+- [ ] CP38 Desktop player declutter: bar, main menu, shortcut sheet
+- [ ] CP39 Support asks v2: positive moments, three asks at most, thank-you state, tmplayer.org/support
+- [ ] CP40 Episodes button and modal in the player (phone, TV, desktop), after CP37 and CP38
+
 ## Standing rules
 
 - **Stop at every CP.** Commit, tick, push, report, wait for `/clear`.
@@ -566,6 +572,59 @@ name "TMPlayer"; a "Report" action for chats; sensitive media hidden by default.
 Outside the repo (Play takes PNG): icon 512×512 full square; feature graphic 1024×500; 2 to 8 phone shots
 cropped to 1080×2160; TV shots 1920×1080; TV banner 1280×720 with the name. Only own or openly licensed video
 on screen; no "movies" or "series" wording, no "S02E04" example.
+**STOP**
+
+### CP37 Android player declutter
+**Design:** sections 2 to 4 of `docs/design/2026-10-06-player-declutter-and-support-asks-plan.md` (decisions D1, D2
+default to the recommendations unless you say otherwise). Phone first, then TV.
+**Do:** remove phone centre seek buttons, row Lock, PiP and Scale (Scale and Lock and PiP into the overflow),
+overflow Speed and Start over; route `gesture_hud` through `PlayerFeedback`; one renderer for the subtitle Look
+controls; stale XML comment and `controls_clock` default; TV row down to subtitles, audio, speed, More, with
+Scale and PiP in More and no row episode buttons; drop dead TV Lock and Rotate code; first-run hints for double
+tap and TV remote keys; update `INSTALL.md` and `docs/FEATURES.md`.
+**Done when:** phone and TV emulator (promo flavor) screenshots of the new rows and menus, a D-pad walk with no dead
+focus, tests green; real gestures and pinch listed as pending for CP11.
+**STOP**
+
+### CP38 Desktop player declutter
+**Design:** section 5 of the same document (D3, D4). Runs in parallel with CP37 (disjoint files).
+**Do:** remove 10 s buttons, wall clock and the Shape button; the speed pill opens the list; main menu reduced to
+Always on top, Playback options, Subtitle style and timing, Telegram items, Help; group and trim the shortcut
+sheet; one next-episode prompt instead of card plus countdown sheet.
+**Done when:** desktop render test screenshots of the bar, main menu and each new page.
+**STOP**
+
+### CP39 Support asks v2
+**Design:** section 6 of the same document (D5, D6). Replaces the flat 14 day, 10 play rule of CP10c.
+**Do:** completed-watch and watch-time counters in `SettingsStore`; the three-rung ladder in `SupportReminder`
+with "Later" and "I already support"; trigger on player close after a finished watch or a finished download,
+never in the player; thank-you About state; `tmplayer.org/support/?from=` page and QR targets; debug flag per
+rung; one closing support line in the Telegram release post; tests.
+**Done when:** unit tests for the ladder, screenshots of each rung and the thank-you state on phone, TV and
+desktop, and the site page at 390 and 1440 wide in headless Chromium.
+**STOP**
+
+### CP40 Episodes button and modal in the player
+**Why:** the user asked for an Episodes button in the empty bottom right of the controls row, opening an episodes
+modal with everything about switching episodes (2026-10-06; the original request was never written down, so the
+exact feature list is still open, see below).
+**Where:** Android `PlayerControls.kt`, `player_controls.xml`, `PlayerActivity.kt` (`findEpisodes`, `playEpisode`,
+`stepEpisode`); desktop `PlayerOverlay.kt`. Reuse `SeasonsSection`, `EpisodeRow` and the `SeriesSheet` code from
+browse (`ui/src/shared/.../browse/`) so the modal matches the series view.
+**Do:**
+- An "Episodes" button at the right end of the row (phone, TV) and of the bar (desktop), visible only when the
+  file belongs to a series.
+- The modal: season tabs, the current episode highlighted and scrolled into view, per row the title, watched
+  tick or progress and length. Previous and next at the top. Tapping a row plays it through the same loader,
+  resume and watch cache path as the next-episode button.
+- TV: D-pad focus starts on the current episode, Back closes the modal first, no dead focus. Desktop: keyboard
+  navigable, Esc closes.
+- Once it exists, remove the TV More-menu previous and next lines and the TV row episode buttons (CP37 leaves
+  them until then). Phone centre previous and next stay.
+- Open: which extra features to include (autoplay toggle, mark watched from the list, skip intro, next up
+  order). Ask the user for their list before building.
+**Done when:** emulator screenshots of the button and modal on phone and TV (current episode highlighted, a
+season switch, a watched tick), the desktop render test, a D-pad walk, and tests green.
 **STOP**
 
 ## Your tasks
