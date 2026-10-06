@@ -105,6 +105,7 @@ jobs:
           fi
           if [ -z "$OPENSUBTITLES_API_KEY" ]; then
             echo "::notice::OPENSUBTITLES_API_KEY is not set. This build ships without online subtitles."
+          fi
           if [ -z "$TMDB_API_KEY" ]; then
             echo "::notice::TMDB_API_KEY is not set. This build has no TMDB key of its own."
           fi
