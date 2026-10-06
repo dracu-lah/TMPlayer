@@ -14,7 +14,7 @@ import java.io.IOException
  * Online subtitles for the screenshot fixtures, answered by a canned OpenSubtitles that never
  * touches the network, in whichever state the shot needs:
  *
- *     --es online signed_out|signed_in|quota|expired|unavailable|empty|offline|subdl|none
+ *     --es online signed_out|signed_in|quota|expired|unavailable|empty|offline|subdl|none|live
  *
  * `none` is a build without a key: the feature is not drawn at all. Every state starts from a
  * fresh account file and an empty cache, so one shot cannot leak into the next.
@@ -25,6 +25,17 @@ object PromoOnline {
         if (state == null) return
         val dir = File(context.filesDir, "promo-online").apply { deleteRecursively(); mkdirs() }
         val store = OnlineSubtitlesStore(File(dir, "account.properties"))
+        if (state == "live") {
+            // The real service with the build's key, over the real transport: how a search on a
+            // device is checked end to end without a Telegram account.
+            OnlineSubtitles.current = OnlineSubtitles(
+                apiKey = BuildConfig.OPENSUBTITLES_API_KEY,
+                store = store,
+                cache = SubtitleCache(File(dir, "cache")),
+                appVersion = BuildConfig.VERSION_NAME,
+            )
+            return
+        }
         val now = System.currentTimeMillis()
         when (state) {
             "signed_in", "unavailable" -> store.update { it.copy(username = "filmfan", token = "promo", allowed = 20, remaining = 17) }

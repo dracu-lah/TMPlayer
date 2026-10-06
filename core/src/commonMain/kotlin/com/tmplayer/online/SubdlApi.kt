@@ -1,7 +1,6 @@
 package com.tmplayer.online
 
 import org.json.JSONObject
-import java.io.IOException
 import java.net.URLEncoder
 import java.util.Locale
 
@@ -35,11 +34,12 @@ class SubdlApi(
         episode?.let { params["episode_number"] = it.toString() }
         val query = params.entries.joinToString("&") { (k, v) -> "$k=${URLEncoder.encode(v, "UTF-8")}" }
         limiter.acquire()
-        val response = try {
-            http.send(HttpRequest("GET", "$API?$query", mapOf("User-Agent" to userAgent, "Accept" to "application/json")))
-        } catch (_: IOException) {
-            return Reply.Failed(0)
-        }
+        val response = http.sendLogged(
+            PROVIDER,
+            HttpRequest("GET", "$API?$query", mapOf("User-Agent" to userAgent, "Accept" to "application/json")),
+        ) ?: return Reply.Failed(0)
+        // Status only for SubDL: its address carries the viewer's key, and ProviderLog drops it.
+        if (response.code !in 200..299) ProviderLog.failed(PROVIDER, "GET", API, "HTTP ${response.code}")
         if (response.code == 401 || response.code == 403) return Reply.Unauthorized
         if (response.code == 429) return Reply.Throttled(1_000)
         val json = runCatching { JSONObject(response.text) }.getOrNull() ?: return Reply.Failed(response.code)
@@ -69,12 +69,11 @@ class SubdlApi(
     suspend fun fetch(path: String): Reply<ByteArray> {
         limiter.acquire()
         val url = if (path.startsWith("http")) path else DOWNLOAD + "/" + path.trimStart('/')
-        val response = try {
-            http.send(HttpRequest("GET", url, mapOf("User-Agent" to userAgent)))
-        } catch (_: IOException) {
-            return Reply.Failed(0)
-        }
-        return if (response.code in 200..299) Reply.Ok(response.body) else Reply.Failed(response.code)
+        val response = http.sendLogged(PROVIDER, HttpRequest("GET", url, mapOf("User-Agent" to userAgent)))
+            ?: return Reply.Failed(0)
+        if (response.code in 200..299) return Reply.Ok(response.body)
+        ProviderLog.failed(PROVIDER, "GET", url, "HTTP ${response.code}")
+        return Reply.Failed(response.code)
     }
 
     /** SubDL answers "english" in `lang` and "EN" in `language`; the two letter code is what we keep. */
@@ -86,5 +85,6 @@ class SubdlApi(
     companion object {
         const val API = "https://api.subdl.com/api/v1/subtitles"
         const val DOWNLOAD = "https://dl.subdl.com"
+        private const val PROVIDER = "SubDL"
     }
 }

@@ -152,7 +152,8 @@ class OnlineSubtitles(
 
         val queries = buildList {
             target.hash?.let { add("os|hash:$it$tail" to OpenSubtitlesApi.Query(hash = it, languages = languages, includeMachine = machine)) }
-            if (name.isNotBlank()) {
+            // OpenSubtitles answers a title under three letters with a 400, "Query is too short".
+            if (name.length >= MIN_QUERY) {
                 add(
                     "os|name:${name.lowercase(Locale.ROOT)}|${parsed.season}|${parsed.episode}$tail" to
                         OpenSubtitlesApi.Query(name = name, season = parsed.season, episode = parsed.episode, languages = languages, includeMachine = machine),
@@ -192,6 +193,9 @@ class OnlineSubtitles(
                         break
                     }
                     is Reply.Failed -> {
+                        // The service answered and turned this one query down: the next one may
+                        // still find something, and the connection is not what failed.
+                        if (reply.refusedRequest) continue
                         problem = SubtitleNotice.Offline
                         break
                     }
@@ -352,6 +356,9 @@ class OnlineSubtitles(
 
     companion object {
         private const val TAG = "OnlineSubtitles"
+
+        /** The shortest title OpenSubtitles accepts as a query. */
+        internal const val MIN_QUERY = 3
 
         /** How long a refused key keeps the feature off before one more try. */
         const val REFUSED_RETRY_MS = SubtitleCache.DAY_MS

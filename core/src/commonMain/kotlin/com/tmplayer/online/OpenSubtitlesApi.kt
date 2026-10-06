@@ -1,7 +1,8 @@
 package com.tmplayer.online
 
+import com.tmplayer.platform.Logger
+import kotlinx.coroutines.CancellationException
 import org.json.JSONObject
-import java.io.IOException
 import java.net.URLEncoder
 import java.time.Instant
 import java.util.Locale
@@ -22,9 +23,55 @@ sealed interface Reply<out T> {
     /** 429 without a quota attached: too many requests, try again after [retryAfterMs]. */
     data class Throttled(val retryAfterMs: Long) : Reply<Nothing>
 
-    /** No connection, a server error, or an answer that could not be read. */
-    data class Failed(val code: Int) : Reply<Nothing>
+    /**
+     * No connection ([code] 0), a server error, or an answer that could not be read. A 4xx other
+     * than the ones above is the provider turning down this one request (OpenSubtitles answers
+     * 400 to a title under three letters, for one): see [refusedRequest].
+     */
+    data class Failed(val code: Int) : Reply<Nothing> {
+        /** The provider answered and said no to the request itself, so the network is fine. */
+        val refusedRequest: Boolean get() = code in 400..499
+    }
 }
+
+/**
+ * The one log line for a provider call that did not come back Ok: the method, where it went
+ * (scheme, host and path only, since SubDL carries its key in the query) and why. Never the key,
+ * the account token or the password, none of which reach this function. Tagged `TMPlayer` so a
+ * `logcat -s TMPlayer` on a viewer's device shows it.
+ */
+internal object ProviderLog {
+    const val TAG = "TMPlayer"
+
+    fun failed(provider: String, method: String, url: String, why: String, error: Throwable? = null) {
+        Logger.w(TAG, "$provider $method ${where(url)} failed: $why", error)
+    }
+
+    fun status(provider: String, method: String, url: String, response: HttpResponse) {
+        val said = response.text.take(200).replace(Regex("\\s+"), " ").trim()
+        failed(provider, method, url, "HTTP ${response.code}" + if (said.isEmpty()) "" else ": $said")
+    }
+
+    /** The address without its query string. */
+    fun where(url: String): String = url.substringBefore('?').substringBefore('#')
+
+    fun describe(e: Throwable): String = e.javaClass.simpleName + (e.message?.let { ": $it" } ?: "")
+}
+
+/**
+ * Sends [request], turning any exception into null after logging it. A provider that cannot be
+ * reached is an [java.io.IOException], but a malformed address or a platform refusal is not, and
+ * none of them should either escape into the screen or be swallowed without a word.
+ */
+internal suspend fun HttpTransport.sendLogged(provider: String, request: HttpRequest): HttpResponse? =
+    try {
+        send(request)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        ProviderLog.failed(provider, request.method, request.url, ProviderLog.describe(e), e)
+        null
+    }
 
 /**
  * OpenSubtitles.com's REST API, version 1: sign in and out, the account's quota, search, and the
@@ -80,8 +127,10 @@ class OpenSubtitlesApi(
 
     suspend fun search(query: Query, host: String): Reply<List<SubtitleHit>> {
         val params = sortedMapOf<String, String>()
+        // `machine_translated` is no longer a parameter: the API answers every search that sends
+        // it with a 301 to the same address without it, one wasted round trip per search. Machine
+        // translations are flagged on each hit, and [OnlineSubtitles] filters them there.
         params["ai_translated"] = if (query.includeMachine) "include" else "exclude"
-        params["machine_translated"] = if (query.includeMachine) "include" else "exclude"
         params["languages"] = query.languages.map { it.lowercase(Locale.ROOT) }.distinct().sorted().joinToString(",")
         query.hash?.let { params["moviehash"] = it.lowercase(Locale.ROOT) }
         query.name?.let { params["query"] = it.lowercase(Locale.ROOT).trim() }
@@ -122,12 +171,11 @@ class OpenSubtitlesApi(
     /** The file behind a download link. The link is OpenSubtitles' own CDN and needs no key. */
     suspend fun fetch(link: String): Reply<ByteArray> {
         limiter.acquire()
-        val response = try {
-            http.send(HttpRequest("GET", link, mapOf("User-Agent" to userAgent)))
-        } catch (_: IOException) {
-            return Reply.Failed(0)
-        }
-        return if (response.code in 200..299) Reply.Ok(response.body) else Reply.Failed(response.code)
+        val response = http.sendLogged(PROVIDER, HttpRequest("GET", link, mapOf("User-Agent" to userAgent)))
+            ?: return Reply.Failed(0)
+        if (response.code in 200..299) return Reply.Ok(response.body)
+        ProviderLog.status(PROVIDER, "GET", link, response)
+        return Reply.Failed(response.code)
     }
 
     private suspend fun <T> call(
@@ -146,14 +194,14 @@ class OpenSubtitlesApi(
             if (body != null) put("Content-Type", "application/json")
             if (token != null) put("Authorization", "Bearer $token")
         }
-        val response = try {
-            http.send(HttpRequest(method, url, headers, body))
-        } catch (_: IOException) {
-            return Reply.Failed(0)
-        }
+        val response = http.sendLogged(PROVIDER, HttpRequest(method, url, headers, body))
+            ?: return Reply.Failed(0)
         val json = runCatching { JSONObject(response.text) }.getOrNull()
+        val parsed = if (response.code in 200..299) json?.let(parse) else null
+        if (parsed == null) ProviderLog.status(PROVIDER, method, url, response)
         return when {
-            response.code in 200..299 -> json?.let(parse)?.let { Reply.Ok(it) } ?: Reply.Failed(response.code)
+            parsed != null -> Reply.Ok(parsed)
+            response.code in 200..299 -> Reply.Failed(response.code)
             response.code == 401 -> Reply.Unauthorized
             response.code == 403 -> Reply.Forbidden
             // 406 is the documented "download limit reached"; a 429 that carries the quota fields
@@ -182,5 +230,6 @@ class OpenSubtitlesApi(
 
     companion object {
         const val DEFAULT_HOST = "api.opensubtitles.com"
+        private const val PROVIDER = "OpenSubtitles"
     }
 }

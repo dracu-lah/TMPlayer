@@ -1,5 +1,7 @@
 package com.tmplayer.online
 
+import com.tmplayer.platform.LogSink
+import com.tmplayer.platform.Logger
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -92,7 +94,7 @@ class OnlineSubtitlesTest {
         val request = http.requests.single()
         assertEquals("GET", request.method)
         assertEquals(
-            "https://api.opensubtitles.com/api/v1/subtitles?ai_translated=exclude&languages=en,es&machine_translated=exclude&moviehash=8e245d9679d31e12",
+            "https://api.opensubtitles.com/api/v1/subtitles?ai_translated=exclude&languages=en,es&moviehash=8e245d9679d31e12",
             request.url.replace("%2C", ","),
         )
         assertEquals("test-key", request.headers["Api-Key"])
@@ -197,6 +199,108 @@ class OnlineSubtitlesTest {
         val failing = OnlineSubtitles("k", store, cache, "1.0.0", http = { throw java.io.IOException("down") }, now = { clock }, sleep = { clock += it })
         assertEquals(SubtitleNotice.Offline, failing.search(episode).notice)
         assertTrue(o.inBuild)
+    }
+
+    // ---- error mapping and the log line -------------------------------------------------------
+
+    /** Every line the shared code logs while [block] runs. */
+    private fun logged(block: () -> Unit): List<String> {
+        val lines = mutableListOf<String>()
+        val before = Logger.sink
+        Logger.sink = object : LogSink {
+            override fun i(tag: String, message: String) { lines += "I/$tag: $message" }
+            override fun w(tag: String, message: String, error: Throwable?) { lines += "W/$tag: $message" }
+        }
+        try {
+            block()
+        } finally {
+            Logger.sink = before
+        }
+        return lines
+    }
+
+    private fun failingWith(error: Exception) =
+        OnlineSubtitles("secret-app-key", store, cache, "1.0.0", http = { throw error }, now = { clock }, sleep = { clock += it })
+
+    @Test
+    fun `a failed connection is logged under TMPlayer, with where and why but never the key`() {
+        val lines = logged {
+            val result = runBlocking { failingWith(java.net.UnknownHostException("api.opensubtitles.com")).search(episode) }
+            assertEquals(SubtitleNotice.Offline, result.notice)
+        }
+        val line = lines.single()
+        assertTrue(line, line.startsWith("W/TMPlayer: OpenSubtitles GET https://api.opensubtitles.com/api/v1/subtitles failed: UnknownHostException"))
+        assertFalse("the key never reaches the log", "secret-app-key" in line)
+        assertFalse("nor the query string", "moviehash" in line)
+    }
+
+    @Test
+    fun `an exception that is not an IOException is still offline, logged, and does not escape`() {
+        val lines = logged {
+            val result = runBlocking { failingWith(SecurityException("Permission denied (missing INTERNET permission?)")).search(episode) }
+            assertEquals(SubtitleNotice.Offline, result.notice)
+        }
+        assertTrue(lines.single().contains("SecurityException: Permission denied"))
+    }
+
+    @Test
+    fun `a server error is offline and the log line carries its status and words`() = runBlocking {
+        val o = online()
+        http.on("/subtitles", json(503, """{"message":"Service unavailable"}"""))
+        val lines = logged { assertEquals(SubtitleNotice.Offline, runBlocking { o.search(episode) }.notice) }
+        assertEquals(
+            listOf("""W/TMPlayer: OpenSubtitles GET https://api.opensubtitles.com/api/v1/subtitles failed: HTTP 503: {"message":"Service unavailable"}"""),
+            lines,
+        )
+    }
+
+    @Test
+    fun `an answer that is not JSON is offline and logged`() = runBlocking {
+        val o = online()
+        http.on("/subtitles", json(200, "<html>captive portal</html>"))
+        val lines = logged { assertEquals(SubtitleNotice.Offline, runBlocking { o.search(episode) }.notice) }
+        assertTrue(lines.single(), lines.single().endsWith("failed: HTTP 200: <html>captive portal</html>"))
+    }
+
+    @Test
+    fun `a query the service turns down is not the connection failing, and the name still gets its turn`() = runBlocking {
+        val o = online()
+        http.on("moviehash=", json(400, """{"errors":["Not enough parameters"],"status":400}"""))
+        http.on("query=", page(hit(7)))
+        val lines = logged {
+            val result = runBlocking { o.search(episode) }
+            assertEquals(listOf("7"), result.hits.map { it.id })
+            assertEquals(SubtitleNotice.SignInToDownload, result.notice)
+        }
+        assertTrue(lines.single().contains("HTTP 400"))
+        assertTrue(Reply.Failed(400).refusedRequest)
+        assertFalse(Reply.Failed(0).refusedRequest)
+        assertFalse(Reply.Failed(502).refusedRequest)
+    }
+
+    @Test
+    fun `a refused query with nothing else to try is no results, not unreachable`() = runBlocking {
+        val o = online()
+        http.on("/subtitles", json(400, """{"errors":["Query is too short"],"status":400}"""))
+        val result = o.search(SubtitleTarget(fileName = "Movie title.mkv", sizeBytes = 0, languages = listOf("en")))
+        assertTrue(result.hits.isEmpty())
+        assertNull(result.notice)
+    }
+
+    @Test
+    fun `a title under three letters is never sent, since OpenSubtitles answers it with a 400`() = runBlocking {
+        val o = online()
+        val result = o.search(SubtitleTarget(fileName = "Up.mkv", sizeBytes = 0, languages = listOf("en")))
+        assertTrue(http.requests.isEmpty())
+        assertNull(result.notice)
+    }
+
+    @Test
+    fun `searches no longer send machine_translated, which the API now answers with a redirect`() = runBlocking {
+        val o = online()
+        http.on("/subtitles", page(hit(1)))
+        o.search(episode)
+        assertFalse(http.requests.single().url.contains("machine_translated"))
     }
 
     // ---- account ---------------------------------------------------------------------------
