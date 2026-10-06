@@ -12,6 +12,7 @@ import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.draganddrop.DragData
 import androidx.compose.ui.draganddrop.dragData
+import com.tmplayer.i18n.L
 import java.io.File
 import java.net.URI
 import java.util.Locale
@@ -48,7 +49,7 @@ internal fun Modifier.subtitleDropTarget(onDrop: (String) -> Unit, onRefused: (S
                 val files = (event.dragData() as? DragData.FilesList)?.readFiles().orEmpty()
                 val path = SubtitleDrop.pick(files)
                 if (path == null) {
-                    refuse("Drop a subtitle file: .srt, .ass, .vtt")
+                    refuse(L.playerDropSubtitle)
                     return false
                 }
                 drop(path)

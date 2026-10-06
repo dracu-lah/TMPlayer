@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import com.tmplayer.i18n.L
 import com.tmplayer.ui.components.TmAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -33,6 +34,7 @@ import com.tmplayer.desktop.UpdateProgress
 import com.tmplayer.desktop.os.OpenExternal
 import com.tmplayer.platform.Background
 import com.tmplayer.player.StreamStats
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -50,12 +52,13 @@ data class NavUpdate(val label: String, val version: String)
  */
 @Composable
 fun rememberNavUpdate(state: ShellState): NavUpdate? {
+    val s = LocalStrings.current
     val update by Updates.state.collectAsState()
     val progress = state.extras.selfUpdate?.progress?.collectAsState()?.value
-    if (progress is UpdateProgress.Ready) return NavUpdate("Restart to update", progress.version)
+    if (progress is UpdateProgress.Ready) return NavUpdate(s.updateRestartToUpdate, progress.version)
     val release = update.release ?: return null
     if ((update as? UpdateState.Available)?.skipped == true) return null
-    return NavUpdate("Update", release.version)
+    return NavUpdate(s.updateNavItem, release.version)
 }
 
 /**
@@ -142,6 +145,7 @@ fun UpdatePopup(
     onRestart: () -> Unit,
     onClose: () -> Unit,
 ) {
+    val s = LocalStrings.current
     val busy = progress is UpdateProgress.Downloading || progress == UpdateProgress.Verifying || progress == UpdateProgress.Installing
     TmAlertDialog(
         onDismissRequest = onClose,
@@ -174,7 +178,7 @@ fun UpdatePopup(
         },
         confirmButton = {
             when {
-                progress is UpdateProgress.Ready -> Button(onClick = onRestart) { Text("Restart now") }
+                progress is UpdateProgress.Ready -> Button(onClick = onRestart) { Text(s.updateRestartNow) }
                 busy -> Unit
                 !canUpdate -> Button(onClick = onOpenPage) { Text(UpdateWords.OPEN_RELEASE_PAGE) }
                 else -> Button(onClick = onUpdate) {
@@ -186,9 +190,9 @@ fun UpdatePopup(
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 when {
                     // Later keeps the side bar item, which now reads "Restart to update".
-                    progress is UpdateProgress.Ready -> TextButton(onClick = onClose) { Text("Later") }
+                    progress is UpdateProgress.Ready -> TextButton(onClick = onClose) { Text(s.updateLaterShort) }
                     // The download goes on with the popup closed; the item reopens it.
-                    busy -> TextButton(onClick = onClose) { Text("Hide") }
+                    busy -> TextButton(onClick = onClose) { Text(s.commonHide) }
                     else -> {
                         TextButton(onClick = onSkip) { Text(UpdateWords.SKIP) }
                         TextButton(onClick = onLater) { Text(UpdateWords.LATER) }
@@ -204,19 +208,23 @@ internal fun updateLine(kind: InstallKind, canUpdate: Boolean, progress: UpdateP
     when (progress) {
         is UpdateProgress.Downloading -> {
             val size = SelfUpdate.assetFor(kind)?.let(release.assets::get)?.size ?: 0L
-            "Downloading" + (if (size > 0) " ${StreamStats.formatBytes(size)}" else "") +
-                (progress.fraction?.let { ", ${(it * 100).toInt()}%" } ?: "")
+            val percent = progress.fraction?.let { L.messages.formatter.percent(it.toDouble()) }
+            when {
+                size > 0 && percent != null -> L.updateDownloadingSizePercent(StreamStats.formatBytes(size), percent)
+                size > 0 -> L.updateDownloadingSize(StreamStats.formatBytes(size))
+                percent != null -> L.updateDownloadingPercent(percent)
+                else -> L.updateDownloadingPlain
+            }
         }
-        UpdateProgress.Verifying -> "Checking the download"
-        UpdateProgress.Installing -> "Installing. Your system will ask for your password."
-        is UpdateProgress.Ready -> "Ready. TMPlayer restarts to finish."
+        UpdateProgress.Verifying -> L.updateVerifying
+        UpdateProgress.Installing -> L.updateInstalling
+        is UpdateProgress.Ready -> L.updateReady
         is UpdateProgress.Failed -> progress.message
         UpdateProgress.Idle -> SelfUpdate.retiredLine(kind, release) ?: when {
             canUpdate && (kind == InstallKind.Deb || kind == InstallKind.Rpm) ->
-                "The update downloads from GitHub, is checked, and TMPlayer restarts when it is done. " +
-                    "Your system will ask for your password."
-            canUpdate -> "The update downloads from GitHub, is checked, and TMPlayer restarts when it is done."
-            kind == InstallKind.Flatpak -> "Download the new Flatpak from the release page and install it over this one."
-            else -> "Download it from the release page and replace the old files."
+                L.updateHowPackage
+            canUpdate -> L.updateHowSelf
+            kind == InstallKind.Flatpak -> L.updateHowFlatpak
+            else -> L.updateHowManual
         }
     }

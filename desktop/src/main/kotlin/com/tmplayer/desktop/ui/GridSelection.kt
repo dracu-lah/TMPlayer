@@ -27,7 +27,9 @@ import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import com.tmplayer.desktop.DesktopPaths
+import com.tmplayer.i18n.L
 import com.tmplayer.ui.components.rememberToast
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.launch
 
@@ -92,6 +94,7 @@ internal fun SelectionBar(
     index: Map<String, ResumeRecord>,
     modifier: Modifier = Modifier,
 ) {
+    val s = LocalStrings.current
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
     Surface(shape = MaterialTheme.shapes.large, color = Tone.surfaceHigh, tonalElevation = 6.dp, modifier = modifier) {
@@ -101,9 +104,9 @@ internal fun SelectionBar(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             val count = selection.ids.size
-            Text(if (count == 1) "1 selected" else "$count selected", style = MaterialTheme.typography.titleSmall)
-            TextButton(onClick = { selection.selectAll(items.filter { it.canBeSaved }.map { it.id }) }) { Text("Select all") }
-            TextButton(onClick = { selection.clear() }) { Text("Clear") }
+            Text(s.browseSelectedCount(count), style = MaterialTheme.typography.titleSmall)
+            TextButton(onClick = { selection.selectAll(items.filter { it.canBeSaved }.map { it.id }) }) { Text(s.browseSelectAll) }
+            TextButton(onClick = { selection.clear() }) { Text(s.commonClear) }
             Button(onClick = {
                 val chosen = items.filter { selection.isSelected(it.id) }
                 selection.clear()
@@ -111,7 +114,7 @@ internal fun SelectionBar(
                     val title = chatTitle.ifBlank { chosen.firstOrNull()?.let { state.chatTitleOf(it.chatId) }.orEmpty() }
                     toast(downloadSelected(state.downloads, state.settings, chosen, title, index))
                 }
-            }) { Text("Download selected") }
+            }) { Text(s.browseDownloadSelected) }
         }
     }
 }
@@ -131,7 +134,7 @@ internal suspend fun downloadSelected(
 ): String {
     val active = OfflineDownloads.active.value
     val wanted = chosen.filter { item -> item.canBeSaved && item.id !in index && active[item.fileId]?.busy != true }
-    if (wanted.isEmpty()) return "Those are in Downloads already"
+    if (wanted.isEmpty()) return L.browseAlreadyDownloaded
     val candidates = wanted.map { item ->
         CacheShelf.Candidate(
             fileId = item.fileId,
@@ -150,10 +153,10 @@ internal suspend fun downloadSelected(
     val starting = (batch.alreadyHere + batch.fits).sorted().map { wanted[it] }
     starting.forEach { OfflineDownloads.start(runner, it, chatTitle) }
     val left = wanted.size - starting.size
-    val queued = if (starting.size == 1) "Downloading 1 video" else "Downloading ${starting.size} videos"
+    val queued = L.browseDownloadingVideos(starting.size)
     return when {
-        starting.isEmpty() -> "Not enough space for any of them"
-        left > 0 -> "$queued. $left did not fit"
+        starting.isEmpty() -> L.browseNoSpaceForAny
+        left > 0 -> L.browseSomeDidNotFit(queued, left)
         else -> queued
     }
 }

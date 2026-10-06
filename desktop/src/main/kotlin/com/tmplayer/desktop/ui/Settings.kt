@@ -80,6 +80,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SettingsPage(state: ShellState, version: String = "") {
+    val s = LocalStrings.current
     var showAbout by remember { mutableStateOf(false) }
     if (showAbout) {
         AboutPage(version, onBack = { showAbout = false })
@@ -120,13 +121,13 @@ fun SettingsPage(state: ShellState, version: String = "") {
     val scroll = rememberScrollState()
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(scroll)) {
-            PageHeader("Settings", if (version.isBlank()) null else "TMPlayer $version")
+            PageHeader(s.settingsTitle, if (version.isBlank()) null else s.settingsAppVersion(version))
             Column(
                 Modifier.widthIn(max = 760.dp).padding(horizontal = 24.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Group("Appearance")
-                Setting("Theme", theme.description.replace("phone", "computer")) {
+                Group(s.settingsAppearance)
+                Setting(s.settingsTheme, if (theme == ThemeChoice.System) s.themeSystemDesktopDetail else theme.description) {
                     SingleChoiceSegmentedButtonRow {
                         ThemeChoice.entries.forEachIndexed { index, choice ->
                             SegmentedButton(
@@ -138,16 +139,16 @@ fun SettingsPage(state: ShellState, version: String = "") {
                     }
                 }
 
-                Group("Playback")
-                Toggle("Play the next episode", "When a video ends, start the one after it", autoplay) {
+                Group(s.settingsPlayback)
+                Toggle(s.settingsAutoplayNext, s.settingsAutoplayDetail, autoplay) {
                     scope.launch { settings.setAutoplayNext(it) }
                 }
-                Toggle("Download the whole video first", "Wait for the file instead of streaming it", downloadFirst) {
+                Toggle(s.settingsDownloadFirst, s.settingsDownloadFirstDetail, downloadFirst) {
                     scope.launch { settings.setDownloadBeforePlaying(it) }
                 }
                 Setting(
-                    "Hide the controls after",
-                    "${TouchPrefs.timeoutLabel(touchPrefs.controlsTimeoutMs)} without the mouse moving. A paused video keeps them up",
+                    s.settingsHideControls,
+                    s.settingsHideControlsDetail(TouchPrefs.timeoutLabel(touchPrefs.controlsTimeoutMs)),
                 ) {
                     val choices = TouchPrefs.TIMEOUT_CHOICES_MS
                     Stepper(
@@ -157,25 +158,25 @@ fun SettingsPage(state: ShellState, version: String = "") {
                 }
 
                 Toggle(
-                    "Mouse wheel seeks",
-                    if (desktop.wheelSeeks) "The wheel skips 10 s; Shift and the wheel change the volume" else "The wheel changes the volume; Shift and the wheel skip 10 s",
+                    s.settingsWheelSeeks,
+                    if (desktop.wheelSeeks) s.settingsWheelSeeksOn else s.settingsWheelSeeksOff,
                     desktop.wheelSeeks,
                 ) { on -> state.extras.prefs.update { it.copy(wheelSeeks = on) } }
-                Toggle("Downmix to stereo", "Fold surround sound into two speakers or headphones", desktop.downmix) { on ->
+                Toggle(s.playerDownmix, s.settingsDownmixDetail, desktop.downmix) { on ->
                     state.extras.prefs.update { it.copy(downmix = on) }
                 }
                 Toggle(
-                    "Force software decoding",
+                    s.settingsSoftwareDecoding,
                     if (DesktopSettings.defaultSoftwareDecoding()) {
-                        "On by default on Linux, where the bundled video drivers rarely match the system's. Turn off to try the graphics card"
+                        s.settingsSoftwareDecodingLinux
                     } else {
-                        "Decode on the processor instead of the graphics card, if videos show green or broken frames"
+                        s.settingsSoftwareDecodingDetail
                     },
                     desktop.softwareDecoding,
                 ) { on -> state.extras.prefs.update { it.copy(softwareDecoding = on) } }
 
-                Group("Subtitles")
-                Setting("Size", "${subtitleStyle.size.label}. A file's own styled subtitles keep their look") {
+                Group(s.playerSubtitles)
+                Setting(s.subtitlesSize, s.settingsSubtitleSizeHint(subtitleStyle.size.label)) {
                     val sizes = SubtitleSize.entries
                     fun size(by: Int) {
                         val next = sizes[(subtitleStyle.size.ordinal + by).coerceIn(0, sizes.lastIndex)]
@@ -183,10 +184,10 @@ fun SettingsPage(state: ShellState, version: String = "") {
                     }
                     Stepper(onLess = { size(-1) }, onMore = { size(1) })
                 }
-                Toggle("Background box", "A dark box behind the text, for a bright or busy picture", subtitleStyle.box) { on ->
+                Toggle(s.subtitlesBox, s.settingsSubtitleBoxDetail, subtitleStyle.box) { on ->
                     scope.launch { settings.setSubtitleStyle(subtitleStyle.copy(box = on)) }
                 }
-                Setting("Position", "Raised clears the controls; High clears text burnt into the picture") {
+                Setting(s.subtitlesPosition, s.settingsSubtitlePositionHint) {
                     SingleChoiceSegmentedButtonRow {
                         SubtitlePosition.entries.forEachIndexed { index, place ->
                             SegmentedButton(
@@ -199,29 +200,29 @@ fun SettingsPage(state: ShellState, version: String = "") {
                 }
                 SubtitlePreview(subtitleStyle, Modifier.padding(vertical = 6.dp))
 
-                Group("Library")
-                Toggle("Open the last chat on launch", "Start where you left off rather than on the chat list", openLast) {
+                Group(s.settingsLibrary)
+                Toggle(s.settingsOpenLast, s.settingsOpenLastDetail, openLast) {
                     scope.launch { settings.setOpenLastChat(it) }
                 }
                 if (openLast && lastChatId != 0L) {
-                    Setting("Forget the last chat", "Start at the chat list again until you open another chat") {
+                    Setting(s.settingsForgetLast, s.settingsForgetLastDetail) {
                         OutlinedButton(onClick = {
                             scope.launch {
                                 settings.forgetLastChat()
                                 // The row goes away on success, so the toast is the only sign.
-                                toast("TMPlayer will start at the chat list")
+                                toast(s.settingsForgetLastDone)
                             }
-                        }) { Text("Forget") }
+                        }) { Text(s.settingsForget) }
                     }
                 }
                 Box(Modifier.bringIntoViewRequester(sizeLimits)) {
-                Setting("Smallest video shown", SizeFilter.label(minSize)) {
+                Setting(s.settingsSmallest, SizeFilter.label(minSize)) {
                     Stepper(
                         onLess = { scope.launch { settings.setMinSizeBytes(SizeFilter.clampMin(SizeFilter.step(minSize, -1), maxSize)) } },
                         onMore = { scope.launch { settings.setMinSizeBytes(SizeFilter.clampMin(SizeFilter.step(minSize, 1), maxSize)) } },
                     )
                 }
-                Setting("Largest video shown", SizeFilter.label(maxSize)) {
+                Setting(s.settingsLargest, SizeFilter.label(maxSize)) {
                     Stepper(
                         onLess = { scope.launch { settings.setMaxSizeBytes(SizeFilter.clampMax(SizeFilter.step(maxSize, -1), minSize)) } },
                         onMore = { scope.launch { settings.setMaxSizeBytes(SizeFilter.clampMax(SizeFilter.step(maxSize, 1), minSize)) } },
@@ -229,88 +230,80 @@ fun SettingsPage(state: ShellState, version: String = "") {
                 }
                 }
                 if (minSize != SizeFilter.FLOOR || maxSize != SizeFilter.CEILING) {
-                    Setting("Size limits", "Show every video again, whatever its size") {
+                    Setting(s.settingsSizeLimitsReset, s.settingsSizeLimitsDetail) {
                         OutlinedButton(onClick = {
                             scope.launch {
                                 settings.setMinSizeBytes(SizeFilter.FLOOR)
                                 settings.setMaxSizeBytes(SizeFilter.CEILING)
                             }
-                        }) { Text("Reset") }
+                        }) { Text(s.commonReset) }
                     }
                 }
 
                 StorageGroup(state)
 
-                Group("History")
-                Setting("Continue watching", "Forget where every video was stopped") {
+                Group(s.settingsHistory)
+                Setting(s.continueTitle, s.settingsContinueDetail) {
                     OutlinedButton(onClick = {
                         if (history.isEmpty()) {
-                            toast("Nothing in Continue watching")
+                            toast(s.settingsContinueEmpty)
                             return@OutlinedButton
                         }
                         confirm = Confirm(
-                            title = "Clear Continue watching?",
-                            message = "Every video you have part watched is forgotten, and the page empties.",
-                            detail = "Nothing is deleted from Telegram; each video stays in the chat it came from.",
+                            title = s.settingsContinueClearTitle,
+                            message = s.settingsContinueClearMessage,
+                            detail = s.settingsContinueClearDetail,
                         ) {
                             scope.launch {
                                 val count = history.size
                                 settings.clearWatchHistory()
-                                toast(if (count == 1) "Continue watching cleared" else "$count videos forgotten")
+                                toast(s.settingsContinueCleared(count))
                             }
                         }
-                    }) { Text("Clear") }
+                    }) { Text(s.commonClear) }
                 }
                 Setting(
-                    "Clear watched list",
-                    when (watchedList.size) {
-                        0 -> "Take the watched tick off every video"
-                        1 -> "Take the tick off the one video you have watched"
-                        else -> "Take the tick off all ${watchedList.size} videos you have watched"
-                    },
+                    s.settingsClearWatched,
+                    s.settingsClearWatchedSummary(watchedList.size),
                 ) {
                     OutlinedButton(onClick = {
-                        if (watchedList.isEmpty()) toast("Nothing in Previously watched") else confirmClearWatched = true
-                    }) { Text("Clear") }
+                        if (watchedList.isEmpty()) toast(s.settingsWatchedEmpty) else confirmClearWatched = true
+                    }) { Text(s.commonClear) }
                 }
-                Setting("Favourites", "Take the star off every chat") {
+                Setting(s.navFavourites, s.settingsFavouritesDetail) {
                     OutlinedButton(onClick = {
                         if (favourites.isEmpty()) {
-                            toast("No chats are starred")
+                            toast(s.settingsFavouritesEmpty)
                             return@OutlinedButton
                         }
                         confirm = Confirm(
-                            title = "Clear favourites?",
-                            message = if (favourites.size == 1) {
-                                "The one starred chat loses its star and Favourites empties."
-                            } else {
-                                "All ${favourites.size} chats lose their star and Favourites empties."
-                            },
-                            detail = "The chats themselves stay where they are, in the chat list.",
+                            title = s.settingsFavouritesClearTitle,
+                            message = s.settingsFavouritesClearMessage(favourites.size),
+                            detail = s.settingsFavouritesClearDetail,
                         ) {
                             scope.launch {
                                 val count = favourites.size
                                 settings.clearFavorites()
-                                toast(if (count == 1) "Favourite cleared" else "$count favourites cleared")
+                                toast(s.settingsFavouritesCleared(count))
                             }
                         }
-                    }) { Text("Clear") }
+                    }) { Text(s.commonClear) }
                 }
 
                 state.extras.updates?.let { updates ->
-                    Group("Updates")
+                    Group(s.settingsUpdates)
                     Toggle(
-                        "Tell me when a new version is out",
-                        "Looks every six hours. Nothing is downloaded or installed without you",
+                        s.settingsNotifyUpdates,
+                        s.settingsNotifyUpdatesDetail,
                         notifyUpdates,
                     ) { on -> scope.launch { settings.setUpdateNotify(on) } }
                     val offered = updateState.release
                     if (offered != null) {
                         Setting(UpdateWords.settingsRow(offered), UpdateWords.youHave(version), titleColor = Tone.caution) {
-                            OutlinedButton(onClick = { state.updatePopup = true }) { Text("Open", color = Tone.caution) }
+                            OutlinedButton(onClick = { state.updatePopup = true }) { Text(s.commonOpen, color = Tone.caution) }
                         }
                     }
-                    Setting("Check for updates", "TMPlayer $version") {
+                    Setting(s.settingsCheckUpdates, s.settingsAppVersion(version)) {
                         var checking by remember { mutableStateOf(false) }
                         OutlinedButton(enabled = !checking, onClick = {
                             checking = true
@@ -325,42 +318,38 @@ fun SettingsPage(state: ShellState, version: String = "") {
                                         toast(after.message)
                                         Updates.dismiss()
                                     }
-                                    else -> toast("TMPlayer $version is the newest version")
+                                    else -> toast(s.settingsUpToDate(version))
                                 }
                             }
-                        }) { Text(if (checking) "Checking" else "Check") }
+                        }) { Text(if (checking) s.settingsChecking else s.settingsCheck) }
                     }
                 }
 
-                Group("Help")
-                Setting(LocalStrings.current.settingsWalkthrough, LocalStrings.current.settingsWalkthroughBody) {
-                    OutlinedButton(onClick = { scope.launch { settings.replayOverview() } }) { Text(LocalStrings.current.commonShow) }
+                Group(s.settingsHelp)
+                Setting(s.settingsWalkthrough, s.settingsWalkthroughBody) {
+                    OutlinedButton(onClick = { scope.launch { settings.replayOverview() } }) { Text(s.commonShow) }
                 }
-                Setting("Privacy", "What stays on this computer and which services TMPlayer contacts") {
-                    OutlinedButton(onClick = { OpenExternal.browse(About.PRIVACY) }) { Text("Open") }
+                Setting(s.settingsPrivacy, s.settingsPrivacyComputer) {
+                    OutlinedButton(onClick = { OpenExternal.browse(About.PRIVACY) }) { Text(s.commonOpen) }
                 }
-                Setting("Lawful use", "Use TMPlayer only with media you may access") {
-                    OutlinedButton(onClick = { OpenExternal.browse(About.LEGAL) }) { Text("Open") }
+                Setting(s.settingsLawfulUse, s.settingsLawfulUseDetail) {
+                    OutlinedButton(onClick = { OpenExternal.browse(About.LEGAL) }) { Text(s.commonOpen) }
                 }
                 if (SupportReminder.enabled) {
-                    Setting(About.SUPPORT_TITLE, "GitHub Sponsors or Buy Me a Coffee, with a QR code for each") {
-                        OutlinedButton(onClick = { supporting = true }) { Text("Show") }
+                    Setting(About.SUPPORT_TITLE, s.settingsSupportDetail) {
+                        OutlinedButton(onClick = { supporting = true }) { Text(s.commonShow) }
                     }
                 }
-                Setting("About TMPlayer", "Version $version, licence, notices, contact and support") {
-                    OutlinedButton(onClick = { showAbout = true }) { Text("Open") }
+                Setting(s.settingsAbout, s.settingsAboutDetail(version)) {
+                    OutlinedButton(onClick = { showAbout = true }) { Text(s.commonOpen) }
                 }
 
-                Group("Account")
-                Setting("Sign out of Telegram", "Favourites, history and the watched list go with it. Downloads stay unless you say otherwise") {
-                    OutlinedButton(onClick = { confirmSignOut = true }) { Text("Sign out", color = Tone.danger) }
+                Group(s.settingsAccount)
+                Setting(s.settingsSignOut, s.settingsSignOutLoses) {
+                    OutlinedButton(onClick = { confirmSignOut = true }) { Text(s.signoutConfirm, color = Tone.danger) }
                 }
                 Text(
-                    "TMPlayer talks directly to Telegram for your chats and videos, and to " +
-                        "tmplayer.org, or GitHub when the site cannot be reached, to see whether a " +
-                        "newer version is out. That check reads one static file, the same for " +
-                        "everyone, and sends nothing about you. TMPlayer has no account or backend " +
-                        "of its own, and no analytics or advertising SDK.",
+                    s.settingsPrivacyNote,
                     style = MaterialTheme.typography.bodyMedium,
                     color = Tone.muted,
                     modifier = Modifier.padding(top = 20.dp, bottom = 24.dp),
@@ -381,7 +370,7 @@ fun SettingsPage(state: ShellState, version: String = "") {
             title = asked.title,
             message = asked.message,
             detail = asked.detail,
-            confirmLabel = "Clear",
+            confirmLabel = s.commonClear,
             onConfirm = {
                 confirm = null
                 asked.action()
@@ -398,6 +387,7 @@ fun SettingsPage(state: ShellState, version: String = "") {
  */
 @Composable
 private fun SubtitlePreview(style: SubtitleStyle, modifier: Modifier = Modifier) {
+    val s = LocalStrings.current
     BoxWithConstraints(
         modifier.width(360.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp))
             .background(Brush.verticalGradient(listOf(Color(0xFF3A4A5C), Color(0xFF1A1F26)))),
@@ -413,7 +403,7 @@ private fun SubtitlePreview(style: SubtitleStyle, modifier: Modifier = Modifier)
             shadow = if (style.box) null else Shadow(Color.Black, blurRadius = 3f),
         )
         Text(
-            "This is how subtitles will look.",
+            s.subtitlesPreview,
             style = text,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = foot)
                 .then(if (style.box) Modifier.background(Color(0xB3000000)).padding(horizontal = 4.dp, vertical = 1.dp) else Modifier),
@@ -454,8 +444,9 @@ private fun Toggle(title: String, detail: String, checked: Boolean, onChange: (B
 
 @Composable
 internal fun Stepper(onLess: () -> Unit, onMore: () -> Unit) {
+    val s = LocalStrings.current
     Row {
-        IconButton(onClick = onLess) { Icon(TmIcons.Remove, contentDescription = "Less") }
-        IconButton(onClick = onMore) { Icon(Icons.Filled.Add, contentDescription = "More") }
+        IconButton(onClick = onLess) { Icon(TmIcons.Remove, contentDescription = s.commonLess) }
+        IconButton(onClick = onMore) { Icon(Icons.Filled.Add, contentDescription = s.commonMore) }
     }
 }

@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.desktop.os.OpenExternal
 import com.tmplayer.ui.about.About
 import com.tmplayer.ui.components.AppLogo
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Tone
 
 /**
@@ -45,18 +46,19 @@ import com.tmplayer.ui.theme.Tone
  */
 @Composable
 fun AboutPage(version: String, onBack: () -> Unit) {
+    val s = LocalStrings.current
     var reading by remember { mutableStateOf(false) }
     val scroll = rememberScrollState()
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(scroll)) {
             PageHeader(
-                title = if (reading) "Third-party notices" else "About",
+                title = if (reading) s.aboutNoticesTitle else s.aboutTitleShort,
                 leading = {
                     IconButton(onClick = { if (reading) reading = false else onBack() }) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = if (reading) "Back to About" else "Back to settings",
+                            contentDescription = if (reading) s.aboutBackToAbout else s.aboutBackToSettings,
                         )
                     }
                 },
@@ -74,12 +76,13 @@ fun AboutPage(version: String, onBack: () -> Unit) {
 
 @Composable
 private fun Links(version: String, onRead: () -> Unit) {
+    val s = LocalStrings.current
     var supporting by remember { mutableStateOf(false) }
     if (supporting) SupportPopup(onClose = { supporting = false })
     Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
         Image(AppLogo.Mark, contentDescription = null, modifier = Modifier.size(72.dp).clip(RoundedCornerShape(16.dp)))
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("TMPlayer $version", style = MaterialTheme.typography.titleLarge)
+            Text(s.settingsAppVersion(version), style = MaterialTheme.typography.titleLarge)
             Text(About.LICENCE, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
             Text(About.WARRANTY, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
         }
@@ -89,18 +92,18 @@ private fun Links(version: String, onRead: () -> Unit) {
         Group(group.title)
         group.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Tone.muted) }
         if (index == 0) {
-            Setting("Third-party notices", "The libraries inside TMPlayer and their licences. Readable offline") {
-                OutlinedButton(onClick = onRead) { Text("Read") }
+            Setting(s.aboutNoticesTitle, s.aboutNoticesDetail) {
+                OutlinedButton(onClick = onRead) { Text(s.aboutRead) }
             }
         }
         if (group.title == About.SUPPORT_TITLE) {
-            Setting("Show both as QR codes", "Scan one with your phone to pay from there") {
-                OutlinedButton(onClick = { supporting = true }) { Text("Show") }
+            Setting(s.aboutShowQr, s.aboutShowQrDetail) {
+                OutlinedButton(onClick = { supporting = true }) { Text(s.commonShow) }
             }
         }
         group.links.forEach { link ->
-            Setting(link.title, link.detail.replace("this device", "this computer")) {
-                OutlinedButton(onClick = { OpenExternal.browse(link.url) }) { Text("Open") }
+            Setting(link.title, if (link.url == About.PRIVACY) s.settingsPrivacyComputer else link.detail) {
+                OutlinedButton(onClick = { OpenExternal.browse(link.url) }) { Text(s.commonOpen) }
             }
         }
     }

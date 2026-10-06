@@ -1,5 +1,7 @@
 package com.tmplayer.data
 
+import com.tmplayer.i18n.L
+
 /**
  * Which files are large enough to be a video and small enough to be worth streaming.
  *
@@ -83,15 +85,7 @@ object SizeFilter {
     fun clampMax(candidate: Long, currentMin: Long): Long =
         candidate.coerceIn((currentMin + STEP).coerceAtMost(CEILING), CEILING)
 
-    fun label(bytes: Long): String = when {
-        // "No minimum" rather than "Any size", so the bottom of the range pairs with the
-        // "No limit" at the top instead of reading as a description of the whole range.
-        bytes <= FLOOR -> "No minimum"
-        bytes >= CEILING -> "No limit"
-        bytes < GB -> "${bytes / MB} MB"
-        bytes % GB == 0L -> "${bytes / GB} GB"
-        else -> String.format("%.1f GB", bytes.toDouble() / GB)
-    }
+    fun label(bytes: Long): String = L.messages.formatter.sizeLimit(bytes)
 
     /** Where the thumb sits, 0..1. */
     fun fraction(bytes: Long): Float =
@@ -104,16 +98,7 @@ object SizeFilter {
      * shown: "between No minimum and 2.5 GB" is not English. [label] is still the right thing for
      * the track ends and the thumbs, where a bare phrase is what is wanted.
      */
-    fun describe(minBytes: Long, maxBytes: Long): String {
-        val hasMin = minBytes > FLOOR
-        val hasMax = maxBytes < CEILING
-        return when {
-            hasMin && hasMax -> "You'll see videos between ${label(minBytes)} and ${label(maxBytes)}."
-            hasMin -> "You'll see videos from ${label(minBytes)} upwards."
-            hasMax -> "You'll see videos up to ${label(maxBytes)}."
-            else -> "You'll see every video in the chat, whatever its size."
-        }
-    }
+    fun describe(minBytes: Long, maxBytes: Long): String = L.messages.formatter.sizeRange(minBytes, maxBytes)
 
     /** What the size limits let through, and how many they turned away. */
     data class Split<T>(val kept: List<T>, val hidden: Int)
@@ -129,5 +114,5 @@ object SizeFilter {
 
     /** "1 video hidden by the size limits", the line every platform puts beside Show them. */
     fun hiddenLabel(count: Int): String =
-        if (count == 1) "1 video hidden by the size limits" else "$count videos hidden by the size limits"
+        L.sizeHidden(count)
 }

@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import com.tmplayer.i18n.L
 import java.io.File
 
 /**
@@ -50,10 +51,10 @@ object StorageRelocationPlan {
         data class Allowed(val adopt: Boolean, val warning: String?) : Verdict
     }
 
-    const val CANNOT_WRITE = "TMPlayer cannot write there."
-    const val NESTED = "That folder is inside the one TMPlayer uses now, or holds it. Choose another."
-    const val SAME_PLACE = "TMPlayer keeps its files there already."
-    const val NETWORK_WARNING = "Network drives are slow to stream from and may disconnect."
+    val CANNOT_WRITE: String get() = L.storageCannotWrite
+    val NESTED: String get() = L.storageNested
+    val SAME_PLACE: String get() = L.storageSamePlace
+    val NETWORK_WARNING: String get() = L.storageNetworkWarning
 
     /**
      * Whether [candidate] will do as the new storage location, checked in the order the viewer
@@ -77,8 +78,7 @@ object StorageRelocationPlan {
         val needed = downloadsBytes + SPARE_BYTES
         if (candidate.usableBytes < needed) {
             return Verdict.Refused(
-                "That drive has ${size(candidate.usableBytes)} free. " +
-                    "The downloads alone need ${size(needed)}.",
+                L.storageDriveTooSmall(size(candidate.usableBytes), size(needed)),
             )
         }
         val network = isNetworkPath(candidate.root.path) || candidate.storeType.lowercase() in NETWORK_STORE_TYPES
@@ -86,7 +86,7 @@ object StorageRelocationPlan {
     }
 
     /** A size as the rest of the app writes it, with nothing at all written as "0 MB". */
-    fun size(bytes: Long): String = if (bytes <= 0) "0 MB" else MediaMapper.formatSize(bytes)
+    fun size(bytes: Long): String = if (bytes <= 0) L.formatSizeZero else MediaMapper.formatSize(bytes)
 
     /** `<root>/TMPlayer`. */
     fun appFolder(root: File): File = File(root, APP_FOLDER)
@@ -118,17 +118,15 @@ object StorageRelocationPlan {
         cacheBytes: Long,
         adopt: Boolean,
     ): Pair<String, String> {
-        val title = "Move TMPlayer's files to $where?"
-        val videos = if (downloadCount == 1) "1 video" else "$downloadCount videos"
+        val title = L.storageMoveTitle(where)
         val downloads = if (downloadCount == 0) {
-            "There are no downloads to move; new ones go to $newDownloads."
+            L.storageMoveNoDownloads(newDownloads)
         } else {
-            "Downloads ($videos, ${size(downloadsBytes)}) move to $newDownloads."
+            L.storageMoveDownloads(downloadCount, size(downloadsBytes), newDownloads)
         }
-        val cache = if (cacheBytes > 0) "The cache (${size(cacheBytes)})" else "The cache"
-        val adopted = if (adopt) " TMPlayer has used this folder before, and the downloads already in it are kept." else ""
-        val body = "$downloads $cache is cleared and starts again at $newCache. Nothing is removed from Telegram. " +
-            "Playback and downloads pause while this happens.$adopted"
+        val cache = if (cacheBytes > 0) L.storageMoveCacheSized(size(cacheBytes), newCache) else L.storageMoveCache(newCache)
+        val parts = listOf(downloads, cache, L.storageMoveBody) + if (adopt) listOf(L.storageMoveAdopted) else emptyList()
+        val body = parts.joinToString(" ")
         return title to body
     }
 

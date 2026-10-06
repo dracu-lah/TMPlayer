@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Tone
 
 /**
@@ -23,19 +24,20 @@ import com.tmplayer.ui.theme.Tone
  */
 @Composable
 fun PlayerPlaceholder(request: PlayRequest, onClose: () -> Unit) {
+    val s = LocalStrings.current
     Box(Modifier.fillMaxSize()) {
         IconButton(onClick = onClose, modifier = Modifier.padding(16.dp)) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = s.commonBack)
         }
         Column(
             Modifier.align(Alignment.Center).padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("Player goes here", style = MaterialTheme.typography.headlineSmall)
+            Text(s.playerPlaceholder, style = MaterialTheme.typography.headlineSmall)
             Text(request.item.title, color = Tone.muted)
             Text(
-                if (request.startFromBeginning) "From the start" else "Resuming if there is somewhere to resume",
+                if (request.startFromBeginning) s.playerFromStart else s.playerPlaceholderResume,
                 color = Tone.muted,
             )
         }

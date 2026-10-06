@@ -1,5 +1,7 @@
 package com.tmplayer.data
 
+import com.tmplayer.i18n.L
+
 /**
  * What a chat's owner allows done with its videos, read the way Telegram's own clients read it.
  *
@@ -61,5 +63,5 @@ object ContentProtection {
     }
 
     /** Said when a download is refused, or a finished one is left in the cache, for this reason. */
-    const val NOT_SAVABLE = "This chat does not allow saving its videos. You can still watch it here."
+    val NOT_SAVABLE: String get() = L.downloadsNotSavable
 }

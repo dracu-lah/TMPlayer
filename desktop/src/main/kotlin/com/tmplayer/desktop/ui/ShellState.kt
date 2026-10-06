@@ -25,6 +25,7 @@ import com.tmplayer.desktop.DesktopPrefs
 import com.tmplayer.desktop.DesktopServices
 import com.tmplayer.desktop.DesktopWatchCache
 import com.tmplayer.desktop.SelfUpdate
+import com.tmplayer.i18n.L
 import com.tmplayer.ui.browse.BrowseSection
 import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.browse.NavGroup
@@ -48,13 +49,17 @@ class DesktopExtras(
 val POSTER_STEPS = listOf(160.dp, 208.dp, 264.dp, 320.dp)
 
 /** The places the sidebar (or the rail, in a narrow window) goes to. */
-enum class Destination(val label: String) {
-    Chats("Chats"),
-    Favourites("Favourites"),
-    Continue("Continue"),
-    Watched("Watched"),
-    Downloads("Downloads"),
-    Settings("Settings"),
+enum class Destination(private val labelText: () -> String) {
+    Chats({ L.navChats }),
+    Favourites({ L.navFavourites }),
+    Continue({ L.navContinue }),
+    Watched({ L.navWatched }),
+    Downloads({ L.navDownloads }),
+    Settings({ L.navSettings }),
+    ;
+
+    /** The sidebar label, in the UI language. */
+    val label: String get() = labelText()
 }
 
 /**

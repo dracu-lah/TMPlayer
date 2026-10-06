@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.player
 
+import com.tmplayer.i18n.L
 import com.tmplayer.player.SubtitleStyle
 import com.tmplayer.player.SyncDelays
 import com.tmplayer.player.VideoScale
@@ -158,7 +159,7 @@ data class MediaTrack(
             val name = listOfNotNull(
                 title?.takeIf { it.isNotBlank() },
                 language?.takeIf { it.isNotBlank() && it != "und" }?.let(::languageName),
-            ).distinct().joinToString(" · ").ifBlank { "Track $id" }
+            ).distinct().joinToString(" · ").ifBlank { L.playerTrackNumber(id.toString()) }
             val extra = listOfNotNull(
                 codec?.takeIf { it.isNotBlank() },
                 channels?.takeIf { it > 0 }?.let(::channelLabel),
@@ -167,15 +168,14 @@ data class MediaTrack(
         }
 
     private fun languageName(code: String): String =
-        runCatching { java.util.Locale.forLanguageTag(code).getDisplayLanguage(java.util.Locale.ENGLISH) }
-            .getOrNull()?.takeIf { it.isNotBlank() && !it.equals(code, ignoreCase = true) } ?: code
+        L.messages.formatter.trackLanguage(code) ?: code
 
     private fun channelLabel(count: Int): String = when (count) {
-        1 -> "mono"
-        2 -> "stereo"
+        1 -> L.playerChannelsMono
+        2 -> L.playerChannelsStereo
         6 -> "5.1"
         8 -> "7.1"
-        else -> "${count}ch"
+        else -> L.playerChannelsCount(count.toString())
     }
 }
 

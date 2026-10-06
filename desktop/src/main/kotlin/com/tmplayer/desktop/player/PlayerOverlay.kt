@@ -39,6 +39,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
+import com.tmplayer.i18n.L
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Floating
 import com.tmplayer.ui.theme.FloatingTone
 import com.tmplayer.ui.theme.floatingBorder
@@ -233,6 +235,7 @@ internal fun BoxScope.PlayerOverlay(
     onCloseMenu: () -> Unit,
     onMenuAction: (MenuAction) -> Unit,
 ) {
+    val s = LocalStrings.current
     // The right click menu hangs at the cursor whether or not the controls are up.
     if (menu?.anchor == MenuAt.Anchor.Cursor) {
         Box(Modifier.offset { IntOffset(menu.at.x.roundToInt(), menu.at.y.roundToInt()) }.size(1.dp)) {
@@ -253,7 +256,7 @@ internal fun BoxScope.PlayerOverlay(
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                OverlayButton(PlayerIcons.ArrowBack, "Back (Esc)", onBack)
+                OverlayButton(PlayerIcons.ArrowBack, s.playerBackHint, onBack)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -264,7 +267,7 @@ internal fun BoxScope.PlayerOverlay(
                 WallClock()
                 Spacer(Modifier.width(8.dp))
                 Box {
-                    OverlayButton(PlayerIcons.MoreVert, "More", onClick = { onOpenMenu(MenuAt(MenuPage.Main, MenuAt.Anchor.Overflow)) })
+                    OverlayButton(PlayerIcons.MoreVert, s.commonMore, onClick = { onOpenMenu(MenuAt(MenuPage.Main, MenuAt.Anchor.Overflow)) })
                     if (menu?.anchor == MenuAt.Anchor.Overflow) {
                         PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, onOpenMenu, onCloseMenu, onMenuAction)
                     }
@@ -273,7 +276,7 @@ internal fun BoxScope.PlayerOverlay(
 
             // The download chip, top right under the bar.
             if (downloaded != null && downloaded < 1f) {
-                Chip("Downloaded ${(downloaded * 100).toInt()}%", Modifier.align(Alignment.TopEnd).padding(top = 72.dp, end = 16.dp))
+                Chip(s.playerDownloadedChip(s.messages.formatter.percent(downloaded.toDouble())), Modifier.align(Alignment.TopEnd).padding(top = 72.dp, end = 16.dp))
             }
 
             // Centre cluster.
@@ -285,7 +288,7 @@ internal fun BoxScope.PlayerOverlay(
                 val previous = episodes.previous
                 val next = episodes.next
                 if (previous != null) {
-                    OverlayButton(PlayerIcons.SkipPrevious, episodeLabel("Previous", previous) + " (Shift+P)", { onEpisode(previous) }, size = 48)
+                    OverlayButton(PlayerIcons.SkipPrevious, s.playerPreviousEpisodeHint(episodeLabel(s.playerPrevious, previous)), { onEpisode(previous) }, size = 48)
                 }
                 SkipButton(forward = false) { onSeekBy(-PlayerKeys.SEEK_MEDIUM_MS) }
                 Box(
@@ -295,12 +298,12 @@ internal fun BoxScope.PlayerOverlay(
                     if (status.buffering) {
                         CircularProgressIndicator(Modifier.size(40.dp), color = Color.White, strokeWidth = 3.dp)
                     } else {
-                        Icon(if (status.playing) PlayerIcons.Pause else PlayerIcons.Play, if (status.playing) "Pause" else "Play", tint = Color.White, modifier = Modifier.size(40.dp))
+                        Icon(if (status.playing) PlayerIcons.Pause else PlayerIcons.Play, if (status.playing) s.playerPause else s.playerPlay, tint = Color.White, modifier = Modifier.size(40.dp))
                     }
                 }
                 SkipButton(forward = true) { onSeekBy(PlayerKeys.SEEK_MEDIUM_MS) }
                 if (next != null) {
-                    OverlayButton(PlayerIcons.SkipNext, episodeLabel("Next", next) + " (Shift+N)", { onEpisode(next) }, size = 48)
+                    OverlayButton(PlayerIcons.SkipNext, s.playerNextEpisodeHint(episodeLabel(s.playerNext, next)), { onEpisode(next) }, size = 48)
                 }
             }
 
@@ -326,8 +329,8 @@ internal fun BoxScope.PlayerOverlay(
                     Spacer(Modifier.weight(1f))
                     if (loop != null) {
                         Chip(
-                            loop.endMs?.let { "Repeating ${SeekMath.clock(loop.startMs)} to ${SeekMath.clock(it)}  (R to stop)" }
-                                ?: "Loop from ${SeekMath.clock(loop.startMs)}  (R to end it)",
+                            loop.endMs?.let { s.playerLoopChip(SeekMath.clock(loop.startMs), SeekMath.clock(it)) }
+                                ?: s.playerLoopStartChip(SeekMath.clock(loop.startMs)),
                         )
                         Spacer(Modifier.weight(1f))
                     }
@@ -341,30 +344,30 @@ internal fun BoxScope.PlayerOverlay(
                 TimeBar(status.positionMs, status.durationMs, status.bufferedMs, onSeekTo, status.chapters, loop)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Box {
-                        OverlayButton(PlayerIcons.Subtitles, "Subtitles (V, C)", onClick = { onOpenMenu(MenuAt(MenuPage.Subtitles, MenuAt.Anchor.Subtitles)) })
+                        OverlayButton(PlayerIcons.Subtitles, s.playerSubtitlesHint, onClick = { onOpenMenu(MenuAt(MenuPage.Subtitles, MenuAt.Anchor.Subtitles)) })
                         if (menu?.anchor == MenuAt.Anchor.Subtitles) {
                             PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, onOpenMenu, onCloseMenu, onMenuAction)
                         }
                     }
                     Box {
-                        OverlayButton(PlayerIcons.Audio, "Audio (A)", onClick = { onOpenMenu(MenuAt(MenuPage.Audio, MenuAt.Anchor.Audio)) })
+                        OverlayButton(PlayerIcons.Audio, s.playerAudioHint, onClick = { onOpenMenu(MenuAt(MenuPage.Audio, MenuAt.Anchor.Audio)) })
                         if (menu?.anchor == MenuAt.Anchor.Audio) {
                             PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, onOpenMenu, onCloseMenu, onMenuAction)
                         }
                     }
-                    Tip("Speed (] and [)") {
+                    Tip(s.playerSpeedHint) {
                         Box(
                             Modifier.height(36.dp).widthIn(min = 48.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick = onCycleSpeed).padding(horizontal = 10.dp),
                             contentAlignment = Alignment.Center,
                         ) { Text(SeekMath.speedLabel(status.speed), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
                     }
-                    OverlayButton(PlayerIcons.AspectRatio, "Picture shape: ${status.scale.label}", onCycleScale)
+                    OverlayButton(PlayerIcons.AspectRatio, s.playerShapeHint(status.scale.label), onCycleScale)
                     Spacer(Modifier.weight(1f))
                     VolumeControl(status.volume, status.muted, onVolume, onToggleMute)
-                    OverlayButton(PlayerIcons.PictureInPicture, "Mini player (Ctrl+P)", onMiniPlayer)
+                    OverlayButton(PlayerIcons.PictureInPicture, s.playerMiniHint, onMiniPlayer)
                     OverlayButton(
                         if (fullscreen) PlayerIcons.FullscreenExit else PlayerIcons.Fullscreen,
-                        if (fullscreen) "Exit fullscreen (F)" else "Fullscreen (F)",
+                        if (fullscreen) s.playerExitFullscreenHint else s.playerFullscreenHint,
                         onToggleFullscreen,
                     )
                 }
@@ -429,9 +432,10 @@ internal fun OverlayButton(icon: ImageVector, label: String, onClick: () -> Unit
 /** Back or forward ten seconds, with the figure inside the arrow as on the phone. */
 @Composable
 private fun SkipButton(forward: Boolean, onClick: () -> Unit) {
+    val s = LocalStrings.current
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
-    Tip(if (forward) "Forward 10 s (L)" else "Back 10 s (J)") {
+    Tip(if (forward) s.playerForwardHint else s.playerBackHintSeek) {
         Box(
             Modifier.size(56.dp).clip(CircleShape)
                 .background(if (hovered) Color(0x33FFFFFF) else Color.Transparent)
@@ -441,11 +445,11 @@ private fun SkipButton(forward: Boolean, onClick: () -> Unit) {
         ) {
             Icon(
                 PlayerIcons.Replay,
-                if (forward) "Forward 10 seconds" else "Back 10 seconds",
+                if (forward) s.playerForwardLabel else s.playerBackLabel,
                 tint = Color.White,
                 modifier = Modifier.size(36.dp).graphicsLayer { if (forward) scaleX = -1f },
             )
-            Text("10", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(y = 2.dp))
+            Text(s.messages.formatter.number(10), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.offset(y = 2.dp))
         }
     }
 }
@@ -460,6 +464,7 @@ private fun Chip(text: String, modifier: Modifier = Modifier) {
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun VolumeControl(volume: Int, muted: Boolean, onVolume: (Int) -> Unit, onToggleMute: () -> Unit) {
+    val s = LocalStrings.current
     var hovered by remember { mutableStateOf(false) }
     Row(
         Modifier.onPointerEvent(PointerEventType.Enter) { hovered = true }
@@ -479,7 +484,7 @@ private fun VolumeControl(volume: Int, muted: Boolean, onVolume: (Int) -> Unit, 
             volume < 50 -> PlayerIcons.VolumeDown
             else -> PlayerIcons.VolumeUp
         }
-        OverlayButton(icon, if (muted) "Unmute (M)" else "Mute (M)", onToggleMute)
+        OverlayButton(icon, if (muted) s.playerUnmuteHint else s.playerMuteHint, onToggleMute)
     }
 }
 
@@ -589,6 +594,7 @@ internal fun PlayerMenu(
     onClose: () -> Unit,
     onAction: (MenuAction) -> Unit,
 ) {
+    val s = LocalStrings.current
     fun pick(action: MenuAction) {
         onClose()
         onAction(action)
@@ -626,85 +632,85 @@ internal fun PlayerMenu(
 
     TmDropdownMenu(expanded = true, onDismissRequest = onClose, modifier = Modifier.widthIn(min = 240.dp, max = 420.dp)) {
         if (menu.page != MenuPage.Main && menu.anchor != MenuAt.Anchor.Subtitles && menu.anchor != MenuAt.Anchor.Audio) {
-            Entry("Back") { page(MenuPage.Main) }
+            Entry(s.commonBack) { page(MenuPage.Main) }
             HorizontalDivider()
         }
         when (menu.page) {
             MenuPage.Main -> {
-                Entry(if (status.playing) "Pause" else "Play", trailing = "Space") { pick(MenuAction.Do(PlayerAction.TogglePlay)) }
+                Entry(if (status.playing) s.playerPause else s.playerPlay, trailing = s.playerKeySpace) { pick(MenuAction.Do(PlayerAction.TogglePlay)) }
                 val audio = tracks.firstOrNull { it.type == TrackType.Audio && it.selected }
-                Entry("Audio", trailing = audio?.label?.take(18) ?: "") { page(MenuPage.Audio) }
+                Entry(s.playerAudio, trailing = audio?.label?.take(18) ?: "") { page(MenuPage.Audio) }
                 val sub = tracks.firstOrNull { it.type == TrackType.Subtitle && it.selected }
-                Entry("Subtitles", trailing = sub?.label?.take(18) ?: "Off") { page(MenuPage.Subtitles) }
-                Entry("Speed", trailing = SeekMath.speedLabel(status.speed)) { page(MenuPage.Speed) }
-                Entry("Picture shape", trailing = status.scale.label) { page(MenuPage.Shape) }
+                Entry(s.playerSubtitles, trailing = sub?.label?.take(18) ?: s.commonOff) { page(MenuPage.Subtitles) }
+                Entry(s.playerSpeed, trailing = SeekMath.speedLabel(status.speed)) { page(MenuPage.Speed) }
+                Entry(s.playerShape, trailing = status.scale.label) { page(MenuPage.Shape) }
                 HorizontalDivider()
-                Entry(if (fullscreen) "Exit fullscreen" else "Fullscreen", trailing = "F") { pick(MenuAction.Do(PlayerAction.ToggleFullscreen)) }
-                if (alwaysOnTopAvailable) Entry("Always on top", trailing = "Ctrl+T") { pick(MenuAction.Do(PlayerAction.AlwaysOnTop)) }
-                if (miniPlayerAvailable) Entry("Mini player", trailing = "Ctrl+P") { pick(MenuAction.Do(PlayerAction.MiniPlayer)) }
-                Entry("Downmix to stereo", checked = status.downmix) { pick(MenuAction.ToggleDownmix) }
-                Entry("Volume boost", checked = status.volumeBoost) { pick(MenuAction.ToggleVolumeBoost) }
-                Entry("Sleep timer", trailing = sleepTimer ?: "Off") { page(MenuPage.Sleep) }
-                Entry("Ignore clicks on the video", checked = ignoreClicks) { pick(MenuAction.ToggleIgnoreClicks) }
+                Entry(if (fullscreen) s.playerExitFullscreen else s.playerFullscreen, trailing = "F") { pick(MenuAction.Do(PlayerAction.ToggleFullscreen)) }
+                if (alwaysOnTopAvailable) Entry(s.playerAlwaysOnTop, trailing = s.playerKeyCtrlT) { pick(MenuAction.Do(PlayerAction.AlwaysOnTop)) }
+                if (miniPlayerAvailable) Entry(s.playerMini, trailing = s.playerKeyCtrlP) { pick(MenuAction.Do(PlayerAction.MiniPlayer)) }
+                Entry(s.playerDownmix, checked = status.downmix) { pick(MenuAction.ToggleDownmix) }
+                Entry(s.playerVolumeBoost, checked = status.volumeBoost) { pick(MenuAction.ToggleVolumeBoost) }
+                Entry(s.playerSleepTimer, trailing = sleepTimer ?: s.commonOff) { page(MenuPage.Sleep) }
+                Entry(s.playerIgnoreClicks, checked = ignoreClicks) { pick(MenuAction.ToggleIgnoreClicks) }
                 HorizontalDivider()
-                Entry("Start over") { pick(MenuAction.StartOver) }
+                Entry(s.playerStartOver) { pick(MenuAction.StartOver) }
                 if (fromTelegram) {
-                    Entry("Copy link") { pick(MenuAction.CopyLink) }
+                    Entry(s.commonCopyLink) { pick(MenuAction.CopyLink) }
                     if (savable) {
-                        Entry("Save to Downloads") { pick(MenuAction.Download) }
-                        Entry("Open in another app") { pick(MenuAction.OpenElsewhere) }
+                        Entry(s.downloadsSave) { pick(MenuAction.Download) }
+                        Entry(s.commonOpenElsewhere) { pick(MenuAction.OpenElsewhere) }
                     }
                 }
                 if (watchedLabel != null) Entry(watchedLabel) { pick(MenuAction.ToggleWatched) }
-                Entry("Playback details", trailing = "I") { pick(MenuAction.Details) }
-                Entry("Keyboard shortcuts", trailing = "?") { pick(MenuAction.Shortcuts) }
+                Entry(s.playerDetails, trailing = "I") { pick(MenuAction.Details) }
+                Entry(s.playerShortcuts, trailing = "?") { pick(MenuAction.Shortcuts) }
             }
             MenuPage.Audio -> {
                 val list = tracks.filter { it.type == TrackType.Audio }
-                if (list.isEmpty()) Entry("No audio tracks") { onClose() }
+                if (list.isEmpty()) Entry(s.playerNoAudioTracks) { onClose() }
                 list.forEach { t -> Entry(t.label, checked = t.selected) { pick(MenuAction.Track(TrackType.Audio, t)) } }
                 HorizontalDivider()
-                Nudge("Delay", SyncDelays.label(status.audioDelayMs), "Earlier", "Later",
+                Nudge(s.playerDelay, SyncDelays.label(status.audioDelayMs), s.playerEarlier, s.playerLater,
                     { onAction(MenuAction.AudioDelay(-1)) }, { onAction(MenuAction.AudioDelay(1)) })
-                if (status.audioDelayMs != 0L) Entry("Reset delay") { onAction(MenuAction.AudioDelay(0)) }
+                if (status.audioDelayMs != 0L) Entry(s.playerResetDelay) { onAction(MenuAction.AudioDelay(0)) }
             }
             MenuPage.Subtitles -> {
                 val list = tracks.filter { it.type == TrackType.Subtitle }
-                Entry("Off", checked = list.none { it.selected }) { pick(MenuAction.Track(TrackType.Subtitle, null)) }
+                Entry(s.commonOff, checked = list.none { it.selected }) { pick(MenuAction.Track(TrackType.Subtitle, null)) }
                 list.forEach { t -> Entry(t.label, checked = t.selected) { pick(MenuAction.Track(TrackType.Subtitle, t)) } }
                 HorizontalDivider()
-                Nudge("Delay", SyncDelays.label(status.subtitleDelayMs), "Earlier", "Later",
+                Nudge(s.playerDelay, SyncDelays.label(status.subtitleDelayMs), s.playerEarlier, s.playerLater,
                     { onAction(MenuAction.SubtitleDelay(-1)) }, { onAction(MenuAction.SubtitleDelay(1)) })
-                if (status.subtitleDelayMs != 0L) Entry("Reset delay") { onAction(MenuAction.SubtitleDelay(0)) }
+                if (status.subtitleDelayMs != 0L) Entry(s.playerResetDelay) { onAction(MenuAction.SubtitleDelay(0)) }
                 HorizontalDivider()
                 // The look, previewed on the picture as it changes; the ends of each scale stop.
                 val style = status.subtitleStyle
                 val sizes = SubtitleSize.entries
                 val places = SubtitlePosition.entries
                 fun look(to: SubtitleStyle) = onAction(MenuAction.SubtitleLook(to))
-                Nudge("Size", style.size.label, "Smaller", "Larger",
-                    sizes.getOrNull(style.size.ordinal - 1)?.let { s -> { look(style.copy(size = s)) } },
-                    sizes.getOrNull(style.size.ordinal + 1)?.let { s -> { look(style.copy(size = s)) } })
-                Nudge("Position", style.position.label, "Lower", "Higher",
+                Nudge(s.subtitlesSize, style.size.label, s.subtitlesSmaller, s.subtitlesLarger,
+                    sizes.getOrNull(style.size.ordinal - 1)?.let { size -> { look(style.copy(size = size)) } },
+                    sizes.getOrNull(style.size.ordinal + 1)?.let { size -> { look(style.copy(size = size)) } })
+                Nudge(s.subtitlesPosition, style.position.label, s.subtitlesLower, s.subtitlesHigher,
                     places.getOrNull(style.position.ordinal - 1)?.let { p -> { look(style.copy(position = p)) } },
                     places.getOrNull(style.position.ordinal + 1)?.let { p -> { look(style.copy(position = p)) } })
-                Entry("Background box", checked = style.box) { look(style.copy(box = !style.box)) }
+                Entry(s.subtitlesBox, checked = style.box) { look(style.copy(box = !style.box)) }
             }
             MenuPage.Sleep -> {
                 // Only here, never on the picture: the countdown stays off the screen (1.16.0).
                 if (sleepTimer != null) {
-                    Entry("Turn off", trailing = sleepTimer) { pick(MenuAction.Sleep(null)) }
+                    Entry(L.playerSleepTurnOff, trailing = sleepTimer) { pick(MenuAction.Sleep(null)) }
                     HorizontalDivider()
                 }
                 SleepTimer.CHOICES.forEach { minutes ->
                     Entry(SleepTimer.label(minutes)) { pick(MenuAction.Sleep(minutes)) }
                 }
             }
-            MenuPage.Speed -> PlaybackSpeed.CHOICES.forEach { s ->
-                Entry(PlaybackSpeed.label(s), checked = kotlin.math.abs(s - status.speed) < 0.001f) { pick(MenuAction.Speed(s)) }
+            MenuPage.Speed -> PlaybackSpeed.CHOICES.forEach { speed ->
+                Entry(PlaybackSpeed.label(speed), checked = kotlin.math.abs(speed - status.speed) < 0.001f) { pick(MenuAction.Speed(speed)) }
             }
-            MenuPage.Shape -> VideoScale.entries.forEach { s ->
-                Entry(s.label, checked = s == status.scale) { pick(MenuAction.Shape(s)) }
+            MenuPage.Shape -> VideoScale.entries.forEach { shape ->
+                Entry(shape.label, checked = shape == status.scale) { pick(MenuAction.Shape(shape)) }
             }
         }
     }
@@ -713,6 +719,7 @@ internal fun PlayerMenu(
 /** The flashes of A4.1 and A4.2, the volume HUD, and the spinner for a stall with the controls down. */
 @Composable
 internal fun BoxScope.FeedbackLayer(flash: Flash?, spinner: Boolean, chip: String?) {
+    val s = LocalStrings.current
     if (spinner) {
         CircularProgressIndicator(Modifier.align(Alignment.Center).size(48.dp), color = Color.White, strokeWidth = 3.dp)
     }
@@ -767,7 +774,7 @@ internal fun BoxScope.FeedbackLayer(flash: Flash?, spinner: Boolean, chip: Strin
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(if (f.text == "Muted" || f.text == "0%") PlayerIcons.VolumeOff else PlayerIcons.VolumeUp, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                Icon(if (f.text == s.playerMuted || f.text == s.messages.formatter.percent(0.0)) PlayerIcons.VolumeOff else PlayerIcons.VolumeUp, null, tint = Color.White, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(f.text, color = Color.White, fontSize = 15.sp)
             }
@@ -782,6 +789,7 @@ internal fun BoxScope.FeedbackLayer(flash: Flash?, spinner: Boolean, chip: Strin
 /** "Resuming from 1:02:14" with Start over beside it (A4.8), for eight seconds. */
 @Composable
 internal fun BoxScope.ResumeNotice(from: Long, lifted: Boolean, onStartOver: () -> Unit, onTimeout: () -> Unit) {
+    val s = LocalStrings.current
     LaunchedEffect(from) {
         delay(8_000)
         onTimeout()
@@ -791,15 +799,16 @@ internal fun BoxScope.ResumeNotice(from: Long, lifted: Boolean, onStartOver: () 
             .clip(RoundedCornerShape(20.dp)).background(Color(0xCC1C1C1E)).padding(start = 16.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Resuming from ${SeekMath.clock(from)}", color = Color.White, fontSize = 14.sp)
+        Text(s.playerResumingFrom(SeekMath.clock(from)), color = Color.White, fontSize = 14.sp)
         Spacer(Modifier.width(8.dp))
-        TextButton(onClick = onStartOver) { Text("Start over") }
+        TextButton(onClick = onStartOver) { Text(s.playerStartOver) }
     }
 }
 
 /** A4.7: the next episode, offered in the last half minute. */
 @Composable
 internal fun BoxScope.NextUpCard(next: MediaItem, secondsLeft: Int, lifted: Boolean, onPlayNow: () -> Unit, onHide: () -> Unit) {
+    val s = LocalStrings.current
     val code = MediaName.parse(next.fileName.ifBlank { next.title }).episodeCode
     AnimatedVisibility(
         true,
@@ -809,12 +818,12 @@ internal fun BoxScope.NextUpCard(next: MediaItem, secondsLeft: Int, lifted: Bool
     ) {
         Surface(shape = RoundedCornerShape(12.dp), color = Color(0xE61C1C1E), modifier = Modifier.width(300.dp)) {
             Column(Modifier.padding(16.dp)) {
-                Text("Next: ${code ?: next.title}", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text("Next episode in $secondsLeft", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                Text(s.playerNextUp(code ?: next.title), color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(s.playerNextIn(secondsLeft), color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
                 Spacer(Modifier.height(8.dp))
                 Row {
-                    TextButton(onClick = onPlayNow) { Text("Play now") }
-                    TextButton(onClick = onHide) { Text("Hide") }
+                    TextButton(onClick = onPlayNow) { Text(s.playerPlayNow) }
+                    TextButton(onClick = onHide) { Text(s.commonHide) }
                 }
             }
         }
@@ -824,6 +833,7 @@ internal fun BoxScope.NextUpCard(next: MediaItem, secondsLeft: Int, lifted: Bool
 /** B3.4 item 4: what a tester's report needs, refreshed while open. */
 @Composable
 internal fun BoxScope.DetailsPanel(rows: () -> List<Pair<String, String>>, onClose: () -> Unit) {
+    val s = LocalStrings.current
     var lines by remember { mutableStateOf(rows()) }
     val read by rememberUpdatedState(rows)
     LaunchedEffect(Unit) {
@@ -839,8 +849,8 @@ internal fun BoxScope.DetailsPanel(rows: () -> List<Pair<String, String>>, onClo
     ) {
         Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Playback details", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                OverlayButton(PlayerIcons.Close, "Close (I)", onClose, size = 32)
+                Text(s.playerDetails, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                OverlayButton(PlayerIcons.Close, s.playerCloseDetailsHint, onClose, size = 32)
             }
             Spacer(Modifier.height(8.dp))
             lines.forEach { (label, value) ->
@@ -866,6 +876,7 @@ internal fun BoxScope.StatusSheet(
     onCancelNext: () -> Unit,
     onKeepWatching: () -> Unit = {},
 ) {
+    val s = LocalStrings.current
     if (phase == Phase.Playing) return
     Box(Modifier.matchParentSize().background(Color(0xCC000000)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
         Column(Modifier.widthIn(max = 520.dp).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -878,50 +889,50 @@ internal fun BoxScope.StatusSheet(
                     Spacer(Modifier.height(12.dp))
                     Text(phase.message, color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp)
                     Spacer(Modifier.height(12.dp))
-                    TextButton(onClick = onBack) { Text("Back") }
+                    TextButton(onClick = onBack) { Text(s.commonBack) }
                 }
                 is Phase.Failed -> {
                     Text(phase.message, color = Color.White, fontSize = 15.sp, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(12.dp))
                     Row {
-                        TextButton(onClick = onRetry) { Text("Try again") }
-                        TextButton(onClick = onBack) { Text("Back") }
+                        TextButton(onClick = onRetry) { Text(s.commonTryAgain) }
+                        TextButton(onClick = onBack) { Text(s.commonBack) }
                     }
                 }
                 is Phase.Countdown -> {
                     val code = MediaName.parse(phase.next.fileName.ifBlank { phase.next.title }).episodeCode
-                    Text("Next: ${code ?: phase.next.title}", color = Color.White, fontSize = 17.sp)
-                    Text("Starting in ${phase.seconds}", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
+                    Text(s.playerNextUp(code ?: phase.next.title), color = Color.White, fontSize = 17.sp)
+                    Text(s.playerStartingIn(phase.seconds), color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
                     Spacer(Modifier.height(12.dp))
                     Row {
-                        TextButton(onClick = { onPlayNext(phase.next) }) { Text("Play now") }
-                        TextButton(onClick = onCancelNext) { Text("Cancel") }
+                        TextButton(onClick = { onPlayNext(phase.next) }) { Text(s.playerPlayNow) }
+                        TextButton(onClick = onCancelNext) { Text(s.commonCancel) }
                     }
                 }
                 Phase.Finished -> {
-                    Text("That's the end.", color = Color.White, fontSize = 15.sp)
+                    Text(s.playerTheEnd, color = Color.White, fontSize = 15.sp)
                     Spacer(Modifier.height(12.dp))
                     Row {
-                        TextButton(onClick = onWatchAgain) { Text("Watch again") }
-                        TextButton(onClick = onBack) { Text("Back") }
+                        TextButton(onClick = onWatchAgain) { Text(s.playerWatchAgain) }
+                        TextButton(onClick = onBack) { Text(s.commonBack) }
                     }
                 }
                 is Phase.StillWatching -> {
-                    Text("Still watching?", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                    Text(s.playerStillWatching, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(6.dp))
                     Text(phase.why, color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp, textAlign = TextAlign.Center)
                     val code = phase.next?.let { MediaName.parse(it.fileName.ifBlank { it.title }).episodeCode ?: it.title }
                     Text(
-                        code?.let { "Next: $it" } ?: "Playback and downloads are paused.",
+                        code?.let { s.playerNextUp(it) } ?: s.playerPausedEverything,
                         color = Color.White.copy(alpha = 0.7f),
                         fontSize = 14.sp,
                     )
                     Spacer(Modifier.height(12.dp))
                     val keep = remember { FocusRequester() }
                     Row {
-                        Button(onClick = onKeepWatching, modifier = Modifier.focusRequester(keep)) { Text("Keep watching") }
+                        Button(onClick = onKeepWatching, modifier = Modifier.focusRequester(keep)) { Text(s.playerKeepWatching) }
                         Spacer(Modifier.width(8.dp))
-                        TextButton(onClick = onBack) { Text("Back") }
+                        TextButton(onClick = onBack) { Text(s.commonBack) }
                     }
                     // Enter answers it from the keyboard, as the remote's OK does on TV.
                     LaunchedEffect(phase) { runCatching { keep.requestFocus() } }
@@ -938,6 +949,7 @@ internal fun BoxScope.StatusSheet(
  */
 @Composable
 internal fun BoxScope.ShortcutSheet(onClose: () -> Unit, mac: Boolean = false, wheelSeeks: Boolean = false) {
+    val s = LocalStrings.current
     BoxWithConstraints(
         Modifier.matchParentSize().background(FloatingTone.scrim).clickable(onClick = onClose),
         contentAlignment = Alignment.Center,
@@ -952,7 +964,7 @@ internal fun BoxScope.ShortcutSheet(onClose: () -> Unit, mac: Boolean = false, w
             modifier = Modifier.widthIn(max = if (twoColumns) 1040.dp else 560.dp).padding(16.dp),
         ) {
             Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState())) {
-                Text("Keyboard shortcuts", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Text(s.playerShortcuts, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(12.dp))
                 @Composable
                 fun Rows(part: List<Pair<String, String>>, modifier: Modifier) {

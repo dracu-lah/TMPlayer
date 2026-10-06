@@ -1,5 +1,7 @@
 package com.tmplayer.player
 
+import com.tmplayer.i18n.L
+
 /**
  * The speeds the transport row offers, and the arithmetic for stepping between them.
  *
@@ -27,13 +29,8 @@ object PlaybackSpeed {
 
     /** "1x", "1.25x": trailing zeroes dropped, because "1.00x" reads as a measurement. */
     fun label(value: Float): String {
-        val snapped = sanitise(value)
-        val text = if (snapped == snapped.toInt().toFloat()) {
-            snapped.toInt().toString()
-        } else {
-            snapped.toString().trimEnd('0').trimEnd('.')
-        }
-        return "${text}x"
+        // The locale's digits, at most two decimals, trailing zeroes dropped: "1x", "1.25x", "1,25x".
+        return L.formatSpeedFactor(L.messages.formatter.number(sanitise(value).toBigDecimal().stripTrailingZeros()))
     }
 
     private fun nearestIndex(value: Float): Int {

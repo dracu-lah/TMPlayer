@@ -76,7 +76,7 @@ class Messages internal constructor(
         else -> value.toString().toBigDecimalOrNull() ?: 0
     }
 
-    override fun toString(): String = "Messages($tag, ${own.size} of ${english.size} keys)"
+    override fun toString(): String = "Messages($tag, ${own.size} of ${english.size} keys)" // i18n-ok: debug toString
 }
 
 /**

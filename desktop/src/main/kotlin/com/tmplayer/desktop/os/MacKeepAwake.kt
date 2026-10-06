@@ -21,7 +21,7 @@ internal class MacKeepAwake : SerialKeepAwake("macos") {
     override fun hold(reason: String): Boolean {
         val viaIoKit = runCatching {
             val type = CFStringRef.createCFString(ASSERTION_TYPE)
-            val name = CFStringRef.createCFString("TMPlayer: $reason")
+            val name = CFStringRef.createCFString("TMPlayer: $reason") // i18n-ok: the reason is already translated
             try {
                 val id = IntByReference()
                 val result = IOKitPower.INSTANCE.IOPMAssertionCreateWithName(type, LEVEL_ON, name, id)

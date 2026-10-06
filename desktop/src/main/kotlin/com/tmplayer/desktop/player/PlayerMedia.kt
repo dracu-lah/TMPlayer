@@ -18,6 +18,7 @@ import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.Td
 import com.tmplayer.data.valueOrNull
+import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
 import dev.g000sha256.tdl.dto.OptionValueString
 import kotlinx.coroutines.CancellationException
@@ -80,7 +81,7 @@ interface PlayerMedia {
     val savable: StateFlow<Boolean> get() = NO_RESTRICTION
 
     /** Queues the whole file to be kept, and says what happened in words for a notice. */
-    fun download(): String = "Only Telegram videos can be downloaded"
+    fun download(): String = L.playerDownloadOnlyTelegram
 
     /**
      * The whole file on disk, for Open in another app: the download in the Downloads folder, or
@@ -204,7 +205,7 @@ class TelegramPlayerMedia(
     private suspend fun fetchWhole(fileId: Int) = coroutineScope {
         val progress = launch {
             _downloaded.collect { f ->
-                _preparing.value = "Downloading the whole video" + (f?.let { ": ${(it * 100).toInt()} %" } ?: "")
+                _preparing.value = f?.let { L.playerDownloadingWholePercent(L.messages.formatter.number((it * 100).toInt())) } ?: L.playerDownloadingWholeVideo
             }
         }
         try {
@@ -218,7 +219,7 @@ class TelegramPlayerMedia(
             )
             result.errorMessage?.let { throw IOException(Failures.humanise(it)) }
             if (Td.localFileAvailability(fileId) != LocalFileAvailability.Complete) {
-                throw IOException("The download did not finish. Check the connection and try again.")
+                throw IOException(L.playerDownloadIncomplete)
             }
         } catch (cancelled: CancellationException) {
             withContext(NonCancellable) {
@@ -288,15 +289,15 @@ class TelegramPlayerMedia(
      * lets go of the file, which for the video on screen is when playback stops.
      */
     override fun download(): String {
-        val runner = downloads ?: return "Downloads are not available here"
+        val runner = downloads ?: return L.downloadsUnavailable
         if (!_savable.value) return ContentProtection.NOT_SAVABLE
-        if (downloadFile != null) return "Already in Downloads"
+        if (downloadFile != null) return L.downloadsAlreadyIn
         val row = OfflineDownloads.active.value[playingId]
         if (row != null && row.busy) {
-            return if (row.stage == OfflineDownloads.Stage.Moving) "Saves to Downloads when playback stops" else "Already downloading"
+            return if (row.stage == OfflineDownloads.Stage.Moving) L.downloadsSavesWhenStopped else L.downloadsAlreadyDownloading
         }
         OfflineDownloads.start(runner, item.copy(fileId = playingId), chatTitle)
-        return if (_downloaded.value == 1f) "Saving to Downloads. It finishes when playback stops" else "Downloading ${item.title}"
+        return if (_downloaded.value == 1f) L.downloadsSavingWhenStopped else L.downloadsDownloadingTitle(item.title)
     }
 
     override suspend fun localFile(): File? {

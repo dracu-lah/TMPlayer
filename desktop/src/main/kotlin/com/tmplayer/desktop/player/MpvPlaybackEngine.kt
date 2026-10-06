@@ -2,6 +2,7 @@ package com.tmplayer.desktop.player
 
 import com.tmplayer.data.ResumeState
 import com.tmplayer.desktop.DesktopPaths
+import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
 import com.tmplayer.player.SubtitleStyle
 import com.tmplayer.player.SyncDelays
@@ -128,7 +129,7 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
                     is PlaybackEvent.SeekCompleted -> landSeek(e.positionMillis)
                     is PlaybackEvent.MediaEnded -> _state.update { it.copy(ended = true, playing = false) }
                     is PlaybackEvent.ErrorOccurred -> _state.update {
-                        it.copy(error = e.error.message ?: "Playback failed (${e.error.code})")
+                        it.copy(error = e.error.message ?: L.playerPlaybackFailed(e.error.code.toString()))
                     }
                     else -> Unit
                 }
@@ -275,7 +276,7 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             throw e
         } catch (e: Throwable) {
             Logger.w(TAG, "Open failed", e)
-            _state.update { it.copy(error = e.message ?: "This video could not be opened.", buffering = false) }
+            _state.update { it.copy(error = e.message ?: L.playerOpenFailed, buffering = false) }
         }
     }
 
@@ -536,32 +537,32 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             val w = h.int("video-params/w") ?: _state.value.videoWidth
             val ht = h.int("video-params/h") ?: _state.value.videoHeight
             val fps = h.double("container-fps") ?: h.double("estimated-vf-fps")
-            if (w > 0 && ht > 0) add("Picture" to ("$w x $ht" + (fps?.let { ", %.3g fps".format(it) } ?: "")))
-            h.string("video-codec")?.let { add("Video codec" to it) }
-            h.string("video-params/pixelformat")?.let { add("Pixel format" to it) }
+            if (w > 0 && ht > 0) add(L.playerDetailsLabelPicture to (fps?.let { L.playerDetailsPictureValue(w.toString(), ht.toString(), "%.3g".format(L.messages.locale, it)) } ?: "$w x $ht"))
+            h.string("video-codec")?.let { add(L.playerDetailsLabelVideoCodec to it) }
+            h.string("video-params/pixelformat")?.let { add(L.playerDetailsPixelFormat to it) }
             val hw = h.string("hwdec-current")
-            add("Hardware decoding" to if (hw.isNullOrBlank() || hw == "no") "Off (software)" else hw)
+            add(L.playerDetailsHwdec to if (hw.isNullOrBlank() || hw == "no") L.playerDetailsSoftware else hw)
             val audio = listOfNotNull(
                 h.string("audio-codec-name"),
-                h.int("audio-params/channel-count")?.let { "$it channels" },
-                h.int("audio-params/samplerate")?.let { "$it Hz" },
+                h.int("audio-params/channel-count")?.let { L.playerDetailsChannels(it) },
+                h.int("audio-params/samplerate")?.let { L.playerDetailsHz(it.toString()) },
             )
-            if (audio.isNotEmpty()) add("Sound" to audio.joinToString(", "))
-            add("Downmix to stereo" to if (_state.value.downmix) "On" else "Off")
+            if (audio.isNotEmpty()) add(L.playerDetailsLabelSound to audio.joinToString(", "))
+            add(L.playerDownmix to if (_state.value.downmix) L.commonOn else L.commonOff)
             add(
-                "Volume boost" to when {
-                    !_state.value.volumeBoost -> "Off"
-                    h.string("af").orEmpty().contains("dynaudnorm") -> "On, levelled"
-                    else -> "On, gain only"
+                L.playerVolumeBoost to when {
+                    !_state.value.volumeBoost -> L.commonOff
+                    h.string("af").orEmpty().contains("dynaudnorm") -> L.playerDetailsBoostLevelled
+                    else -> L.playerDetailsBoostGain
                 },
             )
             // Read back from mpv rather than from the state, so the panel shows what is in force.
-            h.double("sub-delay")?.let { add("Subtitle delay" to SyncDelays.label((it * 1000).roundToLong())) }
-            h.double("audio-delay")?.let { add("Audio delay" to SyncDelays.label((it * 1000).roundToLong())) }
-            h.string("file-format")?.let { add("Container" to it) }
-            h.double("demuxer-cache-duration")?.let { add("Buffered ahead" to "%.1f s".format(it)) }
-            h.string("current-vo")?.let { add("Video output" to it) }
-            h.string("current-ao")?.let { add("Audio output" to it) }
+            h.double("sub-delay")?.let { add(L.playerDetailsSubtitleDelay to SyncDelays.label((it * 1000).roundToLong())) }
+            h.double("audio-delay")?.let { add(L.playerDetailsAudioDelay to SyncDelays.label((it * 1000).roundToLong())) }
+            h.string("file-format")?.let { add(L.playerDetailsContainer to it) }
+            h.double("demuxer-cache-duration")?.let { add(L.playerDetailsBuffered to L.formatSecondsShort(L.messages.formatter.decimal(it, 1))) }
+            h.string("current-vo")?.let { add(L.playerDetailsVideoOutput to it) }
+            h.string("current-ao")?.let { add(L.playerDetailsAudioOutput to it) }
             h.string("mpv-version")?.let { add("mpv" to it) }
             h.string("ffmpeg-version")?.let { add("FFmpeg" to it) }
         }

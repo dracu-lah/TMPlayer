@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.player
 
+import com.tmplayer.i18n.L
 import com.tmplayer.player.PlaybackSpeed
 import com.tmplayer.player.StreamStats
 import kotlin.math.abs
@@ -76,8 +77,8 @@ object SeekMath {
     fun speedLabel(speed: Float): String {
         val stop = PlaybackSpeed.CHOICES.firstOrNull { abs(it - speed) < 0.001f }
         if (stop != null) return PlaybackSpeed.label(stop)
-        val text = "%.2f".format(java.util.Locale.ROOT, speed).trimEnd('0').trimEnd('.')
-        return "${text}x"
+        val rounded = java.math.BigDecimal(speed.toDouble()).setScale(2, java.math.RoundingMode.HALF_UP).stripTrailingZeros()
+        return L.formatSpeedFactor(L.messages.formatter.number(rounded))
     }
 
     fun clock(ms: Long): String = StreamStats.formatClock(ms)

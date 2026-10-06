@@ -55,9 +55,11 @@ import com.tmplayer.desktop.DesktopPaths
 import com.tmplayer.desktop.DesktopSettings
 import com.tmplayer.desktop.DownloadIndex
 import com.tmplayer.desktop.os.OpenExternal
+import com.tmplayer.i18n.L
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.rememberToast
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.nav.BackHandler
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.launch
@@ -73,11 +75,12 @@ import java.io.File
  * question, since a download is the one thing TMPlayer never takes back on its own.
  */
 /** The "Remove after watching" switch's words. */
-internal const val REMOVE_AFTER_WATCHING = "Remove after watching"
-internal const val REMOVE_AFTER_WATCHING_DETAIL = "Delete a download once it is marked watched. Cached videos are not affected"
+internal val REMOVE_AFTER_WATCHING: String get() = L.downloadsRemoveAfterWatching
+internal val REMOVE_AFTER_WATCHING_DETAIL: String get() = L.downloadsRemoveAfterWatchingDetail
 
 @Composable
 fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloadsDir) {
+    val s = LocalStrings.current
     val active by OfflineDownloads.active.collectAsState()
     val history by state.settings.downloadHistory.collectAsState(initial = emptyList())
     val cachedRecords by state.settings.cachedVideos.collectAsState(initial = emptyList())
@@ -112,23 +115,23 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
 
     Column(Modifier.fillMaxSize()) {
         PageHeader(
-            "Downloads",
-            "Kept in ${downloadsDir.path} until you delete them",
+            s.navDownloads,
+            s.downloadsKeptIn(downloadsDir.path),
             actions = {
                 if (picked.isNotEmpty()) {
-                    TextButton(onClick = { picked = emptySet() }) { Text("Clear selection") }
+                    TextButton(onClick = { picked = emptySet() }) { Text(s.commonClearSelection) }
                     OutlinedButton(onClick = { confirm = history.filter { it.key in picked } }) {
-                        Text("Delete selected (${picked.size})", color = Tone.danger)
+                        Text(s.downloadsDeleteSelected(picked.size), color = Tone.danger)
                     }
                 } else {
                     if (queue.any { it.busy && it.stage != OfflineDownloads.Stage.Moving }) {
-                        TextButton(onClick = { OfflineDownloads.pauseAll(state.downloads) }) { Text("Pause all") }
+                        TextButton(onClick = { OfflineDownloads.pauseAll(state.downloads) }) { Text(s.downloadsPauseAll) }
                     } else if (queue.any { !it.busy }) {
-                        TextButton(onClick = { OfflineDownloads.resumeAll(state.downloads) }) { Text("Resume all") }
+                        TextButton(onClick = { OfflineDownloads.resumeAll(state.downloads) }) { Text(s.downloadsResumeAll) }
                     }
-                    TextButton(onClick = { OpenExternal.open(downloadsDir.apply { mkdirs() }) }) { Text("Open folder") }
+                    TextButton(onClick = { OpenExternal.open(downloadsDir.apply { mkdirs() }) }) { Text(s.downloadsOpenFolder) }
                     if (history.isNotEmpty()) {
-                        TextButton(onClick = { confirm = history }) { Text("Delete all", color = Tone.danger) }
+                        TextButton(onClick = { confirm = history }) { Text(s.downloadsDeleteAll, color = Tone.danger) }
                     }
                 }
             },
@@ -141,13 +144,13 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.fillMaxSize().padding(end = 12.dp),
             ) {
-                item(key = "h-active") { Section("Downloading") }
+                item(key = "h-active") { Section(s.downloadsDownloading) }
                 if (queue.isEmpty()) {
-                    item(key = "e-active") { Empty("Nothing downloading. Choose Download on a video and it queues here.") }
+                    item(key = "e-active") { Empty(s.downloadsEmptyActive) }
                 }
                 items(queue, key = { "a${it.fileId}" }) { row -> ActiveRow(state, row) }
 
-                item(key = "h-done") { Section("Downloaded") }
+                item(key = "h-done") { Section(s.downloadsDownloaded) }
                 item(key = "t-remove") {
                     Setting(REMOVE_AFTER_WATCHING, REMOVE_AFTER_WATCHING_DETAIL) {
                         Switch(
@@ -157,7 +160,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                     }
                 }
                 if (history.isEmpty()) {
-                    item(key = "e-done") { Empty("Nothing downloaded yet. Downloads are kept in ${downloadsDir.path} until you delete them.") }
+                    item(key = "e-done") { Empty(s.downloadsEmptyDone(downloadsDir.path)) }
                 }
                 items(history, key = { "d${it.key}" }) { record ->
                     KeptRow(
@@ -175,7 +178,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                                 val file = record.localPath?.let(::File)
                                     ?: runCatching { Td.localFilePath(Td.currentFileId(record.chatId, record.messageId, record.fileId)) }
                                         .getOrNull()?.let(::File)
-                                if (file == null || !file.exists()) toast("The file is not here any more") else OpenExternal.reveal(file)
+                                if (file == null || !file.exists()) toast(s.downloadsFileGone) else OpenExternal.reveal(file)
                             }
                         },
                         onOpenElsewhere = { record.localPath?.let { OpenExternal.open(File(it)) } },
@@ -194,31 +197,32 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                 }
 
                 if (unlisted.isNotEmpty()) {
-                    item(key = "h-unlisted") { Section("Not in TMPlayer's list") }
+                    item(key = "h-unlisted") { Section(s.downloadsUnlisted) }
                     items(unlisted, key = { "u${it.path}" }) { file ->
                         UnlistedRow(
                             file = file,
                             onKeep = { scope.launch { DownloadIndex.keep(state.settings, file) } },
                             onDelete = {
                                 scope.launch {
-                                    if (!DownloadIndex.discard(file)) toast("${file.name} could not be deleted")
+                                    if (!DownloadIndex.discard(file)) toast(s.downloadsDeleteFailed(file.name))
                                 }
                             },
                         )
                     }
                 }
 
-                item(key = "h-cached") { Section("Cached from playback") }
+                item(key = "h-cached") { Section(s.downloadsCached) }
                 item(key = "l-cached") {
                     Text(
-                        "Played recently. The least recently played go first once the cache passes " +
-                            "${MediaMapper.formatSize(desktop.cacheLimitBytes.takeIf { it > 0 } ?: DesktopSettings.DEFAULT_CACHE_LIMIT_BYTES)}.",
+                        s.downloadsCachedDetail(
+                            MediaMapper.formatSize(desktop.cacheLimitBytes.takeIf { it > 0 } ?: DesktopSettings.DEFAULT_CACHE_LIMIT_BYTES),
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = Tone.muted,
                     )
                 }
                 if (cached.isEmpty()) {
-                    item(key = "e-cached") { Empty("Nothing cached. Playing a video keeps it here, up to the cache limit.") }
+                    item(key = "e-cached") { Empty(s.downloadsEmptyCacheLimit) }
                 }
                 items(cached, key = { "c${it.key}" }) { record ->
                     CachedRow(
@@ -240,7 +244,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                                 val id = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }
                                     .getOrDefault(record.fileId)
                                 OfflineDownloads.start(state.downloads, record.toMediaItem().copy(fileId = id), record.chatTitle)
-                                toast("Saving ${record.title} to Downloads")
+                                toast(s.downloadsSavingTitle(record.title))
                             }
                         },
                         onDelete = {
@@ -261,17 +265,17 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
     confirm?.let { doomed ->
         val one = doomed.size == 1
         ConfirmDialog(
-            title = if (one) "Delete this download?" else "Delete ${doomed.size} downloads?",
-            message = if (one) "${doomed.first().title} is deleted from this computer." else "The files are deleted from this computer.",
-            detail = "The videos stay on Telegram, to play or download again.",
-            confirmLabel = "Delete",
+            title = s.downloadsDeleteTitle(doomed.size),
+            message = if (one) s.downloadsDeleteOneMessage(doomed.first().title) else s.downloadsDeleteManyMessage,
+            detail = s.downloadsDeleteDetail,
+            confirmLabel = s.commonDelete,
             onDismiss = { confirm = null },
             onConfirm = {
                 confirm = null
                 picked = picked - doomed.map { it.key }.toSet()
                 scope.launch {
                     val locked = doomed.count { !DownloadIndex.delete(state.settings, it) }
-                    if (locked > 0) toast(if (locked == 1) "One file is in use and was not deleted" else "$locked files are in use and were not deleted")
+                    if (locked > 0) toast(s.downloadsLocked(locked))
                 }
             },
         )
@@ -293,10 +297,11 @@ internal fun rememberDownloadsInFlight(): Int {
  */
 @Composable
 internal fun DownloadToasts(state: ShellState) {
+    val s = LocalStrings.current
     val toast = rememberToast()
     val runner = state.downloads as? com.tmplayer.desktop.DesktopDownloadRunner ?: return
     LaunchedEffect(runner) {
-        runner.finished.collect { toast("Downloaded: ${it.title}") }
+        runner.finished.collect { toast(s.downloadsFinished(it.title)) }
     }
 }
 
@@ -317,19 +322,20 @@ private fun Empty(text: String) {
 
 @Composable
 private fun ActiveRow(state: ShellState, row: OfflineDownloads.Progress) {
+    val s = LocalStrings.current
     val status = when (row.stage) {
         OfflineDownloads.Stage.Running -> buildString {
-            append(StreamStats.formatBytes(row.downloadedBytes)).append(" of ").append(StreamStats.formatBytes(row.totalBytes))
+            append(s.downloadsProgress(StreamStats.formatBytes(row.downloadedBytes), StreamStats.formatBytes(row.totalBytes)))
             if (row.bytesPerSecond > 0) append("  ·  ").append(StreamStats.formatSpeed(row.bytesPerSecond))
             row.remainingSeconds?.let { append("  ·  ").append(StreamStats.formatEta(it)) }
         }
-        OfflineDownloads.Stage.Queued -> "Waiting its turn"
-        OfflineDownloads.Stage.Paused -> "Paused at ${StreamStats.formatBytes(row.downloadedBytes)}"
-        OfflineDownloads.Stage.Offline -> "Waiting for a connection"
-        OfflineDownloads.Stage.NoWifi -> "Waiting for Wi-Fi"
+        OfflineDownloads.Stage.Queued -> s.downloadsQueued
+        OfflineDownloads.Stage.Paused -> s.downloadsPausedAt(StreamStats.formatBytes(row.downloadedBytes))
+        OfflineDownloads.Stage.Offline -> s.downloadsWaitingConnection
+        OfflineDownloads.Stage.NoWifi -> s.downloadsWaitingWifi
         OfflineDownloads.Stage.Moving ->
-            if (row.heldByPlayer) "Finishes when playback stops" else "Moving into Downloads"
-        OfflineDownloads.Stage.Failed -> row.failure ?: "Stopped"
+            if (row.heldByPlayer) s.downloadsFinishesWhenStopped else s.downloadsMovingIn
+        OfflineDownloads.Stage.Failed -> row.failure ?: s.downloadsStopped
     }
     val fraction = if (row.stage == OfflineDownloads.Stage.Moving) row.moveFraction ?: 0f else row.fraction ?: 0f
     Row(
@@ -349,17 +355,17 @@ private fun ActiveRow(state: ShellState, row: OfflineDownloads.Progress) {
         when {
             row.stage == OfflineDownloads.Stage.Moving -> Unit
             row.busy -> IconButton(onClick = { OfflineDownloads.pause(state.downloads, row.fileId) }) {
-                Icon(TmIcons.Pause, contentDescription = "Pause")
+                Icon(TmIcons.Pause, contentDescription = s.playerPause)
             }
             else -> IconButton(onClick = { OfflineDownloads.resume(state.downloads, row.fileId) }) {
                 Icon(
                     if (row.stage == OfflineDownloads.Stage.Failed) Icons.Filled.Refresh else Icons.Filled.PlayArrow,
-                    contentDescription = if (row.stage == OfflineDownloads.Stage.Failed) "Try again" else "Resume",
+                    contentDescription = if (row.stage == OfflineDownloads.Stage.Failed) s.commonTryAgain else s.downloadsResume,
                 )
             }
         }
         IconButton(onClick = { OfflineDownloads.cancel(state.downloads, row.fileId) }) {
-            Icon(Icons.Filled.Close, contentDescription = "Cancel")
+            Icon(Icons.Filled.Close, contentDescription = s.commonCancel)
         }
     }
 }
@@ -382,6 +388,7 @@ private fun KeptRow(
     onResume: () -> Unit,
     onRemove: () -> Unit,
 ) {
+    val s = LocalStrings.current
     val missing = fileState == DownloadIndex.FileState.Missing ||
         (fileState == DownloadIndex.FileState.Legacy && legacy == LocalFileAvailability.Missing)
     val partial = fileState == DownloadIndex.FileState.Legacy && legacy == LocalFileAvailability.Partial
@@ -390,9 +397,9 @@ private fun KeptRow(
         if (record.chatTitle.isNotBlank()) append(record.chatTitle).append("  ·  ")
         append(MediaMapper.formatSize(record.sizeBytes))
         when {
-            missing -> append("  ·  File missing")
-            partial -> append("  ·  Part downloaded")
-            fileState == DownloadIndex.FileState.Legacy && legacy == LocalFileAvailability.Complete -> append("  ·  Moving into the Downloads folder soon")
+            missing -> append("  ·  ").append(s.downloadsFileMissing)
+            partial -> append("  ·  ").append(s.downloadsPartDownloaded)
+            fileState == DownloadIndex.FileState.Legacy && legacy == LocalFileAvailability.Complete -> append("  ·  ").append(s.downloadsMovingSoon)
         }
     }
     Row(
@@ -418,14 +425,14 @@ private fun KeptRow(
             )
         }
         when {
-            missing -> TextButton(onClick = onRemove) { Text("Remove") }
-            partial -> TextButton(onClick = onResume) { Text("Resume") }
+            missing -> TextButton(onClick = onRemove) { Text(s.commonRemove) }
+            partial -> TextButton(onClick = onResume) { Text(s.downloadsResume) }
             else -> {
                 if (fileState == DownloadIndex.FileState.Present) {
-                    TextButton(onClick = onOpenElsewhere) { Text("Open in another app") }
+                    TextButton(onClick = onOpenElsewhere) { Text(s.commonOpenElsewhere) }
                 }
-                IconButton(onClick = onShowInFolder) { Icon(TmIcons.Folder, contentDescription = "Show in folder") }
-                IconButton(onClick = onRemove) { Icon(Icons.Filled.Delete, contentDescription = "Delete download") }
+                IconButton(onClick = onShowInFolder) { Icon(TmIcons.Folder, contentDescription = s.downloadsShowInFolder) }
+                IconButton(onClick = onRemove) { Icon(Icons.Filled.Delete, contentDescription = s.downloadsDeleteDownload) }
             }
         }
     }
@@ -433,6 +440,7 @@ private fun KeptRow(
 
 @Composable
 private fun UnlistedRow(file: File, onKeep: () -> Unit, onDelete: () -> Unit) {
+    val s = LocalStrings.current
     Row(
         Modifier.fillMaxWidth().widthIn(max = 960.dp).padding(vertical = 4.dp, horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -441,13 +449,13 @@ private fun UnlistedRow(file: File, onKeep: () -> Unit, onDelete: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(file.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                "${MediaMapper.formatSize(file.length())}  ·  In the folder, not in TMPlayer's list",
+                s.downloadsUnlistedDetail(MediaMapper.formatSize(file.length())),
                 style = MaterialTheme.typography.bodySmall,
                 color = Tone.muted,
             )
         }
-        TextButton(onClick = onKeep) { Text("Keep") }
-        TextButton(onClick = onDelete) { Text("Delete", color = Tone.danger) }
+        TextButton(onClick = onKeep) { Text(s.downloadsKeep) }
+        TextButton(onClick = onDelete) { Text(s.commonDelete, color = Tone.danger) }
     }
 }
 
@@ -460,6 +468,7 @@ private fun CachedRow(
     onSave: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    val s = LocalStrings.current
     Row(
         Modifier
             .fillMaxWidth()
@@ -483,10 +492,10 @@ private fun CachedRow(
             )
         }
         if (queued) {
-            Text("Saving to Downloads", style = MaterialTheme.typography.bodySmall, color = Tone.muted)
+            Text(s.downloadsSaving, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
         } else {
-            TextButton(onClick = onSave) { Text("Save to Downloads") }
+            TextButton(onClick = onSave) { Text(s.downloadsSave) }
         }
-        IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "Delete from the cache") }
+        IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = s.downloadsDeleteCached) }
     }
 }

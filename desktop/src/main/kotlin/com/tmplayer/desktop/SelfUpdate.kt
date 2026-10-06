@@ -3,6 +3,7 @@ package com.tmplayer.desktop
 import com.tmplayer.data.Release
 import com.tmplayer.data.UpdateWords
 import com.tmplayer.desktop.os.OsInfo
+import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,14 +28,25 @@ import java.util.concurrent.TimeUnit
  * and the Flatpak, dropped after 1.21.0): the download to take instead, once a release without
  * this one comes out. See [SelfUpdate.retiredLine].
  */
-enum class InstallKind(val canSelfUpdate: Boolean, val label: String, val movesTo: String? = null) {
-    WindowsMsi(true, "Windows installer"),
-    WindowsPortable(true, "portable zip", movesTo = "Windows installer (the .msi)"),
-    AppImage(true, "AppImage"),
-    Deb(true, "deb package", movesTo = "AppImage"),
-    Rpm(true, "rpm package", movesTo = "AppImage"),
-    Flatpak(false, "Flatpak", movesTo = "AppImage"),
-    Manual(false, "manual install"),
+enum class InstallKind(
+    val canSelfUpdate: Boolean,
+    private val labelText: () -> String,
+    private val movesToText: (() -> String)? = null,
+) {
+    WindowsMsi(true, { L.installWindowsInstaller }),
+    WindowsPortable(true, { L.installPortableZip }, movesToText = { L.installWindowsInstallerMsi }),
+    AppImage(true, { L.installAppimage }),
+    Deb(true, { L.installDebPackage }, movesToText = { L.installAppimage }),
+    Rpm(true, { L.installRpmPackage }, movesToText = { L.installAppimage }),
+    Flatpak(false, { L.installFlatpak }, movesToText = { L.installAppimage }),
+    Manual(false, { L.installManual }),
+    ;
+
+    /** How the viewer would name this kind of install, in the UI language. */
+    val label: String get() = labelText()
+
+    /** The download to take instead, for a format releases no longer carry. */
+    val movesTo: String? get() = movesToText?.invoke()
 }
 
 /** What the update popup shows while an update is being fetched and put in place. */
@@ -102,7 +114,7 @@ class SelfUpdate(
             Logger.w(TAG, "update failed: ${it.message}")
             // A dropped connection reads the same whichever request it was; the rest are this
             // class's own sentences.
-            val message = if (it is IOException) UNREACHABLE else it.message ?: "The update did not finish."
+            val message = if (it is IOException) UNREACHABLE else it.message ?: L.updateDidNotFinish
             _progress.value = UpdateProgress.Failed(message)
         }
     }
@@ -122,7 +134,7 @@ class SelfUpdate(
 
     private fun run(release: Release) {
         val asset = assetFor(kind)?.let(release.assets::get)
-            ?: error(retiredLine(kind, release) ?: "This release has no ${kind.label}.")
+            ?: error(retiredLine(kind, release) ?: L.updateNoAsset(kind.label))
         val assetName = asset.name
 
         workDir.mkdirs()
@@ -130,7 +142,7 @@ class SelfUpdate(
         _progress.value = UpdateProgress.Downloading(null)
         val expected = asset.sha256
             ?: release.checksumsUrl?.let { expectedSha256(String(httpGet(it).readBytes()), assetName) }
-            ?: error("This release has no checksum for $assetName.")
+            ?: error(L.updateNoChecksum(assetName))
         val file = File(workDir, assetName)
         download(asset.url, file)
 
@@ -152,7 +164,7 @@ class SelfUpdate(
     }
 
     private fun stageMsi(msi: File) {
-        val exe = appLauncher() ?: error("Could not find TMPlayer.exe")
+        val exe = appLauncher() ?: error(L.updateNoExe)
         val script = File(workDir, "update.ps1")
         script.writeText(
             """
@@ -166,15 +178,15 @@ class SelfUpdate(
     }
 
     private fun stagePortable(zip: File) {
-        val exe = appLauncher() ?: error("Could not find TMPlayer.exe")
-        val current = exe.parentFile ?: error("Could not find the TMPlayer folder")
-        val parent = current.parentFile ?: error("Could not find the TMPlayer folder")
-        if (!parent.canWrite()) error("${parent.absolutePath} is not writable")
+        val exe = appLauncher() ?: error(L.updateNoExe)
+        val current = exe.parentFile ?: error(L.updateNoFolder)
+        val parent = current.parentFile ?: error(L.updateNoFolder)
+        if (!parent.canWrite()) error(L.updateNotWritable(parent.absolutePath))
         val staged = File(parent, current.name + ".new")
         staged.deleteRecursively()
         unzip(zip, staged)
         // The zip holds one TMPlayer folder.
-        val fresh = staged.listFiles()?.singleOrNull { it.isDirectory } ?: error("The zip did not hold a TMPlayer folder")
+        val fresh = staged.listFiles()?.singleOrNull { it.isDirectory } ?: error(L.updateBadZip)
         val old = File(parent, current.name + ".old")
         val script = File(workDir, "update.ps1")
         script.writeText(
@@ -194,22 +206,22 @@ class SelfUpdate(
     }
 
     private fun replaceAppImage(downloaded: File) {
-        val target = File(System.getenv("APPIMAGE") ?: error("Could not find the AppImage"))
-        val dir = target.absoluteFile.parentFile ?: error("Could not find the AppImage's folder")
-        if (!dir.canWrite()) error("${dir.absolutePath} is not writable, so the AppImage cannot be replaced")
+        val target = File(System.getenv("APPIMAGE") ?: error(L.updateNoAppimage))
+        val dir = target.absoluteFile.parentFile ?: error(L.updateNoAppimageFolder)
+        if (!dir.canWrite()) error(L.updateAppimageNotWritable(dir.absolutePath))
         val next = File(dir, ".${target.name}.new")
         downloaded.copyTo(next, overwrite = true)
         next.setExecutable(true, false)
         // A rename over the old file: the running copy keeps its mount of the old one.
         if (!next.renameTo(target)) {
             next.delete()
-            error("Could not replace ${target.absolutePath}")
+            error(L.updateCouldNotReplace(target.absolutePath))
         }
         downloaded.delete()
     }
 
     private fun installPackage(pkg: File) {
-        if (!OsInfo.onPath("pkexec")) error("pkexec is not installed. Install the package with your package manager")
+        if (!OsInfo.onPath("pkexec")) error(L.updateNoPkexec)
         val command = when (kind) {
             InstallKind.Deb -> when {
                 OsInfo.onPath("apt-get") -> listOf("apt-get", "install", "-y", "--allow-downgrades", pkg.absolutePath)
@@ -226,14 +238,14 @@ class SelfUpdate(
         val output = process.inputStream.bufferedReader().readText()
         if (!process.waitFor(15, TimeUnit.MINUTES)) {
             process.destroy()
-            error("The install took too long")
+            error(L.updateTooLong)
         }
         when (process.exitValue()) {
             0 -> pkg.delete()
-            126, 127 -> error("The password prompt was closed, or no polkit agent is running. Nothing was installed")
+            126, 127 -> error(L.updateNoPolkit)
             else -> {
                 Logger.w(TAG, "package install failed: $output")
-                error("The package manager stopped: ${output.lines().lastOrNull { it.isNotBlank() } ?: "exit ${process.exitValue()}"}")
+                error(L.updatePackageManagerStopped(output.lines().lastOrNull { it.isNotBlank() } ?: "exit ${process.exitValue()}"))
             }
         }
     }
@@ -275,7 +287,7 @@ class SelfUpdate(
             connection.disconnect()
         }
         target.delete()
-        if (!part.renameTo(target)) error("Could not save the download")
+        if (!part.renameTo(target)) error(L.updateCouldNotSave)
     }
 
     private fun httpGet(url: String) = open(url).inputStream
@@ -293,8 +305,8 @@ class SelfUpdate(
     companion object {
         private const val TAG = "SelfUpdate"
 
-        const val UNREACHABLE = UpdateWords.UNREACHABLE
-        const val DAMAGED = UpdateWords.DAMAGED
+        val UNREACHABLE: String get() = UpdateWords.UNREACHABLE
+        val DAMAGED: String get() = UpdateWords.DAMAGED
 
         /** Dropped into the portable zip's folder by CI, so the app knows it is not the MSI. */
         const val PORTABLE_MARKER = "portable.txt"
@@ -378,14 +390,11 @@ class SelfUpdate(
         fun retiredLine(kind: InstallKind, release: Release): String? {
             val next = kind.movesTo ?: return null
             if (publishedKey(kind)?.let(release.assets::containsKey) == true) return null
-            val what = "The ${kind.label} is no longer published, so this copy cannot update itself."
+            val what = L.updateRetired(kind.label)
             return when (kind) {
-                InstallKind.WindowsPortable ->
-                    "$what Take the $next from the release page and delete this folder. Your sign in and settings carry over."
-                InstallKind.Deb, InstallKind.Rpm ->
-                    "$what Remove it with your package manager, then take the $next from the release page. Your sign in and settings carry over."
-                else ->
-                    "$what Take the $next from the release page. It keeps its data outside the Flatpak, so you sign in again there; INSTALL.md says how to bring your settings."
+                InstallKind.WindowsPortable -> L.updateRetiredPortable(what, next)
+                InstallKind.Deb, InstallKind.Rpm -> L.updateRetiredPackage(what, next)
+                else -> L.updateRetiredFlatpak(what, next)
             }
         }
 

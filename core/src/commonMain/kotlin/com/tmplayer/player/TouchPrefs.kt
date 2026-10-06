@@ -1,5 +1,7 @@
 package com.tmplayer.player
 
+import com.tmplayer.i18n.L
+
 /**
  * How the phone's player answers a thumb, as the viewer has set it in Settings.
  *
@@ -46,15 +48,14 @@ data class TouchPrefs(
             ms?.takeIf { it in TIMEOUT_CHOICES_MS } ?: TIMEOUT_DEFAULT_MS
 
         fun holdLabel(speed: Float): String = when {
-            speed <= 0f -> "Off"
-            speed % 1f == 0f -> "${speed.toInt()}x"
-            else -> "${speed}x"
+            speed <= 0f -> L.commonOff
+            else -> L.formatSpeedFactor(L.messages.formatter.number(speed.toBigDecimal().stripTrailingZeros()))
         }
 
         fun timeoutLabel(ms: Long): String = when {
-            ms <= 0L -> "Never"
-            ms % 1000L == 0L -> "${ms / 1000} seconds"
-            else -> String.format(java.util.Locale.ROOT, "%.1f seconds", ms / 1000f)
+            ms <= 0L -> L.commonNever
+            ms % 1000L == 0L -> L.unitSeconds(ms / 1000)
+            else -> L.unitSecondsDecimal(L.messages.formatter.decimal(ms / 1000.0, 1))
         }
 
         /** The next choice up or down a list, clamped at the ends. */

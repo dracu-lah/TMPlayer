@@ -2,6 +2,7 @@ package com.tmplayer.desktop.os
 
 import com.sun.jna.platform.win32.Advapi32Util
 import com.sun.jna.platform.win32.WinReg
+import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
 import com.tmplayer.platform.TransferNotifier
 import com.tmplayer.platform.TransferNotifier.Capability
@@ -218,10 +219,10 @@ internal object WindowsToast {
     )
 
     fun statusOf(kind: Kind): String = when (kind) {
-        Kind.Download -> "Downloading"
-        Kind.MoveToDownloads -> "Moving into Downloads"
-        Kind.Relocate -> "Moving downloads"
-        Kind.Migrate -> "Moving downloads"
+        Kind.Download -> L.downloadsDownloading
+        Kind.MoveToDownloads -> L.downloadsMovingIn
+        Kind.Relocate -> L.storageMovingDownloads
+        Kind.Migrate -> L.storageMovingDownloads
     }
 
     /** A progress toast whose bar, figures and status are bound to the toast's data. */
@@ -233,7 +234,7 @@ internal object WindowsToast {
 
     /** A finished or failed transfer; [launch] is a file URI opened when it is pressed. */
     fun doneXml(title: String, body: String, launch: String?): String {
-        val activation = launch?.let { " activationType=\"protocol\" launch=\"${xml(it)}\"" }.orEmpty()
+        val activation = launch?.let { " activationType=\"protocol\" launch=\"${xml(it)}\"" }.orEmpty() // i18n-ok: toast XML
         return "<toast$activation><visual><binding template=\"ToastGeneric\">" +
             "<text>${xml(title)}</text>" +
             (if (body.isNotEmpty()) "<text>${xml(body)}</text>" else "") +

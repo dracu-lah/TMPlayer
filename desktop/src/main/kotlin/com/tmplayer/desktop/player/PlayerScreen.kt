@@ -1,6 +1,8 @@
 package com.tmplayer.desktop.player
 
 import androidx.compose.ui.input.key.Key
+import com.tmplayer.i18n.L
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.TmMaterialTheme
 import com.tmplayer.desktop.os.MediaKeyEcho
 import androidx.compose.foundation.background
@@ -169,6 +171,7 @@ fun PlayerScreen(
     engineFactory: () -> PlaybackEngine = { MpvPlaybackEngine(OpenPrefs.hwdecFor(prefs.now.softwareDecoding)) },
     backdrop: Color = Color.Black,
 ) {
+    val s = LocalStrings.current
     val engine = remember { engineFactory() }
     val desktop by prefs.state.collectAsState()
     DisposableEffect(engine) { onDispose { engine.close() } }
@@ -181,7 +184,7 @@ fun PlayerScreen(
     var current by remember(media) { mutableStateOf(media) }
     var ignoreSavedPosition by remember(media) { mutableStateOf(startFromBeginning) }
     var attempt by remember { mutableIntStateOf(0) }
-    var phase by remember { mutableStateOf<Phase>(Phase.Loading("Opening")) }
+    var phase by remember { mutableStateOf<Phase>(Phase.Loading(s.playerOpeningVideo)) }
     var episodes by remember { mutableStateOf(Episodes()) }
     var resumedFrom by remember { mutableStateOf<Long?>(null) }
     var autoplayNext by remember { mutableStateOf(true) }
@@ -239,7 +242,7 @@ fun PlayerScreen(
     // ---- open, resume, episodes --------------------------------------------------------------
 
     LaunchedEffect(current, attempt) {
-        phase = Phase.Loading(if (item.chatId != 0L) "Connecting to Telegram" else "Opening")
+        phase = Phase.Loading(if (item.chatId != 0L) s.playerConnectingTelegram else s.playerOpeningVideo)
         nextUpDismissed = false
         nextUpShown = false
         resumedFrom = null
@@ -290,12 +293,12 @@ fun PlayerScreen(
             throw e
         } catch (e: Exception) {
             Logger.w("PlayerScreen", "Could not open ${item.title}", e)
-            phase = Phase.Failed(e.message ?: "This video could not be opened.")
+            phase = Phase.Failed(e.message ?: s.playerOpenFailed)
             return@LaunchedEffect
         } finally {
             preparing.cancel()
         }
-        phase = Phase.Loading(if (start > 0) "Resuming from ${SeekMath.clock(start)}" else "Opening")
+        phase = Phase.Loading(if (start > 0) s.playerResumingFrom(SeekMath.clock(start)) else s.playerOpeningVideo)
         engine.open(data, start, prefs)
         val error = engine.state.value.error
         if (error != null) {
@@ -453,7 +456,7 @@ fun PlayerScreen(
         val autoplays = next != null && autoplayNext && !nextUpDismissed
         if (sleepAtTheEnd) {
             sleepAtTheEnd = false
-            askStillWatching("The sleep timer stopped at the end of the video.", next.takeIf { autoplays }, ended = true)
+            askStillWatching(s.playerStillSleepEnded, next.takeIf { autoplays }, ended = true)
             return@LaunchedEffect
         }
         if (next == null || !autoplays) {
@@ -461,7 +464,7 @@ fun PlayerScreen(
             return@LaunchedEffect
         }
         if (StillWatching.askBeforeAutoplay(autoplayedInARow)) {
-            askStillWatching("${StillWatching.AUTOPLAY_LIMIT} episodes played in a row.", next, ended = true)
+            askStillWatching(s.playerStillAutoplayLimit(StillWatching.AUTOPLAY_LIMIT), next, ended = true)
             return@LaunchedEffect
         }
         // The card already counted the last half minute down; a second countdown would be a wait for nothing.
@@ -484,7 +487,7 @@ fun PlayerScreen(
             if (phase is Phase.StillWatching) continue
             if (sleepAt > 0 && System.currentTimeMillis() >= sleepAt) {
                 sleepAt = 0L
-                askStillWatching("The sleep timer paused the video.", next = null, ended = phase == Phase.Finished)
+                askStillWatching(s.playerStillSleepPaused, next = null, ended = phase == Phase.Finished)
                 continue
             }
             if (phase == Phase.Playing && engine.state.value.playing) {
@@ -492,7 +495,7 @@ fun PlayerScreen(
                 if (idleMs >= idleLimitMs) {
                     idleMs = 0L
                     askStillWatching(
-                        if (idleLimitMs == StillWatching.IDLE_LIMIT_MS) "Nothing pressed for two hours." else "Nothing pressed for a while.",
+                        if (idleLimitMs == StillWatching.IDLE_LIMIT_MS) s.playerStillIdleTwoHours else s.playerStillIdle,
                         next = null,
                         ended = false,
                     )
@@ -519,9 +522,9 @@ fun PlayerScreen(
         showFlash(
             Flash.Kind.Text,
             when (minutes) {
-                null -> "Sleep timer off"
-                SleepTimer.END_OF_VIDEO -> "Stops at the end of this video"
-                else -> "Stops in ${SleepTimer.label(minutes)}"
+                null -> L.playerSleepOff
+                SleepTimer.END_OF_VIDEO -> L.playerSleepEndOfVideo
+                else -> L.playerSleepIn(SleepTimer.label(minutes))
             },
         )
     }
@@ -530,7 +533,7 @@ fun PlayerScreen(
     fun toggleVolumeBoost() {
         val on = !status.volumeBoost
         engine.setVolumeBoost(on)
-        showFlash(Flash.Kind.Text, if (on) "Volume boost on" else "Volume boost off")
+        showFlash(Flash.Kind.Text, if (on) L.playerVolumeBoostOn else L.playerVolumeBoostOff)
         playerScope.launch { runCatching { settings.setVolumeBoost(on) } }
     }
 
@@ -587,13 +590,20 @@ fun PlayerScreen(
     fun selectTrack(type: TrackType, track: MediaTrack?) {
         engine.selectTrack(type, track?.id)
         rememberTracks(type, track)
-        val noun = if (type == TrackType.Audio) "Audio" else "Subtitles"
-        showFlash(Flash.Kind.Text, if (track == null) "$noun off" else "$noun: ${track.label}")
+        val audio = type == TrackType.Audio
+        showFlash(
+            Flash.Kind.Text,
+            when {
+                track == null -> if (audio) L.playerAudioOff else L.playerSubtitlesOff
+                audio -> L.playerAudioTrack(track.label)
+                else -> L.playerSubtitlesTrack(track.label)
+            },
+        )
     }
 
     fun cycleTrack(type: TrackType, forward: Boolean) {
         if (tracks.none { it.type == type }) {
-            showFlash(Flash.Kind.Text, if (type == TrackType.Audio) "No other audio" else "No subtitles")
+            showFlash(Flash.Kind.Text, if (type == TrackType.Audio) L.playerNoOtherAudio else L.playerNoSubtitles)
             return
         }
         selectTrack(type, tracks.cycle(type, forward))
@@ -614,14 +624,14 @@ fun PlayerScreen(
     fun setVolume(value: Int) {
         engine.setVolume(value)
         prefs.update { it.copy(volume = value, muted = if (value > 0) false else it.muted) }
-        showFlash(Flash.Kind.Volume, "$value%")
+        showFlash(Flash.Kind.Volume, L.messages.formatter.percent(value / 100.0))
     }
 
     fun toggleMute() {
         val muted = !status.muted
         engine.setMuted(muted)
         prefs.update { it.copy(muted = muted) }
-        showFlash(Flash.Kind.Volume, if (muted) "Muted" else "${status.volume}%")
+        showFlash(Flash.Kind.Volume, if (muted) L.playerMuted else L.messages.formatter.percent(status.volume / 100.0))
     }
 
     /**
@@ -643,14 +653,14 @@ fun PlayerScreen(
     fun stepSubtitleDelay(direction: Int) {
         val ms = if (direction == 0) 0L else SyncDelays.step(engine.state.value.subtitleDelayMs, direction)
         engine.setSubtitleDelay(ms)
-        showFlash(Flash.Kind.Text, "Subtitle delay ${SyncDelays.label(ms)}")
+        showFlash(Flash.Kind.Text, L.playerSubtitleDelay(SyncDelays.label(ms)))
         saveDelays()
     }
 
     fun stepAudioDelay(direction: Int) {
         val ms = if (direction == 0) 0L else SyncDelays.step(engine.state.value.audioDelayMs, direction)
         engine.setAudioDelay(ms)
-        showFlash(Flash.Kind.Text, "Audio delay ${SyncDelays.label(ms)}")
+        showFlash(Flash.Kind.Text, L.playerAudioDelay(SyncDelays.label(ms)))
         saveDelays()
     }
 
@@ -667,7 +677,7 @@ fun PlayerScreen(
         val total = if (same) run + delta else delta
         seekRun = total to now
         val seconds = kotlin.math.abs(total) / 1000
-        val text = if (seconds >= 60 && seconds % 60 == 0L) "${seconds / 60} min" else "$seconds s"
+        val text = if (seconds >= 60 && seconds % 60 == 0L) L.formatMinutesShort(seconds / 60) else L.formatSecondsShort(seconds)
         showFlash(if (delta < 0) Flash.Kind.SeekBack else Flash.Kind.SeekForward, text)
     }
 
@@ -688,13 +698,13 @@ fun PlayerScreen(
             val chat = item.chatId
             val message = item.messageId
             playerScope.launch { runCatching { store.markUnwatched(chat, message) } }
-            showFlash(Flash.Kind.Text, "Marked as unwatched")
+            showFlash(Flash.Kind.Text, L.playerMarkedUnwatched)
         } else {
             markedHere.add(key)
             val chat = item.chatId
             val message = item.messageId
             recordWatched(current, status.durationMs, manual = true) { settings.clearResumePosition(chat, message) }
-            showFlash(Flash.Kind.Text, "Marked as watched")
+            showFlash(Flash.Kind.Text, L.playerMarkedWatched)
         }
     }
 
@@ -702,7 +712,7 @@ fun PlayerScreen(
         engine.seekTo(0)
         engine.play()
         resumedFrom = null
-        showFlash(Flash.Kind.Text, "From the start")
+        showFlash(Flash.Kind.Text, L.playerFromStart)
     }
 
     /**
@@ -726,7 +736,7 @@ fun PlayerScreen(
                     ScreenshotFiles.fileFor(dir, name, at).takeIf { engine.screenshot(it, withSubtitles) }
                 }.getOrNull()
             }
-            showFlash(Flash.Kind.Text, if (file != null) "Screenshot saved: ${file.name}" else "The screenshot could not be saved")
+            showFlash(Flash.Kind.Text, if (file != null) L.playerScreenshotSaved(file.name) else L.playerScreenshotFailed)
         }
     }
 
@@ -739,14 +749,14 @@ fun PlayerScreen(
         when {
             after == null -> {
                 engine.setAbLoop(null)
-                showFlash(Flash.Kind.Text, "Repeat off")
+                showFlash(Flash.Kind.Text, L.playerRepeatOff)
             }
-            after == before -> showFlash(Flash.Kind.Text, "Play on a little, then press R again to end the loop")
+            after == before -> showFlash(Flash.Kind.Text, L.playerLoopTooShort)
             after.complete -> {
                 engine.setAbLoop(after)
-                showFlash(Flash.Kind.Text, "Repeating ${SeekMath.clock(after.startMs)} to ${SeekMath.clock(after.endMs ?: 0)}")
+                showFlash(Flash.Kind.Text, L.playerRepeating(SeekMath.clock(after.startMs), SeekMath.clock(after.endMs ?: 0)))
             }
-            else -> showFlash(Flash.Kind.Text, "Loop from ${SeekMath.clock(after.startMs)}. Press R again to end it")
+            else -> showFlash(Flash.Kind.Text, L.playerLoopFrom(SeekMath.clock(after.startMs)))
         }
     }
 
@@ -763,7 +773,7 @@ fun PlayerScreen(
         val at = status.positionMs
         val target = if (forward) Chapters.next(chapters, at) else Chapters.previous(chapters, at)
         if (target == null) {
-            showFlash(Flash.Kind.Text, if (forward) "This is the last chapter" else "Before the first chapter")
+            showFlash(Flash.Kind.Text, if (forward) L.playerLastChapter else L.playerBeforeFirstChapter)
             return
         }
         engine.seekTo(chapters[target].startMs)
@@ -781,7 +791,7 @@ fun PlayerScreen(
             }
             is PlayerAction.JumpToTenth -> SeekMath.tenth(status.durationMs, action.tenth)?.let {
                 engine.seekTo(it)
-                showFlash(Flash.Kind.Text, "${action.tenth * 10}%")
+                showFlash(Flash.Kind.Text, L.messages.formatter.percent(action.tenth / 10.0))
             }
             PlayerAction.JumpToEnd -> if (status.durationMs > 0) engine.seekTo(status.durationMs)
             is PlayerAction.FrameStep -> if (!status.playing) engine.frameStep(action.forward)
@@ -794,7 +804,7 @@ fun PlayerScreen(
             PlayerAction.SubtitleToggle -> {
                 val subs = tracks.filter { it.type == TrackType.Subtitle }
                 if (subs.isEmpty()) {
-                    showFlash(Flash.Kind.Text, "No subtitles")
+                    showFlash(Flash.Kind.Text, L.playerNoSubtitles)
                 } else if (subs.any { it.selected }) {
                     selectTrack(TrackType.Subtitle, null)
                 } else {
@@ -808,13 +818,13 @@ fun PlayerScreen(
             PlayerAction.SpeedUp -> setSpeed(SeekMath.fineSpeed(status.speed, up = true))
             PlayerAction.SpeedDown -> setSpeed(SeekMath.fineSpeed(status.speed, up = false))
             PlayerAction.SpeedReset -> setSpeed(1f)
-            PlayerAction.NextEpisode -> episodes.next?.let(::switchTo) ?: showFlash(Flash.Kind.Text, "No next episode")
+            PlayerAction.NextEpisode -> episodes.next?.let(::switchTo) ?: showFlash(Flash.Kind.Text, L.playerNoNextEpisode)
             PlayerAction.PreviousEpisode -> episodes.previous?.let(::switchTo)
-                ?: showFlash(Flash.Kind.Text, "No previous episode")
+                ?: showFlash(Flash.Kind.Text, L.playerNoPreviousEpisode)
             PlayerAction.AlwaysOnTop -> onToggleAlwaysOnTop?.invoke()
-                ?: showFlash(Flash.Kind.Text, "Always on top is not available here")
+                ?: showFlash(Flash.Kind.Text, L.playerNoAlwaysOnTop)
             PlayerAction.MiniPlayer -> onMiniPlayer?.invoke()
-                ?: showFlash(Flash.Kind.Text, "The mini player is not available here")
+                ?: showFlash(Flash.Kind.Text, L.playerNoMiniPlayer)
             PlayerAction.Stats -> showDetails = !showDetails
             PlayerAction.Back -> onBack()
             PlayerAction.Quit -> onQuit?.invoke()
@@ -831,19 +841,19 @@ fun PlayerScreen(
     fun loadSubtitle(path: String) {
         if (phase != Phase.Playing) return
         val name = java.io.File(path).name
-        if (engine.addSubtitle(path)) showFlash(Flash.Kind.Text, "Subtitles: $name") else showFlash(Flash.Kind.Text, "Could not load $name")
+        if (engine.addSubtitle(path)) showFlash(Flash.Kind.Text, L.playerSubtitlesTrack(name)) else showFlash(Flash.Kind.Text, L.playerSubtitleLoadFailed(name))
     }
 
     fun copyLink() {
         scope.launch {
             val link = current.messageLink()
             if (link == null) {
-                showFlash(Flash.Kind.Text, "This chat has no links to its messages")
+                showFlash(Flash.Kind.Text, L.commonNoLinks)
             } else {
                 runCatching {
                     java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(java.awt.datatransfer.StringSelection(link), null)
                 }
-                showFlash(Flash.Kind.Text, "Link copied")
+                showFlash(Flash.Kind.Text, L.commonLinkCopied)
             }
         }
     }
@@ -855,10 +865,10 @@ fun PlayerScreen(
         scope.launch {
             val file = current.localFile()
             if (file == null) {
-                showFlash(Flash.Kind.Text, "Only a video that is all here can open in another app")
+                showFlash(Flash.Kind.Text, L.playerOpenElsewherePartial)
             } else {
                 com.tmplayer.desktop.os.OpenExternal.open(file)
-                showFlash(Flash.Kind.Text, "Opening in another app")
+                showFlash(Flash.Kind.Text, L.playerOpeningElsewhere)
             }
         }
     }
@@ -991,7 +1001,7 @@ fun PlayerScreen(
                             val on = !status.downmix
                             engine.setDownmix(on)
                             prefs.update { it.copy(downmix = on) }
-                            showFlash(Flash.Kind.Text, if (on) "Downmix to stereo on" else "Downmix to stereo off")
+                            showFlash(Flash.Kind.Text, if (on) s.playerDownmixOn else s.playerDownmixOff)
                         }
                         MenuAction.ToggleVolumeBoost -> toggleVolumeBoost()
                         is MenuAction.Sleep -> setSleepTimer(action.minutes)
@@ -1001,7 +1011,7 @@ fun PlayerScreen(
                         MenuAction.StartOver -> startOver()
                         MenuAction.ToggleIgnoreClicks -> {
                             ignoreClicks = !ignoreClicks
-                            showFlash(Flash.Kind.Text, if (ignoreClicks) "Clicks on the video are ignored" else "Clicks on the video work again")
+                            showFlash(Flash.Kind.Text, if (ignoreClicks) s.playerClicksIgnored else s.playerClicksWork)
                         }
                         MenuAction.CopyLink -> copyLink()
                         MenuAction.Download -> showFlash(Flash.Kind.Text, current.download())
@@ -1016,7 +1026,7 @@ fun PlayerScreen(
             FeedbackLayer(
                 flash = flash,
                 spinner = phase == Phase.Playing && status.buffering && !showControls,
-                chip = if (phase == Phase.Playing && status.buffering && !showControls) "Buffering" else null,
+                chip = if (phase == Phase.Playing && status.buffering && !showControls) s.playerBuffering else null,
             )
 
             resumedFrom?.let { from ->
@@ -1043,10 +1053,10 @@ fun PlayerScreen(
                     rows = {
                         buildList {
                             addAll(engine.details())
-                            add("Speed" to SeekMath.speedLabel(engine.state.value.speed))
-                            if (item.sizeBytes > 0) add("File" to com.tmplayer.player.StreamStats.formatBytes(item.sizeBytes))
-                            downloaded?.let { add("Downloaded" to "${(it * 100).toInt()}%") }
-                            add("TDLib" to (tdlibVersion ?: if (item.chatId != 0L) "unknown" else "not used"))
+                            add(s.playerSpeed to SeekMath.speedLabel(engine.state.value.speed))
+                            if (item.sizeBytes > 0) add(s.playerDetailsLabelFile to com.tmplayer.player.StreamStats.formatBytes(item.sizeBytes))
+                            downloaded?.let { add(s.playerDetailsLabelDownloaded to s.messages.formatter.percent(it.toDouble())) }
+                            add("TDLib" to (tdlibVersion ?: if (item.chatId != 0L) s.playerDetailsUnknown else s.playerDetailsNotUsed))
                         }
                     },
                     onClose = {

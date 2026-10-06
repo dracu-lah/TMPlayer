@@ -4,6 +4,7 @@ import com.tmplayer.data.MediaItem
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.WatchedRecord
 import com.tmplayer.data.WatchedStore
+import com.tmplayer.i18n.L
 
 /**
  * The small decisions behind the desktop's Watched list, kept apart from Compose so they can be
@@ -12,7 +13,7 @@ import com.tmplayer.data.WatchedStore
  */
 object WatchedWords {
 
-    fun markLabel(onList: Boolean): String = if (onList) "Mark as unwatched" else "Mark as watched"
+    fun markLabel(onList: Boolean): String = if (onList) L.watchedMarkUnwatched else L.watchedMarkWatched
 
     /**
      * How much of a poster's bar is filled. A video part way through (a second viewing included)
@@ -42,8 +43,7 @@ object WatchedWords {
     fun hiddenNote(bySize: Int, selfDestructing: Int): String? {
         val destructing = when {
             selfDestructing <= 0 -> null
-            selfDestructing == 1 -> "1 self-destructing video not shown: open it in Telegram"
-            else -> "$selfDestructing self-destructing videos not shown: open them in Telegram"
+            else -> L.browseSelfDestructingHidden(selfDestructing)
         }
         return listOfNotNull(sizeLimitNote(bySize), destructing).joinToString(". ").ifEmpty { null }
     }

@@ -6,6 +6,7 @@ import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.TdFiles
 import com.tmplayer.data.Td
+import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
 import com.tmplayer.platform.NoTransferNotifier
 import com.tmplayer.platform.TransferNotifier
@@ -71,8 +72,7 @@ class DownloadMigration(
         var moved = 0
         var left = 0
         val note = notifier()
-        val words = if (ready.size == 1) "1 download" else "${ready.size} downloads"
-        note.begin(NOTIFY_ID, TransferNotifier.Kind.Migrate, "Moving $words into TMPlayer's Downloads folder")
+        note.begin(NOTIFY_ID, TransferNotifier.Kind.Migrate, L.downloadsMigratingToFolder(ready.size))
         for ((record, resolved) in ready) {
             val (id, src) = resolved
             if (isOpen(id)) {
@@ -98,9 +98,9 @@ class DownloadMigration(
             done = before + src.length().coerceAtLeast(0)
         }
         if (left == 0) runCatching { settings.markDownloadsMigrated() }
-        val body = if (moved == 1) "1 download is in $dir" else "$moved downloads are in $dir"
+        val body = L.downloadsMigrated(moved, dir.toString())
         if (moved > 0) {
-            note.complete(NOTIFY_ID, "Downloads moved", body, TransferNotifier.OpenTarget.Folder(dir.absolutePath))
+            note.complete(NOTIFY_ID, L.downloadsMoved, body, TransferNotifier.OpenTarget.Folder(dir.absolutePath))
         } else {
             note.cancel(NOTIFY_ID)
         }

@@ -1,5 +1,7 @@
 package com.tmplayer.player
 
+import com.tmplayer.i18n.L
+
 /**
  * When the player stops to ask "Still watching?", on every platform.
  *
@@ -42,10 +44,10 @@ object SleepTimer {
     val CHOICES: List<Int> = listOf(15, 30, 45, 60, 90, END_OF_VIDEO)
 
     fun label(minutes: Int): String = when {
-        minutes == END_OF_VIDEO -> "End of this video"
-        minutes < 60 -> "$minutes minutes"
-        minutes % 60 == 0 -> if (minutes == 60) "1 hour" else "${minutes / 60} hours"
-        else -> "${minutes / 60} h ${minutes % 60} min"
+        minutes == END_OF_VIDEO -> L.sleepEndOfVideo
+        minutes < 60 -> L.unitMinutes(minutes)
+        minutes % 60 == 0 -> L.unitHours(minutes / 60)
+        else -> L.sleepHoursMinutes(minutes / 60, minutes % 60)
     }
 
     /**
@@ -54,6 +56,6 @@ object SleepTimer {
      */
     fun remaining(leftMs: Long): String {
         val minutes = ((leftMs.coerceAtLeast(0L) + 59_999L) / 60_000L).coerceAtLeast(1L)
-        return if (minutes == 1L) "1 minute left" else "$minutes minutes left"
+        return L.sleepMinutesLeft(minutes)
     }
 }

@@ -46,6 +46,7 @@ import com.tmplayer.data.AuthState
 import com.tmplayer.data.CodeDelivery
 import com.tmplayer.data.SignInMethod
 import com.tmplayer.data.Td
+import com.tmplayer.i18n.L
 import com.tmplayer.ui.auth.QrCode
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.components.AppLogo
@@ -62,6 +63,7 @@ import kotlinx.coroutines.withContext
  */
 @Composable
 fun SignInScreen(auth: AuthState) {
+    val s = LocalStrings.current
     // No choice screen on a desktop: the QR code is the first answer, and the phone number is a
     // link under it.
     LaunchedEffect(auth) {
@@ -79,7 +81,7 @@ fun SignInScreen(auth: AuthState) {
         ) {
             Image(AppLogo.Mark, contentDescription = null, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)))
             when (auth) {
-                AuthState.Connecting, AuthState.ChooseMethod, AuthState.Ready -> Waiting("Connecting to Telegram…")
+                AuthState.Connecting, AuthState.ChooseMethod, AuthState.Ready -> Waiting(s.signinConnecting)
                 is AuthState.Qr -> QrPane(auth.link)
                 is AuthState.Phone -> PhonePane(auth.wrong)
                 is AuthState.Code -> CodePane(auth)
@@ -110,13 +112,14 @@ private fun Heading(title: String, body: String) {
 
 @Composable
 private fun QrPane(link: String) {
+    val s = LocalStrings.current
     val scope = rememberCoroutineScope()
     val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = link) {
         value = withContext(Dispatchers.Default) { QrCode.render(link, QR_PIXELS) }
     }
     Heading(
-        "Sign in to TMPlayer",
-        "On your phone, open Telegram, go to Settings, then Devices, then Link Desktop Device, and point it at this code.",
+        s.signinQrTitle,
+        s.signinQrBody,
     )
     // Black on a white plate whatever the theme: contrast is what makes a code scannable.
     Box(
@@ -131,16 +134,17 @@ private fun QrPane(link: String) {
         if (rendered == null) {
             CircularProgressIndicator()
         } else {
-            Image(rendered, contentDescription = "Telegram login QR code", modifier = Modifier.fillMaxSize())
+            Image(rendered, contentDescription = s.signinQrLabel, modifier = Modifier.fillMaxSize())
         }
     }
     TextButton(onClick = { scope.launch { Td.chooseSignInMethod(SignInMethod.Phone) } }) {
-        Text("Log in by phone number")
+        Text(s.signinUsePhone)
     }
 }
 
 @Composable
 private fun PhonePane(wrong: Boolean) {
+    val s = LocalStrings.current
     val scope = rememberCoroutineScope()
     var number by remember { mutableStateOf("+") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -166,11 +170,11 @@ private fun PhonePane(wrong: Boolean) {
             }
         }
     }
-    Heading("Your phone number", "The number your Telegram account uses, with its country code.")
+    Heading(s.signinPhoneTitle, s.signinPhoneBody)
     OutlinedTextField(
         value = number,
         onValueChange = { number = it; error = null },
-        label = { Text("Phone number") },
+        label = { Text(s.signinPhoneLabel) },
         singleLine = true,
         isError = error != null || wrong,
         supportingText = { error?.let { Text(it) } },
@@ -179,13 +183,14 @@ private fun PhonePane(wrong: Boolean) {
         modifier = Modifier.fillMaxWidth().focusRequester(focus),
     )
     Button(onClick = { submit() }, enabled = !busy && number.count { it.isDigit() } >= 5, modifier = Modifier.fillMaxWidth()) {
-        Text(if (busy) "Sending…" else "Next")
+        Text(if (busy) s.signinSending else s.signinNext)
     }
-    TextButton(onClick = { scope.launch { Td.cancelPhoneEntry() } }) { Text("Use a QR code instead") }
+    TextButton(onClick = { scope.launch { Td.cancelPhoneEntry() } }) { Text(s.signinUseQr) }
 }
 
 @Composable
 private fun CodePane(state: AuthState.Code) {
+    val s = LocalStrings.current
     val scope = rememberCoroutineScope()
     var code by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -202,11 +207,11 @@ private fun CodePane(state: AuthState.Code) {
             }
         }
     }
-    Heading("Enter the code", whereTheCodeWent(state))
+    Heading(s.signinCodeTitle, whereTheCodeWent(state))
     OutlinedTextField(
         value = code,
         onValueChange = { code = it; error = null },
-        label = { Text("Code") },
+        label = { Text(s.signinCodeLabel) },
         singleLine = true,
         isError = error != null || state.wrong,
         supportingText = { error?.let { Text(it) } },
@@ -215,27 +220,28 @@ private fun CodePane(state: AuthState.Code) {
         modifier = Modifier.fillMaxWidth().focusRequester(focus),
     )
     Button(onClick = { submit() }, enabled = !busy && code.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
-        Text(if (busy) "Checking…" else "Sign in")
+        Text(if (busy) s.signinChecking else s.signinSignIn)
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (state.next != null) {
-            TextButton(onClick = { scope.launch { error = Td.resendCode() } }) { Text("Send it another way") }
+            TextButton(onClick = { scope.launch { error = Td.resendCode() } }) { Text(s.signinResend) }
         }
-        TextButton(onClick = { scope.launch { Td.restartSignIn() } }) { Text("Start over") }
+        TextButton(onClick = { scope.launch { Td.restartSignIn() } }) { Text(s.signinStartOver) }
     }
 }
 
 private fun whereTheCodeWent(state: AuthState.Code): String = when (state.delivery) {
-    CodeDelivery.TelegramApp -> "Telegram sent a code to your account on another device. It arrives as a message from Telegram."
-    CodeDelivery.Sms, CodeDelivery.SmsWord, CodeDelivery.SmsPhrase -> "Telegram sent a text to ${state.phoneNumber}."
-    CodeDelivery.Call -> "Telegram is calling ${state.phoneNumber} to read the code out."
-    CodeDelivery.MissedCall, CodeDelivery.FlashCall -> "Telegram is calling ${state.phoneNumber}. The code is in the calling number."
-    CodeDelivery.Fragment -> "The code is waiting for you on Fragment."
-    CodeDelivery.Firebase, CodeDelivery.Unknown -> "Telegram sent a code to ${state.phoneNumber}."
+    CodeDelivery.TelegramApp -> L.signinCodeApp
+    CodeDelivery.Sms, CodeDelivery.SmsWord, CodeDelivery.SmsPhrase -> L.signinCodeSms(state.phoneNumber)
+    CodeDelivery.Call -> L.signinCodeCall(state.phoneNumber)
+    CodeDelivery.MissedCall, CodeDelivery.FlashCall -> L.signinCodeMissedCall(state.phoneNumber)
+    CodeDelivery.Fragment -> L.signinCodeFragment
+    CodeDelivery.Firebase, CodeDelivery.Unknown -> L.signinCodeSent(state.phoneNumber)
 }
 
 @Composable
 private fun PasswordPane(state: AuthState.Password) {
+    val s = LocalStrings.current
     val scope = rememberCoroutineScope()
     var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -253,13 +259,13 @@ private fun PasswordPane(state: AuthState.Password) {
         }
     }
     Heading(
-        "Your Telegram password",
-        if (state.hint.isBlank()) "This account has two-step verification on." else "Hint: ${state.hint}",
+        s.signinPasswordTitle,
+        if (state.hint.isBlank()) s.signinPasswordBody else s.signinPasswordHint(state.hint),
     )
     OutlinedTextField(
         value = password,
         onValueChange = { password = it; error = null },
-        label = { Text("Password") },
+        label = { Text(s.signinPasswordLabel) },
         singleLine = true,
         isError = error != null || state.wrong,
         supportingText = { error?.let { Text(it) } },
@@ -269,16 +275,17 @@ private fun PasswordPane(state: AuthState.Password) {
         modifier = Modifier.fillMaxWidth().focusRequester(focus),
     )
     Button(onClick = { submit() }, enabled = !busy && password.isNotEmpty(), modifier = Modifier.fillMaxWidth()) {
-        Text(if (busy) "Checking…" else "Sign in")
+        Text(if (busy) s.signinChecking else s.signinSignIn)
     }
-    TextButton(onClick = { scope.launch { Td.restartSignIn() } }) { Text("Start over") }
+    TextButton(onClick = { scope.launch { Td.restartSignIn() } }) { Text(s.signinStartOver) }
 }
 
 @Composable
 private fun FailedPane(message: String) {
+    val s = LocalStrings.current
     val scope = rememberCoroutineScope()
-    Heading("Could not sign in", message)
-    Button(onClick = { scope.launch { Td.restartSignIn() } }) { Text("Try again") }
+    Heading(s.signinFailed, message)
+    Button(onClick = { scope.launch { Td.restartSignIn() } }) { Text(s.commonTryAgain) }
 }
 
 private const val QR_PIXELS = 560

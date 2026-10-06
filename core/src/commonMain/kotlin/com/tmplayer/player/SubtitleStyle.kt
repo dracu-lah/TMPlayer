@@ -1,5 +1,7 @@
 package com.tmplayer.player
 
+import com.tmplayer.i18n.L
+
 /**
  * How big subtitles are drawn, with the figure each player needs for it.
  *
@@ -7,11 +9,14 @@ package com.tmplayer.player
  * is mpv's `sub-font-size`, which is in pixels of a 720 line high frame. Medium is what both players
  * used before the setting existed, so nobody's subtitles change size on the upgrade.
  */
-enum class SubtitleSize(val label: String, val fraction: Float, val mpvFontSize: Int) {
-    Small("Small", 0.052f, 38),
-    Medium("Medium", 0.065f, 46),
-    Large("Large", 0.08f, 56),
-    ExtraLarge("Extra large", 0.095f, 66),
+enum class SubtitleSize(private val labelText: () -> String, val fraction: Float, val mpvFontSize: Int) {
+    Small({ L.subtitlesSizeSmall }, 0.052f, 38),
+    Medium({ L.subtitlesSizeMedium }, 0.065f, 46),
+    Large({ L.subtitlesSizeLarge }, 0.08f, 56),
+    ExtraLarge({ L.subtitlesSizeExtraLarge }, 0.095f, 66),
+    ;
+
+    val label: String get() = labelText()
 }
 
 /**
@@ -21,10 +26,13 @@ enum class SubtitleSize(val label: String, val fraction: Float, val mpvFontSize:
  * default is 0.08); [mpvSubPos] is mpv's `sub-pos`, where 100 is the bottom. Raised clears the
  * player's own controls and a television's overscan; High clears burnt in text at the bottom.
  */
-enum class SubtitlePosition(val label: String, val bottomFraction: Float, val mpvSubPos: Int) {
-    Bottom("Bottom", 0.08f, 100),
-    Raised("Raised", 0.16f, 92),
-    High("High", 0.26f, 82),
+enum class SubtitlePosition(private val labelText: () -> String, val bottomFraction: Float, val mpvSubPos: Int) {
+    Bottom({ L.subtitlesPositionBottom }, 0.08f, 100),
+    Raised({ L.subtitlesPositionRaised }, 0.16f, 92),
+    High({ L.subtitlesPositionHigh }, 0.26f, 82),
+    ;
+
+    val label: String get() = labelText()
 }
 
 /**
@@ -99,10 +107,10 @@ data class SyncDelays(val subtitleMs: Long = 0, val audioMs: Long = 0) {
 
         /** "+0.3 s", "-1.2 s", "0 s". A plain hyphen for minus: it is what every keyboard has. */
         fun label(ms: Long): String {
-            if (ms == 0L) return "0 s"
+            if (ms == 0L) return L.formatSecondsShort(L.messages.formatter.number(0))
             val sign = if (ms > 0) "+" else "-"
-            val abs = kotlin.math.abs(ms)
-            return "$sign${abs / 1000}.${(abs % 1000) / 100} s"
+            val tenths = kotlin.math.abs(ms) / 100
+            return L.formatSecondsShort(sign + L.messages.formatter.decimal(tenths / 10.0, 1))
         }
     }
 }

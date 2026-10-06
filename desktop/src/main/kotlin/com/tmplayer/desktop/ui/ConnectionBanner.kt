@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.NetworkStatus
 import com.tmplayer.ui.components.TmIcons
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.delay
 
@@ -64,6 +65,7 @@ fun rememberConnectionNotice(network: NetworkStatus, telegramConnected: Boolean,
 /** A passive pill: it never takes focus, and saved videos and playback carry on under it. */
 @Composable
 fun ConnectionBanner(notice: ConnectionNotice, modifier: Modifier = Modifier) {
+    val s = LocalStrings.current
     AnimatedVisibility(visible = notice != ConnectionNotice.Hidden, modifier = modifier, enter = fadeIn(), exit = fadeOut()) {
         Row(
             Modifier
@@ -79,8 +81,8 @@ fun ConnectionBanner(notice: ConnectionNotice, modifier: Modifier = Modifier) {
             }
             Text(
                 when (notice) {
-                    ConnectionNotice.Offline -> "Offline. Saved videos still work."
-                    ConnectionNotice.Reconnecting -> "Back online. Reconnecting to Telegram..."
+                    ConnectionNotice.Offline -> s.connectionOffline
+                    ConnectionNotice.Reconnecting -> s.connectionReconnecting
                     ConnectionNotice.Hidden -> ""
                 },
                 style = MaterialTheme.typography.bodyMedium,

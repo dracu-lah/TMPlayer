@@ -1,5 +1,7 @@
 package com.tmplayer.player
 
+import com.tmplayer.i18n.L
+
 /**
  * How the picture is fitted to the screen, and the order the control steps through.
  *
@@ -10,16 +12,18 @@ package com.tmplayer.player
  * The integers are Media3's own `AspectRatioFrameLayout.RESIZE_MODE_*` values, kept here as
  * literals so this stays pure and testable rather than dragging a view class into a unit test.
  */
-enum class VideoScale(val resizeMode: Int, val label: String) {
+enum class VideoScale(val resizeMode: Int, private val labelText: () -> String) {
     /** The video's own aspect, letterboxed. What everything starts on. */
-    Fit(0, "Fit"),
+    Fit(0, { L.playerScaleFit }),
 
     /** Cropped to fill the screen, keeping the aspect: the bars go, the edges go with them. */
-    Crop(4, "Crop"),
+    Crop(4, { L.playerScaleCrop }),
 
     /** Stretched to fill the screen. Wrong shape, but it is the viewer's screen. */
-    Stretch(3, "Stretch"),
+    Stretch(3, { L.playerScaleStretch }),
     ;
+
+    val label: String get() = labelText()
 
     fun next(): VideoScale = entries[(ordinal + 1) % entries.size]
 

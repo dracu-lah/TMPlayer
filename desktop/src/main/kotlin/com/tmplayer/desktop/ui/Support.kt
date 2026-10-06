@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.floatingSurface
 import com.tmplayer.ui.components.TmAlertDialog
@@ -57,6 +58,7 @@ import kotlinx.coroutines.withContext
  */
 @Composable
 fun SupportPopup(onClose: () -> Unit) {
+    val s = LocalStrings.current
     TmAlertDialog(
         onDismissRequest = onClose,
         icon = { Icon(Icons.Filled.Favorite, contentDescription = null, tint = Tone.accent) },
@@ -64,7 +66,7 @@ fun SupportPopup(onClose: () -> Unit) {
         text = {
             Column(Modifier.widthIn(max = 520.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
-                    "${About.SUPPORT_NOTE} Open a link here, or scan a code with your phone.",
+                    s.supportPopupNote(About.SUPPORT_NOTE),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -74,12 +76,13 @@ fun SupportPopup(onClose: () -> Unit) {
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onClose) { Text("Close") } },
+        confirmButton = { TextButton(onClick = onClose) { Text(s.commonClose) } },
     )
 }
 
 @Composable
 private fun SupportCode(link: About.Link, modifier: Modifier) {
+    val s = LocalStrings.current
     val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = link.url) {
         value = withContext(Dispatchers.Default) { QrCode.render(link.url, QR_PIXELS) }
     }
@@ -89,7 +92,7 @@ private fun SupportCode(link: About.Link, modifier: Modifier) {
             contentAlignment = Alignment.Center,
         ) {
             bitmap?.let {
-                Image(it, contentDescription = "QR code for ${link.title}", modifier = Modifier.fillMaxSize().padding(8.dp))
+                Image(it, contentDescription = s.updateQrFor(link.title), modifier = Modifier.fillMaxSize().padding(8.dp))
             }
         }
         Text(link.title, style = MaterialTheme.typography.titleSmall, textAlign = TextAlign.Center)
@@ -99,7 +102,7 @@ private fun SupportCode(link: About.Link, modifier: Modifier) {
             color = Tone.muted,
             textAlign = TextAlign.Center,
         )
-        OutlinedButton(onClick = { OpenExternal.browse(link.url) }) { Text("Open") }
+        OutlinedButton(onClick = { OpenExternal.browse(link.url) }) { Text(s.commonOpen) }
     }
 }
 
@@ -109,6 +112,7 @@ private fun SupportCode(link: About.Link, modifier: Modifier) {
  */
 @Composable
 fun SupportCard(onSupport: () -> Unit, onNotNow: () -> Unit, onNever: () -> Unit, modifier: Modifier = Modifier) {
+    val s = LocalStrings.current
     Column(
         modifier
             .width(420.dp)
@@ -122,9 +126,9 @@ fun SupportCard(onSupport: () -> Unit, onNotNow: () -> Unit, onNever: () -> Unit
         }
         Text(About.REMINDER_TEXT, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)) {
-            TextButton(onClick = onNever) { Text("Don't ask again") }
-            TextButton(onClick = onNotNow) { Text("Not now") }
-            Button(onClick = onSupport) { Text("Support") }
+            TextButton(onClick = onNever) { Text(s.supportNever) }
+            TextButton(onClick = onNotNow) { Text(s.supportNotNow) }
+            Button(onClick = onSupport) { Text(s.supportSupport) }
         }
     }
 }

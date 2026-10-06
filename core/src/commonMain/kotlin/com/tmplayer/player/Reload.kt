@@ -1,5 +1,7 @@
 package com.tmplayer.player
 
+import com.tmplayer.i18n.L
+
 /**
  * What "Reload" should actually do to a video that would not play.
  *
@@ -39,13 +41,13 @@ object Reload {
      * the same as one that will not.
      */
     fun label(plan: Plan): String = when (plan) {
-        Plan.StartOver -> "Reload from scratch"
-        Plan.PlainRetry -> "Reload"
+        Plan.StartOver -> L.playerReloadFromScratch
+        Plan.PlainRetry -> L.playerReload
     }
 
     /** The stage caption while it runs, for the same reason. */
     fun status(plan: Plan): String = when (plan) {
-        Plan.StartOver -> "Clearing the cached copy…"
-        Plan.PlainRetry -> "Trying again…"
+        Plan.StartOver -> L.playerReloadClearing
+        Plan.PlainRetry -> L.playerReloadRetrying
     }
 }

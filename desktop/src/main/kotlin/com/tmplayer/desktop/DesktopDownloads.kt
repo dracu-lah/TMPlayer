@@ -15,6 +15,7 @@ import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.Td
 import com.tmplayer.data.errorMessage
 import com.tmplayer.desktop.player.ActiveStreams
+import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
 import com.tmplayer.platform.NoTransferNotifier
 import com.tmplayer.platform.TransferNotifier
@@ -252,7 +253,7 @@ class DesktopDownloadRunner(
         if (stillToCome > 0 && disk.totalBytes > 0 && disk.freeBytes < stillToCome + CacheShelf.HEADROOM_BYTES) {
             val short = stillToCome + CacheShelf.HEADROOM_BYTES - disk.freeBytes
             withContext(NonCancellable) {
-                fail(request, landedAlready, "Not enough space: ${StreamStats.formatBytes(short)} short")
+                fail(request, landedAlready, L.downloadsNoSpace(StreamStats.formatBytes(short)))
             }
             return@coroutineScope
         }
@@ -437,7 +438,7 @@ class DesktopDownloadRunner(
                 fail(
                     request,
                     src.length(),
-                    "Not enough space in the Downloads folder: ${StreamStats.formatBytes(needed - room.freeBytes)} short",
+                    L.downloadsNoSpaceFolder(StreamStats.formatBytes(needed - room.freeBytes)),
                 )
                 return
             }
@@ -471,8 +472,8 @@ class DesktopDownloadRunner(
             persistNow()
             notifier.complete(
                 moveId,
-                "Downloaded",
-                "${request.title} is in Downloads",
+                L.downloadsDownloaded,
+                L.downloadsIsInDownloads(request.title),
                 TransferNotifier.OpenTarget.File(target.absolutePath),
             )
             _finished.tryEmit(Finished(request.title, target))
@@ -526,8 +527,8 @@ class DesktopDownloadRunner(
         const val MAX_TAKEOVERS = 60
         const val TAKEOVER_BACKOFF_MS = 2_000L
         const val TAKEN_OVER = "Canceled by another downloadFile"
-        const val FAILED_TEXT = "The download did not finish. Try again."
-        const val MOVE_FAILED_TEXT = "Could not move the video into Downloads. Try again."
+        val FAILED_TEXT: String get() = L.downloadsDidNotFinish
+        val MOVE_FAILED_TEXT: String get() = L.downloadsMoveFailedVideo
         const val HOLD_POLL_MS = 1_000L
 
         /** The notifier id of a move, apart from the download's own so the two never collide. */

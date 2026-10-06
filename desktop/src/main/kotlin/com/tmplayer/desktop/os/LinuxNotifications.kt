@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.os
 
+import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
 import com.tmplayer.platform.TransferNotifier
 import com.tmplayer.platform.TransferNotifier.Capability
@@ -287,8 +288,8 @@ internal object LinuxNotificationText {
     const val ACTION_DEFAULT = "default"
 
     fun summary(kind: Kind, title: String): String = when (kind) {
-        Kind.Download -> if (title.isBlank()) "Downloading" else "Downloading $title"
-        Kind.MoveToDownloads -> if (title.isBlank()) "Moving into Downloads" else "Moving $title into Downloads"
+        Kind.Download -> if (title.isBlank()) L.downloadsDownloading else L.downloadsDownloadingTitle(title)
+        Kind.MoveToDownloads -> if (title.isBlank()) L.downloadsMovingIn else L.downloadsMovingTitleIn(title)
         Kind.Relocate, Kind.Migrate -> title
     }
 
@@ -302,8 +303,7 @@ internal object LinuxNotificationText {
     fun progressBody(done: Long, total: Long?, bytesPerSecond: Long?): String = buildString {
         val pct = percent(done, total)
         if (pct != null) {
-            append(pct).append(" %, ")
-            append(StreamStats.formatBytes(done)).append(" of ").append(StreamStats.formatBytes(total!!))
+            append(L.downloadsNotifyProgress(L.messages.formatter.number(pct), StreamStats.formatBytes(done), StreamStats.formatBytes(total!!)))
         } else {
             append(StreamStats.formatBytes(done))
         }
@@ -322,9 +322,9 @@ internal object LinuxNotificationText {
     /** The action list for a completion, as the spec pairs them: key, label, key, label. */
     fun actions(target: OpenTarget): List<String> {
         val label = when (target) {
-            OpenTarget.DownloadsScreen -> "Show Downloads"
-            is OpenTarget.File -> "Show in folder"
-            is OpenTarget.Folder -> "Open folder"
+            OpenTarget.DownloadsScreen -> L.downloadsShowDownloads
+            is OpenTarget.File -> L.downloadsShowInFolder
+            is OpenTarget.Folder -> L.downloadsOpenFolder
         }
         return listOf(ACTION_DEFAULT, label, ACTION_OPEN, label)
     }

@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import com.tmplayer.i18n.L
 import dev.g000sha256.tdl.TdlClient
 import dev.g000sha256.tdl.dto.MessageAnimation
 import dev.g000sha256.tdl.dto.MessagePhoto
@@ -112,7 +113,7 @@ internal fun mapSponsoredMessage(message: SponsoredMessage): SponsoredItem {
     }
     return SponsoredItem(
         messageId = message.messageId,
-        label = if (message.isRecommended) "Recommended" else "Sponsored",
+        label = if (message.isRecommended) L.sponsoredRecommended else L.sponsoredLabel,
         title = message.title,
         text = text,
         buttonText = message.buttonText,

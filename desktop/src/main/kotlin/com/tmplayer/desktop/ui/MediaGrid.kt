@@ -3,6 +3,8 @@ package com.tmplayer.desktop.ui
 import androidx.compose.runtime.produceState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.tmplayer.i18n.L
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Focus
 import com.tmplayer.data.DiskInfo
 import com.tmplayer.desktop.DesktopPaths
@@ -140,6 +142,7 @@ import java.awt.datatransfer.StringSelection
  */
 @Composable
 fun MediaGridPage(state: ShellState, chat: ChatSummary) {
+    val s = LocalStrings.current
     val minSize by state.settings.minSizeBytes.collectAsState(initial = null)
     val maxSize by state.settings.maxSizeBytes.collectAsState(initial = null)
     val min = minSize
@@ -162,17 +165,17 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
 
         PageHeader(
             title = chat.title,
-            subtitle = (ui as? UiState.Content)?.value?.items?.size?.let { if (it == 1) "1 video" else "$it videos" },
+            subtitle = (ui as? UiState.Content)?.value?.items?.size?.let { s.browseVideosCount(it) },
             leading = {
                 IconButton(onClick = { state.closeChat() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to chats")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = s.browseBackToChats)
                 }
                 ChatAvatar(chat.miniThumbnail, chat.photoFileId, chat.title, 40.dp)
             },
             actions = {
-                SearchField(query, { query = it }, "Search this chat", state.searchFocus, Modifier.width(300.dp), onDown = { gridNav?.focus(0) })
+                SearchField(query, { query = it }, s.browseSearchChat, state.searchFocus, Modifier.width(300.dp), onDown = { gridNav?.focus(0) })
                 PosterSizeStep(state)
-                IconButton(onClick = { model.load() }) { Icon(Icons.Filled.Refresh, contentDescription = "Refresh") }
+                IconButton(onClick = { model.load() }) { Icon(Icons.Filled.Refresh, contentDescription = s.commonRefresh) }
             },
         )
         val recent by state.settings.recentSearches.collectAsState(initial = emptyList())
@@ -319,12 +322,13 @@ internal fun VideoGrid(
  */
 @Composable
 internal fun SizeLimitNote(text: String, onShow: (() -> Unit)?, onChange: (() -> Unit)?) {
+    val s = LocalStrings.current
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(text, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
         // Show them lifts the limits for this chat while it is open; Change goes to Settings.
-        if (onShow != null) TextButton(onClick = onShow) { Text("Show them", style = MaterialTheme.typography.bodySmall) }
+        if (onShow != null) TextButton(onClick = onShow) { Text(s.browseShowThem, style = MaterialTheme.typography.bodySmall) }
         // Change opens the size limits, which is no answer to a self-destructing video.
-        if (onChange != null) TextButton(onClick = onChange) { Text("Change", style = MaterialTheme.typography.bodySmall) }
+        if (onChange != null) TextButton(onClick = onChange) { Text(s.commonChange, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
@@ -344,12 +348,13 @@ private fun LoadMoreNearEnd(grid: LazyGridState, enabled: Boolean, loadMore: () 
 /** The toolbar's poster size step: smaller and larger, through [POSTER_STEPS]. */
 @Composable
 fun PosterSizeStep(state: ShellState) {
+    val s = LocalStrings.current
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = { state.stepPoster(-1) }, enabled = state.posterWidth != POSTER_STEPS.first()) {
-            Icon(TmIcons.Grid, contentDescription = "Smaller posters")
+            Icon(TmIcons.Grid, contentDescription = s.browseSmallerPosters)
         }
         IconButton(onClick = { state.stepPoster(1) }, enabled = state.posterWidth != POSTER_STEPS.last()) {
-            Icon(Icons.Filled.Add, contentDescription = "Larger posters")
+            Icon(Icons.Filled.Add, contentDescription = s.browseLargerPosters)
         }
     }
 }
@@ -360,15 +365,16 @@ fun PosterSizeStep(state: ShellState) {
  */
 @Composable
 fun ContinuePage(state: ShellState) {
+    val s = LocalStrings.current
     val records by state.settings.continueWatching.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
     Column(Modifier.fillMaxSize()) {
-        PageHeader("Continue", "Pick up where you left off", actions = { PosterSizeStep(state) })
+        PageHeader(s.navContinue, s.continueSubtitle, actions = { PosterSizeStep(state) })
         val list = records
         when {
             list == null -> Centred { CircularProgressIndicator() }
-            list.isEmpty() -> Centred { Text("Nothing part-watched yet. Videos you stop half way wait here.", color = Tone.muted) }
+            list.isEmpty() -> Centred { Text(s.continueEmpty, color = Tone.muted) }
             else -> {
                 val grid = rememberLazyGridState()
                 val records by rememberUpdatedState(list)
@@ -389,7 +395,7 @@ fun ContinuePage(state: ShellState) {
                                 onMarkWatched = {
                                     // On the page's scope: marking takes the card off this page.
                                     val item = record.toMediaItem()
-                                    toast("${item.title} marked as watched")
+                                    toast(s.watchedMarkedWatched(item.title))
                                     scope.launch {
                                         runCatching { setWatched(state.watched, state.settings, item, record.chatTitle, watched = true) }
                                     }
@@ -415,6 +421,7 @@ private fun ContinueTile(
     onMarkWatched: () -> Unit,
     onForget: () -> Unit,
 ) {
+    val s = LocalStrings.current
     val item = remember(record) { record.toMediaItem() }
     Poster(
         state = state,
@@ -428,14 +435,14 @@ private fun ContinueTile(
                 Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(40.dp))
             }
         },
-        subtitle = "${record.chatTitle}  ·  ${MediaMapper.formatDuration((record.remainingMs / 1000).toInt())} left",
+        subtitle = s.continueLeft(record.chatTitle, MediaMapper.formatDuration((record.remainingMs / 1000).toInt())),
         extraMenu = { close ->
             // Marking also forgets the position, so the card leaves this page with it.
             DropdownMenuItem(text = { Text(WatchedWords.markLabel(onList = false)) }, onClick = {
                 close()
                 onMarkWatched()
             })
-            DropdownMenuItem(text = { Text("Remove from Continue watching") }, onClick = { close(); onForget() })
+            DropdownMenuItem(text = { Text(s.continueRemove) }, onClick = { close(); onForget() })
         },
         markToggle = false,
     )
@@ -444,6 +451,7 @@ private fun ContinueTile(
 /** A video in a chat's grid. */
 @Composable
 internal fun MediaTile(state: ShellState, item: MediaItem, chatTitle: String, nav: KeyboardNav? = null, index: Int = 0) {
+    val s = LocalStrings.current
     val progress by state.settings.watchProgress.collectAsState(initial = emptyMap())
     val key = SettingsStore.progressKey(item.chatId, item.messageId)
     val point: WatchPoint? = progress[key]
@@ -466,7 +474,7 @@ internal fun MediaTile(state: ShellState, item: MediaItem, chatTitle: String, na
             if (item.durationSec > 0) append(MediaMapper.formatDuration(item.durationSec)).append("  ·  ")
             append(MediaMapper.formatSize(item.sizeBytes))
             item.qualityTags.firstOrNull()?.let { append("  ·  ").append(it) }
-            if (WatchedWords.showsWatched(point?.fraction, finished)) append("  ·  Watched")
+            if (WatchedWords.showsWatched(point?.fraction, finished)) append("  ·  ").append(s.watchedBadge)
         },
     )
 }
@@ -499,6 +507,7 @@ internal fun Poster(
     /** The menu's play, download and link lines; off for a page whose [extraMenu] is the menu. */
     fileMenu: Boolean = true,
 ) {
+    val s = LocalStrings.current
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     var lifted by remember { mutableStateOf(false) }
@@ -596,10 +605,10 @@ internal fun Poster(
                 WatchedBadge(Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = 9.dp), size = 24.dp)
             }
             when {
-                selected -> Badge(Icons.Filled.CheckCircle, "Selected", Modifier.align(Alignment.TopStart))
-                record != null -> Badge(Icons.Filled.CheckCircle, "Downloaded", Modifier.align(Alignment.TopStart))
-                download != null && download.busy -> Badge(TmIcons.Download, "Downloading", Modifier.align(Alignment.TopStart))
-                item.onDevice -> Badge(TmIcons.Download, "Cached", Modifier.align(Alignment.TopStart))
+                selected -> Badge(Icons.Filled.CheckCircle, s.browseBadgeSelected, Modifier.align(Alignment.TopStart))
+                record != null -> Badge(Icons.Filled.CheckCircle, s.downloadsDownloaded, Modifier.align(Alignment.TopStart))
+                download != null && download.busy -> Badge(TmIcons.Download, s.downloadsDownloading, Modifier.align(Alignment.TopStart))
+                item.onDevice -> Badge(TmIcons.Download, s.browseBadgeCached, Modifier.align(Alignment.TopStart))
             }
             if (lifted || menu || focused) {
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)))
@@ -609,11 +618,11 @@ internal fun Poster(
                     modifier = Modifier.align(Alignment.Center).size(48.dp)
                         .clickable { state.openPlayer(item, startFromBeginning = false) },
                 ) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = "Play", tint = Tone.onAccent, modifier = Modifier.padding(10.dp))
+                    Icon(Icons.Filled.PlayArrow, contentDescription = s.playerPlay, tint = Tone.onAccent, modifier = Modifier.padding(10.dp))
                 }
                 Box(Modifier.align(Alignment.TopEnd)) {
                     IconButton(onClick = { menu = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = Color.White)
+                        Icon(Icons.Filled.MoreVert, contentDescription = s.commonMore, tint = Color.White)
                     }
                 }
             }
@@ -646,7 +655,7 @@ private fun Badge(icon: androidx.compose.ui.graphics.vector.ImageVector, label: 
 
 /** "Download (12.3 GB free)", or the bare label while the disk has not answered. */
 internal fun withFree(label: String, freeBytes: Long): String =
-    DiskInfo.freeLabel(freeBytes)?.let { "$label ($it)" } ?: label
+    DiskInfo.freeLabel(freeBytes)?.let { L.commonWithDetail(label, it) } ?: label
 
 /**
  * Play, Play from start, the one download entry for where the video is (Download when it is on
@@ -665,6 +674,7 @@ internal fun TileMenu(
     watchedToggle: Boolean? = null,
     fileMenu: Boolean = true,
 ) {
+    val s = LocalStrings.current
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
     val downloads by OfflineDownloads.active.collectAsState()
@@ -680,8 +690,8 @@ internal fun TileMenu(
       if (!fileMenu) {
         extra?.invoke(onDismiss)
       } else {
-        DropdownMenuItem(text = { Text("Play") }, onClick = { onDismiss(); state.openPlayer(item, startFromBeginning = false) })
-        DropdownMenuItem(text = { Text("Play from start") }, onClick = { onDismiss(); state.openPlayer(item, startFromBeginning = true) })
+        DropdownMenuItem(text = { Text(s.playerPlay) }, onClick = { onDismiss(); state.openPlayer(item, startFromBeginning = false) })
+        DropdownMenuItem(text = { Text(s.playerPlayFromStart) }, onClick = { onDismiss(); state.openPlayer(item, startFromBeginning = true) })
         // Beside the play lines, because it is about watching rather than about the file. Marking
         // also forgets the saved position, so the video leaves Continue watching with it.
         if (watchedToggle != null) {
@@ -690,27 +700,27 @@ internal fun TileMenu(
                 val mark = !watchedToggle
                 scope.launch {
                     runCatching { setWatched(state.watched, state.settings, item, title, mark) }
-                    toast(if (mark) "${item.title} marked as watched" else "${item.title} marked as unwatched")
+                    toast(if (mark) s.watchedMarkedWatched(item.title) else s.watchedMarkedUnwatched(item.title))
                 }
             })
         }
         when {
             record != null -> {
-                DropdownMenuItem(text = { Text("In Downloads") }, onClick = { onDismiss(); state.go(Destination.Downloads) })
-                DropdownMenuItem(text = { Text("Remove from Downloads") }, onClick = {
+                DropdownMenuItem(text = { Text(s.downloadsInDownloads) }, onClick = { onDismiss(); state.go(Destination.Downloads) })
+                DropdownMenuItem(text = { Text(s.downloadsRemove) }, onClick = {
                     onDismiss()
                     scope.launch {
                         if (DownloadIndex.delete(state.settings, record)) {
-                            toast("${item.title} removed from Downloads")
+                            toast(s.downloadsRemoved(item.title))
                         } else {
-                            toast("The file is in use. Close whatever has it open and try again")
+                            toast(s.downloadsInUse)
                         }
                     }
                 })
             }
             row != null && row.busy -> {
-                DropdownMenuItem(text = { Text("Downloading…") }, onClick = { onDismiss(); state.go(Destination.Downloads) })
-                DropdownMenuItem(text = { Text("Cancel download") }, onClick = {
+                DropdownMenuItem(text = { Text(s.downloadsDownloadingEllipsis) }, onClick = { onDismiss(); state.go(Destination.Downloads) })
+                DropdownMenuItem(text = { Text(s.downloadsCancel) }, onClick = {
                     onDismiss()
                     OfflineDownloads.cancel(state.downloads, item.fileId)
                 })
@@ -718,19 +728,19 @@ internal fun TileMenu(
             // A chat with "restrict saving content" lets its videos be watched and nothing more,
             // so neither a download nor, below, a hand off to another app is offered.
             !item.canBeSaved -> Unit
-            item.onDevice -> DropdownMenuItem(text = { Text(withFree("Save to Downloads", free)) }, onClick = {
+            item.onDevice -> DropdownMenuItem(text = { Text(withFree(s.downloadsSave, free)) }, onClick = {
                 onDismiss()
                 OfflineDownloads.start(state.downloads, item, title)
-                toast("Saving ${item.title} to Downloads")
+                toast(s.downloadsSavingTitle(item.title))
             })
-            else -> DropdownMenuItem(text = { Text(withFree("Download", free)) }, onClick = {
+            else -> DropdownMenuItem(text = { Text(withFree(s.downloadsDownload, free)) }, onClick = {
                 onDismiss()
                 OfflineDownloads.start(state.downloads, item, title)
-                toast("Downloading ${item.title}")
+                toast(s.downloadsDownloadingTitle(item.title))
             })
         }
         if (item.canBeSaved && (record != null || item.onDevice)) {
-            DropdownMenuItem(text = { Text("Open in another app") }, onClick = {
+            DropdownMenuItem(text = { Text(s.commonOpenElsewhere) }, onClick = {
                 onDismiss()
                 scope.launch {
                     // A tile built from a saved record (Continue watching) does not know the
@@ -742,21 +752,21 @@ internal fun TileMenu(
                     val file = record?.localPath?.let(::File)?.takeIf { it.isFile }
                         ?: runCatching { Td.localFilePath(Td.currentFileId(item.chatId, item.messageId, item.fileId)) }
                             .getOrNull()?.let(::File)
-                    if (file == null) toast("The file is not here any more") else OpenExternal.open(file)
+                    if (file == null) toast(s.downloadsFileGone) else OpenExternal.open(file)
                 }
             })
         }
-        DropdownMenuItem(text = { Text("Copy link") }, onClick = {
+        DropdownMenuItem(text = { Text(s.commonCopyLink) }, onClick = {
             onDismiss()
             scope.launch {
                 val link = runCatching {
                     Td.client.getMessageLink(item.chatId, item.messageId, 0, 0, "", false, false).valueOrNull?.link
                 }.getOrNull()
                 if (link.isNullOrBlank()) {
-                    toast("This chat has no links to its messages")
+                    toast(s.commonNoLinks)
                 } else {
                     Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(link), null)
-                    toast("Link copied")
+                    toast(s.commonLinkCopied)
                 }
             }
         })
@@ -768,6 +778,7 @@ internal fun TileMenu(
 /** Telegram's sponsored message for a channel, shown above its videos as the phone shows it. */
 @Composable
 private fun SponsoredCard(ad: SponsoredItem, model: MediaListViewModel) {
+    val s = LocalStrings.current
     val toast = rememberToast()
     var reportOptions by remember(ad.messageId) { mutableStateOf<Pair<String, List<SponsoredReportOption>>?>(null) }
 
@@ -778,10 +789,10 @@ private fun SponsoredCard(ad: SponsoredItem, model: MediaListViewModel) {
             onResult = { outcome ->
                 when (outcome) {
                     is SponsoredReportOutcome.Options -> reportOptions = outcome.title to outcome.options
-                    SponsoredReportOutcome.Reported -> toast("Sponsored message reported.")
-                    SponsoredReportOutcome.AdsHidden -> toast("Sponsored messages hidden by Telegram.")
-                    SponsoredReportOutcome.PremiumRequired -> toast("Telegram Premium is required to hide sponsored messages.")
-                    SponsoredReportOutcome.Unavailable -> toast("This sponsored message can no longer be reported.")
+                    SponsoredReportOutcome.Reported -> toast(L.sponsoredReported)
+                    SponsoredReportOutcome.AdsHidden -> toast(L.sponsoredHidden)
+                    SponsoredReportOutcome.PremiumRequired -> toast(L.sponsoredPremiumRequired)
+                    SponsoredReportOutcome.Unavailable -> toast(L.sponsoredUnavailable)
                 }
             },
             onFailure = toast,
@@ -799,7 +810,7 @@ private fun SponsoredCard(ad: SponsoredItem, model: MediaListViewModel) {
                 MediaArt(ad.miniThumbnail, ad.thumbnailFileId, Modifier.size(56.dp).clip(MaterialTheme.shapes.small)) {}
             }
             Column(Modifier.weight(1f)) {
-                Text(ad.label.ifBlank { "Sponsored" }, style = MaterialTheme.typography.labelMedium, color = Tone.muted)
+                Text(ad.label.ifBlank { s.sponsoredLabel }, style = MaterialTheme.typography.labelMedium, color = Tone.muted)
                 Text(ad.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(ad.text, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
@@ -808,10 +819,10 @@ private fun SponsoredCard(ad: SponsoredItem, model: MediaListViewModel) {
                     model.clickSponsored(ad, media = false, onSuccess = {
                         OpenExternal.browse(ad.sponsorUrl)
                     }, onFailure = toast)
-                }) { Text(ad.buttonText.ifBlank { "Open" }) }
+                }) { Text(ad.buttonText.ifBlank { s.commonOpen }) }
             }
             if (ad.canBeReported) {
-                TextButton(onClick = { report(ad, byteArrayOf()) }) { Text("Report", color = Tone.muted) }
+                TextButton(onClick = { report(ad, byteArrayOf()) }) { Text(s.sponsoredReport, color = Tone.muted) }
             }
         }
     }
@@ -821,7 +832,7 @@ private fun SponsoredCard(ad: SponsoredItem, model: MediaListViewModel) {
     reportOptions?.let { (title, options) ->
         TmAlertDialog(
             onDismissRequest = { reportOptions = null },
-            title = { Text(title.ifBlank { "Why are you reporting this?" }) },
+            title = { Text(title.ifBlank { s.sponsoredReportWhy }) },
             text = {
                 Column {
                     options.forEach { option ->
@@ -836,7 +847,7 @@ private fun SponsoredCard(ad: SponsoredItem, model: MediaListViewModel) {
                 }
             },
             confirmButton = {},
-            dismissButton = { TextButton(onClick = { reportOptions = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { reportOptions = null }) { Text(s.commonCancel) } },
         )
     }
 }

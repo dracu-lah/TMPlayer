@@ -1,6 +1,7 @@
 package com.tmplayer.desktop.player
 
 import androidx.compose.ui.input.key.Key
+import com.tmplayer.i18n.L
 
 /** Everything a key, a click or a menu entry can ask the player to do. */
 sealed interface PlayerAction {
@@ -201,35 +202,35 @@ object PlayerKeys {
      * [actionFor], so the sheet cannot promise a key the player does not have.
      */
     fun sheet(mac: Boolean = false, wheelSeeks: Boolean = false): List<Pair<String, String>> {
-        val cmd = if (mac) "Cmd" else "Ctrl"
+        val cmd = if (mac) L.keysCmd else L.keysCtrl
         return listOf(
-            "Play or pause" to "Space, K",
-            "Seek 5 s" to "Left, Right",
-            "Seek 10 s" to "J, L",
-            "Seek 1 min" to "Shift+Left, Shift+Right",
-            "Seek 5 min" to if (mac) "Cmd+Shift+Alt+Left, Cmd+Shift+Alt+Right" else "Ctrl+Alt+Left, Ctrl+Alt+Right",
-            "Previous, next chapter" to "$cmd+Left, $cmd+Right",
-            "Frame step while paused" to ", and .",
-            "Repeat A to B: start, end, off" to "R",
-            "Jump to 0 to 90 %" to "0 to 9",
-            "Start, end" to "Home, End",
-            "Volume" to if (wheelSeeks) "Up, Down, Shift+wheel" else "Up, Down, wheel",
-            "Seek 10 s with the wheel" to if (wheelSeeks) "wheel" else "Shift+wheel",
-            "Mute" to "M",
-            "Fullscreen" to "F, F11, double click",
-            "Subtitles next, previous, on or off" to "V, Shift+V, C",
-            "Audio next, previous" to "A, Shift+A",
-            "Subtitles earlier, later" to "Z, X",
-            "Sound earlier, later" to "Ctrl+-, Ctrl+=",
-            "Speed up, down, reset" to "], [, Backspace",
-            "Next, previous episode" to "Shift+N, Shift+P",
-            "Always on top" to "$cmd+T",
-            "Mini player" to "$cmd+P",
-            "Screenshot, without subtitles" to "S, Shift+S",
-            "Playback details" to "I",
-            "Back" to "Esc, Backspace",
-            "Quit" to "$cmd+Q",
-            "This sheet" to "?",
+            L.keysRowPlayPause to L.keysSpaceK,
+            L.keysRowSeek5s to L.keysLeftRight,
+            L.keysRowSeek10s to "J, L",
+            L.keysRowSeek1min to L.keysShiftLeftRight,
+            L.keysRowSeek5min to if (mac) L.keysSeek5minMac else L.keysSeek5min,
+            L.keysRowChapter to L.keysChapter(cmd),
+            L.keysRowFrameStep to L.keysCommaPeriod,
+            L.keysRowAbRepeat to "R",
+            L.keysRowJump to L.keysDigits,
+            L.keysRowStartEnd to L.keysHomeEnd,
+            L.keysRowVolume to if (wheelSeeks) L.keysVolumeShiftWheel else L.keysVolumeWheel,
+            L.keysRowWheelSeek to if (wheelSeeks) L.keysWheel else L.keysShiftWheel,
+            L.keysRowMute to "M",
+            L.keysRowFullscreen to L.keysFullscreenKeys,
+            L.keysRowSubtitles to L.keysSubtitlesKeys,
+            L.keysRowAudio to L.keysAudioKeys,
+            L.keysRowSubtitleDelay to "Z, X",
+            L.keysRowAudioDelay to L.keysAudioDelayKeys,
+            L.keysRowSpeed to L.keysSpeedKeys,
+            L.keysRowEpisodes to L.keysEpisodesKeys,
+            L.keysRowAlwaysOnTop to "$cmd+T",
+            L.keysRowMini to "$cmd+P",
+            L.keysRowScreenshot to L.keysScreenshotKeys,
+            L.keysRowDetails to "I",
+            L.keysRowBack to L.keysBackKeys,
+            L.keysRowQuit to "$cmd+Q",
+            L.keysRowThisSheet to "?",
         )
     }
 }

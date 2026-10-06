@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
 import java.io.IOException
 
@@ -25,31 +26,31 @@ object Failures {
         floodWaitSeconds(raw)?.let { return floodMessage(it) }
 
         return when {
-            raw.startsWith("Unauthorized", ignoreCase = true) ||
+            raw.startsWith("Unauthorized", ignoreCase = true) || // i18n-ok: TDLib text, matched
                 raw.contains("SESSION_REVOKED") ||
                 raw.contains("AUTH_KEY_UNREGISTERED") ->
-                "Telegram signed this device out. Sign in again to carry on."
+                L.errorsSignedOut
 
             raw.contains("CHAT_NOT_FOUND") || raw.contains("PEER_ID_INVALID") ->
-                "That chat isn't there any more. It was deleted, or you left it."
+                L.errorsChatGone
 
             raw.contains("CHANNEL_PRIVATE") ->
-                "You're not in this channel any more, so its videos aren't available."
+                L.errorsChannelPrivate
 
             // The size check before playback only knows what the file claims to be. A remux that
             // was under-reported, or a second video arriving alongside this one, still fills the
             // disk part-way through, and "Telegram didn't answer" is a poor account of that.
-            raw.contains("No space left", ignoreCase = true) ||
+            raw.contains("No space left", ignoreCase = true) || // i18n-ok: TDLib text, matched
                 raw.contains("ENOSPC") ||
-                raw.contains("Not enough disk space", ignoreCase = true) ->
-                "This device has run out of storage. Clear space in Settings, then try again."
+                raw.contains("Not enough disk space", ignoreCase = true) -> // i18n-ok: TDLib text, matched
+                L.errorsNoSpace
 
             raw.contains("FILE_REFERENCE") || raw.contains("FILE_ID_INVALID") ->
-                "Telegram moved this video. Press Refresh, then try again."
+                L.errorsFileMoved
 
-            raw.contains("Timeout", ignoreCase = true) ||
-                raw.contains("Connection", ignoreCase = true) ||
-                raw.contains("Network", ignoreCase = true) ->
+            raw.contains("Timeout", ignoreCase = true) || // i18n-ok: TDLib text, matched
+                raw.contains("Connection", ignoreCase = true) || // i18n-ok: TDLib text, matched
+                raw.contains("Network", ignoreCase = true) -> // i18n-ok: TDLib text, matched
                 OFFLINE
 
             else -> {
@@ -85,12 +86,12 @@ object Failures {
     private val STALE_FILE = listOf(
         "FILE_REFERENCE",
         "FILE_ID_INVALID",
-        "Invalid file identifier",
-        "Invalid file id",
-        "Unknown file id",
-        "File not found",
-        "Can't download file",
-        "File is not downloadable",
+        "Invalid file identifier", // i18n-ok: TDLib text, matched
+        "Invalid file id", // i18n-ok: TDLib text, matched
+        "Unknown file id", // i18n-ok: TDLib text, matched
+        "File not found", // i18n-ok: TDLib text, matched
+        "Can't download file", // i18n-ok: TDLib text, matched
+        "File is not downloadable", // i18n-ok: TDLib text, matched
     )
 
     /**
@@ -104,17 +105,17 @@ object Failures {
 
     private fun floodMessage(seconds: Int): String {
         val wait = when {
-            seconds < 60 -> "$seconds seconds"
-            seconds < 3600 -> "${seconds / 60} minutes"
-            else -> "${seconds / 3600} hours"
+            seconds < 60 -> L.unitSeconds(seconds)
+            seconds < 3600 -> L.unitMinutes(seconds / 60)
+            else -> L.unitHours(seconds / 3600)
         }
-        return "Telegram has asked us to slow down. Try again in about $wait."
+        return L.errorsFloodWait(wait)
     }
 
     private val FLOOD = Regex("""(?:FLOOD_WAIT_|retry after )(\d+)""", RegexOption.IGNORE_CASE)
 
     private const val TAG = "Failures"
 
-    const val OFFLINE = "Can't reach Telegram. Check this device's internet connection."
-    const val DEFAULT = "Telegram didn't answer. Try again in a moment."
+    val OFFLINE: String get() = L.errorsOffline
+    val DEFAULT: String get() = L.errorsNoAnswer
 }

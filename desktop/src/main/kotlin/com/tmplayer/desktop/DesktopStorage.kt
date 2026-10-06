@@ -5,6 +5,7 @@ import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.Td
 import com.tmplayer.data.WatchCacheRules
 import com.tmplayer.desktop.player.ActiveStreams
+import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
 import com.tmplayer.platform.NoTransferNotifier
 import com.tmplayer.platform.TransferNotifier
@@ -174,6 +175,5 @@ object RoomOnDisk {
 
     /** What the player says when there is not room, before a byte is fetched. */
     fun refusal(shortBytes: Long, where: File): String =
-        "Not enough space to play this. ${com.tmplayer.data.StorageRelocationPlan.size(shortBytes)} more is needed " +
-            "on the drive that holds ${where.path}. Delete some downloads, or choose another storage location in Settings."
+        L.playerNoSpace(com.tmplayer.data.StorageRelocationPlan.size(shortBytes), where.path)
 }

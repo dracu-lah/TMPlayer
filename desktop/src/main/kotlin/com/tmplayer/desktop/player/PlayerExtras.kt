@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.player
 
+import com.tmplayer.i18n.L
 import java.io.File
 
 /** One chapter mark of the file: where it starts, and its name when the file gives one. */
@@ -45,8 +46,8 @@ object Chapters {
     /** "Chapter 3 of 12" with its name after a colon, for the flash. */
     fun label(chapters: List<Chapter>, index: Int): String {
         val name = chapters.getOrNull(index)?.title?.trim()?.takeIf { it.isNotEmpty() && !isGeneric(it) }
-        val count = "Chapter ${index + 1} of ${chapters.size}"
-        return if (name == null) count else "$count: $name"
+        val count = L.playerChapterOf(index + 1, chapters.size)
+        return if (name == null) count else L.playerChapterNamed(count, name)
     }
 
     /** "Chapter 03", "Chapter 3": a name that says nothing the count does not. */

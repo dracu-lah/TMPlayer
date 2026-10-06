@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import com.tmplayer.i18n.L
 import dev.g000sha256.tdl.dto.AuthenticationCodeInfo
 import dev.g000sha256.tdl.dto.AuthenticationCodeType
 import dev.g000sha256.tdl.dto.AuthenticationCodeTypeCall
@@ -234,6 +235,5 @@ object AuthReducer {
         else -> 0
     }
 
-    private const val UNSUPPORTED_STEP =
-        "This account needs a step TMPlayer can't do. Finish signing in in the Telegram app first, then try again."
+    private val UNSUPPORTED_STEP: String get() = L.errorsUnsupportedSignInStep
 }

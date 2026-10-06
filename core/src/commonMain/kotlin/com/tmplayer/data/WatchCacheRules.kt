@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import com.tmplayer.i18n.L
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -186,7 +187,7 @@ class WatchCacheRules(
         val title: String
             get() {
                 val stem = fileName.substringBeforeLast('.').replace('_', ' ').trim()
-                return if (stem.any { it.isLetter() }) stem else "Cached video"
+                return if (stem.any { it.isLetter() }) stem else L.downloadsCachedVideo
             }
     }
 

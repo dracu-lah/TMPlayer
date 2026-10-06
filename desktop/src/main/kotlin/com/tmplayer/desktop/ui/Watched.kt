@@ -40,6 +40,7 @@ import com.tmplayer.desktop.WatchedWords
 import com.tmplayer.desktop.setWatched
 import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.components.rememberToast
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -52,6 +53,7 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun WatchedPage(state: ShellState) {
+    val s = LocalStrings.current
     val records by state.watched.history.collectAsState(initial = null)
     val progress by state.settings.watchProgress.collectAsState(initial = emptyMap())
     var confirmClear by remember { mutableStateOf(false) }
@@ -72,7 +74,7 @@ fun WatchedPage(state: ShellState) {
             BrowseTab.Watched.blurb,
             actions = {
                 if (!records.isNullOrEmpty()) {
-                    OutlinedButton(onClick = { confirmClear = true }) { Text("Clear watched") }
+                    OutlinedButton(onClick = { confirmClear = true }) { Text(s.watchedClear) }
                 }
                 PosterSizeStep(state)
             },
@@ -81,7 +83,7 @@ fun WatchedPage(state: ShellState) {
         when {
             list == null -> Centred { CircularProgressIndicator() }
             list.isEmpty() -> Centred {
-                Text("Nothing watched yet. Videos you finish, or mark as watched, are listed here.", color = Tone.muted)
+                Text(s.watchedEmpty, color = Tone.muted)
             }
             else -> {
                 val grid = rememberLazyGridState()
@@ -100,7 +102,7 @@ fun WatchedPage(state: ShellState) {
                             LaunchedEffect(record) { state.noteChatTitle(record.chatId, record.chatTitle) }
                             WatchedTile(state, record, progress[record.key]?.fraction, now, nav, index) {
                                 val item = record.toMediaItem()
-                                toast("${item.title} marked as unwatched")
+                                toast(s.watchedMarkedUnwatched(item.title))
                                 scope.launch {
                                     runCatching { setWatched(state.watched, state.settings, item, record.chatTitle, watched = false) }
                                 }
@@ -127,6 +129,7 @@ private fun WatchedTile(
     index: Int,
     onUnwatch: () -> Unit,
 ) {
+    val s = LocalStrings.current
     val item = remember(record) { record.toMediaItem() }
     Poster(
         state = state,
@@ -147,7 +150,7 @@ private fun WatchedTile(
         markToggle = false,
         fileMenu = false,
         extraMenu = { close ->
-            DropdownMenuItem(text = { Text("Play again") }, onClick = {
+            DropdownMenuItem(text = { Text(s.watchedPlayAgain) }, onClick = {
                 close()
                 state.openPlayer(item, startFromBeginning = true)
             })
@@ -162,17 +165,18 @@ private fun WatchedTile(
 /** "Clear the watched list?", from the page and from Settings alike. */
 @Composable
 internal fun ClearWatchedDialog(state: ShellState, count: Int, scope: CoroutineScope, onDismiss: () -> Unit) {
+    val s = LocalStrings.current
     val toast = rememberToast()
     ConfirmDialog(
-        title = "Clear the watched list?",
-        message = "Every video loses its watched tick, and Previously watched empties.",
-        detail = "Nothing is deleted from Telegram. Videos you are part way through stay in Continue watching.",
-        confirmLabel = "Clear",
+        title = s.watchedClearTitle,
+        message = s.watchedClearMessage,
+        detail = s.watchedClearDetail,
+        confirmLabel = s.commonClear,
         onConfirm = {
             onDismiss()
             scope.launch {
                 runCatching { state.watched.clear() }
-                toast(if (count == 1) "Watched list cleared" else "$count videos unmarked")
+                toast(s.watchedCleared(count))
             }
         },
         onDismiss = onDismiss,

@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.os
 
+import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -20,7 +21,7 @@ interface KeepAwake : AutoCloseable {
     /** What was last asked for: true between [acquire] and [release]. */
     val isHeld: Boolean
 
-    fun acquire(reason: String = "Playing a video")
+    fun acquire(reason: String = L.playerKeepAwakeReason)
 
     fun release()
 

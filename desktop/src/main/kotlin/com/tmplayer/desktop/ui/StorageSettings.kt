@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import com.tmplayer.i18n.L
 import com.tmplayer.ui.components.TmAlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +34,7 @@ import com.tmplayer.desktop.DesktopStorage
 import com.tmplayer.desktop.DownloadIndex
 import com.tmplayer.desktop.os.FolderPicker
 import com.tmplayer.ui.components.rememberToast
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -57,6 +59,7 @@ internal data class StorageFigures(
  */
 @Composable
 internal fun StorageGroup(state: ShellState) {
+    val s = LocalStrings.current
     val settings = state.settings
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
@@ -68,31 +71,31 @@ internal fun StorageGroup(state: ShellState) {
     var busy by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(refresh) { figures = measure(state) }
 
-    Group("Storage")
+    Group(s.storageTitle)
     StorageCard(figures)
 
     val root = desktop.storageRoot.takeIf { it.isNotBlank() }?.let(::File)
     Setting(
-        "Storage location",
+        s.storageLocation,
         when {
-            moving != null -> "Moving downloads, ${StorageRelocationPlan.size(moving!!.doneBytes)} of ${StorageRelocationPlan.size(moving!!.totalBytes)}"
+            moving != null -> s.storageMovingProgress(StorageRelocationPlan.size(moving!!.doneBytes), StorageRelocationPlan.size(moving!!.totalBytes))
             busy != null -> busy!!
             root != null -> StorageRelocationPlan.appFolder(root).path
-            else -> "Default folders: downloads in ${DesktopPaths.layout(null).downloadsDir.path}"
+            else -> s.storageDefaultFolders(DesktopPaths.layout(null).downloadsDir.path)
         },
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(enabled = busy == null && moving == null, onClick = {
                 scope.launch {
-                    val picked = FolderPicker.pick("Choose where TMPlayer keeps its files", root ?: DesktopPaths.downloadsDir.parentFile)
+                    val picked = FolderPicker.pick(s.storagePickTitle, root ?: DesktopPaths.downloadsDir.parentFile)
                         ?: return@launch
                     dialog = check(state, picked)
                 }
-            }) { Text("Change") }
+            }) { Text(s.commonChange) }
             if (root != null) {
                 OutlinedButton(enabled = busy == null && moving == null, onClick = {
                     scope.launch { dialog = check(state, null) }
-                }) { Text("Reset") }
+                }) { Text(s.commonReset) }
             }
         }
     }
@@ -105,8 +108,8 @@ internal fun StorageGroup(state: ShellState) {
 
     val limitGb = desktop.cacheLimitBytes / GB
     Setting(
-        "Cache limit",
-        "$limitGb GB. Played videos stay until the cache passes this; the least recently played go first",
+        s.storageCacheLimit,
+        s.storageCacheLimitDetail(s.formatSizeGb(s.messages.formatter.number(limitGb))),
     ) {
         Row {
             Stepper(
@@ -114,105 +117,105 @@ internal fun StorageGroup(state: ShellState) {
                 onMore = { setLimit(state, DesktopSettings.stepCacheLimit(desktop.cacheLimitBytes, 1)) },
             )
             if (desktop.cacheLimitBytes != DesktopSettings.DEFAULT_CACHE_LIMIT_BYTES) {
-                TextButton(onClick = { setLimit(state, DesktopSettings.DEFAULT_CACHE_LIMIT_BYTES) }) { Text("Reset") }
+                TextButton(onClick = { setLimit(state, DesktopSettings.DEFAULT_CACHE_LIMIT_BYTES) }) { Text(s.commonReset) }
             }
         }
     }
 
     val f = figures
     Setting(
-        "Cached videos",
+        s.storageCachedVideos,
         when {
-            f == null -> "Working it out\u2026"
-            f.cachedCount == 0 -> "None. Playing a video keeps it here, up to the cache limit"
-            else -> "${videos(f.cachedCount)}, ${StorageRelocationPlan.size(f.cachedBytes)}. Each can be saved to Downloads"
+            f == null -> s.storageMeasuring
+            f.cachedCount == 0 -> s.storageCachedNone
+            else -> s.storageCachedSummary(f.cachedCount, StorageRelocationPlan.size(f.cachedBytes))
         },
     ) {
-        OutlinedButton(onClick = { state.go(Destination.Downloads) }) { Text("Show") }
+        OutlinedButton(onClick = { state.go(Destination.Downloads) }) { Text(s.commonShow) }
     }
     state.extras.watchCache?.let {
-        Setting("Clear cache", "Deletes every cached video. Downloads are not touched") {
-            OutlinedButton(onClick = { dialog = StorageDialog.ClearCache }) { Text("Clear") }
+        Setting(s.storageClearCache, s.storageClearCacheDetail) {
+            OutlinedButton(onClick = { dialog = StorageDialog.ClearCache }) { Text(s.commonClear) }
         }
     }
-    Setting("Clear pictures and previews", "Thumbnails and pictures TMPlayer fetches again as you browse") {
+    Setting(s.storageClearPictures, s.storageClearPicturesDetail) {
         OutlinedButton(onClick = {
             scope.launch {
                 runCatching { Td.clearPicturesAndPreviews() }
                 refresh++
-                toast("Pictures and previews cleared")
+                toast(s.storagePicturesCleared)
             }
-        }) { Text("Clear") }
+        }) { Text(s.commonClear) }
     }
-    Setting("Clear everything except downloads", "Cached videos, pictures and previews. Downloads stay") {
-        OutlinedButton(onClick = { dialog = StorageDialog.ClearAllButDownloads }) { Text("Clear", color = Tone.danger) }
+    Setting(s.storageClearAll, s.storageClearAllDetail) {
+        OutlinedButton(onClick = { dialog = StorageDialog.ClearAllButDownloads }) { Text(s.commonClear, color = Tone.danger) }
     }
-    Setting("Scan the downloads folder", "Find files in ${DesktopPaths.downloadsDir.path} that are not in TMPlayer's list") {
+    Setting(s.storageScan, s.storageScanDetail(DesktopPaths.downloadsDir.path)) {
         OutlinedButton(onClick = {
             scope.launch {
                 val found = DownloadIndex.scan(settings)
                 if (found.isEmpty()) {
-                    toast("Every file in the folder is in TMPlayer's list")
+                    toast(s.storageScanClean)
                 } else {
-                    toast(if (found.size == 1) "1 file is not in TMPlayer's list" else "${found.size} files are not in TMPlayer's list")
+                    toast(s.storageScanFound(found.size))
                     state.go(Destination.Downloads)
                 }
             }
-        }) { Text("Scan") }
+        }) { Text(s.storageScanButton) }
     }
 
     when (val d = dialog) {
         null -> Unit
         is StorageDialog.Refused -> TmAlertDialog(
             onDismissRequest = { dialog = null },
-            title = { Text("Choose another folder") },
+            title = { Text(s.storageChooseAnother) },
             text = { Text(d.reason) },
-            confirmButton = { TextButton(onClick = { dialog = null }) { Text("OK") } },
+            confirmButton = { TextButton(onClick = { dialog = null }) { Text(s.commonOk) } },
         )
         is StorageDialog.Confirm -> ConfirmDialog(
             title = d.title,
             message = d.body,
             detail = d.warning,
-            confirmLabel = if (d.adopt) "Use what is already there" else "Move",
+            confirmLabel = if (d.adopt) s.storageAdopt else s.storageMove,
             destructive = false,
             onDismiss = { dialog = null },
             onConfirm = {
                 dialog = null
-                busy = "Clearing the cache and restarting Telegram"
+                busy = s.storageRestarting
                 scope.launch {
                     val outcome = runCatching { DesktopStorage.relocation.move(d.root) }
                     busy = null
                     refresh++
-                    outcome.onSuccess { toast(it.message) }.onFailure { toast("The move stopped: ${it.message}") }
+                    outcome.onSuccess { toast(it.message) }.onFailure { toast(s.storageMoveStopped(it.message.orEmpty())) }
                     if (d.adopt && outcome.isSuccess) {
                         val found = DownloadIndex.scan(settings)
                         if (found.isNotEmpty()) {
-                            toast("${found.size} files there are not in TMPlayer's list. Keep or delete them in Downloads")
+                            toast(s.storageAdoptFound(found.size))
                         }
                     }
                 }
             },
         )
         StorageDialog.ClearCache -> ConfirmDialog(
-            title = "Clear the cache?",
-            message = "Deletes every cached video. Opening one of them again streams it again.",
-            detail = "Downloads are not touched, and nothing is removed from Telegram.",
-            confirmLabel = "Clear",
+            title = s.storageClearCacheTitle,
+            message = s.storageClearCacheMessage,
+            detail = s.storageClearCacheNote,
+            confirmLabel = s.commonClear,
             onDismiss = { dialog = null },
             onConfirm = {
                 dialog = null
                 scope.launch {
                     val freed = runCatching { state.extras.watchCache?.clearAll() ?: 0L }.getOrDefault(0L)
                     refresh++
-                    toast(if (freed > 0) "${StorageRelocationPlan.size(freed)} freed" else "No cached videos to clear")
+                    toast(if (freed > 0) s.storageFreed(StorageRelocationPlan.size(freed)) else s.storageNothingToClear)
                 }
             },
         )
         StorageDialog.ClearAllButDownloads -> ConfirmDialog(
-            title = "Clear everything except downloads?",
-            message = "Cached videos, pictures and previews all go; TMPlayer fetches them again as you browse.",
-            detail = "Downloads are not touched.",
-            confirmLabel = "Clear",
+            title = s.storageClearAllTitle,
+            message = s.storageClearAllMessage,
+            detail = s.storageClearAllNote,
+            confirmLabel = s.commonClear,
             onDismiss = { dialog = null },
             onConfirm = {
                 dialog = null
@@ -223,7 +226,7 @@ internal fun StorageGroup(state: ShellState) {
                     val migrated = runCatching { settings.downloadsMigratedNow() }.getOrDefault(false)
                     if (migrated) runCatching { Td.clearEverythingCached() } else runCatching { Td.clearPicturesAndPreviews() }
                     refresh++
-                    toast("Cleared. Downloads are as they were")
+                    toast(s.storageClearedAll)
                 }
             },
         )
@@ -233,16 +236,19 @@ internal fun StorageGroup(state: ShellState) {
 /** The figures in one card: what each kind of file takes, then the drives' free space. */
 @Composable
 private fun StorageCard(figures: StorageFigures?) {
+    val s = LocalStrings.current
     Surface(shape = MaterialTheme.shapes.medium, color = Tone.surface, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (figures == null) {
-                Text("Working it out\u2026", color = Tone.muted)
+                Text(s.storageMeasuring, color = Tone.muted)
                 return@Column
             }
             Text(
-                "${StorageRelocationPlan.size(figures.downloadsBytes)} in Downloads  ·  " +
-                    "${StorageRelocationPlan.size(figures.cachedBytes)} cached  ·  " +
-                    "${StorageRelocationPlan.size(figures.picturesBytes)} pictures and previews",
+                s.storageCardSummary(
+                    StorageRelocationPlan.size(figures.downloadsBytes),
+                    StorageRelocationPlan.size(figures.cachedBytes),
+                    StorageRelocationPlan.size(figures.picturesBytes),
+                ),
                 style = MaterialTheme.typography.bodyLarge,
             )
             figures.drives.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = Tone.muted) }
@@ -301,13 +307,15 @@ private suspend fun check(state: ShellState, picked: File?): StorageDialog = wit
         val free = DiskInfo.of(target.downloadsDir).freeBytes
         if (free in 1 until downloadsBytes + StorageRelocationPlan.SPARE_BYTES && !sameDrive(current.downloadsDir, target.downloadsDir)) {
             return@withContext StorageDialog.Refused(
-                "The default folders' drive has ${StorageRelocationPlan.size(free)} free. " +
-                    "The downloads alone need ${StorageRelocationPlan.size(downloadsBytes + StorageRelocationPlan.SPARE_BYTES)}.",
+                L.storageDefaultDriveTooSmall(
+                    StorageRelocationPlan.size(free),
+                    StorageRelocationPlan.size(downloadsBytes + StorageRelocationPlan.SPARE_BYTES),
+                ),
             )
         }
     }
     val (title, body) = StorageRelocationPlan.confirmText(
-        where = picked?.path ?: "the default folders",
+        where = picked?.path ?: L.storageTheDefaultFolders,
         newDownloads = target.downloadsDir.path,
         newCache = target.cacheDir.path,
         downloadCount = moving.size,
@@ -354,7 +362,7 @@ private suspend fun measure(state: ShellState): StorageFigures = withContext(Dis
     val dirs = listOf(DesktopPaths.downloadsDir, DesktopPaths.layout().cacheDir)
     val drives = dirs.map { volumeOf(it) }.distinct().map { (label, dir) ->
         val disk = DiskInfo.of(dir)
-        "${StorageRelocationPlan.size(disk.freeBytes)} free of ${StorageRelocationPlan.size(disk.totalBytes)} on $label"
+        L.storageDriveFree(StorageRelocationPlan.size(disk.freeBytes), StorageRelocationPlan.size(disk.totalBytes), label)
     }
     StorageFigures(
         downloadsBytes = downloads,
@@ -382,7 +390,5 @@ private fun volumeOf(dir: File): Pair<String, File> {
     }
     return top.path to top
 }
-
-private fun videos(n: Int) = if (n == 1) "1 video" else "$n videos"
 
 private const val GB = 1024L * 1024 * 1024

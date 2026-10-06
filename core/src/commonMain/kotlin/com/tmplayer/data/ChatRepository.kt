@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import com.tmplayer.i18n.L
 import dev.g000sha256.tdl.TdlClient
 import dev.g000sha256.tdl.TdlResult
 import dev.g000sha256.tdl.dto.Chat
@@ -19,7 +20,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 
 /** How a chat is grouped in the navigation rail. */
-enum class ChatKind(val label: String) {
+enum class ChatKind(private val labelText: () -> String) {
     /**
      * The chat with yourself, which Telegram gives every account and every client names rather
      * than showing the account's own name on it.
@@ -27,10 +28,14 @@ enum class ChatKind(val label: String) {
      * It gets a kind of its own because it is the one chat people use as a video library: a file
      * forwarded to Saved Messages from a phone is the usual way something arrives on this app.
      */
-    Saved("Saved Messages"),
-    Channel("Channels"),
-    Group("Groups"),
-    Direct("People"),
+    Saved({ L.chatsSavedMessages }),
+    Channel({ L.chatsKindChannels }),
+    Group({ L.chatsKindGroups }),
+    Direct({ L.chatsKindPeople }),
+    ;
+
+    /** The rail heading, in the UI language. */
+    val label: String get() = labelText()
 }
 
 /**
@@ -306,7 +311,7 @@ class ChatRepository(private val td: TdlClient) {
         }
         return ChatSummary(
             id = chat.id,
-            title = if (saved) "Saved Messages" else chat.title.ifBlank { "Chat ${chat.id}" },
+            title = if (saved) L.chatsSavedMessages else chat.title.ifBlank { L.chatsUntitled(chat.id.toString()) },
             miniThumbnail = chat.photo?.minithumbnail?.data,
             photoFileId = chat.photo?.small?.id ?: 0,
             kind = if (saved) ChatKind.Saved else kindOf(chat.type),

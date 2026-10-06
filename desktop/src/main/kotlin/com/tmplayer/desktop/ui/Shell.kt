@@ -79,6 +79,7 @@ import com.tmplayer.ui.components.AppLogo
 import com.tmplayer.ui.components.LocalToastHost
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.rememberToast
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.nav.BackHandler
 import com.tmplayer.ui.nav.LocalBackStack
 import com.tmplayer.ui.theme.Tone
@@ -147,6 +148,7 @@ fun DesktopShell(
 
 @Composable
 private fun Browse(state: ShellState, player: PlayerContent) {
+    val s = LocalStrings.current
     // One chat list for the session, the same view model the phone uses. Its store is cleared when
     // the account goes, which cancels everything it was loading.
     val chats = rememberViewModel(Unit) { ChatListViewModel(state.settings) }
@@ -177,11 +179,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         val removed = runCatching { state.settings.pruneBrokenHistory() }.getOrDefault(0)
         if (removed > 0) {
             toast(
-                if (removed == 1) {
-                    "Removed a video TMPlayer can no longer open from Continue watching"
-                } else {
-                    "Removed $removed videos TMPlayer can no longer open from Continue watching"
-                },
+                s.continuePruned(removed),
             )
         }
     }
@@ -194,7 +192,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     val connection = rememberConnectionNotice(network, telegramConnected) {
         chats.load()
         browseScope.launch { runCatching { state.extras.updates?.checkIfDue() } }
-        toast("Back online. Library updated.")
+        toast(s.connectionBackOnline)
     }
 
     BackHandler(enabled = state.openChat != null) { state.closeChat() }
@@ -268,6 +266,7 @@ internal fun Sidebar(
     update: NavUpdate? = null,
     folders: List<ChatFolderSummary> = Td.folders.collectAsState().value,
 ) {
+    val s = LocalStrings.current
     val groups = rememberNavGroups(state.settings, state.currentGroup)
     val sections = remember(folders) { browseSections(folders, withWatched = true) }
     val inFlight = rememberDownloadsInFlight()
@@ -288,7 +287,7 @@ internal fun Sidebar(
                     entries.forEach { entry ->
                         val target = entry.destination()
                         SidebarItem(
-                            label = if (entry is NavEntry.Section) entry.section.label else "Downloads",
+                            label = if (entry is NavEntry.Section) entry.section.label else s.navDownloads,
                             icon = target?.icon() ?: (entry as NavEntry.Section).section.icon,
                             badge = if (entry == NavEntry.Downloads && inFlight > 0) inFlight.toString() else null,
                             selected = when {
@@ -366,6 +365,7 @@ private val SIDEBAR_ROW = 40.dp
 
 @Composable
 private fun Rail(state: ShellState, update: NavUpdate?) {
+    val s = LocalStrings.current
     NavigationRail(containerColor = Tone.background) {
         Image(
             AppLogo.Mark,
@@ -380,7 +380,7 @@ private fun Rail(state: ShellState, update: NavUpdate?) {
                 icon = {
                     if (destination == Destination.Downloads && inFlight > 0) {
                         BadgedBox(badge = { Badge { Text(inFlight.toString()) } }) {
-                            Icon(destination.icon(), contentDescription = "${destination.label}, $inFlight in progress")
+                            Icon(destination.icon(), contentDescription = s.navInProgress(destination.label, inFlight))
                         }
                     } else {
                         Icon(destination.icon(), contentDescription = destination.label)

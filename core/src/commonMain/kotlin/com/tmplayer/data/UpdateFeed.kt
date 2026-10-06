@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -63,8 +64,8 @@ object UpdateFeed {
         val headers = mapOf("User-Agent" to userAgent)
         val fromSite = runCatching {
             val answer = get(FEED_URL, headers)
-            if (answer.code !in 200..299) throw UpdateFailure("The site answered ${answer.code}")
-            parseFeed(answer.body) ?: throw UpdateFailure("The site's feed could not be read")
+            if (answer.code !in 200..299) throw UpdateFailure(L.updateSiteAnswered(answer.code.toString()))
+            parseFeed(answer.body) ?: throw UpdateFailure(L.updateSiteUnreadable)
         }
         fromSite.getOrNull()?.let { return it }
         Logger.w(TAG, "Update feed unavailable, asking GitHub: ${fromSite.exceptionOrNull()?.message}")
@@ -72,20 +73,20 @@ object UpdateFeed {
         // GitHub asks every caller to name itself and answers 403 to some that do not.
         val answer = runCatching {
             get(GITHUB_LATEST, headers + ("Accept" to "application/vnd.github+json"))
-        }.getOrElse { throw UpdateFailure("Could not reach GitHub. Try again in a moment.") }
+        }.getOrElse { throw UpdateFailure(L.updateUnreachable) }
         if (answer.code !in 200..299) {
             // An anonymous caller gets sixty requests an hour per address, and a household behind
             // one address can spend them, so rate limiting is worth naming rather than reporting
             // as a network that is down.
             throw UpdateFailure(
                 if (answer.code == 403 || answer.code == 429) {
-                    "GitHub is rate limiting this connection. Try again in an hour."
+                    L.updateRateLimited
                 } else {
-                    "GitHub answered ${answer.code}. Try again in a moment."
+                    L.updateGithubAnswered(answer.code.toString())
                 },
             )
         }
-        return parseGitHub(answer.body) ?: throw UpdateFailure("GitHub sent a release with no version on it.")
+        return parseGitHub(answer.body) ?: throw UpdateFailure(L.updateNoVersion)
     }
 
     /** `latest.json`, schema 1. Null when it is not that. */
@@ -111,7 +112,7 @@ object UpdateFeed {
         }
         Release(
             version = version,
-            pageUrl = root.optString("releaseUrl").ifBlank { "$RELEASES_PAGE/tag/v$version" },
+            pageUrl = root.optString("releaseUrl").ifBlank { "$RELEASES_PAGE/tag/v$version" }, // i18n-ok: a JSON field
             notes = root.optString("notes").trim(),
             assets = assets,
         )

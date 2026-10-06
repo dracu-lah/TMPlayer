@@ -103,7 +103,7 @@ object DesktopPaths : Paths {
 }
 
 fun desktopDeviceInfo(): DeviceInfo = DeviceInfo(
-    model = "Desktop",
+    model = "Desktop", // i18n-ok: the device name Telegram lists, not UI
     systemVersion = "${System.getProperty("os.name")} ${System.getProperty("os.version")}",
     appVersion = BuildInfo.VERSION,
 )

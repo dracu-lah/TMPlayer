@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
 import com.tmplayer.player.StreamStats
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -410,6 +411,6 @@ interface DownloadRunner {
 
     companion object {
         /** The fallback for a runner that has nothing more particular to say. */
-        const val REFUSED_ANYWHERE = "This download could not start. Press Try again."
+        val REFUSED_ANYWHERE: String get() = L.downloadsRefusedAnywhere
     }
 }

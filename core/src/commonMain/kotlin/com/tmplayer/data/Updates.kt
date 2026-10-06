@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -132,7 +133,7 @@ object Updates {
         if (before is UpdateState.Downloading || before is UpdateState.Ready) return false
 
         if (!canTryInternet()) {
-            if (!quiet) _state.value = UpdateState.Failed("Connect to the internet to check for updates.")
+            if (!quiet) _state.value = UpdateState.Failed(L.updateOffline)
             return false
         }
 
@@ -173,7 +174,7 @@ object Updates {
     suspend fun download(release: Release, dir: File): File? {
         val asset = apkFor(release)
         if (asset == null) {
-            _state.value = UpdateState.Failed("The newest release has no APK this device can install.", release)
+            _state.value = UpdateState.Failed(L.updateNoApk, release)
             return null
         }
         if (!canTryInternet()) {

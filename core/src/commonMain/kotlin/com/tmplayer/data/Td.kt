@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import com.tmplayer.i18n.L
 import com.tmplayer.platform.Credentials
 import com.tmplayer.platform.DeviceInfo
 import com.tmplayer.platform.Logger
@@ -184,7 +185,7 @@ object Td {
                         // placeholder character.
                         ChatFolderSummary(
                             id = folder.id,
-                            title = folder.name.text.text.trim().ifBlank { "Folder ${folder.id}" },
+                            title = folder.name.text.text.trim().ifBlank { L.chatsUntitledFolder(folder.id.toString()) },
                         )
                     }
                 }
@@ -284,13 +285,13 @@ object Td {
      * want permissions this app does not hold, and neither exists on a TV at all.
      */
     suspend fun submitPhoneNumber(phoneNumber: String): String? {
-        val td = current ?: return "Not connected"
+        val td = current ?: return L.errorsNotConnected
         return when (val result = td.setAuthenticationPhoneNumber(phoneNumber)) {
             is TdlResult.Success -> null
             is TdlResult.Failure -> {
                 _auth.value = AuthState.Phone(wrong = true)
                 if (result.message.contains("PHONE_NUMBER_INVALID")) {
-                    "That number isn't one Telegram recognises. Include the country code, as in +44."
+                    L.errorsPhoneInvalid
                 } else {
                     Failures.humanise(result.message)
                 }
@@ -300,7 +301,7 @@ object Td {
 
     /** Submits the login code Telegram sent. Returns null on success, an error otherwise. */
     suspend fun submitCode(code: String): String? {
-        val td = current ?: return "Not connected"
+        val td = current ?: return L.errorsNotConnected
         // Copied rather than rebuilt: the screen's delivery route, digit count and resend timer all
         // live in this state, and a fresh Code() would blank them the moment a digit is mistyped.
         val current = _auth.value as? AuthState.Code ?: AuthState.Code("")
@@ -309,9 +310,9 @@ object Td {
             is TdlResult.Failure -> {
                 _auth.value = current.copy(wrong = true)
                 when {
-                    result.message.contains("PHONE_CODE_INVALID") -> "Wrong code"
+                    result.message.contains("PHONE_CODE_INVALID") -> L.errorsWrongCode
                     result.message.contains("PHONE_CODE_EXPIRED") ->
-                        "That code has expired. Start over to have a new one sent."
+                        L.errorsCodeExpired
                     else -> Failures.humanise(result.message)
                 }
             }
@@ -342,7 +343,7 @@ object Td {
      * only that the user pressed the button, and guessing at a reason would be inventing one.
      */
     suspend fun resendCode(): String? {
-        val td = current ?: return "Not connected"
+        val td = current ?: return L.errorsNotConnected
         return when (val result = td.resendAuthenticationCode()) {
             is TdlResult.Success -> null
             is TdlResult.Failure -> Failures.humanise(result.message)
@@ -353,7 +354,7 @@ object Td {
         val paths = currentPaths ?: return
         if (!credentials.present) {
             _auth.value = AuthState.Failed(
-                "No Telegram API credentials in this build. Add TG_API_ID and TG_API_HASH to local.properties and rebuild. See the README.",
+                L.errorsNoApiCredentials,
             )
             return
         }
@@ -374,7 +375,7 @@ object Td {
             applicationVersion = device.appVersion,
         )
         if (result is TdlResult.Failure) {
-            _auth.value = AuthState.Failed("TDLib rejected its parameters: ${result.message}")
+            _auth.value = AuthState.Failed(L.errorsTdlibParameters(result.message))
         }
     }
 
@@ -390,13 +391,13 @@ object Td {
 
     /** Submits the two-step verification password. Returns null on success, an error otherwise. */
     suspend fun submitPassword(password: String): String? {
-        val td = current ?: return "Not connected"
+        val td = current ?: return L.errorsNotConnected
         val hint = (_auth.value as? AuthState.Password)?.hint.orEmpty()
         return when (val result = td.checkAuthenticationPassword(password)) {
             is TdlResult.Success -> null
             is TdlResult.Failure -> {
                 _auth.value = AuthState.Password(hint, wrong = true)
-                if (result.message == "PASSWORD_HASH_INVALID") "Wrong password" else Failures.humanise(result.message)
+                if (result.message == "PASSWORD_HASH_INVALID") L.errorsWrongPassword else Failures.humanise(result.message)
             }
         }
     }

@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import com.tmplayer.i18n.L
 import dev.g000sha256.tdl.dto.Message
 import dev.g000sha256.tdl.dto.MessageAnimation
 import dev.g000sha256.tdl.dto.MessageDocument
@@ -174,7 +175,7 @@ object MediaMapper {
                 chatId = message.chatId,
                 messageId = message.id,
                 fileId = video.video.id,
-                title = displayTitle(video.fileName, content.caption?.text, "Video"),
+                title = displayTitle(video.fileName, content.caption?.text, L.mediaUntitledVideo),
                 fileName = video.fileName,
                 sizeBytes = fileSize(video.video.size, video.video.expectedSize),
                 durationSec = video.duration,
@@ -195,7 +196,7 @@ object MediaMapper {
                 chatId = message.chatId,
                 messageId = message.id,
                 fileId = document.document.id,
-                title = displayTitle(name, content.caption?.text, "File"),
+                title = displayTitle(name, content.caption?.text, L.mediaUntitledFile),
                 fileName = name,
                 sizeBytes = fileSize(document.document.size, document.document.expectedSize),
                 durationSec = 0,
@@ -215,7 +216,7 @@ object MediaMapper {
                 chatId = message.chatId,
                 messageId = message.id,
                 fileId = animation.animation.id,
-                title = displayTitle(animation.fileName, content.caption?.text, "Clip"),
+                title = displayTitle(animation.fileName, content.caption?.text, L.mediaUntitledClip),
                 fileName = animation.fileName,
                 sizeBytes = fileSize(animation.animation.size, animation.animation.expectedSize),
                 durationSec = animation.duration,
@@ -289,18 +290,7 @@ object MediaMapper {
         ) == LocalFileAvailability.Complete
     }
 
-    fun formatSize(bytes: Long): String = when {
-        bytes <= 0 -> ""
-        bytes >= 1024L * 1024 * 1024 -> String.format(Locale.US, "%.1f GB", bytes / 1024.0 / 1024 / 1024)
-        bytes >= 1024L * 1024 -> String.format(Locale.US, "%.0f MB", bytes / 1024.0 / 1024)
-        else -> String.format(Locale.US, "%.0f KB", bytes / 1024.0)
-    }
+    fun formatSize(bytes: Long): String = L.messages.formatter.size(bytes)
 
-    fun formatDuration(seconds: Int): String {
-        if (seconds <= 0) return ""
-        val hours = seconds / 3600
-        val minutes = (seconds % 3600) / 60
-        return if (hours > 0) String.format(Locale.US, "%dh %02dm", hours, minutes)
-        else String.format(Locale.US, "%dm", minutes.coerceAtLeast(1))
-    }
+    fun formatDuration(seconds: Int): String = L.messages.formatter.duration(seconds.toLong())
 }

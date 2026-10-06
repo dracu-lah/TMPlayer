@@ -23,6 +23,7 @@ import com.tmplayer.data.Td
 import com.tmplayer.data.WatchedStore
 import com.tmplayer.desktop.DesktopPaths
 import com.tmplayer.desktop.DownloadIndex
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -34,6 +35,7 @@ import kotlinx.coroutines.withContext
  */
 @Composable
 internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
+    val s = LocalStrings.current
     val settings = state.settings
     val scope = rememberCoroutineScope()
     var alsoDownloads by remember { mutableStateOf(false) }
@@ -43,16 +45,15 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
     }
     TmAlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Sign out of Telegram?") },
+        title = { Text(s.signoutTitle) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "You'll be signed out and taken back to the sign in screen. Your favourites, your watched list " +
-                        "and everything you were part way through go with it. Downloads stay in ${DesktopPaths.downloadsDir.path}.",
+                    s.signoutBody(DesktopPaths.downloadsDir.path),
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = alsoDownloads, onCheckedChange = { alsoDownloads = it })
-                    Text(if (size > 0) "Also delete my downloads (${StorageRelocationPlan.size(size)})" else "Also delete my downloads")
+                    Text(if (size > 0) s.commonWithDetail(s.signoutDeleteDownloads, StorageRelocationPlan.size(size)) else s.signoutDeleteDownloads)
                 }
             }
         },
@@ -65,9 +66,9 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
                     state.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.All))
                     Td.logOut()
                 }
-            }) { Text("Sign out", color = Tone.danger) }
+            }) { Text(s.signoutConfirm, color = Tone.danger) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s.commonCancel) } },
     )
 }
 

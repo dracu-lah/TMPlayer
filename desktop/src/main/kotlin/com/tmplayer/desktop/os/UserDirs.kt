@@ -25,7 +25,7 @@ object UserDirs {
             else -> xdgDownloads(System.getenv(), home())
         }
     }.onFailure { Logger.w(TAG, "could not resolve the Downloads folder: ${it.message}") }
-        .getOrNull() ?: File(home(), "Downloads")
+        .getOrNull() ?: File(home(), "Downloads") // i18n-ok: a folder name on disk
 
     /**
      * The Pictures folder, the same way: a Known Folder on Windows, `XDG_PICTURES_DIR` on Linux,
@@ -39,7 +39,7 @@ object UserDirs {
             else -> xdgDir(System.getenv(), home(), PICTURES_KEY)
         }
     }.onFailure { Logger.w(TAG, "could not resolve the Pictures folder: ${it.message}") }
-        .getOrNull() ?: File(home(), "Pictures")
+        .getOrNull() ?: File(home(), "Pictures") // i18n-ok: a folder name on disk
 
     private fun home(): File = File(System.getProperty("user.home").orEmpty())
 

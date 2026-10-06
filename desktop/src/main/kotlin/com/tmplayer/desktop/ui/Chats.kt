@@ -37,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Focus
 import com.tmplayer.ui.components.TmDropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -93,6 +94,7 @@ fun ChatsPage(
     /** False beside the wide side bar, which lists the same sections in its Chats group. */
     showSections: Boolean = true,
 ) {
+    val s = LocalStrings.current
     val ui by model.state.collectAsState()
     val favourites by state.settings.favorites.collectAsState(initial = emptySet())
     val folders by Td.folders.collectAsState()
@@ -114,22 +116,22 @@ fun ChatsPage(
 
     Column(Modifier.fillMaxSize()) {
         PageHeader(
-            title = if (favouritesOnly) "Favourites" else section.heading,
-            subtitle = if (favouritesOnly) "Chats you've starred" else section.blurb,
+            title = if (favouritesOnly) s.navFavourites else section.heading,
+            subtitle = if (favouritesOnly) s.chatsFavouritesBlurb else section.blurb,
             actions = {
                 SearchField(
                     query = query,
                     onQuery = { query = it },
-                    placeholder = "Search chats",
+                    placeholder = s.chatsSearch,
                     focus = state.searchFocus,
                     modifier = Modifier.width(320.dp),
                     onDown = { nav.focus(0) },
                 )
                 IconButton(onClick = {
                     val waiting = model.refreshUnlessRateLimited()
-                    if (waiting > 0) toast("Telegram asked to wait $waiting s before refreshing again")
+                    if (waiting > 0) toast(s.chatsRefreshWait(waiting))
                 }) {
-                    Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+                    Icon(Icons.Filled.Refresh, contentDescription = s.commonRefresh)
                 }
             },
         )
@@ -157,9 +159,9 @@ fun ChatsPage(
                 Centred {
                     Text(
                         when {
-                            query.isNotBlank() -> "No chat matches \"$query\"."
-                            favouritesOnly -> "Star a chat in the list and it will wait for you here."
-                            else -> "Nothing in ${section.label}."
+                            query.isNotBlank() -> s.chatsNoMatch(query)
+                            favouritesOnly -> s.chatsFavouritesEmpty
+                            else -> s.chatsSectionEmpty(section.label)
                         },
                         color = Tone.muted,
                     )
@@ -177,19 +179,19 @@ fun ChatsPage(
                     actions = ChatRowActions(
                         onTogglePinned = { chat ->
                             model.setPinned(chat, !chat.isPinned) { toast(it) }
-                            toast(if (chat.isPinned) "${chat.title} unpinned" else "${chat.title} pinned to the top")
+                            toast(if (chat.isPinned) s.chatsUnpinned(chat.title) else s.chatsPinned(chat.title))
                         },
                         onToggleMuted = { chat ->
                             model.setMuted(chat, !chat.isMuted) { toast(it) }
-                            toast(if (chat.isMuted) "${chat.title} unmuted" else "${chat.title} muted")
+                            toast(if (chat.isMuted) s.chatsUnmuted(chat.title) else s.chatsMuted(chat.title))
                         },
                         onToggleArchived = { chat ->
                             model.setArchived(chat, !chat.isArchived) { toast(it) }
-                            toast(if (chat.isArchived) "${chat.title} moved out of the archive" else "${chat.title} archived")
+                            toast(if (chat.isArchived) s.chatsUnarchived(chat.title) else s.chatsArchived(chat.title))
                         },
                         onMarkRead = { chat ->
                             model.markRead(chat) { toast(it) }
-                            toast("${chat.title} marked as read")
+                            toast(s.chatsMarkedRead(chat.title))
                         },
                     ),
                 )
@@ -261,6 +263,7 @@ internal fun ChatRow(
     modifier: Modifier = Modifier,
     actions: ChatRowActions = ChatRowActions(),
 ) {
+    val s = LocalStrings.current
     var focused by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     Row(
@@ -305,7 +308,7 @@ internal fun ChatRow(
         ChatAvatar(chat.miniThumbnail, chat.photoFileId, chat.title, Avatar.Compact + 8.dp)
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (chat.isPinned) Icon(TmIcons.Pin, contentDescription = "Pinned", tint = Tone.muted, modifier = Modifier.width(14.dp))
+                if (chat.isPinned) Icon(TmIcons.Pin, contentDescription = s.chatsPinnedLabel, tint = Tone.muted, modifier = Modifier.width(14.dp))
                 Text(
                     chat.title,
                     style = MaterialTheme.typography.titleMedium,
@@ -332,7 +335,7 @@ internal fun ChatRow(
         IconButton(onClick = onStar) {
             Icon(
                 if (favourite) Icons.Filled.Star else TmIcons.StarOutline,
-                contentDescription = if (favourite) "Remove from favourites" else "Add to favourites",
+                contentDescription = if (favourite) s.chatsUnfavourite else s.chatsFavourite,
                 tint = if (favourite) Tone.caution else Tone.muted,
             )
         }
@@ -356,6 +359,7 @@ private fun ChatRowMenu(
     onStar: () -> Unit,
     actions: ChatRowActions,
 ) {
+    val s = LocalStrings.current
     @Composable
     fun entry(label: String, key: String?, icon: ImageVector, action: () -> Unit) {
         DropdownMenuItem(
@@ -369,25 +373,25 @@ private fun ChatRowMenu(
         )
     }
     TmDropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        entry("Open", "Enter", TmIcons.Folder, onOpen)
+        entry(s.commonOpen, s.keysEnter, TmIcons.Folder, onOpen)
         entry(
-            if (favourite) "Remove from favourites" else "Add to favourites",
+            if (favourite) s.chatsUnfavourite else s.chatsFavourite,
             "S",
             if (favourite) Icons.Filled.Star else TmIcons.StarOutline,
             onStar,
         )
         HorizontalDivider()
-        entry(if (chat.isPinned) "Unpin" else "Pin to the top", "P", TmIcons.Pin) { actions.onTogglePinned(chat) }
+        entry(if (chat.isPinned) s.chatsUnpin else s.chatsPin, "P", TmIcons.Pin) { actions.onTogglePinned(chat) }
         entry(
-            if (chat.isMuted) "Unmute" else "Mute",
+            if (chat.isMuted) s.chatsUnmute else s.chatsMute,
             "M",
             if (chat.isMuted) TmIcons.Bell else TmIcons.BellOff,
         ) { actions.onToggleMuted(chat) }
         if (chat.unreadCount > 0) {
-            entry("Mark as read", "R", Icons.Filled.Check) { actions.onMarkRead(chat) }
+            entry(s.chatsMarkRead, "R", Icons.Filled.Check) { actions.onMarkRead(chat) }
         }
         entry(
-            if (chat.isArchived) "Move out of the archive" else "Archive",
+            if (chat.isArchived) s.chatsUnarchive else s.chatsArchive,
             "A",
             TmIcons.Archive,
         ) { actions.onToggleArchived(chat) }

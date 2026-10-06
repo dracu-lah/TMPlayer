@@ -3,6 +3,7 @@ package com.tmplayer.desktop
 import com.tmplayer.data.DownloadFiles
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.StorageRelocationPlan
+import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
 import com.tmplayer.platform.NoTransferNotifier
 import com.tmplayer.platform.TransferNotifier
@@ -72,9 +73,9 @@ class StorageRelocation(
     ) {
         val message: String
             get() = when {
-                failed.isEmpty() -> "Storage moved to ${downloadsDir.parentFile ?: downloadsDir}"
-                failed.size == 1 -> "Storage moved, but ${failed.first()} could not be. TMPlayer tries again next launch."
-                else -> "Storage moved, but ${failed.size} downloads could not be. TMPlayer tries again next launch."
+                failed.isEmpty() -> L.storageMovedTo((downloadsDir.parentFile ?: downloadsDir).toString())
+                failed.size == 1 -> L.storageMovedButOne(failed.first())
+                else -> L.storageMovedButSome(failed.size)
             }
     }
 
@@ -168,7 +169,7 @@ class StorageRelocation(
         var moved = 0
         val failed = mutableListOf<String>()
         if (moving.isNotEmpty()) {
-            note.begin(id, TransferNotifier.Kind.Relocate, "Moving downloads")
+            note.begin(id, TransferNotifier.Kind.Relocate, L.storageMovingDownloads)
             _moving.value = Moving(0, total)
         }
         for (record in moving) {
@@ -197,9 +198,9 @@ class StorageRelocation(
         val outcome = Outcome(to.downloadsDir, moved, failed)
         if (moving.isNotEmpty()) {
             if (failed.isEmpty()) {
-                note.complete(id, "Downloads moved", outcome.message, TransferNotifier.OpenTarget.Folder(to.downloadsDir.path))
+                note.complete(id, L.downloadsMoved, outcome.message, TransferNotifier.OpenTarget.Folder(to.downloadsDir.path))
             } else {
-                note.fail(id, "Some downloads did not move", outcome.message, retryable = true)
+                note.fail(id, L.storageSomeDidNotMove, outcome.message, retryable = true)
             }
         }
         return outcome

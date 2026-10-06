@@ -7,12 +7,15 @@ import com.sun.jna.win32.StdCallLibrary
 import com.tmplayer.desktop.os.NativeInventory
 import com.tmplayer.desktop.os.OsInfo
 import com.tmplayer.desktop.player.MpvNatives
+import com.tmplayer.i18n.Icu
+import com.tmplayer.i18n.Languages
+import com.tmplayer.i18n.Translator
 import org.openani.mediamp.mpv.MPVHandle
 import java.io.File
 
 /**
- * `TMPlayer --self-test`: loads every native library the app depends on, prints what it found and
- * exits 0, or 1 if anything failed to load. No window, no Telegram account, no network.
+ * `TMPlayer --self-test`: loads every native library the app depends on and every UI language's
+ * catalog, prints what it found and exits 0, or 1 if anything failed to load. No window, no Telegram account, no network.
  *
  * CI runs it against the packaged app (the Linux app image, the AppImage, the Flatpak, the
  * installed MSI and the portable zip), so a release can never ship an installer whose natives do
@@ -51,6 +54,7 @@ object SelfTest {
         if (OsInfo.isWindows) step("msvc runtime origin") { WindowsRuntime.checkOrigin() }
         step("libmpv") { mpvVersions() }
         step("jna") { "${Native.VERSION}, native ${Native.VERSION_NATIVE}, pointer size ${Native.POINTER_SIZE}" }
+        step("i18n") { catalogs() }
         step("skiko") {
             org.jetbrains.skiko.Library.load()
             "loaded"
@@ -98,6 +102,29 @@ object SelfTest {
         } finally {
             h.destroy()
         }
+    }
+
+    /**
+     * Reads every UI language's catalog off the classpath the way the app does, and fails if one
+     * does not parse, carries a message that is not valid ICU, or names a key English does not
+     * have. A language with no catalog yet is fine: it reads in English.
+     */
+    private fun catalogs(): String {
+        val english = Translator.resource(Languages.ENGLISH) ?: error("i18n/en.json is not in the app")
+        val keys = Translator.parse(english).onEach { (_, text) -> Icu.parse(text) }.keys
+        val others = Languages.tags.filter { it != Languages.ENGLISH }
+        val present = others.mapNotNull { tag ->
+            val json = Translator.resource(tag) ?: return@mapNotNull null
+            val entries = Translator.parse(json)
+            val stray = entries.keys - keys
+            check(stray.isEmpty()) { "$tag has keys English does not: ${stray.take(3)}" }
+            entries.forEach { (key, text) -> runCatching { Icu.parse(text) }.getOrElse { throw IllegalStateException("$tag $key: ${it.message}") } }
+            check(Translator.load(tag).tag == tag)
+            "$tag ${entries.size}"
+        }
+        Translator.load(Languages.PSEUDO)
+        return "${keys.size} English keys; ${present.size} of ${others.size} translations present" +
+            present.joinToString(prefix = if (present.isEmpty()) "" else " (", postfix = if (present.isEmpty()) "" else ")")
     }
 
     private val VALUE = Regex(""""value"\s*:\s*"([^"]*)"""")

@@ -41,7 +41,7 @@ class NativeFullscreen(private val window: Frame) {
     /** True when this platform is handled here, so [set] will do the work. */
     val supported: Boolean = when {
         OsInfo.isWindows -> true
-        OsInfo.isLinux -> Toolkit.getDefaultToolkit().javaClass.name == "sun.awt.X11.XToolkit"
+        OsInfo.isLinux -> Toolkit.getDefaultToolkit().javaClass.name == "sun.awt.X11.XToolkit" // i18n-ok: a class name
         else -> false
     }
 

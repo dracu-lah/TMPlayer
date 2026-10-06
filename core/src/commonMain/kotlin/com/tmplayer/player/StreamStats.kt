@@ -1,5 +1,6 @@
 package com.tmplayer.player
 
+import com.tmplayer.i18n.L
 import kotlin.math.roundToLong
 
 /**
@@ -78,26 +79,11 @@ object StreamStats {
         return sizeBytes.toDouble() / (durationSec * 1000.0)
     }
 
-    fun formatSpeed(bytesPerSec: Long): String = when {
-        bytesPerSec < MIN_MEANINGFUL_SPEED -> "…"
-        bytesPerSec < 1024 * 1024 -> "${bytesPerSec / 1024} KB/s"
-        else -> String.format("%.1f MB/s", bytesPerSec / (1024.0 * 1024.0))
-    }
+    fun formatSpeed(bytesPerSec: Long): String = L.messages.formatter.speed(bytesPerSec)
 
-    fun formatEta(seconds: Long?): String = when {
-        seconds == null -> ""
-        seconds <= 1 -> "almost there"
-        seconds < 60 -> "about ${seconds}s left"
-        seconds < 3600 -> "about ${seconds / 60}m ${seconds % 60}s left"
-        else -> "about ${seconds / 3600}h ${(seconds % 3600) / 60}m left"
-    }
+    fun formatEta(seconds: Long?): String = L.messages.formatter.eta(seconds)
 
-    fun formatBytes(bytes: Long): String = when {
-        bytes <= 0 -> "0 MB"
-        bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-        bytes < 1024L * 1024 * 1024 -> String.format("%.1f MB", bytes / (1024.0 * 1024.0))
-        else -> String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
-    }
+    fun formatBytes(bytes: Long): String = L.messages.formatter.bytes(bytes)
 
     /** `1:23:45` / `4:07`, the form people read on a seek bar. */
     fun formatClock(ms: Long): String {

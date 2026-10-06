@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import com.tmplayer.i18n.L
 import java.io.File
 import java.util.Locale
 
@@ -19,10 +20,10 @@ data class DiskInfo(val freeBytes: Long, val totalBytes: Long) {
          */
         fun freeLabel(freeBytes: Long): String? = when {
             freeBytes <= 0 -> null
-            freeBytes >= 100 * GB -> "${freeBytes / GB} GB free"
-            freeBytes >= GB -> String.format(Locale.US, "%.1f GB free", freeBytes / GB.toDouble())
-            freeBytes >= MB -> "${freeBytes / MB} MB free"
-            else -> "Less than 1 MB free"
+            freeBytes >= 100 * GB -> L.storageFree(L.formatSizeGb(L.messages.formatter.decimal((freeBytes / GB).toDouble(), 0)))
+            freeBytes >= GB -> L.storageFree(L.formatSizeGb(L.messages.formatter.decimal(freeBytes / GB.toDouble(), 1)))
+            freeBytes >= MB -> L.storageFree(L.formatSizeMb(L.messages.formatter.decimal((freeBytes / MB).toDouble(), 0)))
+            else -> L.storageFreeUnderMb
         }
 
         private const val MB = 1024L * 1024

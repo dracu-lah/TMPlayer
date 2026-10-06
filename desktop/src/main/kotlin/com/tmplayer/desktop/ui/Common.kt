@@ -51,6 +51,7 @@ import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.UiState
 import androidx.compose.material3.SuggestionChip
 import kotlinx.coroutines.delay
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.nav.BackHandler
 import com.tmplayer.ui.theme.Tone
 
@@ -67,6 +68,7 @@ fun <T> StateBox(
     slowAfterMs: Long = SlowAnswer.AFTER_MS,
     content: @Composable (T) -> Unit,
 ) {
+    val s = LocalStrings.current
     when (state) {
         is UiState.Content -> content(state.value)
         is UiState.Loading -> Centred {
@@ -82,7 +84,7 @@ fun <T> StateBox(
         }
         is UiState.Error -> Centred {
             Text(state.message, textAlign = TextAlign.Center)
-            if (onRetry != null) OutlinedButton(onClick = onRetry) { Text("Try again") }
+            if (onRetry != null) OutlinedButton(onClick = onRetry) { Text(s.commonTryAgain) }
         }
     }
 }
@@ -108,13 +110,14 @@ private fun SlowAnswerLine(key: Any, onRetry: () -> Unit, afterMs: Long) {
  */
 @Composable
 fun RecentSearchRow(searches: List<String>, onPick: (String) -> Unit, onClear: () -> Unit, modifier: Modifier = Modifier) {
+    val s = LocalStrings.current
     if (searches.isEmpty()) return
     Row(
         modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("Recent searches", style = MaterialTheme.typography.bodySmall, color = Tone.muted)
+        Text(s.browseRecentSearches, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
         for (recent in searches) {
             SuggestionChip(
                 onClick = { onPick(recent) },
@@ -122,7 +125,7 @@ fun RecentSearchRow(searches: List<String>, onPick: (String) -> Unit, onClear: (
                 icon = { Icon(TmIcons.History, contentDescription = null, modifier = Modifier.size(18.dp)) },
             )
         }
-        TextButton(onClick = onClear) { Text("Clear") }
+        TextButton(onClick = onClear) { Text(s.commonClear) }
     }
 }
 
@@ -151,6 +154,7 @@ fun SearchField(
     modifier: Modifier = Modifier,
     onDown: (() -> Unit)? = null,
 ) {
+    val s = LocalStrings.current
     var focused by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     BackHandler(enabled = focused || query.isNotEmpty()) {
@@ -166,7 +170,7 @@ fun SearchField(
         trailingIcon = {
             if (query.isNotEmpty()) {
                 IconButton(onClick = { onQuery("") }) {
-                    Icon(Icons.Filled.Close, contentDescription = "Clear search")
+                    Icon(Icons.Filled.Close, contentDescription = s.browseClearSearch)
                 }
             }
         },
@@ -232,6 +236,7 @@ fun ConfirmDialog(
     detail: String? = null,
     destructive: Boolean = true,
 ) {
+    val s = LocalStrings.current
     val cancelFocus = remember { FocusRequester() }
     TmAlertDialog(
         onDismissRequest = onDismiss,
@@ -248,7 +253,7 @@ fun ConfirmDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.focusRequester(cancelFocus)) { Text("Cancel") }
+            TextButton(onClick = onDismiss, modifier = Modifier.focusRequester(cancelFocus)) { Text(s.commonCancel) }
         },
     )
     LaunchedEffect(Unit) { runCatching { cancelFocus.requestFocus() } }
