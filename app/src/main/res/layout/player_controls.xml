@@ -20,17 +20,18 @@
   committed seek. Only its colours are this app's: the played run and the thumb in the accent,
   the rest in translucent white.
 
-  One thing floats outside the bottom cluster: the wall clock in the top left corner. The top
-  right belongs to the status pill.
+  One thing floats outside the bottom cluster on a television: the wall clock in the top left
+  corner. It is gone by default and only the television shows it.
 
-  A phone gets three more pieces, all gone on a television: a top bar (back, title, clock, the
-  overflow menu), a centre cluster (previous, back, play or pause, forward, next) of the kind every
-  phone player draws, and an elapsed and total line over the bar. Those take the transport buttons
-  and the time text out of the bottom row, which is what lets the row fit a phone held upright
-  without scrolling. A television drops the transport buttons altogether, because the remote's own
-  keys already play, pause, jump and change episode, and keeps only the play disc from the centre
-  cluster, as a cue shown while paused rather than a button. PlayerControls.kt decides which pieces
-  a device shows.
+  A phone gets three more pieces, all gone on a television: a top bar (back, title, the overflow
+  menu), a centre cluster (previous episode, play or pause, next episode) of the kind every phone
+  player draws, and an elapsed and total line over the bar. The bottom row keeps four buttons on
+  a phone: subtitles, audio, speed and rotate. Everything else (lock, picture in picture, picture
+  shape) lives in the overflow, and the jumps are the double tap and the keys. A television drops
+  the transport altogether, because the remote's own keys already play, pause, jump and change
+  episode, and keeps only the play disc from the centre cluster, as a cue shown while paused
+  rather than a button. Its row is subtitles, audio, speed and More. PlayerControls.kt decides
+  which pieces a device shows.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -54,9 +55,9 @@
         android:layout_gravity="bottom"
         android:background="@drawable/bg_controls_scrim_bottom" />
 
-    <!-- The time of day, the way the television apps draw it: the viewer paused to look at the
-         controls, and "how late is it" is half of why. Top left because the status pill (download
-         percent and speed) already owns the top right corner of the frame. -->
+    <!-- Television only: the time of day, the way the television apps draw it. The viewer
+         paused to look at the controls, and "how late is it" is half of why. A phone's status
+         bar already shows it, so it is gone unless PlayerControls turns it on. -->
     <TextView
         android:id="@+id/controls_clock"
         android:layout_width="wrap_content"
@@ -65,7 +66,8 @@
         android:layout_marginStart="24dp"
         android:layout_marginTop="16dp"
         android:textColor="#E6FFFFFF"
-        android:textSize="15sp" />
+        android:textSize="15sp"
+        android:visibility="gone" />
 
     <!-- Phone only: an even dim under the centre cluster, so white glyphs read on a bright frame. -->
     <View
@@ -211,36 +213,6 @@
         </LinearLayout>
 
         <FrameLayout
-            android:id="@+id/center_rewind"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:background="@drawable/bg_center_button"
-            android:clickable="true"
-            android:contentDescription="Back 10 seconds"
-            android:focusable="true">
-
-            <ImageView
-                android:layout_width="30dp"
-                android:layout_height="30dp"
-                android:layout_gravity="center"
-                android:importantForAccessibility="no"
-                android:src="@drawable/ic_player_rewind"
-                android:tint="#FFFFFFFF" />
-
-            <TextView
-                android:id="@+id/center_rewind_label"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:importantForAccessibility="no"
-                android:text="10"
-                android:textColor="#FFFFFFFF"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:translationY="1dp" />
-        </FrameLayout>
-
-        <FrameLayout
             android:id="@+id/center_play_pause"
             android:layout_width="72dp"
             android:layout_height="72dp"
@@ -265,36 +237,6 @@
                 android:layout_gravity="center"
                 android:indeterminateTint="#FFFFFFFF"
                 android:visibility="gone" />
-        </FrameLayout>
-
-        <FrameLayout
-            android:id="@+id/center_forward"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:background="@drawable/bg_center_button"
-            android:clickable="true"
-            android:contentDescription="Forward 10 seconds"
-            android:focusable="true">
-
-            <ImageView
-                android:layout_width="30dp"
-                android:layout_height="30dp"
-                android:layout_gravity="center"
-                android:importantForAccessibility="no"
-                android:src="@drawable/ic_player_forward"
-                android:tint="#FFFFFFFF" />
-
-            <TextView
-                android:id="@+id/center_forward_label"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:importantForAccessibility="no"
-                android:text="10"
-                android:textColor="#FFFFFFFF"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:translationY="1dp" />
         </FrameLayout>
 
         <LinearLayout
@@ -431,8 +373,8 @@
 
             <!--
               Scrolls only when it must. A television fits the whole row. A phone moves its
-              transport into the centre cluster and keeps five buttons here, which fit a 360dp
-              screen held upright; the scroll is only a safety net for something narrower.
+              transport into the centre cluster and keeps four buttons here, which fit a 360dp
+              screen held upright with room to spare; the scroll is only a safety net.
             -->
             <HorizontalScrollView
                 android:layout_width="0dp"
@@ -446,116 +388,6 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal">
-
-                    <ImageButton
-                        android:id="@+id/control_play_pause"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Pause"
-                        android:nextFocusUp="@id/controls_timebar"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_player_pause"
-                        android:tint="@color/player_control_icon" />
-
-                    <FrameLayout
-                        android:id="@+id/control_rewind"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:clickable="true"
-                        android:contentDescription="Back 10 seconds"
-                        android:focusable="true"
-                        android:nextFocusUp="@id/controls_timebar">
-
-                        <ImageView
-                            android:layout_width="26dp"
-                            android:layout_height="26dp"
-                            android:layout_gravity="center"
-                            android:duplicateParentState="true"
-                            android:importantForAccessibility="no"
-                            android:src="@drawable/ic_player_rewind"
-                            android:tint="@color/player_control_icon" />
-
-                        <TextView
-                            android:id="@+id/control_rewind_label"
-                           
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_gravity="center"
-                            android:duplicateParentState="true"
-                            android:importantForAccessibility="no"
-                            android:text="10"
-                            android:textColor="@color/player_control_icon"
-                            android:textSize="8sp"
-                            android:textStyle="bold"
-                            android:translationY="1dp" />
-                    </FrameLayout>
-
-                    <FrameLayout
-                        android:id="@+id/control_forward"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:clickable="true"
-                        android:contentDescription="Forward 10 seconds"
-                        android:focusable="true"
-                        android:nextFocusUp="@id/controls_timebar">
-
-                        <ImageView
-                            android:layout_width="26dp"
-                            android:layout_height="26dp"
-                            android:layout_gravity="center"
-                            android:duplicateParentState="true"
-                            android:importantForAccessibility="no"
-                            android:src="@drawable/ic_player_forward"
-                            android:tint="@color/player_control_icon" />
-
-                        <TextView
-                            android:id="@+id/control_forward_label"
-                           
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_gravity="center"
-                            android:duplicateParentState="true"
-                            android:importantForAccessibility="no"
-                            android:text="10"
-                            android:textColor="@color/player_control_icon"
-                            android:textSize="8sp"
-                            android:textStyle="bold"
-                            android:translationY="1dp" />
-                    </FrameLayout>
-
-                    <ImageButton
-                        android:id="@+id/control_previous"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Previous episode"
-                        android:nextFocusUp="@id/controls_timebar"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_player_previous"
-                        android:tint="@color/player_control_icon"
-                        android:visibility="gone" />
-
-                    <ImageButton
-                        android:id="@+id/control_next"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Next episode"
-                        android:nextFocusUp="@id/controls_timebar"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_player_next"
-                        android:tint="@color/player_control_icon"
-                        android:visibility="gone" />
 
                     <ImageButton
                         android:id="@+id/control_subtitles"
@@ -597,19 +429,6 @@
                         android:tint="@color/player_control_icon" />
 
                     <ImageButton
-                        android:id="@+id/control_scale"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Picture shape"
-                        android:nextFocusUp="@id/controls_timebar"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_aspect"
-                        android:tint="@color/player_control_icon" />
-
-                    <ImageButton
                         android:id="@+id/control_rotate"
                         android:layout_width="48dp"
                         android:layout_height="48dp"
@@ -620,34 +439,6 @@
                         android:padding="12dp"
                         android:scaleType="fitCenter"
                         android:src="@drawable/ic_rotate_landscape"
-                        android:tint="@color/player_control_icon"
-                        android:visibility="gone" />
-
-                    <!-- Phone only, and only on a row wide enough to hold them (a phone held
-                         sideways). Upright, both live in the overflow menu. -->
-                    <ImageButton
-                        android:id="@+id/control_lock"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Lock the screen"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_lock"
-                        android:tint="@color/player_control_icon"
-                        android:visibility="gone" />
-
-                    <ImageButton
-                        android:id="@+id/control_pip"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginStart="4dp"
-                        android:background="@drawable/bg_control_button"
-                        android:contentDescription="Picture in picture"
-                        android:padding="12dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_pip"
                         android:tint="@color/player_control_icon"
                         android:visibility="gone" />
 

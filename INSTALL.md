@@ -83,7 +83,7 @@ You land on your chat list. Open any chat to see only its playable videos, and p
 | **OK** | Show the controls, with the seek bar focused; on the bar OK is play / pause, so OK twice from the bare picture pauses |
 | **⏯** (if your remote has it) | Play / pause; paused, the controls stay up with a pause sign in the middle |
 | **Left / Right** (on the seek bar) | Travel: 30 seconds a press, presses pile up and land as one seek a moment after the last |
-| **Down** (controls up) | The button row: subtitles, audio, speed, picture shape, and More at the end |
+| **Down** (controls up) | The button row: subtitles, audio, speed, and More at the end. More holds the previous and next episode, picture shape, picture in picture, start over, volume boost, sleep timer and the rest |
 | **0 - 9** (if your remote has them) | Jump to that tenth of the video; 5 is halfway |
 | **⏪ / ⏩** (if your remote has them) | Jump back 5 / forward 10 seconds |
 | **⏮ / ⏭** (if your remote has them) | The previous or next episode, when the chat has one; also in the More menu |
@@ -95,7 +95,7 @@ You land on your chat list. Open any chat to see only its playable videos, and p
 | Touch | What it does |
 | --- | --- |
 | **Tap** | Show or hide the controls. Settings, Player can make a tap play and pause instead |
-| **Big button in the middle** | Play / pause; the arrows either side jump, the outer buttons change episode |
+| **Big button in the middle** | Play / pause; the buttons either side change episode |
 | **Double tap left / right** | Jump back / forward 10 seconds; keep tapping to add 10 more each time |
 | **Double tap the middle** | Play / pause |
 | **Hold** | Play at 2x for as long as your finger stays down |
@@ -105,7 +105,8 @@ You land on your chat list. Open any chat to see only its playable videos, and p
 | **Pinch** | Fit, fill or stretch the picture |
 | **Tap the total time** | Show the time remaining instead |
 | **Hold a button** | Show its name |
-| **⋮ menu** | Lock the screen, picture in picture, speed, start over, open in another app, details, save to Downloads |
+| **Start over** | Appears for a few seconds when a video opens where you left off |
+| **⋮ menu** | Lock the screen, picture in picture, picture shape, volume boost, sleep timer, open in another app, subtitle file, copy link, save to Downloads, mark watched, details |
 
 The jump length, the hold speed, how long the controls stay up, each drag and the vibration are
 all in Settings, Player.

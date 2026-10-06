@@ -17,11 +17,12 @@ import com.tmplayer.i18n.L
 
 /**
  * The bottom-right card that offers the next episode before this one ends: "Next: S01E05,
- * starting in 12 s", with Hide and Play now.
+ * starting in 12 s", with Hide (phone only) and Play now.
  *
- * On a television it comes up with D-pad focus on Play now, so OK starts the episode and left
- * reaches Hide; the activity routes the remote's keys to it while it is up and the row is down.
- * The buttons take the row's own focus treatment there, a solid white seat with dark text.
+ * On a television it comes up with D-pad focus on Play now, so OK starts the episode and Back puts
+ * the card away, which is why it has no Hide button there; the activity routes the remote's keys to
+ * it while it is up and the row is down. The button takes the row's own focus treatment, a solid
+ * white seat with dark text.
  *
  * Built in code and added to [root] under [below], the overlay container, so the gesture HUD and
  * the phone's flashes still draw over it. The activity owns when it shows and what pressing does.
@@ -59,7 +60,9 @@ class NextUpCard(
             LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.END
-                addView(button(L.commonHide, onHide))
+                // On a television Back puts the card away, which is the shorter path than steering
+                // across to a second button with the D-pad.
+                if (!tv) addView(button(L.commonHide, onHide))
                 addView(play)
             },
         )

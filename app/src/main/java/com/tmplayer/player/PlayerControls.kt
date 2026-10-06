@@ -37,15 +37,14 @@ import com.tmplayer.i18n.Translator
  * takes the press and commits.
  *
  * A phone shows more of the layout than a television does: a top bar with the way back and an
- * overflow menu, a centre cluster carrying the transport (previous, back, play or pause, forward,
- * next), and an elapsed and total line over the bar. With the transport moved there, the bottom row
- * keeps five buttons, which fit a phone held upright without scrolling; lock and picture in
- * picture join them when the row is wide enough. A television shows none of the phone pieces and
- * keeps one row, but without play, pause and the jumps: the remote already does those. The
- * episode steps do get a seat at the head of the row, since a remote's media keys are not on
- * every remote and the button can say where it goes: focused, it puts "Next: S01E05" in the line
- * under the title. What a television keeps of the centre is the play disc as a cue rather than a
- * button, drawn only while the video is paused.
+ * overflow menu, a centre cluster carrying the transport (previous episode, play or pause, next
+ * episode), and an elapsed and total line over the bar. The bottom row keeps four buttons:
+ * subtitles, audio, speed and rotate. The jumps are the double tap and the keys, and lock,
+ * picture in picture and picture shape sit in the overflow. A television shows none of the phone
+ * pieces and keeps one row: subtitles, audio, speed and More at the end. Play, pause, the jumps
+ * and the episode steps are the remote's keys, and the episode steps are also in More, labelled
+ * with the episode they open. What a television keeps of the centre is the play disc as a cue
+ * rather than a button, drawn only while the video is paused.
  *
  * The activity stays the owner of every action. This class decides nothing about playback; it
  * raises, lowers and repaints the furniture, and forwards each press to the lambda wired for it.
@@ -57,21 +56,14 @@ class PlayerControls(
     private val player: () -> Player?,
     private val onVisibility: (Boolean) -> Unit,
     private val onTogglePlay: () -> Unit,
-    private val onSkip: (Long) -> Unit,
     private val onPickSubtitles: () -> Unit,
     private val onPickAudio: () -> Unit,
     private val onPickSpeed: () -> Unit,
-    private val onCycleScale: () -> Unit,
     private val onCycleOrientation: () -> Unit,
     private val onPlayEpisode: (MediaItem) -> Unit,
-    /**
-     * The phone's top bar back arrow and lock button; the overflow (the phone's top bar, the end of
-     * the television's row) and picture in picture, on both.
-     */
+    /** The phone's top bar back arrow, and the overflow (the phone's top bar, the end of the television's row). */
     private val onBack: () -> Unit = {},
     private val onMore: (anchor: View) -> Unit = {},
-    private val onLock: () -> Unit = {},
-    private val onPictureInPicture: () -> Unit = {},
     /** The total was flipped between total and remaining: a tap on a phone, OK on a television. */
     private val onRemainingToggled: (Boolean) -> Unit = {},
 ) {
@@ -81,9 +73,6 @@ class PlayerControls(
     private val subtitle: TextView = root.findViewById(R.id.controls_subtitle)
     private val timeBar: DefaultTimeBar = root.findViewById(R.id.controls_timebar)
     private val clock: TextView = root.findViewById(R.id.controls_clock)
-    private val playPause: ImageButton = root.findViewById(R.id.control_play_pause)
-    private val previous: ImageButton = root.findViewById(R.id.control_previous)
-    private val next: ImageButton = root.findViewById(R.id.control_next)
     private val rotate: ImageButton = root.findViewById(R.id.control_rotate)
     private val time: TextView get() = timeText
 
@@ -105,8 +94,6 @@ class PlayerControls(
     private val timesPosition: TextView = root.findViewById(R.id.times_position)
     private val timesDuration: TextView = root.findViewById(R.id.times_duration)
     private val cluster: View = root.findViewById(R.id.controls_cluster)
-    private val lock: View = root.findViewById(R.id.control_lock)
-    private val pip: View = root.findViewById(R.id.control_pip)
 
     /** The phone's times line shows what is left rather than the total. */
     var showRemaining = false
@@ -162,13 +149,9 @@ class PlayerControls(
     }
 
     init {
-        wire(playPause) { onTogglePlay(); renderPlayPause() }
-        wire(root.findViewById(R.id.control_rewind)) { onSkip(-Skip.BACK_MS) }
-        wire(root.findViewById(R.id.control_forward)) { onSkip(Skip.FORWARD_MS) }
         wire(root.findViewById(R.id.control_subtitles)) { onPickSubtitles() }
         wire(root.findViewById(R.id.control_audio)) { onPickAudio() }
         wire(root.findViewById(R.id.control_speed)) { onPickSpeed() }
-        wire(root.findViewById(R.id.control_scale)) { onCycleScale() }
         wire(rotate) { onCycleOrientation() }
         rotate.visibility = if (isTv) View.GONE else View.VISIBLE
         describeFromCatalog(root)
@@ -307,49 +290,20 @@ class PlayerControls(
 
     /**
      * The phone's layout: the transport moves to the middle, the name to the top, and the bottom row
-     * is left with the five buttons that fit an upright phone.
+     * is left with subtitles, audio, speed and rotate.
      */
     private fun setUpPhone(root: View) {
         listOf(tint, topBar, center, times).forEach { it.visibility = View.VISIBLE }
-        listOf(
-            playPause,
-            root.findViewById<View>(R.id.control_rewind),
-            root.findViewById<View>(R.id.control_forward),
-            previous,
-            next,
-            timeText,
-            clock,
-            title,
-            subtitle,
-        ).forEach { it.visibility = View.GONE }
+        listOf(timeText, title, subtitle).forEach { it.visibility = View.GONE }
 
         wire(centerPlay) { onTogglePlay(); renderPlayPause(animate = true) }
-        wire(root.findViewById(R.id.center_rewind)) { onSkip(-skipBackMs) }
-        wire(root.findViewById(R.id.center_forward)) { onSkip(skipForwardMs) }
         wire(root.findViewById(R.id.control_back)) { onBack() }
         val more = root.findViewById<View>(R.id.control_more)
         wire(more) { onMore(more) }
-        wire(lock) { onLock() }
-        wire(pip) { onPictureInPicture() }
         timesDuration.setOnClickListener {
             showRemaining = !showRemaining
             onRemainingToggled(showRemaining)
             poke()
-        }
-
-        // Lock and picture in picture earn a seat on the row only where it is wide enough: a
-        // phone held sideways. Measured on the cluster itself, never on the window, because some
-        // phones report a portrait window while drawing sideways.
-        val wideEnough = (WIDE_ROW_DP * root.resources.displayMetrics.density).toInt()
-        cluster.addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
-            val wide = view.width >= wideEnough
-            val want = if (wide) View.VISIBLE else View.GONE
-            if (lock.visibility != want) {
-                view.post {
-                    lock.visibility = want
-                    pip.visibility = if (wide && pictureInPictureAvailable) View.VISIBLE else View.GONE
-                }
-            }
         }
 
         // A long press names the button, the way every phone app's icons do. The names already
@@ -359,37 +313,27 @@ class PlayerControls(
     }
 
     /**
-     * The television's row: no transport, since the remote's own keys play, pause and jump and a
-     * button for each was a second way to do what a thumb never needed. More goes at the end,
-     * picture in picture where the device has it, and the time readout becomes something OK can
-     * land on and press, which flips the total to the time left the way a tap on the phone's
-     * total does.
+     * The television's row: no transport, since the remote's own keys play, pause, jump and step
+     * episodes and a button for each was a second way to do what a thumb never needed. More goes at
+     * the end, holding the rarer actions (picture shape, picture in picture, the episode steps), and
+     * the time readout becomes something OK can land on and press, which flips the total to the time
+     * left the way a tap on the phone's total does.
      *
      * The centre disc stays, stripped to the glyph: not focusable, not pressable, shown only while
      * paused. With no play button on the row it is the one thing on screen that says paused.
      */
     private fun setUpTv(root: View) {
-        listOf(
-            playPause,
-            root.findViewById<View>(R.id.control_rewind),
-            root.findViewById<View>(R.id.control_forward),
-            previous,
-            next,
-            centerPrevious,
-            root.findViewById<View>(R.id.center_rewind),
-            root.findViewById<View>(R.id.center_forward),
-            centerNext,
-        ).forEach { it.visibility = View.GONE }
+        listOf(centerPrevious, centerNext, centerPreviousCaption, centerNextCaption)
+            .forEach { it.visibility = View.GONE }
+        clock.visibility = View.VISIBLE
         centerPlay.isFocusable = false
         centerPlay.isClickable = false
         centerPlay.contentDescription = L.playerPaused
-        // Down from the bar lands on the first button the row still has; the layout's own pointer
-        // names the play button, which a television no longer shows.
+        // Down from the bar lands on the first button the row has.
         timeBar.nextFocusDownId = R.id.control_subtitles
         val more = root.findViewById<View>(R.id.control_tv_more)
         more.visibility = View.VISIBLE
         wire(more) { onMore(more) }
-        wire(pip) { onPictureInPicture() }
         timeText.isFocusable = true
         timeText.isClickable = true
         // Focus fills the readout with a white pill and darkens its text, the buttons' own cue in
@@ -425,23 +369,13 @@ class PlayerControls(
             R.id.control_back to L.commonBack,
             R.id.control_more to L.playerMoreOptions,
             R.id.center_previous to L.playerPreviousEpisode,
-            R.id.center_rewind to L.playerBackSeconds(Skip.BACK_MS / 1000),
             R.id.center_play_pause to L.commonPause,
-            R.id.center_forward to L.playerForwardSeconds(Skip.FORWARD_MS / 1000),
             R.id.center_next to L.playerNextEpisode,
             R.id.times_duration to L.playerShowTimeRemaining,
-            R.id.control_play_pause to L.commonPause,
-            R.id.control_rewind to L.playerBackSeconds(Skip.BACK_MS / 1000),
-            R.id.control_forward to L.playerForwardSeconds(Skip.FORWARD_MS / 1000),
-            R.id.control_previous to L.playerPreviousEpisode,
-            R.id.control_next to L.playerNextEpisode,
             R.id.control_subtitles to L.tracksSubtitles,
             R.id.control_audio to L.playerAudio,
             R.id.control_speed to L.playerPlaybackSpeed,
-            R.id.control_scale to L.playerPictureShape,
             R.id.control_rotate to L.playerScreenOrientation,
-            R.id.control_lock to L.playerLockScreen,
-            R.id.control_pip to L.playerPictureInPicture,
             R.id.control_tv_more to L.commonMore,
         )
         for ((id, name) in names) root.findViewById<View>(id)?.contentDescription = name
@@ -451,39 +385,6 @@ class PlayerControls(
         if (view == null || view.contentDescription == text) return
         view.contentDescription = text
         if (!isTv) view.tooltipText = text
-    }
-
-    /**
-     * Whether this device can do picture in picture at all; the PiP button is hidden if not. A
-     * television's row has no width rule, so there the answer alone decides.
-     */
-    var pictureInPictureAvailable = true
-        set(value) {
-            field = value
-            if (isTv) pip.visibility = if (value) View.VISIBLE else View.GONE
-        }
-
-    /** What the jump buttons say and do. The phone's follow the double tap setting. */
-    private var skipBackMs = Skip.BACK_MS
-    private var skipForwardMs = Skip.FORWARD_MS
-
-    /**
-     * Sets the jump the buttons make and the figure drawn inside their arrows. The television's row
-     * jumps by [Skip], back five and forward ten; its glyphs used to say ten both ways.
-     */
-    fun setSkip(backMs: Long, forwardMs: Long) {
-        skipBackMs = backMs
-        skipForwardMs = forwardMs
-        val root = container
-        fun label(id: Int, ms: Long) { root.findViewById<TextView>(id)?.text = Translator.messages.formatter.number(ms / 1000) }
-        label(R.id.control_rewind_label, backMs)
-        label(R.id.control_forward_label, forwardMs)
-        label(R.id.center_rewind_label, backMs)
-        label(R.id.center_forward_label, forwardMs)
-        describe(root.findViewById(R.id.control_rewind), L.playerBackSeconds(backMs / 1000))
-        describe(root.findViewById(R.id.control_forward), L.playerForwardSeconds(forwardMs / 1000))
-        describe(root.findViewById(R.id.center_rewind), L.playerBackSeconds(backMs / 1000))
-        describe(root.findViewById(R.id.center_forward), L.playerForwardSeconds(forwardMs / 1000))
     }
 
     /** Mid-play buffering: the phone swaps the play glyph for a spinner in the same disc. */
@@ -509,7 +410,7 @@ class PlayerControls(
         }
     }
 
-    /** The line under the title as [setTitle] last wrote it, for when a focused step lets it go. */
+    /** The line under the title as [setTitle] last wrote it. */
     private var detail = ""
 
     fun setTitle(name: String, detail: String) {
@@ -521,7 +422,6 @@ class PlayerControls(
         if (!tv) return
         title.text = name
         title.visibility = if (name.isBlank()) View.GONE else View.VISIBLE
-        if (previous.hasFocus() || next.hasFocus()) return
         showDetail(detail)
     }
 
@@ -531,13 +431,14 @@ class PlayerControls(
     }
 
     /**
-     * Offers the episode steps once the chat search has answered, and never before: a button that
-     * does nothing is worse than no button.
+     * Offers the phone's episode steps once the chat search has answered, and never before: a
+     * button that does nothing is worse than no button. A television has no buttons for them (its
+     * More menu and the remote's keys carry the steps), so there this does nothing.
      *
      * [previousLabel] and [nextLabel] are the whole name ("Next: S01E05  ·  The Lighthouse"): the
-     * button's description and tooltip, and on a television the line under the title while the
-     * button has focus. [previousCaption] and [nextCaption] are the short form ("S01E05") the
-     * phone writes under its buttons, where the whole name would crowd a phone held upright.
+     * button's description and tooltip. [previousCaption] and [nextCaption] are the short form
+     * ("S01E05") the phone writes under its buttons, where the whole name would crowd a phone
+     * held upright.
      */
     fun setEpisodes(
         previousEpisode: MediaItem?,
@@ -547,28 +448,9 @@ class PlayerControls(
         previousCaption: String = "",
         nextCaption: String = "",
     ) {
-        previous.visibility = if (previousEpisode != null) View.VISIBLE else View.GONE
-        describe(previous, previousLabel)
-        previous.setOnClickListener {
-            previousEpisode?.let(onPlayEpisode)
-        }
-        next.visibility = if (nextEpisode != null) View.VISIBLE else View.GONE
-        describe(next, nextLabel)
-        next.setOnClickListener {
-            nextEpisode?.let(onPlayEpisode)
-        }
-        if (isTv) {
-            // On the row, ahead of subtitles, where Left from subtitles reaches them; Down from the
-            // bar still lands on subtitles, so Down and OK never start another episode by habit.
-            // Focus names the target in the line under the title, and leaving gives it back.
-            labelOnFocus(previous, previousLabel)
-            labelOnFocus(next, nextLabel)
-            return
-        }
-        // The phone's transport lives in the centre; the row's two copies stay hidden. Invisible
-        // rather than gone keeps the play disc dead centre whether or not there are neighbours.
-        previous.visibility = View.GONE
-        next.visibility = View.GONE
+        if (isTv) return
+        // Invisible rather than gone keeps the play disc dead centre whether or not there are
+        // neighbours.
         centerPrevious.visibility = if (previousEpisode != null) View.VISIBLE else View.INVISIBLE
         describe(centerPrevious, previousLabel)
         centerPrevious.setOnClickListener { previousEpisode?.let(onPlayEpisode) }
@@ -582,18 +464,6 @@ class PlayerControls(
     private fun caption(view: TextView, text: String?) {
         view.text = text.orEmpty()
         view.visibility = if (text.isNullOrBlank()) View.INVISIBLE else View.VISIBLE
-    }
-
-    private fun labelOnFocus(button: View, label: String) {
-        button.onFocusChangeListener = View.OnFocusChangeListener { _, focused ->
-            if (focused) {
-                showDetail(label)
-                poke()
-            } else if (!previous.hasFocus() && !next.hasFocus()) {
-                showDetail(detail)
-            }
-        }
-        if (button.hasFocus()) showDetail(label)
     }
 
     /** The orientation button carries its current state, drawn by the activity that owns it. */
@@ -694,8 +564,6 @@ class PlayerControls(
     private fun renderPlayPause(animate: Boolean = false) {
         val exo = player()
         val playing = exo?.isPlaying == true || (exo?.playWhenReady == true && buffering)
-        playPause.setImageResource(if (playing) R.drawable.ic_player_pause else R.drawable.ic_player_play)
-        describe(playPause, if (playing) L.commonPause else L.commonPlay)
         if (isTv) {
             renderPausedCue(paused = exo != null && !exo.playWhenReady, animate = animate)
             return
@@ -796,9 +664,6 @@ class PlayerControls(
 
         /** Long enough to read the row and reach for something on it, short enough to get out. */
         const val TIMEOUT_MS = 3_500L
-
-        /** A row at least this wide (a phone held sideways) also seats lock and PiP. */
-        const val WIDE_ROW_DP = 560
 
         /** How long the television's disc holds the play triangle before it fades on a resume. */
         const val CUE_HOLD_MS = 500L

@@ -18,7 +18,6 @@ enum class PlayerMenuEntry {
     PreviousEpisode,
     PlaybackDetails,
     StartOver,
-    Speed,
     /** Night mode: quiet dialogue lifted, loud scenes held back. On or off, and the menu closes. */
     VolumeBoost,
     /** A page of lengths, and the time left on one that is running. */
@@ -26,9 +25,51 @@ enum class PlayerMenuEntry {
     SaveToDownloads,
     /** "Mark as watched", or "Mark as unwatched" once it is on the list. */
     MarkWatched,
+    /** Fit, crop or stretch: a page of the three. Its only home on the television, the row has no button for it. */
+    PictureShape,
     PictureInPicture,
     OpenInAnotherApp,
     RemoteKeys,
+}
+
+/**
+ * One line of the phone's overflow menu.
+ *
+ * Speed is not here: the bottom row's button opens the same sheet. Start over is not here either:
+ * the resume notice carries it for the first seconds, and the bar reaches zero.
+ */
+enum class PhoneMenuEntry {
+    LockScreen,
+    PictureInPicture,
+    /** Opens the fit, crop and stretch sheet; the pinch stays as the shortcut. */
+    PictureShape,
+    VolumeBoost,
+    SleepTimer,
+    OpenInAnotherApp,
+    LoadSubtitleFile,
+    CopyLink,
+    SaveToDownloads,
+    MarkWatched,
+    /** Last: a line for bug reports, not for watching. */
+    PlaybackDetails,
+}
+
+/**
+ * The line's text. [sleepDetail] is a running sleep timer's time left, which the line carries;
+ * [watched] turns Mark as watched into Mark as unwatched.
+ */
+fun PhoneMenuEntry.label(sleepDetail: String? = null, watched: Boolean = false): String = when (this) {
+    PhoneMenuEntry.LockScreen -> L.playerLockScreen
+    PhoneMenuEntry.PictureInPicture -> L.playerPictureInPicture
+    PhoneMenuEntry.PictureShape -> L.playerPictureShape
+    PhoneMenuEntry.VolumeBoost -> L.playerVolumeBoost
+    PhoneMenuEntry.SleepTimer -> sleepDetail?.let { L.playerSleepTimerNow(it) } ?: L.playerSleepTimer
+    PhoneMenuEntry.OpenInAnotherApp -> L.playerOpenInAnotherApp
+    PhoneMenuEntry.LoadSubtitleFile -> L.playerLoadSubtitleFile
+    PhoneMenuEntry.CopyLink -> L.playerCopyLink
+    PhoneMenuEntry.SaveToDownloads -> L.playerSaveToDownloads
+    PhoneMenuEntry.MarkWatched -> if (watched) L.playerMarkUnwatched else L.playerMarkWatched
+    PhoneMenuEntry.PlaybackDetails -> L.playerPlaybackDetails
 }
 
 /** Which lines the More menu offers on this device, in the order it draws them. */
@@ -65,14 +106,39 @@ object PlayerMenu {
         if (previousEpisode) add(PlayerMenuEntry.PreviousEpisode)
         add(PlayerMenuEntry.PlaybackDetails)
         add(PlayerMenuEntry.StartOver)
-        add(PlayerMenuEntry.Speed)
         add(PlayerMenuEntry.VolumeBoost)
         add(PlayerMenuEntry.SleepTimer)
         if (saveToDownloads) add(PlayerMenuEntry.SaveToDownloads)
         if (markWatched) add(PlayerMenuEntry.MarkWatched)
+        add(PlayerMenuEntry.PictureShape)
         if (pictureInPicture) add(PlayerMenuEntry.PictureInPicture)
         if (openInAnotherApp) add(PlayerMenuEntry.OpenInAnotherApp)
         add(PlayerMenuEntry.RemoteKeys)
+    }
+
+    /**
+     * The phone's overflow, in the order it draws. [pictureInPicture] is whether the device can do
+     * it; [openInAnotherApp] false for a chat that restricts saving; [copyLink] and [markWatched]
+     * need a message to point at; [saveToDownloads] only while the video can still become one.
+     */
+    fun phoneEntries(
+        pictureInPicture: Boolean,
+        openInAnotherApp: Boolean,
+        copyLink: Boolean,
+        saveToDownloads: Boolean,
+        markWatched: Boolean,
+    ): List<PhoneMenuEntry> = buildList {
+        add(PhoneMenuEntry.LockScreen)
+        if (pictureInPicture) add(PhoneMenuEntry.PictureInPicture)
+        add(PhoneMenuEntry.PictureShape)
+        add(PhoneMenuEntry.VolumeBoost)
+        add(PhoneMenuEntry.SleepTimer)
+        if (openInAnotherApp) add(PhoneMenuEntry.OpenInAnotherApp)
+        add(PhoneMenuEntry.LoadSubtitleFile)
+        if (copyLink) add(PhoneMenuEntry.CopyLink)
+        if (saveToDownloads) add(PhoneMenuEntry.SaveToDownloads)
+        if (markWatched) add(PhoneMenuEntry.MarkWatched)
+        add(PhoneMenuEntry.PlaybackDetails)
     }
 }
 

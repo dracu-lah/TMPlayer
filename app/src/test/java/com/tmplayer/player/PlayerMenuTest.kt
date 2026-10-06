@@ -16,11 +16,11 @@ class PlayerMenuTest {
                 PlayerMenuEntry.PreviousEpisode,
                 PlayerMenuEntry.PlaybackDetails,
                 PlayerMenuEntry.StartOver,
-                PlayerMenuEntry.Speed,
                 PlayerMenuEntry.VolumeBoost,
                 PlayerMenuEntry.SleepTimer,
                 PlayerMenuEntry.SaveToDownloads,
                 PlayerMenuEntry.MarkWatched,
+                PlayerMenuEntry.PictureShape,
                 PlayerMenuEntry.PictureInPicture,
                 PlayerMenuEntry.OpenInAnotherApp,
                 PlayerMenuEntry.RemoteKeys,
@@ -91,6 +91,55 @@ class PlayerMenuTest {
                 nextEpisode = true,
                 previousEpisode = true,
             ).toSet(),
+        )
+    }
+
+    @Test
+    fun `the phone overflow reads in a fixed order and carries neither speed nor start over`() {
+        assertEquals(
+            listOf(
+                PhoneMenuEntry.LockScreen,
+                PhoneMenuEntry.PictureInPicture,
+                PhoneMenuEntry.PictureShape,
+                PhoneMenuEntry.VolumeBoost,
+                PhoneMenuEntry.SleepTimer,
+                PhoneMenuEntry.OpenInAnotherApp,
+                PhoneMenuEntry.LoadSubtitleFile,
+                PhoneMenuEntry.CopyLink,
+                PhoneMenuEntry.SaveToDownloads,
+                PhoneMenuEntry.MarkWatched,
+                PhoneMenuEntry.PlaybackDetails,
+            ),
+            PlayerMenu.phoneEntries(
+                pictureInPicture = true,
+                openInAnotherApp = true,
+                copyLink = true,
+                saveToDownloads = true,
+                markWatched = true,
+            ),
+        )
+        assertEquals(PhoneMenuEntry.entries.toSet(), PlayerMenu.phoneEntries(true, true, true, true, true).toSet())
+    }
+
+    @Test
+    fun `the phone overflow leaves out what the device or the video cannot do`() {
+        val bare = PlayerMenu.phoneEntries(
+            pictureInPicture = false,
+            openInAnotherApp = false,
+            copyLink = false,
+            saveToDownloads = false,
+            markWatched = false,
+        )
+        assertEquals(
+            listOf(
+                PhoneMenuEntry.LockScreen,
+                PhoneMenuEntry.PictureShape,
+                PhoneMenuEntry.VolumeBoost,
+                PhoneMenuEntry.SleepTimer,
+                PhoneMenuEntry.LoadSubtitleFile,
+                PhoneMenuEntry.PlaybackDetails,
+            ),
+            bare,
         )
     }
 

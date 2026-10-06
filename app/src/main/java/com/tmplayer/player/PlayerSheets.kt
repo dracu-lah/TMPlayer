@@ -40,7 +40,7 @@ import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tone
 
 /**
- * The player's speed, sleep timer and playback details, drawn as the language picker's modal
+ * The player's speed, picture shape, sleep timer and playback details, drawn as the language picker's modal
  * ([ChoiceSheet]) over the dimmed video, as the subtitle and audio pickers are.
  *
  * The television's More menu shows the speed and sleep timer as pages of its own ([PlayerTvMenu]),
@@ -56,6 +56,7 @@ class PlayerSheets(
 ) {
     private sealed interface Sheet {
         class Speed(val current: Float, val onPick: (Float) -> Unit) : Sheet
+        class Shape(val current: VideoScale, val onPick: (VideoScale) -> Unit) : Sheet
         class Sleep(val running: String?, val chosen: Int?, val onPick: (Int?) -> Unit) : Sheet
         class Details(val title: String, val lines: List<String>) : Sheet
     }
@@ -74,6 +75,10 @@ class PlayerSheets(
 
     fun showSpeed(current: Float, onPick: (Float) -> Unit) {
         sheet.value = Sheet.Speed(current, onPick)
+    }
+
+    fun showShape(current: VideoScale, onPick: (VideoScale) -> Unit) {
+        sheet.value = Sheet.Shape(current, onPick)
     }
 
     /** [running] is the running timer's detail, [chosen] the length it was started with. */
@@ -96,6 +101,12 @@ class PlayerSheets(
         when (val shown = sheet.value) {
             null -> Unit
             is Sheet.Speed -> SpeedSheet(
+                current = shown.current,
+                onPick = { close(); shown.onPick(it) },
+                onDismiss = ::close,
+                onClose = ::close,
+            )
+            is Sheet.Shape -> ShapeSheet(
                 current = shown.current,
                 onPick = { close(); shown.onPick(it) },
                 onDismiss = ::close,
@@ -188,6 +199,29 @@ private fun ColumnScope.SpeedTiles(current: Float, onPick: (Float) -> Unit) {
 private val TILE_HEIGHT = 112.dp
 private val TILE_MIN = 88.dp
 private val TILE_GAP = 12.dp
+
+/**
+ * The picture shapes, one ticked: fit, crop and stretch, as the pickers' panel draws a choice of
+ * one of a few. The pinch on a phone stays as the shortcut; this is the route that can be found.
+ */
+@Composable
+internal fun ShapeSheet(current: VideoScale, onPick: (VideoScale) -> Unit, onDismiss: () -> Unit, onClose: () -> Unit) {
+    val s = LocalStrings.current
+    val touch = isTouch()
+    val focus = remember { FocusRequester() }
+    ChoiceSheet(title = s.playerPictureShape, onDismiss = onDismiss, onClose = onClose, ignoreRelease = !touch, fullScreen = true) {
+        ChoiceList {
+            VideoScale.entries.forEach { choice ->
+                ChoiceLine(
+                    title = choice.label,
+                    selected = choice == current,
+                    modifier = if (choice == current) Modifier.focusRequester(focus) else Modifier,
+                ) { onPick(choice) }
+            }
+        }
+        FocusOnOpen(focus)
+    }
+}
 
 /**
  * The sleep timer's lengths, with Off first: Off is ticked while no timer runs, the length a
