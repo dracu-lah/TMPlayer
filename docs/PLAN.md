@@ -632,11 +632,14 @@ season switch, a watched tick), the desktop render test, a D-pad walk, and tests
 **Why:** the user asked on 2026-10-06 for a Settings option that hides the default Telegram grouping from the
 sidebar and from other places, removes favourites that this affects, shows proper alert prompts for features
 like it, and adds the same prompts where they are missing.
-**What "default grouping" means here (to confirm):** the fixed Chats group of the sidebar built by
-`browseSections` in `ui/src/shared/.../browse/BrowseSections.kt`: Recent, Unread, Saved, Channels, Groups, People,
-All and Archived (the `ChatKind` split in `ChatRepository.kt`). Watch (Home, Continue, Watched, Favourites,
-Downloads) and the account's own Telegram folders are not part of it. Alternative reading: hide only Channels,
-Groups and People. Ask before building if the user has not said.
+**What "default grouping" means (confirmed 2026-10-06):** the user's friend wants the app's fixed groupings
+disabled completely, keeping only the custom ones. Default: the Chats group of the sidebar built by
+`browseSections` in `ui/src/shared/.../browse/BrowseSections.kt`: Recent, Unread, Saved, Channels, Groups,
+People, All and Archived (the `ChatKind` split in `ChatRepository.kt`). Custom: the account's own Telegram
+folders (the Folders group), which stay. Watch (Home, Continue, Watched, Favourites, Downloads) stays too. All
+eight default sections go together, with no per-section choice. With no folders on the account the sidebar
+would hold Watch only, so the toggle's prompt says to make folders in Telegram first, and Home and the empty
+states point there instead of at "All".
 **Do:**
 - A Settings toggle "Hide Telegram's default groups" (name to settle), off by default, stored in `SettingsStore`.
   When on, `browseSections` and `navGroups` leave the Chats group out on phone drawer, TV rail and desktop side
