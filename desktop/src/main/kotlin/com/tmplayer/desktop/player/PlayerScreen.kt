@@ -107,11 +107,25 @@ internal data class Flash(val kind: Kind, val text: String, val id: Long) {
     enum class Kind { Play, Pause, SeekBack, SeekForward, Text, Volume }
 }
 
-internal enum class MenuPage { Main, Audio, Subtitles, Speed, Shape, Sleep }
+internal enum class MenuPage { Main, Audio, Subtitles, Speed, Shape, Sleep, Options, SubtitleStyle }
 
 /** Where an open menu hangs: at the cursor for a right click, or under a button. */
 internal data class MenuAt(val page: MenuPage, val anchor: Anchor, val at: Offset = Offset.Zero) {
-    enum class Anchor { Cursor, Overflow, Subtitles, Audio }
+    enum class Anchor { Cursor, Overflow, Subtitles, Audio, Speed }
+
+    /**
+     * The page Back returns to, or null on the page a button's own menu opens at: that menu has no
+     * Back line, a click outside closes it.
+     */
+    fun parentPage(): MenuPage? = when (page) {
+        MenuPage.Main -> null
+        MenuPage.Audio -> if (anchor == Anchor.Audio) null else MenuPage.Main
+        MenuPage.Subtitles -> if (anchor == Anchor.Subtitles) null else MenuPage.Main
+        MenuPage.Speed -> if (anchor == Anchor.Speed) null else MenuPage.Main
+        MenuPage.Sleep, MenuPage.Shape -> MenuPage.Options
+        MenuPage.Options -> MenuPage.Main
+        MenuPage.SubtitleStyle -> if (anchor == Anchor.Subtitles) MenuPage.Subtitles else MenuPage.Main
+    }
 }
 
 private val blankCursor: PointerIcon by lazy {
@@ -1004,8 +1018,6 @@ fun PlayerScreen(
                     val value = showRemaining
                     playerScope.launch { runCatching { settings.updateTouchPrefs { it.copy(showRemaining = value) } } }
                 },
-                onCycleSpeed = { setSpeed(SeekMath.nextSpeedStop(status.speed)) },
-                onCycleScale = { setScale(status.scale.next()) },
                 onVolume = ::setVolume,
                 onToggleMute = ::toggleMute,
                 onToggleFullscreen = onToggleFullscreen,

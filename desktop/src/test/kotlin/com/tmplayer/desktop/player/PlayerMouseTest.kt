@@ -201,7 +201,9 @@ class PlayerMouseTest {
         open()
         onNodeWithTag("video").performMouseInput { rightClick(onPicture) }
         waitForIdle()
-        onNodeWithText("Playback details").assertExists()
+        onNodeWithText("Playback options").assertExists()
+        onNodeWithText("Subtitle style and timing").assertExists()
+        onNodeWithText("Help").assertExists()
         onNodeWithText("Copy link").assertExists()
         onNodeWithText("Open in another app").assertExists()
         onNodeWithText("Save to Downloads").performClick()
@@ -216,11 +218,13 @@ class PlayerMouseTest {
     fun `the menu switches volume boost on and off, kept as the setting`() = runComposeUiTest {
         open()
         onNodeWithTag("video").performMouseInput { rightClick(onPicture) }
+        onNodeWithText("Playback options").performClick()
         onNodeWithText("Volume boost").performClick()
         waitForIdle()
         assertEquals(1, engine.count("boost:true"))
         waitUntil(timeoutMillis = 2_000) { runBlocking { settings.volumeBoostNow() } }
         onNodeWithTag("video").performMouseInput { rightClick(onPicture) }
+        onNodeWithText("Playback options").performClick()
         onNodeWithText("Volume boost").performClick()
         waitForIdle()
         assertEquals(1, engine.count("boost:false"))
@@ -231,12 +235,14 @@ class PlayerMouseTest {
     fun `the sleep timer is a page of the menu and reads what is left`() = runComposeUiTest {
         open()
         onNodeWithTag("video").performMouseInput { rightClick(onPicture) }
+        onNodeWithText("Playback options").performClick()
         onNodeWithText("Sleep timer").performClick()
         waitForIdle()
         onNodeWithText("End of this video").assertExists()
         onNodeWithText("30 minutes").performClick()
         waitForIdle()
         onNodeWithTag("video").performMouseInput { rightClick(onPicture) }
+        onNodeWithText("Playback options").performClick()
         onNodeWithText("30 minutes left").assertExists()
     }
 
