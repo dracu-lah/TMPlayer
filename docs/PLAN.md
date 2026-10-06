@@ -118,6 +118,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [ ] CP43 Sidebar with fewer entries: fold the eight chat sections into two entries with filter chips (before CP41)
 - [ ] CP41 Setting to hide Telegram's default chat groups everywhere, with warning prompts, plus a sweep for settings that lack one
 - [ ] CP42 Minimal onboarding: six tour pages down to two, one first-sign-in card, deferred hints
+- [ ] CP44 Device pass for CP37 to CP43: install on the phone and the Mi TV stick, hunt wasted space and anything broken
 
 ## Standing rules
 
@@ -738,6 +739,32 @@ filter by `unreadCount` or `ChatKind`).
 - Strings go into `en.json` only; leave other locales and never run langsync.
 **Done when:** unit tests for the chip filters and the saved selection, screenshots of the shorter sidebar and
 the chip row on phone and TV, the desktop render test, a D-pad walk, and the old tab names gone from docs.
+**STOP**
+
+### CP44 Device pass: layout, wasted space, nothing broken
+**Why:** the user asked on 2026-10-06 to commit the changes, install them on the phone and on Android TV, and look
+for extra spaces that can be used and anything that looks broken. Repeat after each batch of CP37 to CP43 lands;
+it also takes the "pending for CP11" device checks those CPs list.
+**Rules (from the standing rules and memory):** done from the main session, not a subagent (subagents are
+refused installs on real devices). Release-signed APKs only, `adb install -r`, never the debug build on the
+phone (same package, other key, wipes the Telegram login). The stick is armeabi-v7a on Android 9 and needs the
+release-signed universal APK; it is the `MiTV-AESP0` at `10.27.27.33:5555` over adb. The phone is the POCO and is
+shared with the user: ask or check it is connected, set media volume to 0 before any playback test and confirm it
+with `cmd media_session volume --stream 3 --get`. Emulators first (`tmplayer_phone_api36`, `tmplayer_tv_api36`,
+promo flavor); the devices are for real data, codecs, audio and storage. Verify the installed versionCode with
+aapt2 (see the stale versionCode note) before trusting a test.
+**Do:**
+- Build the release APK(s) from the merged main, install on the phone and on the stick, keep the login.
+- Walk every changed screen at 1:1 with screenshots: player controls row and overflow, TV row and More menu,
+  support card rungs, sidebar and chips, hide-default-groups setting and its prompt, onboarding, episodes
+  modal. Phone in portrait and landscape; TV on the stick's 1080p.
+- Look for: unused gaps and padding, controls that are too small or crowded, text clipped or overlapping,
+  content that does not use the freed room (for example a shorter sidebar leaving a dead strip, a shorter
+  player row leaving an empty band), focus that gets lost on the D-pad, anything that looks broken, then fix
+  what is found or list it.
+- Record what was verified and what was not in the plan board line.
+**Done when:** screenshots of each changed screen on both devices were viewed, findings fixed or listed, and
+the pending device checks of CP37 to CP43 are ticked or carried forward by name.
 **STOP**
 
 ## Your tasks
