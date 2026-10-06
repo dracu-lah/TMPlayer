@@ -10,6 +10,14 @@
 -keep class org.drinkless.** { *; }
 -keep class dev.g000sha256.tdl.** { *; }
 
+# Enum.valueOf goes through values(), which nothing calls by name, so shrinking strips it and every
+# valueOf then throws "is not an enum class". zxing's QRCodeWriter does exactly that with
+# ErrorCorrectionLevel, which left the sign in QR code a spinner forever in release builds only.
+-keepclassmembers enum * {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
+
 # kotlinx.serialization finds a generated serializer through reflection on the companion object.
 -keepattributes *Annotation*, InnerClasses, Signature, EnclosingMethod, RuntimeVisibleAnnotations
 -keepclassmembers class **$$serializer { *; }

@@ -80,6 +80,9 @@ object Td {
      */
     private var method = SignInMethod.Undecided
 
+    /** The method a fresh client starts with: what [restartSignIn] was asked to go straight to. */
+    private var methodAfterRestart = SignInMethod.Undecided
+
     @Volatile
     private var closedSignal: CompletableDeferred<Unit>? = null
 
@@ -214,7 +217,8 @@ object Td {
             current = td
             _session.value = TdSession(td, generation.incrementAndGet())
             lastHandled = null
-            method = SignInMethod.Undecided
+            method = methodAfterRestart
+            methodAfterRestart = SignInMethod.Undecided
             closedSignal = closed
 
             val updates = launch {
@@ -344,6 +348,13 @@ object Td {
 
     /** The user picked a route on the first login screen. */
     suspend fun chooseSignInMethod(chosen: SignInMethod) {
+        // Once a QR code is up TDLib is waiting for the other device, and it takes a phone number
+        // only from its first question. Starting the sign in over gets back to that question, with
+        // the method kept, so it is answered with the number entry this time.
+        if (chosen == SignInMethod.Phone && _auth.value is AuthState.Qr) {
+            restartSignIn(SignInMethod.Phone)
+            return
+        }
         method = chosen
         replay()
     }
@@ -478,14 +489,15 @@ object Td {
     }
 
     /**
-     * Abandons a half-finished sign-in and goes back to the choice of method.
+     * Abandons a half-finished sign-in and goes back to the choice of method, or straight to [next].
      *
      * The password and code steps are dead ends otherwise: somebody who scanned with the wrong
      * account or cannot remember the password has nothing to press. Logging out here throws away
      * an attempt rather than an account, since nobody is signed in yet.
      */
-    suspend fun restartSignIn() {
-        method = SignInMethod.Undecided
+    suspend fun restartSignIn(next: SignInMethod = SignInMethod.Undecided) {
+        method = next
+        methodAfterRestart = next
         _auth.value = AuthState.Connecting
         runCatching { current?.logOut() }
     }
