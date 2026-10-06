@@ -106,7 +106,6 @@ PUBLISH_THRESHOLD = 0.95
 BUILD_STRINGS = {
     "build.language": "Language",
     "build.languages": "Languages",
-    "build.now_in": "Now in {languages}",
     "build.languages_count": "{count} languages",
     "build.suggest": "This page is also in {language}.",
     "build.suggest_go": "Read it in {language}",
@@ -135,7 +134,7 @@ LD_TEXT_KEYS = {"name", "alternateName", "description", "text", "headline", "fea
 LD_URL_KEYS = {"url", "item", "@id", "mainEntityOfPage"}
 
 REGION_RE = r"<!-- i18n:{0} -->.*?<!-- /i18n:{0} -->"
-REGIONS = ["head", "picker", "footer", "now", "langcount"]
+REGIONS = ["head", "picker", "footer", "langcount"]
 
 
 class BuildError(Exception):
@@ -819,12 +818,6 @@ def regions(lang, page_id, langs, strings):
                      f'aria-label="{html.escape(t["build.languages"], quote=True)}">\n      '
                      + "\n      ".join(links) + "\n    </nav>\n    ")
 
-    translated = [o for o in langs if o is not ENGLISH]
-    names = ", ".join(f'<a href="{page_url(o, "home")}" hreflang="{o["hreflang"]}" lang="{o["tag"]}">'
-                      f'{html.escape(o["name"])}</a>' for o in translated)
-    out["now"] = (f'\n      <p class="hero-langs">'
-                  + html.escape(t["build.now_in"], quote=False).replace("{languages}", names)
-                  + "</p>\n      ")
     count = html.escape(t["build.languages_count"], quote=False).replace(
         "{count}", f"<b>{len(langs)}</b>")
     out["langcount"] = f"<span>{count}</span>"

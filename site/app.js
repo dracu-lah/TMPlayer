@@ -148,7 +148,7 @@ var tmT = (function () {
     if (!document.getElementById('platforms')) { return; }
     if (os === 'mac' || os === 'ios') {
       el.osNote.textContent = os === 'mac'
-        ? tmT('os_note_mac', 'There is no macOS version yet: it is coming later. Everything below is for Android, Windows and Linux.')
+        ? tmT('os_note_mac', 'There is no macOS version. Everything below is for Android, Windows and Linux.')
         : tmT('os_note_ios', 'There is no iPhone or iPad version. Everything below is for Android, Windows and Linux.');
       el.osNote.hidden = false;
       return;

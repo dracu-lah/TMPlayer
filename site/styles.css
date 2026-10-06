@@ -655,9 +655,9 @@ summary {
   color: var(--on-surface-variant);
   font-weight: 400;
   letter-spacing: -0.012em;
-  /* Narrow enough that the sentence breaks into two lines of similar length
-     rather than a long line and a two word stub. */
-  max-width: 38ch;
+  /* Wide enough that the sentence takes two lines, balanced so neither is a
+     two word stub. */
+  max-width: 52ch;
   text-wrap: balance;
   margin: 0 0 clamp(30px, 4.5vw, 46px);
 }
@@ -2359,58 +2359,6 @@ a.card:hover .card-go svg { transform: translateX(4px); }
    reader sees the licence on its own rather than two empty labels. */
 .support-stats [data-count-wrap][hidden] { display: none; }
 
-/* Write ups by others, in a short band of their own under the opening: the same kind of evidence
-   as a star, from outside the repository. */
-.press-band { padding-block: clamp(8px, 2vw, 24px) clamp(28px, 4vw, 48px); }
-.press {
-  margin: 0 auto;
-  max-width: 760px;
-  text-align: center;
-}
-.press h2 {
-  margin: 0 0 14px;
-  color: var(--on-surface-variant);
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.press-list {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: minmax(0, 1fr);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-@media (min-width: 640px) {
-  .press-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-.press-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  height: 100%;
-  padding: 16px 18px;
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--shape-l);
-  background: var(--surface-container-low);
-  color: var(--on-surface);
-  text-align: left;
-  text-decoration: none;
-  transition: border-color 0.2s ease, transform 0.2s ease;
-}
-.press-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.press-meta { color: var(--on-surface-variant); font-size: 0.85rem; }
-.press-title { font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
-.press-en { color: var(--on-surface-variant); font-size: 0.92rem; }
-@media (hover: hover) {
-  .press-card:hover { border-color: var(--primary); transform: translateY(-2px); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .press-card { transition: none; }
-  .press-card:hover { transform: none; }
-}
 
 
 /* ---------------------------------------------------------------------------
@@ -2670,15 +2618,7 @@ a.card:hover .card-go svg { transform: translateX(4px); }
 }
 .lang-suggest button:hover { opacity: 1; }
 
-/* "Now in ..." under the hero, and the footer's list of languages. */
-.hero-langs {
-  margin: 12px auto 0;
-  max-width: 60ch;
-  color: var(--on-surface-variant);
-  font-size: 0.9rem;
-  line-height: 1.7;
-}
-.hero-langs a { white-space: nowrap; }
+/* The footer's list of languages. */
 .footer-langs a { font-size: 0.9rem; }
 
 /* Fonts. Poppins is served from this domain as a Latin subset, so it covers English, Spanish,
