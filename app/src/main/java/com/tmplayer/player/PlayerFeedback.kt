@@ -22,6 +22,8 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import com.tmplayer.R
+import com.tmplayer.i18n.L
+import com.tmplayer.i18n.Translator
 import kotlin.math.roundToInt
 
 /**
@@ -331,7 +333,7 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
                 path.close()
                 canvas.drawPath(path, chevron)
             }
-            canvas.drawText("$seconds seconds", cx, cy + size + 22f * density, label)
+            canvas.drawText(L.playerSeekSeconds(seconds), cx, cy + size + 22f * density, label)
         }
     }
 
@@ -376,7 +378,7 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
             canvas.drawRoundRect(rect, barHalf, barHalf, track)
             rect.top = bottom - (bottom - top) * fraction
             canvas.drawRoundRect(rect, barHalf, barHalf, fill)
-            canvas.drawText("${(fraction * 100).roundToInt()}", w / 2, 20f * density, text)
+            canvas.drawText(Translator.messages.formatter.number((fraction * 100).roundToInt()), w / 2, 20f * density, text)
             val iconRes = when {
                 brightness -> R.drawable.ic_brightness
                 fraction <= 0f -> R.drawable.ic_volume_off
@@ -428,8 +430,8 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
 
         fun show(deltaMs: Long, targetMs: Long, durationMs: Long) {
             val sign = if (deltaMs >= 0) "+" else "-"
-            delta.text = sign + StreamStats.formatClock(kotlin.math.abs(deltaMs))
-            target.text = "${StreamStats.formatClock(targetMs)} / ${StreamStats.formatClock(durationMs)}"
+            delta.text = sign + Translator.messages.formatter.clock(kotlin.math.abs(deltaMs))
+            target.text = "${Translator.messages.formatter.clock(targetMs)} / ${Translator.messages.formatter.clock(durationMs)}"
             bar.progress = if (durationMs > 0) (targetMs * 1000 / durationMs).toInt() else 0
             removeCallbacks(hide)
             animate().cancel()

@@ -1,5 +1,6 @@
 package com.tmplayer.ui.auth
 
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.nav.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -61,6 +62,7 @@ fun CountryPicker(
     onPick: (Country) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val s = LocalStrings.current
     var query by remember { mutableStateOf("") }
     val search = remember { FocusRequester() }
     val shown = remember(countries, query) {
@@ -74,12 +76,12 @@ fun CountryPicker(
         containerColor = Tone.background,
         topBar = {
             TopAppBar(
-                title = { Text("Choose a country") },
+                title = { Text(s.loginChooseCountry) },
                 navigationIcon = {
                     IconButton(onClick = onDismiss) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Close the country list",
+                            contentDescription = s.loginCloseCountryList,
                         )
                     }
                 },
@@ -92,14 +94,14 @@ fun CountryPicker(
                 value = query,
                 onValueChange = { query = it },
                 singleLine = true,
-                label = { Text("Search by name or code") },
+                label = { Text(s.loginCountrySearch) },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 trailingIcon = {
                     // Two hundred rows filtered to none is a dead end, and clearing a field by
                     // holding backspace is a chore nobody should be set on a sign-in screen.
                     if (query.isNotEmpty()) {
                         IconButton(onClick = { query = "" }) {
-                            Icon(Icons.Filled.Close, contentDescription = "Clear the search")
+                            Icon(Icons.Filled.Close, contentDescription = s.loginClearSearch)
                         }
                     }
                 },
@@ -113,7 +115,7 @@ fun CountryPicker(
 
             if (shown.isEmpty()) {
                 Text(
-                    "Nothing matches that.",
+                    s.loginCountryNoMatch,
                     style = MaterialTheme.typography.bodyLarge,
                     color = Tone.muted,
                     modifier = Modifier.padding(horizontal = PhonePad.Side, vertical = 8.dp),

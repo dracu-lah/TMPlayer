@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Tone
 
 enum class ConnectionNotice {
@@ -30,6 +31,7 @@ enum class ConnectionNotice {
 /** A passive status only. It never takes focus or blocks saved content and playback. */
 @Composable
 fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier) {
+    val s = LocalStrings.current
     AnimatedVisibility(
         visible = notice != ConnectionNotice.Hidden,
         modifier = modifier,
@@ -69,8 +71,8 @@ fun ConnectionStatus(notice: ConnectionNotice, modifier: Modifier = Modifier) {
             }
             Text(
                 text = when (notice) {
-                    ConnectionNotice.Offline -> "Offline. Saved videos still work."
-                    ConnectionNotice.Reconnecting -> "Back online. Reconnecting to Telegram..."
+                    ConnectionNotice.Offline -> s.stateOffline
+                    ConnectionNotice.Reconnecting -> s.stateReconnecting
                     ConnectionNotice.Hidden -> ""
                 },
                 // A phone screen is narrower than this sentence at TV size, and the pill would run

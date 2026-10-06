@@ -1,12 +1,14 @@
 package com.tmplayer.ui.components
 
+import com.tmplayer.i18n.L
+
 /** Every screen is exactly one of these: no blank frames, ever. */
 sealed interface UiState<out T> {
     /**
      * @param tip one line under the spinner for a wait the viewer has not seen before, such as the
      *   very first chat list, which takes far longer than every launch after it.
      */
-    data class Loading(val label: String = "Loading…", val tip: String? = null) : UiState<Nothing>
+    data class Loading(val label: String = L.commonLoading, val tip: String? = null) : UiState<Nothing>
 
     /** Something actually failed and retrying might help. */
     data class Error(val message: String) : UiState<Nothing>
@@ -28,12 +30,19 @@ sealed interface UiState<out T> {
  * A button an empty state can offer. An enum rather than a lambda, so a state stays a value that
  * compares equal to itself, and each screen decides what the button does.
  */
-enum class StateAction(val label: String) {
+enum class StateAction {
     /** Lift the size limits for this listing, so the videos they hid come into view. */
-    ShowHidden("Show them"),
+    ShowHidden,
 
     /** Ask again: the scaffold's ordinary retry. */
-    KeepLooking("Keep looking"),
+    KeepLooking,
+    ;
+
+    /** The button's words. */
+    val label: String get() = when (this) {
+        ShowHidden -> L.commonShowHidden
+        KeepLooking -> L.commonKeepLooking
+    }
 }
 
 /** What every platform says when a load runs on for too long, and when it starts saying it. */
@@ -43,6 +52,6 @@ object SlowAnswer {
      * at a spinner gets a way out before they give up on the app.
      */
     const val AFTER_MS = 15_000L
-    const val MESSAGE = "Telegram is slow to answer"
-    const val RETRY = "Retry"
+    val MESSAGE: String get() = L.commonSlowAnswer
+    val RETRY: String get() = L.commonRetry
 }

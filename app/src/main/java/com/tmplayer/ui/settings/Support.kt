@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -40,18 +41,18 @@ import androidx.compose.ui.unit.min
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.tmplayer.ui.components.FloatingWindow
-import com.tmplayer.ui.theme.floatingSurface
-import com.tmplayer.ui.theme.LocalOnFloating
-import androidx.compose.runtime.CompositionLocalProvider
 import com.tmplayer.ui.about.About
 import com.tmplayer.ui.auth.QrCode
+import com.tmplayer.ui.components.FloatingWindow
 import com.tmplayer.ui.components.PhonePad
 import com.tmplayer.ui.components.TmButton
 import com.tmplayer.ui.components.TmSecondaryButton
 import com.tmplayer.ui.components.isTouch
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Corner
+import com.tmplayer.ui.theme.LocalOnFloating
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.floatingSurface
 import com.tmplayer.ui.update.openLink
 import com.tmplayer.ui.update.readableUrl
 import kotlinx.coroutines.Dispatchers
@@ -66,6 +67,7 @@ import kotlinx.coroutines.withContext
  */
 @Composable
 fun SupportDialog(onClose: () -> Unit) {
+    val s = LocalStrings.current
     val touch = isTouch()
     val context = LocalContext.current
     val close = remember { FocusRequester() }
@@ -83,11 +85,7 @@ fun SupportDialog(onClose: () -> Unit) {
         ) {
             Text(About.SUPPORT_TITLE, style = MaterialTheme.typography.headlineSmall, color = Tone.text)
             Text(
-                About.SUPPORT_NOTE + if (touch) {
-                    " Open a link here, or scan a code on another device."
-                } else {
-                    " Point your phone's camera at a code."
-                },
+                if (touch) s.supportNoteTouch(About.SUPPORT_NOTE) else s.supportNoteTv(About.SUPPORT_NOTE),
                 style = MaterialTheme.typography.bodyLarge,
                 color = Tone.muted,
                 textAlign = TextAlign.Center,
@@ -105,7 +103,7 @@ fun SupportDialog(onClose: () -> Unit) {
                 }
             }
             Spacer(Modifier.height(4.dp))
-            TmSecondaryButton(onClick = onClose, modifier = Modifier.focusRequester(close)) { Label("Close") }
+            TmSecondaryButton(onClick = onClose, modifier = Modifier.focusRequester(close)) { Label(s.commonClose) }
         }
     }
 
@@ -115,6 +113,7 @@ fun SupportDialog(onClose: () -> Unit) {
 /** One link: its code on a white plate, what it is, and the address to type instead. */
 @Composable
 private fun SupportCode(link: About.Link, modifier: Modifier, onOpen: (() -> Unit)?) {
+    val s = LocalStrings.current
     val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = link.url) {
         value = withContext(Dispatchers.Default) { QrCode.render(link.url, QR_PIXELS) }
     }
@@ -131,7 +130,7 @@ private fun SupportCode(link: About.Link, modifier: Modifier, onOpen: (() -> Uni
             bitmap?.let {
                 Image(
                     bitmap = it,
-                    contentDescription = "QR code for ${link.title}",
+                    contentDescription = s.supportQrFor(link.title),
                     // A scanner needs a quiet margin of the code's own white to find it.
                     modifier = Modifier.fillMaxSize().padding(10.dp),
                 )
@@ -141,7 +140,7 @@ private fun SupportCode(link: About.Link, modifier: Modifier, onOpen: (() -> Uni
         Text(link.title, style = MaterialTheme.typography.titleMedium, color = Tone.text, textAlign = TextAlign.Center)
         Text(readableUrl(link.url), style = MaterialTheme.typography.bodyMedium, color = Tone.muted, textAlign = TextAlign.Center)
         if (onOpen != null) {
-            TmButton(onClick = onOpen) { Label("Open") }
+            TmButton(onClick = onOpen) { Label(s.commonOpen) }
         }
     }
 }
@@ -159,6 +158,7 @@ fun SupportCard(
     onNever: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val s = LocalStrings.current
     val touch = isTouch()
     val notNow = remember { FocusRequester() }
     if (!touch) BackHandler(onBack = onNotNow)
@@ -179,10 +179,10 @@ fun SupportCard(
             // A phone held upright has no room for three buttons in a row: the two everyday
             // answers share the width, and the final one sits under them.
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TmSecondaryButton(onClick = onNotNow, modifier = Modifier.weight(1f)) { Label("Not now") }
-                TmButton(onClick = onSupport, modifier = Modifier.weight(1f)) { Label("Support") }
+                TmSecondaryButton(onClick = onNotNow, modifier = Modifier.weight(1f)) { Label(s.supportNotNow) }
+                TmButton(onClick = onSupport, modifier = Modifier.weight(1f)) { Label(s.supportSupport) }
             }
-            TmSecondaryButton(onClick = onNever, modifier = Modifier.fillMaxWidth()) { Label("Don't ask again") }
+            TmSecondaryButton(onClick = onNever, modifier = Modifier.fillMaxWidth()) { Label(s.supportNever) }
         } else {
             // The card floats, so a button at rest takes the step above its fill (see FloatingTone.control).
             CompositionLocalProvider(LocalOnFloating provides true) {
@@ -191,9 +191,9 @@ fun SupportCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TmSecondaryButton(onClick = onNever) { Label("Don't ask again") }
-                    TmSecondaryButton(onClick = onNotNow, modifier = Modifier.focusRequester(notNow)) { Label("Not now") }
-                    TmButton(onClick = onSupport) { Label("Support") }
+                    TmSecondaryButton(onClick = onNever) { Label(s.supportNever) }
+                    TmSecondaryButton(onClick = onNotNow, modifier = Modifier.focusRequester(notNow)) { Label(s.supportNotNow) }
+                    TmButton(onClick = onSupport) { Label(s.supportSupport) }
                 }
             }
         }

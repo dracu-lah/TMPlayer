@@ -40,6 +40,8 @@ import com.tmplayer.data.AndroidTransferNotifier
 import com.tmplayer.data.AuthState
 import com.tmplayer.data.LegacyDownloads
 import com.tmplayer.data.LocalDownloads
+import com.tmplayer.i18n.L
+import com.tmplayer.i18n.Translator
 import com.tmplayer.platform.CoalescingTransferNotifier
 import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.CardLayout
@@ -68,7 +70,7 @@ import com.tmplayer.data.Updates
 import com.tmplayer.data.release
 import com.tmplayer.data.updateScheduler
 import com.tmplayer.player.PlayerActivity
-import com.tmplayer.player.StreamStats
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.LocalDarkTheme
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.auth.LoginScreen
@@ -242,6 +244,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 @SuppressLint("UnsafeOptInUsageError")
 private fun Root() {
+    val s = LocalStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val auth by Td.auth.collectAsStateWithLifecycle()
@@ -347,7 +350,7 @@ private fun Root() {
     // A download finishing, said in the window too. A television shows apps like this one no
     // notification shade, so without this the end of a download would pass unremarked there.
     LaunchedEffect(Unit) {
-        AndroidTransferNotifier.completions.collect { title -> toast("Downloaded: $title") }
+        AndroidTransferNotifier.completions.collect { title -> toast(s.mainDownloaded(title = title)) }
     }
 
     // Half-watched entries that can no longer be turned into a card are swept once per launch.
@@ -357,11 +360,7 @@ private fun Root() {
         val removed = runCatching { settings.pruneBrokenHistory() }.getOrDefault(0)
         if (removed > 0) {
             toast(
-                if (removed == 1) {
-                    "Removed a video TMPlayer can no longer open from Continue watching"
-                } else {
-                    "Removed $removed videos TMPlayer can no longer open from Continue watching"
-                },
+                s.mainPrunedHistory(count = removed),
             )
         }
     }
@@ -411,7 +410,7 @@ private fun Root() {
                 if (auth is AuthState.Ready) {
                     chatsViewModel.load()
                     updates.checkIfDue()
-                    toast("Back online. Library updated.")
+                    toast(L.mainBackOnline)
                 }
             }
             else -> connectionNotice = ConnectionNotice.Hidden
@@ -426,7 +425,7 @@ private fun Root() {
     var roomPrompt by remember { mutableStateOf<RoomPrompt?>(null) }
     // The machine the space message is about, since "this phone is 2 GB short" on a television
     // reads as the app talking about something else entirely.
-    val device = remember { if (FormFactor.isTv(context)) "TV" else "phone" }
+    val device = remember { if (FormFactor.isTv(context)) "tv" else "phone" }
     // Where leaving the Downloads screen goes back to.
     var downloadsCameFrom by remember { mutableStateOf<Screen>(Screen.Chats) }
     // Whether the Downloads screen opens on its cached videos, which is how Settings' Cached
@@ -506,9 +505,9 @@ private fun Root() {
             if (!canReachTelegram && local != LocalFileAvailability.Complete) {
                 toast(
                     if (local == LocalFileAvailability.Partial) {
-                        "This video is only partly downloaded. Connect to finish it."
+                        L.mainPartlyDownloaded
                     } else {
-                        "Connect to the internet to play this video."
+                        L.mainConnectToPlay
                     },
                 )
                 return@withContext
@@ -590,7 +589,7 @@ private fun Root() {
             // before this fires, and a chip that flashes on every press is worse than no chip.
             val chip = launch {
                 delay(PREPARE_CHIP_AFTER_MS)
-                toast("Starting ${item.title}…")
+                toast(L.mainStarting(title = item.title))
             }
             try {
                 playNow(item, confirmed, chatTitle)
@@ -624,7 +623,7 @@ private fun Root() {
                 }
             }
         }
-        toast(if (watched) "${item.title} marked as watched" else "${item.title} marked as unwatched")
+        toast(if (watched) L.mainMarkedWatched(title = item.title) else L.mainMarkedUnwatched(title = item.title))
     }
 
     /**
@@ -754,7 +753,7 @@ private fun Root() {
         if (screen is Screen.Chats) {
             val activity = LocalActivity.current
             BackHandler {
-                if (exitArmed) activity?.finish() else { exitArmed = true; toast("Press Back again to leave") }
+                if (exitArmed) activity?.finish() else { exitArmed = true; toast(L.mainBackAgain) }
             }
             // The second press has to follow the first, not arrive ten minutes later on a screen
             // the viewer has long since forgotten pressing Back on.
@@ -782,10 +781,10 @@ private fun Root() {
                         val waiting = chatsViewModel.refreshUnlessRateLimited()
                         when {
                             waiting > 0 -> toast(
-                                "Telegram has asked us to slow down. Try again in $waiting seconds.",
+                                L.mainFloodWait(seconds = waiting),
                             )
                             networkStatus == NetworkStatus.Offline && !telegramConnected ->
-                                toast("You're offline. Showing saved chats.")
+                                toast(L.mainOfflineSavedChats)
                         }
                     },
                     onOpenChat = { openChat(it) },
@@ -806,9 +805,9 @@ private fun Root() {
                         chatsViewModel.setPinned(chat, !chat.isPinned) { toast(it) }
                         toast(
                             if (chat.isPinned) {
-                                "${chat.title} unpinned"
+                                L.mainUnpinned(title = chat.title)
                             } else {
-                                "${chat.title} pinned to the top"
+                                L.mainPinned(title = chat.title)
                             },
                         )
                     },
@@ -816,21 +815,21 @@ private fun Root() {
                         chatsViewModel.setArchived(chat, !chat.isArchived) { toast(it) }
                         toast(
                             if (chat.isArchived) {
-                                "${chat.title} moved out of the archive"
+                                L.mainUnarchived(title = chat.title)
                             } else {
-                                "${chat.title} archived"
+                                L.mainArchived(title = chat.title)
                             },
                         )
                     },
                     onToggleMuted = { chat ->
                         chatsViewModel.setMuted(chat, !chat.isMuted) { toast(it) }
                         toast(
-                            if (chat.isMuted) "${chat.title} unmuted" else "${chat.title} muted",
+                            if (chat.isMuted) L.mainUnmuted(title = chat.title) else L.mainMuted(title = chat.title),
                         )
                     },
                     onMarkRead = { chat ->
                         chatsViewModel.markRead(chat) { toast(it) }
-                        toast("${chat.title} marked as read")
+                        toast(L.mainMarkedRead(title = chat.title))
                     },
                     onToggleFavorite = { chat ->
                         scope.launch {
@@ -840,9 +839,9 @@ private fun Root() {
                             val nowFavorite = settings.toggleFavorite(chat.id)
                             toast(
                                 if (nowFavorite) {
-                                    "${chat.title} added to Favourites"
+                                    L.mainFavouriteAdded(title = chat.title)
                                 } else {
-                                    "${chat.title} removed from Favourites"
+                                    L.mainFavouriteRemoved(title = chat.title)
                                 },
                             )
                         }
@@ -856,7 +855,7 @@ private fun Root() {
                     onForgetMedia = { record ->
                         scope.launch {
                             settings.clearResumePosition(record.chatId, record.messageId)
-                            toast("${record.title} removed from Continue watching")
+                            toast(L.mainForgotResume(title = record.title))
                         }
                     },
                     onClearFavorites = {
@@ -864,18 +863,14 @@ private fun Root() {
                             val count = favorites.size
                             settings.clearFavorites()
                             toast(
-                                if (count == 1) {
-                                    "Favourite cleared"
-                                } else {
-                                    "$count favourites cleared"
-                                },
+                                L.mainFavouritesCleared(count = count),
                             )
                         }
                     },
                     onClearHistory = {
                         scope.launch {
                             settings.clearWatchHistory()
-                            toast("Continue watching cleared")
+                            toast(L.mainHistoryCleared)
                         }
                     },
                     onMarkMediaWatched = { record ->
@@ -889,7 +884,7 @@ private fun Root() {
                     onClearWatched = {
                         scope.launch {
                             runCatching { watchedStore.clear() }
-                            toast("Watched list cleared")
+                            toast(L.mainWatchedCleared)
                         }
                     },
                     launchChatId = lastChatId,
@@ -926,9 +921,9 @@ private fun Root() {
                             val nowFavorite = settings.toggleFavorite(current.chat.id)
                             toast(
                                 if (nowFavorite) {
-                                    "${current.chat.title} added to Favourites"
+                                    L.mainFavouriteAdded(title = current.chat.title)
                                 } else {
-                                    "${current.chat.title} removed from Favourites"
+                                    L.mainFavouriteRemoved(title = current.chat.title)
                                 },
                             )
                         }
@@ -989,19 +984,20 @@ private fun Root() {
             // nothing left for the app to give up on its own. It says how much short the device
             // is and offers the screen where the viewer can decide what goes.
             TvConfirm(
-                title = "Not enough space",
-                message = "“${pending.item.title}” is " +
-                    "${StreamStats.formatBytes(pending.item.sizeBytes)}, and this $device is " +
-                    "${StreamStats.formatBytes(pending.shortfallBytes)} short. " +
+                title = L.mainNoRoomTitle,
+                message = L.mainNoRoom(
+                    title = pending.item.title,
+                    size = Translator.messages.formatter.bytes(pending.item.sizeBytes),
+                    device = device,
+                    short = Translator.messages.formatter.bytes(pending.shortfallBytes),
+                ) + " " +
                     if (pending.reclaimBytes > 0) {
-                        "TMPlayer is holding " +
-                            "${StreamStats.formatBytes(pending.reclaimBytes)} in Downloads you " +
-                            "can delete."
+                        L.mainNoRoomReclaim(size = Translator.messages.formatter.bytes(pending.reclaimBytes))
                     } else {
-                        "Freeing space on the $device will let it play."
+                        L.mainNoRoomFree(device = device)
                     },
-                detail = "Nothing is deleted from Telegram, only this device's copy.",
-                confirmLabel = "Manage downloads",
+                detail = L.mainNoRoomDetail,
+                confirmLabel = L.mainManageDownloads,
                 onConfirm = {
                     roomPrompt = null
                     downloadsCameFrom = screen

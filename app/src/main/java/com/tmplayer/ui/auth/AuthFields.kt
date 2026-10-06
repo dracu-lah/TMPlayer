@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.ui.components.isTouch
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 
@@ -131,7 +132,7 @@ fun PaneField(
  * television the pane's text buttons remain the way out and this draws nothing.
  */
 @Composable
-fun BackArrow(onBack: () -> Unit, description: String = "Back") {
+fun BackArrow(onBack: () -> Unit, description: String = LocalStrings.current.commonBack) {
     IconButton(onClick = onBack, modifier = Modifier.size(BACK_TARGET)) {
         Icon(
             Icons.AutoMirrored.Filled.ArrowBack,

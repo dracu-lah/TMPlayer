@@ -8,8 +8,9 @@ import android.content.Context
 import android.content.Intent
 import com.tmplayer.MainActivity
 import com.tmplayer.R
+import com.tmplayer.i18n.L
+import com.tmplayer.i18n.Translator
 import com.tmplayer.platform.TransferNotifier
-import com.tmplayer.player.StreamStats
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -50,9 +51,9 @@ class AndroidTransferNotifier(context: Context) : TransferNotifier {
         val known = total != null && total > 0
         // A migration counts videos; everything else counts bytes.
         val line = when {
-            kinds[id] == TransferNotifier.Kind.Migrate && known -> "$done of $total"
-            known -> "${StreamStats.formatBytes(done)} of ${StreamStats.formatBytes(total!!)}"
-            else -> StreamStats.formatBytes(done)
+            kinds[id] == TransferNotifier.Kind.Migrate && known -> L.commonOfTotal(done = done.toString(), total = total.toString())
+            known -> L.commonOfTotal(done = Translator.messages.formatter.bytes(done), total = Translator.messages.formatter.bytes(total!!))
+            else -> Translator.messages.formatter.bytes(done)
         }
         post(
             id.progressId(),
@@ -125,11 +126,11 @@ class AndroidTransferNotifier(context: Context) : TransferNotifier {
         fun ensureChannel(context: Context) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Downloads",
+                L.notifyChannelDownloads,
                 // Low: a progress bar that pings and vibrates every time it moves is not information.
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
-                description = "Videos coming down into TMPlayer's Downloads, and when they are done"
+                description = L.notifyChannelDownloadsDescription
                 setShowBadge(false)
             }
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

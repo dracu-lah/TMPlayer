@@ -13,6 +13,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import com.tmplayer.i18n.L
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -54,7 +55,7 @@ class SubtitleFiles(
     /** Opens the document picker. Every file is offered; the extension is checked on the way back. */
     fun pick() {
         runCatching { picker.launch(arrayOf("*/*")) }
-            .onFailure { say("There's no file picker on this device") }
+            .onFailure { say(L.tracksNoFilePicker) }
     }
 
     /** The video's media item with every subtitle file loaded so far, for building or rebuilding. */
@@ -82,17 +83,17 @@ class SubtitleFiles(
 
     private fun load(uri: Uri) {
         activity.lifecycleScope.launch {
-            val name = withContext(Dispatchers.IO) { displayName(uri) } ?: "subtitles"
+            val name = withContext(Dispatchers.IO) { displayName(uri) } ?: L.tracksFileFallbackName
             val extension = ExternalSubtitle.extensionOf(name)
             if (!ExternalSubtitle.accepts(name)) {
-                say("Choose a subtitle file: .srt, .ass, .ssa, .vtt or .sub")
+                say(L.tracksChooseFile)
                 return@launch
             }
             // Read on the main thread before the copy: the player belongs to it.
             val fps = player()?.videoFormat?.frameRate?.toDouble()?.takeIf { it > 0 } ?: ExternalSubtitle.DEFAULT_FPS
             val copied = withContext(Dispatchers.IO) { runCatching { copy(uri, extension, fps) }.getOrNull() }
             when (copied) {
-                null -> say("Couldn't read $name")
+                null -> say(L.tracksFileUnreadable(name))
                 is Copy.Refused -> say(copied.reason)
                 is Copy.Done -> attach(copied, name)
             }
@@ -112,7 +113,7 @@ class SubtitleFiles(
         pending = id to name
         exo.setMediaItem(item(video), exo.currentPosition)
         if (exo.playbackState == Player.STATE_IDLE) exo.prepare()
-        say("Subtitles: $name")
+        say(L.tracksFileLoaded(name))
     }
 
     private sealed interface Copy {
@@ -129,11 +130,11 @@ class SubtitleFiles(
                 if (read < 0) break
                 out.write(chunk, 0, read)
                 if (out.size() > ExternalSubtitle.MAX_BYTES) {
-                    return Copy.Refused("That file is too big to be subtitles")
+                    return Copy.Refused(L.tracksFileTooBig)
                 }
             }
             out.toByteArray()
-        } ?: return Copy.Refused("Couldn't open that file")
+        } ?: return Copy.Refused(L.tracksFileUnopenable)
         val folder = File(activity.cacheDir, "subtitles").apply { mkdirs() }
         // Written back as UTF-8 whatever it arrived in: Media3 reads these formats as UTF-8, and
         // an older .srt saved in a Windows code page would otherwise lose every accented letter.
@@ -145,7 +146,7 @@ class SubtitleFiles(
             return Copy.Done(file, mime)
         }
         if (!ExternalSubtitle.isMicroDvd(text)) {
-            return Copy.Refused("This .sub is made of pictures (VobSub), which can't be shown here")
+            return Copy.Refused(L.tracksFileVobsub)
         }
         val file = File(folder, "${loaded.size + 1}.srt")
         file.writeText(ExternalSubtitle.microDvdToSrt(text, fps))

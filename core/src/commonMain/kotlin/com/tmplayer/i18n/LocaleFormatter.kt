@@ -1,5 +1,7 @@
 package com.tmplayer.i18n
 
+import com.tmplayer.data.SizeFilter
+import com.tmplayer.player.StreamStats
 import java.text.NumberFormat
 import java.time.Instant
 import java.time.ZoneId
@@ -37,6 +39,57 @@ class LocaleFormatter internal constructor(private val messages: Messages) {
         bytes >= GB -> messages.formatSizeGb(decimal(bytes.toDouble() / GB, 1))
         bytes >= MB -> messages.formatSizeMb(decimal(bytes.toDouble() / MB, 0))
         else -> messages.formatSizeKb(decimal(bytes.toDouble() / KB, 0))
+    }
+
+    /**
+     * A transfer's running total: `0 MB`, `640 KB`, `12.5 MB`, `1.42 GB`. Finer than [size], since
+     * it is watched while it counts up.
+     */
+    fun bytes(bytes: Long): String = when {
+        bytes <= 0 -> messages.formatSizeMb(number(0))
+        bytes < MB -> messages.formatSizeKb(number(bytes / KB))
+        bytes < GB -> messages.formatSizeMb(decimal(bytes.toDouble() / MB, 1))
+        else -> messages.formatSizeGb(decimal(bytes.toDouble() / GB, 2))
+    }
+
+    /** `640 KB/s`, `2.4 MB/s`, or `…` while the speed says nothing yet. */
+    fun speed(bytesPerSec: Long): String = when {
+        bytesPerSec < StreamStats.MIN_MEANINGFUL_SPEED -> "…"
+        bytesPerSec < MB -> messages.formatSpeedKb(number(bytesPerSec / KB))
+        else -> messages.formatSpeedMb(decimal(bytesPerSec.toDouble() / MB, 1))
+    }
+
+    /** "about 3m 20s left", or "" when there is no estimate yet. */
+    fun eta(seconds: Long?): String = when {
+        seconds == null -> ""
+        seconds <= 1 -> messages.formatEtaAlmost
+        seconds < 60 -> messages.formatEtaSeconds(seconds)
+        seconds < 3600 -> messages.formatEtaMinutes(seconds / 60, seconds % 60)
+        else -> messages.formatEtaHours(seconds / 3600, (seconds % 3600) / 60)
+    }
+
+    /**
+     * One end of the size limits: `50 MB`, `2 GB`, `2.5 GB`, or the open ends "No minimum" and
+     * "No limit", which pair with each other rather than reading as the whole range.
+     */
+    fun sizeLimit(bytes: Long): String = when {
+        bytes <= SizeFilter.FLOOR -> messages.sizeNoMinimum
+        bytes >= SizeFilter.CEILING -> messages.sizeNoLimit
+        bytes < GB -> messages.formatSizeMb(number(bytes / MB))
+        bytes % GB == 0L -> messages.formatSizeGb(number(bytes / GB))
+        else -> messages.formatSizeGb(decimal(bytes.toDouble() / GB, 1))
+    }
+
+    /** The size limits as a sentence, four cases, since "between No minimum and 2 GB" is not one. */
+    fun sizeRange(minBytes: Long, maxBytes: Long): String {
+        val hasMin = minBytes > SizeFilter.FLOOR
+        val hasMax = maxBytes < SizeFilter.CEILING
+        return when {
+            hasMin && hasMax -> messages.sizeRangeBetween(sizeLimit(minBytes), sizeLimit(maxBytes))
+            hasMin -> messages.sizeRangeFrom(sizeLimit(minBytes))
+            hasMax -> messages.sizeRangeUpTo(sizeLimit(maxBytes))
+            else -> messages.sizeRangeAll
+        }
     }
 
     /** A video's length: `1h 05m`, `42m`, never less than a minute, or "" when unknown. */

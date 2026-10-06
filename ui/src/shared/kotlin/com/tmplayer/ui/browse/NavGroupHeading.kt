@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tmplayer.ui.components.AppLogo
+import com.tmplayer.ui.i18n.LocalStrings
 
 // The Material 3 half of the folding sidebar, shared by the phone's drawer and the desktop's side
 // bar. The television draws its own, in tv-material, from the same NavGroups model.
@@ -57,6 +58,7 @@ fun NavGroupHeading(
     height: Dp = 40.dp,
     start: Dp = 16.dp,
 ) {
+    val s = LocalStrings.current
     val turn by animateFloatAsState(if (open) 0f else -90f, label = "navGroupChevron")
     Row(
         modifier
@@ -66,8 +68,8 @@ fun NavGroupHeading(
             .then(
                 if (toggleable) {
                     Modifier
-                        .clickable(role = Role.Button, onClickLabel = if (open) "Fold" else "Unfold", onClick = onToggle)
-                        .semantics { stateDescription = if (open) "Open" else "Folded" }
+                        .clickable(role = Role.Button, onClickLabel = if (open) s.navFold else s.navUnfold, onClick = onToggle)
+                        .semantics { stateDescription = if (open) s.navOpen else s.navFolded }
                 } else {
                     Modifier
                 },

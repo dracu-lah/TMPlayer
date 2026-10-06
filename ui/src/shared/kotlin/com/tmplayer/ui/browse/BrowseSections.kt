@@ -11,31 +11,73 @@ import com.tmplayer.data.ChatFolderSummary
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.Fuzzy
+import com.tmplayer.i18n.L
 import com.tmplayer.ui.components.TmIcons
 
 // The browser's sections and the chat filter behind them, shared by the phone, the television and
 // the desktop.
 
 /** The rail's built-in sections, in the order they appear. */
-enum class BrowseTab(
-    val label: String,
-    val heading: String,
-    val blurb: String,
-    val icon: ImageVector,
-) {
-    Continue("Continue", "Continue watching", "Pick up where you left off", Icons.Filled.PlayArrow),
-    Watched("Watched", "Previously watched", "Videos you've finished", Icons.Filled.Check),
-    Favorites("Favourites", "Favourites", "Chats you've starred", Icons.Filled.Star),
+enum class BrowseTab(val icon: ImageVector) {
+    Continue(Icons.Filled.PlayArrow),
+    Watched(Icons.Filled.Check),
+    Favorites(Icons.Filled.Star),
     // A clock, not the circular-arrow reload glyph: that one belongs to the video grid's refresh
     // action, and one picture must not stand for two unrelated things.
-    Recent("Recent", "Recent", "Chats with something new", TmIcons.Clock),
-    Unread("Unread", "Unread", "Chats with messages you haven't read", TmIcons.Dot),
-    Saved("Saved", "Saved Messages", "The chat you send things to yourself in", TmIcons.Bookmark),
-    Channels("Channels", "Channels", "Broadcast channels you follow", TmIcons.Channel),
-    Groups("Groups", "Groups", "Groups you're in", TmIcons.Group),
-    People("People", "People", "Your one-to-one chats", Icons.Filled.Person),
-    All("All chats", "All chats", "Everything, newest first", Icons.AutoMirrored.Filled.List),
-    Archived("Archived", "Archived", "Chats you've put out of the way", TmIcons.Archive),
+    Recent(TmIcons.Clock),
+    Unread(TmIcons.Dot),
+    Saved(TmIcons.Bookmark),
+    Channels(TmIcons.Channel),
+    Groups(TmIcons.Group),
+    People(Icons.Filled.Person),
+    All(Icons.AutoMirrored.Filled.List),
+    Archived(TmIcons.Archive),
+    ;
+
+    /** The rail's short name. */
+    val label: String get() = when (this) {
+        Continue -> L.browseTabContinue
+        Watched -> L.browseTabWatched
+        Favorites -> L.browseTabFavourites
+        Recent -> L.browseTabRecent
+        Unread -> L.browseTabUnread
+        Saved -> L.browseTabSaved
+        Channels -> L.browseTabChannels
+        Groups -> L.browseTabGroups
+        People -> L.browseTabPeople
+        All -> L.browseTabAll
+        Archived -> L.browseTabArchived
+    }
+
+    /** The heading over the list. */
+    val heading: String get() = when (this) {
+        Continue -> L.browseTabContinueHeading
+        Watched -> L.browseTabWatchedHeading
+        Favorites -> L.browseTabFavouritesHeading
+        Recent -> L.browseTabRecentHeading
+        Unread -> L.browseTabUnreadHeading
+        Saved -> L.browseTabSavedHeading
+        Channels -> L.browseTabChannelsHeading
+        Groups -> L.browseTabGroupsHeading
+        People -> L.browseTabPeopleHeading
+        All -> L.browseTabAllHeading
+        Archived -> L.browseTabArchivedHeading
+    }
+
+    /** The line under the heading. */
+    val blurb: String get() = when (this) {
+        Continue -> L.browseTabContinueBlurb
+        Watched -> L.browseTabWatchedBlurb
+        Favorites -> L.browseTabFavouritesBlurb
+        Recent -> L.browseTabRecentBlurb
+        Unread -> L.browseTabUnreadBlurb
+        Saved -> L.browseTabSavedBlurb
+        Channels -> L.browseTabChannelsBlurb
+        Groups -> L.browseTabGroupsBlurb
+        People -> L.browseTabPeopleBlurb
+        All -> L.browseTabAllBlurb
+        Archived -> L.browseTabArchivedBlurb
+    }
 }
 
 /**
@@ -65,7 +107,7 @@ sealed interface BrowseSection {
     data class Folder(val id: Int, val name: String) : BrowseSection {
         override val label get() = name
         override val heading get() = name
-        override val blurb = "A folder from your Telegram account"
+        override val blurb get() = L.browseFolderBlurb
         override val icon get() = TmIcons.Folder
     }
 
@@ -103,7 +145,7 @@ sealed interface BrowseSection {
                     BrowseTab.entries.firstOrNull { it.name == body }?.let(::Tab)
                 encoded.startsWith("folder:") -> {
                     val id = body.substringBefore(':').toIntOrNull() ?: return null
-                    Folder(id, body.substringAfter(':', "").ifBlank { "Folder $id" })
+                    Folder(id, body.substringAfter(':', "").ifBlank { L.browseFolderFallback(id.toString()) })
                 }
                 else -> null
             }

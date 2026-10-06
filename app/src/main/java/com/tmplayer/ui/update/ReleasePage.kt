@@ -33,16 +33,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.tmplayer.ui.components.FloatingWindow
-import com.tmplayer.ui.theme.floatingSurface
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.Release
 import com.tmplayer.data.UpdateFeed
 import com.tmplayer.ui.auth.QrCode
+import com.tmplayer.ui.components.FloatingWindow
 import com.tmplayer.ui.components.PhonePad
 import com.tmplayer.ui.components.TmButton
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.floatingSurface
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -73,7 +74,8 @@ internal fun openLink(context: Context, url: String): Boolean {
 /** The release page as a QR code, for a television without a browser. */
 @Composable
 fun ReleasePageQrDialog(url: String, onClose: () -> Unit) {
-    LinkQrDialog(url = url, what = "the release page", onClose = onClose)
+    val s = LocalStrings.current
+    LinkQrDialog(url = url, what = s.updateTheReleasePage, onClose = onClose)
 }
 
 /**
@@ -87,6 +89,7 @@ fun ReleasePageQrDialog(url: String, onClose: () -> Unit) {
  */
 @Composable
 fun LinkQrDialog(url: String, what: String, onClose: () -> Unit) {
+    val s = LocalStrings.current
     val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = url) {
         value = withContext(Dispatchers.Default) { QrCode.render(url, QR_PIXELS) }
     }
@@ -105,7 +108,7 @@ fun LinkQrDialog(url: String, what: String, onClose: () -> Unit) {
                 bitmap?.let {
                     Image(
                         bitmap = it,
-                        contentDescription = "QR code for $what",
+                        contentDescription = s.updateQrFor(what = what),
                         // A scanner needs a quiet margin of the code's own white to find it.
                         modifier = Modifier.fillMaxSize().padding(12.dp),
                     )
@@ -114,19 +117,18 @@ fun LinkQrDialog(url: String, what: String, onClose: () -> Unit) {
         }
         val words: @Composable ColumnScope.() -> Unit = {
             Text(
-                "Open $what on your phone",
+                s.updateOpenOnPhone(what = what),
                 style = MaterialTheme.typography.titleLarge,
                 color = Tone.text,
             )
             Text(
-                "This TV has no browser to open it in. Point your phone's camera at the code, " +
-                    "or type the address.",
+                s.updateNoBrowser,
                 style = MaterialTheme.typography.bodyLarge,
                 color = Tone.muted,
             )
             Text(readableUrl(url).removePrefix("mailto:"), style = MaterialTheme.typography.bodyLarge, color = Tone.text)
             Spacer(Modifier.height(6.dp))
-            TmButton(onClick = onClose, modifier = Modifier.focusRequester(close)) { Text("Close") }
+            TmButton(onClick = onClose, modifier = Modifier.focusRequester(close)) { Text(s.commonClose) }
         }
 
         val frame = Modifier

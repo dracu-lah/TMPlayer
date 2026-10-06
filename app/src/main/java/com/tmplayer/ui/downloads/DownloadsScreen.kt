@@ -1,15 +1,11 @@
 package com.tmplayer.ui.downloads
 
-import com.tmplayer.ui.theme.Focus
-import com.tmplayer.ui.nav.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.ui.semantics.Role
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -19,14 +15,15 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -35,7 +32,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import com.tmplayer.ui.components.TmAlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -65,49 +61,54 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tmplayer.data.ContentProtection
 import com.tmplayer.data.DiskInfo
 import com.tmplayer.data.DiskSpace
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.withContext
 import com.tmplayer.data.LegacyDownloads
 import com.tmplayer.data.LocalDownloads
 import com.tmplayer.data.LocalFileAvailability
-import com.tmplayer.data.start
-import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.OfflineDownloads
+import com.tmplayer.data.ResumeRecord
+import com.tmplayer.data.SettingsStore
+import com.tmplayer.data.ShareMedia
+import com.tmplayer.data.StorageSplit
+import com.tmplayer.data.Td
 import com.tmplayer.data.cancel
 import com.tmplayer.data.pause
 import com.tmplayer.data.pauseAll
 import com.tmplayer.data.resume
 import com.tmplayer.data.resumeAll
-import com.tmplayer.data.ResumeRecord
-import com.tmplayer.data.ShareMedia
-import com.tmplayer.data.SettingsStore
-import com.tmplayer.data.StorageSplit
-import com.tmplayer.data.Td
-import com.tmplayer.player.StreamStats
+import com.tmplayer.data.start
+import com.tmplayer.i18n.L
+import com.tmplayer.i18n.Translator
 import com.tmplayer.ui.components.BigEmpty
+import com.tmplayer.ui.components.TmAlertDialog
+import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.rememberToast
-import com.tmplayer.ui.components.TmIcons
+import com.tmplayer.ui.i18n.LocalStrings
+import com.tmplayer.ui.nav.BackHandler
 import com.tmplayer.ui.theme.Corner
+import com.tmplayer.ui.theme.Focus
 import com.tmplayer.ui.theme.LocalDarkTheme
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 import com.tmplayer.ui.theme.focusRing
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * One video on this device, as the screen knows it: what names it, and what it holds on disk.
@@ -380,11 +381,11 @@ fun DownloadsScreen(
             if (intent == null) {
                 // All of them part downloaded or gone. Saying so beats an empty share sheet,
                 // which reads as the button being broken.
-                toast("Nothing to share yet. These videos are not fully downloaded.")
+                toast(L.downloadsNothingToShare)
                 return@launch
             }
             runCatching { context.startActivity(intent) }
-                .onFailure { toast("No app on this phone can take a video.") }
+                .onFailure { toast(L.downloadsNoShareApp) }
             leavePicking()
         }
     }
@@ -430,7 +431,7 @@ fun DownloadsScreen(
                 return@launch
             }
             OfflineDownloads.start(context, row.record.toMediaItem().copy(fileId = row.fileId), row.chatTitle)
-            toast(if (row.cached) "Saving ${row.title} to Downloads" else "Resuming ${row.title}")
+            toast(if (row.cached) L.downloadsSavingTitle(title = row.title) else L.downloadsResumingTitle(title = row.title))
             if (row.cached) tab = ONGOING
         }
     }
@@ -446,7 +447,7 @@ fun DownloadsScreen(
     fun removeMissing(row: DownloadRow) {
         scope.launch {
             withContext(Dispatchers.IO) { settings.forgetDownload(row.record.chatId, row.record.messageId) }
-            toast("Removed ${row.title} from Downloads")
+            toast(L.downloadsRemovedTitle(title = row.title))
             refresh(history)
         }
     }
@@ -473,9 +474,9 @@ fun DownloadsScreen(
                 title = {
                     Text(
                         if (picking) {
-                            if (chosen.isEmpty()) "Select videos" else "${chosen.size} selected"
+                            if (chosen.isEmpty()) L.downloadsSelectVideos else L.downloadsSelected(count = chosen.size)
                         } else {
-                            "Downloads"
+                            L.downloadsTitle
                         },
                     )
                 },
@@ -490,25 +491,25 @@ fun DownloadsScreen(
                     ) {
                         Icon(
                             if (picking) Icons.Filled.Close else Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = if (picking) "Leave the selection" else "Back",
+                            contentDescription = if (picking) L.downloadsLeaveSelection else L.commonBack,
                         )
                     }
                 },
                 actions = {
                     if (picking) {
                         // Everything the list is showing, and never more than that.
-                        TextAction("Select all", enabled = chosen.size < shown.size) {
+                        TextAction(L.downloadsSelectAll, enabled = chosen.size < shown.size) {
                             picked = shown.map { it.key }.toSet()
                         }
                         return@TopAppBar
                     }
                     if (rows.isNotEmpty() && tab == COMPLETED) {
-                        TextAction("Select") { picking = true }
+                        TextAction(L.downloadsSelect) { picking = true }
                     }
                     // Offered on the rows and nothing else: a screen headed "Downloads" must not
                     // carry a button that empties the cache and the previews too.
                     if (rows.isNotEmpty() && tab == COMPLETED) {
-                        TextAction("Delete all") { confirmingClearAll = true }
+                        TextAction(L.downloadsDeleteAll) { confirmingClearAll = true }
                     }
                 },
             )
@@ -525,9 +526,9 @@ fun DownloadsScreen(
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    PrimaryAction("Share", TmIcons.Share) { share(chosen) }
+                    PrimaryAction(L.commonShare, TmIcons.Share) { share(chosen) }
                     SecondaryAction(
-                        label = "Delete",
+                        label = L.commonDelete,
                         icon = Icons.Filled.Delete,
                         onClick = { confirmingDeleteMany = true },
                         danger = true,
@@ -549,7 +550,7 @@ fun DownloadsScreen(
                     interactionSource = ongoingFocus,
                     modifier = Modifier.tvFocusRing(ongoingFocus, RectangleShape),
                     text = {
-                        Text(if (active.isEmpty()) "Downloading" else "Downloading (${active.size})")
+                        Text(if (active.isEmpty()) L.downloadsTabDownloading else L.downloadsTabDownloadingCount(count = active.size))
                     },
                 )
                 val completedFocus = remember { MutableInteractionSource() }
@@ -559,7 +560,7 @@ fun DownloadsScreen(
                     interactionSource = completedFocus,
                     modifier = Modifier.tvFocusRing(completedFocus, RectangleShape),
                     text = {
-                        Text(if (rows.isEmpty()) "Downloaded" else "Downloaded (${rows.size})")
+                        Text(if (rows.isEmpty()) L.downloadsTabDownloaded else L.downloadsTabDownloadedCount(count = rows.size))
                     },
                 )
                 val cachedFocus = remember { MutableInteractionSource() }
@@ -570,7 +571,7 @@ fun DownloadsScreen(
                     modifier = Modifier.tvFocusRing(cachedFocus, RectangleShape),
                     text = {
                         Text(
-                            if (cachedRows.isEmpty()) "Cached from playback" else "Cached from playback (${cachedRows.size})",
+                            if (cachedRows.isEmpty()) L.downloadsTabCached else L.downloadsTabCachedCount(count = cachedRows.size),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -590,7 +591,7 @@ fun DownloadsScreen(
                                 // Only worth offering on a real queue. With one video the card's
                                 // own button says the same thing an inch further down the screen.
                                 bulk = if (active.size > 1) {
-                                    if (active.any { it.busy }) "Pause all" else "Resume all"
+                                    if (active.any { it.busy }) L.commonPauseAll else L.commonResumeAll
                                 } else {
                                     null
                                 },
@@ -624,8 +625,7 @@ fun DownloadsScreen(
                             // inside a LazyColumn that is nothing, so it would collapse to a line.
                             Box(Modifier.fillParentMaxHeight(0.7f)) {
                                 BigEmpty(
-                                    "Nothing downloading. Choose Download on a video and it " +
-                                        "queues here.",
+                                    L.downloadsEmptyDownloading,
                                     icon = TmIcons.Download,
                                 )
                             }
@@ -637,7 +637,7 @@ fun DownloadsScreen(
                 if (tab == CACHED) {
                     item {
                         Text(
-                            "Played recently. The next video you play replaces it.",
+                            L.downloadsCachedNote,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 4.dp),
@@ -659,7 +659,7 @@ fun DownloadsScreen(
                         item {
                             Box(Modifier.fillParentMaxHeight(0.6f)) {
                                 BigEmpty(
-                                    "Nothing cached. Playing a video keeps it here until the next one.",
+                                    L.downloadsEmptyCached,
                                     icon = TmIcons.Download,
                                 )
                             }
@@ -706,8 +706,7 @@ fun DownloadsScreen(
                     item {
                         Box(Modifier.fillParentMaxHeight(0.6f)) {
                             BigEmpty(
-                                "Nothing downloaded yet. Downloads are kept in " +
-                                    "${LegacyDownloads.FOLDER} until you delete them.",
+                                L.downloadsEmptyDownloaded(folder = LegacyDownloads.FOLDER),
                                 icon = TmIcons.Download,
                             )
                         }
@@ -721,23 +720,25 @@ fun DownloadsScreen(
         TmAlertDialog(
             onDismissRequest = { confirmingDelete = null },
             title = {
-                Text(if (row.cached) "Delete this cached video?" else "Delete this download?")
+                Text(if (row.cached) L.downloadsDeleteCachedTitle else L.downloadsDeleteOneTitle)
             },
             text = {
                 Text(
-                    "\"${row.title}\" frees ${StreamStats.formatBytes(row.bytes)}. Nothing " +
-                        "is removed from Telegram, so you can " +
-                        (if (row.cached) "play it again." else "download it again."),
+                    if (row.cached) {
+                        L.downloadsDeleteCachedBody(title = row.title, size = Translator.messages.formatter.bytes(row.bytes))
+                    } else {
+                        L.downloadsDeleteOneBody(title = row.title, size = Translator.messages.formatter.bytes(row.bytes))
+                    },
                 )
             },
             confirmButton = {
-                TextAction("Delete") {
+                TextAction(L.commonDelete) {
                     delete(row)
                     confirmingDelete = null
                 }
             },
             dismissButton = {
-                TextAction("Keep it") { confirmingDelete = null }
+                TextAction(L.downloadsKeepIt) { confirmingDelete = null }
             },
         )
     }
@@ -747,27 +748,22 @@ fun DownloadsScreen(
             onDismissRequest = { confirmingDeleteMany = false },
             title = {
                 Text(
-                    if (chosen.size == 1) {
-                        "Delete this download?"
-                    } else {
-                        "Delete ${chosen.size} downloads?"
-                    },
+                    L.downloadsDeleteManyTitle(count = chosen.size),
                 )
             },
             text = {
                 Text(
-                    "This frees ${StreamStats.formatBytes(chosen.sumOf { it.bytes })}. Nothing " +
-                        "is removed from Telegram, so you can download them again.",
+                    L.downloadsDeleteManyBody(size = Translator.messages.formatter.bytes(chosen.sumOf { it.bytes })),
                 )
             },
             confirmButton = {
-                TextAction("Delete") {
+                TextAction(L.commonDelete) {
                     confirmingDeleteMany = false
                     deleteMany(chosen)
                 }
             },
             dismissButton = {
-                TextAction("Keep them") { confirmingDeleteMany = false }
+                TextAction(L.downloadsKeepThem) { confirmingDeleteMany = false }
             },
         )
     }
@@ -775,19 +771,17 @@ fun DownloadsScreen(
     if (confirmingClearAll) {
         TmAlertDialog(
             onDismissRequest = { confirmingClearAll = false },
-            title = { Text("Delete every download?") },
+            title = { Text(L.downloadsDeleteAllTitle) },
             text = {
                 // The rows, and only the rows: the figure quoted here has to be what this button
                 // will actually delete. Cache and previews are counted and cleared in Settings.
                 val freed = rows.sumOf { it.bytes }
                 Text(
-                    "This deletes ${rows.size.videos("download")} and frees " +
-                        "${StreamStats.formatBytes(freed)}. Nothing is removed from Telegram, so " +
-                        "you can download any of them again.",
+                    L.downloadsDeleteAllBody(count = rows.size, size = Translator.messages.formatter.bytes(freed)),
                 )
             },
             confirmButton = {
-                TextAction("Delete all") {
+                TextAction(L.downloadsDeleteAll) {
                     confirmingClearAll = false
                     scope.launch {
                         // The downloads, one at a time, and nothing else. Each is only forgotten
@@ -798,7 +792,7 @@ fun DownloadsScreen(
                 }
             },
             dismissButton = {
-                TextAction("Keep them") { confirmingClearAll = false }
+                TextAction(L.downloadsKeepThem) { confirmingClearAll = false }
             },
         )
     }
@@ -847,6 +841,7 @@ private fun Modifier.tvFocusRing(
  */
 @Composable
 private fun RemoveAfterWatchingRow(checked: Boolean, onChange: (Boolean) -> Unit) {
+    val s = LocalStrings.current
     val interactions = remember { MutableInteractionSource() }
     val shape = RoundedCornerShape(Corner.Medium)
     Row(
@@ -867,9 +862,9 @@ private fun RemoveAfterWatchingRow(checked: Boolean, onChange: (Boolean) -> Unit
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Column(Modifier.weight(1f)) {
-            Text("Remove after watching", style = MaterialTheme.typography.titleMedium)
+            Text(s.downloadsRemoveAfterWatching, style = MaterialTheme.typography.titleMedium)
             Text(
-                "Delete a download once it is marked watched. Cached videos are not affected.",
+                s.downloadsRemoveAfterWatchingBody,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -905,12 +900,12 @@ private fun queueHeading(active: List<OfflineDownloads.Progress>): String {
     val waiting = active.count { it.stage == OfflineDownloads.Stage.Queued }
     return when {
         active.any { it.stage == OfflineDownloads.Stage.Running } && waiting > 0 ->
-            "Downloading now, $waiting waiting"
-        active.any { it.stage == OfflineDownloads.Stage.Running } -> "Downloading now"
-        active.all { it.stage == OfflineDownloads.Stage.NoWifi } -> "Waiting for Wi-Fi"
-        active.all { it.stage == OfflineDownloads.Stage.Offline } -> "Waiting for a connection"
-        active.all { it.stage == OfflineDownloads.Stage.Paused } -> "Paused"
-        else -> "In the queue"
+            L.downloadsHeadingRunningWaiting(count = waiting)
+        active.any { it.stage == OfflineDownloads.Stage.Running } -> L.downloadsHeadingRunning
+        active.all { it.stage == OfflineDownloads.Stage.NoWifi } -> L.downloadsWaitingWifi
+        active.all { it.stage == OfflineDownloads.Stage.Offline } -> L.downloadsWaitingConnection
+        active.all { it.stage == OfflineDownloads.Stage.Paused } -> L.downloadsPaused
+        else -> L.downloadsHeadingQueued
     }
 }
 
@@ -948,6 +943,7 @@ private fun StorageSummary(
     freeBytes: Long,
     totalBytes: Long,
 ) {
+    val s = LocalStrings.current
     val usedFraction = if (totalBytes > 0) {
         ((totalBytes - freeBytes).toFloat() / totalBytes).coerceIn(0f, 1f)
     } else {
@@ -959,13 +955,12 @@ private fun StorageSummary(
     ) {
         Column(Modifier.padding(16.dp)) {
             Text(
-                "${StreamStats.formatBytes(split.downloadBytes)} in Downloads",
+                s.downloadsStorageInDownloads(size = s.formatter.bytes(split.downloadBytes)),
                 style = MaterialTheme.typography.titleMedium,
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "${StreamStats.formatBytes(freeBytes)} free of " +
-                    StreamStats.formatBytes(totalBytes),
+                s.downloadsStorageFree(free = s.formatter.bytes(freeBytes), total = s.formatter.bytes(totalBytes)),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -974,9 +969,7 @@ private fun StorageSummary(
             if (split.cachedBytes > 0 || split.otherBytes > 0) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "TMPlayer also has " + StreamStats.formatBytes(split.cachedBytes) + " cached and " +
-                        StreamStats.formatBytes(split.otherBytes) + " of pictures and previews. " +
-                        "Clear them in Settings.",
+                    s.downloadsStorageOther(cached = s.formatter.bytes(split.cachedBytes), other = s.formatter.bytes(split.otherBytes)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1147,20 +1140,21 @@ private fun DownloadCard(
     onToggle: () -> Unit,
     onHold: (() -> Unit)?,
 ) {
+    val s = LocalStrings.current
     val details = listOfNotNull(
         // A part-loaded video says both figures: "710 MB" alone reads as the size of the video,
         // while "710 MB of 1.4 GB" says what is on the disk and what would finish it.
         if (row.partial && row.totalBytes > row.bytes) {
-            "${StreamStats.formatBytes(row.bytes)} of ${StreamStats.formatBytes(row.totalBytes)}"
+            s.commonOfTotal(done = s.formatter.bytes(row.bytes), total = s.formatter.bytes(row.totalBytes))
         } else {
-            StreamStats.formatBytes(row.bytes).takeIf { row.bytes > 0 }
+            s.formatter.bytes(row.bytes).takeIf { row.bytes > 0 }
         },
-        MediaMapper.formatDuration(row.durationSec).ifBlank { null },
+        s.formatter.duration(row.durationSec.toLong()).ifBlank { null },
         row.chatTitle.ifBlank { null },
         // A part-loaded file still occupies its bytes, and that is the row a viewer looking for
         // space is most likely to want gone.
-        if (row.partial) "Part downloaded" else null,
-        if (row.missing) "File missing" else null,
+        if (row.partial) s.downloadsPartDownloaded else null,
+        if (row.missing) s.downloadsFileMissing else null,
     ).joinToString(DOT)
 
     RowCard(
@@ -1198,21 +1192,21 @@ private fun DownloadCard(
             CardActions {
                 when {
                     // Something took the file. The record is all that is left to deal with.
-                    row.missing -> SecondaryAction("Remove", Icons.Filled.Delete, onDelete, danger = true)
+                    row.missing -> SecondaryAction(s.commonRemove, Icons.Filled.Delete, onDelete, danger = true)
                     row.cached -> {
-                        PrimaryAction("Watch", Icons.Filled.PlayArrow, onPlay)
+                        PrimaryAction(s.navWatch, Icons.Filled.PlayArrow, onPlay)
                         // The share slot's place: what a cached video wants is keeping.
-                        SecondaryAction("Save to Downloads", TmIcons.Download, onShare)
-                        IconOnlyAction("Delete", Icons.Filled.Delete, onDelete, danger = true)
+                        SecondaryAction(s.downloadsSaveToDownloads, TmIcons.Download, onShare)
+                        IconOnlyAction(s.commonDelete, Icons.Filled.Delete, onDelete, danger = true)
                     }
                     row.partial -> {
-                        PrimaryAction("Resume", Icons.Filled.Refresh, onPlay)
-                        IconOnlyAction("Delete", Icons.Filled.Delete, onDelete, danger = true)
+                        PrimaryAction(s.commonResume, Icons.Filled.Refresh, onPlay)
+                        IconOnlyAction(s.commonDelete, Icons.Filled.Delete, onDelete, danger = true)
                     }
                     else -> {
-                        PrimaryAction("Watch", Icons.Filled.PlayArrow, onPlay)
-                        SecondaryAction("Share", TmIcons.Share, onShare)
-                        IconOnlyAction("Delete", Icons.Filled.Delete, onDelete, danger = true)
+                        PrimaryAction(s.navWatch, Icons.Filled.PlayArrow, onPlay)
+                        SecondaryAction(s.commonShare, TmIcons.Share, onShare)
+                        IconOnlyAction(s.commonDelete, Icons.Filled.Delete, onDelete, danger = true)
                     }
                 }
             }
@@ -1235,48 +1229,48 @@ private fun ActiveDownloadCard(
     onResume: () -> Unit,
     onCancel: () -> Unit,
 ) {
+    val s = LocalStrings.current
     val stage = progress.stage
     val failed = stage == OfflineDownloads.Stage.Failed
     val fraction = progress.fraction
     val size = if (progress.totalBytes > 0) {
-        "${StreamStats.formatBytes(progress.downloadedBytes)} of " +
-            StreamStats.formatBytes(progress.totalBytes)
+        s.commonOfTotal(done = s.formatter.bytes(progress.downloadedBytes), total = s.formatter.bytes(progress.totalBytes))
     } else {
-        StreamStats.formatBytes(progress.downloadedBytes)
+        s.formatter.bytes(progress.downloadedBytes)
     }
     val line = when (stage) {
         OfflineDownloads.Stage.Failed -> progress.failure.orEmpty()
         OfflineDownloads.Stage.Queued -> listOfNotNull(
-            if (place <= 0) "Next in the queue" else "${place + 1} in the queue",
-            StreamStats.formatBytes(progress.totalBytes).takeIf { progress.totalBytes > 0 },
+            if (place <= 0) s.downloadsNextInQueue else s.downloadsPlaceInQueue(place = place + 1),
+            s.formatter.bytes(progress.totalBytes).takeIf { progress.totalBytes > 0 },
             // Only worth saying when an earlier attempt left something behind, since a queued
             // video normally has nothing on disk and "0 B so far" is not news.
-            "${StreamStats.formatPercent(fraction ?: 0f)} already here"
+            s.downloadsAlreadyHere(percent = s.formatter.percent((fraction ?: 0f).toDouble()))
                 .takeIf { progress.downloadedBytes > 0 },
         ).joinToString(DOT)
         OfflineDownloads.Stage.Paused -> listOfNotNull(
-            "Paused",
-            fraction?.let(StreamStats::formatPercent),
+            s.downloadsPaused,
+            fraction?.let { s.formatter.percent(it.toDouble()) },
             size,
         ).joinToString(DOT)
         OfflineDownloads.Stage.NoWifi -> listOfNotNull(
-            "Waiting for Wi-Fi",
-            fraction?.let(StreamStats::formatPercent),
+            s.downloadsWaitingWifi,
+            fraction?.let { s.formatter.percent(it.toDouble()) },
             size,
         ).joinToString(DOT)
         OfflineDownloads.Stage.Offline -> listOfNotNull(
-            "Waiting for a connection",
-            fraction?.let(StreamStats::formatPercent),
+            s.downloadsWaitingConnection,
+            fraction?.let { s.formatter.percent(it.toDouble()) },
             size,
         ).joinToString(DOT)
         OfflineDownloads.Stage.Moving ->
-            if (progress.heldByPlayer) "Finishes when playback stops" else "Moving into Downloads"
+            if (progress.heldByPlayer) s.downloadsFinishesAfterPlayback else s.downloadsMovingIntoDownloads
         OfflineDownloads.Stage.Running -> listOfNotNull(
-            fraction?.let(StreamStats::formatPercent),
+            fraction?.let { s.formatter.percent(it.toDouble()) },
             size,
-            StreamStats.formatSpeed(progress.bytesPerSecond)
+            s.formatter.speed(progress.bytesPerSecond)
                 .takeIf { progress.bytesPerSecond >= 1024 },
-            StreamStats.formatEta(progress.remainingSeconds).ifBlank { null },
+            s.formatter.eta(progress.remainingSeconds).ifBlank { null },
         ).joinToString(DOT)
     }
 
@@ -1322,26 +1316,26 @@ private fun ActiveDownloadCard(
         CardActions {
             when (stage) {
                 OfflineDownloads.Stage.Running ->
-                    PrimaryAction("Pause", TmIcons.Pause, onPause)
+                    PrimaryAction(s.commonPause, TmIcons.Pause, onPause)
                 OfflineDownloads.Stage.Paused ->
-                    PrimaryAction("Resume", Icons.Filled.PlayArrow, onResume)
+                    PrimaryAction(s.commonResume, Icons.Filled.PlayArrow, onResume)
                 // Refused because the chat forbids keeping a copy: trying again is refused the
                 // same way, so the only offer left is Dismiss below.
                 OfflineDownloads.Stage.Failed ->
                     if (progress.failure != ContentProtection.NOT_SAVABLE) {
-                        PrimaryAction("Try again", Icons.Filled.Refresh, onResume)
+                        PrimaryAction(s.commonTryAgain, Icons.Filled.Refresh, onResume)
                     }
                 // It will start itself the moment the signal is back, so the useful offer is the
                 // other one: hold it, and do not.
                 OfflineDownloads.Stage.Offline, OfflineDownloads.Stage.NoWifi ->
-                    PrimaryAction("Pause", TmIcons.Pause, onPause)
+                    PrimaryAction(s.commonPause, TmIcons.Pause, onPause)
                 // Nothing to pause that has not started. Cancel below fills the row on its own.
                 OfflineDownloads.Stage.Queued -> Unit
                 // Fetched already; the move is short, and stopping it half way gains nothing.
                 OfflineDownloads.Stage.Moving -> Unit
             }
             SecondaryAction(
-                label = if (failed) "Dismiss" else "Cancel",
+                label = if (failed) s.commonDismiss else s.commonCancel,
                 icon = Icons.Filled.Close,
                 onClick = onCancel,
                 danger = true,
@@ -1354,10 +1348,6 @@ private fun ActiveDownloadCard(
 private const val ONGOING = 0
 private const val COMPLETED = 1
 private const val CACHED = 2
-
-/** "1 download", "3 downloads": counted, so a dialog does not have to say "download(s)". */
-private fun Int.videos(noun: String): String =
-    if (this == 1) "1 $noun" else "$this ${noun}s"
 
 /** The separator these rows join their figures with, spaced as the rest of the app spaces it. */
 private const val DOT = "  ·  "

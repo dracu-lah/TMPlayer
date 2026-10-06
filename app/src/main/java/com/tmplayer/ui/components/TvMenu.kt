@@ -44,14 +44,15 @@ import androidx.compose.ui.unit.min
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Danger
-import com.tmplayer.ui.theme.Tone
-import com.tmplayer.ui.theme.focusRing
 import com.tmplayer.ui.theme.Floating
 import com.tmplayer.ui.theme.FloatingTone
+import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.floatingBorder
 import com.tmplayer.ui.theme.floatingSurface
+import com.tmplayer.ui.theme.focusRing
 
 /** One line of a [TvMenu]. [detail] says what the action will do when the label cannot. */
 data class MenuAction(
@@ -78,6 +79,7 @@ fun TvMenu(
     onDismiss: () -> Unit,
     subtitle: String? = null,
 ) {
+    val s = LocalStrings.current
     val heading = remember { FocusRequester() }
     val touch = isTouch()
 
@@ -133,7 +135,7 @@ fun TvMenu(
             actions.forEach { action -> MenuRow(action = action, touch = false) }
 
             Text(
-                "Press Down to choose, or Back to close this.",
+                s.tvMenuHint,
                 style = MaterialTheme.typography.bodySmall,
                 color = Tone.muted,
                 modifier = Modifier.padding(start = 4.dp, top = 8.dp),

@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.i18n.L
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -15,11 +16,18 @@ import kotlinx.coroutines.launch
 // desktop's side bar, so all three fold the same entries under the same headings.
 
 /** A heading in the sidebar, and the entries that fold away under it. */
-enum class NavGroup(val label: String) {
-    Watch("Watch"),
-    Chats("Chats"),
-    Folders("Folders"),
+enum class NavGroup {
+    Watch,
+    Chats,
+    Folders,
     ;
+
+    /** The heading's words. */
+    val label: String get() = when (this) {
+        Watch -> L.navWatch
+        Chats -> L.navChats
+        Folders -> L.navFolders
+    }
 
     /** How the group is written down in [SettingsStore]: lower case, so a rename of the enum is visible. */
     val key: String get() = name.lowercase()

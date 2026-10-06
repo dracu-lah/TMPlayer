@@ -2,6 +2,7 @@ package com.tmplayer.ui.browse
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.tmplayer.i18n.L
 import com.tmplayer.platform.Background
 import com.tmplayer.data.Account
 import com.tmplayer.data.AuthState
@@ -440,13 +441,13 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
          */
         const val REORDER_SETTLE_MS = 400L
 
-        const val LOADING_CHATS = "Loading your chats…"
+        val LOADING_CHATS: String get() = L.browseLoadingChats
     }
 
     private fun publish() {
         val loaded = chats ?: return
         _state.value = if (loaded.isEmpty()) {
-            UiState.Empty("No chats yet. Open Telegram on your phone, then come back.")
+            UiState.Empty(L.browseNoChats)
         } else {
             UiState.Content(BrowseData(loaded, account))
         }
@@ -463,11 +464,9 @@ class ChatListViewModel(private val settings: SettingsStore? = null) : ViewModel
  * read to the end, so "no videos in this chat" would be a guess, and Keep looking carries on from
  * where the walk stopped.
  */
-const val STILL_MORE_TO_SEARCH = "No videos yet in the newest part of this chat."
+val STILL_MORE_TO_SEARCH: String get() = L.browseStillMoreToSearch
 
-const val FIRST_LOAD_TIP =
-    "Tip: the first visit fetches your whole chat list from Telegram, so it can take a minute. " +
-        "After this the app opens straight onto it."
+val FIRST_LOAD_TIP: String get() = L.browseFirstLoadTip
 
 /**
  * "No videos here between 100 MB and 2 GB.", with the open ends said in English rather than as
@@ -477,10 +476,10 @@ fun noVideosWithin(minBytes: Long, maxBytes: Long): String {
     val hasMin = minBytes > SizeFilter.FLOOR
     val hasMax = maxBytes < SizeFilter.CEILING
     return when {
-        hasMin && hasMax -> "No videos here between ${SizeFilter.label(minBytes)} and ${SizeFilter.label(maxBytes)}."
-        hasMin -> "No videos here of ${SizeFilter.label(minBytes)} or more."
-        hasMax -> "No videos here of ${SizeFilter.label(maxBytes)} or less."
-        else -> "No playable videos in this chat."
+        hasMin && hasMax -> L.browseNoVideosBetween(L.messages.formatter.sizeLimit(minBytes), L.messages.formatter.sizeLimit(maxBytes))
+        hasMin -> L.browseNoVideosFrom(L.messages.formatter.sizeLimit(minBytes))
+        hasMax -> L.browseNoVideosUpTo(L.messages.formatter.sizeLimit(maxBytes))
+        else -> L.browseNoPlayableVideos
     }
 }
 
@@ -549,7 +548,7 @@ class MediaListViewModel(
     private var sponsored: SponsoredBatch? = null
     private val viewedSponsored = mutableSetOf<Long>()
 
-    private val _state = MutableStateFlow<UiState<MediaListState>>(UiState.Loading("Finding videos…"))
+    private val _state = MutableStateFlow<UiState<MediaListState>>(UiState.Loading(L.browseFindingVideos))
     val state: StateFlow<UiState<MediaListState>> = _state.asStateFlow()
 
     init {
@@ -583,7 +582,7 @@ class MediaListViewModel(
      */
     private fun keepLooking() {
         if (_state.value !is UiState.Empty || pageJob?.isActive == true) return
-        _state.value = UiState.Loading(if (query.isNotBlank()) "Searching…" else "Finding videos…")
+        _state.value = UiState.Loading(if (query.isNotBlank()) L.browseSearching else L.browseFindingVideos)
         pageJob = viewModelScope.launch {
             val session = Td.awaitAuthorizedSession()
             pageMore(session, ChatRepository(session.client), emptyList(), endReached = false)
@@ -614,7 +613,7 @@ class MediaListViewModel(
         hiddenSelfDestructing = 0
         val searching = query.isNotBlank()
         if (previous == null) {
-            _state.value = UiState.Loading(if (searching) "Searching…" else "Finding videos…")
+            _state.value = UiState.Loading(if (searching) L.browseSearching else L.browseFindingVideos)
         }
         pageJob?.cancel()
         loadSponsored()
@@ -827,13 +826,13 @@ class MediaListViewModel(
         // Say which knob is hiding things, rather than claiming the chat is empty when it is the
         // filter doing the work, and offer to lift it on the spot rather than send the viewer to
         // Settings.
-        val hidden = if (query.isBlank() && hiddenBySize > 0) SizeFilter.hiddenLabel(hiddenBySize) + "." else null
+        val hidden = if (query.isBlank() && hiddenBySize > 0) L.browseHiddenBySize(hiddenBySize) else null
         return when {
-            query.isNotBlank() -> UiState.Empty("Nothing in this chat matches “$query”.")
+            query.isNotBlank() -> UiState.Empty(L.browseNoMatch(query))
             !reachedEnd && hidden != null -> UiState.Empty("$STILL_MORE_TO_SEARCH\n\n$hidden", StateAction.ShowHidden)
             !reachedEnd -> UiState.Empty(STILL_MORE_TO_SEARCH, StateAction.KeepLooking)
             hidden != null -> UiState.Empty("${noVideosWithin(minSizeBytes, maxSizeBytes)}\n\n$hidden", StateAction.ShowHidden)
-            else -> UiState.Empty("No playable videos in this chat.")
+            else -> UiState.Empty(L.browseNoPlayableVideos)
         }
     }
 

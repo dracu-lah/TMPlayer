@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.ui.graphics.vector.ImageVector
-import com.tmplayer.ui.components.TmAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon as M3Icon
@@ -24,11 +22,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.ui.components.TmAlertDialog
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.floatingSurface
@@ -48,7 +49,7 @@ fun TvConfirm(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
     detail: String? = null,
-    cancelLabel: String = "Cancel",
+    cancelLabel: String = LocalStrings.current.commonCancel,
     destructive: Boolean = true,
     icon: ImageVector = if (destructive) Icons.Default.Warning else Icons.Default.Info,
     /** Drawn under the message and detail, for a choice that belongs to the question, such as a tick box. */

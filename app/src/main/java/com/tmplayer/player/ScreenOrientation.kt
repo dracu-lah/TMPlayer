@@ -1,6 +1,7 @@
 package com.tmplayer.player
 
 import android.content.pm.ActivityInfo
+import com.tmplayer.i18n.L
 
 /**
  * Which way up the picture is held, and the order the button steps through.
@@ -16,16 +17,23 @@ import android.content.pm.ActivityInfo
  * Meaningless on a television, which reports one orientation and ignores every request made of it,
  * so nothing here is ever reached there.
  */
-enum class ScreenOrientation(val requested: Int, val label: String) {
+enum class ScreenOrientation(val requested: Int) {
     /** Whatever the phone's own rotation setting says. */
-    Follow(ActivityInfo.SCREEN_ORIENTATION_FULL_USER, "Rotation: follow the phone"),
+    Follow(ActivityInfo.SCREEN_ORIENTATION_FULL_USER),
 
     /** Sideways, either way round. What the player opens in, because almost every video is wide. */
-    Landscape(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, "Rotation: locked sideways"),
+    Landscape(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE),
 
     /** Upright, either way up. */
-    Portrait(ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT, "Rotation: locked upright"),
+    Portrait(ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT),
     ;
+
+    /** What the button says it does now. */
+    val label: String get() = when (this) {
+        Follow -> L.playerRotationFollow
+        Landscape -> L.playerRotationLandscape
+        Portrait -> L.playerRotationPortrait
+    }
 
     fun next(): ScreenOrientation = entries[(ordinal + 1) % entries.size]
 

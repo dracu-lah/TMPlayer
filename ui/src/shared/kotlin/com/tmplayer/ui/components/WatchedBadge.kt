@@ -15,6 +15,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Tone
 
 /**
@@ -32,6 +33,7 @@ fun WatchedBadge(
     modifier: Modifier = Modifier,
     size: Dp = 28.dp,
 ) {
+    val s = LocalStrings.current
     Box(
         modifier
             .size(size)
@@ -42,7 +44,7 @@ fun WatchedBadge(
     ) {
         Icon(
             Icons.Filled.Check,
-            contentDescription = "Watched",
+            contentDescription = s.commonWatched,
             tint = Tone.onAccent,
             modifier = Modifier.size(size * 0.64f),
         )

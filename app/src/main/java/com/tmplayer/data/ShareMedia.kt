@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
+import com.tmplayer.i18n.L
 import java.io.File
 
 /**
@@ -45,7 +46,7 @@ object ShareMedia {
                 type = "video/*"
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             },
-            if (uris.size == 1) "Share this video" else "Share ${uris.size} videos",
+            L.shareChooserTitle(count = uris.size),
         ).apply {
             // The chooser itself is started from a context that may not be an activity, and the
             // read permission has to survive being handed to whichever app is picked.

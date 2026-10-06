@@ -5,66 +5,67 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
-import android.content.pm.PackageManager
-import android.os.Build
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.util.Log
 import android.widget.Toast
-import android.net.Uri
-import com.tmplayer.ui.theme.Focus
-import com.tmplayer.ui.nav.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -76,30 +77,25 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme as M3MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text as M3Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
-import kotlinx.coroutines.launch
-import java.io.File
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.produceState
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -114,79 +110,83 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.data.AndroidPaths
 import com.tmplayer.data.CacheShelf
 import com.tmplayer.data.CardLayout
+import com.tmplayer.data.DiskInfo
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.FormFactor
-import com.tmplayer.data.MediaItem
 import com.tmplayer.data.LocalDownloads
-import com.tmplayer.data.OfflineDownloads
-import com.tmplayer.data.cancel
-import com.tmplayer.data.start
-import com.tmplayer.data.Td
 import com.tmplayer.data.MediaFeedEntry
+import com.tmplayer.data.MediaItem
+import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.SeriesShelf
-import com.tmplayer.data.ShelfEntry
-import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.SettingsStore
-import com.tmplayer.data.SizeFilter
-import com.tmplayer.data.WatchedRecord
-import com.tmplayer.ui.components.WatchedBadge
+import com.tmplayer.data.ShelfEntry
 import com.tmplayer.data.SponsoredItem
 import com.tmplayer.data.SponsoredReportOption
 import com.tmplayer.data.SponsoredReportOutcome
+import com.tmplayer.data.Td
 import com.tmplayer.data.WatchPoint
+import com.tmplayer.data.WatchedRecord
+import com.tmplayer.data.cancel
 import com.tmplayer.data.isSponsoredTextFullyVisible
 import com.tmplayer.data.placeSponsored
-import com.tmplayer.ui.components.MediaGridSkeleton
-import com.tmplayer.ui.components.MenuAction
+import com.tmplayer.data.start
+import com.tmplayer.i18n.L
 import com.tmplayer.ui.components.ConnectionNotice
+import com.tmplayer.ui.components.MediaGridSkeleton
 import com.tmplayer.ui.components.MediaPreview
+import com.tmplayer.ui.components.MenuAction
+import com.tmplayer.ui.components.Spinner
+import com.tmplayer.ui.components.StateScaffold
+import com.tmplayer.ui.components.TmIcons
+import com.tmplayer.ui.components.TmSecondaryButton
+import com.tmplayer.ui.components.TvConfirm
+import com.tmplayer.ui.components.TvMenu
+import com.tmplayer.ui.components.TvSearchField
+import com.tmplayer.ui.components.WatchedBadge
 import com.tmplayer.ui.components.holdable
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.pressable
-import com.tmplayer.ui.components.StateScaffold
-import com.tmplayer.ui.components.Spinner
-import com.tmplayer.ui.components.TmIcons
-import com.tmplayer.ui.components.TmSecondaryButton
-import com.tmplayer.ui.components.TvSearchField
-import com.tmplayer.ui.components.TvConfirm
-import com.tmplayer.ui.components.TvMenu
 import com.tmplayer.ui.components.rememberVoiceSearch
+import com.tmplayer.ui.i18n.LocalStrings
+import com.tmplayer.ui.nav.BackHandler
 import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.Corner
+import com.tmplayer.ui.theme.Focus
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.Tv
 import com.tmplayer.ui.theme.focusRing
 import com.tmplayer.ui.theme.focusScale
-import com.tmplayer.ui.theme.Tv
-import com.tmplayer.data.AndroidPaths
-import com.tmplayer.data.DiskInfo
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -242,6 +242,7 @@ fun MediaGridScreen(
     /** Thumbnails four across, or one wide row per video with the full title on it. */
     layout: CardLayout = CardLayout.Grid,
 ) {
+    val s = LocalStrings.current
     val context = LocalContext.current
     // A phone has neither overscan to clear nor a fixed width to plan a grid against, so both of
     // those figures are asked for again below rather than assumed.
@@ -292,22 +293,22 @@ fun MediaGridScreen(
                     SponsoredReportOutcome.Reported -> {
                         reportTarget = null
                         reportOptions = emptyList()
-                        onOfflineAction("Sponsored message reported.")
+                        onOfflineAction(s.gridSponsoredReported)
                     }
                     SponsoredReportOutcome.AdsHidden -> {
                         reportTarget = null
                         reportOptions = emptyList()
-                        onOfflineAction("Sponsored messages hidden by Telegram.")
+                        onOfflineAction(s.gridSponsoredHidden)
                     }
                     SponsoredReportOutcome.PremiumRequired -> {
                         reportTarget = null
                         reportOptions = emptyList()
-                        onOfflineAction("Telegram Premium is required to hide sponsored messages.")
+                        onOfflineAction(s.gridSponsoredPremium)
                     }
                     SponsoredReportOutcome.Unavailable -> {
                         reportTarget = null
                         reportOptions = emptyList()
-                        onOfflineAction("This sponsored message can no longer be reported.")
+                        onOfflineAction(s.gridSponsoredUnavailable)
                     }
                 }
             },
@@ -323,7 +324,7 @@ fun MediaGridScreen(
                 if (item.sponsorUrl.isNotBlank()) {
                     runCatching {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.sponsorUrl)))
-                    }.onFailure { onOfflineAction("No app can open this sponsored link.") }
+                    }.onFailure { onOfflineAction(s.gridSponsoredNoApp) }
                 }
             },
             onFailure = onOfflineAction,
@@ -349,7 +350,7 @@ fun MediaGridScreen(
 
     val refresh = {
         viewModel.load()
-        if (offline) onOfflineAction("You're offline. Showing what was loaded before.")
+        if (offline) onOfflineAction(s.gridOfflineRefresh)
     }
 
     // Whichever video a long press is asking about, and nothing while none is.
@@ -481,10 +482,10 @@ fun MediaGridScreen(
                 val (planTaken, planMessage) = planDownloads(toPlan)
                 val all = wholeHere + planTaken
                 all to when {
-                    all.isEmpty() && toPlan.isEmpty() && chosen.size == 1 -> "That video is in Downloads already."
-                    all.isEmpty() && toPlan.isEmpty() -> "Those videos are already downloading or in Downloads."
-                    toPlan.isEmpty() && all.size == 1 -> "Saving to Downloads."
-                    toPlan.isEmpty() -> "Saving ${all.size} videos to Downloads."
+                    all.isEmpty() && toPlan.isEmpty() && chosen.size == 1 -> s.gridAlreadyDownloadedOne
+                    all.isEmpty() && toPlan.isEmpty() -> s.gridAlreadyDownloadedMany
+                    toPlan.isEmpty() && all.size == 1 -> s.gridSavingOne
+                    toPlan.isEmpty() -> s.gridSavingMany(all.size)
                     else -> planMessage
                 }
             }
@@ -774,7 +775,7 @@ fun MediaGridScreen(
                         ) {
                             Spinner(size = 18.dp, strokeWidth = 2.dp)
                             Text(
-                                "Loading more…",
+                                s.gridLoadingMore,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Tone.muted,
                             )
@@ -921,8 +922,8 @@ fun MediaGridScreen(
             )
         }
         TvMenu(
-            title = reportTitle.ifBlank { "Report sponsored message" },
-            subtitle = "Telegram decides what happens after your report",
+            title = reportTitle.ifBlank { s.gridReportSponsored },
+            subtitle = s.gridReportSponsoredDetail,
             actions = actions,
             onDismiss = {
                 reportTarget = null
@@ -967,12 +968,13 @@ internal fun TouchMediaScaffold(
     selectionBar: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
+    val s = LocalStrings.current
     var searching by rememberSaveable { mutableStateOf(startSearching) }
     val field = remember { FocusRequester() }
     // The bar is a lot of a phone screen to spend on chrome while scrolling, so it leaves on the
     // way down and comes back on the first flick up.
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
-    val startVoice = rememberVoiceSearch("Say a video name") {
+    val startVoice = rememberVoiceSearch(s.gridVoicePromptVideo) {
         onQuery(it)
         onSubmit()
     }
@@ -1031,22 +1033,22 @@ internal fun TouchMediaScaffold(
                     ) {
                         M3Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = if (searching) "Close search" else "Back to chats",
+                            contentDescription = if (searching) s.browseCloseSearch else s.gridBackToChats,
                         )
                     }
                 },
                 actions = {
                     if (searching) return@TopAppBar
                     IconButton(onClick = { searching = true }) {
-                        M3Icon(Icons.Filled.Search, contentDescription = "Search this chat")
+                        M3Icon(Icons.Filled.Search, contentDescription = s.gridSearchThisChat)
                     }
                     IconButton(onClick = onToggleFavorite) {
                         M3Icon(
                             if (isFavorite) Icons.Filled.Star else TmIcons.StarOutline,
                             contentDescription = if (isFavorite) {
-                                "Remove from favourites"
+                                s.browseRemoveFavourite
                             } else {
-                                "Add to favourites"
+                                s.browseAddFavourite
                             },
                             // Only the filled star is coloured. The outline is left to the bar's
                             // own action colour, so it sits with the other two icons.
@@ -1058,9 +1060,9 @@ internal fun TouchMediaScaffold(
                     // chat's name on a 1080p panel.
                     BarOverflow(
                         listOf(
-                            (if (layout == CardLayout.Grid) "Show as rows" else "Show as tiles")
+                            (if (layout == CardLayout.Grid) s.browseShowAsRows else s.browseShowAsTiles)
                                 to onToggleLayout,
-                            "Refresh" to onRefresh,
+                            s.commonRefresh to onRefresh,
                         ),
                     )
                 },
@@ -1099,6 +1101,7 @@ private fun MediaSearchField(
     onVoiceSearch: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
+    val s = LocalStrings.current
     // Not a Material SearchBar: that component owns the whole top of the screen, arrow and
     // suggestion sheet included, and this search sits inside an app bar that already has both. It
     // borrows the shape and the colour so it still reads as a search bar.
@@ -1129,7 +1132,7 @@ private fun MediaSearchField(
                 decorationBox = { inner ->
                     if (query.isEmpty()) {
                         M3Text(
-                            "Search this chat",
+                            s.gridSearchThisChat,
                             style = M3MaterialTheme.typography.bodyLarge,
                             color = Tone.muted,
                             maxLines = 1,
@@ -1140,11 +1143,11 @@ private fun MediaSearchField(
             )
             if (query.isNotEmpty()) {
                 IconButton(onClick = { onQueryChange("") }) {
-                    M3Icon(Icons.Filled.Close, contentDescription = "Clear search")
+                    M3Icon(Icons.Filled.Close, contentDescription = s.browseClearSearch)
                 }
             } else if (onVoiceSearch != null) {
                 IconButton(onClick = onVoiceSearch) {
-                    M3Icon(TmIcons.Mic, contentDescription = "Search by voice")
+                    M3Icon(TmIcons.Mic, contentDescription = s.browseSearchByVoice)
                 }
             }
         }
@@ -1173,7 +1176,8 @@ internal fun Header(
     /** Shows the recent row whatever has focus, for the screenshot fixture. */
     alwaysShowRecent: Boolean = false,
 ) {
-    val startVoice = rememberVoiceSearch("Say a video name") {
+    val s = LocalStrings.current
+    val startVoice = rememberVoiceSearch(s.gridVoicePromptVideo) {
         onQuery(it)
         onSubmit()
     }
@@ -1183,7 +1187,7 @@ internal fun Header(
         Row(verticalAlignment = Alignment.CenterVertically) {
             // The way out, drawn. The remote's Back key works, but Back is the key stick owners
             // are least sure of, so the screen says it as well.
-            Pill("Back to chats", Icons.AutoMirrored.Filled.ArrowBack, showLabel = false, onClick = onBack)
+            Pill(s.gridBackToChats, Icons.AutoMirrored.Filled.ArrowBack, showLabel = false, onClick = onBack)
             Spacer(Modifier.width(16.dp))
             MediaPreview(
                 miniThumbnail = chatMiniThumbnail,
@@ -1201,7 +1205,7 @@ internal fun Header(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    "Videos from this chat",
+                    s.gridVideosFromChat,
                     style = MaterialTheme.typography.bodyMedium,
                     color = Tone.muted,
                 )
@@ -1221,16 +1225,16 @@ internal fun Header(
             TvSearchField(
                 value = query,
                 onValueChange = onQuery,
-                placeholder = "Search this chat",
+                placeholder = s.gridSearchThisChat,
                 onSubmit = onSubmit,
                 modifier = Modifier.weight(1f).focusRequester(searchField),
             )
             if (startVoice != null) {
                 // The microphone says what it does, so no label takes room from the search field.
-                Pill(label = "Voice search", icon = TmIcons.Mic, showLabel = false, onClick = startVoice)
+                Pill(label = s.browseVoiceSearch, icon = TmIcons.Mic, showLabel = false, onClick = startVoice)
             }
             if (query.isNotBlank()) {
-                Pill("Clear", Icons.Filled.Close) {
+                Pill(s.commonClear, Icons.Filled.Close) {
                     // Focus has to leave before the state change, because clearing the query is
                     // what removes this pill from the layout. Letting it vanish while focused
                     // strands the remote: the next press goes nowhere or jumps to the rail.
@@ -1240,7 +1244,7 @@ internal fun Header(
                 }
             }
             Pill(
-                label = if (isFavorite) "Remove favourite" else "Add favourite",
+                label = if (isFavorite) s.gridRemoveFavouriteShort else s.gridAddFavouriteShort,
                 icon = if (isFavorite) Icons.Filled.Star else TmIcons.StarOutline,
                 tintWhenIdle = if (isFavorite) Tone.accent else Tone.text,
                 onClick = onToggleFavorite,
@@ -1248,7 +1252,7 @@ internal fun Header(
             // Which arrangement suits a chat depends on the chat: tiles for visual browsing,
             // rows for one that posts long file names. The choice is remembered per screen.
             Pill(
-                label = if (layout == CardLayout.Grid) "As rows" else "As tiles",
+                label = if (layout == CardLayout.Grid) s.browseAsRows else s.browseAsTiles,
                 icon = if (layout == CardLayout.Grid) Icons.AutoMirrored.Filled.List else TmIcons.Grid,
                 // The two glyphs are the ones every app uses for this, so a label adds nothing.
                 showLabel = false,
@@ -1257,7 +1261,7 @@ internal fun Header(
             // Telegram pushes new messages into TDLib's database, but this grid was built from a
             // search that ran when it opened, so a video posted since then needs a fresh search.
             // Icon only, like the refresh on the chat list: a label costs the search field 90dp.
-            Pill("Refresh", Icons.Filled.Refresh, showLabel = false, onClick = onRefresh)
+            Pill(s.commonRefresh, Icons.Filled.Refresh, showLabel = false, onClick = onRefresh)
         }
         if (query.isBlank() && recentSearches.isNotEmpty() && (headerFocused || alwaysShowRecent)) {
             Row(
@@ -1265,7 +1269,7 @@ internal fun Header(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Recent", style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+                Text(s.gridRecentSearchesLabel, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
                 for (recent in recentSearches) {
                     Pill(recent, TmIcons.History) {
                         // The row goes as soon as there is a query, so focus moves first, as Clear does.
@@ -1274,7 +1278,7 @@ internal fun Header(
                         onSubmit()
                     }
                 }
-                Pill("Clear recent searches", Icons.Filled.Close, showLabel = false) {
+                Pill(s.gridClearRecentSearches, Icons.Filled.Close, showLabel = false) {
                     runCatching { searchField.requestFocus() }
                     onClearRecent()
                 }
@@ -1294,6 +1298,7 @@ private fun TouchRecentSearches(
     onPick: (String) -> Unit,
     onClear: () -> Unit,
 ) {
+    val s = LocalStrings.current
     Row(
         Modifier
             .fillMaxWidth()
@@ -1309,7 +1314,7 @@ private fun TouchRecentSearches(
                 icon = { M3Icon(TmIcons.History, contentDescription = null, modifier = Modifier.size(18.dp)) },
             )
         }
-        TextButton(onClick = onClear) { M3Text("Clear") }
+        TextButton(onClick = onClear) { M3Text(s.commonClear) }
     }
 }
 
@@ -1331,18 +1336,19 @@ private fun SelectionBar(
     onCancel: () -> Unit,
     edge: Dp,
 ) {
-    val label = if (count == 1) "1 selected" else "$count selected"
+    val s = LocalStrings.current
+    val label = s.gridSelectedCount(count)
 
     if (isTouch()) {
         TopAppBar(
             title = { M3Text(label, style = M3MaterialTheme.typography.titleMedium) },
             navigationIcon = {
                 IconButton(onClick = onCancel) {
-                    M3Icon(Icons.Filled.Close, contentDescription = "Stop selecting")
+                    M3Icon(Icons.Filled.Close, contentDescription = s.gridStopSelecting)
                 }
             },
             actions = {
-                TextButton(onClick = onSelectAll) { M3Text("Select all") }
+                TextButton(onClick = onSelectAll) { M3Text(s.gridSelectAll) }
                 // Words, not a bare arrow: this is the one control on the bar that acts on the
                 // ticked videos, and a corner glyph would say nothing about what it starts.
                 if (onDownload != null) Button(
@@ -1357,7 +1363,7 @@ private fun SelectionBar(
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(Modifier.width(8.dp))
-                    M3Text("Download selected")
+                    M3Text(s.gridDownloadSelected)
                 }
             },
         )
@@ -1377,9 +1383,9 @@ private fun SelectionBar(
             color = Tone.text,
             modifier = Modifier.weight(1f),
         )
-        if (onDownload != null) Pill("Download", TmIcons.Download, onClick = onDownload)
-        Pill("Select all", Icons.Filled.Check, onClick = onSelectAll)
-        Pill("Cancel", Icons.Filled.Close, onClick = onCancel)
+        if (onDownload != null) Pill(s.gridDownload, TmIcons.Download, onClick = onDownload)
+        Pill(s.gridSelectAll, Icons.Filled.Check, onClick = onSelectAll)
+        Pill(s.commonCancel, Icons.Filled.Close, onClick = onCancel)
     }
 }
 
@@ -1396,6 +1402,7 @@ private fun SponsoredCard(
     onOpenMedia: () -> Unit,
     onReport: () -> Unit,
 ) {
+    val s = LocalStrings.current
     var textTop by remember(item.messageId) { mutableStateOf(Float.NaN) }
     var textBottom by remember(item.messageId) { mutableStateOf(Float.NaN) }
     var viewportHeight by remember(item.messageId) { mutableStateOf(0f) }
@@ -1500,7 +1507,7 @@ private fun SponsoredCard(
                     SponsoredButton(item.buttonText, primary = true, onClick = onOpen)
                 }
                 if (item.canBeReported) {
-                    SponsoredButton("Report", primary = false, onClick = onReport)
+                    SponsoredButton(s.gridReport, primary = false, onClick = onReport)
                 }
             }
         }
@@ -1909,6 +1916,7 @@ private fun MediaArt(
      */
     finished: Boolean = false,
 ) {
+    val s = LocalStrings.current
     val tagStyle = if (compact) {
         M3MaterialTheme.typography.labelSmall
     } else {
@@ -1941,13 +1949,13 @@ private fun MediaArt(
             Text(
                 when (waiting.stage) {
                     OfflineDownloads.Stage.Running ->
-                        waiting.fraction?.let { "${(it * 100).toInt()}%" } ?: "Downloading"
-                    OfflineDownloads.Stage.Queued -> "Queued"
-                    OfflineDownloads.Stage.Paused -> "Paused"
-                    OfflineDownloads.Stage.Offline -> "Waiting"
-                    OfflineDownloads.Stage.NoWifi -> "Wi-Fi"
-                    OfflineDownloads.Stage.Moving -> "Moving"
-                    OfflineDownloads.Stage.Failed -> "Failed"
+                        waiting.fraction?.let { s.formatter.percent(it.toDouble()) } ?: s.gridStageDownloading
+                    OfflineDownloads.Stage.Queued -> s.gridStageQueued
+                    OfflineDownloads.Stage.Paused -> s.gridStagePaused
+                    OfflineDownloads.Stage.Offline -> s.gridStageWaiting
+                    OfflineDownloads.Stage.NoWifi -> s.gridStageNoWifi
+                    OfflineDownloads.Stage.Moving -> s.gridStageMoving
+                    OfflineDownloads.Stage.Failed -> s.gridStageFailed
                 },
                 style = tagStyle,
                 color = Tone.onAccent,
@@ -1969,7 +1977,7 @@ private fun MediaArt(
             Text(
                 // Two words for two kinds of copy: one the viewer kept, and one playing left
                 // behind that the next play may take.
-                if (item.locality == MediaItem.Locality.Downloaded) "Downloaded" else "Cached",
+                if (item.locality == MediaItem.Locality.Downloaded) s.gridBadgeDownloaded else s.gridBadgeCached,
                 style = tagStyle,
                 // The one badge here that is the app speaking rather than a fact about the picture,
                 // so it takes the theme's own colour instead of the plain black plate the tags use.
@@ -2002,7 +2010,7 @@ private fun MediaArt(
                 }
             }
         }
-        val duration = MediaMapper.formatDuration(item.durationSec)
+        val duration = s.formatter.duration(item.durationSec.toLong())
         if (durationOverlay && duration.isNotEmpty()) {
             Text(
                 duration,
@@ -2094,7 +2102,7 @@ private fun MediaArt(
                 if (selected) {
                     M3Icon(
                         Icons.Filled.Check,
-                        contentDescription = "Selected",
+                        contentDescription = s.gridSelected,
                         tint = Tone.onAccent,
                         modifier = Modifier.size(ring * 0.6f),
                     )
@@ -2165,6 +2173,7 @@ internal fun MediaActionsSheet(
     onRemoved: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val s = LocalStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val downloads by OfflineDownloads.active.collectAsStateWithLifecycle()
@@ -2192,17 +2201,16 @@ internal fun MediaActionsSheet(
     var confirmingRemove by remember { mutableStateOf(false) }
     if (confirmingRemove) {
         TvConfirm(
-            title = "Remove from Downloads?",
-            message = "\"${item.title}\" is deleted from this device. Nothing is removed from " +
-                "Telegram, so you can download it again.",
-            confirmLabel = "Remove",
+            title = s.gridRemoveDownloadTitle,
+            message = s.gridRemoveDownloadMessage(item.title),
+            confirmLabel = s.commonRemove,
             onConfirm = {
                 scope.launch {
                     val record = settings.downloadRecord(item.chatId, item.messageId)
                     val removed = record != null && LocalDownloads.delete(settings, record)
                     Toast.makeText(
                         context,
-                        if (removed) "Removed from Downloads" else "That download could not be deleted.",
+                        if (removed) s.gridRemovedDownload else s.gridRemoveDownloadFailed,
                         Toast.LENGTH_SHORT,
                     ).show()
                     onRemoved()
@@ -2216,13 +2224,13 @@ internal fun MediaActionsSheet(
 
     val resume = watched
         ?.takeIf { it.positionMs > 0 }
-        ?.let { "  ·  Stopped at ${com.tmplayer.player.StreamStats.formatClock(it.positionMs)}" }
+        ?.let { "  ·  " + s.gridStoppedAt(s.formatter.clock(it.positionMs)) }
         .orEmpty()
 
     val actions = buildList {
         add(
             MenuAction(
-                label = if (watched != null && watched.positionMs > 0) "Resume" else "Play",
+                label = if (watched != null && watched.positionMs > 0) s.commonResume else s.commonPlay,
                 icon = Icons.Filled.PlayArrow,
                 onSelect = { onDismiss(); onPlay() },
             ),
@@ -2233,7 +2241,7 @@ internal fun MediaActionsSheet(
         if (watched != null && watched.positionMs > 0) {
             add(
                 MenuAction(
-                    label = "Play from the start",
+                    label = s.gridPlayFromStart,
                     icon = Icons.Filled.Refresh,
                     onSelect = {
                         scope.launch {
@@ -2252,12 +2260,12 @@ internal fun MediaActionsSheet(
         // also forgets the saved position, so the video leaves Continue watching with it.
         add(
             MenuAction(
-                label = if (finished) "Mark as unwatched" else "Mark as watched",
+                label = if (finished) s.gridMarkUnwatched else s.gridMarkWatched,
                 icon = if (finished) Icons.Filled.Close else Icons.Filled.Check,
                 detail = if (finished) {
-                    "Takes the tick off and it out of Previously watched"
+                    s.gridMarkUnwatchedDetail
                 } else {
-                    "Ticks it and lists it in Previously watched"
+                    s.gridMarkWatchedDetail
                 },
                 onSelect = {
                     onDismiss()
@@ -2272,21 +2280,21 @@ internal fun MediaActionsSheet(
             downloading != null -> add(
                 MenuAction(
                     label = when (downloading.stage) {
-                        OfflineDownloads.Stage.Queued -> "Take out of the queue"
-                        OfflineDownloads.Stage.Paused -> "Remove the paused download"
-                        OfflineDownloads.Stage.Failed -> "Remove the failed download"
-                        OfflineDownloads.Stage.Offline -> "Stop waiting for a connection"
-                        OfflineDownloads.Stage.NoWifi -> "Stop waiting for Wi-Fi"
-                        OfflineDownloads.Stage.Moving -> "Stop the download"
-                        OfflineDownloads.Stage.Running -> "Stop the download"
+                        OfflineDownloads.Stage.Queued -> s.gridCancelQueued
+                        OfflineDownloads.Stage.Paused -> s.gridCancelPaused
+                        OfflineDownloads.Stage.Failed -> s.gridCancelFailed
+                        OfflineDownloads.Stage.Offline -> s.gridCancelOffline
+                        OfflineDownloads.Stage.NoWifi -> s.gridCancelNoWifi
+                        OfflineDownloads.Stage.Moving -> s.gridCancelRunning
+                        OfflineDownloads.Stage.Running -> s.gridCancelRunning
                     },
                     icon = Icons.Filled.Close,
                     detail = when (downloading.stage) {
-                        OfflineDownloads.Stage.Queued -> "Waiting its turn"
-                        OfflineDownloads.Stage.Offline -> "Resumes with a signal"
-                        OfflineDownloads.Stage.NoWifi -> "Resumes on Wi-Fi"
+                        OfflineDownloads.Stage.Queued -> s.gridQueuedDetail
+                        OfflineDownloads.Stage.Offline -> s.gridOfflineDetail
+                        OfflineDownloads.Stage.NoWifi -> s.gridNoWifiDetail
                         else -> downloading.fraction
-                            ?.let { "${(it * 100).toInt()}% so far, and kept" }
+                            ?.let { s.gridProgressKept(s.formatter.percent(it.toDouble())) }
                     },
                     onSelect = {
                         OfflineDownloads.cancel(context, item.fileId)
@@ -2297,15 +2305,15 @@ internal fun MediaActionsSheet(
             inDownloads -> {
                 add(
                     MenuAction(
-                        label = "In Downloads",
+                        label = s.gridInDownloads,
                         icon = TmIcons.Download,
-                        detail = "Plays without a connection",
+                        detail = s.gridInDownloadsDetail,
                         onSelect = { onDismiss() },
                     ),
                 )
                 add(
                     MenuAction(
-                        label = "Remove from Downloads",
+                        label = s.gridRemoveDownload,
                         icon = Icons.Filled.Close,
                         onSelect = { confirmingRemove = true },
                     ),
@@ -2316,9 +2324,9 @@ internal fun MediaActionsSheet(
             !item.canBeSaved -> Unit
             cachedHere -> add(
                 MenuAction(
-                    label = "Save to Downloads",
+                    label = s.gridSaveToDownloads,
                     icon = TmIcons.Download,
-                    detail = withFree("Kept until you delete it, not replaced by the next video"),
+                    detail = withFree(s.gridSaveToDownloadsDetail),
                     onSelect = {
                         onDownloadForLater()
                         onDismiss()
@@ -2327,9 +2335,9 @@ internal fun MediaActionsSheet(
             )
             else -> add(
                 MenuAction(
-                    label = "Download",
+                    label = s.gridDownload,
                     icon = TmIcons.Download,
-                    detail = withFree("Kept in Downloads, no signal needed"),
+                    detail = withFree(s.gridDownloadDetail),
                     onSelect = {
                         // Through the same planner the multi-select uses, which asks the disk
                         // first and spends the watch cache if that is what makes room.
@@ -2343,9 +2351,9 @@ internal fun MediaActionsSheet(
         if (item.canBeSaved) {
             add(
                 MenuAction(
-                    label = "Select videos",
+                    label = s.gridSelectVideos,
                     icon = Icons.Filled.Check,
-                    detail = "Download several at once",
+                    detail = s.gridSelectVideosDetail,
                     onSelect = { onDismiss(); onSelectVideos() },
                 ),
             )
@@ -2354,7 +2362,7 @@ internal fun MediaActionsSheet(
         if (onDisk && item.canBeSaved) {
             add(
                 MenuAction(
-                    label = "Share",
+                    label = s.commonShare,
                     icon = TmIcons.Share,
                     onSelect = {
                         scope.launch { shareVideo(context, item, send = true) }
@@ -2364,7 +2372,7 @@ internal fun MediaActionsSheet(
             )
             add(
                 MenuAction(
-                    label = "Open in another player",
+                    label = s.gridOpenInOtherPlayer,
                     icon = Icons.AutoMirrored.Filled.ExitToApp,
                     onSelect = {
                         scope.launch { shareVideo(context, item, send = false) }
@@ -2377,9 +2385,9 @@ internal fun MediaActionsSheet(
         if (isTouch()) {
             add(
                 MenuAction(
-                    label = "Copy Telegram link",
+                    label = s.gridCopyLink,
                     icon = TmIcons.Share,
-                    detail = "To open this video in Telegram, or send it on",
+                    detail = s.gridCopyLinkDetail,
                     onSelect = {
                         scope.launch {
                             com.tmplayer.data.MessageLink.copy(context, item.chatId, item.messageId)
@@ -2393,8 +2401,8 @@ internal fun MediaActionsSheet(
 
     TvMenu(
         title = item.title,
-        subtitle = MediaMapper.formatDuration(item.durationSec) + "  ·  " +
-            MediaMapper.formatSize(item.sizeBytes) + resume,
+        subtitle = s.formatter.duration(item.durationSec.toLong()) + "  ·  " +
+            s.formatter.size(item.sizeBytes) + resume,
         actions = actions,
         onDismiss = onDismiss,
     )
@@ -2413,16 +2421,16 @@ private fun batchMessage(batch: CacheShelf.Batch, wanted: Int): String {
     val needed = wanted - batch.alreadyHere.size
     // Room is the only thing that can refuse a tick, and by this point the watch cache has already
     // been handed over, so there is genuinely nothing left to give.
-    val noRoom = "There is no more room on this device."
+    val noRoom = L.gridNoRoom
     return when {
-        needed == 0 && wanted == 1 -> "That video is in Downloads already."
-        needed == 0 -> "Those videos are already downloading or in Downloads."
-        taken == 0 -> "None of them will fit. $noRoom"
-        taken < needed -> "Queued $taken of $needed. $noRoom"
-        taken == 1 -> "Downloading 1 video."
+        needed == 0 && wanted == 1 -> L.gridAlreadyDownloadedOne
+        needed == 0 -> L.gridAlreadyDownloadedMany
+        taken == 0 -> L.gridNoneFit(room = noRoom)
+        taken < needed -> L.gridSomeFit(taken = taken, needed = needed, room = noRoom)
+        taken == 1 -> L.gridDownloadingOne
         // They are fetched one at a time, so what the viewer is told is what they will see on the
         // Downloads screen: one coming down and the rest waiting their turn.
-        else -> "Queued $taken videos. They download one at a time."
+        else -> L.gridQueuedMany(taken)
     }
 }
 
@@ -2473,13 +2481,13 @@ private suspend fun shareVideo(context: Context, item: MediaItem, send: Boolean)
         // file already on the phone. Said out loud anyway: silence here is indistinguishable from
         // a press that missed.
         Log.w(SHARE_TAG, "No local file for ${item.fileId}")
-        Toast.makeText(context, "That video is not on this phone yet.", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, L.gridShareNotHere, Toast.LENGTH_SHORT).show()
         return
     }
     val uri = runCatching {
         FileProvider.getUriForFile(context, "${context.packageName}.updates", File(path))
     }.onFailure { Log.w(SHARE_TAG, "Cannot share $path", it) }.getOrNull() ?: run {
-        Toast.makeText(context, "That video cannot be handed to another app.", Toast.LENGTH_SHORT)
+        Toast.makeText(context, L.gridShareFailed, Toast.LENGTH_SHORT)
             .show()
         return
     }
@@ -2497,11 +2505,11 @@ private suspend fun shareVideo(context: Context, item: MediaItem, send: Boolean)
 
     // The chooser is deliberate on both: ACTION_VIEW without one lands in whatever app once won
     // the default, which for a video on most phones is this one, and that is a loop.
-    val chooser = Intent.createChooser(intent, if (send) "Share" else "Open with")
+    val chooser = Intent.createChooser(intent, if (send) L.commonShare else L.gridOpenWith)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { context.startActivity(chooser) }.onFailure {
         Log.w(SHARE_TAG, "No app took the video", it)
-        Toast.makeText(context, "Nothing on this phone opens that.", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, L.gridNoAppOpens, Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -2515,12 +2523,13 @@ private fun MetaLine(
     compact: Boolean = false,
     finished: Boolean = false,
 ) {
-    val duration = MediaMapper.formatDuration(item.durationSec)
-    val size = MediaMapper.formatSize(item.sizeBytes)
+    val s = LocalStrings.current
+    val duration = s.formatter.duration(item.durationSec.toLong())
+    val size = s.formatter.size(item.sizeBytes)
     val resume = watched
         ?.takeIf { it.positionMs > 0 }
-        ?.let { "Stopped at ${com.tmplayer.player.StreamStats.formatClock(it.positionMs)}" }
-        ?: "Watched".takeIf { finished }
+        ?.let { s.gridStoppedAt(s.formatter.clock(it.positionMs)) }
+        ?: s.commonWatched.takeIf { finished }
     Text(
         listOfNotNull(duration.ifEmpty { null }, size.ifEmpty { null }, resume)
             .joinToString("  ·  "),
@@ -2593,6 +2602,7 @@ private const val FOCUS_SETTLE_MS = 150L
  */
 @Composable
 internal fun HiddenVideosNote(bySize: Int, selfDestructing: Int, onShowHidden: () -> Unit) {
+    val s = LocalStrings.current
     Row(
         Modifier.padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -2607,23 +2617,19 @@ internal fun HiddenVideosNote(bySize: Int, selfDestructing: Int, onShowHidden: (
         // Lifts the limits for this chat only, for as long as it is open; Settings keeps them.
         // A self-destructing video has nothing to show here, so only the size count earns it.
         if (bySize > 0) {
-            TmSecondaryButton(onClick = onShowHidden) { Text("Show them") }
+            TmSecondaryButton(onClick = onShowHidden) { Text(s.commonShowHidden) }
         }
     }
 }
 
-internal fun hiddenBySizeText(count: Int): String = SizeFilter.hiddenLabel(count) + "."
+internal fun hiddenBySizeText(count: Int): String = L.browseHiddenBySize(count)
 
 /**
  * A self-destructing video is gone once it has been opened, which only Telegram itself can honour,
  * so the listing leaves it out and says where it can be watched instead.
  */
 internal fun hiddenSelfDestructingText(count: Int): String =
-    if (count == 1) {
-        "1 self-destructing video is not shown: open it in Telegram."
-    } else {
-        "$count self-destructing videos are not shown: open them in Telegram."
-    }
+    L.gridSelfDestructingHidden(count)
 
 /** Both sentences, each only when it has something to count. */
 internal fun hiddenVideosText(bySize: Int, selfDestructing: Int): String =

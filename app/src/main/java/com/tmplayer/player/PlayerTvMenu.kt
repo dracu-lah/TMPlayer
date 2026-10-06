@@ -40,17 +40,18 @@ import androidx.fragment.app.FragmentActivity
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.R
+import com.tmplayer.ui.components.FloatingWindow
 import com.tmplayer.ui.components.MenuAction
-import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.PhonePad
+import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvMenu
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Corner
+import com.tmplayer.ui.theme.FloatingTone
 import com.tmplayer.ui.theme.TMPlayerTheme
 import com.tmplayer.ui.theme.Tone
-import com.tmplayer.ui.theme.focusRing
-import com.tmplayer.ui.theme.FloatingTone
 import com.tmplayer.ui.theme.floatingSurface
-import com.tmplayer.ui.components.FloatingWindow
+import com.tmplayer.ui.theme.focusRing
 
 /**
  * The television player's More menu, drawn in Compose over a player built from views.
@@ -118,10 +119,11 @@ class PlayerTvMenu(
 
     @Composable
     private fun MenuContent() {
+        val s = LocalStrings.current
         when (page.value) {
             Page.Closed -> Unit
             Page.Main -> TvMenu(
-                title = "More",
+                title = s.commonMore,
                 subtitle = title().ifBlank { null },
                 actions = PlayerMenu.tvEntries(
                     pictureInPicture(),
@@ -134,13 +136,13 @@ class PlayerTvMenu(
                 onDismiss = ::close,
             )
             Page.Speed -> TvMenu(
-                title = "Playback speed",
+                title = s.playerPlaybackSpeed,
                 actions = PlaybackSpeed.CHOICES.map { choice ->
                     val current = choice == speed()
                     MenuAction(
                         label = PlaybackSpeed.label(choice),
                         icon = if (current) Icons.Filled.Check else ImageVector.vectorResource(R.drawable.ic_speed),
-                        detail = if (current) "Playing at this speed" else null,
+                        detail = if (current) s.playerSpeedCurrent else null,
                     ) {
                         onSpeed(choice)
                         close()
@@ -149,11 +151,11 @@ class PlayerTvMenu(
                 onDismiss = { page.value = Page.Main },
             )
             Page.Sleep -> TvMenu(
-                title = "Sleep timer",
+                title = s.playerSleepTimer,
                 subtitle = sleepTimer(),
                 actions = buildList {
                     if (sleepTimer() != null) {
-                        add(MenuAction("Turn off", Icons.Filled.Close, detail = "Keep playing") {
+                        add(MenuAction(s.playerTurnOff, Icons.Filled.Close, detail = s.playerKeepPlaying) {
                             onSleepTimer(null)
                             close()
                         })
@@ -174,56 +176,59 @@ class PlayerTvMenu(
     }
 
     @Composable
-    private fun action(entry: PlayerMenuEntry): MenuAction = when (entry) {
-        PlayerMenuEntry.NextEpisode -> MenuAction(
-            label = nextEpisode() ?: "Next episode",
-            icon = ImageVector.vectorResource(R.drawable.ic_player_next),
-        ) { choose(entry) }
-        PlayerMenuEntry.PreviousEpisode -> MenuAction(
-            label = previousEpisode() ?: "Previous episode",
-            icon = ImageVector.vectorResource(R.drawable.ic_player_previous),
-        ) { choose(entry) }
-        PlayerMenuEntry.PlaybackDetails -> MenuAction("Playback details", Icons.Filled.Info) { choose(entry) }
-        PlayerMenuEntry.StartOver -> MenuAction("Start over", Icons.Filled.Refresh) { choose(entry) }
-        PlayerMenuEntry.Speed -> MenuAction(
-            label = "Speed",
-            icon = ImageVector.vectorResource(R.drawable.ic_speed),
-            detail = PlaybackSpeed.label(speed()),
-        ) { page.value = Page.Speed }
-        PlayerMenuEntry.VolumeBoost -> MenuAction(
-            label = "Volume boost",
-            icon = ImageVector.vectorResource(R.drawable.ic_volume),
-            detail = if (volumeBoost()) "On: quiet speech lifted, loud scenes held back" else "Off",
-        ) { choose(entry) }
-        PlayerMenuEntry.SleepTimer -> MenuAction(
-            label = "Sleep timer",
-            icon = TmIcons.Clock,
-            detail = sleepTimer() ?: "Off",
-        ) { page.value = Page.Sleep }
-        PlayerMenuEntry.SaveToDownloads -> MenuAction(
-            label = "Save to Downloads",
-            icon = TmIcons.Download,
-            detail = "Kept until you delete it",
-        ) { choose(entry) }
-        PlayerMenuEntry.MarkWatched -> if (watched()) {
-            MenuAction(
-                label = "Mark as unwatched",
-                icon = Icons.Filled.Close,
-                detail = "Takes it off Previously watched",
+    private fun action(entry: PlayerMenuEntry): MenuAction {
+        val s = LocalStrings.current
+        return when (entry) {
+            PlayerMenuEntry.NextEpisode -> MenuAction(
+                label = nextEpisode() ?: s.playerNextEpisode,
+                icon = ImageVector.vectorResource(R.drawable.ic_player_next),
             ) { choose(entry) }
-        } else {
-            MenuAction(
-                label = "Mark as watched",
-                icon = Icons.Filled.Check,
-                detail = "Lists it in Previously watched",
+            PlayerMenuEntry.PreviousEpisode -> MenuAction(
+                label = previousEpisode() ?: s.playerPreviousEpisode,
+                icon = ImageVector.vectorResource(R.drawable.ic_player_previous),
             ) { choose(entry) }
+            PlayerMenuEntry.PlaybackDetails -> MenuAction(s.playerPlaybackDetails, Icons.Filled.Info) { choose(entry) }
+            PlayerMenuEntry.StartOver -> MenuAction(s.playerStartOver, Icons.Filled.Refresh) { choose(entry) }
+            PlayerMenuEntry.Speed -> MenuAction(
+                label = s.playerSpeed,
+                icon = ImageVector.vectorResource(R.drawable.ic_speed),
+                detail = PlaybackSpeed.label(speed()),
+            ) { page.value = Page.Speed }
+            PlayerMenuEntry.VolumeBoost -> MenuAction(
+                label = s.playerVolumeBoost,
+                icon = ImageVector.vectorResource(R.drawable.ic_volume),
+                detail = if (volumeBoost()) s.playerVolumeBoostOnDetail else s.commonOff,
+            ) { choose(entry) }
+            PlayerMenuEntry.SleepTimer -> MenuAction(
+                label = s.playerSleepTimer,
+                icon = TmIcons.Clock,
+                detail = sleepTimer() ?: s.commonOff,
+            ) { page.value = Page.Sleep }
+            PlayerMenuEntry.SaveToDownloads -> MenuAction(
+                label = s.playerSaveToDownloads,
+                icon = TmIcons.Download,
+                detail = s.playerSaveToDownloadsDetail,
+            ) { choose(entry) }
+            PlayerMenuEntry.MarkWatched -> if (watched()) {
+                MenuAction(
+                    label = s.playerMarkUnwatched,
+                    icon = Icons.Filled.Close,
+                    detail = s.playerMarkUnwatchedDetail,
+                ) { choose(entry) }
+            } else {
+                MenuAction(
+                    label = s.playerMarkWatched,
+                    icon = Icons.Filled.Check,
+                    detail = s.playerMarkWatchedDetail,
+                ) { choose(entry) }
+            }
+            PlayerMenuEntry.PictureInPicture ->
+                MenuAction(s.playerPictureInPicture, ImageVector.vectorResource(R.drawable.ic_pip)) { choose(entry) }
+            PlayerMenuEntry.OpenInAnotherApp ->
+                MenuAction(s.playerOpenInAnotherApp, Icons.AutoMirrored.Filled.ExitToApp) { choose(entry) }
+            PlayerMenuEntry.RemoteKeys ->
+                MenuAction(s.playerRemoteKeys, Icons.Filled.Info, detail = s.playerRemoteKeysDetail) { page.value = Page.Keys }
         }
-        PlayerMenuEntry.PictureInPicture ->
-            MenuAction("Picture in picture", ImageVector.vectorResource(R.drawable.ic_pip)) { choose(entry) }
-        PlayerMenuEntry.OpenInAnotherApp ->
-            MenuAction("Open in another app", Icons.AutoMirrored.Filled.ExitToApp) { choose(entry) }
-        PlayerMenuEntry.RemoteKeys ->
-            MenuAction("Remote keys", Icons.Filled.Info, detail = "What each key does here") { page.value = Page.Keys }
     }
 
     /** Closes the menu first, so whatever the entry opens (a dialog, another app) is on top. */
@@ -241,6 +246,7 @@ class PlayerTvMenu(
  */
 @Composable
 private fun RemoteKeysSheet(onDismiss: () -> Unit) {
+    val s = LocalStrings.current
     val first = remember { FocusRequester() }
     FloatingWindow(onDismiss = onDismiss) {
         val panel = min(maxWidth - PhonePad.Side * 2, KEYS_MAX)
@@ -253,7 +259,7 @@ private fun RemoteKeysSheet(onDismiss: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                "Remote keys",
+                s.playerRemoteKeys,
                 style = MaterialTheme.typography.titleLarge,
                 color = Tone.text,
                 modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
@@ -262,7 +268,7 @@ private fun RemoteKeysSheet(onDismiss: () -> Unit) {
                 KeyRow(key, does, if (index == 0) Modifier.focusRequester(first) else Modifier)
             }
             Text(
-                "Press Back to close this.",
+                s.playerRemoteKeysClose,
                 style = MaterialTheme.typography.bodySmall,
                 color = Tone.muted,
                 modifier = Modifier.padding(start = 4.dp, top = 8.dp),

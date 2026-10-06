@@ -65,10 +65,12 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.BuildConfig
 import com.tmplayer.data.Updates
+import com.tmplayer.i18n.L
 import com.tmplayer.ui.about.About
 import com.tmplayer.ui.components.AppLogo
 import com.tmplayer.ui.components.PhonePad
 import com.tmplayer.ui.components.isTouch
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
@@ -85,6 +87,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
+    val s = LocalStrings.current
     var reading by remember { mutableStateOf(false) }
     if (reading) {
         BackHandler { reading = false }
@@ -140,8 +143,8 @@ fun AboutScreen(onBack: () -> Unit) {
                 if (index == 0) {
                     item {
                         ActionRow(
-                            title = "Third-party notices",
-                            subtitle = "The libraries inside TMPlayer and their licences. Readable offline",
+                            title = s.aboutNotices,
+                            subtitle = s.aboutNoticesDetail,
                             icon = Icons.AutoMirrored.Filled.List,
                             modifier = Modifier.focusRequester(first),
                             onClick = { reading = true },
@@ -152,8 +155,8 @@ fun AboutScreen(onBack: () -> Unit) {
                 if (group.title == About.SUPPORT_TITLE) {
                     item {
                         ActionRow(
-                            title = "Show both as QR codes",
-                            subtitle = "Scan one with your phone, or open it on another device",
+                            title = s.aboutSupportQr,
+                            subtitle = s.aboutSupportQrDetail,
                             icon = Icons.Filled.Favorite,
                             onClick = { supporting = true },
                         )
@@ -175,10 +178,10 @@ fun AboutScreen(onBack: () -> Unit) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { M3Text("About") },
+                    title = { M3Text(s.aboutTitle) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
-                            M3Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to settings")
+                            M3Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = s.aboutBackToSettings)
                         }
                     },
                 )
@@ -198,7 +201,7 @@ fun AboutScreen(onBack: () -> Unit) {
     if (supporting) SupportDialog(onClose = { supporting = false })
 
     qr?.let { link ->
-        LinkQrDialog(url = link.url, what = link.title.replaceFirstChar { it.lowercase() }.let { "the $it link" }) {
+        LinkQrDialog(url = link.url, what = link.title.replaceFirstChar { it.lowercase() }.let { s.aboutLinkQrWhat(it) }) {
             qr = null
         }
     }
@@ -207,6 +210,7 @@ fun AboutScreen(onBack: () -> Unit) {
 /** The logo, the name and version, and the licence with its lack of warranty. */
 @Composable
 private fun Masthead() {
+    val s = LocalStrings.current
     val touch = isTouch()
     Row(
         Modifier
@@ -234,7 +238,7 @@ private fun Masthead() {
                 color = Tone.text,
             )
             Text(
-                "Build ${BuildConfig.VERSION_CODE}. ${About.LICENCE}",
+                s.aboutBuildLine(BuildConfig.VERSION_CODE.toString(), About.LICENCE),
                 style = MaterialTheme.typography.bodyMedium,
                 color = Tone.muted,
             )
@@ -249,9 +253,9 @@ private fun Masthead() {
 }
 
 private fun iconFor(group: String): ImageVector = when (group) {
-    "Contact" -> Icons.Filled.Email
+    L.aboutContact -> Icons.Filled.Email
     About.SUPPORT_TITLE -> Icons.Filled.Favorite
-    "Your data and the law" -> Icons.Filled.Lock
+    L.aboutDataAndLaw -> Icons.Filled.Lock
     else -> Icons.Filled.Info
 }
 
@@ -263,6 +267,7 @@ private fun iconFor(group: String): ImageVector = when (group) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NoticesScreen(onBack: () -> Unit) {
+    val s = LocalStrings.current
     val touch = isTouch()
     val state = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -306,7 +311,7 @@ private fun NoticesScreen(onBack: () -> Unit) {
             if (!touch) {
                 item {
                     Text(
-                        "Up and Down scroll. Back returns to About.",
+                        s.aboutNoticesTvHint,
                         style = MaterialTheme.typography.bodyMedium,
                         color = Tone.muted,
                     )
@@ -320,10 +325,10 @@ private fun NoticesScreen(onBack: () -> Unit) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { M3Text("Third-party notices") },
+                    title = { M3Text(s.aboutNotices) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
-                            M3Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to About")
+                            M3Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = s.aboutBackToAbout)
                         }
                     },
                 )

@@ -12,6 +12,8 @@ import androidx.media3.ui.DefaultTimeBar
 import androidx.media3.ui.TimeBar
 import com.tmplayer.R
 import com.tmplayer.data.MediaItem
+import com.tmplayer.i18n.L
+import com.tmplayer.i18n.Translator
 
 /**
  * The transport overlay in player_controls.xml, given its behaviour.
@@ -145,6 +147,7 @@ class PlayerControls(
         wire(root.findViewById(R.id.control_scale)) { onCycleScale() }
         wire(rotate) { onCycleOrientation() }
         rotate.visibility = if (isTv) View.GONE else View.VISIBLE
+        describeFromCatalog(root)
         if (!isTv) setUpPhone(root) else setUpTv(root)
 
         // A press of D-pad left or right on the bar steps the position by this much: coarser than
@@ -264,7 +267,7 @@ class PlayerControls(
         ).forEach { it.visibility = View.GONE }
         centerPlay.isFocusable = false
         centerPlay.isClickable = false
-        centerPlay.contentDescription = "Paused"
+        centerPlay.contentDescription = L.playerPaused
         // Down from the bar lands on the first button the row still has; the layout's own pointer
         // names the play button, which a television no longer shows.
         timeBar.nextFocusDownId = R.id.control_subtitles
@@ -294,6 +297,38 @@ class PlayerControls(
      * A button's name: read aloud by TalkBack and, on a phone, shown when it is long pressed. Not
      * on a television, where a held OK on a focused button would otherwise pop a tooltip.
      */
+    /**
+     * The layout's buttons named in the UI language. The XML keeps English for the layout preview;
+     * these replace it before anything is drawn. Play, pause, the skips and the time are named
+     * again as they change.
+     */
+    private fun describeFromCatalog(root: View) {
+        val names = listOf(
+            R.id.control_back to L.commonBack,
+            R.id.control_more to L.playerMoreOptions,
+            R.id.center_previous to L.playerPreviousEpisode,
+            R.id.center_rewind to L.playerBackSeconds(Skip.BACK_MS / 1000),
+            R.id.center_play_pause to L.commonPause,
+            R.id.center_forward to L.playerForwardSeconds(Skip.FORWARD_MS / 1000),
+            R.id.center_next to L.playerNextEpisode,
+            R.id.times_duration to L.playerShowTimeRemaining,
+            R.id.control_play_pause to L.commonPause,
+            R.id.control_rewind to L.playerBackSeconds(Skip.BACK_MS / 1000),
+            R.id.control_forward to L.playerForwardSeconds(Skip.FORWARD_MS / 1000),
+            R.id.control_previous to L.playerPreviousEpisode,
+            R.id.control_next to L.playerNextEpisode,
+            R.id.control_subtitles to L.tracksSubtitles,
+            R.id.control_audio to L.playerAudio,
+            R.id.control_speed to L.playerPlaybackSpeed,
+            R.id.control_scale to L.playerPictureShape,
+            R.id.control_rotate to L.playerScreenOrientation,
+            R.id.control_lock to L.playerLockScreen,
+            R.id.control_pip to L.playerPictureInPicture,
+            R.id.control_tv_more to L.commonMore,
+        )
+        for ((id, name) in names) root.findViewById<View>(id)?.contentDescription = name
+    }
+
     private fun describe(view: View?, text: String) {
         if (view == null || view.contentDescription == text) return
         view.contentDescription = text
@@ -322,15 +357,15 @@ class PlayerControls(
         skipBackMs = backMs
         skipForwardMs = forwardMs
         val root = container
-        fun label(id: Int, ms: Long) { root.findViewById<TextView>(id)?.text = "${ms / 1000}" }
+        fun label(id: Int, ms: Long) { root.findViewById<TextView>(id)?.text = Translator.messages.formatter.number(ms / 1000) }
         label(R.id.control_rewind_label, backMs)
         label(R.id.control_forward_label, forwardMs)
         label(R.id.center_rewind_label, backMs)
         label(R.id.center_forward_label, forwardMs)
-        describe(root.findViewById(R.id.control_rewind), "Back ${backMs / 1000} seconds")
-        describe(root.findViewById(R.id.control_forward), "Forward ${forwardMs / 1000} seconds")
-        describe(root.findViewById(R.id.center_rewind), "Back ${backMs / 1000} seconds")
-        describe(root.findViewById(R.id.center_forward), "Forward ${forwardMs / 1000} seconds")
+        describe(root.findViewById(R.id.control_rewind), L.playerBackSeconds(backMs / 1000))
+        describe(root.findViewById(R.id.control_forward), L.playerForwardSeconds(forwardMs / 1000))
+        describe(root.findViewById(R.id.center_rewind), L.playerBackSeconds(backMs / 1000))
+        describe(root.findViewById(R.id.center_forward), L.playerForwardSeconds(forwardMs / 1000))
     }
 
     /** Mid-play buffering: the phone swaps the play glyph for a spinner in the same disc. */
@@ -501,14 +536,14 @@ class PlayerControls(
         val exo = player()
         val playing = exo?.isPlaying == true || (exo?.playWhenReady == true && buffering)
         playPause.setImageResource(if (playing) R.drawable.ic_player_pause else R.drawable.ic_player_play)
-        describe(playPause, if (playing) "Pause" else "Play")
+        describe(playPause, if (playing) L.commonPause else L.commonPlay)
         if (isTv) {
             renderPausedCue(paused = exo != null && !exo.playWhenReady, animate = animate)
             return
         }
         centerIcon.setShowsPlay(!playing, animate = animate && centerDrawn && visible)
         centerDrawn = true
-        describe(centerPlay, if (playing) "Pause" else "Play")
+        describe(centerPlay, if (playing) L.commonPause else L.commonPlay)
     }
 
     /** True while the television's disc is folding back into play on its way out. */
@@ -568,20 +603,20 @@ class PlayerControls(
         val duration = exo.duration.takeIf { it > 0 } ?: 0L
         if (isTv) {
             val end = if (showRemaining && duration > 0) {
-                "-" + StreamStats.formatClock((duration - position).coerceAtLeast(0))
+                "-" + Translator.messages.formatter.clock((duration - position).coerceAtLeast(0))
             } else {
-                StreamStats.formatClock(duration)
+                Translator.messages.formatter.clock(duration)
             }
-            time.text = "${StreamStats.formatClock(position)} / $end"
+            time.text = "${Translator.messages.formatter.clock(position)} / $end"
             return
         }
-        timesPosition.text = StreamStats.formatClock(position)
+        timesPosition.text = Translator.messages.formatter.clock(position)
         timesDuration.text = if (showRemaining && duration > 0) {
-            "-" + StreamStats.formatClock((duration - position).coerceAtLeast(0))
+            "-" + Translator.messages.formatter.clock((duration - position).coerceAtLeast(0))
         } else {
-            StreamStats.formatClock(duration)
+            Translator.messages.formatter.clock(duration)
         }
-        describe(timesDuration, if (showRemaining) "Show the total length" else "Show the time remaining")
+        describe(timesDuration, if (showRemaining) L.playerShowTotalLength else L.playerShowTimeRemaining)
     }
 
     /**

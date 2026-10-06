@@ -16,9 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
-import com.tmplayer.ui.components.FloatingWindow
-import com.tmplayer.ui.theme.floatingSurface
-import com.tmplayer.ui.components.TmAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon as M3Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -56,16 +53,21 @@ import com.tmplayer.data.downloadAndInstall
 import com.tmplayer.data.release
 import com.tmplayer.data.unknownSourcesIntent
 import com.tmplayer.data.updateScheduler
+import com.tmplayer.i18n.L
+import com.tmplayer.i18n.Translator
 import com.tmplayer.platform.Background
-import com.tmplayer.player.StreamStats
+import com.tmplayer.ui.components.FloatingWindow
 import com.tmplayer.ui.components.PhonePad
-import com.tmplayer.ui.components.isTouch
-import com.tmplayer.ui.theme.Caution
-import com.tmplayer.ui.theme.Tone
-import kotlinx.coroutines.launch
+import com.tmplayer.ui.components.TmAlertDialog
 import com.tmplayer.ui.components.TmButton
 import com.tmplayer.ui.components.TmSecondaryButton
+import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.paneAction
+import com.tmplayer.ui.i18n.LocalStrings
+import com.tmplayer.ui.theme.Caution
+import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.floatingSurface
+import kotlinx.coroutines.launch
 
 /**
  * The update popup: "TMPlayer 1.20.0 is out", what is new, how it installs, and *Update now*,
@@ -80,6 +82,7 @@ import com.tmplayer.ui.components.paneAction
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun UpdateDialog(onDismiss: () -> Unit) {
+    val s = LocalStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val state by Updates.state.collectAsStateWithLifecycle()
@@ -219,16 +222,16 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                         TmButton(
                             onClick = primary,
                             loading = state is UpdateState.Checking,
-                            busyLabel = "Checking…",
+                            busyLabel = s.updateChecking,
                             modifier = Modifier.focusRequester(confirm).paneAction(),
-                        ) { Text("Check again") }
+                        ) { Text(s.updateCheckAgain) }
                         if (showReleasePage) {
                             TmSecondaryButton(onClick = releasePage, modifier = Modifier.paneAction()) {
                                 Text(RELEASE_PAGE)
                             }
                         }
                         TmSecondaryButton(onClick = onDismiss, modifier = Modifier.paneAction()) {
-                            Text("Close")
+                            Text(s.commonClose)
                         }
                     }
                 }
@@ -251,7 +254,7 @@ private class Offer(
 )
 
 /** The button that opens the release page, or on a TV shows it as a QR code. */
-private const val RELEASE_PAGE = "Release page"
+private val RELEASE_PAGE: String get() = L.updateReleasePage
 
 /** As wide as this dialog ever gets, on any screen. */
 private val PANEL_MAX = 620.dp
@@ -271,6 +274,7 @@ private fun TouchUpdateDialog(
     onDismiss: () -> Unit,
     onReleasePage: (() -> Unit)?,
 ) {
+    val s = LocalStrings.current
     val downloading = state as? UpdateState.Downloading
     TmAlertDialog(
         // A download in progress is the one state that must not be dismissed by a stray tap
@@ -298,7 +302,7 @@ private fun TouchUpdateDialog(
                 }
                 // Under the words rather than in the button row, which is already three wide.
                 if (onReleasePage != null) {
-                    TextButton(onClick = onReleasePage) { M3Text("Open the release page") }
+                    TextButton(onClick = onReleasePage) { M3Text(s.updateOpenReleasePage) }
                 }
             }
         },
@@ -313,9 +317,9 @@ private fun TouchUpdateDialog(
             ) {
                 M3Text(
                     when {
-                        checking -> "Checking…"
+                        checking -> s.updateChecking
                         offer != null -> primaryLabel(state, offer)
-                        else -> "Check again"
+                        else -> s.updateCheckAgain
                     },
                 )
             }
@@ -327,7 +331,7 @@ private fun TouchUpdateDialog(
                     TextButton(onClick = onSkip) { M3Text(UpdateWords.SKIP) }
                     TextButton(onClick = onLater) { M3Text(UpdateWords.LATER) }
                 } else {
-                    TextButton(onClick = onDismiss) { M3Text("Close") }
+                    TextButton(onClick = onDismiss) { M3Text(s.commonClose) }
                 }
             }
         },
@@ -363,15 +367,15 @@ private fun ProgressBar(fraction: Float?) {
 
 private fun title(state: UpdateState, offer: Offer?): String = when {
     offer != null -> UpdateWords.title(offer.release, offer.skipped)
-    state is UpdateState.Idle -> "TMPlayer is up to date"
-    else -> "Checking for updates"
+    state is UpdateState.Idle -> L.updateUpToDate
+    else -> L.updateCheckingForUpdates
 }
 
 private fun primaryLabel(state: UpdateState, offer: Offer): String = when {
-    !offer.allowed -> "Open that setting"
+    !offer.allowed -> L.updateOpenSetting
     state is UpdateState.Failed -> UpdateWords.TRY_AGAIN
     offer.onMobileData && offer.sizeBytes > 0 ->
-        "${UpdateWords.UPDATE_NOW} (${StreamStats.formatBytes(offer.sizeBytes)} on mobile data)"
+        L.updateNowOnMobileData(action = UpdateWords.UPDATE_NOW, size = Translator.messages.formatter.bytes(offer.sizeBytes))
     else -> UpdateWords.UPDATE_NOW
 }
 
@@ -386,23 +390,21 @@ private fun body(state: UpdateState, offer: Offer?, device: String): List<String
     if (offer == null) {
         return listOf(
             if (state is UpdateState.Checking) {
-                "Asking GitHub…"
+                L.updateAskingGithub
             } else {
-                "You are on ${Updates.installedVersion}, the newest release on ${Updates.RELEASES_PAGE}."
+                L.updateNewest(version = Updates.installedVersion, page = Updates.RELEASES_PAGE)
             },
         )
     }
-    val size = StreamStats.formatBytes(offer.sizeBytes)
+    val size = Translator.messages.formatter.bytes(offer.sizeBytes)
     val how = when {
-        state is UpdateState.Downloading -> "Downloading $size from GitHub. Keep this on screen."
-        !offer.allowed && device == "TV" ->
-            "This TV blocks installs from TMPlayer. Allow them in Settings, Apps, Security and " +
-                "restrictions, then come back here."
+        state is UpdateState.Downloading -> L.updateDownloading(size = size)
+        !offer.allowed && device == "tv" ->
+            L.updateBlockedTv
         !offer.allowed ->
-            "This phone blocks installs from TMPlayer. Allow them in the setting this opens, " +
-                "then come back here."
+            L.updateBlockedPhone
         offer.waitsForWifi -> UPDATE_WAITS_FOR_WIFI
-        else -> "The update is $size from GitHub. Android asks you to confirm before it installs."
+        else -> L.updateSizeAndConfirm(size = size)
     }
     return listOf(
         listOf(UpdateWords.youHave(Updates.installedVersion), offer.release.notes)

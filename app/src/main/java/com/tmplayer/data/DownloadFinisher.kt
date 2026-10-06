@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import com.tmplayer.i18n.L
 import kotlinx.coroutines.delay
 import java.io.File
 import java.io.IOException
@@ -101,7 +102,7 @@ class DownloadFinisher(
         /** How often a held move looks to see whether the player has gone. */
         const val POLL_MS = 500L
 
-        const val NOT_FOUND = "The finished file could not be found. Try again."
-        const val MOVE_FAILED = "Could not move it into Downloads. Try again."
+        val NOT_FOUND: String get() = L.downloadsFinishedFileMissing
+        val MOVE_FAILED: String get() = L.downloadsMoveFailed
     }
 }

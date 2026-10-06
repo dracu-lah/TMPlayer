@@ -13,6 +13,8 @@ import android.os.IBinder
 import android.util.Log
 import com.tmplayer.MainActivity
 import com.tmplayer.R
+import com.tmplayer.i18n.L
+import com.tmplayer.i18n.Translator
 import com.tmplayer.platform.TransferNotifier
 import com.tmplayer.player.StreamStats
 import kotlinx.coroutines.CancellationException
@@ -454,7 +456,7 @@ class DownloadService : Service() {
                         row.copy(
                             downloadedBytes = landedAlready,
                             stage = OfflineDownloads.Stage.Failed,
-                            failure = "Not enough space: ${StreamStats.formatBytes(short)} short",
+                            failure = L.downloadsNotEnoughSpace(short = Translator.messages.formatter.bytes(short)),
                             bytesPerSecond = 0,
                         ),
                     )
@@ -874,23 +876,23 @@ class DownloadService : Service() {
             if (row.stage == OfflineDownloads.Stage.Failed) continue
             val line = when (row.stage) {
                 OfflineDownloads.Stage.Running -> listOfNotNull(
-                    row.fraction?.let(StreamStats::formatPercent),
+                    row.fraction?.let { Translator.messages.formatter.percent(it.toDouble()) },
                     if (row.totalBytes > 0) {
-                        "${bytes(row.downloadedBytes)} of ${bytes(row.totalBytes)}"
+                        L.commonOfTotal(done = bytes(row.downloadedBytes), total = bytes(row.totalBytes))
                     } else {
                         bytes(row.downloadedBytes)
                     },
-                    StreamStats.formatEta(row.remainingSeconds).ifEmpty { null },
+                    Translator.messages.formatter.eta(row.remainingSeconds).ifEmpty { null },
                 ).joinToString(DOT)
                 OfflineDownloads.Stage.Queued -> {
                     val place = queued.indexOfFirst { it.fileId == row.fileId }
-                    if (place <= 0) "Next in the queue" else "${place + 1} in the queue"
+                    if (place <= 0) L.downloadsNextInQueue else L.downloadsPlaceInQueue(place = place + 1)
                 }
-                OfflineDownloads.Stage.Paused -> "Paused"
-                OfflineDownloads.Stage.Offline -> "Waiting for a connection"
-                OfflineDownloads.Stage.NoWifi -> "Waiting for Wi-Fi"
+                OfflineDownloads.Stage.Paused -> L.downloadsPaused
+                OfflineDownloads.Stage.Offline -> L.downloadsWaitingConnection
+                OfflineDownloads.Stage.NoWifi -> L.downloadsWaitingWifi
                 OfflineDownloads.Stage.Moving ->
-                    if (row.heldByPlayer) "Finishes when playback stops" else "Moving into Downloads"
+                    if (row.heldByPlayer) L.downloadsFinishesAfterPlayback else L.downloadsMovingIntoDownloads
                 OfflineDownloads.Stage.Failed -> continue
             }
             if (lines[row.fileId] == line) continue
@@ -926,7 +928,7 @@ class DownloadService : Service() {
                 addAction(
                     action(
                         icon = R.drawable.ic_notify_cancel,
-                        label = "Cancel",
+                        label = L.commonCancel,
                         action = ACTION_CANCEL,
                         fileId = row.fileId,
                     ),
@@ -935,7 +937,7 @@ class DownloadService : Service() {
                     addAction(
                         action(
                             icon = R.drawable.ic_notify_pause,
-                            label = "Pause",
+                            label = L.commonPause,
                             action = ACTION_PAUSE,
                             fileId = row.fileId,
                         ),
@@ -944,7 +946,7 @@ class DownloadService : Service() {
                     addAction(
                         action(
                             icon = R.drawable.ic_notify_resume,
-                            label = "Resume",
+                            label = L.commonResume,
                             action = ACTION_RESUME,
                             fileId = row.fileId,
                         ),
@@ -978,8 +980,8 @@ class DownloadService : Service() {
             // Fetched, and waiting for the player or being moved: the last stage of the queue.
             val waitingForPlayer = rows.any { it.stage == OfflineDownloads.Stage.Moving && it.heldByPlayer }
             return builder
-                .setContentTitle(if (moving == 1) "Saving to Downloads" else "Saving $moving videos to Downloads")
-                .setContentText(if (waitingForPlayer) "Finishes when playback stops" else "Moving into Downloads")
+                .setContentTitle(L.notifySaving(count = moving))
+                .setContentText(if (waitingForPlayer) L.downloadsFinishesAfterPlayback else L.downloadsMovingIntoDownloads)
                 .setProgress(0, 0, !waitingForPlayer)
                 .addAction(cancelAction(rows.size))
                 .build()
@@ -993,18 +995,17 @@ class DownloadService : Service() {
                 val held = maxOf(offline, noWifi)
                 return builder
                     .setContentTitle(
-                        when {
-                            forWifi && held == 1 -> "Waiting for Wi-Fi"
-                            forWifi -> "$held downloads waiting for Wi-Fi"
-                            held == 1 -> "Waiting for a connection"
-                            else -> "$held downloads waiting for a connection"
+                        if (forWifi) {
+                            L.notifyHeldForWifi(count = held)
+                        } else {
+                            L.notifyHeldForConnection(count = held)
                         },
                     )
                     .setContentText(
                         if (forWifi) {
-                            "They start on Wi-Fi. Change this in Settings."
+                            L.notifyStartOnWifi
                         } else {
-                            "They carry on by themselves when the signal is back."
+                            L.notifyCarryOn
                         },
                     )
                     .setProgress(0, 0, false)
@@ -1013,11 +1014,9 @@ class DownloadService : Service() {
                     .build()
             }
             val title = when {
-                paused > 0 && paused == 1 -> "Download paused"
-                paused > 0 -> "$paused downloads paused"
-                queued == 1 -> "Starting a download"
-                queued > 1 -> "Starting $queued downloads"
-                else -> "Downloading for later"
+                paused > 0 -> L.notifyPaused(count = paused)
+                queued > 0 -> L.notifyStarting(count = queued)
+                else -> L.notifyDownloadingForLater
             }
             return builder
                 .setContentTitle(title)
@@ -1025,9 +1024,9 @@ class DownloadService : Service() {
                 // rows still queued or paused say so instead.
                 .setContentText(
                     when {
-                        paused > 0 -> "Paused"
-                        queued > 0 -> "Waiting to start"
-                        else -> "Finishing up"
+                        paused > 0 -> L.downloadsPaused
+                        queued > 0 -> L.notifyWaitingToStart
+                        else -> L.notifyFinishingUp
                     },
                 )
                 .setProgress(0, 0, paused == 0)
@@ -1038,20 +1037,20 @@ class DownloadService : Service() {
 
         val fraction = current.fraction
         val line = listOfNotNull(
-            fraction?.let(StreamStats::formatPercent),
+            fraction?.let { Translator.messages.formatter.percent(it.toDouble()) },
             if (current.totalBytes > 0) {
-                "${bytes(current.downloadedBytes)} of ${bytes(current.totalBytes)}"
+                L.commonOfTotal(done = bytes(current.downloadedBytes), total = bytes(current.totalBytes))
             } else {
                 bytes(current.downloadedBytes)
             },
-            StreamStats.formatSpeed(current.bytesPerSecond).takeIf { current.bytesPerSecond >= 1024 },
+            Translator.messages.formatter.speed(current.bytesPerSecond).takeIf { current.bytesPerSecond >= 1024 },
             waitingLine(queued + paused + offline + noWifi),
         ).joinToString(DOT)
 
         return builder
             .setContentTitle(current.title)
             .setContentText(line)
-            .setSubText(StreamStats.formatEta(current.remainingSeconds).ifEmpty { null })
+            .setSubText(Translator.messages.formatter.eta(current.remainingSeconds).ifEmpty { null })
             .setProgress(100, ((fraction ?: 0f) * 100).toInt(), fraction == null)
             .addAction(pauseAction())
             .addAction(cancelAction(rows.size))
@@ -1060,8 +1059,7 @@ class DownloadService : Service() {
 
     private fun waitingLine(count: Int): String? = when {
         count <= 0 -> null
-        count == 1 -> "1 waiting"
-        else -> "$count waiting"
+        else -> L.notifyWaiting(count = count)
     }
 
     /**
@@ -1073,19 +1071,19 @@ class DownloadService : Service() {
      */
     private fun pauseAction(): Notification.Action = action(
         icon = R.drawable.ic_notify_pause,
-        label = "Pause",
+        label = L.commonPause,
         action = ACTION_PAUSE,
     )
 
     private fun resumeAction(paused: Int): Notification.Action = action(
         icon = R.drawable.ic_notify_resume,
-        label = if (paused > 1) "Resume all" else "Resume",
+        label = if (paused > 1) L.commonResumeAll else L.commonResume,
         action = ACTION_RESUME,
     )
 
     private fun cancelAction(rows: Int): Notification.Action = action(
         icon = R.drawable.ic_notify_cancel,
-        label = if (rows > 1) "Cancel all" else "Cancel",
+        label = if (rows > 1) L.commonCancelAll else L.commonCancel,
         action = ACTION_CANCEL,
     )
 
@@ -1139,7 +1137,7 @@ class DownloadService : Service() {
     /** One channel for these and for [AndroidTransferNotifier]'s, so one switch covers both. */
     private fun channel() = AndroidTransferNotifier.ensureChannel(this)
 
-    private fun bytes(value: Long): String = StreamStats.formatBytes(value)
+    private fun bytes(value: Long): String = Translator.messages.formatter.bytes(value)
 
     private fun Int.notificationId(): Int = SUMMARY_ID + 1 + (this and 0xFFFF)
 
@@ -1201,9 +1199,9 @@ class DownloadService : Service() {
 
         private const val DOT = "  ·  "
 
-        private const val FAILED_TEXT = "The download did not finish. Try again."
+        private val FAILED_TEXT: String get() = L.downloadsFailed
 
         /** What a finished download's notification says under its title. */
-        private const val DONE_TEXT = "Downloaded. It is in Downloads and plays without a connection."
+        private val DONE_TEXT: String get() = L.notifyDownloaded
     }
 }

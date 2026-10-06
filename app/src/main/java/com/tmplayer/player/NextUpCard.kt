@@ -13,6 +13,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.tmplayer.R
+import com.tmplayer.i18n.L
 
 /**
  * The bottom-right card that offers the next episode before this one ends: "Next: S01E05,
@@ -45,7 +46,7 @@ class NextUpCard(
     }
 
     /** Play now, which a television focuses as the card comes up. */
-    val play: Button = button("Play now", onPlay)
+    val play: Button = button(L.playerPlayNow, onPlay)
 
     val view: LinearLayout = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
@@ -58,7 +59,7 @@ class NextUpCard(
             LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.END
-                addView(button("Hide", onHide))
+                addView(button(L.commonHide, onHide))
                 addView(play)
             },
         )
@@ -83,7 +84,7 @@ class NextUpCard(
 
     /** Writes [label] and the seconds left, and shows the card. True when it has just come up. */
     fun show(label: String, secondsLeft: Long): Boolean {
-        text.text = "Next: $label\nStarting in $secondsLeft s"
+        text.text = L.playerNextUpCard(label, secondsLeft)
         if (isShown) return false
         view.visibility = View.VISIBLE
         return true

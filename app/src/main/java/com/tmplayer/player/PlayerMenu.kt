@@ -1,5 +1,7 @@
 package com.tmplayer.player
 
+import com.tmplayer.i18n.L
+
 /**
  * One line of the television player's More menu.
  *
@@ -81,19 +83,17 @@ object PlayerMenu {
  * install guide can still find out that OK twice pauses, and a change to one is a change to both.
  */
 object RemoteKeys {
-    val ROWS: List<Pair<String, String>> = listOf(
-        "Left / Right" to "Jump back 5 or forward 10 seconds, right on the picture, nothing else comes up",
-        "OK" to "Show the controls with the seek bar focused; on the bar OK is play and pause, " +
-            "so OK twice from the bare picture pauses",
-        "Play / Pause" to "Play or pause; paused, the controls stay up with a pause sign in the middle",
-        "Left / Right on the seek bar" to "Travel 30 seconds a press; presses pile up and land as " +
-            "one seek a moment after the last",
-        "Down, controls up" to "The button row: subtitles, audio, speed, picture shape, and More at the end",
-        "OK on the time" to "Switch between the total length and the time left",
-        "0 to 9" to "Jump to that tenth of the video; 5 is halfway",
-        "Rewind / Fast forward" to "Jump back 5 or forward 10 seconds",
-        "Next / Previous" to "The next or previous episode, when the chat has one; also in More",
-        "Hold OK, controls up" to "Open the video in another app",
-        "Back" to "Close what is on top: the controls, then the player; the position is remembered",
+    val ROWS: List<Pair<String, String>> get() = listOf(
+        L.playerKeyLeftRight to L.playerKeyLeftRightDoes,
+        L.playerKeyOk to L.playerKeyOkDoes,
+        L.playerKeyPlayPause to L.playerKeyPlayPauseDoes,
+        L.playerKeySeekBar to L.playerKeySeekBarDoes,
+        L.playerKeyDown to L.playerKeyDownDoes,
+        L.playerKeyTime to L.playerKeyTimeDoes,
+        L.playerKeyDigits to L.playerKeyDigitsDoes,
+        L.playerKeyRewind to L.playerKeyRewindDoes,
+        L.playerKeyNext to L.playerKeyNextDoes,
+        L.playerKeyHoldOk to L.playerKeyHoldOkDoes,
+        L.playerKeyBack to L.playerKeyBackDoes,
     )
 }

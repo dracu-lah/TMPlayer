@@ -31,6 +31,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.tmplayer.i18n.L
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.delay
 
@@ -44,7 +46,7 @@ import kotlinx.coroutines.delay
  * a hang after about five seconds.
  */
 @Composable
-fun ConnectingPane(label: String = "Connecting to Telegram") {
+fun ConnectingPane(label: String = LocalStrings.current.stateConnecting) {
     val touch = isTouch()
     // Cycles once through and then stays on the last line. Looping back to "Connecting" after
     // suggesting the viewer check their connection would be the app forgetting what it just said.
@@ -149,10 +151,10 @@ private fun PulseRings(size: androidx.compose.ui.unit.Dp) {
  * The last two are the only advice worth giving: everything this app does needs the internet, and
  * a first launch after an install has a database to build before it can talk to anybody.
  */
-private val REASSURANCES = listOf(
-    "Opening your session",
-    "This takes a moment on the first launch",
-    "Still trying. Check that this device is online",
+private val REASSURANCES: List<String> get() = listOf(
+    L.stateConnectingSession,
+    L.stateConnectingFirstLaunch,
+    L.stateConnectingStillTrying,
 )
 
 /** Long enough that a connection that lands immediately shows the first line and nothing else. */

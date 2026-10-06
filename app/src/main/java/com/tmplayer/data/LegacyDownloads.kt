@@ -1,5 +1,6 @@
 package com.tmplayer.data
 
+import com.tmplayer.i18n.L
 import com.tmplayer.platform.NoTransferNotifier
 import com.tmplayer.platform.TransferNotifier
 import java.io.File
@@ -83,15 +84,15 @@ class LegacyDownloads(
             if (failed == 0) {
                 notifier.complete(
                     NOTIFICATION_ID,
-                    "Downloads moved",
-                    if (moved == 1) "1 download is in $FOLDER." else "$moved downloads are in $FOLDER.",
+                    L.downloadsMigratedTitle,
+                    L.downloadsMigratedBody(count = moved, folder = FOLDER),
                     TransferNotifier.OpenTarget.DownloadsScreen,
                 )
             } else {
                 notifier.fail(
                     NOTIFICATION_ID,
-                    "Some downloads did not move",
-                    "$failed of ${whole.size} are still in the cache. TMPlayer tries again next time.",
+                    L.downloadsMigrateFailedTitle,
+                    L.downloadsMigrateFailedBody(failed = failed, total = whole.size),
                     retryable = true,
                 )
             }
@@ -102,19 +103,18 @@ class LegacyDownloads(
 
     companion object {
         /** What the viewer is told the folder is called. */
-        const val FOLDER = "TMPlayer's Downloads folder"
+        val FOLDER: String get() = L.downloadsFolder
 
         /** The aggregate notification's id, clear of the download service's 4200 range. */
         const val NOTIFICATION_ID = 4100L
 
         fun title(count: Int): String =
-            if (count == 1) "Moving 1 download into $FOLDER" else "Moving $count downloads into $FOLDER"
+            L.downloadsMigrating(count = count, folder = FOLDER)
 
         /** The toast at the end, or null when nothing moved and there is nothing to say. */
         fun toast(result: Result?): String? = when {
             result == null || result.moved == 0 -> null
-            result.moved == 1 -> "1 download moved into $FOLDER."
-            else -> "${result.moved} downloads moved into $FOLDER."
+            else -> L.downloadsMigratedToast(count = result.moved, folder = FOLDER)
         }
     }
 }

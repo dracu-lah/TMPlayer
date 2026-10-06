@@ -133,7 +133,6 @@ import com.tmplayer.data.UpdateWords
 import com.tmplayer.data.Updates
 import com.tmplayer.data.release
 import com.tmplayer.data.updateScheduler
-import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.PhonePad
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvConfirm
@@ -186,6 +185,7 @@ fun SettingsScreen(
     /** Settings, then About: the licence, the notices and every link. */
     onOpenAbout: () -> Unit = {},
 ) {
+    val s = LocalStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings = remember { SettingsStore(context) }
@@ -267,7 +267,7 @@ fun SettingsScreen(
 
     val touch = isTouch()
     // These rows describe the machine they are running on, and half of them name it.
-    val device = if (touch) "phone" else "TV"
+    val device = if (touch) "phone" else "tv"
 
     // The size beside the cached video has to follow the video: watching something else replaces
     // the record, and a figure left over from the last video is worse than no figure at all.
@@ -320,12 +320,12 @@ fun SettingsScreen(
             item {
                 Column(Modifier.padding(bottom = 12.dp)) {
                     Text(
-                        "Settings",
+                        s.settingsTitle,
                         style = MaterialTheme.typography.headlineLarge,
                         color = Tone.text,
                     )
                     Text(
-                        "Changes save as you make them.",
+                        s.settingsSavesAsYouGo,
                         style = MaterialTheme.typography.bodyMedium,
                         color = Tone.muted,
                     )
@@ -352,7 +352,7 @@ fun SettingsScreen(
 
         // First, on both devices: a stick often lives on a screen in a bright room, so the theme
         // is worth offering there too.
-        item { SectionTitle("Appearance") }
+        item { SectionTitle(s.settingsAppearance) }
         item {
             if (touch) {
                 ThemePicker(
@@ -363,7 +363,7 @@ fun SettingsScreen(
                 // Segments are a thumb control and cannot be reached with a D-pad. The stepper is
                 // the same one the size limits use, so Left and Right already mean "change this".
                 StepperRow(
-                    title = "Theme",
+                    title = s.settingsTheme,
                     subtitle = themeChoice.tvDescription,
                     value = themeChoice.label,
                     icon = TmIcons.CircleOutline,
@@ -383,11 +383,11 @@ fun SettingsScreen(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 item {
                     ToggleRow(
-                        title = "Use the wallpaper's colours",
+                        title = s.settingsWallpaperColours,
                         subtitle = if (dynamicColour) {
-                            "TMPlayer takes its colours from your phone's wallpaper"
+                            s.settingsWallpaperColoursOn
                         } else {
-                            "Off: TMPlayer uses its own colours"
+                            s.settingsWallpaperColoursOff
                         },
                         icon = TmIcons.CircleOutline,
                         checked = dynamicColour,
@@ -414,7 +414,7 @@ fun SettingsScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "Video size limits",
+                    s.settingsSizeLimits,
                     style = sectionStyle(),
                     color = if (touch) Tone.accent else Tone.text,
                     modifier = Modifier.weight(1f),
@@ -437,8 +437,7 @@ fun SettingsScreen(
         item {
             Text(
                 // Phrased around whichever ends are actually set.
-                SizeFilter.describe(minSize, maxSize) +
-                    " This keeps short clips out of the list.",
+                s.settingsSizeLimitsNote(s.formatter.sizeRange(minSize, maxSize)),
                 style = MaterialTheme.typography.bodyMedium,
                 color = Tone.muted,
                 modifier = Modifier.padding(
@@ -480,17 +479,13 @@ fun SettingsScreen(
         // Every row below is conditional, so the heading only appears when it has something
         // under it rather than standing over empty space.
         if (favorites.isNotEmpty() || history.isNotEmpty() || watchedList.isNotEmpty()) {
-            item { SectionTitle("Lists") }
+            item { SectionTitle(s.settingsLists) }
         }
         if (favorites.isNotEmpty()) {
             item {
                 ActionRow(
-                    title = "Clear favourites",
-                    subtitle = if (favorites.size == 1) {
-                        "Unstars the one chat you have starred"
-                    } else {
-                        "Unstars all ${favorites.size} starred chats"
-                    },
+                    title = s.settingsClearFavourites,
+                    subtitle = s.settingsClearFavouritesDetail(favorites.size),
                     icon = Icons.Filled.Close,
                     onClick = { prompt = Prompt.ClearFavorites },
                 )
@@ -499,12 +494,8 @@ fun SettingsScreen(
         if (history.isNotEmpty()) {
             item {
                 ActionRow(
-                    title = "Clear Continue watching",
-                    subtitle = if (history.size == 1) {
-                        "Forgets the one video you have on the go"
-                    } else {
-                        "Forgets all ${history.size} videos you have on the go"
-                    },
+                    title = s.settingsClearHistory,
+                    subtitle = s.settingsClearHistoryDetail(history.size),
                     icon = Icons.Filled.Close,
                     onClick = { prompt = Prompt.ClearHistory },
                 )
@@ -513,12 +504,8 @@ fun SettingsScreen(
         if (watchedList.isNotEmpty()) {
             item {
                 ActionRow(
-                    title = "Clear watched list",
-                    subtitle = if (watchedList.size == 1) {
-                        "Takes the tick off the one video you have watched"
-                    } else {
-                        "Takes the tick off all ${watchedList.size} videos you have watched"
-                    },
+                    title = s.settingsClearWatched,
+                    subtitle = s.settingsClearWatchedDetail(watchedList.size),
                     icon = Icons.Filled.Close,
                     onClick = { prompt = Prompt.ClearWatched },
                 )
@@ -527,14 +514,14 @@ fun SettingsScreen(
 
         // ---- playback -----------------------------------------------------------------------
 
-        item { SectionTitle("Playback") }
+        item { SectionTitle(s.settingsPlayback) }
         item {
             ToggleRow(
-                title = "Play the next episode automatically",
+                title = s.settingsAutoplay,
                 subtitle = if (autoplayNext) {
-                    "Starts after a short countdown you can stop"
+                    s.settingsAutoplayOn
                 } else {
-                    "Off: a finished video stays on the last frame"
+                    s.settingsAutoplayOff
                 },
                 icon = Icons.Filled.PlayArrow,
                 checked = autoplayNext,
@@ -543,11 +530,11 @@ fun SettingsScreen(
         }
         item {
             ToggleRow(
-                title = "Download the whole video first",
+                title = s.settingsDownloadFirst,
                 subtitle = if (downloadFirst) {
-                    "Waits for all of it, then plays"
+                    s.settingsDownloadFirstOn
                 } else {
-                    "Off: it downloads while you watch"
+                    s.settingsDownloadFirstOff
                 },
                 icon = TmIcons.Clock,
                 checked = downloadFirst,
@@ -563,11 +550,11 @@ fun SettingsScreen(
         item {
             val downmix = AudioDownmix.wanted(downmixChoice, television = !touch)
             ToggleRow(
-                title = "Downmix to stereo",
+                title = s.settingsDownmix,
                 subtitle = if (downmix) {
-                    "Surround sound is folded into two channels"
+                    s.settingsDownmixOn
                 } else {
-                    "Off: surround sound goes out as it is"
+                    s.settingsDownmixOff
                 },
                 icon = ImageVector.vectorResource(R.drawable.ic_audio_language),
                 checked = downmix,
@@ -578,8 +565,8 @@ fun SettingsScreen(
         item {
             val choices = TouchPrefs.TIMEOUT_CHOICES_MS
             StepperRow(
-                title = "Hide the controls after",
-                subtitle = "While playing; a paused video keeps them up",
+                title = s.settingsControlsTimeout,
+                subtitle = s.settingsControlsTimeoutDetail,
                 value = TouchPrefs.timeoutLabel(touchPrefs.controlsTimeoutMs),
                 icon = TmIcons.Clock,
                 canDecrease = touchPrefs.controlsTimeoutMs != choices.first(),
@@ -599,11 +586,11 @@ fun SettingsScreen(
         if (touch) {
             item {
                 ToggleRow(
-                    title = "Only download over Wi-Fi",
+                    title = s.settingsWifiOnly,
                     subtitle = if (wifiOnly) {
-                        "Videos you haven't downloaded won't open on mobile data"
+                        s.settingsWifiOnlyOn
                     } else {
-                        "Off: a large video warns you once before it starts on mobile data"
+                        s.settingsWifiOnlyOff
                     },
                     icon = TmIcons.Wifi,
                     checked = wifiOnly,
@@ -616,14 +603,14 @@ fun SettingsScreen(
         // The same three the player's subtitle list offers, with a preview here because nothing is
         // playing behind Settings to show the change on.
 
-        item { SectionTitle("Subtitles") }
+        item { SectionTitle(s.settingsSubtitles) }
         item { SubtitlePreview(subtitleStyle) }
         item {
             val sizes = SubtitleSize.entries
             val at = sizes.indexOf(subtitleStyle.size)
             StepperRow(
-                title = "Subtitle size",
-                subtitle = "For subtitles without a style of their own",
+                title = s.settingsSubtitleSize,
+                subtitle = s.settingsSubtitleSizeDetail,
                 value = subtitleStyle.size.label,
                 icon = ImageVector.vectorResource(R.drawable.ic_subtitles),
                 canDecrease = at > 0,
@@ -636,11 +623,11 @@ fun SettingsScreen(
         }
         item {
             ToggleRow(
-                title = "Background box",
+                title = s.settingsSubtitleBox,
                 subtitle = if (subtitleStyle.box) {
-                    "A dark box behind the text, for a bright or busy picture"
+                    s.settingsSubtitleBoxOn
                 } else {
-                    "Off: white text with a black outline"
+                    s.settingsSubtitleBoxOff
                 },
                 icon = ImageVector.vectorResource(R.drawable.ic_subtitles),
                 checked = subtitleStyle.box,
@@ -651,8 +638,8 @@ fun SettingsScreen(
             val positions = SubtitlePosition.entries
             val at = positions.indexOf(subtitleStyle.position)
             StepperRow(
-                title = "Subtitle position",
-                subtitle = "Raise them above burnt in text or a cropped edge",
+                title = s.settingsSubtitlePosition,
+                subtitle = s.settingsSubtitlePositionDetail,
                 value = subtitleStyle.position.label,
                 icon = ImageVector.vectorResource(R.drawable.ic_subtitles),
                 canDecrease = at > 0,
@@ -670,14 +657,14 @@ fun SettingsScreen(
             fun update(change: (TouchPrefs) -> TouchPrefs) {
                 scope.launch { settings.updateTouchPrefs(change) }
             }
-            item { SectionTitle("Player") }
+            item { SectionTitle(s.settingsPlayer) }
             item {
                 ToggleRow(
-                    title = "Tap the picture to play or pause",
+                    title = s.settingsTapPlays,
                     subtitle = if (touchPrefs.tapPlaysPauses) {
-                        "A tap pauses and shows the controls; another tap plays"
+                        s.settingsTapPlaysOn
                     } else {
-                        "Off: a tap shows the controls, and the big button pauses"
+                        s.settingsTapPlaysOff
                     },
                     icon = TmIcons.Pause,
                     checked = touchPrefs.tapPlaysPauses,
@@ -687,9 +674,9 @@ fun SettingsScreen(
             item {
                 val choices = TouchPrefs.DOUBLE_TAP_CHOICES_MS
                 StepperRow(
-                    title = "Double tap to jump",
-                    subtitle = "Each tap on a side of the picture, and the jump buttons",
-                    value = "${touchPrefs.doubleTapMs / 1000} seconds",
+                    title = s.settingsDoubleTap,
+                    subtitle = s.settingsDoubleTapDetail,
+                    value = s.settingsDoubleTapSeconds(touchPrefs.doubleTapMs / 1000),
                     icon = Icons.Filled.Refresh,
                     canDecrease = touchPrefs.doubleTapMs != choices.first(),
                     canIncrease = touchPrefs.doubleTapMs != choices.last(),
@@ -701,8 +688,8 @@ fun SettingsScreen(
             item {
                 val choices = TouchPrefs.HOLD_CHOICES
                 StepperRow(
-                    title = "Hold to speed up",
-                    subtitle = "Plays fast for as long as a finger is held on the picture",
+                    title = s.settingsHoldSpeed,
+                    subtitle = s.settingsHoldSpeedDetail,
                     value = TouchPrefs.holdLabel(touchPrefs.holdSpeed),
                     icon = Icons.Filled.PlayArrow,
                     canDecrease = touchPrefs.holdSpeed != choices.first(),
@@ -714,8 +701,8 @@ fun SettingsScreen(
             }
             item {
                 ToggleRow(
-                    title = "Swipe sideways to seek",
-                    subtitle = "Drag across the picture to travel through the video",
+                    title = s.settingsSeekGesture,
+                    subtitle = s.settingsSeekGestureDetail,
                     icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     checked = touchPrefs.seekGesture,
                     onToggle = { update { it.copy(seekGesture = !it.seekGesture) } },
@@ -723,8 +710,8 @@ fun SettingsScreen(
             }
             item {
                 ToggleRow(
-                    title = "Swipe on the left for brightness",
-                    subtitle = "Up and down on the left side of the picture",
+                    title = s.settingsBrightnessGesture,
+                    subtitle = s.settingsBrightnessGestureDetail,
                     icon = Icons.Filled.KeyboardArrowUp,
                     checked = touchPrefs.brightnessGesture,
                     onToggle = { update { it.copy(brightnessGesture = !it.brightnessGesture) } },
@@ -732,8 +719,8 @@ fun SettingsScreen(
             }
             item {
                 ToggleRow(
-                    title = "Swipe on the right for volume",
-                    subtitle = "Up and down on the right side of the picture",
+                    title = s.settingsVolumeGesture,
+                    subtitle = s.settingsVolumeGestureDetail,
                     icon = Icons.Filled.KeyboardArrowUp,
                     checked = touchPrefs.volumeGesture,
                     onToggle = { update { it.copy(volumeGesture = !it.volumeGesture) } },
@@ -741,8 +728,8 @@ fun SettingsScreen(
             }
             item {
                 ToggleRow(
-                    title = "Vibrate on taps",
-                    subtitle = "A light tick for play, pause, jumps and the hold",
+                    title = s.settingsHaptics,
+                    subtitle = s.settingsHapticsDetail,
                     icon = TmIcons.Bell,
                     checked = touchPrefs.haptics,
                     onToggle = { update { it.copy(haptics = !it.haptics) } },
@@ -752,7 +739,7 @@ fun SettingsScreen(
 
         // ---- storage ------------------------------------------------------------------------
 
-        item { SectionTitle("Storage") }
+        item { SectionTitle(s.settingsStorage) }
         item {
             StorageCard(
                 split = split,
@@ -765,15 +752,15 @@ fun SettingsScreen(
         item {
             val held = cached.firstOrNull()
             ActionRow(
-                title = "Cached videos",
+                title = s.settingsCachedVideos,
                 subtitle = when {
-                    split.cachedBytes <= 0 -> "Nothing cached. Playing a video keeps it here until the next one."
+                    split.cachedBytes <= 0 -> s.settingsCachedNone
                     // More than one means episodes an older version of the app left behind, so
                     // the count is quoted rather than claiming "1 video" beside two gigabytes.
                     split.cachedCount > 1 ->
-                        "${split.cachedCount} videos, ${StreamStats.formatBytes(split.cachedBytes)}"
-                    held != null -> "\"${held.title}\", ${StreamStats.formatBytes(split.cachedBytes)}"
-                    else -> StreamStats.formatBytes(split.cachedBytes)
+                        s.settingsCachedCount(split.cachedCount, s.formatter.bytes(split.cachedBytes))
+                    held != null -> s.settingsCachedOne(held.title, s.formatter.bytes(split.cachedBytes))
+                    else -> s.formatter.bytes(split.cachedBytes)
                 },
                 icon = TmIcons.Download,
                 onClick = onOpenCachedVideos,
@@ -783,14 +770,14 @@ fun SettingsScreen(
         // Play replaces it anyway.
         item {
             ActionRow(
-                title = "Clear cache",
-                subtitle = "Deletes every cached video. Downloads are not touched.",
+                title = s.settingsClearCache,
+                subtitle = s.settingsClearCacheDetail,
                 icon = Icons.Filled.Delete,
                 onClick = {
                     // Nothing to delete is not a dialog. The row stays focusable and in the same
                     // place every time, and says so instead.
                     if (split.cachedBytes <= 0) {
-                        toast("There is nothing cached right now")
+                        toast(s.settingsNothingCached)
                     } else {
                         prompt = Prompt.ClearCache
                     }
@@ -804,17 +791,16 @@ fun SettingsScreen(
             ActionRow(
                 // Named for what it clears, beside the row above it that clears videos: two rows
                 // that both sound like the general answer to a full disk cannot be told apart.
-                title = "Clear pictures and previews",
+                title = s.settingsClearPictures,
                 subtitle = if (split.otherBytes <= 0) {
-                    "Nothing held. Thumbnails and previews collect as you browse."
+                    s.settingsClearPicturesNone
                 } else {
-                    "${StreamStats.formatBytes(split.otherBytes)} of thumbnails and other data " +
-                        "TMPlayer is holding. They come back as you browse."
+                    s.settingsClearPicturesDetail(s.formatter.bytes(split.otherBytes))
                 },
                 icon = Icons.Filled.Delete,
                 onClick = {
                     if (split.otherBytes <= 0) {
-                        toast("There is nothing to clear right now")
+                        toast(s.settingsNothingToClear)
                     } else {
                         prompt = Prompt.ClearOther
                     }
@@ -826,17 +812,16 @@ fun SettingsScreen(
         // one away. They are deleted from the Downloads screen instead.
         item {
             ActionRow(
-                title = "Clear everything except downloads",
+                title = s.settingsClearAll,
                 subtitle = if (split.cachedBytes + split.otherBytes <= 0) {
-                    "Nothing to clear. Your downloads are never touched by this."
+                    s.settingsClearAllNone
                 } else {
-                    "Frees ${StreamStats.formatBytes(split.cachedBytes + split.otherBytes)}. " +
-                        "Your downloads are not touched."
+                    s.settingsClearAllDetail(s.formatter.bytes(split.cachedBytes + split.otherBytes))
                 },
                 icon = Icons.Filled.Delete,
                 onClick = {
                     if (split.cachedBytes + split.otherBytes <= 0) {
-                        toast("There is nothing to clear right now")
+                        toast(s.settingsNothingToClear)
                     } else {
                         prompt = Prompt.ClearAllButDownloads
                     }
@@ -846,14 +831,14 @@ fun SettingsScreen(
 
         // ---- startup ------------------------------------------------------------------------
 
-        item { SectionTitle("On launch") }
+        item { SectionTitle(s.settingsOnLaunch) }
         item {
             ToggleRow(
-                title = "Carry on from the last chat",
+                title = s.settingsOpenLastChat,
                 subtitle = when {
-                    lastChatTitle != null -> "Opens $lastChatTitle"
-                    lastChatId != 0L -> "Opens the chat you watched last"
-                    else -> "Skips the chat list once you have watched something"
+                    lastChatTitle != null -> s.settingsOpenLastChatNamed(lastChatTitle)
+                    lastChatId != 0L -> s.settingsOpenLastChatUnnamed
+                    else -> s.settingsOpenLastChatOff
                 },
                 icon = TmIcons.Clock,
                 checked = openLastChat,
@@ -863,15 +848,15 @@ fun SettingsScreen(
         if (openLastChat && lastChatId != 0L) {
             item {
                 ActionRow(
-                    title = "Forget it",
-                    subtitle = "Start at the chat list again until you open another chat",
+                    title = s.settingsForgetLastChat,
+                    subtitle = s.settingsForgetLastChatDetail,
                     icon = Icons.Filled.Close,
                     // This row deletes itself on success, so it needs a toast: otherwise the
                     // press reads as having been lost.
                     onClick = {
                         scope.launch {
                             settings.forgetLastChat()
-                            toast("TMPlayer will start at the chat list")
+                            toast(s.settingsForgotLastChat)
                         }
                     },
                 )
@@ -880,14 +865,12 @@ fun SettingsScreen(
 
         // ---- version -------------------------------------------------------------------------
 
-        item { SectionTitle("Version") }
+        item { SectionTitle(s.settingsVersion) }
         updateState.release?.let { offered ->
             item {
                 ActionRow(
                     title = UpdateWords.settingsRow(offered),
-                    subtitle = "Downloads " +
-                        "${StreamStats.formatBytes(Updates.apkFor(offered)?.size ?: 0L)} from GitHub, " +
-                        "then Android asks you to confirm",
+                    subtitle = s.settingsUpdateDetail(s.formatter.bytes(Updates.apkFor(offered)?.size ?: 0L)),
                     icon = Icons.Filled.Refresh,
                     tint = Tone.caution,
                     onClick = { showUpdate = true },
@@ -896,9 +879,8 @@ fun SettingsScreen(
         }
         item {
             ActionRow(
-                title = "Check for updates",
-                subtitle = "This is TMPlayer ${Updates.installedVersion}, from " +
-                    Updates.RELEASES_PAGE,
+                title = s.settingsCheckUpdates,
+                subtitle = s.settingsCheckUpdatesDetail(Updates.installedVersion, Updates.RELEASES_PAGE),
                 icon = Icons.Filled.Refresh,
                 onClick = {
                     showUpdate = true
@@ -909,8 +891,8 @@ fun SettingsScreen(
         }
         item {
             ToggleRow(
-                title = "Tell me when a new version is out",
-                subtitle = "Looks every six hours. Nothing is downloaded or installed without you",
+                title = s.settingsUpdateNotify,
+                subtitle = s.settingsUpdateNotifyDetail,
                 icon = Icons.Filled.Info,
                 checked = updateNotify,
                 onToggle = { scope.launch { settings.setUpdateNotify(!updateNotify) } },
@@ -919,21 +901,21 @@ fun SettingsScreen(
 
         // ---- help ----------------------------------------------------------------------------
 
-        item { SectionTitle("Help") }
+        item { SectionTitle(s.settingsHelp) }
         item {
             ActionRow(
-                title = LocalStrings.current.settingsWalkthrough,
-                subtitle = LocalStrings.current.settingsWalkthroughBody,
+                title = s.settingsWalkthrough,
+                subtitle = s.settingsWalkthroughBody,
                 icon = Icons.Filled.Info,
                 onClick = { scope.launch { settings.replayOverview() } },
             )
         }
         item {
             ActionRow(
-                title = "Privacy",
-                subtitle = "What stays on this $device and which services TMPlayer contacts",
+                title = s.aboutPrivacy,
+                subtitle = s.settingsPrivacyDetail(device),
                 icon = Icons.Filled.Info,
-                onClick = { openPage(About.PRIVACY, "the privacy page") },
+                onClick = { openPage(About.PRIVACY, s.settingsQrPrivacyPage) },
             )
         }
         // The one setting that sends anything anywhere except Telegram and GitHub, and it is off
@@ -942,12 +924,11 @@ fun SettingsScreen(
         if (CrashReports.available) {
             item {
                 ToggleRow(
-                    title = "Send crash reports",
+                    title = s.settingsCrashReports,
                     subtitle = if (crashReports) {
-                        "If TMPlayer crashes, the stack trace is sent to the developer. " +
-                            "No chat names, no filenames, no history"
+                        s.settingsCrashReportsOn
                     } else {
-                        "Off: nothing is sent. Turn this on to help fix the crash you just had"
+                        s.settingsCrashReportsOff
                     },
                     icon = Icons.Filled.Info,
                     checked = crashReports,
@@ -961,10 +942,10 @@ fun SettingsScreen(
         }
         item {
             ActionRow(
-                title = "Lawful use",
-                subtitle = "Use TMPlayer only with media you may access",
+                title = s.aboutLawfulUse,
+                subtitle = s.aboutLawfulUseDetail,
                 icon = Icons.Filled.Info,
-                onClick = { openPage(About.LEGAL, "the lawful use page") },
+                onClick = { openPage(About.LEGAL, s.settingsQrLawfulUsePage) },
             )
         }
 
@@ -972,7 +953,7 @@ fun SettingsScreen(
             item {
                 ActionRow(
                     title = About.SUPPORT_TITLE,
-                    subtitle = "GitHub Sponsors or Buy Me a Coffee, with a QR code for each",
+                    subtitle = s.settingsSupportDetail,
                     icon = Icons.Filled.Favorite,
                     onClick = { supporting = true },
                 )
@@ -981,8 +962,8 @@ fun SettingsScreen(
 
         item {
             ActionRow(
-                title = "About TMPlayer",
-                subtitle = "Version ${Updates.installedVersion}, licence, notices, contact and support",
+                title = s.settingsAbout,
+                subtitle = s.settingsAboutDetail(Updates.installedVersion),
                 icon = Icons.Filled.Info,
                 onClick = onOpenAbout,
             )
@@ -990,11 +971,11 @@ fun SettingsScreen(
 
         // ---- account ------------------------------------------------------------------------
 
-        item { SectionTitle("Account") }
+        item { SectionTitle(s.settingsAccount) }
         item {
             ActionRow(
-                title = "Sign out of Telegram",
-                subtitle = "This $device will stop appearing in your Telegram devices",
+                title = s.settingsSignOut,
+                subtitle = s.settingsSignOutDetail(device),
                 icon = Icons.AutoMirrored.Filled.ExitToApp,
                 onClick = { prompt = Prompt.SignOut },
             )
@@ -1009,11 +990,7 @@ fun SettingsScreen(
                 ),
             ) {
                 Text(
-                    "TMPlayer talks directly to Telegram for your chats and videos, and to " +
-                        "tmplayer.org, or GitHub when the site cannot be reached, to see whether a " +
-                        "newer version is out. That check reads one static file, the same for " +
-                        "everyone, and sends nothing about you. TMPlayer has no account or backend " +
-                        "of its own, and no analytics or advertising SDK.",
+                    s.settingsPrivacyNote,
                     style = MaterialTheme.typography.bodyMedium,
                     color = Tone.muted,
                 )
@@ -1028,12 +1005,12 @@ fun SettingsScreen(
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { M3Text("Settings") },
+                    title = { M3Text(s.settingsTitle) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             M3Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back to chats",
+                                contentDescription = s.settingsBackToChats,
                             )
                         }
                     },
@@ -1051,61 +1028,56 @@ fun SettingsScreen(
 
     when (prompt) {
         Prompt.ClearCache -> TvConfirm(
-            title = "Clear the cache?",
-            message = (if (split.cachedCount > 1) "This deletes ${split.cachedCount} cached videos and " else "This ") +
-                "frees ${StreamStats.formatBytes(split.cachedBytes)}. Playing them again downloads " +
-                "them again.",
+            title = s.settingsClearCacheTitle,
+            message = s.settingsClearCacheMessage(split.cachedCount, s.formatter.bytes(split.cachedBytes)),
             // Says what it will not touch, so it cannot be mistaken for the clear-everything row
             // a little further down.
-            detail = "Your downloads are not touched.",
-            confirmLabel = "Clear",
+            detail = s.settingsDownloadsUntouched,
+            confirmLabel = s.commonClear,
             onConfirm = {
                 prompt = null
                 scope.launch {
-                    busy = "Clearing…"
+                    busy = s.settingsClearing
                     val freed = split.cachedBytes
                     runCatching { WatchCache.clearAll(context) }
                     refresh()
                     busy = null
-                    toast("Freed ${StreamStats.formatBytes(freed)}")
+                    toast(s.settingsFreed(s.formatter.bytes(freed)))
                 }
             },
             onDismiss = { prompt = null },
         )
 
         Prompt.ClearOther -> TvConfirm(
-            title = "Free up space?",
-            message = "This clears ${StreamStats.formatBytes(split.otherBytes)} of previews, " +
-                "thumbnails and other data TMPlayer is holding. They come back as you browse.",
-            detail = "Your Telegram account, chats and favourites are untouched.",
-            confirmLabel = "Free it up",
+            title = s.settingsClearPicturesTitle,
+            message = s.settingsClearPicturesMessage(s.formatter.bytes(split.otherBytes)),
+            detail = s.settingsClearPicturesUntouched,
+            confirmLabel = s.settingsClearPicturesConfirm,
             onConfirm = {
                 prompt = null
                 scope.launch {
-                    busy = "Deleting…"
+                    busy = s.settingsDeleting
                     val freed = split.otherBytes
                     // Pictures only. Nothing here may touch the download index or the videos on
                     // disk: this row is named for thumbnails.
                     runCatching { Td.clearPicturesAndPreviews() }
                     refresh()
                     busy = null
-                    toast("Freed ${StreamStats.formatBytes(freed)}")
+                    toast(s.settingsFreed(s.formatter.bytes(freed)))
                 }
             },
             onDismiss = { prompt = null },
         )
 
         Prompt.ClearAllButDownloads -> TvConfirm(
-            title = "Clear everything except downloads?",
-            message = "This frees " +
-                "${StreamStats.formatBytes(split.cachedBytes + split.otherBytes)} of cached " +
-                "videos, previews and thumbnails.",
-            detail = "The videos you downloaded stay exactly where they are.",
-            confirmLabel = "Clear",
+            title = s.settingsClearAllTitle,
+            message = s.settingsClearAllMessage(s.formatter.bytes(split.cachedBytes + split.otherBytes)),
+            detail = s.settingsClearAllUntouched,
+            confirmLabel = s.commonClear,
             onConfirm = {
                 prompt = null
                 scope.launch {
-                    busy = "Clearing…"
+                    busy = s.settingsClearing
                     val freed = split.cachedBytes + split.otherBytes
                     // The videos first, through the one thing that knows which of them are the
                     // viewer's downloads, and then the pictures, which cannot be anybody's.
@@ -1113,17 +1085,17 @@ fun SettingsScreen(
                     runCatching { Td.clearPicturesAndPreviews() }
                     refresh()
                     busy = null
-                    toast("Freed ${StreamStats.formatBytes(freed)}")
+                    toast(s.settingsFreed(s.formatter.bytes(freed)))
                 }
             },
             onDismiss = { prompt = null },
         )
 
         Prompt.ClearHistory -> TvConfirm(
-            title = "Clear Continue watching?",
-            message = "Every video you have part-watched is forgotten, and the tab empties.",
-            detail = "Nothing is deleted from Telegram; each video stays in the chat it came from.",
-            confirmLabel = "Clear",
+            title = s.settingsClearHistoryTitle,
+            message = s.settingsClearHistoryMessage,
+            detail = s.settingsClearHistoryUntouched,
+            confirmLabel = s.commonClear,
             onConfirm = {
                 prompt = null
                 scope.launch {
@@ -1131,55 +1103,53 @@ fun SettingsScreen(
                     settings.clearWatchHistory()
                     // What was cleared lives on the browse screen, not this one, so the toast is
                     // the only sign anything happened.
-                    toast(if (count == 1) "Continue watching cleared" else "$count videos forgotten")
+                    toast(s.settingsHistoryCleared(count))
                 }
             },
             onDismiss = { prompt = null },
         )
 
         Prompt.ClearWatched -> TvConfirm(
-            title = "Clear the watched list?",
-            message = "Every video loses its watched tick, and Previously watched empties.",
-            detail = "Nothing is deleted from Telegram. Videos you are part way through stay in " +
-                "Continue watching.",
-            confirmLabel = "Clear",
+            title = s.settingsClearWatchedTitle,
+            message = s.settingsClearWatchedMessage,
+            detail = s.settingsClearWatchedUntouched,
+            confirmLabel = s.commonClear,
             onConfirm = {
                 prompt = null
                 scope.launch {
                     val count = watchedList.size
                     runCatching { watchedStore.clear() }
-                    toast(if (count == 1) "Watched list cleared" else "$count videos unmarked")
+                    toast(s.settingsWatchedCleared(count))
                 }
             },
             onDismiss = { prompt = null },
         )
 
         Prompt.ClearFavorites -> TvConfirm(
-            title = "Clear favourites?",
-            message = "All ${favorites.size} chats lose their star and the Favourites tab empties.",
-            detail = "The chats themselves stay where they are, in Recent and All chats.",
-            confirmLabel = "Clear",
+            title = s.settingsClearFavouritesTitle,
+            message = s.settingsClearFavouritesMessage(favorites.size),
+            detail = s.settingsClearFavouritesUntouched,
+            confirmLabel = s.commonClear,
             onConfirm = {
                 prompt = null
                 scope.launch {
                     val count = favorites.size
                     settings.clearFavorites()
-                    toast(if (count == 1) "Favourite cleared" else "$count favourites cleared")
+                    toast(s.settingsFavouritesCleared(count))
                 }
             },
             onDismiss = { prompt = null },
         )
 
         Prompt.SignOut -> TvConfirm(
-            title = "Sign out of Telegram?",
-            message = "You'll be signed out and taken back to the sign-in screen. The cache, your " +
-                "favourites, your watched list and everything you were part-way through go with it.",
-            detail = if (split.downloadBytes > 0) "Your downloads stay unless you tick the box." else null,
-            confirmLabel = "Sign out",
+            title = s.settingsSignOutTitle,
+            message = s.settingsSignOutMessage,
+            detail = if (split.downloadBytes > 0) s.settingsSignOutDownloadsStay else null,
+            confirmLabel = s.settingsSignOutConfirm,
             extra = if (split.downloadBytes > 0) {
                 {
                     TickRow(
-                        label = "Also delete my downloads (${StreamStats.formatBytes(split.downloadBytes)})",
+                        label = s.settingsSignOutDeleteDownloads(s.formatter.bytes(split.downloadBytes)),
                         checked = alsoDeleteDownloads,
                         onToggle = { alsoDeleteDownloads = !alsoDeleteDownloads },
                     )
@@ -1192,7 +1162,7 @@ fun SettingsScreen(
                 val deleteDownloads = alsoDeleteDownloads
                 alsoDeleteDownloads = false
                 scope.launch {
-                    busy = "Signing out…"
+                    busy = s.settingsSigningOut
                     // Everything this app knows about the account that is leaving goes: the
                     // cache and every preference. TDLib clears its own database as it logs out.
                     // The downloads are files in their own folder and stay, with their records,
@@ -1248,6 +1218,7 @@ private fun RangeRow(
     onSetRange: (min: Long, max: Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val s = LocalStrings.current
     val touch = isTouch()
     if (touch) {
         TouchRangeRow(minValue, maxValue, onSetRange, modifier)
@@ -1286,9 +1257,9 @@ private fun RangeRow(
             .padding(horizontal = 20.dp, vertical = 16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            End("From", SizeFilter.label(minValue), active = !editingUpper, onSurface, dim, focused)
+            End(s.settingsRangeFrom, s.formatter.sizeLimit(minValue), active = !editingUpper, onSurface, dim, focused)
             Spacer(Modifier.weight(1f))
-            End("Up to", SizeFilter.label(maxValue), active = editingUpper, onSurface, dim, focused)
+            End(s.settingsRangeUpTo, s.formatter.sizeLimit(maxValue), active = editingUpper, onSurface, dim, focused)
         }
         Spacer(Modifier.height(12.dp))
         RangeTrack(minValue, maxValue, editingUpper, focused)
@@ -1297,7 +1268,7 @@ private fun RangeRow(
             // The ends of the track say what the ends of the range would read as, so the track
             // and the "From" / "Up to" captions above it cannot disagree with each other.
             Text(
-                SizeFilter.label(SizeFilter.FLOOR),
+                s.formatter.sizeLimit(SizeFilter.FLOOR),
                 style = MaterialTheme.typography.bodyMedium,
                 color = dim,
             )
@@ -1326,8 +1297,11 @@ private fun RangeRow(
                     // Named after the captions overhead rather than "upper" and "lower", so the
                     // hint and the labels match.
                     Text(
-                        "change ${if (editingUpper) "Up to" else "From"}   \u00B7   " +
-                            "OK switches to ${if (editingUpper) "From" else "Up to"}",
+                        if (editingUpper) {
+                            s.settingsRangeHint(s.settingsRangeUpTo, s.settingsRangeFrom)
+                        } else {
+                            s.settingsRangeHint(s.settingsRangeFrom, s.settingsRangeUpTo)
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = Tone.onFocusFill,
                         textAlign = TextAlign.Center,
@@ -1335,7 +1309,7 @@ private fun RangeRow(
                 }
             }
             Text(
-                SizeFilter.label(SizeFilter.CEILING),
+                s.formatter.sizeLimit(SizeFilter.CEILING),
                 style = MaterialTheme.typography.bodyMedium,
                 color = dim,
             )
@@ -1356,6 +1330,7 @@ private fun TouchRangeRow(
     onSetRange: (min: Long, max: Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val s = LocalStrings.current
     // Held locally while the thumb is down so the track follows the finger at frame rate; the
     // store is written once, when the finger lifts. Keyed on the stored values so a reset from
     // the chip above, or the first value arriving off disk, moves the thumbs.
@@ -1373,9 +1348,9 @@ private fun TouchRangeRow(
     Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
         // The two figures above the track, where the eye already is.
         Row(verticalAlignment = Alignment.CenterVertically) {
-            RangeEnd("From", SizeFilter.label(low))
+            RangeEnd(s.settingsRangeFrom, s.formatter.sizeLimit(low))
             Spacer(Modifier.weight(1f))
-            RangeEnd("Up to", SizeFilter.label(high))
+            RangeEnd(s.settingsRangeUpTo, s.formatter.sizeLimit(high))
         }
         Spacer(Modifier.height(4.dp))
         // Material's own control: dragging a range is what a phone is for, and it brings its own
@@ -1393,13 +1368,13 @@ private fun TouchRangeRow(
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                SizeFilter.label(SizeFilter.FLOOR),
+                s.formatter.sizeLimit(SizeFilter.FLOOR),
                 style = MaterialTheme.typography.bodySmall,
                 color = Tone.muted,
             )
             Spacer(Modifier.weight(1f))
             Text(
-                SizeFilter.label(SizeFilter.CEILING),
+                s.formatter.sizeLimit(SizeFilter.CEILING),
                 style = MaterialTheme.typography.bodySmall,
                 color = Tone.muted,
             )
@@ -1496,13 +1471,14 @@ private fun BoxWithConstraintsScope.Thumb(width: Dp, value: Long, live: Boolean,
 /** Right-aligned "Reset", greyed out when the range is already the default. */
 @Composable
 private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
+    val s = LocalStrings.current
     if (isTouch()) {
         // Material's own chip on a phone: height, ripple, disabled colours and outline for free.
         // The television cannot use it, because a chip has no focus appearance to speak of.
         AssistChip(
             onClick = onClick,
             enabled = enabled,
-            label = { M3Text("Reset", maxLines = 1) },
+            label = { M3Text(s.commonReset, maxLines = 1) },
             leadingIcon = {
                 M3Icon(
                     Icons.Filled.Refresh,
@@ -1549,7 +1525,7 @@ private fun ResetChip(enabled: Boolean, onClick: () -> Unit) {
         )
         Spacer(Modifier.width(8.dp))
         Text(
-            "Reset",
+            s.commonReset,
             style = MaterialTheme.typography.bodyLarge,
             color = when {
                 !enabled -> Tone.muted
@@ -1636,6 +1612,7 @@ private fun StorageCard(
     freeBytes: Long,
     totalBytes: Long,
 ) {
+    val s = LocalStrings.current
     val cacheBytes = split.totalBytes
     val used = (totalBytes - freeBytes).coerceAtLeast(0)
     val usedFraction = if (totalBytes > 0) used.toFloat() / totalBytes else 0f
@@ -1662,7 +1639,7 @@ private fun StorageCard(
     ) {
     Column(Modifier.padding(if (touch) 16.dp else 20.dp)) {
         Text(
-            "${StreamStats.formatBytes(freeBytes)} free of ${StreamStats.formatBytes(totalBytes)}",
+            s.settingsStorageFree(s.formatter.bytes(freeBytes), s.formatter.bytes(totalBytes)),
             style = if (touch) {
                 MaterialTheme.typography.titleMedium
             } else {
@@ -1680,17 +1657,15 @@ private fun StorageCard(
                 // The bar is three coloured boxes and nothing else, so it needs a description of
                 // its own. Merged into a single node, because the parts mean nothing apart.
                 .semantics(mergeDescendants = true) {
-                    contentDescription = "Storage: " +
-                        "${StreamStats.formatBytes(used)} used of " +
-                        "${StreamStats.formatBytes(totalBytes)}, " +
-                        "${StreamStats.formatBytes(cacheBytes)} of it TMPlayer's, " +
-                        if (measured) {
-                            "${StreamStats.formatBytes(split.downloadBytes)} downloads, " +
-                                "${StreamStats.formatBytes(split.cachedBytes)} cached, " +
-                                "${StreamStats.formatBytes(split.otherBytes)} pictures and previews"
-                        } else {
-                            "still being measured"
-                        }
+                    val f = s.formatter
+                    contentDescription = if (measured) {
+                        s.settingsStorageDescription(
+                            f.bytes(used), f.bytes(totalBytes), f.bytes(cacheBytes),
+                            f.bytes(split.downloadBytes), f.bytes(split.cachedBytes), f.bytes(split.otherBytes),
+                        )
+                    } else {
+                        s.settingsStorageDescriptionMeasuring(f.bytes(used), f.bytes(totalBytes), f.bytes(cacheBytes))
+                    }
                 },
         ) {
             // Everything on the device, then TMPlayer's own slice highlighted inside it, and
@@ -1716,13 +1691,13 @@ private fun StorageCard(
         Spacer(Modifier.height(if (touch) 12.dp else 16.dp))
         Text(
             if (measured) {
-                listOf(
-                    "${StreamStats.formatBytes(split.downloadBytes)} in Downloads",
-                    "${StreamStats.formatBytes(split.cachedBytes)} cached",
-                    "${StreamStats.formatBytes(split.otherBytes)} pictures and previews",
-                ).joinToString("  ·  ")
+                s.settingsStorageSplit(
+                    s.formatter.bytes(split.downloadBytes),
+                    s.formatter.bytes(split.cachedBytes),
+                    s.formatter.bytes(split.otherBytes),
+                )
             } else {
-                "TMPlayer is using ${StreamStats.formatBytes(cacheBytes)}."
+                s.settingsStorageUsing(s.formatter.bytes(cacheBytes))
             },
             style = if (touch) {
                 MaterialTheme.typography.bodyMedium
@@ -1736,13 +1711,13 @@ private fun StorageCard(
             // The same three names, in the same order, as the panel at the top of the Downloads
             // screen: one measurement drawn twice, so the two must not disagree.
             if (split.downloadBytes > 0) {
-                StorageLegend("Downloads", split.downloadBytes, videoBand)
+                StorageLegend(s.settingsStorageDownloads, split.downloadBytes, videoBand)
             }
             if (split.cachedBytes > 0) {
-                StorageLegend("Cached", split.cachedBytes, pictureBand)
+                StorageLegend(s.settingsStorageCached, split.cachedBytes, pictureBand)
             }
             if (split.otherBytes > 0) {
-                StorageLegend("Pictures and previews", split.otherBytes, otherBand)
+                StorageLegend(s.settingsStoragePictures, split.otherBytes, otherBand)
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -1750,11 +1725,9 @@ private fun StorageCard(
             // The two devices keep different bargains, so the wording has to name the one in
             // hand: a phone also holds downloads the viewer deletes themselves.
             if (touch) {
-                "Playing a video caches it, and the next one you play replaces it. Downloads " +
-                    "stay until you delete them, which you can do from the Downloads screen."
+                s.settingsStorageNotePhone
             } else {
-                "One video is cached at a time; playing another replaces it. Downloads stay " +
-                    "until you delete them."
+                s.settingsStorageNoteTv
             },
             style = MaterialTheme.typography.bodyMedium,
             color = Tone.muted,
@@ -1803,12 +1776,13 @@ private fun RowScope.StorageSlice(bytes: Long, color: Color) {
 /** The line naming one of those bands. Merged, so a screen reader reads the pair as a sentence. */
 @Composable
 private fun StorageLegend(label: String, bytes: Long, color: Color) {
+    val s = LocalStrings.current
     Row(
         Modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp)
             .semantics(mergeDescendants = true) {
-                contentDescription = "$label: ${StreamStats.formatBytes(bytes)}"
+                contentDescription = s.settingsStorageLegend(label, s.formatter.bytes(bytes))
             },
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1817,7 +1791,7 @@ private fun StorageLegend(label: String, bytes: Long, color: Color) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
         Spacer(Modifier.weight(1f))
         Text(
-            StreamStats.formatBytes(bytes),
+            s.formatter.bytes(bytes),
             style = MaterialTheme.typography.bodyMedium,
             color = Tone.text,
         )
@@ -1842,22 +1816,23 @@ private fun StepperRow(
     onStep: (direction: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val s = LocalStrings.current
     val touch = isTouch()
 
     if (touch) {
         ListItem(
             headlineContent = { M3Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-            supportingContent = { M3Text("$value. $subtitle", maxLines = 3) },
+            supportingContent = { M3Text(s.settingsValueAndDetail(value, subtitle), maxLines = 3) },
             leadingContent = {
                 M3Icon(icon, contentDescription = null, tint = Tone.text, modifier = Modifier.size(24.dp))
             },
             trailingContent = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { onStep(-1) }, enabled = canDecrease) {
-                        M3Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Fewer")
+                        M3Icon(Icons.Filled.KeyboardArrowDown, contentDescription = s.settingsStepDown)
                     }
                     IconButton(onClick = { onStep(1) }, enabled = canIncrease) {
-                        M3Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "More")
+                        M3Icon(Icons.Filled.KeyboardArrowUp, contentDescription = s.settingsStepUp)
                     }
                 }
             },
@@ -1911,7 +1886,7 @@ private fun StepperRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                if (focused) "$value  ·  Left and Right change it" else "$value. $subtitle",
+                if (focused) s.settingsStepperHint(value) else s.settingsValueAndDetail(value, subtitle),
                 style = MaterialTheme.typography.bodyMedium,
                 color = dim,
                 maxLines = 1,
@@ -1942,6 +1917,7 @@ private fun StepperRow(
  */
 @Composable
 private fun SubtitlePreview(style: SubtitleStyle) {
+    val s = LocalStrings.current
     BoxWithConstraints(
         Modifier
             .padding(horizontal = if (isTouch()) 16.dp else 0.dp, vertical = 8.dp)
@@ -1955,7 +1931,7 @@ private fun SubtitlePreview(style: SubtitleStyle) {
         val density = LocalDensity.current
         val fontSize = with(density) { (maxHeight * style.size.fraction).toSp() }
         M3Text(
-            "This is how subtitles will look.",
+            s.settingsSubtitlePreview,
             color = Color.White,
             fontSize = fontSize,
             textAlign = TextAlign.Center,

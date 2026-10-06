@@ -16,6 +16,7 @@ import androidx.media3.common.SimpleBasePlayer
 import androidx.media3.common.util.UnstableApi
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.tmplayer.i18n.L
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaItem
 import com.tmplayer.player.PlayerControls
@@ -49,6 +50,7 @@ class PromoPlayerActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         val tv = intent.getBooleanExtra("tv", false)
         if (tv) FormFactor.override(true)
+        promoLanguage(intent.getStringExtra("lang"))
         setContentView(R.layout.activity_player)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).hide(WindowInsetsCompat.Type.systemBars())
@@ -78,7 +80,7 @@ class PromoPlayerActivity : FragmentActivity() {
         )
         controls.setTitle("The Coast", "S01E04 · Nature Channel · 1.4 GB")
         if (!tv) controls.setSkip(10_000, 10_000)
-        controls.setEpisodes(demoEpisode(3), demoEpisode(5), "Previous S01E03", "Next S01E05")
+        controls.setEpisodes(demoEpisode(3), demoEpisode(5), L.playerPreviousCode("S01E03"), L.playerNextCode("S01E05"))
         controls.timeoutMs = 0
         controls.show()
         this.controls = controls
@@ -140,8 +142,8 @@ class PromoPlayerActivity : FragmentActivity() {
                     title = { "The Coast S01E04" },
                     pictureInPicture = { true },
                     speed = { 1f },
-                    nextEpisode = { "Next S01E05" },
-                    previousEpisode = { "Previous S01E03" },
+                    nextEpisode = { L.playerNextCode("S01E05") },
+                    previousEpisode = { L.playerPreviousCode("S01E03") },
                     onEntry = {},
                     onSpeed = {},
                     onClosed = {},

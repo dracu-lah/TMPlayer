@@ -7,6 +7,7 @@ import androidx.core.content.FileProvider
 import com.tmplayer.data.LocalFileAvailability
 import com.tmplayer.data.Td
 import com.tmplayer.data.valueOrNull
+import com.tmplayer.i18n.L
 import java.io.File
 
 /**
@@ -96,13 +97,13 @@ object ExternalPlayer {
         totalBytes: Long,
     ): String? = when (readiness) {
         Readiness.Complete -> null
-        Readiness.Nothing -> "This video isn't on the device yet, so another app has nothing to open."
+        Readiness.Nothing -> L.playerHandoffNothing
         Readiness.Partial -> {
             val percent = percentDownloaded(downloadedBytes, totalBytes)
             if (percent != null) {
-                "Only $percent% of this video has downloaded. Another player will stop there."
+                L.playerHandoffPartial(percent)
             } else {
-                "This video is still downloading. Another player will stop where it runs out."
+                L.playerHandoffDownloading
             }
         }
     }
@@ -125,7 +126,7 @@ object ExternalPlayer {
             .setDataAndType(uri, mimeType.ifBlank { "video/*" })
             .putExtra(Intent.EXTRA_TITLE, title)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        return Intent.createChooser(view, "Open with").apply {
+        return Intent.createChooser(view, L.playerOpenWith).apply {
             // The chooser may be started from a context that is not an activity, and the read
             // grant has to survive being handed on to whichever app is picked.
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -138,13 +139,13 @@ object ExternalPlayer {
      */
     fun handOverFile(context: Context, path: String, title: String, mimeType: String = "video/*"): Handoff {
         val chooser = chooserFor(context, path, title, mimeType)
-            ?: return Handoff.Refused("That video can't be handed to another app.")
+            ?: return Handoff.Refused(L.playerHandoffRefused)
         return runCatching {
             context.startActivity(chooser)
             Handoff.Started(caution = null)
         }.getOrElse {
             Log.w(TAG, "Nothing took the video", it)
-            Handoff.Refused("Nothing on this device opens that.")
+            Handoff.Refused(L.playerHandoffNoApp)
         }
     }
 
@@ -172,13 +173,13 @@ object ExternalPlayer {
 
         val path = file.local.path.takeIf { it.isNotBlank() } ?: return Handoff.NothingOnDisk
         val chooser = chooserFor(context, path, title, mimeType)
-            ?: return Handoff.Refused("That video can't be handed to another app.")
+            ?: return Handoff.Refused(L.playerHandoffRefused)
         return runCatching {
             context.startActivity(chooser)
             Handoff.Started(caution(state, downloaded, maxOf(file.size, file.expectedSize)))
         }.getOrElse {
             Log.w(TAG, "Nothing took the video", it)
-            Handoff.Refused("Nothing on this device opens that.")
+            Handoff.Refused(L.playerHandoffNoApp)
         }
     }
 }

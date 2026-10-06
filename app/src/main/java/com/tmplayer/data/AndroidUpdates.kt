@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.content.FileProvider
 import com.tmplayer.BuildConfig
+import com.tmplayer.i18n.L
 import java.io.File
 
 // Installing an update is Android's business; checking for one and fetching it is shared, in
@@ -26,7 +27,7 @@ fun Updates.configureForAndroid() {
 fun updateScheduler(context: Context): UpdateScheduler = UpdateScheduler(SettingsStore(context).updatePrefs)
 
 /** The sentence for a download refused because Wi-Fi only is on and this is not Wi-Fi. */
-const val UPDATE_WAITS_FOR_WIFI = "Wi-Fi only is on in Settings, so the update waits for Wi-Fi."
+val UPDATE_WAITS_FOR_WIFI: String get() = L.updateWaitsForWifi
 
 /**
  * Fetches the APK for this device and hands it to the system installer.

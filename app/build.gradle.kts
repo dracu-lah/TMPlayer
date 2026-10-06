@@ -249,4 +249,7 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
+    // The unit tests run against android.jar stubs, whose org.json returns nothing, and the UI
+    // text catalog is parsed with org.json. The real library goes first on the test classpath.
+    testImplementation(libs.json)
 }

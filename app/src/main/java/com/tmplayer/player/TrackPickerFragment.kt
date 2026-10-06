@@ -9,6 +9,8 @@ import androidx.media3.common.Format
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import com.tmplayer.i18n.L
+import com.tmplayer.i18n.Translator
 import java.util.Locale
 
 /**
@@ -35,7 +37,7 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
     override fun onProvideTheme(): Int = androidx.leanback.R.style.Theme_Leanback_GuidedStep
 
     override fun onCreateGuidance(savedInstanceState: Bundle?): GuidanceStylist.Guidance {
-        val title = if (trackType == C.TRACK_TYPE_AUDIO) "Audio language" else "Subtitles"
+        val title = if (trackType == C.TRACK_TYPE_AUDIO) L.tracksAudioLanguage else L.tracksSubtitles
         return GuidanceStylist.Guidance(title, "", "", null)
     }
 
@@ -45,7 +47,7 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
 
         // Subtitles need an explicit "off"; audio always has at least one track playing.
         if (trackType == C.TRACK_TYPE_TEXT) {
-            options += Option(null, -1, "Off")
+            options += Option(null, -1, L.commonOff)
         }
 
         for (group in player.currentTracks.groups) {
@@ -58,9 +60,9 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
 
         if (options.isEmpty() || (trackType == C.TRACK_TYPE_TEXT && options.size == 1)) {
             val none = if (trackType == C.TRACK_TYPE_AUDIO) {
-                "This video has no other audio"
+                L.tracksNoOtherAudio
             } else {
-                "This video has no subtitles"
+                L.tracksNoSubtitles
             }
             actions.add(GuidedAction.Builder(requireContext()).id(ID_NONE).title(none).build())
             // Sound can still be out of step with only the one track to choose from.
@@ -74,7 +76,7 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
                 GuidedAction.Builder(requireContext())
                     .id(index.toLong())
                     .title(option.label)
-                    .description(if (selected) "Playing now" else null)
+                    .description(if (selected) L.tracksPlayingNow else null)
                     .checkSetId(GuidedAction.DEFAULT_CHECK_SET_ID)
                     .checked(selected)
                     .build(),
@@ -86,16 +88,16 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
 
     private fun addTimingActions(actions: MutableList<GuidedAction>) {
         val subtitles = trackType == C.TRACK_TYPE_TEXT
-        actions += plain(ID_EARLIER, if (subtitles) "Show subtitles earlier" else "Play sound earlier")
-        actions += plain(ID_LATER, if (subtitles) "Show subtitles later" else "Play sound later")
-        actions += plain(ID_RESET, "Reset timing")
+        actions += plain(ID_EARLIER, if (subtitles) L.tracksSubtitlesEarlier else L.tracksSoundEarlier)
+        actions += plain(ID_LATER, if (subtitles) L.tracksSubtitlesLater else L.tracksSoundLater)
+        actions += plain(ID_RESET, L.tracksResetTiming)
         actions.forEach(::describeTiming)
     }
 
     private fun addStyleActions(actions: MutableList<GuidedAction>) {
-        actions += plain(ID_SIZE, "Subtitle size")
-        actions += plain(ID_BOX, "Background box")
-        actions += plain(ID_POSITION, "Subtitle position")
+        actions += plain(ID_SIZE, L.tracksSubtitleSize)
+        actions += plain(ID_BOX, L.tracksBackgroundBox)
+        actions += plain(ID_POSITION, L.tracksSubtitlePosition)
         actions.forEach(::describeStyle)
     }
 
@@ -107,9 +109,9 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
         val delays = (activity as? PlayerActivity)?.syncDelaysNow() ?: return
         val ms = if (trackType == C.TRACK_TYPE_TEXT) delays.subtitleMs else delays.audioMs
         when (action.id) {
-            ID_EARLIER, ID_LATER -> action.description = "A tenth of a second. Now ${SyncDelays.label(ms)}"
+            ID_EARLIER, ID_LATER -> action.description = L.tracksDelayStep(SyncDelays.label(ms))
             ID_RESET -> {
-                action.description = if (ms == 0L) "In step with the file" else "Now ${SyncDelays.label(ms)}"
+                action.description = if (ms == 0L) L.tracksDelayNone else L.tracksDelayNow(SyncDelays.label(ms))
                 action.isEnabled = ms != 0L
             }
         }
@@ -119,7 +121,7 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
         val style = (activity as? PlayerActivity)?.subtitleStyleNow() ?: return
         when (action.id) {
             ID_SIZE -> action.description = style.size.label
-            ID_BOX -> action.description = if (style.box) "On" else "Off"
+            ID_BOX -> action.description = if (style.box) L.commonOn else L.commonOff
             ID_POSITION -> action.description = style.position.label
         }
     }
@@ -186,7 +188,7 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
         val format = group.getTrackFormat(index)
         val language = format.language
             ?.takeIf { it.isNotBlank() && it != "und" }
-            ?.let { runCatching { Locale.forLanguageTag(it).displayLanguage }.getOrNull() ?: it }
+            ?.let { Translator.messages.formatter.trackLanguage(it) ?: it }
         val label = format.label?.takeIf { it.isNotBlank() }
 
         val name = when {
@@ -194,7 +196,7 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
                 "$language ($label)"
             label != null -> label
             language != null -> language
-            else -> "Track ${position + 1}"
+            else -> L.tracksTrackNumber((position + 1).toString())
         }
 
         val details = buildList {
@@ -219,11 +221,11 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
     }
 
     private fun channels(count: Int) = when (count) {
-        1 -> "Mono"
-        2 -> "Stereo"
+        1 -> L.tracksMono
+        2 -> L.tracksStereo
         6 -> "5.1"
         8 -> "7.1"
-        else -> "${count}ch"
+        else -> L.tracksChannels(count.toString())
     }
 
     companion object {

@@ -97,6 +97,8 @@ import com.tmplayer.data.WatchedRecord
 import com.tmplayer.data.WatchedStore
 import com.tmplayer.data.errorMessage
 import com.tmplayer.data.valueOrNull
+import com.tmplayer.i18n.L
+import com.tmplayer.i18n.Translator
 import dev.g000sha256.tdl.TdlClient
 import dev.g000sha256.tdl.dto.File as TdFile
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
@@ -432,6 +434,11 @@ class PlayerActivity : FragmentActivity() {
         statusBack = findViewById<android.widget.Button>(R.id.status_back).apply {
             setOnClickListener { finish() }
         }
+        // The layout carries English for the preview; the words on screen come from the catalog.
+        statusRetry?.text = L.commonTryAgain
+        statusReload?.text = L.commonReload
+        statusOpenWith?.text = L.playerOpenInAnotherApp
+        statusBack?.text = L.playerGoBack
         statusName = findViewById(R.id.status_name)
         rebufferChip = findViewById(R.id.rebuffer_chip)
         rebufferText = findViewById(R.id.rebuffer_text)
@@ -482,8 +489,8 @@ class PlayerActivity : FragmentActivity() {
                 volumeBoost = { volumeBoostOn },
                 sleepTimer = ::sleepTimerDetail,
                 onSleepTimer = ::setSleepTimer,
-                nextEpisode = { _episodes.value.next?.let { episodeLabel("Next", it) } },
-                previousEpisode = { _episodes.value.previous?.let { episodeLabel("Previous", it) } },
+                nextEpisode = { _episodes.value.next?.let { episodeLabel(next = true, it) } },
+                previousEpisode = { _episodes.value.previous?.let { episodeLabel(next = false, it) } },
                 onEntry = ::onTvMenuEntry,
                 onSpeed = ::setSpeed,
                 onClosed = { controls?.show(); controls?.focusRow() },
@@ -514,12 +521,12 @@ class PlayerActivity : FragmentActivity() {
         applySubtitleStyle()
 
         if (fileId <= 0) {
-            showError("There's nothing to play here.", retryable = false)
+            showError(L.playerNothingToPlay, retryable = false)
             return
         }
 
-        statusTitle.text = mediaTitle.ifBlank { "Opening…" }
-        showStatus("Connecting to Telegram…")
+        statusTitle.text = mediaTitle.ifBlank { L.playerOpening }
+        showStatus(L.playerConnecting)
 
         showArtwork()
         statusMeta?.text = mediaSubtitle.ifBlank { chatTitle }
@@ -544,7 +551,7 @@ class PlayerActivity : FragmentActivity() {
             resumeMs = runCatching { settings.resumePosition(chatId, messageId) }.getOrDefault(0L)
             if (resumeMs > 0) {
                 player?.seekTo(resumeMs)
-                resumeNotice = "Resuming from ${StreamStats.formatClock(resumeMs)}"
+                resumeNotice = L.playerResumingFrom(Translator.messages.formatter.clock(resumeMs))
                 renderStatusText()
             }
         }
@@ -574,7 +581,7 @@ class PlayerActivity : FragmentActivity() {
                     NetworkMonitor.status.value == NetworkStatus.Offline &&
                     !Td.connected.value
                 ) {
-                    showError("This video isn't fully downloaded. Connect to the internet and try again.")
+                    showError(L.playerNotFullyDownloaded)
                     return@launch
                 }
                 if (!allowedOnThisConnection(availability)) return@launch
@@ -786,10 +793,10 @@ class PlayerActivity : FragmentActivity() {
     private fun jumpFromRemote(forward: Boolean) {
         if (forward) {
             skipBy(Skip.FORWARD_MS)
-            showGestureFeedback("${Skip.FORWARD_MS / 1000} s   ▶▶", PlayerGestures.SIDE_RIGHT)
+            showGestureFeedback(L.playerJumpForward(Skip.FORWARD_MS / 1000), PlayerGestures.SIDE_RIGHT)
         } else {
             skipBy(-Skip.BACK_MS)
-            showGestureFeedback("◀◀   ${Skip.BACK_MS / 1000} s", PlayerGestures.SIDE_LEFT)
+            showGestureFeedback(L.playerJumpBack(Skip.BACK_MS / 1000), PlayerGestures.SIDE_LEFT)
         }
     }
 
@@ -869,8 +876,8 @@ class PlayerActivity : FragmentActivity() {
                     controls?.setEpisodes(
                         previousEpisode = found.previous,
                         nextEpisode = found.next,
-                        previousLabel = episodeLabel("Previous", found.previous),
-                        nextLabel = episodeLabel("Next", found.next),
+                        previousLabel = episodeLabel(next = false, found.previous),
+                        nextLabel = episodeLabel(next = true, found.next),
                     )
                 }
             }
@@ -894,10 +901,11 @@ class PlayerActivity : FragmentActivity() {
      * The fallback is not dead wood: a series can be numbered in a way the parser reads well enough
      * to order but not well enough to name, and a bare "Next" beats a label made of a guess.
      */
-    fun episodeLabel(direction: String, item: MediaItem?): String {
-        val name = item?.fileName?.ifBlank { item.title } ?: return direction
-        val code = MediaName.parse(name).episodeCode ?: return direction
-        return "$direction $code"
+    fun episodeLabel(next: Boolean, item: MediaItem?): String {
+        val bare = if (next) L.playerNext else L.playerPrevious
+        val name = item?.fileName?.ifBlank { item.title } ?: return bare
+        val code = MediaName.parse(name).episodeCode ?: return bare
+        return if (next) L.playerNextCode(code) else L.playerPreviousCode(code)
     }
 
     /**
@@ -1058,11 +1066,11 @@ class PlayerActivity : FragmentActivity() {
      */
     private suspend fun fetchWholeFilm(): Boolean {
         if (Td.localFileAvailability(fileId) == LocalFileAvailability.Complete) {
-            showStatus("Starting the video…")
+            showStatus(L.playerStarting)
             return true
         }
         waitingForWholeFilm = true
-        showStatus("Downloading the whole video…")
+        showStatus(L.playerDownloadingWhole)
         val session = Td.awaitConnectedSession()
         val result = session.client.downloadFile(
             fileId = fileId,
@@ -1078,10 +1086,10 @@ class PlayerActivity : FragmentActivity() {
             return false
         }
         if (Td.localFileAvailability(fileId) != LocalFileAvailability.Complete) {
-            showError("The download did not finish. Connect to the internet and try again.")
+            showError(L.playerDownloadUnfinished)
             return false
         }
-        showStatus("Starting the video…")
+        showStatus(L.playerStarting)
         return true
     }
 
@@ -1107,8 +1115,7 @@ class PlayerActivity : FragmentActivity() {
             MeteredDecision.Allow -> true
             MeteredDecision.Block -> {
                 showError(
-                    "This video isn't downloaded yet, and TMPlayer is set to use Wi-Fi only. " +
-                        "Connect to Wi-Fi, or turn that off in Settings.",
+                    L.playerWifiOnly,
                     retryable = false,
                 )
                 false
@@ -1128,15 +1135,14 @@ class PlayerActivity : FragmentActivity() {
         statusSpinner?.visibility = View.GONE
         statusProgress.visibility = View.GONE
         statusDetail.visibility = View.GONE
-        statusTitle.text = "You're on mobile data"
+        statusTitle.text = L.playerMobileDataTitle
         hideFailureActions()
-        statusText.text = "This video is ${MediaMapper.formatSize(fileSizeBytes)}. " +
-            "Playing it now will use that much of your allowance."
+        statusText.text = L.playerMobileDataBody(Translator.messages.formatter.size(fileSizeBytes))
         statusRetry?.apply {
-            text = "Play anyway"
+            text = L.playerPlayAnyway
             visibility = View.VISIBLE
             setOnClickListener {
-                text = "Try again"
+                text = L.commonTryAgain
                 setOnClickListener { retryPlayback() }
                 consented.complete(true)
             }
@@ -1146,7 +1152,7 @@ class PlayerActivity : FragmentActivity() {
         // Remembered for the process, not on disk: a session is the unit of consent here, and
         // writing it down would mean asking once ever, which is not the same promise.
         meteredWarningAccepted = true
-        showStatus("Starting the video…")
+        showStatus(L.playerStarting)
         return answer
     }
 
@@ -1438,7 +1444,7 @@ class PlayerActivity : FragmentActivity() {
             when (state) {
                 // Only the very first wait earns the full screen; later stalls get the chip.
                 Player.STATE_BUFFERING -> {
-                    if (openingFilm) showStatus("Loading…") else showRebuffering()
+                    if (openingFilm) showStatus(L.commonLoading) else showRebuffering()
                     controls?.setBuffering(!openingFilm)
                 }
 
@@ -1616,7 +1622,7 @@ class PlayerActivity : FragmentActivity() {
         if (reSourced || chatId == 0L || messageId == 0L) return false
         reSourced = true
         lifecycleScope.launch {
-            showStatus("Asking Telegram for this video again…")
+            showStatus(L.playerAskingAgain)
             val fresh = runCatching { Td.refreshMedia(chatId, messageId) }.getOrNull()
             if (fresh == null || fresh.fileId == fileId) {
                 // Nothing new to try: the id in hand is the id Telegram gives, so the failure is
@@ -1723,7 +1729,7 @@ class PlayerActivity : FragmentActivity() {
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
         ->
-            "Lost the connection to Telegram. Check this device's internet and try again."
+            L.playerErrorConnection
 
         PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
         PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
@@ -1732,20 +1738,19 @@ class PlayerActivity : FragmentActivity() {
             // 4K stream reaches a decoder built for 1080p. Naming the resolution matters: "a
             // different copy may work" sends somebody looking for a bad file, not a smaller one.
             if (videoHeight >= UHD_HEIGHT) {
-                "This video is ${videoHeight}p, which this device's decoder can't manage. " +
-                    "A 1080p copy will play."
+                L.playerErrorUhd(videoHeight.toString())
             } else {
-                "This device can't play this video's format. A different copy may work."
+                L.playerErrorFormat
             }
 
         PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
         PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
         ->
-            "TMPlayer can't play this file. A different copy may work."
+            L.playerErrorContainer
 
         // ExoPlayer's own message names a codec or an internal class; it means nothing on a sofa
         // and reads as a crash. The exception still reaches logcat through ExoPlayer itself.
-        else -> "This video wouldn't play. Try a different copy of it."
+        else -> L.playerErrorOther
     }
 
     /**
@@ -1804,9 +1809,7 @@ class PlayerActivity : FragmentActivity() {
         return when (val plan = decision.plan) {
             is CacheShelf.Plan.NotEnoughSpace -> {
                 showError(
-                    "Not enough space for this video. It needs " +
-                        "${StreamStats.formatBytes(plan.shortfallBytes)} more. " +
-                        "Clear some downloads and try again.",
+                    L.playerNotEnoughSpace(Translator.messages.formatter.bytes(plan.shortfallBytes)),
                     retryable = false,
                 )
                 false
@@ -1881,7 +1884,7 @@ class PlayerActivity : FragmentActivity() {
             hideNextUp()
             if (sleepAtTheEnd) {
                 sleepAtTheEnd = false
-                askStillWatching("The sleep timer stopped at the end of the video.", next)
+                askStillWatching(L.playerStillWatchingSleepEnd, next)
                 return@launch
             }
             if (next == null || !autoplay || nextUpDismissed) {
@@ -1889,7 +1892,7 @@ class PlayerActivity : FragmentActivity() {
                 return@launch
             }
             if (StillWatching.askBeforeAutoplay(autoplayedInARow)) {
-                askStillWatching("${StillWatching.AUTOPLAY_LIMIT} episodes played in a row.", next)
+                askStillWatching(L.playerStillWatchingAutoplay(StillWatching.AUTOPLAY_LIMIT), next)
                 return@launch
             }
             // The card already counted the last half minute down in front of the viewer; a second
@@ -1899,8 +1902,8 @@ class PlayerActivity : FragmentActivity() {
                 return@launch
             }
             for (second in AUTOPLAY_COUNTDOWN_SEC downTo 1) {
-                showStatus("Next: ${next.title}")
-                statusDetail.text = "Starting in $second…  Press Back to stop."
+                showStatus(L.playerNextTitle(next.title))
+                statusDetail.text = L.playerAutoplayCountdown(second)
                 showLoadingProgress(
                     (AUTOPLAY_COUNTDOWN_SEC - second).toFloat() / AUTOPLAY_COUNTDOWN_SEC,
                 )
@@ -1928,14 +1931,14 @@ class PlayerActivity : FragmentActivity() {
         statusSpinner?.visibility = View.GONE
         statusProgress.visibility = View.GONE
         statusDetail.visibility = View.GONE
-        statusTitle.text = mediaTitle.ifBlank { "Finished" }
-        statusText.text = "That's the end."
+        statusTitle.text = mediaTitle.ifBlank { L.playerFinished }
+        statusText.text = L.playerTheEnd
         hideFailureActions()
         statusRetry?.apply {
-            text = "Watch again"
+            text = L.playerWatchAgain
             visibility = View.VISIBLE
             setOnClickListener {
-                text = "Try again"
+                text = L.commonTryAgain
                 setOnClickListener { retryPlayback() }
                 player?.seekTo(0)
                 player?.playWhenReady = true
@@ -2163,7 +2166,7 @@ class PlayerActivity : FragmentActivity() {
         val exo = player ?: return false
         val duration = exo.duration.takeIf { it > 0 } ?: return false
         exo.seekTo(duration * digit / 10)
-        showGestureFeedback("${digit * 10}%")
+        showGestureFeedback(Translator.messages.formatter.percent(digit / 10.0))
         return true
     }
 
@@ -2277,16 +2280,16 @@ class PlayerActivity : FragmentActivity() {
 
                     if (offline) {
                         if (openingFilm) {
-                            showStatus("Offline. Waiting for internet…")
-                            statusDetail.text = "A fully downloaded video can play without internet."
+                            showStatus(L.playerOfflineWaiting)
+                            statusDetail.text = L.playerOfflineHint
                         } else if (player?.playbackState == Player.STATE_BUFFERING) {
                             showRebuffering()
                         }
                     } else if (reconnected && player?.playbackState == Player.STATE_BUFFERING) {
                         if (openingFilm) {
-                            showStatus("Back online. Resuming…")
+                            showStatus(L.playerBackOnline)
                         } else {
-                            rebufferText.text = "Back online. Resuming…"
+                            rebufferText.text = L.playerBackOnline
                         }
                     }
                 }
@@ -2295,19 +2298,19 @@ class PlayerActivity : FragmentActivity() {
     }
 
     private fun renderProgress() {
-        val rate = StreamStats.formatSpeed(speed.bytesPerSec)
+        val rate = Translator.messages.formatter.speed(speed.bytesPerSec)
 
         // Waiting for the whole video: the bar is the video, not the buffer, and the wait is long
         // enough that a percentage and a time left are the only things making it bearable.
         if (waitingForWholeFilm) {
             val remaining = (fileSizeBytes - (fileSizeBytes * downloadedFraction).toLong())
                 .coerceAtLeast(0)
-            val left = StreamStats.formatEta(
+            val left = Translator.messages.formatter.eta(
                 StreamStats.secondsForBytes(remaining, speed.bytesPerSec),
             )
             showLoadingProgress(downloadedFraction)
             statusDetail.text = listOf(
-                "${StreamStats.formatPercent(downloadedFraction)} downloaded",
+                L.playerDownloadedPercent(Translator.messages.formatter.percent(downloadedFraction.toDouble())),
                 rate,
                 left,
             ).filter { it.isNotBlank() }.joinToString("  ·  ")
@@ -2325,13 +2328,13 @@ class PlayerActivity : FragmentActivity() {
             speedBytesPerSec = speed.bytesPerSec,
         )
 
-        val left = StreamStats.formatEta(eta)
+        val left = Translator.messages.formatter.eta(eta)
 
         if (openingFilm) {
             showLoadingProgress(fraction)
             statusDetail.text = listOf(rate, left).filter { it.isNotBlank() }.joinToString("  ·  ")
         } else {
-            rebufferText.text = "Loading  ·  $rate"
+            rebufferText.text = L.playerLoadingRate(rate)
         }
         updateDownloadChip()
     }
@@ -2465,31 +2468,31 @@ class PlayerActivity : FragmentActivity() {
         tvMenu?.let { it.open(); return }
         val menu = android.widget.PopupMenu(this, anchor, Gravity.END)
         val items = menu.menu
-        items.add(0, MENU_LOCK, 0, "Lock the screen")
+        items.add(0, MENU_LOCK, 0, L.playerLockScreen)
         if (packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
-            items.add(0, MENU_PIP, 1, "Picture in picture")
+            items.add(0, MENU_PIP, 1, L.playerPictureInPicture)
         }
-        val speeds = items.addSubMenu(0, MENU_SPEED, 2, "Playback speed (${PlaybackSpeed.label(playbackSpeed)})")
+        val speeds = items.addSubMenu(0, MENU_SPEED, 2, L.playerPlaybackSpeedNow(PlaybackSpeed.label(playbackSpeed)))
         PlaybackSpeed.CHOICES.forEachIndexed { index, choice ->
             speeds.add(1, MENU_SPEED_BASE + index, index, PlaybackSpeed.label(choice))
                 .setCheckable(true)
                 .setChecked(choice == playbackSpeed)
         }
         speeds.setGroupCheckable(1, true, true)
-        items.add(0, MENU_BOOST, 2, "Volume boost").setCheckable(true).setChecked(volumeBoostOn)
-        val sleep = items.addSubMenu(0, MENU_SLEEP, 2, sleepTimerDetail()?.let { "Sleep timer ($it)" } ?: "Sleep timer")
-        if (sleepTimerDetail() != null) sleep.add(2, MENU_SLEEP_OFF, 0, "Turn off")
+        items.add(0, MENU_BOOST, 2, L.playerVolumeBoost).setCheckable(true).setChecked(volumeBoostOn)
+        val sleep = items.addSubMenu(0, MENU_SLEEP, 2, sleepTimerDetail()?.let { L.playerSleepTimerNow(it) } ?: L.playerSleepTimer)
+        if (sleepTimerDetail() != null) sleep.add(2, MENU_SLEEP_OFF, 0, L.playerTurnOff)
         SleepTimer.CHOICES.forEachIndexed { index, minutes ->
             sleep.add(2, MENU_SLEEP_BASE + index, index + 1, SleepTimer.label(minutes))
         }
-        items.add(0, MENU_START_OVER, 3, "Start over")
-        if (savable == true) items.add(0, MENU_OPEN_WITH, 4, "Open in another app")
-        items.add(0, MENU_DETAILS, 5, "Playback details")
-        items.add(0, MENU_SUBTITLE_FILE, 6, "Load a subtitle file")
-        if (chatId != 0L && messageId != 0L) items.add(0, MENU_COPY_LINK, 7, "Copy Telegram link")
-        if (canSaveToDownloads()) items.add(0, MENU_SAVE, 8, "Save to Downloads")
+        items.add(0, MENU_START_OVER, 3, L.playerStartOver)
+        if (savable == true) items.add(0, MENU_OPEN_WITH, 4, L.playerOpenInAnotherApp)
+        items.add(0, MENU_DETAILS, 5, L.playerPlaybackDetails)
+        items.add(0, MENU_SUBTITLE_FILE, 6, L.playerLoadSubtitleFile)
+        if (chatId != 0L && messageId != 0L) items.add(0, MENU_COPY_LINK, 7, L.playerCopyLink)
+        if (canSaveToDownloads()) items.add(0, MENU_SAVE, 8, L.playerSaveToDownloads)
         if (hasMessage()) {
-            items.add(0, MENU_WATCHED, 9, if (onWatchedList) "Mark as unwatched" else "Mark as watched")
+            items.add(0, MENU_WATCHED, 9, if (onWatchedList) L.playerMarkUnwatched else L.playerMarkWatched)
         }
         menu.setOnMenuItemClickListener { item ->
             when (item.itemId) {
@@ -2538,7 +2541,7 @@ class PlayerActivity : FragmentActivity() {
         val on = !volumeBoostOn
         volumeBoostOn = on
         volumeBoost?.enabled = on
-        showGestureFeedback(if (on) "Volume boost on" else "Volume boost off")
+        showGestureFeedback(if (on) L.playerVolumeBoostOn else L.playerVolumeBoostOff)
         lifecycleScope.launch { runCatching { settings.setVolumeBoost(on) } }
     }
 
@@ -2559,9 +2562,9 @@ class PlayerActivity : FragmentActivity() {
         }
         showGestureFeedback(
             when (minutes) {
-                null -> "Sleep timer off"
-                SleepTimer.END_OF_VIDEO -> "Stops at the end of this video"
-                else -> "Stops in ${SleepTimer.label(minutes)}"
+                null -> L.playerSleepTimerOff
+                SleepTimer.END_OF_VIDEO -> L.playerSleepTimerEnd
+                else -> L.playerSleepTimerIn(SleepTimer.label(minutes))
             },
         )
     }
@@ -2589,9 +2592,9 @@ class PlayerActivity : FragmentActivity() {
                 val now = SystemClock.elapsedRealtime()
                 if (sleepAt in 1..now) {
                     sleepAt = 0L
-                    askStillWatching("The sleep timer paused the video.", next = null)
+                    askStillWatching(L.playerStillWatchingSleep, next = null)
                 } else if (exo.isPlaying && StillWatching.askAfterIdle(now - lastInputAt)) {
-                    askStillWatching("Nothing pressed for two hours.", next = null)
+                    askStillWatching(L.playerStillWatchingIdle, next = null)
                 }
             }
         }
@@ -2636,16 +2639,16 @@ class PlayerActivity : FragmentActivity() {
         statusProgress.visibility = View.GONE
         hideFailureActions()
         layOutSheetForThisScreen()
-        statusTitle.text = "Still watching?"
+        statusTitle.text = L.playerStillWatching
         statusText.text = why
         statusDetail.visibility = View.VISIBLE
-        statusDetail.text = next?.let { "Next: ${it.title}" } ?: "Playback and downloads are paused."
+        statusDetail.text = next?.let { L.playerNextTitle(it.title) } ?: L.playerStillWatchingPaused
         statusBack?.visibility = View.VISIBLE
         statusRetry?.apply {
-            text = "Keep watching"
+            text = L.playerKeepWatching
             visibility = View.VISIBLE
             setOnClickListener {
-                text = "Try again"
+                text = L.commonTryAgain
                 setOnClickListener { retryPlayback() }
                 keepWatching(next)
             }
@@ -2687,8 +2690,8 @@ class PlayerActivity : FragmentActivity() {
                 when {
                     savable == null -> CHECKING_FEEDBACK
                     savable == false -> NOT_SAVABLE_FEEDBACK
-                    downloadedFile != null -> "Already in Downloads"
-                    else -> "Already downloading"
+                    downloadedFile != null -> L.playerAlreadyInDownloads
+                    else -> L.playerAlreadyDownloading
                 },
             )
             return
@@ -2697,9 +2700,9 @@ class PlayerActivity : FragmentActivity() {
         OfflineDownloads.start(this, item, chatTitle)
         showGestureFeedback(
             if (downloadComplete) {
-                "Saving to Downloads. It finishes when playback stops."
+                L.playerSavingToDownloads
             } else {
-                "Downloading to Downloads. It finishes when playback stops."
+                L.playerDownloadingToDownloads
             },
         )
     }
@@ -2716,7 +2719,7 @@ class PlayerActivity : FragmentActivity() {
         val exo = player ?: return
         exo.seekTo(0)
         exo.playWhenReady = true
-        showGestureFeedback("From the start")
+        showGestureFeedback(L.playerFromTheStart)
     }
 
     /** What is actually playing: the figures a bug report needs, in words a viewer can read. */
@@ -2726,22 +2729,27 @@ class PlayerActivity : FragmentActivity() {
         val audio = exo.audioFormat
         val lines = buildList {
             if (video != null) {
-                add("Picture: ${video.width} x ${video.height}" +
-                    (video.frameRate.takeIf { it > 0 }?.let { ", %.3g fps".format(it) } ?: ""))
-                video.sampleMimeType?.let { add("Video codec: ${it.substringAfter('/')}") }
+                val width = video.width.toString()
+                val height = video.height.toString()
+                add(
+                    video.frameRate.takeIf { it > 0 }
+                        ?.let { L.playerDetailsPictureFps(width, height, "%.3g".format(it)) }
+                        ?: L.playerDetailsPicture(width, height),
+                )
+                video.sampleMimeType?.let { add(L.playerDetailsVideoCodec(it.substringAfter('/'))) }
             }
             if (audio != null) {
-                add("Sound: ${audio.channelCount} channels at ${audio.sampleRate} Hz")
-                audio.sampleMimeType?.let { add("Audio codec: ${it.substringAfter('/')}") }
+                add(L.playerDetailsSound(audio.channelCount.toString(), audio.sampleRate.toString()))
+                audio.sampleMimeType?.let { add(L.playerDetailsAudioCodec(it.substringAfter('/'))) }
             }
-            if (fileSizeBytes > 0) add("File: ${StreamStats.formatBytes(fileSizeBytes)}")
-            add("Downloaded: ${(downloadedFraction * 100).toInt()}%")
-            add("Speed: ${PlaybackSpeed.label(playbackSpeed)}")
+            if (fileSizeBytes > 0) add(L.playerDetailsFile(Translator.messages.formatter.bytes(fileSizeBytes)))
+            add(L.playerDetailsDownloaded(Translator.messages.formatter.percent(downloadedFraction.toDouble())))
+            add(L.playerDetailsSpeed(PlaybackSpeed.label(playbackSpeed)))
         }
         android.app.AlertDialog.Builder(this)
-            .setTitle(mediaTitle.ifBlank { "Playback details" })
+            .setTitle(mediaTitle.ifBlank { L.playerPlaybackDetails })
             .setMessage(lines.joinToString("\n"))
-            .setPositiveButton("Close", null)
+            .setPositiveButton(L.commonClose, null)
             .show()
     }
 
@@ -2761,7 +2769,7 @@ class PlayerActivity : FragmentActivity() {
             built.isFocusable = true
             built.setOnClickListener { showUnlockPill() }
             val pill = TextView(this).apply {
-                text = "Tap here to unlock"
+                text = L.playerTapToUnlock
                 setTextColor(getColor(R.color.text_primary))
                 textSize = 15f
                 background = getDrawable(R.drawable.bg_player_chip)
@@ -2918,11 +2926,13 @@ class PlayerActivity : FragmentActivity() {
         if (!show) return
 
         downloadChip.text = when {
-            downloadComplete -> "Download completed"
+            downloadComplete -> L.playerDownloadCompleted
             speed.bytesPerSec >= StreamStats.MIN_MEANINGFUL_SPEED ->
-                "${StreamStats.formatPercent(downloadedFraction)} downloaded  ·  " +
-                    StreamStats.formatSpeed(speed.bytesPerSec)
-            else -> "${StreamStats.formatPercent(downloadedFraction)} downloaded"
+                L.playerDownloadedPercentSpeed(
+                    Translator.messages.formatter.percent(downloadedFraction.toDouble()),
+                    Translator.messages.formatter.speed(speed.bytesPerSec),
+                )
+            else -> L.playerDownloadedPercent(Translator.messages.formatter.percent(downloadedFraction.toDouble()))
         }
     }
 
@@ -3154,7 +3164,7 @@ class PlayerActivity : FragmentActivity() {
         } else {
             feedback?.buffering(false)
             rebufferChip.visibility = View.VISIBLE
-            rebufferText.text = if (offline) "Offline. Waiting for internet…" else "Loading…"
+            rebufferText.text = if (offline) L.playerOfflineWaiting else L.commonLoading
         }
         updateDownloadChip()
     }
@@ -3181,7 +3191,7 @@ class PlayerActivity : FragmentActivity() {
             text = mediaTitle
             visibility = if (mediaTitle.isBlank()) View.GONE else View.VISIBLE
         }
-        statusTitle.text = "Can't play this"
+        statusTitle.text = L.playerCantPlay
         statusText.text = message
 
         // One attempt button, not two: the app works out whether it means a plain retry or a
@@ -3223,7 +3233,7 @@ class PlayerActivity : FragmentActivity() {
         lifecycleScope.launch {
             if (retryable) {
                 statusReload?.apply {
-                    text = "Reload"
+                    text = L.commonReload
                     visibility = View.VISIBLE
                     requestFocus()
                 }
@@ -3245,9 +3255,9 @@ class PlayerActivity : FragmentActivity() {
             if (savable != true) return@launch
             statusOpenWith?.apply {
                 text = if (state == ExternalPlayer.Readiness.Complete) {
-                    "Open in another app"
+                    L.playerOpenInAnotherApp
                 } else {
-                    "Open what's downloaded"
+                    L.playerOpenWhatIsDownloaded
                 }
                 visibility = View.VISIBLE
                 requestFocus()
@@ -3335,11 +3345,11 @@ class PlayerActivity : FragmentActivity() {
                 } else {
                     ExternalPlayer.handOver(this@PlayerActivity, fileId, mediaTitle)
                 }
-            }.getOrElse { ExternalPlayer.Handoff.Refused("That video can't be handed to another app.") }
+            }.getOrElse { ExternalPlayer.Handoff.Refused(L.playerHandoffRefused) }
             when (outcome) {
                 is ExternalPlayer.Handoff.Started -> outcome.caution?.let(::showGestureFeedback)
                 ExternalPlayer.Handoff.NothingOnDisk ->
-                    showGestureFeedback("Nothing of this video is on the device yet.")
+                    showGestureFeedback(L.playerHandoffNothingOnDisk)
                 is ExternalPlayer.Handoff.Refused -> showGestureFeedback(outcome.reason)
             }
         }
@@ -3354,7 +3364,7 @@ class PlayerActivity : FragmentActivity() {
     private fun retryPlayback() {
         statusRetry?.visibility = View.GONE
         recoveryAttempts = 0
-        showStatus("Trying again…")
+        showStatus(L.playerTryingAgain)
         val exo = player
         if (exo != null) {
             exo.prepare()
@@ -3551,7 +3561,7 @@ class PlayerActivity : FragmentActivity() {
             onWatchedList = false
             markedWatchedHere = false
             App.backgroundScope.launch { runCatching { store.markUnwatched(chat, message) } }
-            showGestureFeedback("Marked as unwatched")
+            showGestureFeedback(L.playerMarkedUnwatched)
         } else {
             onWatchedList = true
             markedWatchedHere = true
@@ -3562,7 +3572,7 @@ class PlayerActivity : FragmentActivity() {
                     settings.clearResumePosition(chat, message)
                 }
             }
-            showGestureFeedback("Marked as watched")
+            showGestureFeedback(L.playerMarkedWatched)
         }
     }
 
@@ -3583,10 +3593,10 @@ class PlayerActivity : FragmentActivity() {
         private const val EXTRA_CAN_BE_SAVED = "can_be_saved"
 
         /** Said when a press asks for a copy of a video Telegram does not let leave the app. */
-        private const val NOT_SAVABLE_FEEDBACK = "This chat does not allow saving its videos"
+        private val NOT_SAVABLE_FEEDBACK: String get() = L.playerNotSavable
 
         /** Said for the same press in the moment before Telegram has answered whether it may. */
-        private const val CHECKING_FEEDBACK = "Still checking this video with Telegram"
+        private val CHECKING_FEEDBACK: String get() = L.playerCheckingSavable
 
         private const val BUFFER_MIN_MS = 15_000
         private const val BUFFER_MAX_MS = 50_000
@@ -3778,8 +3788,8 @@ class PlayerActivity : FragmentActivity() {
                 putExtra(
                     EXTRA_SUBTITLE,
                     listOf(
-                        MediaMapper.formatDuration(item.durationSec),
-                        MediaMapper.formatSize(item.sizeBytes),
+                        Translator.messages.formatter.duration(item.durationSec.toLong()),
+                        Translator.messages.formatter.size(item.sizeBytes),
                     ).filter { it.isNotEmpty() }.joinToString("  ·  "),
                 )
             }

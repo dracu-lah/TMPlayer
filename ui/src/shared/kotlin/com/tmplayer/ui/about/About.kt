@@ -1,6 +1,7 @@
 package com.tmplayer.ui.about
 
 import com.tmplayer.data.SupportReminder
+import com.tmplayer.i18n.L
 
 /**
  * What the About screen says, the same on phone, TV and desktop: the licence line, every link it
@@ -13,10 +14,9 @@ import com.tmplayer.data.SupportReminder
 object About {
 
     /** Under the version line. */
-    const val LICENCE = "Free software under the GNU GPL, version 3 or later"
+    val LICENCE: String get() = L.aboutLicenceLine
 
-    const val WARRANTY = "TMPlayer comes with no warranty, to the extent the law allows. You may " +
-        "share and change it under the terms of the GPL, which the source code carries in full."
+    val WARRANTY: String get() = L.aboutWarranty
 
     const val SOURCE = "https://github.com/dracu-lah/TMPlayer"
     const val NOTICES_ONLINE = "$SOURCE/blob/main/THIRD_PARTY_NOTICES.md"
@@ -27,10 +27,10 @@ object About {
     const val COFFEE = "https://buymeacoffee.com/nevil.dev"
 
     /** The heading, the Settings row and the card's title. */
-    const val SUPPORT_TITLE = "Support TMPlayer"
+    val SUPPORT_TITLE: String get() = L.aboutSupportTitle
 
     /** Under the support heading, wherever the links appear. */
-    const val SUPPORT_NOTE = "Voluntary. It unlocks nothing: every feature is free for everyone."
+    val SUPPORT_NOTE: String get() = L.aboutSupportNote
 
     /** A link and the sentence under it. */
     data class Link(val title: String, val detail: String, val url: String)
@@ -39,18 +39,17 @@ object About {
     data class Group(val title: String, val links: List<Link>, val note: String? = null)
 
     /** The two ways to chip in, in the order every screen shows them. */
-    val supportLinks: List<Link> = listOf(
-        Link("GitHub Sponsors", "A monthly or one-off sponsorship", SPONSORS),
-        Link("Buy Me a Coffee", "A one-off coffee", COFFEE),
+    val supportLinks: List<Link> get() = listOf(
+        Link("GitHub Sponsors", L.aboutSponsorsDetail, SPONSORS),
+        Link("Buy Me a Coffee", L.aboutCoffeeDetail, COFFEE),
     )
 
     /**
      * The support card's words: rare, short, and honest that nothing is held back. See
      * [SupportReminder] for when it appears.
      */
-    const val REMINDER_TITLE = "Enjoying TMPlayer?"
-    const val REMINDER_TEXT = "It is free and has no ads of its own. If it has earned a place on " +
-        "your screen, a coffee or a sponsorship keeps it going."
+    val REMINDER_TITLE: String get() = L.aboutReminderTitle
+    val REMINDER_TEXT: String get() = L.aboutReminderText
 
     /**
      * Where the corresponding source for this build is: the release it came from, whose notes link
@@ -66,30 +65,30 @@ object About {
      */
     fun groups(version: String, support: Boolean = SupportReminder.enabled): List<Group> = listOfNotNull(
         Group(
-            "Licence",
+            L.aboutLicence,
             listOf(
-                Link("Source code", "Everything TMPlayer is built from, on GitHub", SOURCE),
+                Link(L.aboutSourceCode, L.aboutSourceCodeDetail, SOURCE),
                 Link(
-                    "Corresponding source",
-                    "The NextLib and mediamp source archives, linked from this version's release notes",
+                    L.aboutCorrespondingSource,
+                    L.aboutCorrespondingSourceDetail,
                     releaseUrl(version),
                 ),
             ),
         ),
         Group(
-            "Your data and the law",
+            L.aboutDataAndLaw,
             listOf(
-                Link("Privacy", "What stays on this device and which services TMPlayer contacts", PRIVACY),
-                Link("Lawful use", "Use TMPlayer only with media you may access", LEGAL),
+                Link(L.aboutPrivacy, L.aboutPrivacyDetail, PRIVACY),
+                Link(L.aboutLawfulUse, L.aboutLawfulUseDetail, LEGAL),
             ),
         ),
         Group(
-            "Contact",
+            L.aboutContact,
             listOf(
-                Link("Email", EMAIL, "mailto:$EMAIL"),
-                Link("Telegram channel", "News and every release, at t.me/tmplayerapp", "https://t.me/tmplayerapp"),
-                Link("Telegram group", "Help and chat, at t.me/tmplayer_chat", "https://t.me/tmplayer_chat"),
-                Link("GitHub Discussions", "Questions, ideas and bug reports", "$SOURCE/discussions"),
+                Link(L.aboutEmail, EMAIL, "mailto:$EMAIL"),
+                Link(L.aboutTelegramChannel, L.aboutTelegramChannelDetail, "https://t.me/tmplayerapp"),
+                Link(L.aboutTelegramGroup, L.aboutTelegramGroupDetail, "https://t.me/tmplayer_chat"),
+                Link("GitHub Discussions", L.aboutDiscussionsDetail, "$SOURCE/discussions"),
             ),
         ),
         if (support) Group(SUPPORT_TITLE, supportLinks, note = SUPPORT_NOTE) else null,

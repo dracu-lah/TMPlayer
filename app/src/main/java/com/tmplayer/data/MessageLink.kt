@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import com.tmplayer.i18n.L
 
 /**
  * The link to a video's message in Telegram, put on the clipboard.
@@ -25,11 +26,11 @@ object MessageLink {
     suspend fun copy(context: Context, chatId: Long, messageId: Long) {
         val link = of(chatId, messageId)
         if (link == null) {
-            Toast.makeText(context, "This chat has no links to its messages", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, L.shareNoMessageLinks, Toast.LENGTH_SHORT).show()
             return
         }
         val clipboard = context.getSystemService(ClipboardManager::class.java)
         runCatching { clipboard?.setPrimaryClip(ClipData.newPlainText("Telegram link", link)) }
-        Toast.makeText(context, "Link copied", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, L.shareLinkCopied, Toast.LENGTH_SHORT).show()
     }
 }

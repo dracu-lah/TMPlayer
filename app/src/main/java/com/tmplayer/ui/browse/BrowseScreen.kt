@@ -98,9 +98,11 @@ import androidx.tv.material3.Text
 import com.tmplayer.data.Account
 import com.tmplayer.data.CardLayout
 import com.tmplayer.data.ChatFolderSummary
+import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.Updates
+import com.tmplayer.i18n.L
 import com.tmplayer.ui.components.BigEmpty
 import com.tmplayer.ui.components.MediaPreview
 import com.tmplayer.ui.components.ChatListSkeleton
@@ -112,6 +114,7 @@ import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.MenuAction
 import com.tmplayer.ui.components.holdable
 import com.tmplayer.ui.components.AppMark
+import com.tmplayer.ui.i18n.LocalStrings
 import kotlinx.coroutines.delay
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.TmIcons
@@ -134,12 +137,8 @@ import com.tmplayer.ui.theme.Tv
  * Every tab but two is a list of chats; Continue watching and Previously watched are lists of
  * videos, so they count videos.
  */
-private fun countLabel(section: BrowseSection, count: Int): String = when {
-    section.listsVideos && count == 1 -> "1 video"
-    section.listsVideos -> "$count videos"
-    count == 1 -> "1 chat"
-    else -> "$count chats"
-}
+private fun countLabel(section: BrowseSection, count: Int): String =
+    if (section.listsVideos) L.browseVideosCount(count) else L.browseChatsCount(count)
 
 // BrowseTab, BrowseSection, browseSections and filterChats live in :ui (BrowseSections.kt).
 
@@ -215,6 +214,7 @@ fun BrowseScreen(
     updateVersion: String? = null,
     onUpdate: () -> Unit = {},
 ) {
+    val s = LocalStrings.current
     // An unfinished video wins the landing tab, otherwise Recent, so the first screen is never
     // empty. Those are read from disk after the first frame, so the tab settles once they arrive;
     // an explicit pick always wins. [picked] is hoisted rather than remembered here because
@@ -280,7 +280,7 @@ fun BrowseScreen(
                                 // behind, so the button would be one that visibly does nothing.
                                 if (continueWatching.isNotEmpty()) {
                                     HeaderAction(
-                                        label = "Clear history",
+                                        label = s.browseClearHistory,
                                         icon = Icons.Filled.Close,
                                         onClick = { confirmClearHistory = true },
                                     )
@@ -308,7 +308,7 @@ fun BrowseScreen(
                                 LayoutAction(layout, onToggleLayout)
                                 if (watchedHistory.isNotEmpty()) {
                                     HeaderAction(
-                                        label = "Clear watched",
+                                        label = s.browseClearWatched,
                                         icon = Icons.Filled.Close,
                                         onClick = { confirmClearWatched = true },
                                     )
@@ -343,7 +343,7 @@ fun BrowseScreen(
                                 // from a tab full of them is here, beside the tab they fill.
                                 if (tab == BrowseSection.of(BrowseTab.Favorites) && favorites.isNotEmpty()) {
                                     HeaderAction(
-                                        label = "Clear favourites",
+                                        label = s.browseClearFavourites,
                                         icon = Icons.Filled.Close,
                                         onClick = { confirmClearFavorites = true },
                                     )
@@ -387,7 +387,7 @@ fun BrowseScreen(
     }
 
     if (touch) {
-        val voiceSearch = rememberVoiceSearch("Say a chat name") { query = it }
+        val voiceSearch = rememberVoiceSearch(s.browseVoicePromptChat) { query = it }
         // Continue watching lists videos held on this device, so it counts those instead. Keep the
         // chat count remembered: the same filter and fuzzy ranking already run inside the pane
         // below, and an unremembered copy here costs a second full pass on every keystroke.
@@ -421,7 +421,7 @@ fun BrowseScreen(
             onVoiceSearch = voiceSearch,
             actions = {
                 BarIcon(
-                    label = if (layout == CardLayout.Grid) "Show as rows" else "Show as tiles",
+                    label = if (layout == CardLayout.Grid) s.browseShowAsRows else s.browseShowAsTiles,
                     icon = if (layout == CardLayout.Grid) {
                         Icons.AutoMirrored.Filled.List
                     } else {
@@ -430,7 +430,7 @@ fun BrowseScreen(
                     onClick = onToggleLayout,
                 )
                 if (!tab.listsVideos) {
-                    BarIcon("Refresh", Icons.Filled.Refresh, onRefresh)
+                    BarIcon(s.commonRefresh, Icons.Filled.Refresh, onRefresh)
                 }
                 // Everything destructive goes behind the overflow. A "Clear history" button
                 // sitting in the bar beside Refresh is one mis-tap from emptying the tab.
@@ -441,13 +441,13 @@ fun BrowseScreen(
                     BarOverflow(
                         items = buildList {
                             if (clearHistory) {
-                                add("Clear Continue watching" to { confirmClearHistory = true })
+                                add(s.browseClearContinue to { confirmClearHistory = true })
                             }
                             if (clearWatched) {
-                                add("Clear watched list" to { confirmClearWatched = true })
+                                add(s.browseClearWatchedList to { confirmClearWatched = true })
                             }
                             if (clearFavorites) {
-                                add("Clear favourites" to { confirmClearFavorites = true })
+                                add(s.browseClearFavourites to { confirmClearFavorites = true })
                             }
                         },
                     )
@@ -497,19 +497,19 @@ fun BrowseScreen(
             onDismiss = { chatMenu = null },
             actions = buildList {
                 add(
-                    MenuAction("Open", Icons.Filled.PlayArrow) {
+                    MenuAction(s.navOpen, Icons.Filled.PlayArrow) {
                         chatMenu = null
                         onOpenChat(chat)
                     },
                 )
                 add(
                     MenuAction(
-                        label = if (favorite) "Remove from favourites" else "Add to favourites",
+                        label = if (favorite) s.browseRemoveFavourite else s.browseAddFavourite,
                         icon = if (favorite) Icons.Filled.Star else TmIcons.StarOutline,
                         detail = if (favorite) {
-                            "Takes it out of the Favourites tab"
+                            s.browseRemoveFavouriteDetail
                         } else {
-                            "Keeps it one press away in the Favourites tab"
+                            s.browseAddFavouriteDetail
                         },
                     ) {
                         chatMenu = null
@@ -521,9 +521,9 @@ fun BrowseScreen(
                 // is on the viewer's phone a second later.
                 add(
                     MenuAction(
-                        label = if (chat.isPinned) "Unpin" else "Pin to the top",
+                        label = if (chat.isPinned) s.browseUnpin else s.browsePin,
                         icon = TmIcons.Pin,
-                        detail = "Changes this chat in Telegram, on every device",
+                        detail = s.browsePinDetail,
                     ) {
                         chatMenu = null
                         onTogglePinned(chat)
@@ -531,12 +531,12 @@ fun BrowseScreen(
                 )
                 add(
                     MenuAction(
-                        label = if (chat.isMuted) "Unmute" else "Mute",
+                        label = if (chat.isMuted) s.browseUnmute else s.browseMute,
                         icon = if (chat.isMuted) TmIcons.Bell else TmIcons.BellOff,
                         detail = if (chat.isMuted) {
-                            "Lets it notify you again, on every device"
+                            s.browseUnmuteDetail
                         } else {
-                            "Silences it in Telegram, on every device"
+                            s.browseMuteDetail
                         },
                     ) {
                         chatMenu = null
@@ -546,9 +546,9 @@ fun BrowseScreen(
                 if (chat.unreadCount > 0) {
                     add(
                         MenuAction(
-                            label = "Mark as read",
+                            label = s.browseMarkRead,
                             icon = Icons.Filled.Check,
-                            detail = "Clears the unread count in Telegram",
+                            detail = s.browseMarkReadDetail,
                         ) {
                             chatMenu = null
                             onMarkRead(chat)
@@ -557,12 +557,12 @@ fun BrowseScreen(
                 }
                 add(
                     MenuAction(
-                        label = if (chat.isArchived) "Move out of the archive" else "Archive",
+                        label = if (chat.isArchived) s.browseUnarchive else s.browseArchive,
                         icon = TmIcons.Archive,
                         detail = if (chat.isArchived) {
-                            "Puts it back in the main list, here and in Telegram"
+                            s.browseUnarchiveDetail
                         } else {
-                            "Hides it from every tab but Archived, here and in Telegram"
+                            s.browseArchiveDetail
                         },
                     ) {
                         chatMenu = null
@@ -575,10 +575,10 @@ fun BrowseScreen(
 
     if (confirmClearFavorites) {
         TvConfirm(
-            title = "Clear favourites?",
-            message = "All ${favorites.size} chats lose their star and this tab empties.",
-            detail = "The chats themselves stay where they are, in Recent and All chats.",
-            confirmLabel = "Clear",
+            title = s.browseClearFavouritesTitle,
+            message = s.browseClearFavouritesMessage(favorites.size),
+            detail = s.browseClearFavouritesDetail,
+            confirmLabel = s.commonClear,
             onConfirm = {
                 confirmClearFavorites = false
                 onClearFavorites()
@@ -589,11 +589,10 @@ fun BrowseScreen(
 
     if (confirmClearHistory) {
         TvConfirm(
-            title = "Clear Continue watching?",
-            message = "All ${continueWatching.size} videos are forgotten and the tab empties. " +
-                "Nothing is deleted from Telegram.",
-            detail = "You can still find each video in the chat it came from.",
-            confirmLabel = "Clear",
+            title = s.browseClearContinueTitle,
+            message = s.browseClearContinueMessage(continueWatching.size),
+            detail = s.browseClearContinueDetail,
+            confirmLabel = s.commonClear,
             onConfirm = {
                 confirmClearHistory = false
                 onClearHistory()
@@ -604,11 +603,10 @@ fun BrowseScreen(
 
     if (confirmClearWatched) {
         TvConfirm(
-            title = "Clear the watched list?",
-            message = "All ${watchedHistory.size} videos lose their watched tick and this tab " +
-                "empties. Nothing is deleted from Telegram.",
-            detail = "Videos you are part way through stay in Continue watching.",
-            confirmLabel = "Clear",
+            title = s.browseClearWatchedTitle,
+            message = s.browseClearWatchedMessage(watchedHistory.size),
+            detail = s.browseClearWatchedDetail,
+            confirmLabel = s.commonClear,
             onConfirm = {
                 confirmClearWatched = false
                 onClearWatched()
@@ -626,14 +624,14 @@ fun BrowseScreen(
             ).filter { it.isNotBlank() }.joinToString("  ·  "),
             onDismiss = { watchedMenu = null },
             actions = listOf(
-                MenuAction("Play again", Icons.Filled.PlayArrow, detail = "From the start") {
+                MenuAction(s.browsePlayAgain, Icons.Filled.PlayArrow, detail = s.browseFromTheStart) {
                     watchedMenu = null
                     onOpenWatched(record)
                 },
                 MenuAction(
-                    label = "Mark as unwatched",
+                    label = s.gridMarkUnwatched,
                     icon = Icons.Filled.Close,
-                    detail = "Takes it off this list and the tick off its tile",
+                    detail = s.browseMarkUnwatchedDetail,
                     destructive = true,
                 ) {
                     watchedMenu = null
@@ -646,29 +644,29 @@ fun BrowseScreen(
     mediaMenu?.let { record ->
         TvMenu(
             title = record.title,
-            subtitle = StreamStats.formatClock(record.positionMs) + " watched",
+            subtitle = s.browseWatchedUpTo(s.formatter.clock(record.positionMs)),
             onDismiss = { mediaMenu = null },
             actions = listOf(
-                MenuAction("Resume", Icons.Filled.PlayArrow, detail = "Carry on where you stopped") {
+                MenuAction(s.commonResume, Icons.Filled.PlayArrow, detail = s.browseResumeDetail) {
                     mediaMenu = null
                     onResumeMedia(record)
                 },
-                MenuAction("Play from the start", Icons.Filled.Refresh) {
+                MenuAction(s.gridPlayFromStart, Icons.Filled.Refresh) {
                     mediaMenu = null
                     onRestartMedia(record)
                 },
                 MenuAction(
-                    label = "Mark as watched",
+                    label = s.gridMarkWatched,
                     icon = Icons.Filled.Check,
-                    detail = "Moves it to Previously watched",
+                    detail = s.browseMarkWatchedDetail,
                 ) {
                     mediaMenu = null
                     onMarkMediaWatched(record)
                 },
                 MenuAction(
-                    label = "Remove from Continue watching",
+                    label = s.browseForgetResume,
                     icon = Icons.Filled.Close,
-                    detail = "The video stays in its chat",
+                    detail = s.browseForgetResumeDetail,
                     destructive = true,
                 ) {
                     mediaMenu = null
@@ -694,9 +692,10 @@ private fun RowScope.BarIcon(label: String, icon: ImageVector, onClick: () -> Un
 /** The three dots, and everything that should take two taps rather than one. */
 @Composable
 internal fun RowScope.BarOverflow(items: List<Pair<String, () -> Unit>>) {
+    val s = LocalStrings.current
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true }) {
-        M3Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+        M3Icon(Icons.Filled.MoreVert, contentDescription = s.commonMoreOptions)
     }
     TmDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
         items.forEach { (label, action) ->
@@ -727,11 +726,10 @@ private fun ResumeRecord.cardText() = VideoCardText(
     key = "${chatId}_$messageId",
     title = title,
     detail = buildString {
-        append(StreamStats.formatClock(positionMs))
+        append(L.messages.formatter.clock(positionMs))
         if (remainingMs > 0) {
             append("  ·  ")
-            append(StreamStats.formatClock(remainingMs))
-            append(" left")
+            append(L.browseTimeLeft(L.messages.formatter.clock(remainingMs)))
         }
     },
     chatTitle = chatTitle,
@@ -1096,6 +1094,7 @@ private fun NavRail(
     updateVersion: String? = null,
     onUpdate: () -> Unit = {},
 ) {
+    val s = LocalStrings.current
     Column(
         Modifier
             // 180dp of room for the items, whatever the overscan margin takes on the left.
@@ -1153,7 +1152,7 @@ private fun NavRail(
                         entries.forEach { entry ->
                             when (entry) {
                                 NavEntry.Downloads -> RailItem(
-                                    label = "Downloads",
+                                    label = s.navDownloads,
                                     icon = TmIcons.Download,
                                     // How many videos are coming down right now. A download outlives
                                     // the screen it was started from, and a television has no
@@ -1188,7 +1187,7 @@ private fun NavRail(
         )
         if (updateVersion != null) {
             RailItem(
-                label = "Update",
+                label = s.navUpdate,
                 icon = Icons.Filled.Refresh,
                 badge = updateVersion,
                 selected = false,
@@ -1199,7 +1198,7 @@ private fun NavRail(
         // The version no longer rides on Settings: it sits beside the name at the top, where a
         // long one has room and "Settings" keeps its whole word.
         RailItem(
-            label = "Settings",
+            label = s.navSettings,
             icon = Icons.Filled.Settings,
             badge = null,
             selected = false,
@@ -1254,6 +1253,7 @@ private fun RailGroupHeading(
     toggleable: Boolean,
     onToggle: () -> Unit,
 ) {
+    val s = LocalStrings.current
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     val background by animateColorAsState(
@@ -1278,7 +1278,7 @@ private fun RailGroupHeading(
                 if (toggleable) {
                     Modifier
                         .clickable(interactionSource = interactions, indication = null, onClick = onToggle)
-                        .semantics { stateDescription = if (open) "Open" else "Folded" }
+                        .semantics { stateDescription = if (open) s.navOpen else s.navFolded }
                 } else {
                     Modifier
                 },
@@ -1308,6 +1308,7 @@ private fun RailGroupHeading(
 
 @Composable
 private fun AccountBadge(account: Account?) {
+    val s = LocalStrings.current
     Row(
         Modifier.padding(start = RAIL_INSET),
         verticalAlignment = Alignment.CenterVertically,
@@ -1327,7 +1328,7 @@ private fun AccountBadge(account: Account?) {
             Text(
                 // Not "Signing in…": the viewer is already signed in by the time this draws, and
                 // only the name and picture are still on their way.
-                account?.name ?: "Your account",
+                account?.name ?: s.browseYourAccount,
                 style = MaterialTheme.typography.titleMedium,
                 color = Tone.text,
                 maxLines = 1,
@@ -1441,10 +1442,11 @@ private fun RailItem(
  */
 @Composable
 private fun LayoutAction(layout: CardLayout, onToggle: () -> Unit) {
+    val s = LocalStrings.current
     HeaderAction(
         // A grid of squares and a stack of lines are the two pictures every phone and television
         // uses for this, so the icon alone carries it.
-        label = if (layout == CardLayout.Grid) "As rows" else "As tiles",
+        label = if (layout == CardLayout.Grid) s.browseAsRows else s.browseAsTiles,
         icon = if (layout == CardLayout.Grid) Icons.AutoMirrored.Filled.List else TmIcons.Grid,
         showLabel = false,
         onClick = onToggle,
@@ -1459,8 +1461,9 @@ private fun LayoutAction(layout: CardLayout, onToggle: () -> Unit) {
  */
 @Composable
 private fun RefreshAction(onRefresh: () -> Unit) {
+    val s = LocalStrings.current
     HeaderAction(
-        label = "Refresh",
+        label = s.commonRefresh,
         // Icon-only, here as everywhere: a heading whose chips are two pictures and one
         // picture-with-a-word reads as three unrelated controls. The name still reaches a screen
         // reader through [label].
@@ -1528,12 +1531,8 @@ private fun TabHeading(
     action: @Composable () -> Unit = {},
 ) {
     // The number always carries its unit, and the two video tabs count videos rather than chats.
-    val unit = when {
-        tab.listsVideos && count == 1 -> "video"
-        tab.listsVideos -> "videos"
-        count == 1 -> "chat"
-        else -> "chats"
-    }
+    val s = LocalStrings.current
+    val counted = if (tab.listsVideos) s.browseVideosCount(count) else s.browseChatsCount(count)
     Row(
         Modifier.fillMaxWidth().padding(
             start = insets.start,
@@ -1550,7 +1549,7 @@ private fun TabHeading(
                 color = Tone.text,
             )
             Text(
-                if (count > 0) "${tab.blurb}  ·  $count $unit" else tab.blurb,
+                if (count > 0) "${tab.blurb}  ·  $counted" else tab.blurb,
                 style = MaterialTheme.typography.bodyMedium,
                 color = Tone.muted,
                 maxLines = 1,
@@ -1626,7 +1625,8 @@ private const val MS_PER_MINUTE = 60_000L
 
 @Composable
 private fun SearchRow(query: String, insets: BrowseInsets, onQuery: (String) -> Unit) {
-    val startVoice = rememberVoiceSearch("Say a chat name", onQuery)
+    val s = LocalStrings.current
+    val startVoice = rememberVoiceSearch(s.browseVoicePromptChat, onQuery)
     val searchField = remember { FocusRequester() }
     Row(
         Modifier.fillMaxWidth().padding(start = insets.start, end = insets.end),
@@ -1636,18 +1636,18 @@ private fun SearchRow(query: String, insets: BrowseInsets, onQuery: (String) -> 
         TvSearchField(
             value = query,
             onValueChange = onQuery,
-            placeholder = "Search chats",
+            placeholder = s.browseSearchChats,
             modifier = Modifier.weight(1f).focusRequester(searchField),
         )
         if (startVoice != null) {
             // A microphone on its own says it, and leaves the room to the search field.
-            PillButton(label = "Voice search", icon = TmIcons.Mic, showLabel = false, onClick = startVoice)
+            PillButton(label = s.browseVoiceSearch, icon = TmIcons.Mic, showLabel = false, onClick = startVoice)
         }
         if (query.isNotBlank()) {
             // Clearing the query removes this pill, and a control that deletes itself while
             // focused takes the focus with it, leaving the D-pad nowhere to go. Move focus to the
             // search field first, which is where the viewer wants to be next anyway.
-            PillButton("Clear", Icons.Filled.Close) {
+            PillButton(s.commonClear, Icons.Filled.Close) {
                 runCatching { searchField.requestFocus() }
                 onQuery("")
             }
@@ -1719,6 +1719,7 @@ private fun ChatSection(
     onHold: (ChatSummary) -> Unit,
     launchChatId: Long,
 ) {
+    val s = LocalStrings.current
     val rowsAreFullBleed = isTouch()
     // Around the strip's tiles, for the television's focus scale. A phone does not grow them.
     val clearance = if (rowsAreFullBleed) 0.dp else Tv.FocusClearance
@@ -1758,7 +1759,7 @@ private fun ChatSection(
                         },
                     ) {
                         Text(
-                            "Jump back in",
+                            s.browseJumpBackIn,
                             style = MaterialTheme.typography.titleLarge,
                             color = Tone.text,
                             modifier = Modifier.padding(bottom = 14.dp),
@@ -1786,7 +1787,7 @@ private fun ChatSection(
                         Text(
                             // Not "All chats": that is the name of a rail tab, and repeating it as
                             // a sub-heading inside a different tab reads as if the viewer moved.
-                            "More chats",
+                            s.browseMoreChats,
                             style = MaterialTheme.typography.titleLarge,
                             color = Tone.text,
                             modifier = Modifier.padding(top = 32.dp, bottom = 4.dp),
@@ -1854,6 +1855,7 @@ private fun ChatTile(
     onHold: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val s = LocalStrings.current
     val touch = isTouch()
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
@@ -1872,7 +1874,7 @@ private fun ChatTile(
                 Spacer(Modifier.width(6.dp))
                 Icon(
                     Icons.Filled.Star,
-                    contentDescription = "Favourite",
+                    contentDescription = s.browseFavourite,
                     tint = Tone.accent,
                     modifier = Modifier.size(24.dp),
                 )
@@ -1892,7 +1894,7 @@ private fun ChatTile(
         Text(
             when {
                 focused -> HOLD_HINT
-                opensOnLaunch -> "Opens on launch"
+                opensOnLaunch -> s.browseOpensOnLaunch
                 else -> chatCaption(chat)
             },
             style = MaterialTheme.typography.bodyMedium,
@@ -1955,6 +1957,7 @@ private fun ChatRow(
     onHold: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val s = LocalStrings.current
     val interactions = remember { MutableInteractionSource() }
     val focused by interactions.collectIsFocusedAsState()
     if (isTouch()) {
@@ -1998,7 +2001,7 @@ private fun ChatRow(
                 // launch marker explains why this chat opens straight away on the next start.
                 when {
                     focused -> "${chatCaption(chat)}  ·  $HOLD_HINT"
-                    opensOnLaunch -> "${chatCaption(chat)}  ·  Opens on launch"
+                    opensOnLaunch -> "${chatCaption(chat)}  ·  ${s.browseOpensOnLaunch}"
                     else -> chatCaption(chat)
                 },
                 style = MaterialTheme.typography.bodyMedium,
@@ -2016,7 +2019,7 @@ private fun ChatRow(
             if (favorite) {
                 Icon(
                     Icons.Filled.Star,
-                    contentDescription = "Favourite",
+                    contentDescription = s.browseFavourite,
                     tint = Tone.accent,
                     modifier = Modifier.size(28.dp),
                 )
@@ -2031,7 +2034,12 @@ private fun ChatRow(
  * Pinned and muted are not spelled out here: [ChatMarkers] draws them as glyphs, where Telegram
  * draws them, which leaves this one line free to say what the chat is.
  */
-private fun chatCaption(chat: ChatSummary): String = chat.kind.label
+private fun chatCaption(chat: ChatSummary): String = when (chat.kind) {
+    ChatKind.Saved -> L.browseTabSavedHeading
+    ChatKind.Channel -> L.browseTabChannels
+    ChatKind.Group -> L.browseTabGroups
+    ChatKind.Direct -> L.browseTabPeople
+}
 
 /**
  * The pin and the silent bell, at the end of the row where a chat list puts them.
@@ -2042,10 +2050,11 @@ private fun chatCaption(chat: ChatSummary): String = chat.kind.label
  */
 @Composable
 private fun ChatMarkers(chat: ChatSummary, size: Dp) {
+    val s = LocalStrings.current
     if (chat.isMuted) {
         Icon(
             TmIcons.BellOff,
-            contentDescription = "Muted",
+            contentDescription = s.browseMuted,
             tint = Tone.muted,
             modifier = Modifier.size(size),
         )
@@ -2053,7 +2062,7 @@ private fun ChatMarkers(chat: ChatSummary, size: Dp) {
     if (chat.isPinned) {
         Icon(
             TmIcons.Pin,
-            contentDescription = "Pinned",
+            contentDescription = s.browsePinned,
             tint = Tone.muted,
             modifier = Modifier.size(size),
         )
@@ -2109,6 +2118,7 @@ private fun TouchChatRow(
     modifier: Modifier,
     interactions: MutableInteractionSource,
 ) {
+    val s = LocalStrings.current
     ListItem(
         headlineContent = {
             // Two lines, because a channel name is regularly longer than a phone is wide.
@@ -2126,7 +2136,7 @@ private fun TouchChatRow(
             M3Text(
                 // No hold hint on a phone: there is no focused row for it to attach to.
                 if (opensOnLaunch) {
-                    "${chatCaption(chat)}  ·  Opens on launch"
+                    "${chatCaption(chat)}  ·  ${s.browseOpensOnLaunch}"
                 } else {
                     chatCaption(chat)
                 },
@@ -2153,7 +2163,7 @@ private fun TouchChatRow(
                     if (favorite) {
                         M3Icon(
                             Icons.Filled.Star,
-                            contentDescription = "Favourite",
+                            contentDescription = s.browseFavourite,
                             tint = Tone.accent,
                             modifier = Modifier.size(20.dp),
                         )
@@ -2169,24 +2179,25 @@ private fun TouchChatRow(
 
 @Composable
 private fun EmptyTab(tab: BrowseSection, query: String) {
+    val s = LocalStrings.current
     // Each empty tab says what to do about it, in its own words. A folder is the one section this
     // app has no way to fill from here: folders are made and edited in Telegram itself, so the
     // message says where to go rather than offering something to press.
     val message = when {
-        query.isNotBlank() -> "Nothing matches “$query”."
+        query.isNotBlank() -> s.browseEmptyNoMatch(query)
         tab is BrowseSection.Folder ->
-            "Nothing in this folder yet. Folders are edited in Telegram, on your phone."
+            s.browseEmptyFolder
         tab == BrowseSection.of(BrowseTab.Continue) ->
-            "You haven't started a video yet. Open a chat and pick one."
+            s.browseEmptyContinue
         tab == BrowseSection.of(BrowseTab.Watched) ->
-            "Nothing watched yet. Videos you finish, or mark as watched, appear here."
+            s.browseEmptyWatched
         tab == BrowseSection.of(BrowseTab.Favorites) ->
-            "No favourites yet. Hold OK on any chat to add it here."
-        tab == BrowseSection.of(BrowseTab.Unread) -> "Nothing unread. You're up to date."
-        tab == BrowseSection.of(BrowseTab.Archived) -> "Nothing archived."
+            s.browseEmptyFavourites
+        tab == BrowseSection.of(BrowseTab.Unread) -> s.browseEmptyUnread
+        tab == BrowseSection.of(BrowseTab.Archived) -> s.browseEmptyArchived
         tab == BrowseSection.of(BrowseTab.Saved) ->
-            "Saved Messages is empty. Forward a video to yourself in Telegram and it appears here."
-        else -> "Nothing here yet."
+            s.browseEmptySaved
+        else -> s.browseEmptyOther
     }
     // A search that came back empty is a different situation from a tab with nothing in it yet, so
     // the glyph follows whichever one the viewer is looking at.
@@ -2202,7 +2213,7 @@ private const val FOCUS_FADE_MS = 140
  * A hold is invisible until someone tries it. Attached to the focused row the hint arrives exactly
  * when it is actionable, and costs no layout: it takes the place of a label the row already had.
  */
-private const val HOLD_HINT = "Hold OK for options"
+private val HOLD_HINT: String get() = L.browseHoldHint
 /**
  * One rail row, heading or item, back to back. The old 44 dp item plus a 4 dp gap had the same
  * pitch; this gives the whole of it to the target, the 48 dp floor of the v1 design.

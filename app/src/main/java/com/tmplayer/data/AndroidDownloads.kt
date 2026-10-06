@@ -2,6 +2,7 @@ package com.tmplayer.data
 
 import android.content.Context
 import android.content.Intent
+import com.tmplayer.i18n.L
 
 // The Android half of downloads: how a [DownloadRequest] crosses an intent to reach
 // [DownloadService], and the service as the [DownloadRunner] behind [OfflineDownloads]. The queue,
@@ -77,7 +78,7 @@ class AndroidDownloadRunner(private val context: Context) : DownloadRunner {
          * can argue with, and both are answered by opening the app and asking again, so that is
          * what it says.
          */
-        const val REFUSED = "Android would not start this download. Open TMPlayer and press Try again."
+        val REFUSED: String get() = L.downloadsRefused
     }
 }
 

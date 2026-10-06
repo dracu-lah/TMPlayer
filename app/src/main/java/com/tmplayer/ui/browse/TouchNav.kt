@@ -1,5 +1,6 @@
 package com.tmplayer.ui.browse
 
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.nav.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -125,6 +126,7 @@ internal fun TouchBrowseShell(
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable () -> Unit,
 ) {
+    val s = LocalStrings.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val context = LocalContext.current
     val settings = remember(context) { SettingsStore(context) }
@@ -192,7 +194,7 @@ internal fun TouchBrowseShell(
                                     entries.forEach { entry ->
                                         when (entry) {
                                             NavEntry.Downloads -> DrawerDestination(
-                                                label = "Downloads",
+                                                label = s.navDownloads,
                                                 selected = false,
                                                 // How many videos are coming down right now. A
                                                 // download outlives the screen it was started
@@ -222,7 +224,7 @@ internal fun TouchBrowseShell(
                             // Amber on the icon, the label and the version alike, as on the TV
                             // rail and the desktop side bar: the one item that is news.
                             DrawerDestination(
-                                label = "Update",
+                                label = s.navUpdate,
                                 selected = false,
                                 badge = updateVersion,
                                 icon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
@@ -235,7 +237,7 @@ internal fun TouchBrowseShell(
                             )
                         }
                         DrawerDestination(
-                            label = "Settings",
+                            label = s.navSettings,
                             selected = false,
                             badge = null,
                             icon = { Icon(Icons.Filled.Settings, contentDescription = null) },
@@ -307,11 +309,11 @@ internal fun TouchBrowseShell(
                             IconButton(
                                 onClick = { searching = false; onSearchQueryChange("") },
                             ) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close search")
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = s.browseCloseSearch)
                             }
                         } else {
                             IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                Icon(Icons.Filled.Menu, contentDescription = "Open navigation")
+                                Icon(Icons.Filled.Menu, contentDescription = s.browseOpenNavigation)
                             }
                         }
                     },
@@ -321,7 +323,7 @@ internal fun TouchBrowseShell(
                         if (searching) return@TopAppBar
                         if (searchQuery != null) {
                             IconButton(onClick = { searching = true }) {
-                                Icon(Icons.Filled.Search, contentDescription = "Search")
+                                Icon(Icons.Filled.Search, contentDescription = s.commonSearch)
                             }
                         }
                         actions()
@@ -356,6 +358,7 @@ private fun AppBarSearchField(
     onVoiceSearch: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
+    val s = LocalStrings.current
     Row(verticalAlignment = Alignment.CenterVertically) {
         BasicTextField(
             value = query,
@@ -369,7 +372,7 @@ private fun AppBarSearchField(
             decorationBox = { inner ->
                 if (query.isEmpty()) {
                     Text(
-                        "Search",
+                        s.commonSearch,
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -382,11 +385,11 @@ private fun AppBarSearchField(
         // separate labelled button in the row below.
         if (query.isNotEmpty()) {
             IconButton(onClick = { onQueryChange("") }) {
-                Icon(Icons.Filled.Close, contentDescription = "Clear search")
+                Icon(Icons.Filled.Close, contentDescription = s.browseClearSearch)
             }
         } else if (onVoiceSearch != null) {
             IconButton(onClick = onVoiceSearch) {
-                Icon(TmIcons.Mic, contentDescription = "Search by voice")
+                Icon(TmIcons.Mic, contentDescription = s.browseSearchByVoice)
             }
         }
     }
@@ -472,6 +475,7 @@ private fun DrawerSeparator() {
  */
 @Composable
 private fun DrawerFooter(account: Account?) {
+    val s = LocalStrings.current
     HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
     ListItem(
         leadingContent = {
@@ -493,7 +497,7 @@ private fun DrawerFooter(account: Account?) {
         },
         headlineContent = {
             Text(
-                account?.name ?: "Signed in",
+                account?.name ?: s.browseSignedIn,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

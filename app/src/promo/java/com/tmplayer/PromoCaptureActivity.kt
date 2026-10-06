@@ -2,6 +2,7 @@ package com.tmplayer
 
 import android.content.pm.ActivityInfo
 import android.os.Bundle
+import android.os.LocaleList
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -29,12 +30,14 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.tmplayer.i18n.L
 import kotlinx.coroutines.runBlocking
 import com.tmplayer.data.Account
 import com.tmplayer.data.AuthState
 import com.tmplayer.ui.auth.LoginScreen
 import com.tmplayer.data.CardLayout
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.i18n.Translator
 import com.tmplayer.data.ThemeChoice
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatFolderSummary
@@ -133,6 +136,10 @@ class PromoCaptureActivity : ComponentActivity() {
             runBlocking { SettingsStore(applicationContext).setThemeChoice(choice) }
         }
 
+        // `--es lang en-XA` (or any shipped tag) pins the UI language for the shot, the same way
+        // the Settings choice would; "" goes back to following the system.
+        promoLanguage(intent.getStringExtra("lang"))
+
         val start = intent.getStringExtra("screen") ?: "chats"
         if (start == "signin") {
             // The number field takes focus the moment it appears, which is right in the app and
@@ -176,7 +183,7 @@ class PromoCaptureActivity : ComponentActivity() {
                             }
                         }
                         "chats-first" -> PromoChatsScreen(
-                            state = UiState.Loading("Loading your chats…", tip = FIRST_LOAD_TIP),
+                            state = UiState.Loading(L.browseLoadingChats, tip = FIRST_LOAD_TIP),
                         )
                         // The number pane, not the QR one. A shipped picture of a real QR is a
                         // working key to an account, which is why the old shot had to be blurred;
@@ -623,10 +630,17 @@ private val PROMO_RECENT = listOf("coast walk", "shelf part 2", "birthday", "rec
  */
 private fun promoState(variant: String): UiState<Unit>? = when (variant) {
     "empty-hidden" -> UiState.Empty(
-        "${noVideosWithin(SizeFilter.DEFAULT_MIN, SizeFilter.DEFAULT_MAX)}\n\n${SizeFilter.hiddenLabel(12)}.",
+        "${noVideosWithin(SizeFilter.DEFAULT_MIN, SizeFilter.DEFAULT_MAX)}\n\n${L.browseHiddenBySize(12)}",
         StateAction.ShowHidden,
     )
     "empty-more" -> UiState.Empty(STILL_MORE_TO_SEARCH, StateAction.KeepLooking)
-    "slow" -> UiState.Loading("Finding videos…")
+    "slow" -> UiState.Loading(L.browseFindingVideos)
     else -> null
+}
+
+/** Saves [tag] as the UI language and switches to it now, ahead of the first composition. */
+internal fun ComponentActivity.promoLanguage(tag: String?) {
+    if (tag == null) return
+    runBlocking { SettingsStore(applicationContext).setLanguage(tag) }
+    Translator.select(tag, LocaleList.getDefault().toLanguageTags().split(','))
 }
