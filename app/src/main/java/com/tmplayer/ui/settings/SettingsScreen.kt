@@ -118,6 +118,8 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.CacheShelf
+import com.tmplayer.data.DeviceQuirks
+import com.tmplayer.data.WatchNextPublisher
 import com.tmplayer.data.DiskInfo
 import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.ChatSummary
@@ -202,6 +204,10 @@ fun SettingsScreen(
     val downloadFirst by settings.downloadBeforePlaying.collectAsStateWithLifecycle(initialValue = false)
     val autoplayNext by settings.autoplayNext.collectAsStateWithLifecycle(initialValue = true)
     val wifiOnly by settings.wifiOnlyDownloads.collectAsStateWithLifecycle(initialValue = false)
+    val trickplayOn by settings.trickplay.collectAsStateWithLifecycle(initialValue = true)
+    val watchNextOn by settings.watchNext.collectAsStateWithLifecycle(initialValue = false)
+    val trickplayMemory = remember { DeviceQuirks.trickplayMemory(context) }
+    val watchNextSupported = remember { DeviceQuirks.remote(context).watchNextSupported }
     val touchPrefs by settings.touchPrefs.collectAsStateWithLifecycle(initialValue = TouchPrefs())
     val downmixChoice by settings.downmixChoice.collectAsStateWithLifecycle(initialValue = null)
     val subtitleStyle by settings.subtitleStyle.collectAsStateWithLifecycle(initialValue = SubtitleStyle())
@@ -578,6 +584,47 @@ fun SettingsScreen(
                 checked = downmix,
                 onToggle = { scope.launch { settings.setDownmix(!downmix) } },
             )
+        }
+        // Thumbnails over the scrub bar, from what is already downloaded. Shown even where the
+        // memory rules them out, switched off and saying why, so a 1 GB stick's owner who read
+        // about the feature finds out it is not for this device rather than looking for it.
+        item {
+            val on = trickplayOn && trickplayMemory
+            ToggleRow(
+                title = s.settingsTrickplay,
+                subtitle = when {
+                    !trickplayMemory -> s.settingsTrickplayLowMemory
+                    on -> s.settingsTrickplayOn
+                    else -> s.settingsTrickplayOff
+                },
+                icon = ImageVector.vectorResource(R.drawable.ic_player_forward),
+                checked = on,
+                onToggle = {
+                    if (trickplayMemory) scope.launch { settings.setTrickplay(!trickplayOn) }
+                },
+            )
+        }
+        // The Android TV home screen's "Play next" row. Only where there is one: a phone, a Fire TV
+        // and a Fire tablet have none, and a switch for it there would do nothing.
+        if (watchNextSupported) {
+            item {
+                ToggleRow(
+                    title = s.settingsWatchNext,
+                    subtitle = if (watchNextOn) s.settingsWatchNextOn else s.settingsWatchNextOff,
+                    icon = Icons.Filled.PlayArrow,
+                    checked = watchNextOn,
+                    onToggle = {
+                        val turningOff = watchNextOn
+                        scope.launch {
+                            settings.setWatchNext(!turningOff)
+                            // Off means off: what was already put on the home screen comes back out.
+                            if (turningOff) {
+                                withContext(Dispatchers.IO) { runCatching { WatchNextPublisher.clearAll(context) } }
+                            }
+                        }
+                    },
+                )
+            }
         }
         // The one player timing that means the same with a remote as with a thumb.
         item {

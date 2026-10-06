@@ -884,7 +884,15 @@ internal fun TouchMediaScaffold(
     // The bar is a lot of a phone screen to spend on chrome while scrolling, so it leaves on the
     // way down and comes back on the first flick up.
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
-    val startVoice = rememberVoiceSearch(s.gridVoicePromptVideo) {
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    // On a Fire tablet the keyboard is where dictation lives, so the mic button opens it instead.
+    val startVoice = rememberVoiceSearch(
+        s.gridVoicePromptVideo,
+        onKeyboard = {
+            runCatching { field.requestFocus() }
+            keyboard?.show()
+        },
+    ) {
         onQuery(it)
         onSubmit()
     }
@@ -1087,7 +1095,9 @@ internal fun Header(
     alwaysShowRecent: Boolean = false,
 ) {
     val s = LocalStrings.current
-    val startVoice = rememberVoiceSearch(s.gridVoicePromptVideo) {
+    // On Fire TV the voice button opens the keyboard, which the remote's mic dictates into.
+    var keyboardRequests by remember { mutableStateOf(0) }
+    val startVoice = rememberVoiceSearch(s.gridVoicePromptVideo, onKeyboard = { keyboardRequests++ }) {
         onQuery(it)
         onSubmit()
     }
@@ -1137,6 +1147,7 @@ internal fun Header(
                 onValueChange = onQuery,
                 placeholder = s.gridSearchThisChat,
                 onSubmit = onSubmit,
+                editRequests = keyboardRequests,
                 modifier = Modifier.weight(1f).focusRequester(searchField),
             )
             if (startVoice != null) {

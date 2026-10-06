@@ -32,7 +32,7 @@ import com.tmplayer.player.TapZone
  *
  *     adb shell am start -n com.tmplayer.promo/com.tmplayer.PromoPlayerActivity \
  *         [--ez tv true] [--ez playing true] [--es feedback ripple|level|scrub|hold|flash|jump]
- *         [--ez nextup true] [--ez menu true]
+ *         [--ez nextup true] [--ez menu true] [--ez trickplay true] [--el scrub_at 1265000]
  *
  * `nextup` raises the next-up card over the bare picture, `menu` the television's More menu,
  * `jump` the remote's side figure for a ten second jump. The stand-in player really plays and
@@ -83,6 +83,14 @@ class PromoPlayerActivity : FragmentActivity() {
         if (!tv) controls.setSkip(10_000, 10_000)
         controls.setEpisodes(demoEpisode(3), demoEpisode(5), L.playerPreviousCode("S01E03"), L.playerNextCode("S01E05"))
         controls.timeoutMs = 0
+        // `--ez trickplay true`: scrub thumbnails from a fake download of the first 1,520 seconds,
+        // the same run the bar draws as buffered, so a D-pad scrub shows pictures up to there and
+        // none past it. `--el scrub_at <ms>` pins one up at that point for a still.
+        if (intent.getBooleanExtra("trickplay", false) &&
+            com.tmplayer.data.DeviceQuirks.trickplayMemory(this)
+        ) {
+            controls.thumbnails = PromoThumbnails(this)
+        }
         controls.show()
         this.controls = controls
         standIn = player
@@ -123,6 +131,11 @@ class PromoPlayerActivity : FragmentActivity() {
                         visibility = View.VISIBLE
                     }
                 }
+            }
+            val pinned = intent.getLongExtra("scrub_at", -1L)
+            if (pinned >= 0 && controls.thumbnails != null) {
+                controls.previewPinned = true
+                controls.preview(pinned)
             }
             if (intent.getBooleanExtra("nextup", false)) {
                 controls.hideNow()
@@ -174,6 +187,33 @@ class PromoPlayerActivity : FragmentActivity() {
         miniThumbnail = null, date = 0, fileName = "The.Coast.S01E0$number.mkv",
     )
 
+    /**
+     * Scrub thumbnails for the stand-in film: the demo pictures in turn, one per 10 second slot,
+     * answered through the same [Trickplay.covered] rule the real frames use, over a fake download
+     * of the first 1,520 seconds of a 1.4 GB file.
+     */
+    private class PromoThumbnails(private val activity: FragmentActivity) : com.tmplayer.player.ScrubThumbnails {
+        private val pictures = intArrayOf(
+            R.drawable.demo_coast, R.drawable.demo_forest, R.drawable.demo_workshop,
+            R.drawable.demo_kitchen, R.drawable.demo_birthday, R.drawable.demo_tutorial,
+        )
+        private val size = 1_400_000_000L
+        private val duration = 2_634_000L
+        private val spans = listOf(com.tmplayer.data.Trickplay.Span(0, size * 1_520_000 / duration))
+
+        override fun request(positionMs: Long, onFrame: (android.graphics.Bitmap?) -> Unit) {
+            if (!com.tmplayer.data.Trickplay.covered(positionMs, duration, size, spans, complete = false)) {
+                onFrame(null)
+                return
+            }
+            val slot = (com.tmplayer.data.Trickplay.bucketMs(positionMs) / com.tmplayer.data.Trickplay.STEP_MS).toInt()
+            val bitmap = android.graphics.BitmapFactory.decodeResource(activity.resources, pictures[slot % pictures.size])
+            onFrame(bitmap)
+        }
+
+        override fun release() = Unit
+    }
+
     /** Paused 21 minutes into a 44 minute film, with a little over half of it downloaded. */
     private class StandInPlayer(private var playing: Boolean) : SimpleBasePlayer(Looper.getMainLooper()) {
         override fun getState(): State = State.Builder()
@@ -184,6 +224,10 @@ class PromoPlayerActivity : FragmentActivity() {
             .setContentPositionMs(1_265_000)
             .setContentBufferedPositionMs(PositionSupplier.getConstant(1_520_000))
             .build()
+
+        /** A committed scrub lands nowhere: the stand-in stays where it is, and does not crash. */
+        override fun handleSeek(mediaItemIndex: Int, positionMs: Long, seekCommand: Int): ListenableFuture<*> =
+            Futures.immediateVoidFuture()
 
         override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
             playing = playWhenReady

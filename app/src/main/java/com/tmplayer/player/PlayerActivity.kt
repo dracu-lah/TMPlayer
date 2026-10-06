@@ -71,6 +71,11 @@ import com.tmplayer.data.pauseAll
 import com.tmplayer.data.resume
 import com.tmplayer.data.Failures
 import com.tmplayer.data.FormFactor
+import com.tmplayer.data.DeviceQuirks
+import com.tmplayer.data.RemoteQuirks
+import com.tmplayer.data.Trickplay
+import com.tmplayer.data.WatchNext
+import com.tmplayer.data.WatchNextPublisher
 import com.tmplayer.data.MediaName
 import com.tmplayer.data.MessageLink
 import com.tmplayer.data.MediaItem
@@ -202,6 +207,21 @@ class PlayerActivity : FragmentActivity() {
 
     /** The television's More menu, the phone's overflow in its own form. Null on a phone. */
     private var tvMenu: PlayerTvMenu? = null
+
+    /** What this device's remote does differently: Fire TV's Menu key and held seeks. */
+    private val remoteQuirks: RemoteQuirks by lazy { DeviceQuirks.remote(this) }
+
+    /** True once a held Menu became the long press, so its release opens nothing. */
+    private var menuHeld = false
+
+    /** Scrub thumbnails, when the setting and the device's memory allow them. See [Trickplay]. */
+    private var trickplay: TrickplayFrames? = null
+
+    /** TDLib's file for this video, while it is still TDLib's (not moved into Downloads). */
+    private var trickplayPath: String? = null
+
+    /** The byte runs seen downloaded since the video opened, merged. Main thread only. */
+    private var trickplaySpans: List<Trickplay.Span> = emptyList()
 
     /** Subtitle files loaded from the phone; a field because its picker registers before start. */
     private val subtitleFiles = SubtitleFiles(this, { player }, { showGestureFeedback(it) })
@@ -500,6 +520,7 @@ class PlayerActivity : FragmentActivity() {
             )
         }
         buildNextUpCard()
+        startTrickplay()
         startStillWatchingCounts()
         if (hasMessage()) {
             lifecycleScope.launch {
@@ -793,13 +814,18 @@ class PlayerActivity : FragmentActivity() {
      * the seek lands at once, and the only thing drawn is the icon and figure on the side the
      * jump went.
      */
-    private fun jumpFromRemote(forward: Boolean) {
+    private fun jumpFromRemote(forward: Boolean, repeatCount: Int = 0) {
+        val base = if (forward) Skip.FORWARD_MS else Skip.BACK_MS
+        // A held rewind or fast forward on a Fire TV remote scans in growing steps, the way
+        // Amazon's own players answer it; elsewhere every repeat is the plain jump it always was.
+        val step = if (remoteQuirks.holdSeekAccelerates) RemoteQuirks.holdStepMs(repeatCount, base) else base
+        if (step <= 0) return
         if (forward) {
-            skipBy(Skip.FORWARD_MS)
-            showGestureFeedback(L.playerJumpForward(Skip.FORWARD_MS / 1000), PlayerGestures.SIDE_RIGHT)
+            skipBy(step)
+            showGestureFeedback(L.playerJumpForward(step / 1000), PlayerGestures.SIDE_RIGHT)
         } else {
-            skipBy(-Skip.BACK_MS)
-            showGestureFeedback(L.playerJumpBack(Skip.BACK_MS / 1000), PlayerGestures.SIDE_LEFT)
+            skipBy(-step)
+            showGestureFeedback(L.playerJumpBack(step / 1000), PlayerGestures.SIDE_LEFT)
         }
     }
 
@@ -2035,6 +2061,17 @@ class PlayerActivity : FragmentActivity() {
             if (event.action == KeyEvent.ACTION_DOWN) showUnlockPill()
             return true
         }
+        // Fire TV's Menu key is the player's options, as Amazon's guidelines have it: on release,
+        // so that holding it still reaches the long press below and hands the video over.
+        if (event.keyCode == KeyEvent.KEYCODE_MENU && remoteQuirks.menuOpensPlayerMenu &&
+            statusOverlay.visibility != View.VISIBLE
+        ) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) menuHeld = false
+            if (event.action == KeyEvent.ACTION_UP) {
+                if (!menuHeld && !event.isCanceled) showOverflow(statusOverlay)
+                return true
+            }
+        }
         if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
         val pickerOpen = GuidedStepSupportFragment.getCurrentGuidedStepSupportFragment(supportFragmentManager) != null
         if (pickerOpen) return super.dispatchKeyEvent(event)
@@ -2043,7 +2080,15 @@ class PlayerActivity : FragmentActivity() {
         // the long press the browse grid answers with a menu; here the only entry that menu would
         // carry which the player has no other route to is the handover.
         if (isLongPressOnTheVideo(event)) {
+            if (event.keyCode == KeyEvent.KEYCODE_MENU) menuHeld = true
             openInAnotherApp()
+            return true
+        }
+        // A Menu press on its way to becoming the options above, or the long press: either way
+        // nothing else takes it while it is down.
+        if (event.keyCode == KeyEvent.KEYCODE_MENU && remoteQuirks.menuOpensPlayerMenu &&
+            statusOverlay.visibility != View.VISIBLE
+        ) {
             return true
         }
 
@@ -2085,11 +2130,11 @@ class PlayerActivity : FragmentActivity() {
             // and pause the centre disc or glyph. With no buttons for them on a television's row,
             // the cue is the only sign the press landed.
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
-                jumpFromRemote(forward = true)
+                jumpFromRemote(forward = true, repeatCount = event.repeatCount)
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_REWIND -> {
-                jumpFromRemote(forward = false)
+                jumpFromRemote(forward = false, repeatCount = event.repeatCount)
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
@@ -2233,6 +2278,27 @@ class PlayerActivity : FragmentActivity() {
         }
     }
 
+    /**
+     * Thumbnails over the scrub bar: on unless the viewer turned them off, and never on a device
+     * with too little memory to decode a second picture beside the film (a 1 GB stick).
+     */
+    private fun startTrickplay() {
+        if (!DeviceQuirks.trickplayMemory(this)) return
+        lifecycleScope.launch {
+            if (!runCatching { settings.trickplayNow() }.getOrDefault(true)) return@launch
+            val frames = TrickplayFrames(
+                scope = lifecycleScope,
+                path = { downloadedFile?.path ?: trickplayPath },
+                spans = { trickplaySpans },
+                complete = { downloadedFile != null || downloadComplete },
+                sizeBytes = { downloadedFile?.length() ?: fileSizeBytes },
+                durationMs = { player?.duration?.takeIf { it > 0 } ?: durationSec * 1_000L },
+            )
+            trickplay = frames
+            controls?.thumbnails = frames
+        }
+    }
+
     /** Applies both the initial file snapshot and later TDLib updates to the same meter state. */
     private fun applyDownloadState(file: TdFile) {
         // TDLib let go of a download's file when it moved into Downloads, so what it says about
@@ -2240,6 +2306,11 @@ class PlayerActivity : FragmentActivity() {
         if (downloadedFile != null) return
         if (fileSizeBytes <= 0 && file.size > 0) fileSizeBytes = file.size
         val local = file.local
+        trickplayPath = local.path.takeIf { it.isNotBlank() }
+        if (local.downloadedPrefixSize > 0) {
+            val run = Trickplay.Span(local.downloadOffset, local.downloadOffset + local.downloadedPrefixSize)
+            trickplaySpans = Trickplay.merge(trickplaySpans + run)
+        }
         val diskFile = local.path.takeIf { it.isNotBlank() }?.let(::File)
         downloadComplete = LocalFilePolicy.evaluate(
             downloadCompleted = local.isDownloadingCompleted,
@@ -3417,6 +3488,9 @@ class PlayerActivity : FragmentActivity() {
     override fun onDestroy() {
         stopArtDrift()
         saveResumePosition(leaving = true)
+        controls?.thumbnails = null
+        trickplay?.release()
+        trickplay = null
         holdFile(0)
         stopDownload()
         trimCache()
@@ -3521,6 +3595,35 @@ class PlayerActivity : FragmentActivity() {
             runCatching {
                 if (forget) store.clearResumePosition(chat, message)
                 else store.saveResumePosition(chat, message, position, duration, description)
+            }
+        }
+        if (leaving) publishWatchNext(if (markedWatchedHere && duration > 0) duration else position, duration)
+    }
+
+    /**
+     * The home screen's "Play next" row, when the viewer turned it on and the launcher has one.
+     * Only on the way out of a video: the row is read from the home screen, which is not on
+     * screen while the video is. A video from a chat that restricts saving stays off it, along
+     * with its name.
+     */
+    private fun publishWatchNext(position: Long, duration: Long) {
+        if (!hasMessage() || !remoteQuirks.watchNextSupported || savable == false) return
+        val video = WatchNext.Video(chatId, messageId, fileId, mediaTitle, chatTitle, fileSizeBytes, durationSec)
+        val next = _episodes.value.next?.let { WatchNext.Video.of(it, chatTitle) }
+        val store = settings
+        val context = applicationContext
+        App.backgroundScope.launch {
+            runCatching {
+                val changes = WatchNext.changesFor(
+                    video = video,
+                    positionMs = position,
+                    durationMs = duration,
+                    nowMs = System.currentTimeMillis(),
+                    next = next,
+                    enabled = store.watchNextNow(),
+                    supported = true,
+                )
+                WatchNextPublisher.apply(context, changes)
             }
         }
     }

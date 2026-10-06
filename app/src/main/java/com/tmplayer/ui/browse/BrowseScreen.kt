@@ -1773,7 +1773,13 @@ private fun SearchRow(
     onScope: (SearchScope) -> Unit = {},
 ) {
     val s = LocalStrings.current
-    val startVoice = rememberVoiceSearch(s.browseVoicePromptChat, onQuery)
+    // On Fire TV the voice button opens the keyboard, which the remote's mic dictates into.
+    var keyboardRequests by remember { mutableStateOf(0) }
+    val startVoice = rememberVoiceSearch(
+        s.browseVoicePromptChat,
+        onKeyboard = { keyboardRequests++ },
+        onResult = onQuery,
+    )
     val searchField = remember { FocusRequester() }
     Row(
         Modifier.fillMaxWidth().padding(start = insets.start, end = insets.end),
@@ -1785,6 +1791,7 @@ private fun SearchRow(
             onValueChange = onQuery,
             placeholder = s.browseSearchChats,
             modifier = Modifier.weight(1f).focusRequester(searchField),
+            editRequests = keyboardRequests,
         )
         if (startVoice != null) {
             // A microphone on its own says it, and leaves the room to the search field.

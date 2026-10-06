@@ -32,6 +32,8 @@ private val DOWNMIX_STEREO = booleanPreferencesKey("downmix_stereo")
 private val VOLUME_BOOST = booleanPreferencesKey("volume_boost")
 private val WIFI_ONLY = booleanPreferencesKey("wifi_only_downloads")
 private val REMOVE_AFTER_WATCHING = booleanPreferencesKey("remove_after_watching")
+private val TRICKPLAY = booleanPreferencesKey("trickplay")
+private val WATCH_NEXT = booleanPreferencesKey("watch_next")
 private val CRASH_REPORTS = booleanPreferencesKey("crash_reports")
 private val PLAYBACK_SPEED = floatPreferencesKey("playback_speed")
 private val LAST_CHAT = longPreferencesKey("last_chat")
@@ -451,6 +453,36 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
 
     suspend fun setRemoveAfterWatching(value: Boolean) {
         prefs.edit { it[REMOVE_AFTER_WATCHING] = value }
+    }
+
+    // ---- trickplay and Watch Next ------------------------------------------------------------
+
+    /**
+     * Thumbnails over the scrub bar, from the part of the video already on the disk. See [Trickplay].
+     *
+     * On unless the viewer turns it off; a device under [Trickplay.MIN_TOTAL_MEMORY_BYTES] never
+     * draws them whatever this says.
+     */
+    val trickplay: Flow<Boolean> = read { it[TRICKPLAY] ?: true }
+
+    suspend fun trickplayNow(): Boolean = prefs.data.first()[TRICKPLAY] ?: true
+
+    suspend fun setTrickplay(value: Boolean) {
+        prefs.edit { it[TRICKPLAY] = value }
+    }
+
+    /**
+     * Entries in the Android TV home screen's "Play next" row. See [WatchNext].
+     *
+     * Off until the viewer turns it on: it puts the names of what they watch on the home screen,
+     * where anybody else in the room sees them.
+     */
+    val watchNext: Flow<Boolean> = read { it[WATCH_NEXT] ?: false }
+
+    suspend fun watchNextNow(): Boolean = prefs.data.first()[WATCH_NEXT] ?: false
+
+    suspend fun setWatchNext(value: Boolean) {
+        prefs.edit { it[WATCH_NEXT] = value }
     }
 
     // ---- the support card -------------------------------------------------------------------

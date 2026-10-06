@@ -60,7 +60,20 @@ fun TvSearchField(
     placeholder: String,
     modifier: Modifier = Modifier,
     onSubmit: (() -> Unit)? = null,
+    /**
+     * Raised by one each time something other than a press asks for the keyboard: the voice
+     * button on Fire OS, where dictation is the keyboard's (see [rememberVoiceSearch]).
+     */
+    editRequests: Int = 0,
 ) {
+    // Fire TV's remote microphone dictates into the system keyboard while it is up, and nothing
+    // on screen says so; the empty field says it instead.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val dictationHint = if (com.tmplayer.data.DeviceQuirks.isFireTv(context)) {
+        com.tmplayer.ui.i18n.LocalStrings.current.tvVoiceHintFire
+    } else {
+        null
+    }
     // Focus alone must not start editing. On a remote the D-pad passes through this box on the
     // way to everything below it, and a keyboard that throws itself over the screen each time
     // makes the row impossible to move past. Editing begins on a deliberate press.
@@ -77,6 +90,10 @@ fun TvSearchField(
     val keyboard = LocalSoftwareKeyboardController.current
 
     val active = focused || editing
+
+    LaunchedEffect(editRequests) {
+        if (editRequests > 0) editing = true
+    }
 
     // Leaving the keyboard removes the text field from composition, and focus goes with it: press
     // Back and then Down and the remote is nowhere. Focus is handed back to the box the viewer
@@ -149,6 +166,15 @@ fun TvSearchField(
                             }
                         },
                 )
+                if (value.isEmpty() && dictationHint != null) {
+                    Text(
+                        dictationHint,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Tone.muted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 LaunchedEffect(Unit) {
                     everFocused = false
                     runCatching { field.requestFocus() }

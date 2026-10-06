@@ -119,6 +119,13 @@ class PromoCaptureActivity : ComponentActivity() {
         val tv = intent.getBooleanExtra("tv", false)
         // Before setContent, because the whole tree branches on it during the first composition.
         FormFactor.override(tv)
+        // `--es fire tv|tablet` answers the Fire OS question as that device would, so the Fire
+        // differences (no Watch Next switch, the keyboard's dictation hint) can be seen without one.
+        promoFireOs(intent.getStringExtra("fire"))
+        // `--ez watchnext true` stops two demo episodes the way the player does on the way out,
+        // one part way through and one at the end, through the real rules and the real writer, so
+        // the home screen's "Play next" row can be checked without a Telegram account.
+        if (intent.getBooleanExtra("watchnext", false)) promoWatchNext()
         requestedOrientation = if (tv) {
             ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         } else {
@@ -809,6 +816,32 @@ private fun promoState(variant: String): UiState<Unit>? = when (variant) {
     "empty-more" -> UiState.Empty(STILL_MORE_TO_SEARCH, StateAction.KeepLooking)
     "slow" -> UiState.Loading(L.browseFindingVideos)
     else -> null
+}
+
+/** See `--ez watchnext true` above. Honours the setting, so it writes nothing while that is off. */
+private fun ComponentActivity.promoWatchNext() {
+    val context = applicationContext
+    val supported = com.tmplayer.data.DeviceQuirks.remote(context).watchNextSupported
+    fun episode(n: Int) = com.tmplayer.data.WatchNext.Video(
+        chatId = 1, messageId = n.toLong(), fileId = n, title = "The Coast S01E0$n",
+        chatTitle = "Nature Channel", sizeBytes = 1_400_000_000, durationSec = 2_634,
+    )
+    Thread {
+        val enabled = runBlocking { SettingsStore(context).watchNextNow() }
+        val now = System.currentTimeMillis()
+        val changes = com.tmplayer.data.WatchNext.changesFor(episode(2), 2_600_000, 2_634_000, now - 60_000, episode(3), enabled, supported) +
+            com.tmplayer.data.WatchNext.changesFor(episode(4), 1_265_000, 2_634_000, now, episode(5), enabled, supported)
+        android.util.Log.i("TMPlayerPromo", "Watch Next changes: $changes")
+        com.tmplayer.data.WatchNextPublisher.apply(context, changes)
+    }.start()
+}
+
+/** `tv` or `tablet` answers the Fire OS question as that device would; anything else leaves it. */
+internal fun promoFireOs(asked: String?) {
+    when (asked) {
+        "tv" -> com.tmplayer.data.DeviceQuirks.override(com.tmplayer.data.FireOs.Kind.Tv)
+        "tablet" -> com.tmplayer.data.DeviceQuirks.override(com.tmplayer.data.FireOs.Kind.Tablet)
+    }
 }
 
 /** Saves [tag] as the UI language and switches to it now, ahead of the first composition. */

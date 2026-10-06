@@ -45,6 +45,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.BuildConfig
+import com.tmplayer.data.DeviceQuirks
 import com.tmplayer.data.Feedback
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.SettingsStore
@@ -187,7 +188,7 @@ fun WhatsNewDialog(onClose: () -> Unit, onChangelog: () -> Unit) {
 /** What a report from this device says about it. No account, chat or file: see [Feedback]. */
 fun feedbackFacts(context: Context): Feedback.Facts {
     val tv = FormFactor.isTv(context)
-    val fire = context.packageManager.hasSystemFeature("amazon.hardware.fire_tv")
+    val fire = DeviceQuirks.isFireTv(context)
     val platform = when {
         fire -> Feedback.Platform.FireTv
         tv -> Feedback.Platform.AndroidTv

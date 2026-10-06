@@ -61,6 +61,7 @@ import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.SupportReminder
 import com.tmplayer.data.WatchedRecord
 import com.tmplayer.data.WatchedStore
+import com.tmplayer.data.WatchNextPublisher
 import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.Td
 import com.tmplayer.data.start
@@ -216,6 +217,19 @@ class MainActivity : ComponentActivity() {
         setContent {
             TMPlayerTheme { Root() }
         }
+        if (savedInstanceState == null) playFromHomeScreen(intent)
+    }
+
+    /**
+     * An entry picked in the home screen's "Play next" row (see [WatchNextPublisher]) opens the
+     * player straight away, over the app as it was. The intent's action is cleared once acted on,
+     * so recreating the activity does not play it again.
+     */
+    @SuppressLint("UnsafeOptInUsageError")
+    private fun playFromHomeScreen(intent: Intent?) {
+        val video = WatchNextPublisher.videoFrom(intent) ?: return
+        intent?.action = Intent.ACTION_MAIN
+        startActivity(PlayerActivity.intent(this, video.toMediaItem(), video.chatTitle))
     }
 
     /**
@@ -240,6 +254,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         noteRequestedScreen(intent)
+        playFromHomeScreen(intent)
     }
 
     private fun noteRequestedScreen(intent: Intent?) {

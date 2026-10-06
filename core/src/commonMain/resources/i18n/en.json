@@ -1279,6 +1279,10 @@
     "tap_plays_on": "A tap pauses and shows the controls; another tap plays",
     "theme": "Theme",
     "title": "Settings",
+    "trickplay": "Thumbnails while seeking",
+    "trickplay_low_memory": "Not on this device: it has too little memory",
+    "trickplay_off": "Off: seeking shows the time only",
+    "trickplay_on": "A picture over the bar, from the part of the video already downloaded",
     "up_to_date": "TMPlayer {version} is the newest version",
     "update_detail": "Downloads {size} from GitHub, then Android asks you to confirm",
     "update_notify": "Tell me when a new version is out",
@@ -1293,6 +1297,9 @@
     "wallpaper_colours": "Use the wallpaper's colours",
     "wallpaper_colours_off": "Off: TMPlayer uses its own colours",
     "wallpaper_colours_on": "TMPlayer takes its colours from your phone's wallpaper",
+    "watch_next": "Play next on the home screen",
+    "watch_next_off": "Off: nothing you watch appears on the home screen",
+    "watch_next_on": "What you are watching shows in the home screen's Play next row",
     "watched_cleared": "{count, plural, =1 {Watched list cleared} one {# videos unmarked} other {# videos unmarked}}",
     "watched_empty": "Nothing in Previously watched",
     "whats_new": "What's new",
@@ -1508,7 +1515,8 @@
     "track_number": "Track {number}"
   },
   "tv": {
-    "menu_hint": "Press Down to choose, or Back to close this."
+    "menu_hint": "Press Down to choose, or Back to close this.",
+    "voice_hint_fire": "Hold the mic button on the remote to dictate"
   },
   "unit": {
     "hours": "{count, plural, one {# hour} other {# hours}}",

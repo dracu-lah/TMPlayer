@@ -167,16 +167,107 @@ class PlayerControls(
                 scrubbing = true
                 container.removeCallbacks(hide)
                 renderClock(position)
+                preview(position)
             }
 
-            override fun onScrubMove(bar: TimeBar, position: Long) = renderClock(position)
+            override fun onScrubMove(bar: TimeBar, position: Long) {
+                renderClock(position)
+                preview(position)
+            }
 
             override fun onScrubStop(bar: TimeBar, position: Long, canceled: Boolean) {
                 scrubbing = false
+                hidePreview()
                 if (!canceled) player()?.seekTo(position)
                 poke()
             }
         })
+    }
+
+    // ---- trickplay ---------------------------------------------------------------------------
+
+    /**
+     * Where scrub thumbnails come from, or null for none: the setting is off, the device is short
+     * of memory, or nothing is playing from a file on the disk. See [TrickplayFrames].
+     */
+    var thumbnails: ScrubThumbnails? = null
+        set(value) {
+            field = value
+            if (value == null) hidePreview()
+        }
+
+    private val previewImage = android.widget.ImageView(root.context).apply {
+        scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    }
+
+    /** The picture in a frame: the same hairline and corner as the rest of the player's chrome. */
+    private val previewCard = android.widget.FrameLayout(root.context).apply {
+        val density = resources.displayMetrics.density
+        background = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = PREVIEW_CORNER_DP * density
+            setColor(Color.BLACK)
+            setStroke((2 * density).toInt(), Color.WHITE)
+        }
+        val inset = (2 * density).toInt()
+        setPadding(inset, inset, inset, inset)
+        clipToOutline = true
+        outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+        visibility = View.GONE
+        addView(previewImage, android.widget.FrameLayout.LayoutParams(-1, -1))
+        (root as android.view.ViewGroup).addView(
+            this,
+            android.widget.FrameLayout.LayoutParams(
+                (PREVIEW_WIDTH_DP * density).toInt(),
+                (PREVIEW_WIDTH_DP * 9 / 16 * density).toInt(),
+            ),
+        )
+    }
+
+    /** The position the newest request was for, so a late frame for an older one is dropped. */
+    private var previewAt = -1L
+
+    /**
+     * Shows the frame for [position] over the bar, centred on where the scrubber is, or takes the
+     * card away when that part of the video has no picture.
+     */
+    fun preview(position: Long) {
+        val source = thumbnails ?: return
+        previewAt = position
+        source.request(position) { frame ->
+            if (previewAt != position || !scrubbing && !previewPinned) return@request
+            if (frame == null) {
+                previewCard.visibility = View.GONE
+                return@request
+            }
+            previewImage.setImageBitmap(frame)
+            placePreview(position)
+            previewCard.visibility = View.VISIBLE
+        }
+    }
+
+    /** For the screenshot fixture: keep the card up without a scrub in progress. */
+    var previewPinned = false
+
+    private fun hidePreview() {
+        previewAt = -1L
+        previewCard.visibility = View.GONE
+    }
+
+    private fun placePreview(position: Long) {
+        val duration = player()?.duration?.takeIf { it > 0 } ?: return
+        val parent = previewCard.parent as? View ?: return
+        val bar = IntArray(2)
+        val origin = IntArray(2)
+        timeBar.getLocationInWindow(bar)
+        parent.getLocationInWindow(origin)
+        val width = previewCard.layoutParams.width
+        val height = previewCard.layoutParams.height
+        val gap = 12 * parent.resources.displayMetrics.density
+        val centre = bar[0] - origin[0] + timeBar.width * (position.toFloat() / duration)
+        val maxX = (parent.width - width).toFloat().coerceAtLeast(0f)
+        previewCard.translationX = (centre - width / 2f).coerceIn(0f, maxX)
+        previewCard.translationY = bar[1] - origin[1] - height - gap
     }
 
     /** A press does its thing and buys the row more time on screen; so does focus landing. */
@@ -646,6 +737,10 @@ class PlayerControls(
 
         /** Twice a second: faster than the eye needs on a scrub bar this size. */
         const val TICK_MS = 500L
+
+        /** The scrub thumbnail's width; its height is the 16:9 of that. */
+        const val PREVIEW_WIDTH_DP = 240
+        const val PREVIEW_CORNER_DP = 10f
     }
 }
 
