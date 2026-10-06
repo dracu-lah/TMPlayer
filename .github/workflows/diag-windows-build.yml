@@ -22,7 +22,7 @@ jobs:
       - name: Package and self-test
         uses: ./.github/actions/desktop-windows
         with:
-          version: 1.22.2
+          version: 1.22.3
       - name: Shred credentials
         if: always()
         shell: bash
