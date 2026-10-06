@@ -20,6 +20,8 @@ import com.tmplayer.data.configureForAndroid
 import com.tmplayer.data.WatchCache
 import com.tmplayer.data.WatchedStore
 import com.tmplayer.i18n.Translator
+import com.tmplayer.ui.onboarding.OnboardingImages
+import com.tmplayer.ui.onboarding.OnboardingPage
 import com.tmplayer.platform.Logger
 import com.tmplayer.player.PlayerActivity
 import kotlinx.coroutines.CoroutineScope
@@ -45,6 +47,8 @@ class App : Application() {
                 Translator.select(saved, LocaleList.getDefault().toLanguageTags().split(','))
             }
         }
+        // The tour's pictures are this app's drawables, which the shared :ui code cannot name.
+        OnboardingImages.drawable = ::onboardingDrawable
         // The isolated screenshot fixture must never open TDLib or touch a Telegram account.
         // BuildConfig is variant-specific, and the promo package is never part of a release APK.
         if (BuildConfig.APPLICATION_ID.endsWith(".promo")) return
@@ -118,4 +122,28 @@ class App : Application() {
         /** Long enough to be past the first screen and whatever it wanted off the disk. */
         private const val CACHE_TRIM_DELAY_MS = 20_000L
     }
+}
+
+/**
+ * The screenshot for a tour page. A television gets its one dark landscape shot; a phone gets the
+ * top of a phone screen, light or dark to match the theme. The sign in shot is deliberately
+ * blurred: the real code on that screen is a live sign in token.
+ */
+private fun onboardingDrawable(page: OnboardingPage, tv: Boolean, dark: Boolean): Int = when (page) {
+    OnboardingPage.SignIn -> when {
+        tv -> R.drawable.overview_signin
+        dark -> R.drawable.overview_signin_touch_dark
+        else -> R.drawable.overview_signin_touch
+    }
+    OnboardingPage.Chats -> when {
+        tv -> R.drawable.overview_chats
+        dark -> R.drawable.overview_chats_touch_dark
+        else -> R.drawable.overview_chats_touch
+    }
+    OnboardingPage.Videos -> when {
+        tv -> R.drawable.overview_media
+        dark -> R.drawable.overview_media_touch_dark
+        else -> R.drawable.overview_media_touch
+    }
+    else -> 0
 }

@@ -65,6 +65,7 @@ import com.tmplayer.data.Updates
 import com.tmplayer.data.release
 import com.tmplayer.desktop.os.OpenExternal
 import com.tmplayer.ui.about.About
+import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.data.SupportReminder
 import com.tmplayer.player.TouchPrefs
 import com.tmplayer.ui.components.rememberToast
@@ -332,6 +333,9 @@ fun SettingsPage(state: ShellState, version: String = "") {
                 }
 
                 Group("Help")
+                Setting(LocalStrings.current.settingsWalkthrough, LocalStrings.current.settingsWalkthroughBody) {
+                    OutlinedButton(onClick = { scope.launch { settings.replayOverview() } }) { Text(LocalStrings.current.commonShow) }
+                }
                 Setting("Privacy", "What stays on this computer and which services TMPlayer contacts") {
                     OutlinedButton(onClick = { OpenExternal.browse(About.PRIVACY) }) { Text("Open") }
                 }

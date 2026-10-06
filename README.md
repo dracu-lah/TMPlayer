@@ -37,6 +37,11 @@ No messages, no server, no account except yours.
   <img src="docs/screenshots/devices.webp" width="90%" alt="A chat's videos in TMPlayer on a television and on a phone at the same time, each tile carrying its quality, running time and size" />
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/desktop-grid.webp" width="45%" alt="A chat's videos in the TMPlayer desktop app, a sidebar of chat sections beside a grid of posters with running times and sizes" />
+  <img src="docs/screenshots/desktop-player.webp" width="45%" alt="The TMPlayer desktop player, its title, timebar and controls over a playing video" />
+</p>
+
 ## Runs on
 
 - **Android 8.0 and up**, TV and phone from the same APK. It was built and tested on an 8 GB TV

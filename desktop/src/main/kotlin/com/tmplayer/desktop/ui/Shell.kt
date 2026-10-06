@@ -82,6 +82,9 @@ import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.nav.BackHandler
 import com.tmplayer.ui.nav.LocalBackStack
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.onboarding.Entry
+import com.tmplayer.ui.onboarding.Onboarding
+import com.tmplayer.ui.onboarding.OnboardingTour
 
 /**
  * What the player draws for a [PlayRequest], given a way to close itself.
@@ -117,11 +120,24 @@ fun DesktopShell(
             color = Tone.background,
         ) {
             val auth by Td.auth.collectAsState()
+            // Null until the store has answered, so a first run does not flash the sign in screen.
+            val overviewSeen by state.settings.overviewSeen.collectAsState(initial = null)
+            val scope = rememberCoroutineScope()
             Box(Modifier.fillMaxSize()) {
-                if (auth == AuthState.Ready) {
-                    Browse(state, player)
-                } else {
-                    SignInScreen(auth)
+                val seen = overviewSeen
+                if (seen != null) {
+                    val signedIn = auth == AuthState.Ready
+                    val done: () -> Unit = { scope.launch { state.settings.markOverviewSeen() } }
+                    // Signed in, Browse stays composed under a tour Settings asked for, so the
+                    // chat list is where it was when the tour ends.
+                    if (signedIn) Browse(state, player)
+                    when (Onboarding.entry(signedIn, seen)) {
+                        Entry.Tour -> Surface(Modifier.fillMaxSize(), color = Tone.background) {
+                            OnboardingTour(state.settings, onDone = done, firstRun = !signedIn)
+                        }
+                        Entry.SignIn -> SignInScreen(auth)
+                        Entry.App -> Unit
+                    }
                 }
                 SnackbarHost(toasts, Modifier.align(Alignment.BottomCenter).padding(16.dp))
             }

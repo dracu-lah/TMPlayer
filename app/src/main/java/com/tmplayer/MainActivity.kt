@@ -71,7 +71,6 @@ import com.tmplayer.player.PlayerActivity
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.theme.LocalDarkTheme
 import com.tmplayer.ui.theme.Tone
-import com.tmplayer.ui.auth.IntroScreen
 import com.tmplayer.ui.auth.LoginScreen
 import com.tmplayer.ui.browse.BrowseScreen
 import com.tmplayer.ui.browse.BrowseSection
@@ -83,7 +82,7 @@ import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.components.ConnectionNotice
 import com.tmplayer.ui.components.ConnectionStatus
 import com.tmplayer.ui.components.rememberToast
-import com.tmplayer.ui.onboarding.OverviewScreen
+import com.tmplayer.ui.onboarding.OnboardingScreen
 import com.tmplayer.ui.update.UpdateDialog
 import com.tmplayer.ui.settings.AboutScreen
 import com.tmplayer.ui.settings.SettingsScreen
@@ -264,7 +263,6 @@ private fun Root() {
         }
     }
 
-    val introSeen by settings.introSeen.collectAsStateWithLifecycle(initialValue = true)
     val overviewSeen by settings.overviewSeen.collectAsStateWithLifecycle(initialValue = true)
     val favorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
     val watchProgress by settings.watchProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
@@ -670,12 +668,10 @@ private fun Root() {
                 autoOpened = false
                 autoOpenDecided = false
             }
-            if (!introSeen) {
-                IntroScreen(onContinue = { scope.launch { settings.markIntroSeen() } })
-            } else if (!overviewSeen) {
-                // Between the two: what the app is allowed to do, then how to work it, then the
-                // QR code. A beginner has seen the whole shape of it before they sign in.
-                OverviewScreen(onDone = { scope.launch { settings.markOverviewSeen() } })
+            if (!overviewSeen) {
+                // The tour first: the language, what the app is, then how to work it, then the
+                // sign in. A beginner has seen the whole shape of it before they sign in.
+                OnboardingScreen(firstRun = true, onDone = { scope.launch { settings.markOverviewSeen() } })
             } else {
                 LoginScreen(
                     state = auth,
@@ -722,7 +718,7 @@ private fun Root() {
         // Asked for again from Settings. It covers the screen it is describing, which is the only
         // place a walkthrough of this app makes sense.
         if (!overviewSeen) {
-            OverviewScreen(onDone = { scope.launch { settings.markOverviewSeen() } })
+            OnboardingScreen(firstRun = false, onDone = { scope.launch { settings.markOverviewSeen() } })
             return@Box
         }
 

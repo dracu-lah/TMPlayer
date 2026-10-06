@@ -61,7 +61,8 @@ import com.tmplayer.ui.browse.FIRST_LOAD_TIP
 import com.tmplayer.data.SizeFilter
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.layout.padding
-import com.tmplayer.ui.onboarding.OverviewScreen
+import com.tmplayer.ui.onboarding.OnboardingPage
+import com.tmplayer.ui.onboarding.OnboardingScreen
 import com.tmplayer.ui.settings.AboutScreen
 import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.settings.SupportCard
@@ -173,7 +174,14 @@ class PromoCaptureActivity : ComponentActivity() {
                             onSubmitPassword = {},
                             submitError = null,
                         )
-                        "overview" -> OverviewScreen(onDone = { screen = "chats" })
+                        // The tour, from `--es page language|about|signin|chats|videos`.
+                        "overview" -> OnboardingScreen(
+                            firstRun = true,
+                            onDone = { screen = "chats" },
+                            start = OnboardingPage.entries.firstOrNull {
+                                it.name.equals(intent.getStringExtra("page"), ignoreCase = true)
+                            } ?: OnboardingPage.Language,
+                        )
                         "settings" -> SettingsScreen(
                             chats = promoChats(),
                             onLoggedOut = {},

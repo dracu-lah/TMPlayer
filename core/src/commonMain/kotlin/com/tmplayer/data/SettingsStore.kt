@@ -24,7 +24,6 @@ import okio.Path.Companion.toPath
 import java.io.File
 
 private val FAVORITES = stringSetPreferencesKey("favorite_chats")
-private val INTRO_SEEN = booleanPreferencesKey("intro_seen")
 private val OVERVIEW_SEEN = booleanPreferencesKey("overview_seen")
 private val OPEN_LAST_CHAT = booleanPreferencesKey("open_last_chat")
 private val DOWNLOAD_FIRST = booleanPreferencesKey("download_before_playing")
@@ -865,15 +864,10 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
 
     // ---- prompts ----------------------------------------------------------------------------
 
-    val introSeen: Flow<Boolean> = read { it[INTRO_SEEN] ?: false }
-
-    suspend fun markIntroSeen() {
-        prefs.edit { it[INTRO_SEEN] = true }
-    }
-
     /**
-     * Whether the walkthrough has been shown. Separate from [introSeen]: one is what the app is
-     * allowed to do, the other is how to use it, and Settings can ask for the second one back.
+     * Whether the tour (the language, what TMPlayer is, signing in, chats, videos) has been seen.
+     * It comes before sign in on the first run, and Settings asks for it again with [replayOverview].
+     * Installs from before the shared tour may still carry an old "intro_seen" key; nothing reads it.
      */
     val overviewSeen: Flow<Boolean> = read { it[OVERVIEW_SEEN] ?: false }
 

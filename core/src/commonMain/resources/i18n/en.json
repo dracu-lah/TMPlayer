@@ -1,11 +1,15 @@
 {
+  "auth": {
+    "unofficial": "TMPlayer is an unofficial app that uses the Telegram API. It is not made by Telegram."
+  },
   "browse": {
     "videos_count": "{count, plural, one {# video} other {# videos}}",
     "videos_hidden": "{count, plural, =0 {No videos hidden} one {# video hidden by the size filter} other {# videos hidden by the size filter}}"
   },
   "common": {
     "cancel": "Cancel",
-    "retry": "Retry"
+    "retry": "Retry",
+    "show": "Show"
   },
   "format": {
     "hours_minutes": "{hours}h {minutes}m",
@@ -14,11 +18,38 @@
     "size_kb": "{size} KB",
     "size_mb": "{size} MB"
   },
+  "onboarding": {
+    "about_body": "{form, select, tv {TMPlayer plays the videos in your own Telegram chats on this TV. Here is what that means before you sign in.} desktop {TMPlayer plays the videos in your own Telegram chats on this computer. Here is what that means before you sign in.} other {TMPlayer plays the videos in your own Telegram chats on this phone. Here is what that means before you sign in.}}",
+    "about_data_body": "No ads, no tracking and no account with us. TMPlayer collects nothing about you or about what you watch.",
+    "about_data_title": "Nothing collected",
+    "about_server_body": "{form, select, tv {TMPlayer talks to Telegram directly. Signing in adds this TV to your Telegram devices, just like a computer, and there is no server of ours in between.} desktop {TMPlayer talks to Telegram directly. Signing in adds this computer to your Telegram devices, and there is no server of ours in between.} other {TMPlayer talks to Telegram directly. Signing in adds this phone to your Telegram devices, just like a computer, and there is no server of ours in between.}}",
+    "about_server_title": "No server in between",
+    "about_title": "Welcome to TMPlayer",
+    "about_unofficial_title": "Unofficial",
+    "back": "Back",
+    "chats_body": "{form, select, tv {The rail sorts them: channels, groups, people, or everything at once. Star the chats you watch from and they sit in Favourites, one press away.} desktop {The sidebar sorts them: channels, groups, people, or everything at once. Star the chats you watch from and they sit in Favourites, one click away.} other {The menu sorts them: channels, groups, people, or everything at once. Star the chats you watch from and they sit in Favourites, one tap away.}}",
+    "chats_title": "{form, select, tv {Your Telegram chats, on the left} desktop {Your Telegram chats, in the sidebar} other {Your Telegram chats}}",
+    "help_translate": "Help translate TMPlayer",
+    "help_translate_body": "Most translations start out machine made. Corrections are welcome at tmplayer.org/translate.",
+    "language_body": "TMPlayer follows the language your device uses. Pick another one here, or later in Settings.",
+    "language_system": "System default",
+    "language_title": "Choose your language",
+    "next": "Next",
+    "signin_body": "{form, select, tv {TMPlayer shows a code. Open Telegram on your phone, go to Settings, then Devices, and point the camera at the TV. Nothing is typed on the remote.} desktop {TMPlayer shows a code. On your phone, open Telegram, go to Settings, then Devices, then Link Desktop Device, and point it at the screen. A phone number works too.} other {Type the number your Telegram account is registered to and TMPlayer sends you a code. If your account lives on another phone, scan a QR code instead.}}",
+    "signin_title": "{form, select, tv {Sign in with your phone} desktop {Sign in with a QR code} other {Sign in with your number}}",
+    "skip": "Skip",
+    "start": "Start",
+    "step": "Step {current} of {total}",
+    "videos_body": "{form, select, tv {TMPlayer lists the videos posted in that chat, newest first, with their size and quality. Short clips are filtered out; the size limits are yours to change.} desktop {TMPlayer lists the videos posted in that chat, newest first, with their size and quality. Click one to play it, or right click it for more. Short clips are filtered out; the size limits are yours to change.} other {TMPlayer lists the videos posted in that chat, newest first, with their size and quality. Short clips are filtered out; the size limits are yours to change.}}",
+    "videos_title": "Open a chat to see its videos"
+  },
   "player": {
     "track_kind": "{kind, select, audio {Audio track} subtitle {Subtitle track} other {Track}}"
   },
   "settings": {
     "language_switched": "Now in {language}. You can change it in Settings.",
-    "language_system": "System default"
+    "language_system": "System default",
+    "walkthrough": "Show the walkthrough again",
+    "walkthrough_body": "How TMPlayer works, in a few screens"
   }
 }

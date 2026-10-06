@@ -1,5 +1,6 @@
 package com.tmplayer.ui.settings
 
+import com.tmplayer.ui.i18n.LocalStrings
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -921,8 +922,8 @@ fun SettingsScreen(
         item { SectionTitle("Help") }
         item {
             ActionRow(
-                title = "Show the walkthrough again",
-                subtitle = "How TMPlayer works, in a few screens",
+                title = LocalStrings.current.settingsWalkthrough,
+                subtitle = LocalStrings.current.settingsWalkthroughBody,
                 icon = Icons.Filled.Info,
                 onClick = { scope.launch { settings.replayOverview() } },
             )

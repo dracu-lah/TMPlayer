@@ -140,6 +140,8 @@ private val blankCursor: PointerIcon by lazy {
  * @param shortcutsOpen start with the "?" sheet up (the harness's `--shortcuts`).
  * @param screenshotDir where S puts its pictures: Pictures/TMPlayer, or a temp folder in the tests.
  * @param engineFactory the engine; libmpv in the app, a fake in the UI tests that drive the mouse.
+ * @param backdrop what is painted behind the overlay; the promo fixture leaves it clear so the
+ *   still it draws underneath shows where libmpv's picture would.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -165,6 +167,7 @@ fun PlayerScreen(
     shortcutsOpen: Boolean = false,
     screenshotDir: () -> java.io.File = { java.io.File(UserDirs.pictures(), "TMPlayer") },
     engineFactory: () -> PlaybackEngine = { MpvPlaybackEngine(OpenPrefs.hwdecFor(prefs.now.softwareDecoding)) },
+    backdrop: Color = Color.Black,
 ) {
     val engine = remember { engineFactory() }
     val desktop by prefs.state.collectAsState()
@@ -867,7 +870,7 @@ fun PlayerScreen(
         Box(
             modifier
                 .fillMaxSize()
-                .background(Color.Black)
+                .background(backdrop)
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     noteInput()
