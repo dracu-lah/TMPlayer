@@ -33,7 +33,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [x] CP03 Third-party notices complete, a real desktop corresponding source script, notices inside every package (97a0f3f)
 - [x] CP04 Respect Telegram "restrict saving content" and self-destructing media (572287c, not yet tested on a protected channel)
 - [x] CP05 About screen on phone, TV and desktop (49b4c6f)
-- [ ] U01 Two Sentry settings, and tell Claude the DSN host
+- [ ] U01 Two Sentry settings (DSN host answered 2026-10-06: `.ingest.de.sentry.io`, EU; privacy page updated)
 - [ ] U02 Player logo's source (label settled 2026-10-06: GPL-3.0-or-later everywhere, already true in README, winget, AUR, metainfo and the MSI; libraries keep their own licences)
 - [x] U03 Budget decision: $0 only (2026-10-06). Phase G dropped, no Certum
 - [ ] U04 (optional) Commit email `hello@tmplayer.org`
