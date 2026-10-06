@@ -48,12 +48,10 @@ class PlayerTvMenuSmokeTest {
         root = root,
         title = { "Bethlehem Kudumba Unit" },
         pictureInPicture = { true },
-        speed = { 1f },
         saveToDownloads = { true },
         markWatched = { true },
         watched = { false },
         onEntry = {},
-        onSpeed = {},
         onClosed = {},
     )
 
@@ -74,13 +72,15 @@ class PlayerTvMenuSmokeTest {
     }
 
     @Test
-    fun `the speed, sleep timer and details sheets compose`() {
+    fun `the speed, shape, sleep timer and details sheets compose`() {
         val sheets = PlayerSheets(activity, root, onClosed = {})
         shadowOf(Looper.getMainLooper()).idle()
         assertFalse(sheets.isOpen)
         sheets.showSpeed(1.5f) {}
         shadowOf(Looper.getMainLooper()).idle()
         assertTrue(sheets.isOpen)
+        sheets.showShape(VideoScale.Crop) {}
+        shadowOf(Looper.getMainLooper()).idle()
         sheets.showSleep(running = "23 minutes left", chosen = 30) {}
         shadowOf(Looper.getMainLooper()).idle()
         sheets.showDetails("Bethlehem Kudumba Unit", listOf("Picture 1920 x 1080", "File 1.4 GB"))

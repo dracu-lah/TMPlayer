@@ -306,8 +306,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** The video surface, on every device. Null until playback starts. */
     private var touchSurface: PlayerView? = null
-    private var gestureHud: TextView? = null
-    private val hideGestureHud = Runnable { gestureHud?.visibility = View.GONE }
 
     private var fileId = 0
 
@@ -416,6 +414,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** Set once the row has introduced itself over the first frames, so it only does it once. */
     private var controlsShownOnStart = false
+
+    /** Playback has been ready once, so the resume offer has a picture to sit over. */
+    private var firstFrameReady = false
+    private var startOverOffered = false
+    private var firstRunHintShown = false
 
     /** How far into the video the download has reached, and whether it has reached the end. */
     private var downloadedFraction = 0f
@@ -526,24 +529,19 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         rebufferChip = findViewById(R.id.rebuffer_chip)
         rebufferText = findViewById(R.id.rebuffer_text)
         downloadChip = findViewById(R.id.download_chip)
-        gestureHud = findViewById(R.id.gesture_hud)
         controls = PlayerControls(
             root = findViewById(R.id.player_root),
             isTv = FormFactor.isTv(this),
             player = { player },
             onVisibility = ::onControlsVisibilityChanged,
             onTogglePlay = ::togglePlayback,
-            onSkip = ::skipBy,
             onPickSubtitles = { showTrackPicker(C.TRACK_TYPE_TEXT) },
             onPickAudio = { showTrackPicker(C.TRACK_TYPE_AUDIO) },
             onPickSpeed = ::pickSpeed,
-            onCycleScale = ::cycleScale,
             onCycleOrientation = ::cycleOrientation,
             onPlayEpisode = ::playEpisode,
             onBack = ::finish,
             onMore = ::showOverflow,
-            onLock = ::lockScreen,
-            onPictureInPicture = ::enterPictureInPictureNow,
             onRemainingToggled = { remaining ->
                 touchPrefs = touchPrefs.copy(showRemaining = remaining)
                 lifecycleScope.launch {
@@ -551,20 +549,16 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 }
             },
         )
-        controls?.pictureInPictureAvailable =
-            packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
-        // The television's row jumps by [Skip]: its glyphs used to say ten both ways while the
-        // back jump was five. The phone's buttons follow the double tap setting, read below.
-        controls?.setSkip(Skip.BACK_MS, Skip.FORWARD_MS)
-        if (!FormFactor.isTv(this)) {
-            feedback = PlayerFeedback(findViewById(R.id.player_root), findViewById(R.id.overlay_container))
-        } else {
+        // The text answers (and the resume offer) on both devices; the touch feedback around them
+        // only ever fires from the phone's gestures.
+        feedback = PlayerFeedback(findViewById(R.id.player_root), findViewById(R.id.overlay_container))
+        if (FormFactor.isTv(this)) {
             tvMenu = PlayerTvMenu(
                 activity = this,
                 root = findViewById(R.id.player_root),
                 title = { mediaTitle },
                 pictureInPicture = { packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE) },
-                speed = { playbackSpeed },
+                shape = { videoScale },
                 saveToDownloads = ::canSaveToDownloads,
                 markWatched = ::hasMessage,
                 watched = { onWatchedList },
@@ -576,7 +570,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 nextEpisode = { _episodes.value.takeIf { it.next != null }?.let { episodeLabel(next = true, it.nextTag) } },
                 previousEpisode = { _episodes.value.takeIf { it.previous != null }?.let { episodeLabel(next = false, it.previousTag) } },
                 onEntry = ::onTvMenuEntry,
-                onSpeed = ::setSpeed,
+                onShape = ::applyScale,
                 onClosed = { menuOpen = false; holdControls(); controls?.show(); controls?.focusRow() },
             )
         }
@@ -647,6 +641,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 player?.seekTo(resumeMs)
                 resumeNotice = L.playerResumingFrom(Translator.messages.formatter.clock(resumeMs))
                 renderStatusText()
+                offerStartOver()
             }
         }
 
@@ -871,7 +866,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun togglePlayback() {
         val exo = player ?: return
         val nowPlaying = !exo.isPlaying
-        if (feedback == null) {
+        if (FormFactor.isTv(this)) {
             // The row first, so the disc is on screen to fold when the pause lands.
             if (!nowPlaying && statusOverlay.visibility != View.VISIBLE) controls?.show()
             if (nowPlaying) exo.play() else exo.pause()
@@ -1182,8 +1177,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
     }
 
-    /** The next picture shape along. The button's press flashes the new name over the picture. */
-    fun cycleScale() = applyScale(videoScale.next())
+    /** The overflow's Picture shape: the three shapes to pick from. The pinch is the shortcut. */
+    private fun pickShape() {
+        showSheet { it.showShape(videoScale, ::applyScale) }
+    }
 
     /**
      * The PlayerView owns the picture's shape on every device now, so the codec's own scaling
@@ -1210,22 +1207,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * is the only thing a drag or a key press puts on screen: the transport row stays where it was.
      */
     private fun showGestureFeedback(text: String, side: Int = PlayerGestures.SIDE_CENTRE) {
-        val hud = gestureHud ?: return
-        hud.text = text
-        (hud.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
-            val gravity = android.view.Gravity.CENTER_VERTICAL or when (side) {
-                PlayerGestures.SIDE_LEFT -> android.view.Gravity.START
-                PlayerGestures.SIDE_RIGHT -> android.view.Gravity.END
-                else -> android.view.Gravity.CENTER_HORIZONTAL
-            }
-            if (params.gravity != gravity) {
-                params.gravity = gravity
-                hud.layoutParams = params
-            }
-        }
-        hud.visibility = View.VISIBLE
-        hud.removeCallbacks(hideGestureHud)
-        hud.postDelayed(hideGestureHud, GESTURE_HUD_MS)
+        feedback?.message(text, side)
     }
 
     /**
@@ -1623,6 +1605,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 // refilled here rather than when the retry is issued.
                 Player.STATE_READY -> {
                     recoveryAttempts = 0
+                    firstFrameReady = true
+                    offerStartOver()
                     controls?.setBuffering(false)
                     hideStatus()
                     // Once, as the picture first lands: the viewer sees the name of what they
@@ -2315,7 +2299,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         if (!FormFactor.isTv(this) && handleTouchDeviceKey(event)) return true
 
-        // The next-up card on a television: left, right and OK walk and press its two buttons,
+        // The next-up card on a television: left, right and OK stay on its one button,
         // Back puts it away. Up and down still raise the row below.
         if (nextUpHasTheRemote()) {
             when (event.keyCode) {
@@ -2742,7 +2726,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         feedback?.hapticsEnabled = touchPrefs.haptics
         controls?.timeoutMs = touchPrefs.controlsTimeoutMs
         controls?.showRemaining = touchPrefs.showRemaining
-        if (!FormFactor.isTv(this)) controls?.setSkip(touchPrefs.doubleTapMs, touchPrefs.doubleTapMs)
     }
 
     /** The left and right system gesture strips, in pixels, for the scrub's edge rule. */
@@ -2753,8 +2736,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     /**
-     * The phone's overflow: everything that does not earn a seat on an upright row, and the
-     * handover to another app, which used to be reachable only through a held key.
+     * The phone's overflow: everything that does not earn a seat on the row, and the handover
+     * to another app, which used to be reachable only through a held key. See
+     * [PlayerMenu.phoneEntries] for what is in it and why Speed and Start over are not.
      */
     private fun showOverflow(anchor: View) {
         menuOpen = true
@@ -2762,39 +2746,33 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         tvMenu?.let { it.open(); return }
         val menu = android.widget.PopupMenu(this, anchor, Gravity.END)
         val items = menu.menu
-        items.add(0, MENU_LOCK, 0, L.playerLockScreen)
-        if (packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)) {
-            items.add(0, MENU_PIP, 1, L.playerPictureInPicture)
-        }
+        val entries = PlayerMenu.phoneEntries(
+            pictureInPicture = packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE),
+            openInAnotherApp = savable == true,
+            copyLink = chatId != 0L && messageId != 0L,
+            saveToDownloads = canSaveToDownloads(),
+            markWatched = hasMessage(),
+        )
         // Speed and the sleep timer open the pickers' sheet rather than a submenu, so a choice
         // of one of several looks the same here as the subtitle and audio pickers.
-        items.add(0, MENU_SPEED, 2, L.playerPlaybackSpeedNow(PlaybackSpeed.label(playbackSpeed)))
-        items.add(0, MENU_BOOST, 2, L.playerVolumeBoost).setCheckable(true).setChecked(volumeBoostOn)
-        items.add(0, MENU_SLEEP, 2, sleepTimerDetail()?.let { L.playerSleepTimerNow(it) } ?: L.playerSleepTimer)
-        items.add(0, MENU_START_OVER, 3, L.playerStartOver)
-        if (savable == true) items.add(0, MENU_OPEN_WITH, 4, L.playerOpenInAnotherApp)
-        items.add(0, MENU_DETAILS, 5, L.playerPlaybackDetails)
-        items.add(0, MENU_SUBTITLE_FILE, 6, L.playerLoadSubtitleFile)
-        if (chatId != 0L && messageId != 0L) items.add(0, MENU_COPY_LINK, 7, L.playerCopyLink)
-        if (canSaveToDownloads()) items.add(0, MENU_SAVE, 8, L.playerSaveToDownloads)
-        if (hasMessage()) {
-            items.add(0, MENU_WATCHED, 9, if (onWatchedList) L.playerMarkUnwatched else L.playerMarkWatched)
+        entries.forEachIndexed { order, entry ->
+            val label = entry.label(sleepDetail = sleepTimerDetail(), watched = onWatchedList)
+            val item = items.add(0, entry.ordinal, order, label)
+            if (entry == PhoneMenuEntry.VolumeBoost) item.setCheckable(true).setChecked(volumeBoostOn)
         }
         menu.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                MENU_SAVE -> saveToDownloads()
-                MENU_WATCHED -> toggleWatched()
-                MENU_SUBTITLE_FILE -> subtitleFiles.pick()
-                MENU_COPY_LINK -> lifecycleScope.launch { MessageLink.copy(this@PlayerActivity, chatId, messageId) }
-                MENU_LOCK -> lockScreen()
-                MENU_PIP -> enterPictureInPictureNow()
-                MENU_START_OVER -> startOver()
-                MENU_OPEN_WITH -> openInAnotherApp()
-                MENU_DETAILS -> showPlaybackDetails()
-                MENU_BOOST -> toggleVolumeBoost()
-                MENU_SPEED -> showSheet { it.showSpeed(playbackSpeed, ::setSpeed) }
-                MENU_SLEEP -> showSheet { it.showSleep(sleepTimerDetail(), sleepChoice(), ::setSleepTimer) }
-                else -> return@setOnMenuItemClickListener false
+            when (PhoneMenuEntry.entries[item.itemId]) {
+                PhoneMenuEntry.LockScreen -> lockScreen()
+                PhoneMenuEntry.PictureInPicture -> enterPictureInPictureNow()
+                PhoneMenuEntry.PictureShape -> pickShape()
+                PhoneMenuEntry.VolumeBoost -> toggleVolumeBoost()
+                PhoneMenuEntry.SleepTimer -> showSheet { it.showSleep(sleepTimerDetail(), sleepChoice(), ::setSleepTimer) }
+                PhoneMenuEntry.OpenInAnotherApp -> openInAnotherApp()
+                PhoneMenuEntry.LoadSubtitleFile -> subtitleFiles.pick()
+                PhoneMenuEntry.CopyLink -> lifecycleScope.launch { MessageLink.copy(this@PlayerActivity, chatId, messageId) }
+                PhoneMenuEntry.SaveToDownloads -> saveToDownloads()
+                PhoneMenuEntry.MarkWatched -> toggleWatched()
+                PhoneMenuEntry.PlaybackDetails -> showPlaybackDetails()
             }
             true
         }
@@ -2815,7 +2793,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PlayerMenuEntry.NextEpisode -> _episodes.value.next?.let(::playEpisode)
             PlayerMenuEntry.PreviousEpisode -> _episodes.value.previous?.let(::playEpisode)
             // Pages of the menu itself, opened there.
-            PlayerMenuEntry.Speed, PlayerMenuEntry.SleepTimer, PlayerMenuEntry.RemoteKeys -> Unit
+            PlayerMenuEntry.PictureShape, PlayerMenuEntry.SleepTimer, PlayerMenuEntry.RemoteKeys -> Unit
         }
     }
 
@@ -3016,6 +2994,43 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         lifecycleScope.launch { runCatching { settings.setPlaybackSpeed(value) } }
     }
 
+    /**
+     * The phone's way back to the start of a video that opened where it was left: a line over the
+     * picture with "Start over", for a few seconds. It needs both the saved position and a picture,
+     * which arrive in either order, so the two places that learn them both come here. A saved
+     * position within the first seconds is not worth offering, and the television keeps its menu line.
+     */
+    private fun offerStartOver() {
+        if (startOverOffered || !firstFrameReady || resumeMs < RESUME_OFFER_MIN_MS) return
+        if (FormFactor.isTv(this)) return
+        startOverOffered = true
+        feedback?.offer(
+            L.playerResumingFrom(Translator.messages.formatter.clock(resumeMs)),
+            L.playerStartOver,
+        ) { startOver() }
+    }
+
+    /**
+     * What the row and the menus no longer show: on a phone that a double tap jumps, on a television
+     * that the arrows jump and More lists every key. Said once ever, the first time the row goes
+     * away over a playing video, and not while the resume offer is up.
+     */
+    private fun showFirstRunHint() {
+        if (firstRunHintShown || !firstFrameReady) return
+        firstRunHintShown = true
+        lifecycleScope.launch {
+            val seen = runCatching { settings.playerHintSeenNow() }.getOrDefault(true)
+            if (seen) return@launch
+            runCatching { settings.markPlayerHintSeen() }
+            val text = if (FormFactor.isTv(this@PlayerActivity)) {
+                L.playerRemoteHint
+            } else {
+                L.playerDoubleTapHint(touchPrefs.doubleTapMs / 1000)
+            }
+            feedback?.message(text, holdMs = HINT_MS)
+        }
+    }
+
     /** Back to the first frame, for a viewer who did not want the saved position. */
     private fun startOver() {
         val exo = player ?: return
@@ -3203,6 +3218,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (!visible && nextUpHasTheRemote()) nextUpCard?.play?.requestFocus()
         liftSubtitles()
         updateDownloadChip()
+        if (!visible && !startOverOffered) showFirstRunHint()
     }
 
     /**
@@ -3555,7 +3571,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // A phone waits the way phone players do, with a spinner in the middle of the picture: the
         // corner chip sat on top of the double tap's ripple, since every jump on a stream stalls
         // for a moment. Being offline is news rather than a wait, so that keeps its words.
-        val phone = feedback
+        val phone = feedback.takeUnless { FormFactor.isTv(this) }
         if (phone != null && !offline) {
             rebufferChip.visibility = View.GONE
             phone.buffering(true)
@@ -3818,7 +3834,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         holdFile(0)
         stopDownload()
         trimCache()
-        gestureHud?.removeCallbacks(hideGestureHud)
         // Released before the player it wraps, or it is left holding a released instance.
         mediaSession?.release()
         mediaSession = null
@@ -4064,20 +4079,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         /** How long the unlock pill stays up after a tap on the locked screen. */
         private const val UNLOCK_PILL_MS = 2_500L
 
-        private const val MENU_LOCK = 1
-        private const val MENU_PIP = 2
-        private const val MENU_SPEED = 3
-        private const val MENU_START_OVER = 4
-        private const val MENU_OPEN_WITH = 5
-        private const val MENU_DETAILS = 6
-        private const val MENU_SUBTITLE_FILE = 7
-        private const val MENU_COPY_LINK = 8
-        private const val MENU_SAVE = 9
-        private const val MENU_WATCHED = 10
-        private const val MENU_BOOST = 11
-        private const val MENU_SLEEP = 12
-
         private const val RESUME_TICK_MS = 10_000L
+
+        /** A saved position shorter than this is not worth a "Start over". */
+        private const val RESUME_OFFER_MIN_MS = 15_000L
+
+        /** How long the first-run hint stays up. */
+        private const val HINT_MS = 5_000L
 
         /** The captions' climb out from under the raised transport row, and back. */
         private const val SUBTITLE_LIFT_MS = 200L
@@ -4115,9 +4123,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
          */
         private const val ART_DRIFT_SCALE = 1.12f
         private const val ART_DRIFT_MS = 20_000L
-
-        /** Long enough to read the figure a drag left behind, short enough to stay out of the way. */
-        private const val GESTURE_HUD_MS = 900L
 
         /** Long enough to read the next title and to stop it; short enough not to be a wait. */
         private const val AUTOPLAY_COUNTDOWN_SEC = 8

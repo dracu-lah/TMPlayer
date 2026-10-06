@@ -29,6 +29,7 @@ import com.tmplayer.player.PlayerControls
 import com.tmplayer.player.NextUpCard
 import com.tmplayer.player.PlayerFeedback
 import com.tmplayer.player.PlayerTvMenu
+import com.tmplayer.player.label
 import com.tmplayer.player.TapZone
 import com.tmplayer.player.SubtitleStyle
 import com.tmplayer.player.SyncDelays
@@ -44,8 +45,8 @@ import androidx.media3.common.C
  * so the transport can be captured and checked without a Telegram account or a video file.
  *
  *     adb shell am start -n com.tmplayer.promo/com.tmplayer.PromoPlayerActivity \
- *         [--ez tv true] [--ez playing true] [--es feedback ripple|level|scrub|hold|flash|jump]
- *         [--ez nextup true] [--ez menu true] [--ez trickplay true] [--el scrub_at 1265000]
+ *         [--ez tv true] [--ez playing true] [--es feedback ripple|level|scrub|hold|flash|jump|offer|hint]
+ *         [--ez nextup true] [--ez menu true] [--ez overflow true] [--ez trickplay true] [--el scrub_at 1265000]
  *         [--es picker subtitles|online] [--ez subtitles true]
  *         [--es online signed_out|signed_in|quota|expired|unavailable|empty|offline|subdl|none|live]
  *
@@ -111,18 +112,15 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
             player = { player },
             onVisibility = {},
             onTogglePlay = { player.playWhenReady = !player.playWhenReady },
-            onSkip = {},
             onPickSubtitles = {
                 TrackPickerFragment.show(supportFragmentManager, R.id.overlay_container, C.TRACK_TYPE_TEXT)
             },
             onPickAudio = {},
             onPickSpeed = {},
-            onCycleScale = {},
             onCycleOrientation = {},
             onPlayEpisode = {},
         )
         controls.setTitle("The Coast", "S01E04 · Nature Channel · 1.4 GB")
-        if (!tv) controls.setSkip(10_000, 10_000)
         controls.setEpisodes(demoEpisode(3), demoEpisode(5), L.playerPreviousUp("S01E03"), L.playerNextUp("S01E05"), "S01E03", "S01E05")
         controls.timeoutMs = 0
         // `--ez trickplay true`: scrub thumbnails from a fake download of the first 1,520 seconds,
@@ -143,7 +141,7 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
             override fun onIsPlayingChanged(isPlaying: Boolean) = controls.onPlayingChanged()
         })
 
-        val feedback = if (tv) null else PlayerFeedback(findViewById(R.id.player_root), findViewById(R.id.overlay_container))
+        val feedback = PlayerFeedback(findViewById(R.id.player_root), findViewById(R.id.overlay_container))
         val root = findViewById<View>(R.id.player_root)
         root.postDelayed({
             when (intent.getStringExtra("feedback")) {
@@ -169,12 +167,18 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
                 }
                 "jump" -> {
                     controls.hideNow()
-                    findViewById<TextView>(R.id.gesture_hud).apply {
-                        text = "10 s   ▶▶"
-                        (layoutParams as FrameLayout.LayoutParams).gravity =
-                            android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.END
-                        visibility = View.VISIBLE
-                    }
+                    feedback.message("10 s   \u25B6\u25B6", com.tmplayer.player.PlayerGestures.SIDE_RIGHT)
+                }
+                "offer" -> {
+                    controls.hideNow()
+                    feedback.offer(L.playerResumingFrom("13:54"), L.playerStartOver) {}
+                }
+                "hint" -> {
+                    controls.hideNow()
+                    feedback.message(
+                        if (tv) L.playerRemoteHint else L.playerDoubleTapHint(10),
+                        holdMs = 60_000L,
+                    )
                 }
             }
             val pinned = intent.getLongExtra("scrub_at", -1L)
@@ -200,13 +204,23 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
                     root = findViewById(R.id.player_root),
                     title = { "The Coast S01E04" },
                     pictureInPicture = { true },
-                    speed = { 1f },
                     nextEpisode = { L.playerNextUp("S01E05") },
                     previousEpisode = { L.playerPreviousUp("S01E03") },
                     onEntry = {},
-                    onSpeed = {},
                     onClosed = {},
                 ).open()
+            }
+            // `--ez overflow true`: the phone's overflow, built from the same entries as the player's.
+            if (intent.getBooleanExtra("overflow", false) && !tv) {
+                val popup = android.widget.PopupMenu(this, findViewById(R.id.control_more), android.view.Gravity.END)
+                com.tmplayer.player.PlayerMenu.phoneEntries(
+                    pictureInPicture = true,
+                    openInAnotherApp = true,
+                    copyLink = true,
+                    saveToDownloads = true,
+                    markWatched = true,
+                ).forEachIndexed { order, entry -> popup.menu.add(0, entry.ordinal, order, entry.label()) }
+                popup.show()
             }
             // `--es picker subtitles` opens the subtitle picker, `online` its "Search online" list.
             when (intent.getStringExtra("picker")) {

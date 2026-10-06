@@ -25,6 +25,7 @@ import java.io.File
 
 private val FAVORITES = stringSetPreferencesKey("favorite_chats")
 private val OVERVIEW_SEEN = booleanPreferencesKey("overview_seen")
+private val PLAYER_HINT_SEEN = booleanPreferencesKey("player_hint_seen")
 private val OPEN_LAST_CHAT = booleanPreferencesKey("open_last_chat")
 private val DOWNLOAD_FIRST = booleanPreferencesKey("download_before_playing")
 private val AUTOPLAY_NEXT = booleanPreferencesKey("autoplay_next")
@@ -611,6 +612,17 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
 
     suspend fun setVideoScale(name: String) {
         prefs.edit { it[VIDEO_SCALE] = name }
+    }
+
+    /**
+     * Whether the player's one-time hint has been shown: that a double tap jumps on a phone, that
+     * the arrows jump and More lists every key on a television. The controls that used to say so
+     * are gone from the screen, so it is said once, the first time.
+     */
+    suspend fun playerHintSeenNow(): Boolean = prefs.data.first()[PLAYER_HINT_SEEN] ?: false
+
+    suspend fun markPlayerHintSeen() {
+        prefs.edit { it[PLAYER_HINT_SEEN] = true }
     }
 
     /**

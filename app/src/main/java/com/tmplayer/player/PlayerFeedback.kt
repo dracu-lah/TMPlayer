@@ -32,11 +32,13 @@ import kotlin.math.roundToInt
  * Each gesture answers where the finger is and for as long as the gesture lasts: play and pause
  * flash a big glyph in the middle, a double tap on a side draws YouTube's half-moon with chevrons
  * and a running total, a held finger keeps a speed pill up until it lifts, a vertical drag fills a
- * level bar on its own side, a sideways drag shows where it would land. The older single text chip
- * ([PlayerActivity.showGestureFeedback]) stays for the television and for labels that are not a
- * gesture's answer.
+ * level bar on its own side, a sideways drag shows where it would land. The one text pill
+ * ([message]) answers everything that is not a gesture too, on a television as well: a remote's
+ * jump figure, a new speed, a label. [offer] is the line with a button, for undoing what the
+ * player did by itself.
  *
- * Built in code and laid over the controls, under the track pickers. Phone only.
+ * Built in code and laid over the controls, under the track pickers. The touch pieces only fire
+ * from the phone's gestures; the text pill and the offer serve both devices.
  */
 class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
 
@@ -56,8 +58,16 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
         layoutParams = FrameLayout.LayoutParams(wrap, wrap, Gravity.TOP or Gravity.CENTER_HORIZONTAL)
             .apply { topMargin = dp(84f) }
     }
+    /** The one text answer: a label for a setting that changed, or a figure for a remote's jump. */
+    private val note = pill().apply {
+        layoutParams = FrameLayout.LayoutParams(wrap, wrap, Gravity.CENTER)
+        textSize = 16f
+        typeface = Typeface.DEFAULT
+        accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+    }
     private val level = LevelPill(context)
     private val scrub = ScrubCard(context)
+    private val offer = OfferPill(context)
     private val spinner = ProgressBar(context).apply {
         isIndeterminate = true
         indeterminateTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
@@ -74,7 +84,7 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
     init {
         val at = insertBelow?.let { root.indexOfChild(it) }?.takeIf { it >= 0 } ?: root.childCount
         // Inserted in reverse so they land in this order, bottom to top.
-        listOf(spinner, scrub, level, hold, ripple, flash).forEach { view ->
+        listOf(spinner, scrub, level, hold, note, offer, ripple, flash).forEach { view ->
             if (view.layoutParams == null) {
                 view.layoutParams = FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -124,6 +134,50 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
         haptic(confirm = true)
         flash.show(playing)
     }
+
+    // ---- text ---------------------------------------------------------------------------------
+
+    private val hideNote = Runnable {
+        note.animate().alpha(0f).setDuration(FADE_MS).withEndAction { note.visibility = View.GONE }.start()
+    }
+
+    /**
+     * A short label for something that just changed ("Fit", "1.5x", "Marked as watched"), or on a
+     * television the remote's jump figure. [side] is where the finger or key was, so the figure
+     * reads as an answer to it: [PlayerGestures.SIDE_LEFT], [PlayerGestures.SIDE_RIGHT] or the middle.
+     * It stays [holdMs], which a first-run hint stretches so there is time to read it.
+     */
+    fun message(text: String, side: Int = PlayerGestures.SIDE_CENTRE, holdMs: Long = NOTE_MS) {
+        note.text = text
+        (note.layoutParams as FrameLayout.LayoutParams).let { params ->
+            val gravity = Gravity.CENTER_VERTICAL or when (side) {
+                PlayerGestures.SIDE_LEFT -> Gravity.START
+                PlayerGestures.SIDE_RIGHT -> Gravity.END
+                else -> Gravity.CENTER_HORIZONTAL
+            }
+            val margin = dp(SIDE_MARGIN_DP)
+            if (params.gravity != gravity || params.marginStart != margin) {
+                params.gravity = gravity
+                params.marginStart = margin
+                params.marginEnd = margin
+                note.layoutParams = params
+            }
+        }
+        note.removeCallbacks(hideNote)
+        note.animate().cancel()
+        note.alpha = 1f
+        note.visibility = View.VISIBLE
+        note.postDelayed(hideNote, holdMs)
+    }
+
+    // ---- an offer -----------------------------------------------------------------------------
+
+    /**
+     * A line with one button, low in the picture and gone by itself after a few seconds: the way to
+     * undo something the player did on its own, such as resuming where the viewer left off, with
+     * "Start over" one tap away instead of a menu line.
+     */
+    fun offer(text: String, action: String, onAction: () -> Unit) = offer.show(text, action, onAction)
 
     // ---- double tap --------------------------------------------------------------------------
 
@@ -177,7 +231,9 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
     fun clear() {
         waiting = false
         spinner.removeCallbacks(showSpinner)
-        listOf(flash, ripple, hold, level, scrub, spinner).forEach {
+        note.removeCallbacks(hideNote)
+        offer.dismiss()
+        listOf(flash, ripple, hold, note, level, scrub, spinner).forEach {
             it.animate().cancel()
             it.visibility = View.GONE
         }
@@ -468,8 +524,64 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
         }
     }
 
+    /** The text and its one button, in the same chip as the other pills. */
+    private inner class OfferPill(context: Context) : LinearLayout(context) {
+        private val label = TextView(context).apply {
+            setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+            textSize = 15f
+        }
+        private val button = TextView(context).apply {
+            setTextColor(ContextCompat.getColor(context, R.color.accent))
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            minHeight = dp(48f)
+            minWidth = dp(48f)
+            setPadding(dp(8f), 0, dp(4f), 0)
+            isClickable = true
+            isFocusable = true
+        }
+        private val hide = Runnable { dismiss() }
+
+        init {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = ContextCompat.getDrawable(context, R.drawable.bg_player_chip)
+            setPadding(dp(20f), dp(2f), dp(12f), dp(2f))
+            addView(label, LayoutParams(wrap, wrap).apply { marginEnd = dp(8f) })
+            addView(button, LayoutParams(wrap, wrap))
+            layoutParams = FrameLayout.LayoutParams(wrap, wrap, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
+                .apply { bottomMargin = dp(OFFER_BOTTOM_DP) }
+            // The pill takes its own touches; the picture's gestures never see them.
+            isClickable = true
+        }
+
+        fun show(text: String, action: String, onAction: () -> Unit) {
+            label.text = text
+            button.text = action
+            button.setOnClickListener {
+                dismiss()
+                onAction()
+            }
+            removeCallbacks(hide)
+            animate().cancel()
+            alpha = 1f
+            visibility = VISIBLE
+            postDelayed(hide, OFFER_MS)
+        }
+
+        fun dismiss() {
+            removeCallbacks(hide)
+            if (visibility != VISIBLE) return
+            animate().alpha(0f).setDuration(FADE_MS).withEndAction { visibility = GONE }.start()
+        }
+    }
+
     private companion object {
         const val FADE_MS = 300L
+        const val NOTE_MS = 900L
+        const val OFFER_MS = 7_000L
+        const val OFFER_BOTTOM_DP = 148f
         const val SPINNER_DELAY_MS = 400L
         const val FLASH_MS = 450L
         const val WAVE_MS = 650L

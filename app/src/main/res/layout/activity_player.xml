@@ -393,33 +393,6 @@
 
     </LinearLayout>
 
-    <!--
-      A short figure for what a key or a control just changed: a jump from the remote's arrows,
-      a digit's tenth, a new speed or picture shape. On a television it is the only feedback
-      there is. On a phone the gestures answer through PlayerFeedback.kt instead (the centre
-      flash, the double tap half-moon, the level pills), and this chip is left to labels.
-
-      It moves to the side the action went, which is what the margins are for, and it never
-      raises the transport row: the row belongs to the single tap and to OK.
-    -->
-    <TextView
-        android:id="@+id/gesture_hud"
-        android:accessibilityLiveRegion="polite"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:layout_marginStart="@dimen/player_gesture_hud_side"
-        android:layout_marginEnd="@dimen/player_gesture_hud_side"
-        android:background="@drawable/bg_player_chip"
-        android:paddingLeft="20dp"
-        android:paddingTop="12dp"
-        android:paddingRight="20dp"
-        android:paddingBottom="12dp"
-        android:textColor="@color/text_primary"
-        android:textSize="16sp"
-        android:visibility="gone" />
-
-
     <!-- Track pickers are added here so they cover the video, not the other way round. -->
     <FrameLayout
         android:id="@+id/overlay_container"
