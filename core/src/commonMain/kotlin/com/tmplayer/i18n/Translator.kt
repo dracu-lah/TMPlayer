@@ -106,9 +106,17 @@ object Translator {
         return out
     }
 
-    /** Whether [tag] has text of its own: English always, any other language once its catalog ships. */
+    private val translated = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+    /**
+     * Whether [tag] has text of its own: English always, any other language once its catalog
+     * ships with at least one key. An empty `{}` catalog, waiting for its first translation run,
+     * reads all in English and does not count.
+     */
     fun hasCatalog(tag: String): Boolean =
-        tag == Languages.ENGLISH || Translator::class.java.getResource("/i18n/$tag.json") != null
+        tag == Languages.ENGLISH || translated.getOrPut(tag) {
+            resource(tag)?.let { json -> runCatching { parse(json).isNotEmpty() }.getOrDefault(false) } ?: false
+        }
 
     /** `i18n/<tag>.json` from the classpath, or null when that language has no catalog yet. */
     fun resource(tag: String): String? =

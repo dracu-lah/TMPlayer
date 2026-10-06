@@ -1,0 +1,53 @@
+name: Translation
+description: A wrong, clumsy or missing translation in the app or on the website
+labels: [translation]
+body:
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language
+      options:
+        - Español (Latinoamérica)
+        - Português (Brasil)
+        - Français
+        - Deutsch
+        - Italiano
+        - Русский
+        - Українська
+        - Türkçe
+        - Bahasa Indonesia
+        - Tiếng Việt
+        - العربية
+        - 简体中文
+        - 日本語
+        - 한국어
+        - हिन्दी
+        - മലയാളം
+        - A language TMPlayer does not have yet
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where is it?
+      multiple: true
+      options:
+        - TV (Android TV, Google TV, Fire TV)
+        - Phone or tablet
+        - Windows or Linux
+        - The website
+    validations:
+      required: true
+  - type: textarea
+    id: text
+    attributes:
+      label: What it says now, and what it should say
+      description: The screen it is on, the current text and your suggestion. A screenshot helps. Several fixes in one issue are fine.
+    validations:
+      required: true
+  - type: checkboxes
+    id: review
+    attributes:
+      label: Reviewing
+      options:
+        - label: I speak this language well and could review more of it.

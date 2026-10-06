@@ -34,6 +34,28 @@ Never commit credentials.
 - Commits: short imperative subject, optionally `feat:`/`fix:`/`chore:` prefixes. Keep PRs small and focused.
 - No em dashes or en dashes anywhere: comments, KDoc, commit messages, UI strings, site copy. Use a colon, a comma or a full stop. Screenshots are WebP; see [CLAUDE.md](CLAUDE.md) for the conversion command and where each image is referenced from.
 
+## Translations
+
+TMPlayer ships in 17 languages. English is the source; the other 16 start as machine translations
+and get better as people who speak them correct them. Fixing a few words you noticed is as welcome
+as reviewing a whole language.
+
+- The app's text is in [`core/src/commonMain/resources/i18n/`](core/src/commonMain/resources/i18n),
+  one JSON file per language (`es-419.json`, `pt-BR.json`, `zh-CN.json` and so on), the same keys as
+  `en.json`. The website's text is in [`site/i18n/`](site/i18n), laid out the same way.
+- Change the value, never the key. Keep every `{placeholder}` exactly as it is in English. Plurals
+  are ICU messages: `{count, plural, one {# video} other {# videos}}`. Keep the structure, translate
+  the words inside the braces, and add the forms your language needs (Russian, Ukrainian and Arabic
+  need `few` and `many`); the tests name any that are missing.
+- Keep it short where English is short: the TV shows labels at a large size on a narrow rail.
+- Leave names as they are: TMPlayer, Telegram, Android TV, TDLib, mpv, APK and the like.
+- A key you leave out reads in English, so a partial file is fine.
+- Run `./gradlew :core:jvmTest` before opening the pull request. It fails on a broken placeholder or
+  a missing plural form.
+
+Not set up to build? Open a [translation issue](https://github.com/dracu-lah/TMPlayer/issues/new?template=translation.yml)
+with the screen, the current text and your suggestion, and it will be fixed for you.
+
 ## Reporting issues
 
 Include the platform (Android phone, Android TV, Windows, or Linux with its distribution and version), the app version, the device or computer, what you did, what happened, and logs around the failure if you can: `adb logcat` on Android, or the output of starting the desktop app from a terminal. Say which file you installed on Linux (AppImage, tarball or AUR, or an older deb, rpm or Flatpak). For playback issues, the file's container and codecs (from VLC's or mpv's media info) helps a lot.

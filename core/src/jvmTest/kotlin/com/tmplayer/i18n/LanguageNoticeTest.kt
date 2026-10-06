@@ -38,7 +38,7 @@ class LanguageNoticeTest {
     fun `no card for english, the pseudo-locale or a language without a catalog`() {
         assertFalse(LanguageNotice.shouldShow("", Languages.ENGLISH, "", hasCatalog = true))
         assertFalse(LanguageNotice.shouldShow("", Languages.PSEUDO, "", hasCatalog = true))
-        assertFalse(LanguageNotice.shouldShow("", "es-419", "", hasCatalog = Translator.hasCatalog("es-419")))
+        assertFalse(LanguageNotice.shouldShow("", "es-419", "", hasCatalog = Translator.hasCatalog("xx")))
         assertFalse(LanguageNotice.shouldShow("", "xx", "", hasCatalog = true))
     }
 
@@ -60,7 +60,9 @@ class LanguageNoticeTest {
     fun `catalogs are found on the classpath`() {
         assertTrue(Translator.hasCatalog("en"))
         assertTrue(Translator.hasCatalog("de"))
-        assertFalse(Translator.hasCatalog("ml"))
+        assertFalse(Translator.hasCatalog("xx"))
+        // A catalog with no keys yet, as a new language has before its first translation run.
+        assertFalse(Translator.hasCatalog("xx-empty"))
     }
 
     @Test
