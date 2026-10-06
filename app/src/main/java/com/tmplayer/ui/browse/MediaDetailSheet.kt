@@ -1,34 +1,19 @@
 package com.tmplayer.ui.browse
 
 import android.widget.Toast
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tmplayer.data.AndroidPaths
 import com.tmplayer.data.DetailAction
@@ -45,35 +30,40 @@ import com.tmplayer.data.Td
 import com.tmplayer.data.WatchPoint
 import com.tmplayer.data.cancel
 import com.tmplayer.i18n.Messages
-import com.tmplayer.ui.components.FloatingWindow
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import com.tmplayer.data.MediaFacts
+import com.tmplayer.ui.components.MenuAction
 import com.tmplayer.ui.components.TvConfirm
+import com.tmplayer.ui.components.TvMenu
+import com.tmplayer.ui.components.ignoreStrayRelease
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.i18n.LocalStrings
-import com.tmplayer.ui.theme.Corner
-import com.tmplayer.ui.theme.Floating
-import com.tmplayer.ui.theme.FloatingTone
-import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
-import com.tmplayer.ui.theme.floatingBorder
-import com.tmplayer.ui.theme.floatingSurface
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The detail panel (R5) on Android: a bottom sheet on a phone, a side pane on a television. Opened
- * by a long press, a hold of OK or the remote's info key on a video's tile, wherever the tile is: a
- * chat's grid, Home's rows, the all-chats search.
+ * A video's actions on Android, wherever its tile is: a chat's grid, Home's rows, the all-chats
+ * search. Two ways to show them, kept apart:
  *
- * The television's pane is a window of its own, like the menus, so Back closes it and the tile
- * behind keeps its focus; the pane holds focus only while it is open. Focus starts on the first
- * action, which is safe because the window ignores the release of the OK that opened it.
+ * - the detail page ([DetailScreen]), opened by a tap or OK when Settings asks for the page first;
+ * - the hold menu ([asMenu]), opened by a long press, a held OK or the remote's info key: a quick
+ *   list of every action with Details at its head, a bottom sheet on a phone and a [TvMenu] window
+ *   on a television.
  *
+ * Both are windows of their own, so Back closes them and the tile behind keeps its focus. Focus
+ * starts on the first action, which is safe because the window ignores the release of the OK that
+ * opened it.
+ *
+ * @param asMenu the hold menu rather than the page.
+ * @param onOpenDetails the menu's Details line; null leaves it out.
  * @param onSelectVideos non-null in a chat's grid, where picking several videos is possible.
  * @param onOpenChat non-null outside the video's own chat (Home, search).
  * @param onDownload queues the video; see [queueDownloads]. Run by the caller so it outlives this.
  * @param onRemoved a download was removed from here, so a tile's badge is out of date.
+ * @param onOpenItem opens another video's detail in place of this one, for "More like this".
  */
 @Composable
 internal fun MediaDetailOpened(
@@ -88,6 +78,9 @@ internal fun MediaDetailOpened(
     onSelectVideos: (() -> Unit)? = null,
     onOpenChat: (() -> Unit)? = null,
     onRemoved: () -> Unit = {},
+    onOpenItem: ((MediaItem) -> Unit)? = null,
+    asMenu: Boolean = false,
+    onOpenDetails: (() -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     val context = LocalContext.current
@@ -183,11 +176,46 @@ internal fun MediaDetailOpened(
         }
     }
 
-    if (touch) {
-        DetailSheet(item, chatTitle, watched, finished, rows, onDismiss)
+    if (asMenu) {
+        HoldMenu(item, chatTitle, watched, rows, onDismiss, onOpenDetails)
     } else {
-        DetailPane(item, chatTitle, watched, finished, rows, onDismiss)
+        DetailScreen(item, chatTitle, watched, finished, rows, onDismiss, onOpenItem)
     }
+}
+
+/**
+ * The hold menu: what the file is in one line under its name (length, size, picture, codec and
+ * chat), then Play or Resume, Details, and the rest of the actions as the page has them.
+ */
+@Composable
+private fun HoldMenu(
+    item: MediaItem,
+    chatTitle: String,
+    watched: WatchPoint?,
+    rows: List<DetailRow>,
+    onDismiss: () -> Unit,
+    onOpenDetails: (() -> Unit)?,
+) {
+    val s = LocalStrings.current
+    val facts = remember(item.id) { MediaFacts.of(item) }
+    val subtitle = listOfNotNull(
+        item.durationSec.takeIf { it > 0 }?.let { s.formatter.duration(it.toLong()) },
+        item.sizeBytes.takeIf { it > 0 }?.let { s.formatter.size(it) },
+        facts.resolution,
+        facts.videoCodec,
+        chatTitle.ifBlank { null },
+    ).joinToString("  ·  ").ifBlank { null }
+    val details = onOpenDetails?.let { open ->
+        MenuAction(s.detailOpenDetails, Icons.Filled.Info, s.detailOpenDetailsDetail) { onDismiss(); open() }
+    }
+    val actions = rows.map { MenuAction(it.label, it.icon, it.detail, it.destructive, it.onSelect) }
+    TvMenu(
+        title = item.title,
+        subtitle = subtitle,
+        // Details right under the way to play, where a viewer holding a tile to learn more looks.
+        actions = if (details == null) actions else actions.take(1) + details + actions.drop(1),
+        onDismiss = onDismiss,
+    )
 }
 
 /** A queued download's line, worded for the stage it is at. */
@@ -212,94 +240,40 @@ private fun cancelRow(s: Messages, entry: OfflineDownloads.Progress, run: () -> 
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun DetailSheet(
-    item: MediaItem,
-    chatTitle: String,
-    watched: WatchPoint?,
-    finished: Boolean,
-    rows: List<DetailRow>,
-    onDismiss: () -> Unit,
-) {
-    // Half open first, which shows the picture, the name and the first actions; a drag up shows
-    // the rest of the actions and the facts.
-    val state = rememberModalBottomSheetState()
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = state,
-        modifier = Modifier.border(floatingBorder(), Floating.SheetShape),
-        shape = Floating.SheetShape,
-        containerColor = FloatingTone.sheet,
-    ) {
-        MediaDetailPanel(
-            item = item,
-            chatTitle = chatTitle,
-            watched = watched,
-            finished = finished,
-            rows = rows,
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 28.dp),
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
-}
-
 /**
- * The television's side pane: the right edge of the screen, full height, inside the overscan, in a
- * window of its own so the grid behind keeps its focus and Back closes the pane.
+ * The detail as a screen of its own over everything ([MediaDetailScreen]), in a window so Back
+ * closes it and the tile behind keeps its focus. Opened by a hold on a television, so the release
+ * of that OK is ignored rather than choosing the focused first action.
  */
 @Composable
-private fun DetailPane(
+private fun DetailScreen(
     item: MediaItem,
     chatTitle: String,
     watched: WatchPoint?,
     finished: Boolean,
     rows: List<DetailRow>,
     onDismiss: () -> Unit,
+    onOpenItem: ((MediaItem) -> Unit)?,
 ) {
-    val s = LocalStrings.current
+    val touch = isTouch()
     val first = remember { FocusRequester() }
-    val scroll = rememberScrollState()
-    // This pane is opened by a hold, so OK is still down as it appears; ignoreRelease keeps that
-    // release from choosing the focused first action.
-    FloatingWindow(onDismiss = onDismiss, ignoreRelease = true) {
-        Column(
-            Modifier
-                .align(Alignment.CenterEnd)
-                .fillMaxHeight()
-                .width(DETAIL_PANE_WIDTH)
-                .floatingSurface(FloatingTone.sheet, PANE_SHAPE),
-        ) {
-            MediaDetailPanel(
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+    ) {
+        // Keyed by the video, so one opened from "More like this" starts at its top.
+        androidx.compose.runtime.key(item.id) {
+            MediaDetailScreen(
                 item = item,
                 chatTitle = chatTitle,
                 watched = watched,
                 finished = finished,
                 rows = rows,
-                firstAction = first,
-                compactArt = true,
-                scroll = scroll,
-                contentPadding = PaddingValues(start = 28.dp, end = Tv.SafeH, top = Tv.SafeV, bottom = 12.dp),
-                modifier = Modifier.weight(1f),
+                onClose = onDismiss,
+                modifier = if (touch) Modifier else Modifier.ignoreStrayRelease(),
+                firstAction = if (touch) null else first,
+                onOpenItem = onOpenItem,
             )
-            Text(
-                s.detailCloseHint,
-                style = MaterialTheme.typography.bodySmall,
-                color = Tone.muted,
-                modifier = Modifier.padding(start = 28.dp, end = Tv.SafeH, bottom = Tv.SafeV, top = 4.dp),
-            )
-        }
-        LaunchedEffect(Unit) {
-            runCatching { first.requestFocus() }
-            // Focus asks to be brought into view with room to spare, which scrolls the picture
-            // and the name off the top of a pane they fit in. Back to the top once it has.
-            delay(FOCUS_SETTLE_MS)
-            scroll.scrollTo(0)
         }
     }
 }
-
-private const val FOCUS_SETTLE_MS = 120L
-
-/** Rounded where the pane meets the screen, square against the edge it is pinned to. */
-private val PANE_SHAPE = RoundedCornerShape(topStart = Corner.ExtraLarge, bottomStart = Corner.ExtraLarge)

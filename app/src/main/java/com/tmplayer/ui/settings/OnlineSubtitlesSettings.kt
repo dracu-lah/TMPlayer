@@ -33,6 +33,7 @@ import com.tmplayer.online.OnlineStatus
 import com.tmplayer.online.OnlineSubtitles
 import com.tmplayer.online.OnlineWords
 import com.tmplayer.ui.auth.PaneField
+import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.i18n.LocalStrings
@@ -74,7 +75,7 @@ private fun AccountRow(onDialog: (OnlineDialog) -> Unit) {
             tint = Tone.muted,
             onClick = { toast(OnlineWords.status(status)) },
         )
-        OnlineStatus.SignedOut, is OnlineStatus.Expired -> ActionRow(
+        OnlineStatus.SignedOut, is OnlineStatus.Expired, is OnlineStatus.FreeQuotaUsed -> ActionRow(
             title = s.onlineSignIn,
             subtitle = OnlineWords.status(status),
             icon = Icons.Filled.AccountCircle,
@@ -97,7 +98,8 @@ private fun MachineRow() {
     ToggleRow(
         title = s.onlineMachineToggle,
         subtitle = if (account.includeMachine) s.onlineMachineOn else s.onlineMachineOff,
-        icon = ImageVector.vectorResource(R.drawable.ic_subtitles),
+        // A language's globe: machine translations are subtitles carried into another language.
+        icon = TmIcons.Language,
         checked = account.includeMachine,
         onToggle = { online.setIncludeMachine(!account.includeMachine) },
     )

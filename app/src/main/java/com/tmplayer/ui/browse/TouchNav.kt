@@ -62,9 +62,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.height
-import com.tmplayer.data.SettingsStore
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -128,9 +126,7 @@ internal fun TouchBrowseShell(
 ) {
     val s = LocalStrings.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
-    val context = LocalContext.current
-    val settings = remember(context) { SettingsStore(context) }
-    val groups = rememberNavGroups(settings, current = navGroupOf(selected))
+    val groups = rememberNavGroups(current = navGroupOf(selected))
     val scope = rememberCoroutineScope()
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
     fun close() = scope.launch { drawerState.close() }
@@ -176,12 +172,14 @@ internal fun TouchBrowseShell(
                             Modifier.weight(1f).verticalScroll(middleScroll)
                         }
                         Column(middle) {
-                            // Watch, Chats and the account's folders, each folding under its
-                            // heading. The grouping is the shared one in :ui, so the drawer, the
-                            // television's rail and the desktop's side bar fold the same way.
-                            navGroups(sections).forEach { (group, entries) ->
+                            // Watch with no heading, then Chats and the account's folders, each
+                            // folding under its heading. The grouping is the shared one in :ui, so
+                            // the drawer, the television's rail and the desktop's side bar fold the
+                            // same way.
+                            // Downloads is pinned at the foot beside Settings, not folded into Watch.
+                            navGroups(sections, withDownloads = false).forEach { (group, entries) ->
                                 val open = groups.isOpen(group)
-                                NavGroupHeading(
+                                if (group.headed) NavGroupHeading(
                                     group = group,
                                     open = open,
                                     toggleable = groups.canToggle(group),
@@ -220,6 +218,16 @@ internal fun TouchBrowseShell(
                         }
 
                         DrawerSeparator()
+                        DrawerDestination(
+                            label = s.navDownloads,
+                            selected = false,
+                            // How many videos are coming down right now. A download outlives the
+                            // screen it was started from, so without a mark here the only evidence
+                            // it is running is a notification the viewer may well have swiped away.
+                            badge = downloadCount.takeIf { it > 0 }?.toString(),
+                            icon = { Icon(TmIcons.Download, contentDescription = null) },
+                            onClick = { close(); onOpenDownloads() },
+                        )
                         if (updateVersion != null) {
                             // Amber on the icon, the label and the version alike, as on the TV
                             // rail and the desktop side bar: the one item that is news.

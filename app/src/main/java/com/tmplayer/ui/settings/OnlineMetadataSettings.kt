@@ -5,7 +5,6 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -24,6 +23,7 @@ import com.tmplayer.online.MetaWords
 import com.tmplayer.online.OnlineMetadata
 import com.tmplayer.online.TmdbState
 import com.tmplayer.ui.auth.PaneField
+import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.i18n.LocalStrings
@@ -53,7 +53,7 @@ private fun MetadataToggleRow() {
     ToggleRow(
         title = s.metadataToggle,
         subtitle = if (settings.enabled) s.metadataToggleOn else s.metadataToggleOff,
-        icon = Icons.Filled.Info,
+        icon = TmIcons.Image,
         checked = settings.enabled,
         onToggle = { online.setEnabled(!settings.enabled) },
     )

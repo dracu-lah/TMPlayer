@@ -83,6 +83,7 @@ import androidx.compose.foundation.layout.padding
 import com.tmplayer.ui.onboarding.OnboardingPage
 import com.tmplayer.ui.onboarding.OnboardingScreen
 import com.tmplayer.ui.settings.AboutScreen
+import com.tmplayer.ui.settings.SettingsPage
 import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.settings.SupportCard
 import com.tmplayer.ui.settings.SupportDialog
@@ -229,11 +230,15 @@ class PromoCaptureActivity : ComponentActivity() {
                                 it.name.equals(intent.getStringExtra("page"), ignoreCase = true)
                             } ?: OnboardingPage.Language,
                         )
+                        // A page of it from `--es page appearance|playback|subtitles|...`.
                         "settings" -> SettingsScreen(
                             chats = promoChats(),
                             onLoggedOut = {},
                             onBack = { screen = "chats" },
                             onOpenAbout = { screen = "about" },
+                            initialPage = SettingsPage.entries.firstOrNull {
+                                it.name.equals(intent.getStringExtra("page"), ignoreCase = true)
+                            },
                         )
                         "about" -> AboutScreen(onBack = { screen = "settings" })
                         // The Downloads screen as it is, over this build's own empty index: the

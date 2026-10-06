@@ -169,6 +169,8 @@ private fun onboardingDrawable(page: OnboardingPage, tv: Boolean, dark: Boolean)
         dark -> R.drawable.overview_chats_touch_dark
         else -> R.drawable.overview_chats_touch
     }
+    // One picture for every device: the website's television with a phone in front of it.
+    OnboardingPage.Posters -> if (dark) R.drawable.overview_posters_dark else R.drawable.overview_posters
     OnboardingPage.Videos -> when {
         tv -> R.drawable.overview_media
         dark -> R.drawable.overview_media_touch_dark

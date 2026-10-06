@@ -45,9 +45,11 @@ import com.tmplayer.data.SeriesProgress
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.pressable
 import com.tmplayer.ui.theme.Corner
+import com.tmplayer.ui.theme.Floating
+import com.tmplayer.ui.theme.FloatingTone
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
-import com.tmplayer.ui.theme.focusScale
+import com.tmplayer.ui.theme.floatingBorder
 
 /**
  * A show's tile in a chat's grid, in the same three dresses a video's tile wears: the phone's dense
@@ -107,7 +109,6 @@ internal fun SeriesCard(
     Column(
         modifier
             .fillMaxWidth()
-            .then(if (touch) Modifier else Modifier.focusScale(focused))
             .clip(RoundedCornerShape(Corner.Medium))
             .background(if (focused) Tone.surfaceHigh else Tone.surface)
             .border(1.dp, Tone.outline, RoundedCornerShape(Corner.Medium))
@@ -216,7 +217,14 @@ private fun SeriesSheet(
 ) {
     // Opened all the way: half a sheet of episodes is two rows, and the list is the point.
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = state) {
+    // The detail sheet's fill, corner and hairline, so the two sheets a grid opens look alike.
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = state,
+        modifier = Modifier.border(floatingBorder(), Floating.SheetShape),
+        shape = Floating.SheetShape,
+        containerColor = FloatingTone.sheet,
+    ) {
         SeriesPanel(
             series = series,
             watch = watch,

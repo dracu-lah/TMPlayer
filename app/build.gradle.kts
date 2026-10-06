@@ -245,8 +245,8 @@ dependencies {
     implementation(libs.zxing.core)
 
     // Playback: Media3 core and NextLib's FFmpeg audio renderers for DTS / TrueHD / E-AC3
-    // tracks the stick can't decode natively. The transport UI is the app's own; leanback stays
-    // only for the guided-step track picker.
+    // tracks the stick can't decode natively. The transport UI and the track picker are the app's
+    // own; leanback stays only for the TV player's theme (values-television/themes.xml).
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
     // The transport controls the system draws for us: notification, lock screen, headset

@@ -53,6 +53,8 @@ import com.tmplayer.data.WhatsNew
 import com.tmplayer.i18n.LanguageNotice
 import com.tmplayer.i18n.Translator
 import com.tmplayer.ui.auth.QrCode
+import com.tmplayer.ui.components.ChoiceList
+import com.tmplayer.ui.components.ChoiceSheet
 import com.tmplayer.ui.components.FloatingWindow
 import com.tmplayer.ui.components.PhonePad
 import com.tmplayer.ui.components.TmButton
@@ -72,36 +74,20 @@ import kotlinx.coroutines.withContext
 /**
  * Settings, then Language: every language named in itself, "System default" first. The app
  * changes the moment a row is picked, under the open picker, with no restart. A phone ticks a radio
- * row and closes with Close or Back; a TV walks the list with the D-pad and closes with Back.
+ * row; a TV walks the list with the D-pad. Both close with Close at the bottom end, as every
+ * picker and Material dialog does (Down from the last row on a TV), or with Back.
  */
 @Composable
 fun LanguageDialog(settings: SettingsStore, onClose: () -> Unit) {
-    val s = LocalStrings.current
     val touch = isTouch()
+    val s = LocalStrings.current
     val close = remember { FocusRequester() }
-    FloatingWindow(onDismiss = onClose) {
-        val panel = min(maxWidth - PhonePad.Side * 2, if (touch) 520.dp else 640.dp)
-        Column(
-            Modifier
-                .width(panel)
-                .heightIn(max = maxHeight - 48.dp)
-                .floatingSurface()
-                .padding(if (touch) 20.dp else 28.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(s.languagePickerTitle, style = MaterialTheme.typography.headlineSmall, color = Tone.text)
-            Text(s.languagePickerNote, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
-            if (touch) {
-                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
-                    LanguageList(settings, columns = 1)
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TmSecondaryButton(onClick = onClose) { Label(s.commonClose) }
-                }
-            } else {
-                BackHandler(onBack = onClose)
-                TvLanguages(settings, Modifier.weight(1f, fill = false).focusRequester(close))
-            }
+    ChoiceSheet(title = s.languagePickerTitle, note = s.languagePickerNote, onDismiss = onClose, onClose = onClose) {
+        if (touch) {
+            ChoiceList { LanguageList(settings, columns = 1) }
+        } else {
+            BackHandler(onBack = onClose)
+            TvLanguages(settings, Modifier.weight(1f, fill = false).focusRequester(close))
         }
     }
     if (!touch) LaunchedEffect(Unit) { runCatching { close.requestFocus() } }

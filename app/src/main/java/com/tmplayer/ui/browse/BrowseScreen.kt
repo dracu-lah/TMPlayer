@@ -81,7 +81,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -146,7 +149,6 @@ import com.tmplayer.ui.theme.Caution
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.focusRing
-import com.tmplayer.ui.theme.focusScale
 import com.tmplayer.ui.theme.Tv
 
 /**
@@ -301,7 +303,16 @@ fun BrowseScreen(
     val videoResults by allSearch.state.collectAsState()
     val panelScope = rememberCoroutineScope()
     val panelContext = LocalContext.current
-    val holdMedia: (MediaItem, String) -> Unit = { item, title -> detail = item to title }
+    // A hold, the info key or a right click: the quick menu, which leads to the page by Details.
+    var held by remember { mutableStateOf<Pair<MediaItem, String>?>(null) }
+    val holdMedia: (MediaItem, String) -> Unit = { item, title -> held = item to title }
+    val showDetail: (MediaItem, String) -> Unit = { item, title -> detail = item to title }
+    // A tap or OK on a video opens its page first, as a streaming app's title does, unless
+    // Settings says to play at once; the page is then still a hold and Details away.
+    val detailFirst by remember(panelContext) { SettingsStore(panelContext).detailFirst }.collectAsState(initial = true)
+    val openMedia: (MediaItem, String) -> Unit = if (detailFirst) showDetail else onPlayMedia
+    val openResume: (ResumeRecord) -> Unit =
+        if (detailFirst) ({ record -> showDetail(record.toMediaItem(), record.chatTitle) }) else onResumeMedia
 
     // One question decides the whole shape of this screen: a permanent rail beside the listing on
     // a television, a drawer behind a hamburger on a phone. Everything below the chrome is the
@@ -322,10 +333,12 @@ fun BrowseScreen(
                 filterChats(data.chats, tab, favorites, query)
             }
 
+            // The signed in account, for the picture in the heading's top right corner.
+            val headerAccount = data.account ?: account
             Column(Modifier.fillMaxSize()) {
                     if (tab.isHome) {
                         if (!touch) {
-                            TabHeading(tab, 0, insets) { RefreshAction(onRefreshHome) }
+                            TabHeading(tab, 0, insets, headerAccount) { RefreshAction(onRefreshHome) }
                         }
                         val titles = remember(data.chats) { data.chats.associate { it.id to it.title } }
                         HomePane(
@@ -338,18 +351,18 @@ fun BrowseScreen(
                             bottom = insets.bottom,
                             onRowShown = onHomeRowShown,
                             onArtWanted = onHomeArtWanted,
-                            onResume = onResumeMedia,
-                            onHoldRecord = { mediaMenu = it },
-                            onPlay = onPlayMedia,
+                            onResume = openResume,
+                            onPlay = openMedia,
                             onHoldMedia = holdMedia,
                             onSeeContinue = { onPickTab(BrowseSection.of(BrowseTab.Continue)); query = "" },
                             onOpenChat = { id -> data.chats.firstOrNull { it.id == id }?.let(onOpenChat) },
+                            noFavourites = favorites.isEmpty(),
                         )
                     } else if (tab.isContinue) {
                         // On a phone the heading, the count and the actions live in the app bar, so
                         // the content area starts with the content.
                         if (!touch) {
-                            TabHeading(tab, continueWatching.size, insets) {
+                            TabHeading(tab, continueWatching.size, insets, headerAccount) {
                                 LayoutAction(layout, onToggleLayout)
                                 // No Refresh here: this tab is read off this device and cannot be
                                 // behind, so the button would be one that visibly does nothing.
@@ -373,13 +386,13 @@ fun BrowseScreen(
                                 tiles = tiles,
                                 autoFocus = !touch,
                                 text = { it.cardText() },
-                                onResume = onResumeMedia,
+                                onResume = openResume,
                                 onHold = { mediaMenu = it },
                             )
                         }
                     } else if (tab.isWatched) {
                         if (!touch) {
-                            TabHeading(tab, watchedHistory.size, insets) {
+                            TabHeading(tab, watchedHistory.size, insets, headerAccount) {
                                 LayoutAction(layout, onToggleLayout)
                                 if (watchedHistory.isNotEmpty()) {
                                     HeaderAction(
@@ -411,7 +424,7 @@ fun BrowseScreen(
                         }
                     } else {
                         if (!touch) {
-                            TabHeading(tab, visible.size, insets) {
+                            TabHeading(tab, visible.size, insets, headerAccount) {
                                 LayoutAction(layout, onToggleLayout)
                                 RefreshAction(onRefresh)
                                 // Stars are added one at a time from a menu, so the only way back
@@ -434,13 +447,6 @@ fun BrowseScreen(
                             Spacer(Modifier.height(20.dp))
                         }
 
-                        if (touch && query.isNotBlank()) {
-                            SearchScopeToggle(
-                                scope = searchScope,
-                                onChange = { searchScope = it },
-                                modifier = Modifier.padding(start = insets.start, top = 8.dp, bottom = 8.dp),
-                            )
-                        }
                         if (searchingVideos && query.isNotBlank()) {
                             AllChatsResults(
                                 results = remember(data.chats, query, videoResults) {
@@ -459,7 +465,7 @@ fun BrowseScreen(
                                 insets = insets,
                                 onOpenChat = onOpenChat,
                                 onHoldChat = { chatMenu = it },
-                                onPlay = onPlayMedia,
+                                onPlay = openMedia,
                                 onHold = holdMedia,
                                 onLoadMore = allSearch::loadMore,
                                 onRetry = allSearch::retry,
@@ -499,6 +505,25 @@ fun BrowseScreen(
 
     val chatsNow = (state as? UiState.Content)?.value?.chats.orEmpty()
     val openDetail: @Composable () -> Unit = {
+        held?.let { (item, title) ->
+            MediaDetailOpened(
+                item = item,
+                chatTitle = title,
+                watched = homeWatch.point(item),
+                finished = homeWatch.finished(item),
+                onPlay = { onPlayMedia(item, title) },
+                onSetWatched = { onSetMediaWatched(item, title, it) },
+                onDownload = {
+                    panelScope.launch {
+                        queueDownloads(panelContext, SettingsStore(panelContext), listOf(item)) { title }?.let(onMessage)
+                    }
+                },
+                onOpenChat = chatsNow.firstOrNull { it.id == item.chatId }?.let { chat -> { onOpenChat(chat) } },
+                onDismiss = { held = null },
+                asMenu = true,
+                onOpenDetails = { detail = item to title },
+            )
+        }
         detail?.let { (item, title) ->
             MediaDetailOpened(
                 item = item,
@@ -514,6 +539,7 @@ fun BrowseScreen(
                 },
                 onOpenChat = chatsNow.firstOrNull { it.id == item.chatId }?.let { chat -> { onOpenChat(chat) } },
                 onDismiss = { detail = null },
+                onOpenItem = { other -> detail = other to (chatsNow.firstOrNull { it.id == other.chatId }?.title ?: "") },
             )
         }
     }
@@ -611,7 +637,6 @@ fun BrowseScreen(
     } else {
         Row(Modifier.fillMaxSize()) {
             NavRail(
-                account = (state as? UiState.Content)?.value?.account ?: account,
                 selected = tab,
                 sections = sections,
                 favoriteCount = favorites.size,
@@ -624,7 +649,7 @@ fun BrowseScreen(
                 onUpdate = onUpdate,
             )
 
-            Column(Modifier.fillMaxSize().padding(end = Tv.SafeH)) { pane() }
+            Column(Modifier.fillMaxSize().padding(end = Tv.SafeH).keepsVerticalFocus()) { pane() }
         }
     }
 
@@ -992,8 +1017,10 @@ private fun ContinueTile(
                 style = MaterialTheme.typography.titleMedium,
                 color = Tone.text,
                 // Two lines, as everywhere else a release name is shown: one line cuts the title
-                // before the resolution, which is the part that tells two of them apart.
+                // before the resolution, which is the part that tells two of them apart. Always
+                // two, so a short name keeps the detail lines across the grid level.
                 maxLines = 2,
+                minLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.marqueeWhen(focused),
             )
@@ -1025,7 +1052,6 @@ private fun ContinueTile(
         Column(
             modifier
                 .fillMaxWidth()
-                .focusScale(focused)
                 .clip(RoundedCornerShape(Corner.Medium))
                 .background(if (focused) Tone.surfaceHigh else Tone.surface)
                 .border(Focus.Edge, border, RoundedCornerShape(Corner.Medium))
@@ -1220,7 +1246,6 @@ private val THUMBNAIL_HEIGHT = 54.dp
 
 @Composable
 private fun NavRail(
-    account: Account?,
     selected: BrowseSection,
     sections: List<BrowseSection>,
     favoriteCount: Int,
@@ -1241,6 +1266,7 @@ private fun NavRail(
             // 180dp of room for the items, whatever the overscan margin takes on the left.
             .width(180.dp + Tv.SafeH - RAIL_INSET)
             .fillMaxHeight()
+            .keepsVerticalFocus()
             .background(Tone.surface)
             // The rail is the leftmost thing on the screen, so it alone decides whether the app
             // clears the TV's overscan crop. Its children each add [RAIL_INSET] of their own, so
@@ -1254,12 +1280,8 @@ private fun NavRail(
     ) {
         RailBrand()
         Spacer(Modifier.height(14.dp))
-        AccountBadge(account)
-        Spacer(Modifier.height(10.dp))
 
-        val context = LocalContext.current
-        val settings = remember(context) { SettingsStore(context) }
-        val groups = rememberNavGroups(settings, current = navGroupOf(selected))
+        val groups = rememberNavGroups(current = navGroupOf(selected))
 
         // Scrolls, and takes whatever height is left after the bottom cluster: Settings and the
         // update item. A plain Column clips what it cannot fit, so with every group open and a
@@ -1272,13 +1294,15 @@ private fun NavRail(
                 .weight(1f)
                 .verticalScroll(rememberScrollState()),
         ) {
-            // Watch, Chats and the account's folders, each folding under a heading OK toggles.
+            // Watch with no heading, then Chats and the account's folders, each folding under a
+            // heading OK toggles.
             // The grouping is the shared one in :ui, so the phone's drawer and the desktop's side
             // bar fold the same entries the same way. A folded group's rows are not composed, so
             // D-pad down from its heading goes straight on to the next heading.
-            navGroups(sections).forEach { (group, entries) ->
+            // Downloads is pinned at the foot beside Settings, not folded into Watch.
+            navGroups(sections, withDownloads = false).forEach { (group, entries) ->
                 val open = groups.isOpen(group)
-                RailGroupHeading(
+                if (group.headed) RailGroupHeading(
                     label = group.label,
                     open = open,
                     toggleable = groups.canToggle(group),
@@ -1325,6 +1349,16 @@ private fun NavRail(
         HorizontalDivider(
             modifier = Modifier.padding(start = RAIL_INSET, end = 4.dp, top = 6.dp, bottom = 6.dp),
             color = Tone.outline.copy(alpha = 0.5f),
+        )
+        RailItem(
+            label = s.navDownloads,
+            icon = TmIcons.Download,
+            // How many videos are coming down right now. A download outlives the screen it was
+            // started from, and a television has no notification shade to say one is still
+            // running, so this mark is the only place that says it at all.
+            badge = downloadCount.takeIf { it > 0 }?.toString(),
+            selected = false,
+            onClick = onOpenDownloads,
         )
         if (updateVersion != null) {
             RailItem(
@@ -1447,43 +1481,23 @@ private fun RailGroupHeading(
     }
 }
 
+/**
+ * The signed in account's picture, in the heading's top right corner on a television.
+ *
+ * A label, not a control: the rail's account row it replaces opened nothing either, and signing
+ * out lives in Settings. Telegram's picture when there is one, the initials of the name while it
+ * loads or when there is none.
+ */
 @Composable
-private fun AccountBadge(account: Account?) {
-    val s = LocalStrings.current
-    Row(
-        Modifier.padding(start = RAIL_INSET),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(Avatar.Compact).clip(CircleShape).background(Tone.surfaceHigh)) {
-            if (account != null) {
-                MediaPreview(
-                    miniThumbnail = account.miniThumbnail,
-                    thumbnailFileId = account.photoFileId,
-                    fallbackLabel = account.name,
-                    modifier = Modifier.fillMaxSize().clip(CircleShape),
-                )
-            }
-        }
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                // Not "Signing in…": the viewer is already signed in by the time this draws, and
-                // only the name and picture are still on their way.
-                account?.name ?: s.browseYourAccount,
-                style = MaterialTheme.typography.titleMedium,
-                color = Tone.text,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+private fun AccountPicture(account: Account?) {
+    Box(Modifier.size(Avatar.Compact).clip(CircleShape).background(Tone.surfaceHigh)) {
+        if (account != null) {
+            MediaPreview(
+                miniThumbnail = account.miniThumbnail,
+                thumbnailFileId = account.photoFileId,
+                fallbackLabel = account.name,
+                modifier = Modifier.fillMaxSize().clip(CircleShape),
             )
-            if (!account?.username.isNullOrBlank()) {
-                Text(
-                    "@${account.username}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Tone.muted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
         }
     }
 }
@@ -1669,6 +1683,7 @@ private fun TabHeading(
     tab: BrowseSection,
     count: Int,
     insets: BrowseInsets,
+    account: Account?,
     action: @Composable () -> Unit = {},
 ) {
     // The number always carries its unit, and the two video tabs count videos rather than chats.
@@ -1708,23 +1723,25 @@ private fun TabHeading(
         }
         if (!isTouch()) {
             Spacer(Modifier.width(20.dp))
-            TvStatusCluster()
+            TvStatusCluster(account)
         }
     }
 }
 
 /**
- * The clock, the date and the app's mark, in the top right corner of the television.
+ * The clock, the date and the account's picture, in the top right corner of the television.
  *
  * A phone has a status bar, so an app that drew its own would draw the time twice. A television
  * has none, and this app fills the panel with the system bars hidden, so the clock has to come
- * from here. The app mark beside it says which app is talking on a shared screen.
+ * from here. The picture beside it says whose Telegram this is on a shared screen. It used to be
+ * the app's mark, which the top of the rail already shows, and the account sat in the rail under
+ * it: the mark twice and the account once, where now each shows once.
  *
  * The tick is aligned to the wall clock rather than run every minute from whenever the screen
  * happened to open, so the minute changes when the minute changes.
  */
 @Composable
-private fun TvStatusCluster() {
+private fun TvStatusCluster(account: Account?) {
     var now by remember { mutableStateOf(java.util.Date()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -1758,7 +1775,7 @@ private fun TvStatusCluster() {
             )
         }
         Spacer(Modifier.width(14.dp))
-        AppMark(size = 36.dp)
+        AccountPicture(account)
     }
 }
 
@@ -1806,9 +1823,6 @@ private fun SearchRow(
                 onQuery("")
             }
         }
-        // Beside the field rather than under it: a row of its own would push the list down a
-        // whole line on a 540 dp television for a choice made once per search.
-        SearchScopeToggle(scope = scope, onChange = onScope)
     }
 }
 
@@ -1923,7 +1937,7 @@ private fun ChatSection(
                         )
                         LazyRow(
                             // Drawn [clearance] past every side and padded back in by as much, so
-                            // a grown tile keeps its border and the strip still lines up under its
+                            // a focused tile keeps its border and the strip still lines up under its
                             // heading and sits where it did.
                             modifier = Modifier.bleed(clearance),
                             contentPadding = PaddingValues(clearance),
@@ -2077,7 +2091,6 @@ private fun ChatTile(
         Column(
             modifier
                 .height(RECENT_TILE_HEIGHT)
-                .focusScale(focused)
                 .clip(RoundedCornerShape(Corner.Large))
                 .background(if (focused) Tone.surfaceHigh else Tone.surface)
                 .border(
@@ -2538,6 +2551,22 @@ private val TOUCH_AVATAR = Avatar.List
  * A television crops its outermost few percent, so the TV figures are overscan clearance and have
  * nothing to do with taste. A phone crops nothing, so it spends far less of its width on margins.
  */
+/**
+ * Up and Down stay inside: only Left and Right cross between the rail and the listing.
+ *
+ * The two sit side by side, so when Up or Down has nowhere left to go in one of them, the focus
+ * search finds the nearest thing in the other. Down from the last Home row landed on Settings at
+ * the foot of the rail, and Up from the rail's first heading landed in the search field. At an end
+ * the remote now stays put, as it does at the end of any list.
+ */
+private fun Modifier.keepsVerticalFocus(): Modifier = focusProperties {
+    onExit = {
+        if (requestedFocusDirection == FocusDirection.Up || requestedFocusDirection == FocusDirection.Down) {
+            cancelFocusChange()
+        }
+    }
+}.focusGroup()
+
 /**
  * Grows a lazy row by [by] on every side without taking any more room, so it may draw that far past
  * the space it was given. Paired with a content padding of the same size.

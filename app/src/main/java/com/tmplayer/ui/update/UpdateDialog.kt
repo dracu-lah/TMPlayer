@@ -171,7 +171,7 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                 Spacer(Modifier.width(14.dp))
                 Text(
                     title(state, offer),
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.headlineSmall,
                     color = Tone.text,
                 )
             }

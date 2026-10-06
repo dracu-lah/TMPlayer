@@ -328,8 +328,10 @@ fun BigEmpty(
                 color = muted,
                 textAlign = TextAlign.Center,
                 // A sentence that needs two lines breaks near the middle rather than running the
-                // full width of a television and leaving three words underneath.
-                modifier = Modifier.widthIn(max = 400.dp),
+                // full width of a television and leaving three words underneath. Wider on a
+                // television, where 400 dp at this size broke the longer messages into three
+                // lines and pushed the last one off a screen that cannot scroll to it.
+                modifier = Modifier.widthIn(max = if (touch) 400.dp else 560.dp),
             )
             if (actionLabel != null && onAction != null) {
                 val focus = remember { FocusRequester() }

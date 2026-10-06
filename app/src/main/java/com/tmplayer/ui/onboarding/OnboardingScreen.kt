@@ -42,6 +42,7 @@ import com.tmplayer.data.DeviceForm
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.ui.components.TmButton
 import com.tmplayer.ui.components.TmSecondaryButton
+import com.tmplayer.ui.components.TvChoiceRow
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.nav.BackHandler
@@ -80,6 +81,7 @@ private fun TvTour(settings: SettingsStore, tour: TourState, onDone: () -> Unit)
     val next = remember { FocusRequester() }
 
     BackHandler(enabled = !tour.isFirst || tour.canLeave) { if (!tour.back()) onDone() }
+    PostersDefaultOn(tour.firstRun)
 
     Row(
         Modifier.fillMaxSize().padding(horizontal = Tv.SafeH, vertical = Tv.SafeV),
@@ -98,6 +100,7 @@ private fun TvTour(settings: SettingsStore, tour: TourState, onDone: () -> Unit)
                 Text(s.onboardingHelpTranslate, style = MaterialTheme.typography.titleSmall, color = Tone.text)
                 Text(s.onboardingHelpTranslateBody, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
             }
+            if (page == OnboardingPage.Posters) PostersSwitch(tour.firstRun)
 
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -162,37 +165,11 @@ internal fun TvLanguages(settings: SettingsStore, modifier: Modifier) {
         contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = Tv.FocusClearance),
     ) {
         items(Onboarding.languages(), key = { it.tag }) { choice ->
-            val interactions = remember { MutableInteractionSource() }
-            val focused by interactions.collectIsFocusedAsState()
-            val shape = RoundedCornerShape(Corner.Medium)
-            val title = choice.name ?: s.onboardingLanguageSystem
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-                    .clip(shape)
-                    .background(if (focused) Tone.focusFill else Tone.surface)
-                    .focusRing(focused, shape)
-                    .clickable(
-                        interactionSource = interactions,
-                        indication = null,
-                        role = Role.RadioButton,
-                    ) { scope.launch { settings.setLanguage(choice.tag) } }
-                    .padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                val ink = if (focused) Tone.onFocusFill else Tone.text
-                if (saved.equals(choice.tag, ignoreCase = true)) {
-                    Icon(Icons.Filled.Check, contentDescription = null, tint = if (focused) ink else Tone.accent, modifier = Modifier.size(22.dp))
-                } else {
-                    Spacer(Modifier.size(22.dp))
-                }
-                Spacer(Modifier.width(16.dp))
-                Text(title, style = MaterialTheme.typography.titleMedium, color = ink, modifier = Modifier.weight(1f))
-                if (choice.name == null && system != null) {
-                    Text(system, style = MaterialTheme.typography.bodyMedium, color = if (focused) ink else Tone.muted)
-                }
-            }
+            TvChoiceRow(
+                title = choice.name ?: s.onboardingLanguageSystem,
+                trailing = if (choice.name == null) system else null,
+                selected = saved.equals(choice.tag, ignoreCase = true),
+            ) { scope.launch { settings.setLanguage(choice.tag) } }
         }
     }
 }

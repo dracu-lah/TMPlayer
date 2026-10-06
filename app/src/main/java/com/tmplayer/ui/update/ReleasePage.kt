@@ -118,7 +118,8 @@ fun LinkQrDialog(url: String, what: String, onClose: () -> Unit) {
         val words: @Composable ColumnScope.() -> Unit = {
             Text(
                 s.updateOpenOnPhone(what = what),
-                style = MaterialTheme.typography.titleLarge,
+                // The heading size of every other panel the app draws (pickers, What's new, QR codes).
+                style = MaterialTheme.typography.headlineSmall,
                 color = Tone.text,
             )
             Text(

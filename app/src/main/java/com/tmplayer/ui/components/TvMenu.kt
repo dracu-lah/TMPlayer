@@ -5,7 +5,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,7 +28,6 @@ import androidx.compose.material3.MaterialTheme as M3MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text as M3Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -50,6 +49,7 @@ import com.tmplayer.ui.theme.Danger
 import com.tmplayer.ui.theme.Floating
 import com.tmplayer.ui.theme.FloatingTone
 import com.tmplayer.ui.theme.Tone
+import com.tmplayer.ui.theme.Tv
 import com.tmplayer.ui.theme.floatingBorder
 import com.tmplayer.ui.theme.floatingSurface
 import com.tmplayer.ui.theme.focusRing
@@ -69,8 +69,13 @@ data class MenuAction(
  * A television remote has no second button, so every action beyond "open it" lives behind a hold of
  * OK, which the launcher and every other TV app already train people to try.
  *
- * Nothing is selected when it opens: the hold that opened it ends in a release, and anything
- * focused would be run without being chosen. Focus sits on the heading, and Down reaches the list.
+ * The remote starts on the first line. The hold that opens it ends in a release, which the
+ * window ignores ([FloatingWindow]'s ignoreRelease), so that line is not run without being chosen.
+ * The heading stays put at the top and Close at the foot while a long list scrolls between them.
+ *
+ * It ends with Close at the bottom end ([SheetCloseButton]), as every picker and Material dialog
+ * does, which Down from the last line reaches. Close is [onClose], which is [onDismiss] unless a
+ * page of a bigger menu (the player's More) uses Back to step back a page and Close to shut it.
  */
 @Composable
 fun TvMenu(
@@ -78,9 +83,10 @@ fun TvMenu(
     actions: List<MenuAction>,
     onDismiss: () -> Unit,
     subtitle: String? = null,
+    onClose: (() -> Unit)? = onDismiss,
 ) {
     val s = LocalStrings.current
-    val heading = remember { FocusRequester() }
+    val first = remember { FocusRequester() }
     val touch = isTouch()
 
     if (touch) {
@@ -91,26 +97,22 @@ fun TvMenu(
     // This menu is opened by a hold, so OK is still down as it appears; without ignoreRelease
     // the release would choose the first action on the viewer's behalf.
     FloatingWindow(onDismiss = onDismiss, ignoreRelease = true) {
-        val panel = min(maxWidth - PhonePad.Side * 2, MENU_MAX)
+        val panel = min(maxWidth - Tv.SafeH * 2, MENU_MAX)
 
         // The phone's sheet, in the middle of the screen: the sheet's fill, edge and corner.
         Column(
             Modifier
                 .width(panel)
+                // Inside the overscan: a long menu (the player's More) otherwise ran from the top
+                // edge of the screen to the bottom, its heading and last row lost to the crop.
+                .heightIn(max = maxHeight - Tv.SafeV * 2)
                 .floatingSurface(FloatingTone.sheet)
-                // A list longer than the screen (the player's seven speeds, on a 540 dp
-                // television) scrolls, and focus moving down brings each row into view.
-                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Column(
                 Modifier
-                    .padding(start = 4.dp, bottom = 8.dp)
-                    // Focus has to live somewhere for the D-pad to work at all, so it starts
-                    // here, on something that does nothing when pressed.
-                    .focusRequester(heading)
-                    .focusable(),
+                    .fillMaxWidth()
+                    .padding(start = 4.dp, bottom = 8.dp),
             ) {
                 Text(
                     title,
@@ -132,17 +134,37 @@ fun TvMenu(
                 }
             }
 
-            actions.forEach { action -> MenuRow(action = action, touch = false) }
+            // A list longer than the screen (the player's More, on a 540 dp television) scrolls
+            // here, under the heading, and focus moving down brings each row into view.
+            Column(
+                Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+                    .padding(vertical = Tv.FocusClearance),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                actions.forEachIndexed { index, action ->
+                    MenuRow(action = action, touch = false, modifier = if (index == 0) Modifier.focusRequester(first) else Modifier)
+                }
+            }
 
-            Text(
-                s.tvMenuHint,
-                style = MaterialTheme.typography.bodySmall,
-                color = Tone.muted,
-                modifier = Modifier.padding(start = 4.dp, top = 8.dp),
-            )
+            // The hint and Close share the last line: Close at the end, where a Material dialog
+            // keeps its way out, one Down from the last action.
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    s.tvMenuHint,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Tone.muted,
+                    modifier = Modifier.weight(1f).padding(start = 4.dp, end = 12.dp),
+                )
+                if (onClose != null) SheetCloseButton(onClose)
+            }
         }
 
-        LaunchedEffect(Unit) { runCatching { heading.requestFocus() } }
+        FocusOnOpen(first)
     }
 }
 

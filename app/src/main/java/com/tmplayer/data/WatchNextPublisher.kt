@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.media.tv.TvContract
 import android.net.Uri
+import android.util.Log
 import com.tmplayer.MainActivity
 import com.tmplayer.R
 
@@ -21,6 +22,8 @@ import com.tmplayer.R
  * Runs on a background thread: every call is a content provider round trip.
  */
 object WatchNextPublisher {
+
+    private const val TAG = "WatchNext"
 
     /** The launch intent's action: play the video the extras describe. */
     const val ACTION_PLAY = "com.tmplayer.action.PLAY_FROM_HOME"
@@ -42,7 +45,7 @@ object WatchNextPublisher {
                     is WatchNext.Change.Remove -> existing[change.internalId]?.let { delete(context, it.id) }
                     is WatchNext.Change.Upsert -> upsert(context, change.entry, existing[change.entry.internalId])
                 }
-            }
+            }.onFailure { Log.w(TAG, "Play next row not written", it) }
         }
     }
 
@@ -104,17 +107,24 @@ object WatchNextPublisher {
     private fun upsert(context: Context, entry: WatchNext.Entry, row: Row?) {
         // Taken out of the row by the viewer on the home screen: that is an answer, and putting
         // it back on the next stop would be arguing with it.
-        if (row != null && !row.browsable) return
+        if (row != null && !row.browsable) {
+            Log.i(TAG, "Play next: row ${row.id} was removed on the home screen, left out")
+            return
+        }
         val values = values(context, entry)
         if (row == null) {
-            context.contentResolver.insert(TvContract.WatchNextPrograms.CONTENT_URI, values)
+            // The only trace the row leaves on this side: the provider shows each app its own
+            // entries alone, so neither adb nor the launcher's settings can say whether one went in.
+            val uri = context.contentResolver.insert(TvContract.WatchNextPrograms.CONTENT_URI, values)
+            Log.i(TAG, "Play next ${entry.kind}: ${uri ?: "refused"}")
         } else {
-            context.contentResolver.update(
+            val updated = context.contentResolver.update(
                 ContentUris.withAppendedId(TvContract.WatchNextPrograms.CONTENT_URI, row.id),
                 values,
                 null,
                 null,
             )
+            Log.i(TAG, "Play next ${entry.kind}: row ${row.id} updated ($updated)")
         }
     }
 

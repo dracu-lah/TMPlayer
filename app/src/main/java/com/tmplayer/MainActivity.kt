@@ -28,6 +28,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import androidx.compose.ui.Modifier
@@ -94,6 +96,7 @@ import com.tmplayer.ui.update.UpdateDialog
 import com.tmplayer.ui.update.LinkQrDialog
 import com.tmplayer.ui.update.openLink
 import com.tmplayer.ui.settings.AboutScreen
+import com.tmplayer.ui.settings.SettingsPage
 import com.tmplayer.ui.settings.SettingsScreen
 import com.tmplayer.ui.settings.SupportCard
 import com.tmplayer.ui.settings.LanguageDialog
@@ -282,6 +285,18 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Where the chat list and Home keep their view models: the process, not the activity.
+ *
+ * Both hold what Telegram took seconds to answer, and neither has anything to do with which
+ * activity instance draws it. Owned by the activity they died with it whenever the system finished
+ * the activity behind the player, so Back from a video opened on a skeleton and the first-visit
+ * tip. A sign out still empties them, through the auth effect in [Root].
+ */
+private object ShellViewModels : ViewModelStoreOwner {
+    override val viewModelStore = ViewModelStore()
+}
+
 @Composable
 @SuppressLint("UnsafeOptInUsageError")
 private fun Root() {
@@ -422,8 +437,12 @@ private fun Root() {
     }
 
     // Given the settings store so the chat list can paint from the last sync's snapshot before
-    // TDLib has finished opening its database.
+    // TDLib has finished opening its database. Held by the process rather than the activity, as is
+    // Home below: the system destroys this activity behind the player whenever it is short of
+    // memory (and always, with "Don't keep activities" on), and an activity-owned list came back
+    // from the player as a first visit, skeleton, tip and all, then refetched every Home row.
     val chatsViewModel: ChatListViewModel = viewModel(
+        viewModelStoreOwner = ShellViewModels,
         factory = object : androidx.lifecycle.ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
@@ -434,12 +453,21 @@ private fun Root() {
     // Home's rows, fetched a row at a time as they come on screen, with the size limits a chat's
     // grid uses.
     val homeViewModel: HomeViewModel = viewModel(
+        viewModelStoreOwner = ShellViewModels,
         factory = object : androidx.lifecycle.ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
                 HomeViewModel(sizeLimits = { settings.minSizeBytes.first() to settings.maxSizeBytes.first() }) as T
         },
     )
+    // Home keeps what it fetched, badges included, so its Cached badges are read off the disk again
+    // when the shell is back in front (the player, another activity, may have evicted the last
+    // cached video to make room) and whenever the cache record changes, as Clear cache does.
+    val cacheRecord by settings.cachedVideos.collectAsStateWithLifecycle(initialValue = null)
+    val shellInFront = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
+    LaunchedEffect(shellInFront, cacheRecord) {
+        if (shellInFront) homeViewModel.refreshLocalAvailability()
+    }
     val accountHeader by chatsViewModel.accountHeader.collectAsStateWithLifecycle()
     val chats = (chatsState as? UiState.Content)?.value?.chats.orEmpty()
 
@@ -501,6 +529,9 @@ private fun Root() {
     // Whether the Downloads screen opens on its cached videos, which is how Settings' Cached
     // videos row reaches the list of them.
     var downloadsOnCached by remember { mutableStateOf(false) }
+    // The Settings page open, kept here because Settings itself is gone while About or the cached
+    // videos are showing, and coming back from either should land on the page that led there.
+    var settingsPage by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
 
     // A launch that asked for a particular screen, which is how the download notification opens
     // the list it is about. Cleared as it is acted on, so it happens once per press.
@@ -1045,12 +1076,16 @@ private fun Root() {
                     // Only if it has had time to go stale. Settings cannot change the chat list,
                     // so a full re-sync on the way out would be work nothing asked for.
                     chatsViewModel.refreshIfStale()
+                    settingsPage = null
                     screen = Screen.Chats
                 }
                 BackHandler(onBack = leaveSettings)
                 SettingsScreen(
                     chats = chats,
-                    onLoggedOut = { screen = Screen.Chats },
+                    onLoggedOut = {
+                        settingsPage = null
+                        screen = Screen.Chats
+                    },
                     onBack = leaveSettings,
                     onOpenCachedVideos = {
                         downloadsCameFrom = Screen.Settings
@@ -1058,6 +1093,8 @@ private fun Root() {
                         screen = Screen.Downloads
                     },
                     onOpenAbout = { screen = Screen.About },
+                    initialPage = settingsPage,
+                    onPageChange = { settingsPage = it },
                 )
             }
 

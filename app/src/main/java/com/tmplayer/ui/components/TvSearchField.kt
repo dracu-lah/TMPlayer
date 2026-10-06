@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -36,6 +37,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -83,11 +90,8 @@ fun TvSearchField(
     val focused by interactions.collectIsFocusedAsState()
     val field = remember { FocusRequester() }
     val box = remember { FocusRequester() }
-    // Only ever true once the keyboard has actually been opened. Without it the box would claim
-    // focus from the rest of the screen the first time it is composed, which is not the search
-    // field's to take.
-    var wasEditing by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     val active = focused || editing
 
@@ -95,15 +99,15 @@ fun TvSearchField(
         if (editRequests > 0) editing = true
     }
 
-    // Leaving the keyboard removes the text field from composition, and focus goes with it: press
-    // Back and then Down and the remote is nowhere. Focus is handed back to the box the viewer
-    // pressed to get here.
-    LaunchedEffect(editing) {
-        if (editing) {
-            wasEditing = true
-        } else if (wasEditing) {
-            runCatching { box.requestFocus() }
-        }
+    // Focus must never be left on a node that is about to leave composition. When it is, Compose
+    // clears focus from the whole window, and the window hands it to the first thing on screen:
+    // the top of the side rail. So the box stays focusable while the text field is up (the
+    // field's focus sits inside it), and on the way out the box takes focus back before the field
+    // is removed: press Back and then Down and the remote carries on from here.
+    fun stopEditing() {
+        keyboard?.hide()
+        runCatching { box.requestFocus() }
+        editing = false
     }
 
     Row(
@@ -119,16 +123,10 @@ fun TvSearchField(
                 color = if (active) Tone.accent else Tone.outline,
                 shape = CircleShape,
             )
-            .then(
-                if (editing) {
-                    Modifier
-                } else {
-                    Modifier.clickable(
-                        interactionSource = interactions,
-                        indication = null,
-                    ) { editing = true }
-                },
-            )
+            .clickable(
+                interactionSource = interactions,
+                indication = null,
+            ) { editing = true }
             .padding(horizontal = 22.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -147,14 +145,43 @@ fun TvSearchField(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(
                         onSearch = {
-                            keyboard?.hide()
-                            editing = false
+                            stopEditing()
                             onSubmit?.invoke()
                         },
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(field)
+                        // While the TV keyboard is up it takes the remote's keys before the app
+                        // sees them, so a key that arrives here means the keyboard is down (Back
+                        // closed it). A text field keeps the D-pad for its cursor, which in an
+                        // empty single line field goes nowhere: focus was trapped, with Back and
+                        // OK eaten too. The arrows leave the field, OK brings the keyboard back
+                        // and Back ends editing.
+                        .onPreviewKeyEvent { event ->
+                            val direction = when (event.key) {
+                                Key.DirectionUp -> FocusDirection.Up
+                                Key.DirectionDown -> FocusDirection.Down
+                                Key.DirectionLeft -> FocusDirection.Left
+                                Key.DirectionRight -> FocusDirection.Right
+                                else -> null
+                            }
+                            when {
+                                direction != null -> {
+                                    if (event.type == KeyEventType.KeyDown) focusManager.moveFocus(direction)
+                                    true
+                                }
+                                event.key == Key.Back -> {
+                                    if (event.type == KeyEventType.KeyUp) stopEditing()
+                                    true
+                                }
+                                event.key == Key.DirectionCenter -> {
+                                    if (event.type == KeyEventType.KeyUp) keyboard?.show()
+                                    true
+                                }
+                                else -> false
+                            }
+                        }
                         .onFocusChanged { state ->
                             // onFocusChanged fires once with isFocused = false as the field is
                             // first composed, before the focus request lands. Acting on that
@@ -180,10 +207,7 @@ fun TvSearchField(
                     runCatching { field.requestFocus() }
                     keyboard?.show()
                 }
-                BackHandler {
-                    keyboard?.hide()
-                    editing = false
-                }
+                BackHandler { stopEditing() }
             } else {
                 Text(
                     value.ifEmpty { placeholder },

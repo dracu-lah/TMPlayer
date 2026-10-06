@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
@@ -68,6 +69,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -92,8 +94,8 @@ import com.tmplayer.data.start
 import com.tmplayer.i18n.L
 import com.tmplayer.i18n.Translator
 import com.tmplayer.ui.components.BigEmpty
-import com.tmplayer.ui.components.TmAlertDialog
 import com.tmplayer.ui.components.TmIcons
+import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.i18n.LocalStrings
@@ -550,7 +552,7 @@ fun DownloadsScreen(
                     interactionSource = ongoingFocus,
                     modifier = Modifier.tvFocusRing(ongoingFocus, RectangleShape),
                     text = {
-                        Text(if (active.isEmpty()) L.downloadsTabDownloading else L.downloadsTabDownloadingCount(count = active.size))
+                        TabLabel(if (active.isEmpty()) L.downloadsTabDownloading else L.downloadsTabDownloadingCount(count = active.size))
                     },
                 )
                 val completedFocus = remember { MutableInteractionSource() }
@@ -560,7 +562,7 @@ fun DownloadsScreen(
                     interactionSource = completedFocus,
                     modifier = Modifier.tvFocusRing(completedFocus, RectangleShape),
                     text = {
-                        Text(if (rows.isEmpty()) L.downloadsTabDownloaded else L.downloadsTabDownloadedCount(count = rows.size))
+                        TabLabel(if (rows.isEmpty()) L.downloadsTabDownloaded else L.downloadsTabDownloadedCount(count = rows.size))
                     },
                 )
                 val cachedFocus = remember { MutableInteractionSource() }
@@ -570,11 +572,7 @@ fun DownloadsScreen(
                     interactionSource = cachedFocus,
                     modifier = Modifier.tvFocusRing(cachedFocus, RectangleShape),
                     text = {
-                        Text(
-                            if (cachedRows.isEmpty()) L.downloadsTabCached else L.downloadsTabCachedCount(count = cachedRows.size),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        TabLabel(if (cachedRows.isEmpty()) L.downloadsTabCached else L.downloadsTabCachedCount(count = cachedRows.size))
                     },
                 )
             }
@@ -623,7 +621,7 @@ fun DownloadsScreen(
                         item {
                             // Given a height of its own: BigEmpty fills what it is given, and
                             // inside a LazyColumn that is nothing, so it would collapse to a line.
-                            Box(Modifier.fillParentMaxHeight(0.7f)) {
+                            Box(emptyStateHeight(0.7f)) {
                                 BigEmpty(
                                     L.downloadsEmptyDownloading,
                                     icon = TmIcons.Download,
@@ -657,7 +655,7 @@ fun DownloadsScreen(
                     }
                     if (counted && cachedRows.isEmpty()) {
                         item {
-                            Box(Modifier.fillParentMaxHeight(0.6f)) {
+                            Box(emptyStateHeight(0.6f)) {
                                 BigEmpty(
                                     L.downloadsEmptyCached,
                                     icon = TmIcons.Download,
@@ -704,7 +702,7 @@ fun DownloadsScreen(
                 }
                 if (counted && shown.isEmpty()) {
                     item {
-                        Box(Modifier.fillParentMaxHeight(0.6f)) {
+                        Box(emptyStateHeight(0.6f)) {
                             BigEmpty(
                                 L.downloadsEmptyDownloaded(folder = LegacyDownloads.FOLDER),
                                 icon = TmIcons.Download,
@@ -716,84 +714,59 @@ fun DownloadsScreen(
         }
     }
 
+    // The app's one confirmation (TvConfirm): Material's dialog on a phone, the remote's panel
+    // with Cancel focused on a television, where a stock dialog drew in a look of its own.
     confirmingDelete?.let { row ->
-        TmAlertDialog(
-            onDismissRequest = { confirmingDelete = null },
-            title = {
-                Text(if (row.cached) L.downloadsDeleteCachedTitle else L.downloadsDeleteOneTitle)
+        TvConfirm(
+            title = if (row.cached) L.downloadsDeleteCachedTitle else L.downloadsDeleteOneTitle,
+            message = if (row.cached) {
+                L.downloadsDeleteCachedBody(title = row.title, size = Translator.messages.formatter.bytes(row.bytes))
+            } else {
+                L.downloadsDeleteOneBody(title = row.title, size = Translator.messages.formatter.bytes(row.bytes))
             },
-            text = {
-                Text(
-                    if (row.cached) {
-                        L.downloadsDeleteCachedBody(title = row.title, size = Translator.messages.formatter.bytes(row.bytes))
-                    } else {
-                        L.downloadsDeleteOneBody(title = row.title, size = Translator.messages.formatter.bytes(row.bytes))
-                    },
-                )
+            confirmLabel = L.commonDelete,
+            cancelLabel = L.downloadsKeepIt,
+            onConfirm = {
+                delete(row)
+                confirmingDelete = null
             },
-            confirmButton = {
-                TextAction(L.commonDelete) {
-                    delete(row)
-                    confirmingDelete = null
-                }
-            },
-            dismissButton = {
-                TextAction(L.downloadsKeepIt) { confirmingDelete = null }
-            },
+            onDismiss = { confirmingDelete = null },
         )
     }
 
     if (confirmingDeleteMany) {
-        TmAlertDialog(
-            onDismissRequest = { confirmingDeleteMany = false },
-            title = {
-                Text(
-                    L.downloadsDeleteManyTitle(count = chosen.size),
-                )
+        TvConfirm(
+            title = L.downloadsDeleteManyTitle(count = chosen.size),
+            message = L.downloadsDeleteManyBody(size = Translator.messages.formatter.bytes(chosen.sumOf { it.bytes })),
+            confirmLabel = L.commonDelete,
+            cancelLabel = L.downloadsKeepThem,
+            onConfirm = {
+                confirmingDeleteMany = false
+                deleteMany(chosen)
             },
-            text = {
-                Text(
-                    L.downloadsDeleteManyBody(size = Translator.messages.formatter.bytes(chosen.sumOf { it.bytes })),
-                )
-            },
-            confirmButton = {
-                TextAction(L.commonDelete) {
-                    confirmingDeleteMany = false
-                    deleteMany(chosen)
-                }
-            },
-            dismissButton = {
-                TextAction(L.downloadsKeepThem) { confirmingDeleteMany = false }
-            },
+            onDismiss = { confirmingDeleteMany = false },
         )
     }
 
     if (confirmingClearAll) {
-        TmAlertDialog(
-            onDismissRequest = { confirmingClearAll = false },
-            title = { Text(L.downloadsDeleteAllTitle) },
-            text = {
-                // The rows, and only the rows: the figure quoted here has to be what this button
-                // will actually delete. Cache and previews are counted and cleared in Settings.
-                val freed = rows.sumOf { it.bytes }
-                Text(
-                    L.downloadsDeleteAllBody(count = rows.size, size = Translator.messages.formatter.bytes(freed)),
-                )
-            },
-            confirmButton = {
-                TextAction(L.downloadsDeleteAll) {
-                    confirmingClearAll = false
-                    scope.launch {
-                        // The downloads, one at a time, and nothing else. Each is only forgotten
-                        // once its bytes have actually gone.
-                        for (row in rows) removeOne(row)
-                        refresh(history)
-                    }
+        // The rows, and only the rows: the figure quoted here has to be what this button will
+        // actually delete. Cache and previews are counted and cleared in Settings.
+        val freed = rows.sumOf { it.bytes }
+        TvConfirm(
+            title = L.downloadsDeleteAllTitle,
+            message = L.downloadsDeleteAllBody(count = rows.size, size = Translator.messages.formatter.bytes(freed)),
+            confirmLabel = L.downloadsDeleteAll,
+            cancelLabel = L.downloadsKeepThem,
+            onConfirm = {
+                confirmingClearAll = false
+                scope.launch {
+                    // The downloads, one at a time, and nothing else. Each is only forgotten
+                    // once its bytes have actually gone.
+                    for (row in rows) removeOne(row)
+                    refresh(history)
                 }
             },
-            dismissButton = {
-                TextAction(L.downloadsKeepThem) { confirmingClearAll = false }
-            },
+            onDismiss = { confirmingClearAll = false },
         )
     }
 }
@@ -1153,7 +1126,8 @@ private fun DownloadCard(
         row.chatTitle.ifBlank { null },
         // A part-loaded file still occupies its bytes, and that is the row a viewer looking for
         // space is most likely to want gone.
-        if (row.partial) s.downloadsPartDownloaded else null,
+        // A cached video was never asked for as a download, so it is cached, not downloaded.
+        if (row.partial) (if (row.cached) s.downloadsPartCached else s.downloadsPartDownloaded) else null,
         if (row.missing) s.downloadsFileMissing else null,
     ).joinToString(DOT)
 
@@ -1342,6 +1316,27 @@ private fun ActiveDownloadCard(
             )
         }
     }
+}
+
+/**
+ * The height an empty tab's message is given. A phone's share of the screen centres it in the
+ * space under the storage card. A television's would not fit: the card and the switch already take
+ * most of a 540 dp screen, so a share of the whole list put the message's last line under the
+ * bottom edge, and with nothing focusable down there the remote could never scroll to it. There
+ * the message takes only the room it needs, straight under the switch.
+ */
+@Composable
+private fun LazyItemScope.emptyStateHeight(fraction: Float): Modifier =
+    if (isTouch()) Modifier.fillParentMaxHeight(fraction) else Modifier.padding(top = 8.dp)
+
+/**
+ * A tab's name, on two lines when it needs them. Three fixed tabs share a phone's width, and
+ * "Cached from playback" with its count does not fit a third of it on one line, so it was cut to
+ * "Cached from ..." with the half that says what the tab holds missing.
+ */
+@Composable
+private fun TabLabel(text: String) {
+    Text(text, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
 }
 
 /** The three tabs, as indices, because that is what [TabRow] counts in. */

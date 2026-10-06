@@ -3,6 +3,7 @@ package com.tmplayer.ui.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -136,7 +137,8 @@ fun TvConfirm(
                     tint = if (destructive) Danger else Tone.accent,
                     modifier = Modifier.size(28.dp),
                 )
-                Text(title, style = MaterialTheme.typography.titleLarge, color = Tone.text)
+                // A Material dialog's headline, as the pickers' (ChoiceSheet) is.
+                Text(title, style = MaterialTheme.typography.headlineSmall, color = Tone.text)
             }
             Text(message, style = MaterialTheme.typography.bodyMedium, color = Tone.text)
             if (detail != null) {
@@ -145,10 +147,11 @@ fun TvConfirm(
             extra?.invoke()
 
             // Cancel is the quiet one and confirm the loud one, stated by which button is used
-            // rather than by a colour table each caller passes in.
+            // rather than by a colour table each caller passes in. At the bottom end, where a
+            // Material dialog keeps its actions and the pickers keep Close.
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             ) {
                 TmSecondaryButton(
                     onClick = onDismiss,

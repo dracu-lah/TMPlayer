@@ -1,7 +1,6 @@
 package com.tmplayer.ui.browse
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -88,6 +87,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -155,16 +155,18 @@ import com.tmplayer.data.isSponsoredTextFullyVisible
 import com.tmplayer.data.placeSponsored
 import com.tmplayer.data.start
 import com.tmplayer.i18n.L
+import com.tmplayer.ui.components.ChoiceLine
+import com.tmplayer.ui.components.ChoiceList
+import com.tmplayer.ui.components.ChoiceSheet
 import com.tmplayer.ui.components.ConnectionNotice
+import com.tmplayer.ui.components.FocusOnOpen
 import com.tmplayer.ui.components.MediaGridSkeleton
 import com.tmplayer.ui.components.MediaPreview
-import com.tmplayer.ui.components.MenuAction
 import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.components.StateScaffold
 import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.TmSecondaryButton
 import com.tmplayer.ui.components.TvConfirm
-import com.tmplayer.ui.components.TvMenu
 import com.tmplayer.ui.components.TvSearchField
 import com.tmplayer.ui.components.WatchedBadge
 import com.tmplayer.ui.components.holdable
@@ -179,7 +181,6 @@ import com.tmplayer.ui.theme.Focus
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
 import com.tmplayer.ui.theme.focusRing
-import com.tmplayer.ui.theme.focusScale
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -353,8 +354,10 @@ fun MediaGridScreen(
         if (offline) onOfflineAction(s.gridOfflineRefresh)
     }
 
-    // Whichever video a long press is asking about, and nothing while none is.
+    // Whichever video's page is open, and nothing while none is.
     var showingDetailsOf by remember(chatId) { mutableStateOf<MediaItem?>(null) }
+    // Whichever video a long press is asking about: the quick menu, which leads to the page.
+    var heldMenuOf by remember(chatId) { mutableStateOf<MediaItem?>(null) }
 
     // The videos ticked for one batch download, held as the items themselves rather than as ids:
     // the download is worked out and started well after the tick, by which time paging may have
@@ -366,6 +369,7 @@ fun MediaGridScreen(
     var listedItems by remember(chatId) { mutableStateOf<List<MediaItem>>(emptyList()) }
     val scope = rememberCoroutineScope()
     val settings = remember(context) { SettingsStore(context) }
+    val detailFirst by settings.detailFirst.collectAsState(initial = true)
     // "Series" folds a show's episodes into one tile; "All files" lists every video as before.
     val seriesView by settings.seriesView.collectAsStateWithLifecycle(initialValue = true)
     val watch = remember(watchProgress, watchedVideos) {
@@ -435,27 +439,50 @@ fun MediaGridScreen(
             // videos to download picks files, so both see every file on its own.
             val arranged = remember(list.items) { SeriesShelf.arrange(list.items) }
             val hasShows = arranged.any { it is ShelfEntry.Show }
-            val grouping = seriesView && hasShows && !selecting && query.isBlank()
+            // Every file on its own, episodes included: a chat lists what was posted, one by one.
+            val grouping = false
             val shelf = remember(arranged, list.items, grouping) {
                 if (grouping) arranged else list.items.map { ShelfEntry.File(it) }
             }
             val feed = remember(shelf, list.sponsored) {
                 placeSponsored(shelf, list.sponsored)
             }
-            val viewSwitch: @Composable () -> Unit = {
-                SeriesViewToggle(
-                    seriesView = seriesView,
-                    onChange = { on -> scope.launch { settings.setSeriesView(on) } },
-                    modifier = Modifier.padding(start = if (touch) 12.dp else 0.dp, top = 4.dp, bottom = 4.dp),
-                )
-            }
             LaunchedEffect(list.items) { listedItems = list.items }
             val gridState = rememberLazyGridState()
             val listState = rememberLazyListState()
             val firstItem = remember { FocusRequester() }
             val firstKey = shelf.firstOrNull()?.key
-            fun focusOf(entry: ShelfEntry): Modifier =
-                if (entry.key == firstKey) Modifier.focusRequester(firstItem) else Modifier
+            // The first row of a television's listing, by key. Focus landing there asks to be
+            // brought into view with the focus clearance above it, which scrolls the Series switch
+            // and the hidden videos note above the row a little way off the top and leaves the
+            // switch cut in half. Back to the very top instead, once that scroll has settled, so
+            // both stay whole above the row the remote is on.
+            val firstRowKeys = remember(feed, columns, layout) {
+                if (touch) {
+                    emptySet()
+                } else {
+                    feed.takeWhile { it is MediaFeedEntry.Media }
+                        .take(if (layout == CardLayout.Grid) columns else 1)
+                        .map { (it as MediaFeedEntry.Media).item.key }
+                        .toSet()
+                }
+            }
+            fun focusOf(entry: ShelfEntry): Modifier {
+                val first = if (entry.key == firstKey) Modifier.focusRequester(firstItem) else Modifier
+                if (entry.key !in firstRowKeys) return first
+                return first.onFocusChanged { state ->
+                    if (state.isFocused) {
+                        scope.launch {
+                            delay(FOCUS_SETTLE_MS)
+                            if (layout == CardLayout.Grid) {
+                                gridState.animateScrollToItem(0)
+                            } else {
+                                listState.animateScrollToItem(0)
+                            }
+                        }
+                    }
+                }
+            }
 
             // The phone's grid is compact but not captionless: smaller art than a television's
             // card, two lines of the file name under it in small type, and a hairline of a gap.
@@ -498,14 +525,6 @@ fun MediaGridScreen(
                         horizontalArrangement = Arrangement.spacedBy(gap),
                         verticalArrangement = Arrangement.spacedBy(gap),
                     ) {
-                        if (hasShows && !selecting && query.isBlank()) {
-                            item(key = "series-toggle", span = { GridItemSpan(maxLineSpan) }) { viewSwitch() }
-                        }
-                        if (list.hiddenBySize > 0 || list.hiddenSelfDestructing > 0) {
-                            item(key = "hidden-videos", span = { GridItemSpan(maxLineSpan) }) {
-                                HiddenVideosNote(list.hiddenBySize, list.hiddenSelfDestructing, viewModel::showHidden)
-                            }
-                        }
                         gridItems(
                             items = feed,
                             key = {
@@ -539,9 +558,9 @@ fun MediaGridScreen(
                                         finished = SettingsStore.progressKey(item.chatId, item.messageId) in watchedVideos,
                                         dense = dense,
                                         selected = if (selecting) selected.containsKey(item.id) else null,
-                                        onClick = { if (selecting) toggle(item) else onPlay(item) },
+                                        onClick = { if (selecting) toggle(item) else if (detailFirst) showingDetailsOf = item else onPlay(item) },
                                         onLongClick = if (selecting) null else {
-                                            { showingDetailsOf = item }
+                                            { heldMenuOf = item }
                                         },
                                         onFocused = { standingOn = item },
                                         modifier = focusOf(shelved),
@@ -567,14 +586,6 @@ fun MediaGridScreen(
                         contentPadding = padding,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        if (hasShows && !selecting && query.isBlank()) {
-                            item(key = "series-toggle") { viewSwitch() }
-                        }
-                        if (list.hiddenBySize > 0 || list.hiddenSelfDestructing > 0) {
-                            item(key = "hidden-videos") {
-                                HiddenVideosNote(list.hiddenBySize, list.hiddenSelfDestructing, viewModel::showHidden)
-                            }
-                        }
                         items(
                             items = feed,
                             key = {
@@ -602,9 +613,9 @@ fun MediaGridScreen(
                                         ],
                                         finished = SettingsStore.progressKey(item.chatId, item.messageId) in watchedVideos,
                                         selected = if (selecting) selected.containsKey(item.id) else null,
-                                        onClick = { if (selecting) toggle(item) else onPlay(item) },
+                                        onClick = { if (selecting) toggle(item) else if (detailFirst) showingDetailsOf = item else onPlay(item) },
                                         onLongClick = if (selecting) null else {
-                                            { showingDetailsOf = item }
+                                            { heldMenuOf = item }
                                         },
                                         onFocused = { standingOn = item },
                                         modifier = focusOf(shelved),
@@ -634,31 +645,58 @@ fun MediaGridScreen(
                         SeriesOpened(
                             series = series,
                             watch = watch,
-                            onPlay = onPlay,
+                            // An episode opens its page too, unless Settings says play at once.
+                            onPlay = { if (detailFirst) showingDetailsOf = it else onPlay(it) },
                             onDismiss = { openSeries = null },
-                            onLongClick = { showingDetailsOf = it },
+                            onLongClick = { heldMenuOf = it },
                         )
                     }
                 }
 
-                showingDetailsOf?.let { item ->
+                heldMenuOf?.let { item ->
+                    val key = SettingsStore.progressKey(item.chatId, item.messageId)
                     MediaDetailOpened(
                         item = item,
-                        chatTitle = chatTitle,
-                        watched = watchProgress[
-                            SettingsStore.progressKey(item.chatId, item.messageId),
-                        ],
-                        finished = SettingsStore.progressKey(item.chatId, item.messageId) in watchedVideos,
+                        chatTitle = if (item.chatId == chatId) chatTitle else "",
+                        watched = watchProgress[key],
+                        finished = key in watchedVideos,
                         onSetWatched = { onSetWatched(item, it) },
                         onPlay = { onPlay(item) },
-                        onSelectVideos = {
+                        onSelectVideos = if (item.chatId != chatId) null else ({
                             selected = mapOf(item.id to item)
                             selecting = true
-                        },
+                        }),
                         onDownload = { downloadThese(listOf(item)) },
                         onRemoved = viewModel::refreshLocalAvailability,
-                        onDismiss = { showingDetailsOf = null },
+                        onDismiss = { heldMenuOf = null },
+                        asMenu = true,
+                        onOpenDetails = { showingDetailsOf = item },
                     )
+                }
+
+                showingDetailsOf?.let { item ->
+                    // The episode list on the page shows where the viewer is in each episode.
+                    androidx.compose.runtime.CompositionLocalProvider(LocalSeriesWatch provides watch) {
+                        MediaDetailOpened(
+                            item = item,
+                            // A video from "More like this" may be from another chat, whose name this grid does not know.
+                            chatTitle = if (item.chatId == chatId) chatTitle else "",
+                            watched = watchProgress[
+                                SettingsStore.progressKey(item.chatId, item.messageId),
+                            ],
+                            finished = SettingsStore.progressKey(item.chatId, item.messageId) in watchedVideos,
+                            onSetWatched = { onSetWatched(item, it) },
+                            onPlay = { onPlay(item) },
+                            onSelectVideos = if (item.chatId != chatId) null else ({
+                                selected = mapOf(item.id to item)
+                                selecting = true
+                            }),
+                            onDownload = { downloadThese(listOf(item)) },
+                            onRemoved = viewModel::refreshLocalAvailability,
+                            onDismiss = { showingDetailsOf = null },
+                            onOpenItem = { showingDetailsOf = it },
+                        )
+                    }
                 }
 
                 // Floated over the grid; a reserved band cost a whole row on a 540dp panel.
@@ -821,25 +859,31 @@ fun MediaGridScreen(
 
     val target = reportTarget
     if (target != null && reportOptions.isNotEmpty()) {
-        // A plain List.map. Lint seems unable to resolve the option type, which lives in the KMP core
-        // module, so it falls back to this file's kotlinx.coroutines.flow.map import.
-        @SuppressLint("FlowOperatorInvokedInComposition")
-        val actions = reportOptions.map { option ->
-            MenuAction(
-                label = option.text,
-                icon = Icons.Filled.Close,
-                onSelect = { handleReport(target, option.id) },
-            )
+        // Pick one reason of several, so the pickers' panel rather than a menu of actions: the
+        // same panel as the language and subtitle pickers, with Close at the bottom end, and Back closing it.
+        val dismiss = {
+            reportTarget = null
+            reportOptions = emptyList()
         }
-        TvMenu(
+        val touch = isTouch()
+        val first = remember { FocusRequester() }
+        ChoiceSheet(
             title = reportTitle.ifBlank { s.gridReportSponsored },
-            subtitle = s.gridReportSponsoredDetail,
-            actions = actions,
-            onDismiss = {
-                reportTarget = null
-                reportOptions = emptyList()
-            },
-        )
+            note = s.gridReportSponsoredDetail,
+            onDismiss = dismiss,
+            onClose = dismiss,
+            ignoreRelease = !touch,
+        ) {
+            ChoiceList {
+                reportOptions.forEachIndexed { index, option ->
+                    ChoiceLine(
+                        title = option.text,
+                        modifier = if (index == 0) Modifier.focusRequester(first) else Modifier,
+                    ) { handleReport(target, option.id) }
+                }
+            }
+            FocusOnOpen(first)
+        }
     }
 }
 
@@ -1561,7 +1605,7 @@ private fun FullName(name: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * A media tile that marks focus with a border and a small [focusScale].
+ * A media tile that marks focus with a border.
  *
  * TV Material's card grows by 10% when focused, and a card in the outermost grid column visibly
  * ran off the screen edge when it did; 5% stays inside the overscan margin.
@@ -1619,7 +1663,7 @@ internal fun MediaCard(
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                item.title,
+                cardTitle(item),
                 style = M3MaterialTheme.typography.bodySmall,
                 color = Tone.text,
                 // Two lines, and always two: a tile that reserves the height whether or not the
@@ -1656,7 +1700,6 @@ internal fun MediaCard(
     Column(
         modifier
             .fillMaxWidth()
-            .focusScale(focused)
             .clip(RoundedCornerShape(Corner.Medium))
             .background(if (focused) Tone.surfaceHigh else Tone.surface)
             .selectionEdge(selected, RoundedCornerShape(Corner.Medium))
@@ -1688,7 +1731,7 @@ private fun MediaCardBody(
     )
     Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
         Text(
-            item.title,
+            cardTitle(item),
             style = MaterialTheme.typography.titleMedium,
             color = Tone.text,
             // Two lines, and always two: a release file name fills both, and reserving the height
@@ -2044,6 +2087,11 @@ private fun MediaArt(
  * the same one either way.
  */
 @OptIn(ExperimentalFoundationApi::class)
+/** A film posted in several copies goes by its own name on its one tile; any other file by its title. */
+@Composable
+private fun cardTitle(item: MediaItem): String =
+    if (item.versions.size > 1) remember(item.id) { SeriesShelf.filmTitle(item) } else item.title
+
 private fun Modifier.longPressable(onClick: () -> Unit, onLongClick: (() -> Unit)?): Modifier =
     if (onLongClick == null) clickable(onClick = onClick)
     else combinedClickable(onClick = onClick, onLongClick = onLongClick)
@@ -2161,10 +2209,15 @@ private const val FOCUS_SETTLE_MS = 150L
  * as TMPlayer having lost it, which is what viewers reported.
  */
 @Composable
-internal fun HiddenVideosNote(bySize: Int, selfDestructing: Int, onShowHidden: () -> Unit) {
+internal fun HiddenVideosNote(
+    bySize: Int,
+    selfDestructing: Int,
+    modifier: Modifier = Modifier,
+    onShowHidden: () -> Unit,
+) {
     val s = LocalStrings.current
     Row(
-        Modifier.padding(vertical = 4.dp),
+        modifier.padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
