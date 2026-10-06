@@ -6,6 +6,26 @@
   <project_license>GPL-3.0-or-later</project_license>
   <name>TMPlayer</name>
   <summary>Watch the videos in your Telegram chats while they download</summary>
+  <summary xml:lang="ar">شاهد الفيديوهات في محادثاتك على Telegram أثناء تنزيلها</summary>
+  <summary xml:lang="bn">ডাউনলোড হওয়ার সঙ্গে সঙ্গে আপনার Telegram চ্যাটের ভিডিও দেখুন</summary>
+  <summary xml:lang="de">Sieh dir die Videos in deinen Telegram-Chats an, während sie heruntergeladen werden</summary>
+  <summary xml:lang="es">Mira los videos de tus chats de Telegram mientras se descargan</summary>
+  <summary xml:lang="fa">ویدیوهای گفتگوهای Telegram را همان‌طور که دانلود می‌شوند ببینید</summary>
+  <summary xml:lang="fr">Regardez les vidéos de vos discussions Telegram pendant leur téléchargement</summary>
+  <summary xml:lang="hi">अपनी Telegram चैट के वीडियो डाउनलोड होते-होते देखें</summary>
+  <summary xml:lang="id">Tonton video di chat Telegram-mu selagi diunduh</summary>
+  <summary xml:lang="it">Guarda i video delle tue chat Telegram mentre si scaricano</summary>
+  <summary xml:lang="ja">Telegramのチャットの動画を、ダウンロードしながら再生</summary>
+  <summary xml:lang="ko">Telegram 채팅의 영상을 다운로드하면서 바로 시청하세요</summary>
+  <summary xml:lang="ml">നിങ്ങളുടെ Telegram ചാറ്റുകളിലെ വീഡിയോകൾ ഡൗൺലോഡ് ആകുമ്പോൾ തന്നെ കാണുക</summary>
+  <summary xml:lang="pl">Oglądaj filmy z czatów Telegrama w trakcie ich pobierania</summary>
+  <summary xml:lang="pt_BR">Assista aos vídeos dos seus chats do Telegram enquanto eles baixam</summary>
+  <summary xml:lang="ru">Смотрите видео из чатов Telegram, пока они загружаются</summary>
+  <summary xml:lang="tr">Telegram sohbetlerindeki videoları indirilirken izle</summary>
+  <summary xml:lang="uk">Дивіться відео зі своїх чатів Telegram, поки вони завантажуються</summary>
+  <summary xml:lang="vi">Xem video trong các cuộc trò chuyện Telegram của bạn khi chúng đang tải</summary>
+  <summary xml:lang="zh_CN">边下载边观看你 Telegram 聊天中的视频</summary>
+  <summary xml:lang="zh_TW">邊下載邊觀看 Telegram 聊天中的影片</summary>
   <developer id="io.github.dracu_lah">
     <name>dracu-lah</name>
   </developer>
