@@ -139,6 +139,20 @@ class LocaleFormatter internal constructor(private val messages: Messages) {
         return name.replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
     }
 
+    /**
+     * What a BCP 47 tag says beyond the language, named in the UI language: the script and the
+     * region, so `zh-Hans` and `zh-Hant` read "Simplified" and "Traditional" and `pt-BR` reads
+     * "Brazil". [trackLanguage] names only the language, and two tracks that differ here would
+     * otherwise read the same. Null when the tag carries neither.
+     */
+    fun trackLanguageVariant(code: String?): String? {
+        val raw = code?.trim()?.replace('_', '-')?.takeIf { '-' in it } ?: return null
+        val tag = Locale.forLanguageTag(raw)
+        val script = tag.script.takeIf { it.isNotEmpty() }?.let { tag.getDisplayScript(locale) }
+        val region = tag.country.takeIf { it.isNotEmpty() }?.let { tag.getDisplayCountry(locale) }
+        return listOfNotNull(script, region).filter { it.isNotBlank() }.joinToString(", ").ifBlank { null }
+    }
+
     private fun twoDigits(value: Long): String = NumberFormat.getIntegerInstance(locale).apply {
         minimumIntegerDigits = 2
         isGroupingUsed = false

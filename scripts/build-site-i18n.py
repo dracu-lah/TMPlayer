@@ -8,15 +8,15 @@ key in the markup:
   <img alt="..." data-i18n-alt="home.tv_grid_alt">
   <meta name="description" content="..." data-i18n-content="home.description">
 
-From those keys the script writes site/i18n/en.json, the catalog that langsync translates into
+From those keys the script writes site/i18n/en.json, the catalog that is translated into
 site/i18n/<tag>.json. For every language whose catalog is complete enough to publish, it then
 renders site/<lang>/<page>/index.html with the translated text, `lang`, a canonical URL of its
 own, `hreflang` alternates with `x-default`, `og:locale`, localized internal links, the language
 picker in the header and footer, and the strings app.js needs. Nothing redirects: a reader whose
 browser prefers another published language gets a quiet suggestion bar from app.js.
 
-Inline markup inside a sentence becomes a placeholder, because langsync keeps anything shaped
-like <a>...</a> verbatim and would leave its text in English. So
+Inline markup inside a sentence becomes a placeholder, because a translator handed anything shaped
+like <a>...</a> keeps it verbatim and leaves its text in English. So
 
   <p data-i18n="home.quiet">Android phones. <a href="/install/">How to install</a></p>
 
@@ -36,7 +36,8 @@ Usage:
 
 Run it after editing any localized page, app.js strings or a catalog, and commit what it writes.
 CI runs --check, so a page edited without a rebuild fails the style workflow. Translating is a
-separate step: `langsync -c langsync.site.json` fills the catalogs, and is run only by hand.
+separate step: the catalogs are filled by hand (Claude translates, people who speak the language
+correct), with the same keys and {placeholders} as en.json.
 """
 
 import argparse
@@ -71,27 +72,14 @@ PAGES = {
     "guide_no_casting": "guides/telegram-on-tv-without-casting/",
 }
 
-# The sixteen languages from docs/PLAN.md R1, in the order the picker lists them. `tag` is the
-# catalog langsync writes, `path` the URL prefix, `hreflang` what search engines are told (the
+# The languages besides English, in the order the picker lists them: Spanish (asked for in issue
+# #2) and Arabic for now, the others from docs/PLAN.md R1 to follow. `tag` is the
+# catalog file name, `path` the URL prefix, `hreflang` what search engines are told (the
 # language alone where one region stands for all, so es-CL and pt-PT readers find these too), `og`
 # the og:locale, `name` the language's name for itself, and `dir` the writing direction.
 LANGS = [
     {"tag": "es-419", "path": "es", "hreflang": "es", "og": "es_LA", "name": "Español"},
-    {"tag": "pt-BR", "path": "pt", "hreflang": "pt", "og": "pt_BR", "name": "Português"},
-    {"tag": "fr", "path": "fr", "hreflang": "fr", "og": "fr_FR", "name": "Français"},
-    {"tag": "de", "path": "de", "hreflang": "de", "og": "de_DE", "name": "Deutsch"},
-    {"tag": "it", "path": "it", "hreflang": "it", "og": "it_IT", "name": "Italiano"},
-    {"tag": "ru", "path": "ru", "hreflang": "ru", "og": "ru_RU", "name": "Русский"},
-    {"tag": "uk", "path": "uk", "hreflang": "uk", "og": "uk_UA", "name": "Українська"},
-    {"tag": "tr", "path": "tr", "hreflang": "tr", "og": "tr_TR", "name": "Türkçe"},
-    {"tag": "id", "path": "id", "hreflang": "id", "og": "id_ID", "name": "Bahasa Indonesia"},
-    {"tag": "vi", "path": "vi", "hreflang": "vi", "og": "vi_VN", "name": "Tiếng Việt"},
     {"tag": "ar", "path": "ar", "hreflang": "ar", "og": "ar_AR", "name": "العربية", "dir": "rtl"},
-    {"tag": "zh-CN", "path": "zh", "hreflang": "zh-Hans", "og": "zh_CN", "name": "简体中文"},
-    {"tag": "ja", "path": "ja", "hreflang": "ja", "og": "ja_JP", "name": "日本語"},
-    {"tag": "ko", "path": "ko", "hreflang": "ko", "og": "ko_KR", "name": "한국어"},
-    {"tag": "hi", "path": "hi", "hreflang": "hi", "og": "hi_IN", "name": "हिन्दी"},
-    {"tag": "ml", "path": "ml", "hreflang": "ml", "og": "ml_IN", "name": "മലയാളം"},
 ]
 ENGLISH = {"tag": "en", "path": "", "hreflang": "en", "og": "en_GB", "name": "English"}
 

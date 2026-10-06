@@ -1,7 +1,0 @@
-{
-  "source": "core/src/commonMain/resources/i18n/en.json",
-  "dir": "core/src/commonMain/resources/i18n",
-  "max_parallel_locales": 4,
-  "batch_size": 25,
-  "whitelist": ["TMPlayer","Telegram","Android TV","Android","TDLib","mpv","libmpv","ExoPlayer","Flatpak","AppImage","GitHub","Windows","Linux","macOS","MSI","APK","AUR","Wi-Fi","QR"]
-}

@@ -83,7 +83,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [x] CP21 P3 extract phone and TV text (7d0b42a, 783 new keys over :app and :ui, formatter switch, notifications, track picker and accessibility labels; English compared with the phone and TV emulator fixtures, en-XA shows only :core text, brand names and demo data; 1 leftover by the literal scan, the "TMPlayer" brand)
 - [x] CP22 P4 extract desktop and core text (d05ff55, 611 new keys over :desktop and :core, including the :core labels phone and TV showed in English; English compared and en-XA checked on browse, Settings, the player menu, the "?" sheet, the update popup and the sign out dialog in the desktop render test; `--self-test` reads every catalog; 0 leftovers by `scripts/i18n-leftovers.py`, protocol strings, brand names and TDLib error text are allowlisted with reasons; no tray exists on the desktop, so none was extracted)
 - [x] CP23 P5 language setting, what's new, feedback, localized metadata (94d8d4c, language resolution, the "Now in" card rule, lastSeenVersion and the issue and mailto URLs unit tested against a test-only `de` catalog; Settings row, picker, a live switch to en-XA and to Arabic, the card, What's new, Report a problem with its QR decoded, and right to left including the player overlay checked on the phone and TV emulator fixtures and the desktop render test; desktop scripts render from system fonts, so the package grew 0 bytes and no font notice was needed; `WhatsNew.VERSION` and the `whatsnew.highlight_*` keys move with each release; the PWA manifest goes to CP26 with the site; the star prompt was left out; the real first run of a new version and Android's own language page not yet seen on a device)
-- [ ] CP24 P6 translations (go-ahead given 2026-10-06, 16 languages). Setup done 2026-10-06 (empty catalogs, CONTRIBUTING, issue template); the user runs `langsync` and `langsync -c langsync.site.json` by hand, then Claude does the review pass and the issue #2 request
+- [ ] CP24 P6 translations (go-ahead given 2026-10-06, 16 languages). Cut to Spanish (es-419, issue #2) and Arabic on 2026-10-06, translated by Claude directly as langsync was too slow; the other 14 come back later, in every list `Languages.all` names. Setup done 2026-10-06 (empty catalogs, CONTRIBUTING, issue template); the user runs `langsync` and `langsync -c langsync.site.json` by hand, then Claude does the review pass and the issue #2 request
 - [ ] CP25 P7 verification, then release "Languages" on request
 - [ ] CP26 P14b site localization and the remaining site pages
 - [ ] U22 Review hi and ml; ask the issue #2 author to review es
@@ -113,7 +113,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 ## Standing rules
 
 - **Stop at every CP.** Commit, tick, push, report, wait for `/clear`.
-- **Never without the user saying so in that session:** cut a release or tag, run `langsync`, submit to a
+- **Never without the user saying so in that session:** cut a release or tag, submit to a
   store, registry or list, upload to an existing GitHub release, or post anywhere.
 - **Releases:** run the cadence guard first (`gh release list --limit 10`). 1.20.0, 1.21.0, 1.22.0 and 1.22.1
   went out on 2026-10-04 and 2026-10-05, so nothing before 2026-10-13. Write the release notes in the annotated
@@ -757,9 +757,9 @@ Permission email sent 2026-10-05. Nothing MSone-related is built (not even a lin
 ### R1 Localization
 - Catalog `core/src/commonMain/resources/i18n/<tag>.json`, `en.json` is the source of truth; keys namespaced by
   screen; ICU MessageFormat (`{count, plural, one {# video} other {# videos}}`).
-- `langsync.json` (app) and `langsync.site.json` (site) are in the repo root with do-not-translate lists;
-  `.langsync-state.json` is committed; reviewed translations are never touched by `--rewrite`. langsync sends
-  only the language part to Google (`es-419` as `es`), so Latin American wording is fixed in review.
+- Translations are written by Claude straight into the catalogs (langsync was removed 2026-10-06: Google's free
+  endpoint rate-limited it to nothing, and it cannot write Arabic's six plural forms). Product names stay in
+  Latin script, `{placeholders}` and ICU structure are kept, and `:core:jvmTest` checks both.
 - Codegen: a Gradle task in `:core` turns `en.json` into `object L` with typed accessors (`L.onboardingSkip`,
   `L.videosHidden(count)`), so a missing key fails the build.
 - `Translator`: classpath catalogs, per-key English fallback; ICU subset (`{arg}`, `plural`, `select`) with CLDR
@@ -775,7 +775,7 @@ Permission email sent 2026-10-05. Nothing MSone-related is built (not even a lin
   API 33+; `values-<tag>/strings.xml` for `app_name`; `PhoneCountries.kt` via `Locale.getDisplayCountry`.
 - Track defaults: last pick for this series, then user preference, then UI language.
 - Decisions: auto-switch to a supported system language plus a one-time "Now in Español, change in Settings"
-  card; contributions by GitHub PR on the JSON with CI `langsync --check`, no Weblate; screenshots English only;
+  card; contributions by GitHub PR on the JSON with CI `:core:jvmTest`, no Weblate; screenshots English only;
   first wave es-419 (issue author reviews), pt-BR, hi, ml (user reviews); unreviewed languages hidden.
 - **Changed 2026-10-06 (user):** ship the most common languages at once and review in use: es-419, pt-BR, fr, de, it, ru, uk, tr, id, vi, ar, zh-CN, ja, ko, hi, ml.
   Machine translations are visible in the picker (no hiding). This widens the earlier choices: CLDR plural

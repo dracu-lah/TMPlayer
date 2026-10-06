@@ -152,9 +152,13 @@ class TranslatorTest {
 
     @Test
     fun `a language with no catalog yet is all english`() {
-        val es = Translator.load("es-419")
-        assertEquals("es-419", es.tag)
-        assertEquals(Translator.english().commonRetry, es.commonRetry)
+        // `xx-empty` is a test resource: a catalog with no keys, as a new language has at first.
+        val empty = Translator.load("xx-empty")
+        assertEquals("xx-empty", empty.tag)
+        assertEquals(Translator.english().commonRetry, empty.commonRetry)
+        // The shipped catalogs are translated.
+        assertNotEquals(Translator.english().commonRetry, Translator.load("es-419").commonRetry)
+        assertNotEquals(Translator.english().commonRetry, Translator.load("ar").commonRetry)
     }
 
     @Test
@@ -175,6 +179,26 @@ class TranslatorTest {
         assertEquals("es-419", L.messages.tag)
         assertEquals("en", Translator.select("en", listOf("es-CL")))
         assertEquals("en", L.messages.tag)
+    }
+
+    @Test
+    fun `system default names the device's language, not the one picked`() {
+        // The picker's "System default" row read Arabic while Arabic was picked, and after
+        // switching back, because it asked the process locale, which Android rewrites.
+        Translator.select("ar", listOf("es-CL", "en-GB"))
+        assertEquals("ar", Translator.messages.tag)
+        assertEquals("es-419", Translator.systemDefault())
+        Translator.select("", listOf("es-CL", "en-GB"))
+        assertEquals("es-419", Translator.systemDefault())
+        // Nothing the app ships: English, as the app itself would show.
+        Translator.select("ar", listOf("xx-YY"))
+        assertEquals("en", Translator.systemDefault(fallback = listOf("ar")))
+    }
+
+    @Test
+    fun `system default falls back before the first select`() {
+        Translator.select("ar", emptyList())
+        assertEquals("es-419", Translator.systemDefault(fallback = listOf("es-MX")))
     }
 
     @Test
@@ -245,5 +269,15 @@ class TranslatorTest {
         val fr = Translator.build("fr", null, emptyMap()).formatter
         assertEquals("Anglais", fr.trackLanguage("en"))
         assertNotEquals("English", Translator.build("ja", null, emptyMap()).formatter.trackLanguage("en"))
+    }
+
+    @Test
+    fun `a track language's script and region are named apart from the language`() {
+        val en = Translator.english().formatter
+        assertEquals("Simplified", en.trackLanguageVariant("zh-Hans"))
+        assertEquals("Traditional", en.trackLanguageVariant("zh-Hant"))
+        assertEquals("Brazil", en.trackLanguageVariant("pt-BR"))
+        assertEquals(null, en.trackLanguageVariant("zh"))
+        assertEquals(null, en.trackLanguageVariant(null))
     }
 }

@@ -2,6 +2,10 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
     <loc>https://tmplayer.org/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/"/>
     <lastmod>2026-10-05</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
@@ -15,7 +19,31 @@
     </image:image>
   </url>
   <url>
+    <loc>https://tmplayer.org/es/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/"/>
+    <lastmod>2026-10-05</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/ar/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/"/>
+    <lastmod>2026-10-05</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
     <loc>https://tmplayer.org/features/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/features/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/features/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/features/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/features/"/>
     <lastmod>2026-10-06</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
@@ -65,19 +93,91 @@
     </image:image>
   </url>
   <url>
+    <loc>https://tmplayer.org/es/features/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/features/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/features/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/features/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/features/"/>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/ar/features/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/features/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/features/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/features/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/features/"/>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
     <loc>https://tmplayer.org/download/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/download/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/download/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/download/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/download/"/>
+    <lastmod>2026-10-05</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/es/download/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/download/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/download/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/download/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/download/"/>
+    <lastmod>2026-10-05</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/ar/download/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/download/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/download/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/download/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/download/"/>
     <lastmod>2026-10-05</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
     <loc>https://tmplayer.org/install/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/install/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/install/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/install/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/install/"/>
+    <lastmod>2026-10-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/es/install/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/install/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/install/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/install/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/install/"/>
+    <lastmod>2026-10-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/ar/install/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/install/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/install/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/install/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/install/"/>
     <lastmod>2026-10-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://tmplayer.org/android-tv/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/android-tv/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/android-tv/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/android-tv/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/android-tv/"/>
     <lastmod>2026-08-12</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
@@ -91,7 +191,51 @@
     </image:image>
   </url>
   <url>
+    <loc>https://tmplayer.org/es/android-tv/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/android-tv/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/android-tv/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/android-tv/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/android-tv/"/>
+    <lastmod>2026-08-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/ar/android-tv/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/android-tv/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/android-tv/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/android-tv/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/android-tv/"/>
+    <lastmod>2026-08-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://tmplayer.org/faq/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/faq/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/faq/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/faq/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/faq/"/>
+    <lastmod>2026-10-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/es/faq/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/faq/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/faq/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/faq/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/faq/"/>
+    <lastmod>2026-10-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/ar/faq/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/faq/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/faq/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/faq/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/faq/"/>
     <lastmod>2026-10-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
@@ -116,12 +260,60 @@
   </url>
   <url>
     <loc>https://tmplayer.org/fire-tv/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/fire-tv/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/fire-tv/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/fire-tv/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/fire-tv/"/>
+    <lastmod>2026-10-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/es/fire-tv/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/fire-tv/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/fire-tv/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/fire-tv/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/fire-tv/"/>
+    <lastmod>2026-10-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/ar/fire-tv/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/fire-tv/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/fire-tv/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/fire-tv/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/fire-tv/"/>
     <lastmod>2026-10-05</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://tmplayer.org/formats/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/formats/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/formats/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/formats/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/formats/"/>
+    <lastmod>2026-10-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/es/formats/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/formats/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/formats/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/formats/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/formats/"/>
+    <lastmod>2026-10-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/ar/formats/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/formats/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/formats/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/formats/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/formats/"/>
     <lastmod>2026-10-05</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -134,24 +326,120 @@
   </url>
   <url>
     <loc>https://tmplayer.org/guides/telegram-videos-on-android-tv/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/guides/telegram-videos-on-android-tv/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/guides/telegram-videos-on-android-tv/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/guides/telegram-videos-on-android-tv/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/guides/telegram-videos-on-android-tv/"/>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/es/guides/telegram-videos-on-android-tv/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/guides/telegram-videos-on-android-tv/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/guides/telegram-videos-on-android-tv/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/guides/telegram-videos-on-android-tv/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/guides/telegram-videos-on-android-tv/"/>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/ar/guides/telegram-videos-on-android-tv/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/guides/telegram-videos-on-android-tv/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/guides/telegram-videos-on-android-tv/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/guides/telegram-videos-on-android-tv/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/guides/telegram-videos-on-android-tv/"/>
     <lastmod>2026-10-06</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://tmplayer.org/guides/telegram-videos-on-fire-tv/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/guides/telegram-videos-on-fire-tv/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/guides/telegram-videos-on-fire-tv/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/guides/telegram-videos-on-fire-tv/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/guides/telegram-videos-on-fire-tv/"/>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/es/guides/telegram-videos-on-fire-tv/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/guides/telegram-videos-on-fire-tv/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/guides/telegram-videos-on-fire-tv/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/guides/telegram-videos-on-fire-tv/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/guides/telegram-videos-on-fire-tv/"/>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/ar/guides/telegram-videos-on-fire-tv/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/guides/telegram-videos-on-fire-tv/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/guides/telegram-videos-on-fire-tv/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/guides/telegram-videos-on-fire-tv/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/guides/telegram-videos-on-fire-tv/"/>
     <lastmod>2026-10-06</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://tmplayer.org/guides/telegram-on-tv-without-casting/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/guides/telegram-on-tv-without-casting/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/guides/telegram-on-tv-without-casting/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/guides/telegram-on-tv-without-casting/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/guides/telegram-on-tv-without-casting/"/>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/es/guides/telegram-on-tv-without-casting/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/guides/telegram-on-tv-without-casting/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/guides/telegram-on-tv-without-casting/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/guides/telegram-on-tv-without-casting/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/guides/telegram-on-tv-without-casting/"/>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/ar/guides/telegram-on-tv-without-casting/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/guides/telegram-on-tv-without-casting/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/guides/telegram-on-tv-without-casting/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/guides/telegram-on-tv-without-casting/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/guides/telegram-on-tv-without-casting/"/>
     <lastmod>2026-10-06</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://tmplayer.org/translate/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/translate/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/translate/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/translate/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/translate/"/>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/es/translate/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/translate/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/translate/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/translate/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/translate/"/>
+    <lastmod>2026-10-06</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://tmplayer.org/ar/translate/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tmplayer.org/translate/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://tmplayer.org/es/translate/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/translate/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tmplayer.org/translate/"/>
     <lastmod>2026-10-06</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>

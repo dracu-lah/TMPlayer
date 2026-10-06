@@ -12,7 +12,7 @@ and writes, for every language that translates them:
 - `<summary xml:lang="xx">` in desktop/packaging/linux/io.github.dracu_lah.TMPlayer.metainfo.xml
 
 The English lines stay as they are written in those files, and must match en.json. The name,
-TMPlayer, is the same in every language, so there is no Name[xx]. Run it after langsync.
+TMPlayer, is the same in every language, so there is no Name[xx]. Run it after a catalog changes.
 """
 import json
 import pathlib

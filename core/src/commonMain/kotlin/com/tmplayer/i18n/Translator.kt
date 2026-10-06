@@ -40,10 +40,26 @@ object Translator {
      * preferred tags, loads it, and returns the tag chosen. Cheap when nothing changes.
      */
     fun select(saved: String?, system: List<String>): String {
+        this.system = system
         val tag = Languages.resolve(saved, system, pseudoEnabled)
         use(tag)
         return tag
     }
+
+    /**
+     * The device's own languages as last handed to [select], or empty before the first call.
+     *
+     * Kept because the process locale cannot answer "what would System default be": on Android
+     * 13 and later a per-app language rewrites `Locale.getDefault()`, so with Arabic picked the
+     * picker's "System default" row read Arabic too.
+     */
+    @Volatile
+    var system: List<String> = emptyList()
+        private set
+
+    /** The tag "System default" stands for: [system] resolved with nothing saved. */
+    fun systemDefault(fallback: List<String> = emptyList()): String =
+        Languages.resolve("", system.ifEmpty { fallback }, pseudoEnabled)
 
     /** Switches to [tag], one of [Languages.tags] or [Languages.PSEUDO]. */
     fun use(tag: String) {

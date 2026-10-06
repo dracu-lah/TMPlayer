@@ -16,24 +16,14 @@ object Languages {
     /** The debug-only pseudo-locale: accented, bracketed and stretched English. */
     const val PSEUDO = "en-XA"
 
+    /**
+     * English, Spanish (asked for in issue #2) and Arabic for now. The other languages from
+     * docs/PLAN.md R1 come back once these have settled.
+     */
     val all: List<AppLanguage> = listOf(
         AppLanguage("en", "English"),
         AppLanguage("es-419", "Español (Latinoamérica)"),
-        AppLanguage("pt-BR", "Português (Brasil)"),
-        AppLanguage("fr", "Français"),
-        AppLanguage("de", "Deutsch"),
-        AppLanguage("it", "Italiano"),
-        AppLanguage("ru", "Русский"),
-        AppLanguage("uk", "Українська"),
-        AppLanguage("tr", "Türkçe"),
-        AppLanguage("id", "Bahasa Indonesia"),
-        AppLanguage("vi", "Tiếng Việt"),
         AppLanguage("ar", "العربية", rtl = true),
-        AppLanguage("zh-CN", "简体中文"),
-        AppLanguage("ja", "日本語"),
-        AppLanguage("ko", "한국어"),
-        AppLanguage("hi", "हिन्दी"),
-        AppLanguage("ml", "മലയാളം"),
     )
 
     val tags: List<String> = all.map { it.tag }
@@ -45,7 +35,7 @@ object Languages {
 
     /**
      * The tag to show the app in. [saved] is the Settings value ("" for the system), [system] the
-     * device's preferred languages as BCP 47 tags (`es-CL`, `zh-Hans-CN`, Android's `in-ID`), in
+     * device's preferred languages as BCP 47 tags (`es-CL`, `ar-EG`, Android's `in-ID`), in
      * order. [pseudo] lets `en-XA` through, which only a debug build does.
      */
     fun resolve(saved: String?, system: List<String>, pseudo: Boolean = false): String {
@@ -64,22 +54,10 @@ object Languages {
     fun match(systemTag: String): String? {
         val parts = normalise(systemTag).split('-')
         val language = parts.first().lowercase()
-        val rest = parts.drop(1)
-        val script = rest.firstOrNull { it.length == 4 }?.lowercase()
-        val region = rest.firstOrNull { it.length == 2 || (it.length == 3 && it.all(Char::isDigit)) }?.uppercase()
         return when (language) {
-            // Spanish everywhere gets the Latin American catalog, Portuguese the Brazilian one:
-            // the only ones there are, and far closer than English.
+            // Spanish everywhere gets the Latin American catalog: the only one there is, and far
+            // closer than English.
             "es" -> "es-419"
-            "pt" -> "pt-BR"
-            // Simplified only. Traditional (zh-Hant, Taiwan, Hong Kong, Macau) moves on to the
-            // next system language, which is what a reader of Traditional would rather have.
-            "zh" -> when {
-                script == "hans" -> "zh-CN"
-                script == "hant" -> null
-                region == null || region in setOf("CN", "SG", "MY") -> "zh-CN"
-                else -> null
-            }
             else -> all.firstOrNull { it.tag == language }?.tag
         }
     }

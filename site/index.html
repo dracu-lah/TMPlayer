@@ -6,7 +6,15 @@
 <title data-i18n="home.tmplayer_free_unofficial_telegram_video">TMPlayer: free, unofficial Telegram video player for Android TV and PC</title>
 <meta name="description" content="Stream the videos in your own Telegram chats on Android TV, Android phones, Windows and Linux. Free, open source, and it plays while it downloads." data-i18n-content="home.stream_the_videos_in_your">
 <link rel="canonical" href="https://tmplayer.org/">
-<!-- i18n:head --><!-- /i18n:head -->
+<!-- i18n:head -->
+<link rel="alternate" hreflang="en" href="https://tmplayer.org/">
+<link rel="alternate" hreflang="es" href="https://tmplayer.org/es/">
+<link rel="alternate" hreflang="ar" href="https://tmplayer.org/ar/">
+<link rel="alternate" hreflang="x-default" href="https://tmplayer.org/">
+<meta property="og:locale:alternate" content="es_LA">
+<meta property="og:locale:alternate" content="ar_AR">
+<script type="application/json" id="tm-langs">{"current": "en", "langs": [{"code": "en", "tag": "en", "name": "English", "dir": "ltr", "href": "/", "suggest": "This page is also in English.", "go": "Read it in English", "dismiss": "Stay in this language"}, {"code": "es", "tag": "es-419", "name": "Español", "dir": "ltr", "href": "/es/", "suggest": "Esta página también está en Español.", "go": "Leer en Español", "dismiss": "Seguir en este idioma"}, {"code": "ar", "tag": "ar", "name": "العربية", "dir": "rtl", "href": "/ar/", "suggest": "هذه الصفحة متوفرة أيضًا بـ العربية.", "go": "اقرأها بـ العربية", "dismiss": "البقاء على هذه اللغة"}]}</script>
+<!-- /i18n:head -->
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta name="author" content="dracu-lah">
 <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
@@ -191,7 +199,16 @@
         System theme until the reader says otherwise. The button reports the theme it will switch
         to, which is the thing a screen reader user needs to hear before pressing it.
       -->
-      <!-- i18n:picker --><!-- /i18n:picker -->
+      <!-- i18n:picker -->
+      <details class="lang-picker">
+        <summary class="lang-picker-btn" aria-label="Language: English" title="Language: English"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm6.9 6h-2.9a15.7 15.7 0 0 0-1.4-3.6A8 8 0 0 1 18.9 8ZM12 4a13.8 13.8 0 0 1 1.9 4h-3.8A13.8 13.8 0 0 1 12 4ZM4.3 14a8.2 8.2 0 0 1 0-4h3.4a16.5 16.5 0 0 0 0 4H4.3Zm.8 2h2.9a15.7 15.7 0 0 0 1.4 3.6A8 8 0 0 1 5.1 16ZM8 8H5.1a8 8 0 0 1 4.3-3.6A15.7 15.7 0 0 0 8 8Zm4 12a13.8 13.8 0 0 1-1.9-4h3.8A13.8 13.8 0 0 1 12 20Zm2.3-6H9.7a14.7 14.7 0 0 1 0-4h4.6a14.7 14.7 0 0 1 0 4Zm.3 5.6a15.7 15.7 0 0 0 1.4-3.6h2.9a8 8 0 0 1-4.3 3.6Zm1.7-5.6a16.5 16.5 0 0 0 0-4h3.4a8.2 8.2 0 0 1 0 4h-3.4Z"/></svg><span class="lang-picker-code" aria-hidden="true">EN</span></summary>
+        <ul class="lang-picker-menu">
+          <li><a href="/" hreflang="en" lang="en" data-lang-pick="en" aria-current="true">English</a></li>
+          <li><a href="/es/" hreflang="es" lang="es-419" data-lang-pick="es">Español</a></li>
+          <li><a href="/ar/" hreflang="ar" lang="ar" data-lang-pick="ar">العربية</a></li>
+        </ul>
+      </details>
+      <!-- /i18n:picker -->
       <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark theme" data-i18n-aria-label="common.switch_to_dark_theme">
         <svg class="icon-sun" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
           <!--
@@ -266,7 +283,9 @@
         <span class="sep" aria-hidden="true">&middot;</span>
         <a href="/download/">All releases</a>
       </p>
-      <!-- i18n:now --><!-- /i18n:now -->
+      <!-- i18n:now -->
+      <p class="hero-langs">Now in <a href="/es/" hreflang="es" lang="es-419">Español</a>, <a href="/ar/" hreflang="ar" lang="ar">العربية</a></p>
+      <!-- /i18n:now -->
     </div>
 
       <!-- Both frames are drawn in CSS around the real screenshots. The phone carries the clip
@@ -465,7 +484,7 @@
         <p class="support-stats">
           <span data-count-wrap hidden data-i18n="home.stars"><b data-count="stars"></b> stars</span>
           <span data-count-wrap hidden data-i18n="home.forks"><b data-count="forks"></b> forks</span>
-          <span data-i18n="home.gpl_3_0_and_free">GPL-3.0, and free for good</span><!-- i18n:langcount --><!-- /i18n:langcount -->
+          <span data-i18n="home.gpl_3_0_and_free">GPL-3.0, and free for good</span><!-- i18n:langcount --><span><b>3</b> languages</span><!-- /i18n:langcount -->
         </p>
 
         <!-- Support, under the star: the same two links and the same words as Settings and About in
@@ -603,7 +622,13 @@
       <a href="https://buymeacoffee.com/nevil.dev" rel="noopener" data-i18n="home.buy_me_a_coffee">Buy me a coffee</a>
       <a href="mailto:hello@tmplayer.org">hello@tmplayer.org</a>
     </nav>
-    <!-- i18n:footer --><!-- /i18n:footer -->
+    <!-- i18n:footer -->
+    <nav class="footer-links footer-langs" aria-label="Languages">
+      <a href="/" hreflang="en" lang="en" data-lang-pick="en" aria-current="true">English</a>
+      <a href="/es/" hreflang="es" lang="es-419" data-lang-pick="es">Español</a>
+      <a href="/ar/" hreflang="ar" lang="ar" data-lang-pick="ar">العربية</a>
+    </nav>
+    <!-- /i18n:footer -->
     <p class="footer-legal muted small" data-i18n="common.gpl_3_0_2026_dracu">GPL-3.0, &copy; 2026 dracu-lah. An unofficial Telegram video player, not affiliated with Telegram FZ-LLC. TMPlayer does not provide media: use it only with content you own or are authorized to access. Player mark via <a href="https://www.svgrepo.com" rel="noopener">SVG Repo</a>, set in Poppins under the SIL Open Font License and served from this domain.</p>
   </div>
 </footer>

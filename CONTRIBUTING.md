@@ -36,12 +36,13 @@ Never commit credentials.
 
 ## Translations
 
-TMPlayer ships in 17 languages. English is the source; the other 16 start as machine translations
-and get better as people who speak them correct them. Fixing a few words you noticed is as welcome
+TMPlayer ships in English, Spanish (Latin America) and Arabic for now, with more languages to
+follow. English is the source; the others start as machine translations and get better as people
+who speak them correct them. Fixing a few words you noticed is as welcome
 as reviewing a whole language.
 
 - The app's text is in [`core/src/commonMain/resources/i18n/`](core/src/commonMain/resources/i18n),
-  one JSON file per language (`es-419.json`, `pt-BR.json`, `zh-CN.json` and so on), the same keys as
+  one JSON file per language (`es-419.json`, `ar.json`), the same keys as
   `en.json`. The website's text is in [`site/i18n/`](site/i18n), laid out the same way.
 - Change the value, never the key. Keep every `{placeholder}` exactly as it is in English. Plurals
   are ICU messages: `{count, plural, one {# video} other {# videos}}`. Keep the structure, translate

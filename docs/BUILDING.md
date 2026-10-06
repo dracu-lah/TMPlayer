@@ -33,8 +33,8 @@ that gets abused is acted on by Telegram, and it traces back to whoever register
 Online subtitles come from OpenSubtitles.com through one app key, `OPENSUBTITLES_API_KEY` in
 `local.properties` (or the environment). Without it the build simply has no online subtitles: no
 Settings section, no "Search online" in the subtitle picker. A fork should register its own key at
-[opensubtitles.com/consumers](https://www.opensubtitles.com/consumers). Viewers never enter a key;
-they sign in with their own free account, and downloads count against it.
+[opensubtitles.com/consumers](https://www.opensubtitles.com/consumers). Viewers never enter a key.
+Downloads work without an account; signing in with a free one gives the viewer their own daily quota.
 
 ## The commands
 
