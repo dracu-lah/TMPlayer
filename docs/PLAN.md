@@ -116,6 +116,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [ ] CP39 Support asks v2: positive moments, three asks at most, thank-you state, tmplayer.org/support
 - [ ] CP40 Episodes button and modal in the player (phone, TV, desktop), after CP37 and CP38
 - [ ] CP41 Setting to hide Telegram's default chat groups everywhere, with warning prompts, plus a sweep for settings that lack one
+- [ ] CP42 Minimal onboarding: six tour pages down to two, one first-sign-in card, deferred hints
 
 ## Standing rules
 
@@ -666,6 +667,46 @@ states point there instead of at "All".
 **Done when:** unit tests for the section filtering and the unreachable favourites calculation, emulator
 screenshots on phone and TV of the toggle, the prompt with a favourites count and the shortened sidebar,
 the desktop render test, and the sweep list with each added prompt shown once.
+**STOP**
+
+### CP42 Minimal onboarding
+**Why:** the user asked on 2026-10-06 to check what the onboarding lacks and whether pages can merge so a new user
+sees fewer steps. Audit of the shared tour (`ui/src/shared/.../onboarding/Onboarding.kt`, `OnboardingTour.kt`,
+`PostersSwitch.kt`, the phone and TV `OnboardingScreen.kt`, desktop `Shell.kt`).
+**Today:** six tour pages on every platform (Language, About, Sign in, Chats, Videos, Posters), then the sign in
+screens (phone number, code, optional 2FA; QR first on TV and desktop), then the shell. Skip is hidden until
+after About (the Telegram API terms line lives there). Three of the six pages (Sign in, Chats, Videos) describe
+screens the user is about to see. The Posters page is a notice rather than a choice, because
+`PostersDefaultOn` turns online lookups on at tour start, so a skipped tour enables them without the user ever
+seeing the explanation.
+**Do:**
+- Tour of two pages instead of six. Page 1 "Welcome": the three honest lines (unofficial, no server of ours,
+  nothing collected), the Telegram API terms line, a compact language row ("English, change", system language
+  preselected) instead of a whole page, and a visible "Look up posters and descriptions online" switch with
+  one line on what is sent. This replaces the hidden default: the switch is on screen, so choosing is real.
+  Page 2 "How it works": one illustrated page saying videos come from your own Telegram chats and channels, to
+  forward a video to Saved Messages to get a first one in, folders and favourites in one line, how the sign in
+  works (phone number or QR), then Start. The standalone Sign in, Chats and Videos pages go.
+- Move the "Help translate" block off page 1 into Settings and About; the language card ("Now in X") stays as
+  the second language prompt.
+- One contextual card after the first sign in, not a tour page, because it needs the account: when the account
+  has Telegram folders, ask "Show everything" or "Only my folders" (the CP41 setting), with the CP41 prompt
+  rules. No folders: skip it. Depends on CP41.
+- First-run empty state on the chat list and Home: say how to get a first video (forward to Saved Messages),
+  with the existing strings made visible instead of buried in an empty state.
+- Hints deferred to first use, shown once and dismissible: double tap to jump and the swipe gestures on the
+  first phone playback, the OK, hold-for-favourite and remote keys on TV (shares work with CP37).
+- Kept as they are, on purpose: notification permission on the first download, crash reports off by default and
+  only in Settings, storage location only in Settings, the support card and the update, language and what's new
+  cards held until the shell. No storage permission exists to ask for.
+- Tour state: bump the "overview seen" flag so existing users are not shown the new tour, and keep the
+  Telegram terms acknowledgement working for a fresh install that taps Start.
+- Strings go into `en.json` only; leave other locales and never run langsync. The shorter tour makes the old
+  keys unused, so remove them from `en.json` and note that translations of the new keys wait for the user.
+**Done when:** emulator screenshots on phone and TV of both tour pages, the first sign in card (with and without
+folders) and the first-run empty state, the desktop render test of the tour, a check that a skipped or finished
+tour leaves posters exactly as the switch says, unit tests for the tour state, and the old `Onboarding` page
+count updated in docs and the site's first-run description if it lists steps.
 **STOP**
 
 ## Your tasks
