@@ -500,7 +500,7 @@ module and stop at the split.
 **Go-ahead given 2026-10-06:** the user said to translate into the most common languages with langsync now and
 review while using the app. **Do:** empty `{}` files for es-419, pt-BR, fr, de, it, ru, uk, tr, id, vi, ar, zh-CN, ja, ko, hi, ml
 (check how langsync maps `zh-CN` and `es-419` before the run); `langsync --dry-run`, then `langsync`; a review pass (Spanish "tú", leftovers); CONTRIBUTING "Add a translation"
-and an issue template; a review request on issue #2. Unreviewed languages stay hidden from the picker.
+and an issue template; a review request on issue #2. Every language stays visible in the picker, reviewed or not (user, 2026-10-06).
 **STOP**
 
 ### CP25 P7 verification and the "Languages" release
