@@ -29,6 +29,7 @@ import com.tmplayer.desktop.os.NativeFullscreen
 import com.tmplayer.desktop.os.NonReparentingWm
 import com.tmplayer.desktop.os.NativeInventory
 import com.tmplayer.desktop.os.SingleInstance
+import com.tmplayer.desktop.os.StartupFailure
 import com.tmplayer.desktop.os.WindowMemory
 import com.tmplayer.desktop.os.WindowsTitleBar
 import com.tmplayer.desktop.ui.DesktopShell
@@ -61,134 +62,147 @@ fun main(args: Array<String>) {
     if (!SingleInstance.acquire(args.toList()) { java.awt.EventQueue.invokeLater { raise() } }) return
     // Only the first instance, so a second launch never rotates the log of the one running.
     DesktopLog.install(java.io.File(DesktopPaths.dataDir, "logs"))
-    NativeInventory.log()
-    Td.start(DesktopPaths, desktopDeviceInfo(), desktopCredentials())
-    OnlineSubtitles.current = desktopOnlineSubtitles()
-    val settings = DesktopServices.settings
-    OnlineMetadata.current = desktopOnlineMetadata()
-    // What an earlier run was in the middle of comes back paused, once there is an account to
-    // ask TDLib about.
-    // A storage move a crash or a kill cut short is finished first: it needs the settings store
-    // and the disk, not TDLib, which is already starting over the new folders.
-    Background.scope.launch { runCatching { DesktopStorage.relocation.resumePending() } }
-    // The UI language: the Settings choice, else the system's, else English. The en-XA
-    // pseudo-locale is for development runs only (-Dtmplayer.pseudo=true).
-    Translator.pseudoEnabled = System.getProperty("tmplayer.pseudo") == "true"
-    Background.scope.launch {
-        settings.language.collect { saved -> Translator.select(saved, listOf(Locale.getDefault().toLanguageTag())) }
-    }
-    Background.scope.launch {
-        Td.awaitAuthorizedSession()
-        DesktopServices.downloads.restore()
-    }
-    // "Remove after watching", for the life of the process: the grid, the player's button and the
-    // player reaching the end all write the one watched list this reads.
-    Background.scope.launch {
-        RemoveAfterWatching(
-            enabled = settings.removeAfterWatching,
-            watched = DesktopServices.watched.watched,
-            downloads = { settings.downloadsNow() },
-            delete = { DownloadIndex.delete(settings, it) },
-        ).run()
-    }
-    DesktopUpdates.configure()
-    // Before anything can rewrite desktop.properties, which would drop the old update keys.
-    Background.scope.launch { runCatching { DesktopUpdates.migrate(DesktopServices.prefs, settings) } }
-    // Compose would end the process itself once the last window closes, with System.exit, which on
-    // Linux can hang for good (see AppExit). It returns here instead, and AppExit ends it.
-    application(exitProcessOnExit = false) {
-        val windowState = remember { WindowMemory.load() }
-        LaunchedEffect(windowState) { WindowMemory.follow(windowState) }
-        val shell = remember { ShellState(settings, DesktopServices.downloads, DesktopServices.watched) }
-        val quit = {
-            // Saving is a courtesy; a failure there must never keep the app from closing.
-            runCatching { WindowMemory.save(windowState) }
-            // Should taking the window down hang (a native player that will not let go), the
-            // process still ends.
-            Thread {
-                Thread.sleep(QUIT_GRACE_MS)
-                AppExit.now()
-            }.apply { isDaemon = true }.start()
-            exitApplication()
+    // Until the window is up, an error ends the launch out loud instead of leaving a process with
+    // no window that holds the single instance lock (see StartupFailure).
+    StartupFailure.install()
+    try {
+        NativeInventory.log()
+        Td.start(DesktopPaths, desktopDeviceInfo(), desktopCredentials())
+        OnlineSubtitles.current = desktopOnlineSubtitles()
+        val settings = DesktopServices.settings
+        OnlineMetadata.current = desktopOnlineMetadata()
+        // What an earlier run was in the middle of comes back paused, once there is an account to
+        // ask TDLib about.
+        // A storage move a crash or a kill cut short is finished first: it needs the settings store
+        // and the disk, not TDLib, which is already starting over the new folders.
+        Background.scope.launch { runCatching { DesktopStorage.relocation.resumePending() } }
+        // The UI language: the Settings choice, else the system's, else English. The en-XA
+        // pseudo-locale is for development runs only (-Dtmplayer.pseudo=true).
+        Translator.pseudoEnabled = System.getProperty("tmplayer.pseudo") == "true"
+        Background.scope.launch {
+            settings.language.collect { saved -> Translator.select(saved, listOf(Locale.getDefault().toLanguageTag())) }
         }
-        Window(
-            onCloseRequest = quit,
-            state = windowState,
-            title = "TMPlayer",
-            icon = rememberVectorPainter(AppLogo.Mark),
-            onPreviewKeyEvent = shell::onPreviewKey,
-            onKeyEvent = shell::onKey,
-        ) {
-            window.minimumSize = java.awt.Dimension(960, 600)
-            DesktopServices.selfUpdate.quit = quit
-            // Transfers show outside the window too, once there is a window for the taskbar bar.
-            LaunchedEffect(Unit) {
-                DesktopStorage.closePlayer = { shell.closePlayer() }
-                DesktopStorage.notifier = DesktopTransferNotifier.create({ window }) {
-                    java.awt.EventQueue.invokeLater {
-                        raise()
-                        shell.go(com.tmplayer.desktop.ui.Destination.Downloads)
+        Background.scope.launch {
+            Td.awaitAuthorizedSession()
+            DesktopServices.downloads.restore()
+        }
+        // "Remove after watching", for the life of the process: the grid, the player's button and the
+        // player reaching the end all write the one watched list this reads.
+        Background.scope.launch {
+            RemoveAfterWatching(
+                enabled = settings.removeAfterWatching,
+                watched = DesktopServices.watched.watched,
+                downloads = { settings.downloadsNow() },
+                delete = { DownloadIndex.delete(settings, it) },
+            ).run()
+        }
+        DesktopUpdates.configure()
+        // Before anything can rewrite desktop.properties, which would drop the old update keys.
+        Background.scope.launch { runCatching { DesktopUpdates.migrate(DesktopServices.prefs, settings) } }
+        // Compose would end the process itself once the last window closes, with System.exit, which on
+        // Linux can hang for good (see AppExit). It returns here instead, and AppExit ends it.
+        application(exitProcessOnExit = false) {
+            val windowState = remember { WindowMemory.load() }
+            LaunchedEffect(windowState) { WindowMemory.follow(windowState) }
+            val shell = remember { ShellState(settings, DesktopServices.downloads, DesktopServices.watched) }
+            val quit = {
+                // Saving is a courtesy; a failure there must never keep the app from closing.
+                runCatching { WindowMemory.save(windowState) }
+                // Should taking the window down hang (a native player that will not let go), the
+                // process still ends.
+                Thread {
+                    Thread.sleep(QUIT_GRACE_MS)
+                    AppExit.now()
+                }.apply { isDaemon = true }.start()
+                exitApplication()
+            }
+            Window(
+                onCloseRequest = quit,
+                state = windowState,
+                title = "TMPlayer",
+                icon = rememberVectorPainter(AppLogo.Mark),
+                onPreviewKeyEvent = shell::onPreviewKey,
+                onKeyEvent = shell::onKey,
+            ) {
+                window.minimumSize = java.awt.Dimension(960, 600)
+                DesktopServices.selfUpdate.quit = quit
+                // Transfers show outside the window too, once there is a window for the taskbar bar.
+                LaunchedEffect(Unit) {
+                    DesktopStorage.closePlayer = { shell.closePlayer() }
+                    DesktopStorage.notifier = DesktopTransferNotifier.create({ window }) {
+                        java.awt.EventQueue.invokeLater {
+                            raise()
+                            shell.go(com.tmplayer.desktop.ui.Destination.Downloads)
+                        }
+                    }
+                }
+                // The update check, on every launch and before sign in too: the first one ten seconds
+                // after the first frame, then every six hours while the window is open.
+                LaunchedEffect(Unit) {
+                    withFrameNanos { }
+                    DesktopServices.updates.run()
+                }
+                // Fullscreen is the shell's to ask for and the window's to do. The window system is
+                // asked directly where it can be (see NativeFullscreen); elsewhere Compose's placement
+                // does it, and leaving goes back to whatever the window was before.
+                val native = remember(window) { NativeFullscreen(window) }
+                var beforeFullscreen by remember { mutableStateOf(WindowPlacement.Floating) }
+                LaunchedEffect(shell.fullscreen) {
+                    WindowMemory.freeze(WindowMemory.Hold.Fullscreen, shell.fullscreen)
+                    if (native.set(shell.fullscreen)) return@LaunchedEffect
+                    if (shell.fullscreen && windowState.placement != WindowPlacement.Fullscreen) {
+                        beforeFullscreen = windowState.placement
+                        windowState.placement = WindowPlacement.Fullscreen
+                    } else if (!shell.fullscreen && windowState.placement == WindowPlacement.Fullscreen) {
+                        windowState.placement = beforeFullscreen
+                    }
+                }
+                raise = {
+                    window.isVisible = true
+                    if (window.extendedState and java.awt.Frame.ICONIFIED != 0) {
+                        window.extendedState = window.extendedState and java.awt.Frame.ICONIFIED.inv()
+                    }
+                    window.toFront()
+                    window.requestFocus()
+                }
+                // The first frame is on screen: later launches may hand over to this one now.
+                LaunchedEffect(Unit) {
+                    withFrameNanos { }
+                    SingleInstance.markReady()
+                    StartupFailure.started()
+                }
+                DesktopTheme(settings) {
+                    val colors = MaterialTheme.colorScheme
+                    LaunchedEffect(colors.background, colors.onBackground) {
+                        // The handle exists once the window is shown, which is just after the first frame.
+                        repeat(100) { if (!window.isDisplayable) delay(50) }
+                        WindowsTitleBar.apply(
+                            window,
+                            dark = colors.background.luminance() < 0.5f,
+                            caption = colors.background.toArgb() and 0xFFFFFF,
+                            text = colors.onBackground.toArgb() and 0xFFFFFF,
+                        )
+                    }
+                    DesktopShell(shell) { request, close ->
+                        PlayerHost(
+                            request = request,
+                            onClose = {
+                                shell.fullscreen = false
+                                close()
+                            },
+                            settings = settings,
+                            fullscreen = shell.fullscreen,
+                            onToggleFullscreen = { shell.fullscreen = !shell.fullscreen },
+                            onToggleAlwaysOnTop = { window.isAlwaysOnTop = !window.isAlwaysOnTop },
+                            onQuit = quit,
+                            onRaise = raise,
+                        )
                     }
                 }
             }
-            // The update check, on every launch and before sign in too: the first one ten seconds
-            // after the first frame, then every six hours while the window is open.
-            LaunchedEffect(Unit) {
-                withFrameNanos { }
-                DesktopServices.updates.run()
-            }
-            // Fullscreen is the shell's to ask for and the window's to do. The window system is
-            // asked directly where it can be (see NativeFullscreen); elsewhere Compose's placement
-            // does it, and leaving goes back to whatever the window was before.
-            val native = remember(window) { NativeFullscreen(window) }
-            var beforeFullscreen by remember { mutableStateOf(WindowPlacement.Floating) }
-            LaunchedEffect(shell.fullscreen) {
-                WindowMemory.freeze(WindowMemory.Hold.Fullscreen, shell.fullscreen)
-                if (native.set(shell.fullscreen)) return@LaunchedEffect
-                if (shell.fullscreen && windowState.placement != WindowPlacement.Fullscreen) {
-                    beforeFullscreen = windowState.placement
-                    windowState.placement = WindowPlacement.Fullscreen
-                } else if (!shell.fullscreen && windowState.placement == WindowPlacement.Fullscreen) {
-                    windowState.placement = beforeFullscreen
-                }
-            }
-            raise = {
-                window.isVisible = true
-                if (window.extendedState and java.awt.Frame.ICONIFIED != 0) {
-                    window.extendedState = window.extendedState and java.awt.Frame.ICONIFIED.inv()
-                }
-                window.toFront()
-                window.requestFocus()
-            }
-            DesktopTheme(settings) {
-                val colors = MaterialTheme.colorScheme
-                LaunchedEffect(colors.background, colors.onBackground) {
-                    // The handle exists once the window is shown, which is just after the first frame.
-                    repeat(100) { if (!window.isDisplayable) delay(50) }
-                    WindowsTitleBar.apply(
-                        window,
-                        dark = colors.background.luminance() < 0.5f,
-                        caption = colors.background.toArgb() and 0xFFFFFF,
-                        text = colors.onBackground.toArgb() and 0xFFFFFF,
-                    )
-                }
-                DesktopShell(shell) { request, close ->
-                    PlayerHost(
-                        request = request,
-                        onClose = {
-                            shell.fullscreen = false
-                            close()
-                        },
-                        settings = settings,
-                        fullscreen = shell.fullscreen,
-                        onToggleFullscreen = { shell.fullscreen = !shell.fullscreen },
-                        onToggleAlwaysOnTop = { window.isAlwaysOnTop = !window.isAlwaysOnTop },
-                        onQuit = quit,
-                        onRaise = raise,
-                    )
-                }
-            }
         }
+    } catch (e: Throwable) {
+        StartupFailure.report(e)
     }
     // TDLib's, libmpv's and D-Bus's threads are not daemons; with the window gone, nothing is left
     // that should keep the process alive.
