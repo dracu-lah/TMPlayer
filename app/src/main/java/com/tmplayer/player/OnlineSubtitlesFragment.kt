@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.leanback.app.GuidedStepSupportFragment
 import androidx.leanback.widget.GuidanceStylist
 import androidx.leanback.widget.GuidedAction
+import androidx.leanback.widget.GuidedActionsStylist
 import androidx.lifecycle.lifecycleScope
 import com.tmplayer.i18n.L
 import com.tmplayer.online.DownloadResult
@@ -33,6 +34,9 @@ class OnlineSubtitlesFragment : GuidedStepSupportFragment() {
     private var busy = false
 
     override fun onProvideTheme(): Int = androidx.leanback.R.style.Theme_Leanback_GuidedStep
+
+    /** Rows a tap activates at once on the phone; see [TouchActionsStylist]. */
+    override fun onCreateActionsStylist(): GuidedActionsStylist = TouchActionsStylist()
 
     override fun onCreateGuidance(savedInstanceState: Bundle?): GuidanceStylist.Guidance =
         GuidanceStylist.Guidance(L.onlineResultsTitle, L.onlineSearchOnlineDetail, L.tracksSubtitles, null)

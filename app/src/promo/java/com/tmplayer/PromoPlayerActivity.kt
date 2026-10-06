@@ -11,7 +11,12 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.fragment.app.FragmentActivity
+import androidx.media3.common.Format
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
+import androidx.media3.common.TrackGroup
+import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.common.Tracks
 import androidx.media3.common.SimpleBasePlayer
 import androidx.media3.common.util.UnstableApi
 import com.google.common.util.concurrent.Futures
@@ -42,8 +47,8 @@ import androidx.media3.common.C
  *     adb shell am start -n com.tmplayer.promo/com.tmplayer.PromoPlayerActivity \
  *         [--ez tv true] [--ez playing true] [--es feedback ripple|level|scrub|hold|flash|jump]
  *         [--ez nextup true] [--ez menu true] [--ez trickplay true] [--el scrub_at 1265000]
- *         [--es picker subtitles|online]
- *         [--es online signed_out|signed_in|quota|expired|unavailable|empty|offline|subdl|none]
+ *         [--es picker subtitles|online] [--ez subtitles true]
+ *         [--es online signed_out|signed_in|quota|expired|unavailable|empty|offline|subdl|none|live]
  *
  * `nextup` raises the next-up card over the bare picture, `menu` the television's More menu,
  * `jump` the remote's side figure for a ten second jump. The stand-in player really plays and
@@ -97,7 +102,10 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
             },
         )
 
-        val player = StandInPlayer(playing = intent.getBooleanExtra("playing", false))
+        val player = StandInPlayer(
+            playing = intent.getBooleanExtra("playing", false),
+            withSubtitles = intent.getBooleanExtra("subtitles", false),
+        )
         val controls = PlayerControls(
             root = findViewById(R.id.player_root),
             isTv = tv,
@@ -105,7 +113,11 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
             onVisibility = {},
             onTogglePlay = { player.playWhenReady = !player.playWhenReady },
             onSkip = {},
-            onPickSubtitles = {},
+            onPickSubtitles = {
+                GuidedStepSupportFragment.add(
+                    supportFragmentManager, TrackPickerFragment.forType(C.TRACK_TYPE_TEXT), R.id.overlay_container,
+                )
+            },
             onPickAudio = {},
             onCycleSpeed = {},
             onCycleScale = {},
@@ -254,11 +266,33 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun release() = Unit
     }
 
-    /** Paused 21 minutes into a 44 minute film, with a little over half of it downloaded. */
-    private class StandInPlayer(private var playing: Boolean) : SimpleBasePlayer(Looper.getMainLooper()) {
+    /**
+     * Paused 21 minutes into a 44 minute film, with a little over half of it downloaded. With
+     * [withSubtitles], two subtitle tracks (English, Malayalam) that the picker really switches.
+     */
+    private class StandInPlayer(
+        private var playing: Boolean,
+        private val withSubtitles: Boolean = false,
+    ) : SimpleBasePlayer(Looper.getMainLooper()) {
+        private var params: TrackSelectionParameters = TrackSelectionParameters.DEFAULT
+        private val subtitleGroup = TrackGroup(
+            "subtitles",
+            Format.Builder().setId("en").setSampleMimeType(MimeTypes.APPLICATION_SUBRIP).setLanguage("en").build(),
+            Format.Builder().setId("ml").setSampleMimeType(MimeTypes.APPLICATION_SUBRIP).setLanguage("ml").build(),
+        )
+
+        private fun tracks(): Tracks {
+            if (!withSubtitles) return Tracks.EMPTY
+            val off = C.TRACK_TYPE_TEXT in params.disabledTrackTypes
+            val chosen = params.overrides[subtitleGroup]?.trackIndices
+            val selected = BooleanArray(subtitleGroup.length) { !off && (chosen?.contains(it) ?: (it == 0)) }
+            return Tracks(listOf(Tracks.Group(subtitleGroup, false, IntArray(subtitleGroup.length) { C.FORMAT_HANDLED }, selected)))
+        }
+
         override fun getState(): State = State.Builder()
             .setAvailableCommands(Player.Commands.Builder().addAllCommands().build())
-            .setPlaylist(listOf(MediaItemData.Builder("demo").setDurationUs(2_634_000_000L).build()))
+            .setTrackSelectionParameters(params)
+            .setPlaylist(listOf(MediaItemData.Builder("demo").setDurationUs(2_634_000_000L).setTracks(tracks()).build()))
             .setPlayWhenReady(playing, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
             .setPlaybackState(Player.STATE_READY)
             .setContentPositionMs(1_265_000)
@@ -268,6 +302,11 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
         /** A committed scrub lands nowhere: the stand-in stays where it is, and does not crash. */
         override fun handleSeek(mediaItemIndex: Int, positionMs: Long, seekCommand: Int): ListenableFuture<*> =
             Futures.immediateVoidFuture()
+
+        override fun handleSetTrackSelectionParameters(parameters: TrackSelectionParameters): ListenableFuture<*> {
+            params = parameters
+            return Futures.immediateVoidFuture()
+        }
 
         override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
             playing = playWhenReady

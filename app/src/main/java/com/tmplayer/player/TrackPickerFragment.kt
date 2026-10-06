@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.leanback.app.GuidedStepSupportFragment
 import androidx.leanback.widget.GuidanceStylist
 import androidx.leanback.widget.GuidedAction
+import androidx.leanback.widget.GuidedActionsStylist
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.TrackSelectionOverride
@@ -38,6 +39,9 @@ class TrackPickerFragment : GuidedStepSupportFragment() {
 
     /** PlayerActivity runs on Theme.Leanback, which has no guided-step styling of its own. */
     override fun onProvideTheme(): Int = androidx.leanback.R.style.Theme_Leanback_GuidedStep
+
+    /** Rows a tap activates at once on the phone; see [TouchActionsStylist]. */
+    override fun onCreateActionsStylist(): GuidedActionsStylist = TouchActionsStylist()
 
     override fun onCreateGuidance(savedInstanceState: Bundle?): GuidanceStylist.Guidance {
         val title = if (trackType == C.TRACK_TYPE_AUDIO) L.tracksAudioLanguage else L.tracksSubtitles
