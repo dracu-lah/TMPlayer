@@ -112,7 +112,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 
 **Phase H. Player declutter and support asks (planned 2026-10-06, design: docs/design/2026-10-06-player-declutter-and-support-asks-plan.md)**
 - [ ] CP37 Android player declutter: one visible path per action on phone and TV
-- [x] CP38 Desktop player declutter: bar, main menu, shortcut sheet (HASH; the NextUpCard and Countdown sheet were already exclusive, no cut; Picture shape moved into Playback options; unused en.json strings kept until langsync prunes the locales)
+- [x] CP38 Desktop player declutter: bar, main menu, shortcut sheet (e07f7cb; the NextUpCard and Countdown sheet were already exclusive, no cut; Picture shape moved into Playback options; unused en.json strings kept until langsync prunes the locales)
 - [ ] CP39 Support asks v2: positive moments, three asks at most, thank-you state, tmplayer.org/support
 - [ ] CP40 Episodes button and modal in the player (phone, TV, desktop), after CP37 and CP38
 
