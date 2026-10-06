@@ -48,7 +48,7 @@ links. Renaming an asset means updating the `KINDS` table in `site/app.js` in th
 the download page falls back to linking the release page for that row.
 
 The Windows files are not code signed, so SmartScreen warns on every machine; INSTALL.md and the
-site say how to get past it. macOS is not built for release yet.
+site say how to get past it.
 
 The desktop jobs need the same Telegram credentials as the Android build, and they run in the
 `release` environment too, so each one waits for the same reviewer approval before it starts.

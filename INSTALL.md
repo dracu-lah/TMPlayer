@@ -11,8 +11,6 @@ exist at all). Every build is on the [Releases](../../releases) page, and the
 - [Desktop, menu and taskbar shortcuts](#putting-it-on-the-desktop-in-the-menu-and-on-the-taskbar)
 - [The desktop keyboard](#using-the-keyboard-and-mouse)
 
-macOS is planned for later; there is no Mac build yet.
-
 # Installing TMPlayer on an Android TV device
 
 The same APK installs on a phone: open the file and say yes when Android asks. The steps below are
@@ -149,8 +147,7 @@ the bottom, or under **Settings → Apps → See all apps**.
 
 The desktop app runs on **Windows 10 and 11 (64-bit)** and on **64-bit x86 Linux**. It signs in
 to the same Telegram account, shows the same library and streams the same way as the Android app,
-played through mpv, which is bundled: there is nothing to install beside it. macOS is planned for
-later; there is no build for it yet.
+played through mpv, which is bundled: there is nothing to install beside it.
 
 Every file is on the same GitHub release as the APK:
 

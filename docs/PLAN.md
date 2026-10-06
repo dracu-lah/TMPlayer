@@ -36,6 +36,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [x] U01 Two Sentry settings (2026-10-06: IP storage off, default scrubbers on; DSN host `.ingest.de.sentry.io`, EU, privacy page updated)
 - [ ] U02 Player logo's source (label settled 2026-10-06: GPL-3.0-or-later everywhere, already true in README, winget, AUR, metainfo and the MSI; libraries keep their own licences)
 - [x] U03 Budget decision: $0 only (2026-10-06). Phase G dropped, no Certum
+- [x] U03a No macOS (2026-10-06): not built, tested, packaged or promised anywhere; the CI job, the DMG target and the icns are gone
 - [ ] U04 (optional) Commit email `hello@tmplayer.org`
 - [ ] U05 (optional) DMARC record
 

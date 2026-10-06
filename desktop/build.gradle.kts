@@ -10,7 +10,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 
-// TMPlayer for Windows, Linux and macOS (Part B of the 2026-10-03 plan): a Compose Desktop front
+// TMPlayer for Windows and Linux (Part B of the 2026-10-03 plan): a Compose Desktop front
 // end over :core, playing through libmpv (mediamp).
 //
 // Release packaging: the MSI comes straight from the Compose plugin (jpackage). The Linux AppImage
@@ -75,7 +75,6 @@ val hostOs: String = System.getProperty("os.name").lowercase()
 val hostArm: Boolean = System.getProperty("os.arch").let { it == "aarch64" || it == "arm64" }
 val mpvRuntime = when {
     hostOs.contains("win") -> libs.mediamp.runtime.windows.x64
-    hostOs.contains("mac") -> if (hostArm) libs.mediamp.runtime.macos.arm64 else libs.mediamp.runtime.macos.x64
     else -> libs.mediamp.runtime.linux.x64
 }
 
@@ -86,13 +85,12 @@ val mpvRuntime = when {
 //  - tdl-coroutines carries TDLib for six OS and CPU pairs (about 330 MB unpacked). Each installer
 //    only ever loads its own, so the other five are removed: about 85 MB off every package.
 //  - On a Linux host, the ELF .so entries (libtdjsonjava, libmpv and FFmpeg) are stripped of
-//    symbols that nothing reads at runtime. Windows DLLs and macOS dylibs are left alone.
+//    symbols that nothing reads at runtime. Windows DLLs are left alone.
 // A signed jar (META-INF/*.SF) is only ever stored, never changed, so its signature stays valid.
 // The transform runs per host OS, since the kept TDLib and the strip step both depend on it, and
 // the installers are built on the matching host. The self-test proves the TDLib that remains loads.
 val tdlibKeep = when {
     hostOs.contains("win") -> "windows/x64/"
-    hostOs.contains("mac") -> if (hostArm) "macos/arm64/" else "macos/x64/"
     else -> if (hostArm) "linux/arm64/" else "linux/x64/"
 }
 // The name is the transform's cache identity: change it whenever the transform's output changes.
@@ -189,7 +187,7 @@ dependencies {
         from.attribute(jarsStored, false).attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "jar")
         to.attribute(jarsStored, true).attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, "jar")
         parameters.keep.set(tdlibKeep)
-        parameters.stripElf.set(!hostOs.contains("win") && !hostOs.contains("mac"))
+        parameters.stripElf.set(!hostOs.contains("win"))
     }
 }
 configurations.named("runtimeClasspath") {
@@ -313,7 +311,7 @@ compose.desktop {
             configurationFiles.from(project.file("proguard-rules.pro"))
         }
         nativeDistributions {
-            targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg)
+            targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.Msi, TargetFormat.Exe)
             packageName = "TMPlayer"
             // jpackage wants a plain x.y.z.
             packageVersion = desktopVersion.substringBefore('-')
@@ -348,10 +346,6 @@ compose.desktop {
                 perUserInstall = true
                 dirChooser = false
                 upgradeUuid = "6f1d3c0e-2b8a-4b7e-9d2c-7a1e5f4c3b21"
-            }
-            macOS {
-                bundleID = "com.tmplayer.desktop"
-                iconFile.set(packagingDir.file("icons/tmplayer.icns"))
             }
         }
     }

@@ -50,7 +50,7 @@ No messages, no server, no account except yours.
 - **Linux**, 64-bit x86 with glibc 2.38 or newer, as an AppImage, with an AUR recipe in
   [desktop/packaging/aur](desktop/packaging/aur).
 
-macOS is planned for later. Everything is on the same [GitHub release](../../releases), and
+Everything is on the same [GitHub release](../../releases), and
 [tmplayer.org/download](https://tmplayer.org/download/) lists it by platform.
 
 ## Install

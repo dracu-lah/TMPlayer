@@ -100,7 +100,7 @@ The phone gets its own layout out of the same APK: the chat list, then the chat'
 ## On a computer
 
 A desktop app for **Windows 10 and 11** and **64-bit Linux**, from the same release as the APKs.
-macOS is planned for later. It is the same account, the same library and the same streaming, drawn
+It is the same account, the same library and the same streaming, drawn
 for a mouse and a keyboard. How to install it is in [INSTALL.md](../INSTALL.md#installing-tmplayer-on-a-computer).
 
 **Signs in the same way.** A QR code fills the window: Telegram on your phone, Settings, Devices,

@@ -94,8 +94,6 @@ mediamp-api = { group = "org.openani.mediamp", name = "mediamp-api", version.ref
 mediamp-mpv = { group = "org.openani.mediamp", name = "mediamp-mpv", version.ref = "mediamp" }
 mediamp-runtime-linux-x64 = { group = "org.openani.mediamp", name = "mediamp-mpv-runtime-linux-x64", version.ref = "mediamp" }
 mediamp-runtime-windows-x64 = { group = "org.openani.mediamp", name = "mediamp-mpv-runtime-windows-x64", version.ref = "mediamp" }
-mediamp-runtime-macos-arm64 = { group = "org.openani.mediamp", name = "mediamp-mpv-runtime-macos-arm64", version.ref = "mediamp" }
-mediamp-runtime-macos-x64 = { group = "org.openani.mediamp", name = "mediamp-mpv-runtime-macos-x64", version.ref = "mediamp" }
 kotlinx-coroutines-swing = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-swing", version.ref = "coroutines" }
 cmp-material3 = { group = "org.jetbrains.compose.material3", name = "material3", version.ref = "cmpMaterial3" }
 cmp-material-icons = { group = "org.jetbrains.compose.material", name = "material-icons-core", version.ref = "cmpMaterialIcons" }

@@ -80,7 +80,7 @@ jobs:
   # The desktop app, packaged exactly as a release packages it (the same composite actions under
   # .github/actions) and self-tested from every download, so a broken installer shows up on the
   # push that broke it rather than on release day. No credentials: the app builds and loads its
-  # natives without them. This is where Windows and macOS are compiled, tested and packaged at
+  # natives without them. This is where Windows is compiled, tested and packaged at
   # all, since the developer has only a Linux machine.
   #
   # Ubuntu 24.04 rather than ubuntu-latest: the bundled TDLib and libmpv need glibc 2.38, so the
@@ -257,45 +257,3 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-  # macOS is not released (it would ship unsigned, which macOS 15 and later refuse to open without
-  # a trip to Privacy and Security), but it keeps compiling, testing and packaging here.
-  desktop-macos:
-    name: Desktop (macOS)
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Run desktop tests
-        run: ./gradlew :desktop:test
-
-      - name: Package the DMG and the app
-        run: ./gradlew :desktop:packageDmg :desktop:createDistributable
-
-      - name: Self-test the app
-        run: desktop/build/compose/binaries/main/app/TMPlayer.app/Contents/MacOS/TMPlayer --self-test
-
-      - name: Upload the DMG
-        uses: actions/upload-artifact@v7
-        with:
-          name: tmplayer-desktop-macos
-          path: desktop/build/compose/binaries/main/dmg/*.dmg
-          retention-days: 14
-          if-no-files-found: error
-
-      - name: Publish desktop test report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: desktop-test-results-macos
-          path: desktop/build/reports/tests/
-          retention-days: 14
-          if-no-files-found: ignore

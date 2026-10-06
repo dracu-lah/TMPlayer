@@ -9,7 +9,6 @@
 #   hicolor/<n>x<n>.png      the Linux icon theme sizes
 #   tmplayer.png             512 px, the Compose Linux iconFile and the AppImage icon
 #   tmplayer.ico             Windows, 16 to 256 px
-#   tmplayer.icns            macOS, 16 to 1024 px
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../../.." && pwd)"
@@ -39,8 +38,5 @@ def img(n): return Image.open(f"{tmp}/{n}.png").convert("RGBA")
 ico_sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256]
 img(256).save(f"{here}/tmplayer.ico", format="ICO", sizes=[(n, n) for n in ico_sizes],
               append_images=[img(n) for n in ico_sizes if n != 256])
-# Pillow writes every ICNS size it can derive from the largest image; 1024 covers 512@2x.
-img(1024).save(f"{here}/tmplayer.icns", format="ICNS",
-               append_images=[img(n) for n in (16, 32, 64, 128, 256)])
 EOF
 echo "icons written to $here"
