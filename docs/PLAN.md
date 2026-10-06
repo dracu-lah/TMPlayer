@@ -78,7 +78,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 **Phase D. The "Languages" release**
 - [x] CP19 P1 i18n infrastructure (f7ba39d, catalog, generated `L`, Translator, ICU subset, CLDR plurals for all 17 languages, formatter, resolution, `LocalStrings` and en-XA covered by the :core tests; TV promo home unchanged on the emulator. API: add a key to en.json, read `LocalStrings.current.key` in Compose and `L.key` elsewhere)
 - [x] CP20 P2 shared onboarding and the desktop promo fixture (728ccef, tour pages checked on the phone and TV emulator fixtures, the desktop render test and en-XA; gating unit tested. Site wiring for the desktop shots is done but left uncommitted, see the report; the real first run on a device not yet seen)
-- [ ] CP21 P3 extract phone and TV text
+- [x] CP21 P3 extract phone and TV text (7d0b42a, 783 new keys over :app and :ui, formatter switch, notifications, track picker and accessibility labels; English compared with the phone and TV emulator fixtures, en-XA shows only :core text, brand names and demo data; 1 leftover by the literal scan, the "TMPlayer" brand)
 - [ ] CP22 P4 extract desktop and core text
 - [ ] CP23 P5 language setting, what's new, feedback, localized metadata
 - [ ] CP24 P6 translations (go-ahead given 2026-10-06, 16 languages)
@@ -480,7 +480,7 @@ module and stop at the split.
 **STOP**
 
 ### CP22 P4 extract desktop and core text
-`:desktop` (tray, Windows notifications and SMTC, update popup, keyboard help) and `:core` user-facing errors;
+`:desktop` (tray, Windows notifications and SMTC, update popup, keyboard help) and `:core` user-facing errors, plus the :core labels the phone and TV still show in English (ThemeChoice, PlaybackSpeed, SleepTimer, SyncDelays, SubtitleStyle, TouchPrefs, DiskInfo.freeLabel, WatchedWhen, ChatKind, UpdateWords);
 `--self-test` loads every catalog.
 **STOP**
 
