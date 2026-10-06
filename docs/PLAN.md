@@ -763,6 +763,31 @@ aapt2 (see the stale versionCode note) before trusting a test.
   player row leaving an empty band), focus that gets lost on the D-pad, anything that looks broken, then fix
   what is found or list it.
 - Record what was verified and what was not in the plan board line.
+**First pass, 2026-10-06 (release build 1.23.0-test28, versionCode 12330, merged CP37, CP38, CP39; installed with
+`adb install -r`, login kept; phone POCO M2 Pro `d3f7da23`, 1080x2400; stick Mi TV `10.27.27.33`, 1080p):**
+- Checked and fine: phone Home, the detail page, the player in portrait and landscape (centre cluster is
+  previous, play/pause, next; bottom row subtitles, audio, speed, rotate), the phone overflow, TV Home with the
+  folded rail and the version beside the logo, TV detail page, the TV row (subtitles, audio, speed, More plus the
+  clock), the TV More menu, TV Settings, About and help, and the TV Support dialog (QR decodes to
+  `tmplayer.org/support/?utm_source=settings&utm_medium=app`).
+- Findings, open:
+  1. Phone landscape, controls up: the subtitle line runs through the timebar and the time labels. This is the
+     existing `liftSubtitles` tradeoff (it never climbs into the centre buttons), so little room is left
+     sideways. Options: hide the subtitles while the row is up in a short window, or give them a scrim. Not changed.
+  2. Phone portrait: the previous and next captions (S01E03, S01E05) sit on the same line as the subtitles and
+     collide with them when the controls are up. Same fix as 1.
+  3. Phone landscape overflow: 11 entries scroll and cut off at "Load a subtitle file". Merge or drop entries
+     (Copy link, Save, Mark watched, Open in another app) or split it into two groups.
+  4. Empty right half of the controls row on phone and TV. This is the slot CP40 fills with Episodes.
+  5. Home in landscape and on TV: a Continue row with one item fills a third of the width and leaves the rest
+     empty. Fine with more items, but worth a wider card or a second row (hint plus Favourites) at this size.
+  6. The "Sign out of Telegram" row on TV Settings is the default focus on arrival at the bottom of the list and
+     has no visible confirm on a single OK; CP41's prompt sweep covers it.
+- Not tested: real gestures and pinch, the resume offer pill and the first-run hint over a real resume (the
+  first resume here showed the loader line "Resuming from 13:52", not the offer; check whether the offer shows
+  once playback is ready), the TV rungs of the support card (they need the forced debug flag), phone
+  thank-you state, Picture shape sheet, and the desktop pass. Media volume on the phone was set to 0 for the
+  test and put back to 14.
 **Done when:** screenshots of each changed screen on both devices were viewed, findings fixed or listed, and
 the pending device checks of CP37 to CP43 are ticked or carried forward by name.
 **STOP**
