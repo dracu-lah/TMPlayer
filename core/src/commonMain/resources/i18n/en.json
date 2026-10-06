@@ -46,6 +46,23 @@
   "player": {
     "track_kind": "{kind, select, audio {Audio track} subtitle {Subtitle track} other {Track}}"
   },
+  "series": {
+    "all_files": "All files",
+    "all_watched": "All watched",
+    "back": "Back to the chat",
+    "episode": "Episode {number}",
+    "episodes_count": "{count, plural, one {# episode} other {# episodes}}",
+    "play": "Play {code}",
+    "progress": "{watched} of {total} watched",
+    "resume": "Resume {code}",
+    "season": "Season {number}",
+    "season_picker": "Choose a season",
+    "series": "Series",
+    "stopped_at": "Stopped at {time}",
+    "summary": "{seasons, plural, one {# season} other {# seasons}} · {episodes, plural, one {# ep} other {# eps}}",
+    "up_next_badge": "Up next",
+    "watched_label": "Watched"
+  },
   "settings": {
     "language_switched": "Now in {language}. You can change it in Settings.",
     "language_system": "System default",

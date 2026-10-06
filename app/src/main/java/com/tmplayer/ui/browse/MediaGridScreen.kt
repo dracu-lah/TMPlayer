@@ -146,6 +146,8 @@ import com.tmplayer.data.cancel
 import com.tmplayer.data.start
 import com.tmplayer.data.Td
 import com.tmplayer.data.MediaFeedEntry
+import com.tmplayer.data.SeriesShelf
+import com.tmplayer.data.ShelfEntry
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.SizeFilter
@@ -363,6 +365,16 @@ fun MediaGridScreen(
     var listedItems by remember(chatId) { mutableStateOf<List<MediaItem>>(emptyList()) }
     val scope = rememberCoroutineScope()
     val settings = remember(context) { SettingsStore(context) }
+    // "Series" folds a show's episodes into one tile; "All files" lists every video as before.
+    val seriesView by settings.seriesView.collectAsStateWithLifecycle(initialValue = true)
+    val watch = remember(watchProgress, watchedVideos) {
+        SeriesWatch(
+            point = { watchProgress[SettingsStore.progressKey(it.chatId, it.messageId)] },
+            finished = { SettingsStore.progressKey(it.chatId, it.messageId) in watchedVideos },
+        )
+    }
+    // The show opened from its tile, by key, so it keeps up as more of its episodes page in.
+    var openSeries by remember(chatId) { mutableStateOf<String?>(null) }
 
     fun leaveSelection() {
         selecting = false
@@ -508,15 +520,31 @@ fun MediaGridScreen(
             } else {
                 COLUMNS
             }
-            val feed = remember(list.items, list.sponsored) {
-                placeSponsored(list.items, list.sponsored)
+            // Folded only while browsing: a search ranks files against what was typed, and picking
+            // videos to download picks files, so both see every file on its own.
+            val arranged = remember(list.items) { SeriesShelf.arrange(list.items) }
+            val hasShows = arranged.any { it is ShelfEntry.Show }
+            val grouping = seriesView && hasShows && !selecting && query.isBlank()
+            val shelf = remember(arranged, list.items, grouping) {
+                if (grouping) arranged else list.items.map { ShelfEntry.File(it) }
+            }
+            val feed = remember(shelf, list.sponsored) {
+                placeSponsored(shelf, list.sponsored)
+            }
+            val viewSwitch: @Composable () -> Unit = {
+                SeriesViewToggle(
+                    seriesView = seriesView,
+                    onChange = { on -> scope.launch { settings.setSeriesView(on) } },
+                    modifier = Modifier.padding(start = if (touch) 12.dp else 0.dp, top = 4.dp, bottom = 4.dp),
+                )
             }
             LaunchedEffect(list.items) { listedItems = list.items }
             val gridState = rememberLazyGridState()
             val listState = rememberLazyListState()
             val firstItem = remember { FocusRequester() }
-            fun focusOf(item: MediaItem): Modifier =
-                if (item === list.items.firstOrNull()) Modifier.focusRequester(firstItem) else Modifier
+            val firstKey = shelf.firstOrNull()?.key
+            fun focusOf(entry: ShelfEntry): Modifier =
+                if (entry.key == firstKey) Modifier.focusRequester(firstItem) else Modifier
 
             // The phone's grid is compact but not captionless: smaller art than a television's
             // card, two lines of the file name under it in small type, and a hairline of a gap.
@@ -559,6 +587,9 @@ fun MediaGridScreen(
                         horizontalArrangement = Arrangement.spacedBy(gap),
                         verticalArrangement = Arrangement.spacedBy(gap),
                     ) {
+                        if (hasShows && !selecting && query.isBlank()) {
+                            item(key = "series-toggle", span = { GridItemSpan(maxLineSpan) }) { viewSwitch() }
+                        }
                         if (list.hiddenBySize > 0 || list.hiddenSelfDestructing > 0) {
                             item(key = "hidden-videos", span = { GridItemSpan(maxLineSpan) }) {
                                 HiddenVideosNote(list.hiddenBySize, list.hiddenSelfDestructing, viewModel::showHidden)
@@ -568,7 +599,7 @@ fun MediaGridScreen(
                             items = feed,
                             key = {
                                 when (it) {
-                                    is MediaFeedEntry.Media -> "media-${it.item.id}"
+                                    is MediaFeedEntry.Media -> it.item.key
                                     is MediaFeedEntry.Sponsored -> "sponsor-${it.item.messageId}"
                                 }
                             },
@@ -578,8 +609,17 @@ fun MediaGridScreen(
                             },
                         ) { entry ->
                             when (entry) {
-                                is MediaFeedEntry.Media -> {
-                                    val item = entry.item
+                                is MediaFeedEntry.Media -> when (val shelved = entry.item) {
+                                    is ShelfEntry.Show -> SeriesCard(
+                                        series = shelved.series,
+                                        progress = watch.progress(shelved.series),
+                                        onClick = { openSeries = shelved.series.key },
+                                        onFocused = { standingOn = null },
+                                        modifier = focusOf(shelved),
+                                        dense = dense,
+                                    )
+                                    is ShelfEntry.File -> {
+                                    val item = shelved.item
                                     MediaCard(
                                         item = item,
                                         watched = watchProgress[
@@ -593,8 +633,9 @@ fun MediaGridScreen(
                                             { showingDetailsOf = item }
                                         },
                                         onFocused = { standingOn = item },
-                                        modifier = focusOf(item),
+                                        modifier = focusOf(shelved),
                                     )
+                                    }
                                 }
                                 is MediaFeedEntry.Sponsored -> SponsoredCard(
                                     item = entry.item,
@@ -615,6 +656,9 @@ fun MediaGridScreen(
                         contentPadding = padding,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
+                        if (hasShows && !selecting && query.isBlank()) {
+                            item(key = "series-toggle") { viewSwitch() }
+                        }
                         if (list.hiddenBySize > 0 || list.hiddenSelfDestructing > 0) {
                             item(key = "hidden-videos") {
                                 HiddenVideosNote(list.hiddenBySize, list.hiddenSelfDestructing, viewModel::showHidden)
@@ -624,14 +668,22 @@ fun MediaGridScreen(
                             items = feed,
                             key = {
                                 when (it) {
-                                    is MediaFeedEntry.Media -> "media-${it.item.id}"
+                                    is MediaFeedEntry.Media -> it.item.key
                                     is MediaFeedEntry.Sponsored -> "sponsor-${it.item.messageId}"
                                 }
                             },
                         ) { entry ->
                             when (entry) {
-                                is MediaFeedEntry.Media -> {
-                                    val item = entry.item
+                                is MediaFeedEntry.Media -> when (val shelved = entry.item) {
+                                    is ShelfEntry.Show -> SeriesListRow(
+                                        series = shelved.series,
+                                        progress = watch.progress(shelved.series),
+                                        onClick = { openSeries = shelved.series.key },
+                                        onFocused = { standingOn = null },
+                                        modifier = focusOf(shelved),
+                                    )
+                                    is ShelfEntry.File -> {
+                                    val item = shelved.item
                                     MediaRow(
                                         item = item,
                                         watched = watchProgress[
@@ -644,8 +696,9 @@ fun MediaGridScreen(
                                             { showingDetailsOf = item }
                                         },
                                         onFocused = { standingOn = item },
-                                        modifier = focusOf(item),
+                                        modifier = focusOf(shelved),
                                     )
+                                    }
                                 }
                                 is MediaFeedEntry.Sponsored -> SponsoredCard(
                                     item = entry.item,
@@ -658,6 +711,22 @@ fun MediaGridScreen(
                                 )
                             }
                         }
+                    }
+                }
+
+                // Before the video menu, so a held episode's menu draws over the show.
+                openSeries?.let { key ->
+                    val series = arranged.firstNotNullOfOrNull { (it as? ShelfEntry.Show)?.series?.takeIf { s -> s.key == key } }
+                    if (series == null) {
+                        LaunchedEffect(key) { openSeries = null }
+                    } else {
+                        SeriesOpened(
+                            series = series,
+                            watch = watch,
+                            onPlay = onPlay,
+                            onDismiss = { openSeries = null },
+                            onLongClick = { showingDetailsOf = it },
+                        )
                     }
                 }
 

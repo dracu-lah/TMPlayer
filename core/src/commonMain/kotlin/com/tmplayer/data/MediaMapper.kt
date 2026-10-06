@@ -46,6 +46,11 @@ data class MediaItem(
      * but every way of keeping a copy is withheld: see [ContentProtection].
      */
     val canBeSaved: Boolean = true,
+    /**
+     * The post's caption, trimmed, or empty. A second source for the episode when the file name
+     * does not carry one: see [MediaName.parse].
+     */
+    val caption: String = "",
 ) {
     /**
      * Where a video's bytes are, as far as the viewer is concerned.
@@ -98,6 +103,7 @@ data class MediaItem(
             onDevice == other.onDevice &&
             locality == other.locality &&
             canBeSaved == other.canBeSaved &&
+            caption == other.caption &&
             miniThumbnail.contentEquals(other.miniThumbnail)
     }
 
@@ -115,6 +121,7 @@ data class MediaItem(
         result = 31 * result + onDevice.hashCode()
         result = 31 * result + locality.hashCode()
         result = 31 * result + canBeSaved.hashCode()
+        result = 31 * result + caption.hashCode()
         result = 31 * result + (miniThumbnail?.contentHashCode() ?: 0)
         return result
     }
@@ -176,6 +183,7 @@ object MediaMapper {
                 miniThumbnail = video.minithumbnail?.data,
                 date = message.date,
                 onDevice = onDevice(video.video),
+                caption = captionOf(content.caption?.text),
             )
         }
 
@@ -196,6 +204,7 @@ object MediaMapper {
                 miniThumbnail = document.minithumbnail?.data,
                 date = message.date,
                 onDevice = onDevice(document.document),
+                caption = captionOf(content.caption?.text),
             )
         }
 
@@ -215,6 +224,7 @@ object MediaMapper {
                 miniThumbnail = animation.minithumbnail?.data,
                 date = message.date,
                 onDevice = onDevice(animation.animation),
+                caption = captionOf(content.caption?.text),
             )
         }
 
@@ -258,6 +268,11 @@ object MediaMapper {
         if (firstCaptionLine.isNotEmpty()) return firstCaptionLine.take(120)
         return fallback
     }
+
+    /** Kept short: it is read for an episode and shown as a synopsis, never as a whole post. */
+    private fun captionOf(text: String?): String = text?.trim()?.take(CAPTION_MAX).orEmpty()
+
+    private const val CAPTION_MAX = 600
 
     /** TDLib reports 0 for a file it has never touched, but usually knows the expected size. */
     private fun fileSize(size: Long, expectedSize: Long) = if (size > 0) size else expectedSize

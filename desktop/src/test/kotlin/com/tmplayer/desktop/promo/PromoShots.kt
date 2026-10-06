@@ -32,7 +32,13 @@ import com.tmplayer.data.DownloadRunner
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.UpdateScheduler
+import com.tmplayer.data.WatchedRecord
 import com.tmplayer.data.WatchedStore
+import com.tmplayer.data.SeriesShelf
+import com.tmplayer.data.ShelfEntry
+import com.tmplayer.desktop.ui.SeriesPage
+import com.tmplayer.desktop.ui.rememberSeriesWatch
+import com.tmplayer.ui.browse.SeriesViewToggle
 import com.tmplayer.desktop.DesktopPrefs
 import com.tmplayer.desktop.DesktopWatchCache
 import com.tmplayer.desktop.player.AbLoop
@@ -192,6 +198,94 @@ class PromoShots {
                 VideoGrid(shell, videos, "Weekend Clips")
             }
         }
+    }
+
+    /**
+     * Three made-up shows named the ways real uploads are (a scene release, the fansub dash form,
+     * and a caption carrying the episode), ahead of the ordinary videos.
+     */
+    private val seriesVideos: List<MediaItem> = run {
+        val pictures = listOf("coast", "forest", "workshop", "kitchen", "tutorial", "birthday")
+        var id = 200L
+        fun episode(file: String, sizeMb: Long, minutes: Int, caption: String = "") = MediaItem(
+            chatId = 101, messageId = id, fileId = 0, title = file, sizeBytes = sizeMb * 1024 * 1024,
+            durationSec = minutes * 60, mimeType = "video/x-matroska", thumbnailFileId = 0,
+            miniThumbnail = demo(pictures[(id++ % pictures.size).toInt()]), date = id.toInt(), fileName = file, caption = caption,
+        )
+        val harbour = (1..6).map { episode("Harbour.Notes.S01E%02d.1080p.WEB-DL.mkv".format(it), 820, 44) } +
+            (1..4).map { episode("Harbour.Notes.S02E%02d.1080p.WEB-DL.mkv".format(it), 860, 47) }
+        val garden = (1..5).map { episode("[Demo] Sky Garden - %02d (1080p).mkv".format(it), 340, 24) }
+        val kitchen = (1..3).map { episode("kitchen_journal_720p_part$it.mp4", 210, 18, caption = "Kitchen Journal Ep $it\nNew every Friday") }
+        (harbour + garden + kitchen).reversed() + videos.take(6)
+    }
+
+    /** Season one of Harbour Notes watched to E03 and stopped in E04; Sky Garden finished. */
+    private fun seedWatching() = runBlocking {
+        seriesVideos.filter { Regex("""S01E0[1-3]""").containsMatchIn(it.fileName) || it.fileName.contains("Sky Garden") }
+            .forEach {
+                shell.watched.markWatched(
+                    WatchedRecord(it.chatId, it.messageId, 0, it.title, "Weekend Clips", it.sizeBytes, it.durationSec, 1L, manual = true),
+                )
+            }
+        seriesVideos.first { it.fileName.contains("S01E04") }.let {
+            settings.saveResumePosition(it.chatId, it.messageId, 19 * 60_000L, 44 * 60_000L)
+        }
+    }
+
+    @Composable
+    private fun chatPage(subtitle: String, body: @Composable () -> Unit) {
+        withSidebar {
+            Column(Modifier.fillMaxSize()) {
+                PageHeader(
+                    title = "Weekend Clips",
+                    subtitle = subtitle,
+                    leading = {
+                        IconButton(onClick = {}) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to chats") }
+                        ChatAvatar(chats.first().miniThumbnail, 0, "Weekend Clips", 40.dp)
+                    },
+                    actions = {
+                        SearchField("", {}, "Search this chat", shell.searchFocus, Modifier.width(300.dp))
+                        PosterSizeStep(shell)
+                        IconButton(onClick = {}) { Icon(Icons.Filled.Refresh, contentDescription = "Refresh") }
+                    },
+                )
+                body()
+            }
+        }
+    }
+
+    /** The chat with its shows folded into posters, and the switch above them. */
+    @Test
+    fun series() = both("series", before = ::seedWatching) {
+        chatPage("${seriesVideos.size} videos") {
+            VideoGrid(
+                shell, seriesVideos, "Weekend Clips",
+                shelf = SeriesShelf.arrange(seriesVideos),
+                viewSwitch = { SeriesViewToggle(true, {}) },
+            )
+        }
+    }
+
+    /** The same chat with "All files" chosen. */
+    @Test
+    fun allFiles() = both("series-all-files", before = ::seedWatching) {
+        chatPage("${seriesVideos.size} videos") {
+            VideoGrid(shell, seriesVideos, "Weekend Clips", viewSwitch = { SeriesViewToggle(false, {}) })
+        }
+    }
+
+    /** A show opened: the season dropdown, the play button and the episode list. */
+    @Test
+    fun seriesOpen() = both("series-open", before = ::seedWatching) {
+        val show = (SeriesShelf.arrange(seriesVideos).first { it is ShelfEntry.Show && it.series.key == "harbour notes" } as ShelfEntry.Show).series
+        chatPage("${seriesVideos.size} videos") { SeriesPage(shell, show, rememberSeriesWatch(shell), onClose = {}) }
+    }
+
+    /** The season dropdown open over the episodes. */
+    @Test
+    fun seriesDropdown() = both("series-dropdown", before = ::seedWatching, darkOnly = true) {
+        val show = (SeriesShelf.arrange(seriesVideos).first { it is ShelfEntry.Show && it.series.key == "harbour notes" } as ShelfEntry.Show).series
+        chatPage("${seriesVideos.size} videos") { SeriesPage(shell, show, rememberSeriesWatch(shell), onClose = {}, startOpen = true) }
     }
 
     @Test

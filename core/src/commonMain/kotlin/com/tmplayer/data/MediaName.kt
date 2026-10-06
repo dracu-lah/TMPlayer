@@ -43,11 +43,46 @@ data class ParsedName(
 object MediaName {
 
     fun parse(fileName: String, maxYear: Int = thisYear() + 1): ParsedName {
-        val stripped = stripDecoration(stripExtension(fileName))
+        val read = read(stripExtension(fileName), maxYear)
+        // Falling back to the whole name matters for a file that is nothing but a title.
+        return read.parsed.copy(title = read.parsed.title.ifEmpty { read.whole })
+    }
+
+    /**
+     * The same, with the post's caption as a second source for the episode.
+     *
+     * Plenty of channels upload "harbour_notes_720p.mkv" and write "Harbour Notes S02E04" in the
+     * caption, or name the file after the show and put "Episode 4" underneath. The file name still
+     * wins whenever it carries an episode of its own: a caption is free text, and the first line
+     * of it is often an advert or a channel's greeting rather than a description of the file.
+     *
+     * Only the caption's first line that says anything is read, and it is read as text rather than
+     * as a file name, so a trailing "Mr." is not taken for an extension. When that line names an
+     * episode but no title ("Episode 4"), the title stays the file name's.
+     */
+    fun parse(fileName: String, caption: String?, maxYear: Int = thisYear() + 1): ParsedName {
+        val fromName = parse(fileName, maxYear)
+        if (fromName.isEpisode) return fromName
+        val line = caption?.lineSequence()?.map { it.trim() }?.firstOrNull { it.isNotEmpty() }
+            ?: return fromName
+        val fromCaption = read(line, maxYear).parsed
+        if (!fromCaption.isEpisode) return fromName
+        val nameTitle = fromName.title.takeIf { fileName.isNotBlank() }.orEmpty()
+        return fromCaption.copy(
+            title = fromCaption.title.ifEmpty { nameTitle },
+            year = fromCaption.year ?: fromName.year,
+        )
+    }
+
+    /** What [read] found, with the title left empty when nothing came before the first marker. */
+    private class Read(val parsed: ParsedName, val whole: String)
+
+    private fun read(text: String, maxYear: Int): Read {
+        val stripped = stripDecoration(text)
         // Separators are interchangeable: the same release shows up dot-separated on one tracker
         // and space-separated on another.
         val normalised = stripped.replace(SEPARATORS, " ").replace(WHITESPACE, " ").trim()
-        if (normalised.isEmpty()) return ParsedName("", null)
+        if (normalised.isEmpty()) return Read(ParsedName("", null), "")
 
         val episode = findEpisode(normalised)
         val year = findYear(normalised, maxYear)
@@ -60,14 +95,14 @@ object MediaName {
             firstTagIndex(normalised),
         ).minOrNull() ?: normalised.length
 
-        val title = clean(normalised.substring(0, cut))
-
-        return ParsedName(
-            // Falling back to the whole name matters for a file that is nothing but a title.
-            title = title.ifEmpty { clean(normalised) },
-            year = year?.value,
-            season = episode?.season,
-            episode = episode?.number,
+        return Read(
+            ParsedName(
+                title = clean(normalised.substring(0, cut)),
+                year = year?.value,
+                season = episode?.season,
+                episode = episode?.number,
+            ),
+            whole = clean(normalised),
         )
     }
 
@@ -113,8 +148,9 @@ object MediaName {
     /**
      * Finds an episode however the uploader chose to write it.
      *
-     * Beyond "S02E04", names arrive as "2x04", "Season 2 Episode 4", or a season and an episode
-     * written separately as "S01 EP04".
+     * Beyond "S02E04", names arrive as "2x04", "Season 2 Episode 4", a season and an episode
+     * written separately as "S01 EP04", "Ep 04" on its own, or the fansub form "Show - 04", where
+     * the number is absolute and there is no season at all.
      *
      * A season with no episode is a whole-season pack, and that is a real answer rather than a
      * failure: it still belongs to the television index, it just has no single episode to show.
@@ -132,13 +168,19 @@ object MediaName {
             }
 
         val season = SEASON_ONLY.find(text)
-        val number = EPISODE_ONLY.find(text)
+        val number = EPISODE_ONLY.find(text) ?: DASHED_EPISODE.find(text)?.takeUnless { looksLikeYear(it) }
         if (season == null && number == null) return null
         return Episode(
             season = season?.groupValues?.get(1)?.toIntOrNull(),
             number = number?.groupValues?.get(1)?.toIntOrNull(),
             at = listOfNotNull(season?.range?.first, number?.range?.first).min(),
         )
+    }
+
+    /** "Show - 2019" is a year, not episode 2019; the dashed form is otherwise four digits wide. */
+    private fun looksLikeYear(match: MatchResult): Boolean {
+        val digits = match.groupValues[1]
+        return digits.length == 4 && digits.toInt() in MIN_YEAR..2099
     }
 
     /** A year and where in the name it was found, so the title can be cut at that point. */
@@ -194,6 +236,8 @@ object MediaName {
             }
         }
         return withoutSymbols
+            // A fansub group's tag, "[SubsPlease] Show - 02", is a signature in brackets.
+            .replace(GROUP_TAG, "")
             .replace(HANDLE, " ")
             .replace(SITE, " ")
             // Whatever the signature was attached with, once it is gone.
@@ -252,13 +296,24 @@ object MediaName {
         Regex("""\bseason\s?(\d{1,2})\s?episode\s?(\d{1,3})\b""", RegexOption.IGNORE_CASE),
     )
 
+    /**
+     * The fansub form: "Show - 02", "Show - 1071", "Show - 02v2". Spaces on both sides of the dash
+     * and at least two digits, which is how every group pads the number, so "Part - 2" stays a
+     * title. A resolution never matches, because the number has to end the word, and a year is
+     * turned away by [looksLikeYear].
+     */
+    private val DASHED_EPISODE = Regex("""\s-\s(\d{2,4})(?:v\d)?(?=\s|$)""")
+
+    /** A bracketed group name at the very front, before any title. Never a year. */
+    private val GROUP_TAG = Regex("""^\s*\[(?!\s*(?:19|20)\d{2}\s*\])[^\]]{1,40}\]\s*""")
+
     private val SEASON_ONLY = Regex("""\b(?:s|season\s?)(\d{1,2})\b""", RegexOption.IGNORE_CASE)
 
     /**
      * The word has to be there. A bare "E04" is too easy to find inside a title, and guessing
      * wrong turns a standalone video into episode four of a series that does not exist.
      */
-    private val EPISODE_ONLY = Regex("""\bep(?:isode)?\s?(\d{1,3})\b""", RegexOption.IGNORE_CASE)
+    private val EPISODE_ONLY = Regex("""\bep(?:isode)?[\s-]?(\d{1,3})\b""", RegexOption.IGNORE_CASE)
 
     /**
      * The technical vocabulary, used only to locate where the title stops.

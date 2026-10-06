@@ -41,6 +41,14 @@ import com.tmplayer.data.ChatFolderSummary
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaItem
+import com.tmplayer.data.Series
+import com.tmplayer.data.SeriesShelf
+import com.tmplayer.data.ShelfEntry
+import com.tmplayer.data.WatchPoint
+import com.tmplayer.ui.browse.SeriesCard
+import com.tmplayer.ui.browse.SeriesOpened
+import com.tmplayer.ui.browse.SeriesViewToggle
+import com.tmplayer.ui.browse.SeriesWatch
 import com.tmplayer.ui.browse.BrowseData
 import com.tmplayer.ui.browse.BrowseScreen
 import com.tmplayer.ui.browse.BrowseSection
@@ -296,6 +304,7 @@ private fun PromoChatsScreen(
 @Composable
 private fun PhoneMediaScreen(variant: String, onBack: () -> Unit = {}) {
     val media = promoMedia()
+    val series = promoSeries(variant)
     TouchMediaScaffold(
         chatTitle = "Weekend Clips",
         chatPhotoFileId = 0,
@@ -343,10 +352,28 @@ private fun PhoneMediaScreen(variant: String, onBack: () -> Unit = {}) {
                     Box(Modifier.padding(horizontal = 12.dp)) { HiddenVideosNote(12, 0) {} }
                 }
             }
-            items(tiles, key = { it.messageId }) { item ->
-                MediaCard(item = item, watched = null, onClick = {}, onFocused = {}, dense = true)
+            if (series != null) {
+                item(key = "series-toggle", span = { GridItemSpan(maxLineSpan) }) {
+                    SeriesViewToggle(series.on, series.onChange, Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp))
+                }
+                items(series.entries, key = { it.key }) { entry ->
+                    when (entry) {
+                        is ShelfEntry.Show -> SeriesCard(
+                            series = entry.series,
+                            progress = PROMO_WATCH.progress(entry.series),
+                            onClick = { series.open(entry.series.key) },
+                            dense = true,
+                        )
+                        is ShelfEntry.File -> PromoCard(entry.item, dense = true)
+                    }
+                }
+            } else {
+                items(tiles, key = { it.messageId }) { item ->
+                    MediaCard(item = item, watched = null, onClick = {}, onFocused = {}, dense = true)
+                }
             }
         }
+        series?.Opened()
         if (variant == "menu") PromoMenu(media.first())
     }
 }
@@ -373,6 +400,7 @@ private fun PromoMenu(item: MediaItem) {
 @Composable
 private fun TvMediaScreen(variant: String) {
     val media = promoMedia()
+    val series = promoSeries(variant)
     val first = remember { FocusRequester() }
     val state = promoState(variant)
     LaunchedEffect(Unit) { if (state == null) runCatching { first.requestFocus() } }
@@ -420,21 +448,40 @@ private fun TvMediaScreen(variant: String) {
             if (variant == "hidden") {
                 item(key = "hidden", span = { GridItemSpan(maxLineSpan) }) { HiddenVideosNote(12, 0) {} }
             }
-            items(media, key = { it.id }) { item ->
-                MediaCard(
-                    item = item,
-                    watched = null,
-                    onClick = {},
-                    onFocused = {},
-                    modifier = if (item === media.first()) {
-                        Modifier.focusRequester(first)
-                    } else {
-                        Modifier
-                    },
-                )
+            if (series != null) {
+                item(key = "series-toggle", span = { GridItemSpan(maxLineSpan) }) {
+                    SeriesViewToggle(series.on, series.onChange)
+                }
+                items(series.entries, key = { it.key }) { entry ->
+                    val focus = if (entry === series.entries.first()) Modifier.focusRequester(first) else Modifier
+                    when (entry) {
+                        is ShelfEntry.Show -> SeriesCard(
+                            series = entry.series,
+                            progress = PROMO_WATCH.progress(entry.series),
+                            onClick = { series.open(entry.series.key) },
+                            modifier = focus,
+                        )
+                        is ShelfEntry.File -> PromoCard(entry.item, modifier = focus)
+                    }
+                }
+            } else {
+                items(media, key = { it.id }) { item ->
+                    MediaCard(
+                        item = item,
+                        watched = null,
+                        onClick = {},
+                        onFocused = {},
+                        modifier = if (item === media.first()) {
+                            Modifier.focusRequester(first)
+                        } else {
+                            Modifier
+                        },
+                    )
+                }
             }
         }
     }
+    series?.Opened()
     if (variant == "menu") PromoMenu(media.first())
 }
 
@@ -470,6 +517,99 @@ private fun promoMedia(): List<MediaItem> {
         item(6, "Forest trail morning", R.drawable.demo_forest, 391, 1_376, "forest-trail-1080p.mp4"),
     )
 }
+
+/**
+ * The series variants: `--es variant series` folds the demo shows into tiles, `series-open` opens
+ * the first show (a bottom sheet on the phone, a page on the TV), and `files` is the same chat
+ * with "All files" chosen. The toggle works in all three, so one run can walk between them.
+ */
+private class PromoSeries(
+    val on: Boolean,
+    val onChange: (Boolean) -> Unit,
+    val entries: List<ShelfEntry>,
+    val open: (String) -> Unit,
+    private val opened: Series?,
+    private val close: () -> Unit,
+) {
+    @Composable
+    fun Opened() {
+        val show = opened ?: return
+        SeriesOpened(series = show, watch = PROMO_WATCH, onPlay = {}, onDismiss = close)
+    }
+}
+
+@Composable
+private fun promoSeries(variant: String): PromoSeries? {
+    if (variant != "series" && variant != "series-open" && variant != "files") return null
+    val media = promoSeriesMedia() + promoMedia()
+    var on by remember { mutableStateOf(variant != "files") }
+    val arranged = remember(media) { SeriesShelf.arrange(media) }
+    var openKey by remember { mutableStateOf(if (variant == "series-open") "harbour notes" else null) }
+    return PromoSeries(
+        on = on,
+        onChange = { on = it },
+        entries = if (on) arranged else media.map { ShelfEntry.File(it) },
+        open = { openKey = it },
+        opened = arranged.firstNotNullOfOrNull { (it as? ShelfEntry.Show)?.series?.takeIf { s -> s.key == openKey } },
+        close = { openKey = null },
+    )
+}
+
+/** A video's tile in the fixture, with the demo watch state on it. */
+@Composable
+private fun PromoCard(item: MediaItem, modifier: Modifier = Modifier, dense: Boolean = false) {
+    MediaCard(
+        item = item,
+        watched = PROMO_WATCH.point(item),
+        finished = PROMO_WATCH.finished(item),
+        onClick = {},
+        onFocused = {},
+        dense = dense,
+        modifier = modifier,
+    )
+}
+
+/**
+ * Three made-up shows, named the ways real uploads are: a scene release, the fansub dash form, and
+ * a file named after nothing with the episode in its caption.
+ */
+@Composable
+private fun promoSeriesMedia(): List<MediaItem> {
+    val pictures = listOf(
+        R.drawable.demo_coast, R.drawable.demo_forest, R.drawable.demo_workshop,
+        R.drawable.demo_kitchen, R.drawable.demo_tutorial, R.drawable.demo_birthday,
+    ).map { imageBytes(it) }
+    var id = 200L
+    fun episode(fileName: String, sizeMb: Long, minutes: Int, caption: String = "") = MediaItem(
+        chatId = 101,
+        messageId = id++,
+        fileId = 0,
+        title = fileName,
+        sizeBytes = sizeMb * 1024 * 1024,
+        durationSec = minutes * 60,
+        mimeType = "video/x-matroska",
+        thumbnailFileId = 0,
+        miniThumbnail = pictures[(id % pictures.size).toInt()],
+        date = id.toInt(),
+        fileName = fileName,
+        caption = caption,
+    )
+    val harbour = (1..6).map { episode("Harbour.Notes.S01E%02d.1080p.WEB-DL.mkv".format(it), 820, 44) } +
+        (1..4).map { episode("Harbour.Notes.S02E%02d.1080p.WEB-DL.mkv".format(it), 860, 47) }
+    val garden = (1..5).map { episode("[Demo] Sky Garden - %02d (1080p).mkv".format(it), 340, 24) }
+    val kitchen = (1..3).map { episode("kitchen_journal_720p_part$it.mp4", 210, 18, caption = "Kitchen Journal Ep $it\nNew every Friday") }
+    return (harbour + garden + kitchen).reversed()
+}
+
+/** Season one of Harbour Notes watched up to E04, which is half way through; Sky Garden done. */
+private val PROMO_WATCH = SeriesWatch(
+    point = { item ->
+        if (item.fileName.contains("S01E04")) WatchPoint(positionMs = 19 * 60_000L, durationMs = 44 * 60_000L) else null
+    },
+    finished = { item ->
+        Regex("""S01E0[1-3]""").containsMatchIn(item.fileName) || item.fileName.contains("Sky Garden")
+    },
+)
 
 /** Telegram's grid gap, matched to [com.tmplayer.ui.browse] so the shot is the real spacing. */
 private val DENSE_GAP = 2.dp

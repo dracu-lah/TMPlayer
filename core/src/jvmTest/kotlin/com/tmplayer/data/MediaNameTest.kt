@@ -252,4 +252,158 @@ class MediaNameTest {
         val chat = listOf("Studio.Recording.2024.1080p.mkv", "Studio.Sessions.S02E05.1080p.mkv")
         assertNull(MediaName.previousEpisode("Studio.Recording.2024.1080p.mkv", chat) { it })
     }
+
+    // ---- CP27: the other ways an episode is written, and the caption as a second source ------
+
+    private fun parse(name: String, caption: String?) = MediaName.parse(name, caption, maxYear = 2027)
+
+    @Test
+    fun `a season by episode code reads from real release names`() {
+        listOf(
+            "Harbour.Notes.1x02.720p.HDTV.x264-GROUP.mkv" to (1 to 2),
+            "Harbour Notes 3x11 Return 1080p WEB-DL.mkv" to (3 to 11),
+            "Harbour_Notes_2x05_hdtv.mp4" to (2 to 5),
+        ).forEach { (name, expected) ->
+            val parsed = parse(name)
+            assertEquals(name, "Harbour Notes", parsed.title)
+            assertEquals(name, expected.first, parsed.season)
+            assertEquals(name, expected.second, parsed.episode)
+        }
+    }
+
+    @Test
+    fun `an episode with no season still reads`() {
+        listOf(
+            "Kitchen Journal Ep 02 1080p.mp4",
+            "Kitchen.Journal.Ep02.720p.mkv",
+            "Kitchen Journal EP.02 (2024).mkv",
+            "Kitchen Journal Episode 2 Malayalam 720p.mkv",
+            "Kitchen Journal Ep-02.mkv",
+        ).forEach { name ->
+            val parsed = parse(name)
+            assertEquals(name, "Kitchen Journal", parsed.title)
+            assertNull(name, parsed.season)
+            assertEquals(name, 2, parsed.episode)
+            assertTrue(name, parsed.isEpisode)
+        }
+    }
+
+    @Test
+    fun `the fansub dash form reads as an absolute episode`() {
+        listOf(
+            "[SubsPlease] Sky Garden - 02 (1080p) [A1B2C3D4].mkv" to 2,
+            "[Erai-raws] Sky Garden - 12 [1080p][Multiple Subtitle].mkv" to 12,
+            "Sky Garden - 1071 [720p].mkv" to 1071,
+            "[Group] Sky Garden - 05v2 (1080p).mkv" to 5,
+            "Sky Garden - 07.mkv" to 7,
+        ).forEach { (name, episode) ->
+            val parsed = parse(name)
+            assertEquals(name, "Sky Garden", parsed.title)
+            assertNull(name, parsed.season)
+            assertEquals(name, episode, parsed.episode)
+        }
+    }
+
+    @Test
+    fun `the dash form takes a season when one is written beside it`() {
+        val parsed = parse("[SubsPlease] Sky Garden S2 - 03 (1080p).mkv")
+        assertEquals("Sky Garden", parsed.title)
+        assertEquals(2, parsed.season)
+        assertEquals(3, parsed.episode)
+    }
+
+    @Test
+    fun `a dash before a year or a resolution is not an episode`() {
+        listOf(
+            "City Archive - 2019 1080p BluRay.mkv",
+            "City Archive - 1080p WEB-DL.mkv",
+            "City Archive - 720p.mkv",
+            "Workshop - 2 (2018).mkv",
+            "City Archive - Directors Cut 2160p.mkv",
+        ).forEach { name ->
+            val parsed = parse(name)
+            assertNull(name, parsed.episode)
+            assertFalse(name, parsed.isEpisode)
+        }
+        assertEquals(2019, parse("City Archive - 2019 1080p BluRay.mkv").year)
+    }
+
+    @Test
+    fun `codecs, resolutions and channel counts are never episodes`() {
+        listOf(
+            "City.Archive.2016.1080p.BluRay.x265.10bit.mkv",
+            "City Archive 2016 2160p HDR x264 DDP5 1.mkv",
+            "City Archive 720p 1280x720 H 265.mkv",
+            "City Archive 720p HEVC AAC2 0.mkv",
+            "City Archive (2016) 4K 60fps.mkv",
+        ).forEach { name ->
+            val parsed = parse(name)
+            assertEquals(name, "City Archive", parsed.title)
+            assertNull(name, parsed.season)
+            assertNull(name, parsed.episode)
+        }
+    }
+
+    @Test
+    fun `a bracketed year at the front is not a fansub tag`() {
+        val parsed = parse("[2014] Garden Notes 1080p.mkv")
+        assertTrue(parsed.title.contains("Garden Notes"))
+        assertEquals(2014, parsed.year)
+    }
+
+    @Test
+    fun `the caption gives the episode when the file name has none`() {
+        val parsed = parse(
+            "harbour_notes_720p.mkv",
+            "🎬 Harbour Notes S02E04\n\nJoin @CreatorClips for more",
+        )
+        assertEquals("Harbour Notes", parsed.title)
+        assertEquals(2, parsed.season)
+        assertEquals(4, parsed.episode)
+    }
+
+    @Test
+    fun `a caption that names only the episode keeps the file's title`() {
+        val parsed = parse("Harbour Notes 1080p WEB-DL.mkv", "Episode 4")
+        assertEquals("Harbour Notes", parsed.title)
+        assertNull(parsed.season)
+        assertEquals(4, parsed.episode)
+    }
+
+    @Test
+    fun `the file name wins over the caption when both carry an episode`() {
+        val parsed = parse("Harbour.Notes.S01E03.1080p.mkv", "Harbour Notes S01E09 out now")
+        assertEquals(3, parsed.episode)
+    }
+
+    @Test
+    fun `a caption with no episode changes nothing`() {
+        val plain = parse("City.Archive.1999.1080p.mkv")
+        assertEquals(plain, parse("City.Archive.1999.1080p.mkv", "Watch in HD, link in bio"))
+        assertEquals(plain, parse("City.Archive.1999.1080p.mkv", null))
+        assertEquals(plain, parse("City.Archive.1999.1080p.mkv", "  \n "))
+    }
+
+    @Test
+    fun `a caption alone, with no file name, still reads`() {
+        val parsed = parse("", "Sky Garden Ep 3")
+        assertEquals("Sky Garden", parsed.title)
+        assertEquals(3, parsed.episode)
+    }
+
+    @Test
+    fun `the existing season and episode forms still read the same`() {
+        listOf(
+            "Studio.Sessions.S01E02.1080p.WEB-DL.mkv",
+            "Studio Sessions s01e02 720p.mkv",
+            "Studio Sessions S01.E02.mkv",
+            "Studio Sessions S1E2 (2024).mkv",
+            "Studio Sessions Season 1 Episode 2.mkv",
+        ).forEach { name ->
+            val parsed = parse(name, "something else entirely S09E09")
+            assertEquals(name, "Studio Sessions", parsed.title)
+            assertEquals(name, 1, parsed.season)
+            assertEquals(name, 2, parsed.episode)
+        }
+    }
 }

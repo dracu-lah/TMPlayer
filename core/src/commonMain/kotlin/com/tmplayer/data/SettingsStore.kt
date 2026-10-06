@@ -39,6 +39,7 @@ private val MIN_SIZE = longPreferencesKey("min_size_bytes")
 private val MAX_SIZE = longPreferencesKey("max_size_bytes")
 private val CHAT_LAYOUT = stringPreferencesKey("chat_layout")
 private val MEDIA_LAYOUT = stringPreferencesKey("media_layout")
+private val SERIES_VIEW = booleanPreferencesKey("series_view")
 private val CHAT_SNAPSHOT = stringPreferencesKey("chat_snapshot")
 private val ACCOUNT_SNAPSHOT = stringPreferencesKey("account_snapshot")
 private val THEME_CHOICE = stringPreferencesKey("theme_choice")
@@ -822,6 +823,16 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
 
     suspend fun setMediaLayout(value: CardLayout) {
         prefs.edit { it[MEDIA_LAYOUT] = value.name }
+    }
+
+    /**
+     * Whether a chat folds its episodes into one tile per show ("Series") or lists every file
+     * ("All files"). On by default: a chat of forty episodes reads better as the three shows it is.
+     */
+    val seriesView: Flow<Boolean> = read { it[SERIES_VIEW] ?: true }
+
+    suspend fun setSeriesView(value: Boolean) {
+        prefs.edit { it[SERIES_VIEW] = value }
     }
 
     // ---- appearance -------------------------------------------------------------------------
