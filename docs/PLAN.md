@@ -88,7 +88,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 
 **Phase E. The "Browse" release**
 - [x] CP27 P9 series view (5fb2c07, MediaName and grouping unit tested on real name shapes; series tiles, season tabs, episode list, phone sheet, TV page with a D-pad walk and the Series and All files switch checked on the phone and TV emulator fixtures, desktop dropdown on the render test, light and dark; real chats and caption-only uploads not yet seen on a device)
-- [ ] CP28 P10 Home rows
+- [x] CP28 P10 Home rows (1c9a085, row building unit tested for order, the limit of 10, dedupe and empty favourites; Home checked on the phone and TV emulator fixtures with a D-pad walk across and down the rows and on the desktop render test, light and dark; on a 1 GB TV emulator profile a D-pad scroll of a non-debuggable promo build had 5.1 per cent janky frames, p90 30 ms, against 6.0 per cent for the chat grid; real Telegram rows and Recently added not yet seen on a device)
 - [ ] CP29 P10 detail panel and search across all chats
 - [ ] CP30 P11 Fire TV, trickplay, Watch Next, then release "Browse" on request
 - [ ] U23 Amazon Appstore listing submission (after CP30)
