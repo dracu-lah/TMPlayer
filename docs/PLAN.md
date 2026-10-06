@@ -632,6 +632,10 @@ season switch, a watched tick), the desktop render test, a D-pad walk, and tests
 **Why:** the user asked on 2026-10-06 for a Settings option that hides the default Telegram grouping from the
 sidebar and from other places, removes favourites that this affects, shows proper alert prompts for features
 like it, and adds the same prompts where they are missing.
+**Main goal (user, 2026-10-06):** the sidebar shows only the custom groups the viewer made (their Telegram
+folders), and none of the app's built-in ones. Everything below serves that: nothing built-in is left over,
+chats outside every folder are not listed anywhere except search, and the Watch group (the viewer's own
+watching, not a Telegram grouping) stays. Open for the user: should Watch also be optional? Default: no.
 **What "default grouping" means (confirmed 2026-10-06):** the user's friend wants the app's fixed groupings
 disabled completely, keeping only the custom ones. Default: the Chats group of the sidebar built by
 `browseSections` in `ui/src/shared/.../browse/BrowseSections.kt`: Recent, Unread, Saved, Channels, Groups,
