@@ -64,7 +64,7 @@ class AboutTest {
     fun `the support group follows the one switch`() {
         assertEquals(About.SUPPORT_TITLE, About.groups("1.22.1").last().title)
         assertEquals(listOf(About.supportUrl("about")), About.groups("1.22.1").last().links.map { it.url })
-        assertEquals("https://tmplayer.org/support/?from=about", About.supportUrl("about"))
+        assertEquals("https://tmplayer.org/support/?utm_source=about&utm_medium=app", About.supportUrl("about"))
         assertTrue(About.groups("1.22.1", support = false).none { it.support })
         try {
             SupportReminder.enabled = false

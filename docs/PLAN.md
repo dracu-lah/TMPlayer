@@ -602,7 +602,7 @@ sheet; one next-episode prompt instead of card plus countdown sheet.
 **Design:** section 6 of the same document (D5, D6). Replaces the flat 14 day, 10 play rule of CP10c.
 **Do:** completed-watch and watch-time counters in `SettingsStore`; the three-rung ladder in `SupportReminder`
 with "Later" and "I already support"; trigger on player close after a finished watch or a finished download,
-never in the player; thank-you About state; `tmplayer.org/support/?from=` page and QR targets; debug flag per
+never in the player; thank-you About state; `tmplayer.org/support/?utm_source=` page and QR targets; debug flag per
 rung; one closing support line in the Telegram release post; tests.
 **Done when:** unit tests for the ladder, screenshots of each rung and the thank-you state on phone, TV and
 desktop, and the site page at 390 and 1440 wide in headless Chromium.

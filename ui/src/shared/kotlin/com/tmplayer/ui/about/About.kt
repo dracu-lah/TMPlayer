@@ -37,10 +37,11 @@ object About {
 
     /**
      * The support page, tagged with the place the viewer came from (`card1`, `card2`, `card3`,
-     * `settings`, `about`). The page counts visits by this tag, which is how the entry points
-     * are compared without the app sending anything anywhere.
+     * `settings`, `about`), as Vercel Web Analytics reads it: `utm_source` is the place and
+     * `utm_medium` is `app`. A custom `from` parameter would not be recorded, UTM ones are. The
+     * entry points are compared on the site, without the app sending anything anywhere.
      */
-    fun supportUrl(from: String): String = "$SUPPORT_PAGE?from=$from"
+    fun supportUrl(from: String): String = "$SUPPORT_PAGE?utm_source=$from&utm_medium=app"
 
     /** The heading, the Settings row and the card's title. */
     val SUPPORT_TITLE: String get() = L.aboutSupportTitle

@@ -154,7 +154,7 @@ turn the About group heading into "Thanks for supporting TMPlayer", which costs 
 the wording everywhere). No guilt, no countdown, no "your support helps us" filler. Two copy variants per rung
 are kept in `en.json` so wording can change without code. Do not run langsync; other locales are yours.
 
-**Measuring without spying.** No in-app telemetry. Route the links through `tmplayer.org/support/?from=card1|
+**Measuring without spying.** No in-app telemetry. Route the links through `tmplayer.org/support/?utm_source=card1|
 card2|card3|settings|about`, a static page on the site (Vercel) that lists both donate links, the star link
 and the share link. Vercel analytics already counts page views, so you see which entry point converts and
 which ask rung does, with nothing added to the app and nothing to disclose in the privacy page beyond the
