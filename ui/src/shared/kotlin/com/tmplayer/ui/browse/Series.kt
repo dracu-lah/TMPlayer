@@ -12,6 +12,7 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -696,20 +697,33 @@ fun SeriesPanel(
             trailing()
         }
         Spacer(Modifier.height(12.dp))
-        Row(
-            Modifier.fillMaxWidth().padding(contentPadding.horizontalOnly()),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            val target = next ?: series.episodes.first()
-            val started = (watch.pointOf(target)?.positionMs ?: 0L) > 0
-            PlayButton(
-                label = if (started) s.seriesResume(target.code) else s.seriesPlay(target.code),
-                onClick = { onPlay(next?.item ?: watch.pick(target, progress)) },
-                modifier = Modifier.focusRequester(playFocus),
-            )
-            extras?.trailer?.let { trailer -> TrailerPill(onClick = { trailers.open(trailer) }) }
-            Box(Modifier.weight(1f)) { seasonPicker(shown.number) { season = it } }
+        // Beside the buttons there is room for the seasons on a television, a desktop window and a
+        // phone on its side. A phone held upright has room for the buttons alone, so the seasons
+        // take a line of their own under them, the full width, where every season can be reached.
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val stacked = maxWidth < SEASONS_BESIDE_MIN
+            Column {
+                Row(
+                    Modifier.fillMaxWidth().padding(contentPadding.horizontalOnly()),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    val target = next ?: series.episodes.first()
+                    val started = (watch.pointOf(target)?.positionMs ?: 0L) > 0
+                    PlayButton(
+                        label = if (started) s.seriesResume(target.code) else s.seriesPlay(target.code),
+                        onClick = { onPlay(next?.item ?: watch.pick(target, progress)) },
+                        modifier = Modifier.focusRequester(playFocus),
+                    )
+                    extras?.trailer?.let { trailer -> TrailerPill(onClick = { trailers.open(trailer) }) }
+                    if (!stacked) Box(Modifier.weight(1f)) { seasonPicker(shown.number) { season = it } }
+                }
+                if (stacked) {
+                    Box(Modifier.fillMaxWidth().padding(contentPadding.horizontalOnly()).padding(top = 12.dp)) {
+                        seasonPicker(shown.number) { season = it }
+                    }
+                }
+            }
         }
         trailers.unopened?.takeIf { it == extras?.trailer }?.let {
             TrailerQr(it, Modifier.padding(contentPadding.horizontalOnly()).padding(top = 12.dp))
@@ -779,6 +793,9 @@ private fun PaddingValues.horizontalOnly(): PaddingValues =
     )
 
 private val SERIES_POSTER: Dp = 96.dp
+
+/** Narrower than this, the season picker goes under the play button rather than beside it. */
+private val SEASONS_BESIDE_MIN: Dp = 560.dp
 private val SERIES_POSTER_TV: Dp = 112.dp
 private val EPISODE_ART_TOUCH: Dp = 128.dp
 private val EPISODE_ART_TV: Dp = 176.dp

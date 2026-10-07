@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme as M3MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text as M3Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -42,14 +41,13 @@ import androidx.tv.material3.Text
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.Series
 import com.tmplayer.data.SeriesProgress
+import com.tmplayer.ui.components.PhoneSheet
 import com.tmplayer.ui.components.isTouch
+import com.tmplayer.ui.components.keepScrollInSheet
 import com.tmplayer.ui.components.pressable
 import com.tmplayer.ui.theme.Corner
-import com.tmplayer.ui.theme.Floating
-import com.tmplayer.ui.theme.FloatingTone
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
-import com.tmplayer.ui.theme.floatingBorder
 
 /**
  * A show's tile in a chat's grid, in the same three dresses a video's tile wears: the phone's dense
@@ -217,21 +215,17 @@ private fun SeriesSheet(
 ) {
     // Opened all the way: half a sheet of episodes is two rows, and the list is the point.
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    // The detail sheet's fill, corner and hairline, so the two sheets a grid opens look alike.
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = state,
-        modifier = Modifier.border(floatingBorder(), Floating.SheetShape),
-        shape = Floating.SheetShape,
-        containerColor = FloatingTone.sheet,
-    ) {
+    // The detail sheet's fill, corner and hairline, so the two sheets a grid opens look alike. The
+    // episodes keep their scrolling to themselves, so reaching the top of the list does not drag
+    // the sheet; the header above them still pulls it down.
+    PhoneSheet(onDismissRequest = onDismiss, sheetState = state) {
         SeriesPanel(
             series = series,
             watch = watch,
             onPlay = { onDismiss(); onPlay(it) },
             onLongClick = onLongClick,
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
-            modifier = Modifier.fillMaxWidth().fillMaxHeight(0.92f),
+            modifier = Modifier.fillMaxWidth().fillMaxHeight(0.92f).keepScrollInSheet(),
         )
     }
 }

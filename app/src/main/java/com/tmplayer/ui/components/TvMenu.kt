@@ -3,7 +3,6 @@ package com.tmplayer.ui.components
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -20,12 +19,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon as M3Icon
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme as M3MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text as M3Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -46,11 +44,9 @@ import androidx.tv.material3.Text
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Danger
-import com.tmplayer.ui.theme.Floating
 import com.tmplayer.ui.theme.FloatingTone
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
-import com.tmplayer.ui.theme.floatingBorder
 import com.tmplayer.ui.theme.floatingSurface
 import com.tmplayer.ui.theme.focusRing
 
@@ -171,7 +167,7 @@ fun TvMenu(
 /**
  * The same menu as the sheet a phone expects.
  *
- * [ModalBottomSheet] brings the drag handle, the working scrim, the swipe-down dismiss and the
+ * [PhoneSheet] brings the drag handle, the working scrim, the swipe-down dismiss and the
  * bottom-of-the-screen position a thumb can actually reach, none of which has to be written here.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -182,17 +178,18 @@ private fun TouchMenuSheet(
     actions: List<MenuAction>,
     onDismiss: () -> Unit,
 ) {
-    // No container colour and no drag handle of our own: the sheet's defaults are the scheme's,
-    // and the handle it draws is the one every other sheet on the phone draws, which is how a
-    // thumb already knows this thing can be pulled down.
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        // The hairline every floating surface carries, here as on the television's menu.
-        modifier = Modifier.border(floatingBorder(), Floating.SheetShape),
-        shape = Floating.SheetShape,
-        containerColor = FloatingTone.sheet,
-    ) {
-        Column(Modifier.padding(bottom = 24.dp)) {
+    // The handle is the one every other sheet on the phone draws, which is how a thumb already
+    // knows this thing can be pulled down. A long name in landscape makes the menu taller than the
+    // screen, so it scrolls, and only then keeps its scrolling to itself (see [keepScrollInSheet]):
+    // a menu that fits is pulled down from anywhere.
+    PhoneSheet(onDismissRequest = onDismiss) {
+        val scroll = rememberScrollState()
+        Column(
+            Modifier
+                .then(if (scroll.canScrollForward || scroll.canScrollBackward) Modifier.keepScrollInSheet() else Modifier)
+                .verticalScroll(scroll)
+                .padding(bottom = 24.dp),
+        ) {
             // The heading is what the sheet is about rather than something that can be chosen, so
             // it sits in a section header's padding, not in a row, and it takes the scheme's text
             // colour rather than the content colour the sheet inherits. It gets as many lines as
