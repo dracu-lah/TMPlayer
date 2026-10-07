@@ -222,7 +222,8 @@ fun SettingsPage(state: ShellState, version: String = "") {
                         }) { Text(s.settingsForget) }
                     }
                 }
-                Box(Modifier.bringIntoViewRequester(sizeLimits)) {
+                // A Column, not a Box: in a Box the two rows drew over each other.
+                Column(Modifier.bringIntoViewRequester(sizeLimits)) {
                 Setting(s.settingsSmallest, SizeFilter.label(minSize)) {
                     Stepper(
                         onLess = { scope.launch { settings.setMinSizeBytes(SizeFilter.clampMin(SizeFilter.step(minSize, -1), maxSize)) } },
