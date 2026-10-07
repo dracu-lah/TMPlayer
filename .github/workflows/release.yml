@@ -223,7 +223,7 @@ jobs:
         if: always()
         run: rm -f local.properties
 
-      - name: Hand the AppImage and tarball to the publish job
+      - name: Hand the AppImage, its .zsync and the tarball to the publish job
         uses: actions/upload-artifact@v7
         with:
           name: release-linux
@@ -312,6 +312,7 @@ jobs:
             "TMPlayer-$VERSION-universal.apk" \
             "TMPlayer-$VERSION-windows-x64.msi" \
             "TMPlayer-$VERSION-x86_64.AppImage" \
+            "TMPlayer-$VERSION-x86_64.AppImage.zsync" \
             "TMPlayer-$VERSION-linux-x64.tar.xz"; do
             if [ ! -s "dist/$f" ]; then
               echo "::error::dist/$f is missing"
@@ -322,7 +323,8 @@ jobs:
           for path in dist/*; do
             case "${path#dist/}" in
               "TMPlayer-$VERSION-universal.apk" | "TMPlayer-$VERSION-windows-x64.msi" | \
-                "TMPlayer-$VERSION-x86_64.AppImage" | "TMPlayer-$VERSION-linux-x64.tar.xz") ;;
+                "TMPlayer-$VERSION-x86_64.AppImage" | "TMPlayer-$VERSION-x86_64.AppImage.zsync" | \
+                "TMPlayer-$VERSION-linux-x64.tar.xz") ;;
               *) echo "::error::$path is not one of the release's files"; exit 1 ;;
             esac
           done

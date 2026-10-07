@@ -155,6 +155,7 @@ Every file is on the same GitHub release as the APK:
 | --- | --- |
 | `TMPlayer-<version>-windows-x64.msi` | Windows installer, per user, no administrator needed |
 | `TMPlayer-<version>-x86_64.AppImage` | Linux, any distribution, one file |
+| `TMPlayer-<version>-x86_64.AppImage.zsync` | Not a download: lets AppImage updaters fetch only what changed |
 | `TMPlayer-<version>-linux-x64.tar.xz` | The plain app folder, which the Arch PKGBUILD builds from |
 
 Releases up to 1.21.0 also carried a Windows portable zip, a deb, an rpm and a Flatpak. Those are
@@ -195,6 +196,12 @@ runs on Arch as it is.
 
 To upgrade, the AppImage updates itself from inside the app (see below), or you replace the file
 by hand. Your sign-in and history live in your home directory and are kept.
+
+Releases after 1.24.0 also carry, in the AppImage, the standard AppImage update information, so
+[AppImageUpdate](https://github.com/AppImageCommunity/AppImageUpdate), AppImageLauncher and other
+tools that read it can update it too, downloading only the parts that changed (the `.zsync` file on
+each release says which). A copy of 1.24.0 or older carries none, so update it once from inside the
+app or by hand first.
 
 ## Moving from a format that is no longer published
 

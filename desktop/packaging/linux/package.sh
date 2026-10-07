@@ -8,6 +8,7 @@
 #
 #   TMPlayer-<v>-linux-x64.tar.xz   by hand on any distribution; what the AUR PKGBUILD builds from
 #   TMPlayer-<v>-x86_64.AppImage    any distribution, nothing installed
+#   TMPlayer-<v>-x86_64.AppImage.zsync  the AppImage's block map, when zsyncmake is installed
 #
 # The natives are stripped once in a staging copy (the app image itself is left alone) and both
 # formats are compressed hard (xz for the tarball, zstd at its top level with 1 MB blocks for the
@@ -16,6 +17,13 @@
 #
 # The AppImage comes from appimagetool; set APPIMAGETOOL to its path if it is not on PATH. The
 # deb, rpm and Flatpak that earlier releases carried are no longer built.
+#
+# The AppImage carries its update information (the AppImage spec's gh-releases-zsync form), which
+# tells AppImageUpdate, AppImageLauncher, AM and the like to fetch the .zsync from the latest
+# GitHub release and download only the blocks that changed. appimagetool writes that .zsync beside
+# the AppImage when zsyncmake (the zsync package) is on PATH, and silently skips it otherwise, so
+# CI installs it and checks the file is there. The app's own updater does not use it: it replaces
+# the whole file, which works the same whether or not the information is embedded.
 #
 # Every native the app loads (TDLib inside the tdl-coroutines jar, libmpv and FFmpeg inside the
 # mediamp runtime jar) was linked against glibc 2.38 and GCC 13's libstdc++, which is the floor
@@ -87,6 +95,7 @@ fi
 if has appimage; then
   tool="${APPIMAGETOOL:-$(command -v appimagetool || true)}"
   [ -n "$tool" ] || { echo "appimagetool not found; set APPIMAGETOOL" >&2; exit 1; }
+  tool="$(cd "$(dirname "$tool")" && pwd)/$(basename "$tool")"
   appdir="$work/TMPlayer.AppDir"
   mkdir -p "$appdir/usr/lib"
   cp -a "$stage" "$appdir/usr/lib/tmplayer"
@@ -96,10 +105,19 @@ if has appimage; then
   cp "$icons/hicolor/256x256.png" "$appdir/$id.png"
   ln -s "$id.png" "$appdir/.DirIcon"
   # appimagetool runs as an AppImage itself; extracting it first works without FUSE (CI, containers).
-  ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$tool" --no-appstream --comp zstd \
+  # It writes the .zsync into the directory it runs in, not beside the AppImage, so it runs in $out.
+  out_abs="$(cd "$out" && pwd)"
+  appdir_abs="$(cd "$appdir" && pwd)"
+  (cd "$out_abs" && ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$tool" --no-appstream --comp zstd \
+    --updateinformation "gh-releases-zsync|dracu-lah|TMPlayer|latest|TMPlayer-*-x86_64.AppImage.zsync" \
     --mksquashfs-opt -Xcompression-level --mksquashfs-opt 22 --mksquashfs-opt -b --mksquashfs-opt 1M \
-    "$appdir" "$out/TMPlayer-$version-x86_64.AppImage"
+    "$appdir_abs" "$out_abs/TMPlayer-$version-x86_64.AppImage")
   echo "built $out/TMPlayer-$version-x86_64.AppImage"
+  if [ -f "$out/TMPlayer-$version-x86_64.AppImage.zsync" ]; then
+    echo "built $out/TMPlayer-$version-x86_64.AppImage.zsync"
+  else
+    echo "no zsyncmake, so no .zsync: delta updates need it next to the AppImage" >&2
+  fi
 fi
 
 ls -la "$out"

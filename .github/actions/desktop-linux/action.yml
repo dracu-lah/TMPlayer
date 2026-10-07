@@ -13,13 +13,14 @@ runs:
   using: composite
   steps:
     # The libraries the bundled TDLib, libmpv and JVM load from the system (the same list the
-    # PKGBUILD declares), plus the tools for validating the desktop entry and AppStream metadata.
+    # PKGBUILD declares), plus the tools for validating the desktop entry and AppStream metadata,
+    # and zsync, whose zsyncmake appimagetool calls to write the AppImage's delta update file.
     - name: Install packaging tools and runtime libraries
       shell: bash
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y -qq --no-install-recommends \
-          desktop-file-utils appstream \
+          desktop-file-utils appstream zsync \
           libvulkan1 libpulse0 libasound2t64 libegl1 libgl1 libxtst6 libxi6 libfontconfig1
 
     - name: Run desktop tests
@@ -68,6 +69,21 @@ runs:
       run: |
         # No FUSE on the runner: the AppImage unpacks itself and runs from there instead.
         APPIMAGE_EXTRACT_AND_RUN=1 "dist/TMPlayer-${{ inputs.version }}-x86_64.AppImage" --self-test
+
+    # appimagetool skips the .zsync without a word when zsyncmake is missing, and an AppImage that
+    # names a .zsync the release does not carry leaves every updater that reads it with nothing.
+    - name: Check the AppImage's delta update file
+      shell: bash
+      run: |
+        image="dist/TMPlayer-${{ inputs.version }}-x86_64.AppImage"
+        [ -s "$image.zsync" ] || { echo "::error::$image.zsync was not written"; exit 1; }
+        grep -q "^Filename: TMPlayer-${{ inputs.version }}-x86_64.AppImage$" "$image.zsync" \
+          || { echo "::error::$image.zsync does not name the AppImage"; exit 1; }
+        # Read from the ELF section the runtime keeps it in: with APPIMAGE_EXTRACT_AND_RUN set, the
+        # runtime hands --appimage-updateinformation to the app instead of answering it.
+        info="$(objcopy -O binary --only-section=.upd_info "$image" /dev/stdout | tr -d '\0')"
+        [ "$info" = "gh-releases-zsync|dracu-lah|TMPlayer|latest|TMPlayer-*-x86_64.AppImage.zsync" ] \
+          || { echo "::error::the AppImage carries update information '$info'"; exit 1; }
 
     - name: List the packages
       shell: bash
