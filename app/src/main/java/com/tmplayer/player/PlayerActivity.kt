@@ -859,9 +859,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * big glyph.
      *
      * A television has no play button on its row any more, so the cue is the row's centre disc:
-     * a pause raises the row, where the disc folds into the pause bars and stays while paused,
-     * and a resume with the row up folds it back into the triangle and lets it fade. Only a
-     * resume over the bare picture has nothing to morph, and shows its figure instead.
+     * a pause raises the row, where the disc folds into the play triangle and stays while paused,
+     * and a resume with the row up folds it back into the bars and lets it fade. Only a resume
+     * over the bare picture has nothing to morph, and flashes the play glyph instead.
      */
     private fun togglePlayback() {
         val exo = player ?: return
@@ -870,7 +870,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // The row first, so the disc is on screen to fold when the pause lands.
             if (!nowPlaying && statusOverlay.visibility != View.VISIBLE) controls?.show()
             if (nowPlaying) exo.play() else exo.pause()
-            if (nowPlaying && !controlsUp) showGestureFeedback("▶")
+            if (nowPlaying && !controlsUp) feedback?.flashPlayPause(true)
             return
         }
         if (nowPlaying) exo.play() else exo.pause()
@@ -878,10 +878,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         feedback?.flashPlayPause(nowPlaying)
     }
 
+    /** Adds up a run of key jumps on one side, so the figure counts 10, 20, 30 like the double tap. */
+    private val jumpRun = SeekCounter()
+    private var jumpRunSeconds = 0L
+
     /**
      * A remote's jump, from an arrow over the bare picture or the rewind and fast forward keys:
-     * the seek lands at once, and the only thing drawn is the icon and figure on the side the
-     * jump went.
+     * the seek lands at once, and the only thing drawn is the double tap's chevrons and the run's
+     * total on the side the jump went.
      */
     private fun jumpFromRemote(forward: Boolean, repeatCount: Int = 0) {
         val base = if (forward) Skip.FORWARD_MS else Skip.BACK_MS
@@ -889,13 +893,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // Amazon's own players answer it; elsewhere every repeat is the plain jump it always was.
         val step = if (remoteQuirks.holdSeekAccelerates) RemoteQuirks.holdStepMs(repeatCount, base) else base
         if (step <= 0) return
-        if (forward) {
-            skipBy(step)
-            showGestureFeedback(L.playerJumpForward(step / 1000), PlayerGestures.SIDE_RIGHT)
-        } else {
-            skipBy(-step)
-            showGestureFeedback(L.playerJumpBack(step / 1000), PlayerGestures.SIDE_LEFT)
-        }
+        skipBy(if (forward) step else -step)
+        val zone = if (forward) TapZone.Right else TapZone.Left
+        if (jumpRun.tap(zone, SystemClock.uptimeMillis()) == 1) jumpRunSeconds = 0
+        jumpRunSeconds += step / 1000
+        feedback?.jump(zone, jumpRunSeconds)
     }
 
     /** The remote's next and previous keys; false when the chat has no such episode. */
@@ -2364,13 +2366,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                 if (FormFactor.isTv(this) && statusOverlay.visibility != View.VISIBLE) {
-                    // Over the bare picture OK asks for the row rather than doing anything
-                    // irreversible. With the row up and the bar focused, OK is play or pause,
-                    // which makes two presses from bare video a pause, the reading every viewer
-                    // arrives already trained on. Repeats are ignored so a held OK stays the
-                    // long press it is about to become.
+                    // Over the bare picture OK is play or pause in one press, the way every TV
+                    // player answers it; the pause raises the row with the play sign in the
+                    // middle. With the row up and the bar focused it is play or pause as well.
+                    // Repeats are ignored so a held OK stays the long press it is about to become.
                     if (!controlsUp) {
-                        controls?.show()
+                        if (event.repeatCount == 0) togglePlayback()
                         return true
                     }
                     if (event.repeatCount == 0 && controls?.okOnTimeBar() == true) return true

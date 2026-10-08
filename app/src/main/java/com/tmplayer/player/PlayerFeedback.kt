@@ -190,6 +190,16 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
         ripple.step(zone, totalSeconds, x, y)
     }
 
+    /**
+     * A key's jump, from a remote or a keyboard: the double tap's half-moon, chevrons and running
+     * total on the side the jump went, as if the tap had landed in the middle of that side.
+     */
+    fun jump(zone: TapZone, totalSeconds: Long) {
+        val sideCentre = root.width * TapZone.SIDE_FRACTION / 2f
+        val x = if (zone == TapZone.Left) sideCentre else root.width - sideCentre
+        ripple.step(zone, totalSeconds, x, root.height / 2f)
+    }
+
     // ---- hold --------------------------------------------------------------------------------
 
     fun holdStarted(speed: Float) {

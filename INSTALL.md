@@ -77,9 +77,9 @@ You land on your chat list. Open any chat to see only its playable videos, and p
 
 | Key | What it does |
 | --- | --- |
-| **Left / Right** | Jump back 5 / forward 10 seconds, right on the picture, nothing else comes up |
-| **OK** | Show the controls, with the seek bar focused; on the bar OK is play / pause, so OK twice from the bare picture pauses |
-| **⏯** (if your remote has it) | Play / pause; paused, the controls stay up with a pause sign in the middle |
+| **Left / Right** | Jump back 5 / forward 10 seconds, right on the picture with the seconds on that side; keep pressing to add more |
+| **OK** | Play / pause in one press; a pause brings the controls up with a play sign in the middle. **Up / Down** show the controls without pausing |
+| **⏯** (if your remote has it) | Play / pause; paused, the controls stay up with a play sign in the middle |
 | **Left / Right** (on the seek bar) | Travel: 30 seconds a press, presses pile up and land as one seek a moment after the last |
 | **Down** (controls up) | The button row: subtitles, audio, speed, and More at the end. More holds the previous and next episode, picture shape, picture in picture, start over, volume boost, sleep timer and the rest |
 | **0 - 9** (if your remote has them) | Jump to that tenth of the video; 5 is halfway |

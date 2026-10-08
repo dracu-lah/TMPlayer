@@ -577,11 +577,11 @@ class PlayerControls(
     private var cueLeaving = false
 
     /**
-     * The television's centre disc, which shows state where the phone's shows the action: the
-     * pause bars while paused. Read from the player's intent, so a stall mid-play is not a pause.
-     * Pausing folds the triangle into the bars, resuming folds them back and fades the disc, so
-     * the change itself is the feedback; a row raised over a video already paused just shows the
-     * bars.
+     * The television's centre disc, shown only while paused, with the play triangle: what OK or
+     * the play key will do next, the same glyph the phone's disc shows while paused. Read from the
+     * player's intent, so a stall mid-play is not a pause. Pausing folds the bars into the
+     * triangle, resuming folds it back into the bars and fades the disc, so the change itself is
+     * the feedback; a row raised over a video already paused just shows the triangle.
      */
     private fun renderPausedCue(paused: Boolean, animate: Boolean) {
         val morph = animate && visible
@@ -590,10 +590,10 @@ class PlayerControls(
                 center.animate().cancel()
                 cueLeaving = false
                 center.alpha = 1f
-                if (center.visibility != View.VISIBLE) centerIcon.setShowsPlay(true, animate = false)
+                if (center.visibility != View.VISIBLE) centerIcon.setShowsPlay(false, animate = false)
                 center.visibility = View.VISIBLE
             }
-            centerIcon.setShowsPlay(false, animate = morph)
+            centerIcon.setShowsPlay(true, animate = morph)
             return
         }
         if (center.visibility != View.VISIBLE || cueLeaving) return
@@ -602,7 +602,7 @@ class PlayerControls(
             return
         }
         cueLeaving = true
-        centerIcon.setShowsPlay(true, animate = true)
+        centerIcon.setShowsPlay(false, animate = true)
         center.animate().alpha(0f).setStartDelay(CUE_HOLD_MS).setDuration(FADE_MS)
             .withEndAction {
                 cueLeaving = false
@@ -665,7 +665,7 @@ class PlayerControls(
         /** Long enough to read the row and reach for something on it, short enough to get out. */
         const val TIMEOUT_MS = 3_500L
 
-        /** How long the television's disc holds the play triangle before it fades on a resume. */
+        /** How long the television's disc holds the pause bars before it fades on a resume. */
         const val CUE_HOLD_MS = 500L
 
         /** Twice a second: faster than the eye needs on a scrub bar this size. */

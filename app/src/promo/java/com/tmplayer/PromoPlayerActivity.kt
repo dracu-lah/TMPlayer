@@ -167,7 +167,7 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
                 }
                 "jump" -> {
                     controls.hideNow()
-                    feedback.message("10 s   \u25B6\u25B6", com.tmplayer.player.PlayerGestures.SIDE_RIGHT)
+                    feedback.jump(TapZone.Right, 10)
                 }
                 "offer" -> {
                     controls.hideNow()
