@@ -1363,7 +1363,12 @@ private fun NavRail(
     // Malayalam rail read "ഡൗൺലോ..." and "ക്രമീകരണ...".
     val labelStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
     val measurer = rememberTextMeasurer()
-    val labels = sections.map { it.label } + listOf(s.navDownloads, s.navSettings, s.navUpdate)
+    val labels = buildList {
+        sections.forEach { add(it.label) }
+        add(s.navDownloads)
+        add(s.navSettings)
+        add(s.navUpdate)
+    }
     val widest = remember(labels, labelStyle) {
         labels.maxOf { measurer.measure(it, labelStyle, maxLines = 1, softWrap = false).size.width }
     }
