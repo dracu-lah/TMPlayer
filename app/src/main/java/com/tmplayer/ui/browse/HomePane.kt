@@ -1,21 +1,14 @@
 package com.tmplayer.ui.browse
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -27,27 +20,32 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import com.tmplayer.ui.components.TmIcons
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -63,13 +61,13 @@ import com.tmplayer.data.Series
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.ShelfEntry
 import com.tmplayer.data.WatchPoint
+import com.tmplayer.ui.components.TmSecondaryButton
 import com.tmplayer.ui.components.isTouch
-import com.tmplayer.ui.components.pressable
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Corner
-import com.tmplayer.ui.theme.Focus
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.Tv
+import kotlinx.coroutines.launch
 
 /**
  * Home: a row of what the viewer was part way through, a row per starred chat, and the newest
@@ -120,6 +118,7 @@ internal fun HomePane(
     }
     val touch = isTouch()
     val first = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
     var openSeries by remember { mutableStateOf<Series?>(null) }
     val listState = rememberLazyListState()
 
@@ -151,13 +150,41 @@ internal fun HomePane(
                     is HomeRow.Chat -> { { onOpenChat(row.chatId) } }
                     is HomeRow.Recent -> null
                 }?.takeIf { row.hasMore }
+                val countLabel = if (row.totalAtLeast) s.homeSeeAllCountAtLeast(row.total) else s.homeSeeAllCount(row.total)
+                // On a television "See all" sits on the heading, where it can be seen, but it only
+                // takes focus when Up is pressed from this row's tiles: moving down through Home
+                // goes tile row to tile row and never stops on a heading on the way.
+                val seeAllFocus = remember { FocusRequester() }
+                var seeAllArmed by remember { mutableStateOf(false) }
                 Column {
-                    RowHeading(title, start = start, end = end, seeAll = seeAll.takeIf { touch })
+                    RowHeading(
+                        title,
+                        start = start,
+                        end = end,
+                        seeAll = seeAll,
+                        count = countLabel,
+                        focus = seeAllFocus,
+                        armed = seeAllArmed,
+                        onLeft = { seeAllArmed = false },
+                    )
                     if (!loaded) {
                         PlaceholderRow(start)
                         return@Column
                     }
-                    TileRow(start = start, end = end) {
+                    TileRow(
+                        start = start,
+                        end = end,
+                        modifier = if (touch || seeAll == null) Modifier else Modifier.onPreviewKeyEvent { event ->
+                            if (event.type != KeyEventType.KeyDown || event.key != Key.DirectionUp) return@onPreviewKeyEvent false
+                            seeAllArmed = true
+                            scope.launch {
+                                // A frame for the armed heading to become focusable.
+                                withFrameNanos {}
+                                runCatching { seeAllFocus.requestFocus() }
+                            }
+                            true
+                        },
+                    ) {
                         when (row) {
                             is HomeRow.Continue -> items(row.records, key = { "r-${it.chatId}_${it.messageId}" }) { record ->
                                 val key = SettingsStore.progressKey(record.chatId, record.messageId)
@@ -182,31 +209,6 @@ internal fun HomePane(
                             }
                             is HomeRow.Chat -> entries(row.entries, watch, touch, isFirst, first, { row.title }, onPlay, onHoldMedia) { openSeries = it }
                             is HomeRow.Recent -> entries(row.entries, watch, touch, isFirst, first, chatTitle, onPlay, onHoldMedia) { openSeries = it }
-                        }
-                        if (!touch && seeAll != null) {
-                            item(key = "see-all", contentType = "see-all") {
-                                val preview = when (row) {
-                                    is HomeRow.Continue -> row.more.take(SEE_ALL_PREVIEW).map { record ->
-                                        val key = SettingsStore.progressKey(record.chatId, record.messageId)
-                                        LaunchedEffect(key) { onArtWanted(record) }
-                                        art[key] ?: remember(record) { record.toMediaItem() }
-                                    }
-                                    is HomeRow.Chat -> row.more.take(SEE_ALL_PREVIEW)
-                                    is HomeRow.Recent -> emptyList()
-                                }
-                                SeeAllTile(
-                                    count = if (row.totalAtLeast) s.homeSeeAllCountAtLeast(row.total) else s.homeSeeAllCount(row.total),
-                                    // "+N" only when N is the whole of what is left; past a partial
-                                    // fetch it would undercount, and the arrow says enough.
-                                    more = when (row) {
-                                        is HomeRow.Continue -> row.more.size
-                                        is HomeRow.Chat -> row.more.size.takeIf { row.complete }
-                                        is HomeRow.Recent -> null
-                                    }?.takeIf { it > 0 },
-                                    preview = preview,
-                                    onClick = seeAll,
-                                )
-                            }
                         }
                     }
                 }
@@ -287,12 +289,13 @@ private fun androidx.compose.foundation.lazy.LazyListScope.entries(
 private fun TileRow(
     start: Dp,
     end: Dp,
+    modifier: Modifier = Modifier,
     content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
 ) {
     val touch = isTouch()
     LazyRow(
         // Coming back down into a row lands on the tile it was left on, not whichever is nearest.
-        modifier = Modifier.fillMaxWidth().then(if (touch) Modifier else Modifier.focusRestorer()),
+        modifier = modifier.fillMaxWidth().then(if (touch) Modifier else Modifier.focusRestorer()),
         contentPadding = PaddingValues(
             start = start,
             end = end,
@@ -334,7 +337,16 @@ private fun FavouritesHint(start: Dp, end: Dp) {
 }
 
 @Composable
-private fun RowHeading(title: String, start: Dp, end: Dp, seeAll: (() -> Unit)?) {
+private fun RowHeading(
+    title: String,
+    start: Dp,
+    end: Dp,
+    seeAll: (() -> Unit)?,
+    count: String,
+    focus: FocusRequester,
+    armed: Boolean,
+    onLeft: () -> Unit,
+) {
     val s = LocalStrings.current
     val touch = isTouch()
     Row(
@@ -365,7 +377,27 @@ private fun RowHeading(title: String, start: Dp, end: Dp, seeAll: (() -> Unit)?)
                 modifier = Modifier.weight(1f).alignByBaseline(),
             )
         }
-        if (seeAll != null) {
+        if (seeAll != null && !touch) {
+            // The count beside the words, as the desktop has it, so the row says how much more
+            // there is before anyone presses anything.
+            TmSecondaryButton(
+                onClick = seeAll,
+                modifier = Modifier
+                    .alignByBaseline()
+                    .focusProperties { canFocus = armed }
+                    .focusRequester(focus)
+                    .onFocusChanged { if (!it.hasFocus) onLeft() },
+            ) {
+                Text(s.homeSeeAll)
+                // The label's own colour, softened, so it reads on the focused fill as well as off it.
+                Text("  ·  $count", color = androidx.tv.material3.LocalContentColor.current.copy(alpha = 0.72f))
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        } else if (seeAll != null) {
             // Material's text button: a 48 dp touch target around a 40 dp pill, its label on the
             // heading's baseline, and a chevron that says it goes somewhere.
             TextButton(
@@ -385,145 +417,7 @@ private fun RowHeading(title: String, start: Dp, end: Dp, seeAll: (() -> Unit)?)
     }
 }
 
-/**
- * The end of a row on a television, there only when the row leaves something out: the rest of
- * that chat, or all of Continue watching.
- *
- * Built like a [MediaCard] beside it: the same width, corner, fill, hairline, focus ring and focus
- * scale, a 16:9 picture, and a caption of two title lines and a meta line in the same type, so it
- * is the same size as the cards whatever the font scale. The picture is a mosaic of the videos
- * the row leaves out ([preview]), dimmed so the pill over it reads, and brighter on focus; with
- * none to show it is the raised surface and the pill alone. The caption says "See all" and how
- * many there are, never the row's name again, which is right above it.
- */
-@Composable
-private fun SeeAllTile(
-    count: String,
-    /** How many the row leaves out, for "+N" on the pill; null shows the arrow alone. */
-    more: Int?,
-    preview: List<MediaItem>,
-    onClick: () -> Unit,
-) {
-    val s = LocalStrings.current
-    val interactions = remember { MutableInteractionSource() }
-    val focused by interactions.collectIsFocusedAsState()
-    val border by animateColorAsState(
-        targetValue = if (focused) Tone.accent else Color.Transparent,
-        animationSpec = tween(140),
-        label = "seeAllBorder",
-    )
-    val scrim by animateFloatAsState(
-        targetValue = if (focused) SEE_ALL_SCRIM_FOCUSED else SEE_ALL_SCRIM,
-        animationSpec = tween(140),
-        label = "seeAllScrim",
-    )
-    Column(
-        Modifier
-            .width(tileWidth(false))
-            .clip(RoundedCornerShape(Corner.Medium))
-            .background(if (focused) Tone.surfaceHigh else Tone.surface)
-            .border(1.dp, Tone.outline, RoundedCornerShape(Corner.Medium))
-            .border(Focus.Edge, border, RoundedCornerShape(Corner.Medium))
-            .pressable(interactions, onClick),
-    ) {
-        // The picture, edge to edge: the mosaic fills all of it, and the badge is sized from the
-        // picture's own height (about a third of it) rather than fixed, so it reads as part of the
-        // tile at any tile width instead of a small mark floating in an empty frame.
-        BoxWithConstraints(
-            Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Tone.surfaceHigh),
-            contentAlignment = Alignment.Center,
-        ) {
-            val pill = maxHeight * SEE_ALL_PILL_SHARE
-            val type = with(LocalDensity.current) { (pill * 0.48f).toSp() }
-            if (preview.isNotEmpty()) {
-                SeeAllMosaic(preview, Modifier.fillMaxSize())
-                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = scrim)))
-            }
-            Row(
-                Modifier
-                    .height(pill)
-                    .clip(CircleShape)
-                    .background(if (focused) Tone.accent else Tone.surface.copy(alpha = 0.92f))
-                    .padding(start = if (more != null) pill * 0.4f else pill * 0.2f, end = pill * 0.2f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(pill * 0.1f),
-            ) {
-                if (more != null) {
-                    Text(
-                        s.homeSeeAllMore(more),
-                        style = MaterialTheme.typography.titleMedium.copy(fontSize = type, lineHeight = type),
-                        color = if (focused) Tone.onAccent else Tone.text,
-                        maxLines = 1,
-                    )
-                }
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = null,
-                    tint = if (focused) Tone.onAccent else Tone.accent,
-                    modifier = Modifier.size(pill * 0.6f),
-                )
-            }
-        }
-        // The caption a card has, line for line: padding, two title lines, the gap, a meta line.
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-            Text(
-                s.homeSeeAll,
-                style = MaterialTheme.typography.titleMedium,
-                color = Tone.text,
-                maxLines = 2,
-                minLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                count,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Tone.muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
 
-/**
- * Up to four pictures in one 16:9 frame: one fills it, two split it, three are one half and two
- * quarters, four are a two by two grid. Each cell crops by the same rule as every tile.
- */
-@Composable
-private fun SeeAllMosaic(items: List<MediaItem>, modifier: Modifier = Modifier) {
-    @Composable
-    fun Cell(item: MediaItem, cell: Modifier) {
-        com.tmplayer.ui.components.MediaArt(item.miniThumbnail, item.thumbnailFileId, cell) {}
-    }
-    val gap = 2.dp
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(gap)) {
-        when (items.size) {
-            1 -> Cell(items[0], Modifier.fillMaxSize())
-            2 -> {
-                Cell(items[0], Modifier.weight(1f).fillMaxHeight())
-                Cell(items[1], Modifier.weight(1f).fillMaxHeight())
-            }
-            3 -> {
-                Cell(items[0], Modifier.weight(1f).fillMaxHeight())
-                Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(gap)) {
-                    Cell(items[1], Modifier.weight(1f).fillMaxWidth())
-                    Cell(items[2], Modifier.weight(1f).fillMaxWidth())
-                }
-            }
-            else -> {
-                Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(gap)) {
-                    Cell(items[0], Modifier.weight(1f).fillMaxWidth())
-                    Cell(items[2], Modifier.weight(1f).fillMaxWidth())
-                }
-                Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(gap)) {
-                    Cell(items[1], Modifier.weight(1f).fillMaxWidth())
-                    Cell(items[3], Modifier.weight(1f).fillMaxWidth())
-                }
-            }
-        }
-    }
-}
 
 /**
  * A row still asking Telegram: blank tiles the size of the real ones, so nothing jumps when it fills.
@@ -582,14 +476,4 @@ private fun tileWidth(touch: Boolean): Dp = if (touch) 152.dp else 208.dp
 
 /** The phone's dense tile pads its art by this much, as [MediaCard] does. */
 private val DENSE_PAD = 4.dp
-
-/** The badge's height as a share of the picture's. */
-private const val SEE_ALL_PILL_SHARE = 0.34f
-
-/** The mosaic's dimming, and how far it lifts on focus. */
-private const val SEE_ALL_SCRIM = 0.55f
-private const val SEE_ALL_SCRIM_FOCUSED = 0.25f
-
-/** Pictures in the See all tile's mosaic. */
-private const val SEE_ALL_PREVIEW = 4
 private const val PLACEHOLDER_TILES = 5
