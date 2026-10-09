@@ -14,6 +14,7 @@ import androidx.compose.material3.LocalContentColor as TouchContentColor
 import androidx.compose.material3.MaterialTheme as TouchMaterialTheme
 import androidx.compose.material3.Text as TouchText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -194,14 +195,19 @@ private fun TouchFace(
     busyLabel: String?,
     content: @Composable RowScope.() -> Unit,
 ) {
-    ButtonFace(
-        loading = loading,
-        busy = {
-            Spinner(TouchContentColor.current)
-            if (busyLabel != null) TouchText(busyLabel)
-        },
-        content = content,
-    )
+    // Most screens are written once for TV and phone, so the label inside is often the TV Text,
+    // which reads the TV content colour and not this button's. Without the bridge a light theme drew
+    // "Open Saved Messages" in the TV default, dark teal on the teal button.
+    CompositionLocalProvider(TvContentColor provides TouchContentColor.current) {
+        ButtonFace(
+            loading = loading,
+            busy = {
+                Spinner(TouchContentColor.current)
+                if (busyLabel != null) TouchText(busyLabel)
+            },
+            content = content,
+        )
+    }
 }
 
 /** Small enough to sit on the text's own line, and in the label's colour rather than the accent. */
