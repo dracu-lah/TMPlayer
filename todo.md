@@ -27,7 +27,11 @@ State on 2026-10-10. Everything is pushed. The full plan is `docs/PLAN.md`.
 
 - Emulators only, never the real TV stick. Both AVDs (`tmplayer_phone_api36`, `tmplayer_tv_api36`) are signed
   in to the user's Telegram in the debug build; keep it with `adb install -r` of debug builds.
-- [ ] AppImage on this machine and the MSI in the podman `win11` VM: not done in this session.
+- [x] Desktop, 2026-10-10. AppImage built from main with the real keys: self test passes, opens signed in
+  on Home, TDLib reaches Ready, exits clean. MSI from CI on main: installs, launches on Windows 11 in
+  the light theme with readable onboarding buttons, uninstalls clean; CI checked the 1.24.0 upgrade.
+  Not covered: sign in and playback on Windows (CI builds carry no API keys), clicking through the
+  AppImage (no input tool on this machine).
 
 ## On hold
 

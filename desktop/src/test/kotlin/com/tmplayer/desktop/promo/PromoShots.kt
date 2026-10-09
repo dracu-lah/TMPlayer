@@ -158,7 +158,7 @@ class PromoShots {
     }
 
     @Test
-    fun chats() = both("chats") {
+    fun chats() = both("chats", before = { shell.showChats(shell.chatSection) }) {
         withSidebar {
             val list = rememberLazyListState()
             val nav = rememberKeyboardNav(remember(list) { ListSurface(list) })
