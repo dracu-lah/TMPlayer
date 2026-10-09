@@ -423,14 +423,27 @@ jobs:
       - name: Write the update feed
         run: |
           VERSION="${{ needs.version.outputs.name }}"
-          # An annotated tag's message becomes the popup's notes; a plain tag gets the default.
+          # An annotated tag's notes become the popup's notes, without its "release: X.Y.Z"
+          # subject; a plain tag gets the default. The script folds a "- " list into sentences.
           NOTES=""
           if [ "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME" 2>/dev/null)" = "tag" ]; then
-            NOTES="$(git tag -l --format='%(contents:subject) %(contents:body)' "$GITHUB_REF_NAME")"
+            NOTES="$(git tag -l --format='%(contents:body)' "$GITHUB_REF_NAME")"
           fi
           python3 scripts/write-latest-json.py \
             --version "$VERSION" --dist dist --notes "$NOTES" \
             --out "$RUNNER_TEMP/latest.json"
+
+      # The same notes head the release page, where a "- " list renders as one.
+      - name: Read the tag's notes for the release page
+        id: notes
+        run: |
+          {
+            echo "body<<TMPLAYER_NOTES_END"
+            if [ "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME" 2>/dev/null)" = "tag" ]; then
+              git tag -l --format='%(contents:body)' "$GITHUB_REF_NAME"
+            fi
+            echo "TMPLAYER_NOTES_END"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2
@@ -441,6 +454,8 @@ jobs:
           make_latest: "true"
           generate_release_notes: true
           body: |
+            ${{ steps.notes.outputs.body }}
+
             | Platform | File |
             | --- | --- |
             | Android TV, sticks and phones | `TMPlayer-${{ needs.version.outputs.name }}-universal.apk` |

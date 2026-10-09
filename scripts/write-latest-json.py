@@ -45,13 +45,32 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def popup_notes(notes):
+    """The tag's notes as one short paragraph, which is what every installed popup shows.
+
+    Notes are written as a "- " list, one change per line. Installed copies put the notes on the
+    same line as "You have x.y.z.", so a list would read as dashes run together; each item becomes
+    a sentence instead. Prose without a list passes through with its whitespace folded.
+    """
+    sentences = []
+    for line in notes.splitlines():
+        line = " ".join(line.split())
+        if line.startswith(("- ", "* ")):
+            line = line[2:].strip()
+            if line and line[-1] not in ".!?":
+                line += "."
+        if line:
+            sentences.append(line)
+    return " ".join(sentences)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", required=True)
     parser.add_argument("--dist", help="the folder holding the release's files")
     parser.add_argument("--from-release", help="the JSON `gh release view --json assets` printed")
     parser.add_argument("--published", help="ISO 8601 time; now when left out")
-    parser.add_argument("--notes", default="", help="two or three plain sentences for the popup")
+    parser.add_argument("--notes", default="", help="the tag's notes: a list of \"- \" lines, or plain sentences")
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
 
@@ -99,7 +118,7 @@ def main():
         "versionCode": major * 10000 + minor * 100 + patch,
         "published": published,
         "releaseUrl": f"https://github.com/{REPO}/releases/tag/{tag}",
-        "notes": " ".join(args.notes.split()) or DEFAULT_NOTES,
+        "notes": popup_notes(args.notes) or DEFAULT_NOTES,
         "assets": assets,
     }
     with open(args.out, "w") as f:

@@ -3,9 +3,26 @@
 Releases are cut by pushing a tag. Nothing else produces a signed APK or a desktop installer:
 
 ```bash
-git tag v0.3.0
+git tag -a v0.3.0 -F notes.txt
 git push origin v0.3.0
 ```
+
+The tag is annotated, and its message is the release notes: a `release: 0.3.0` subject, a blank
+line, then one `- ` line per change, short and in plain words, no em or en dashes:
+
+```
+release: 0.3.0
+
+- An Episodes list in the player on phone, TV and desktop
+- OK pauses in one press on TV
+- Buttons in the light theme are readable again
+```
+
+That list heads the GitHub release page, the Telegram post and the site's changelog page as it
+is. The update popup in installed apps shows one short paragraph, so the feed
+(`scripts/write-latest-json.py`) turns each item into a sentence there. The store changelog,
+`fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`, takes the same list, kept under
+500 characters.
 
 `.github/workflows/release.yml` then derives `versionName` from the tag and `versionCode`
 arithmetically (`major*10000 + minor*100 + patch`), so the code can only ever increase.
