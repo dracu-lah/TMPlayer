@@ -41,4 +41,6 @@
     -->
     <dimen name="player_scrim_top">160dp</dimen>
     <dimen name="player_scrim_bottom">240dp</dimen>
+    <!-- The Skip intro pill's distance from the bottom while the row is down; the row lifts it. -->
+    <dimen name="player_skip_intro_bottom">40dp</dimen>
 </resources>

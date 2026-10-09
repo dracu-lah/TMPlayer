@@ -10,12 +10,8 @@ import com.tmplayer.i18n.L
  * rather than lambdas so which lines appear, and in what order, can be tested without a screen.
  */
 enum class PlayerMenuEntry {
-    /**
-     * The episode steps. The television's row has no buttons for them, so besides the remote's
-     * media keys this is where they live, labelled with the episode they open.
-     */
-    NextEpisode,
-    PreviousEpisode,
+    // The episode steps are not here: the row's Episodes button opens the episode list, with the
+    // previous and next episode at its top, and the remote's media keys step as well.
     PlaybackDetails,
     StartOver,
     /** Night mode: quiet dialogue lifted, loud scenes held back. On or off, and the menu closes. */
@@ -85,20 +81,13 @@ object PlayerMenu {
      *
      * [openInAnotherApp] is false for a video from a chat that restricts saving content, whose
      * file must not be handed to another app.
-     *
-     * [nextEpisode] and [previousEpisode] are whether the chat search found a neighbour, and come
-     * first: on a series they are what the menu is most often opened for.
      */
     fun tvEntries(
         pictureInPicture: Boolean,
         saveToDownloads: Boolean = false,
         markWatched: Boolean = false,
         openInAnotherApp: Boolean = true,
-        nextEpisode: Boolean = false,
-        previousEpisode: Boolean = false,
     ): List<PlayerMenuEntry> = buildList {
-        if (nextEpisode) add(PlayerMenuEntry.NextEpisode)
-        if (previousEpisode) add(PlayerMenuEntry.PreviousEpisode)
         add(PlayerMenuEntry.PlaybackDetails)
         add(PlayerMenuEntry.StartOver)
         add(PlayerMenuEntry.VolumeBoost)

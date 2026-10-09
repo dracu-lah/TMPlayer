@@ -460,6 +460,31 @@
                 </LinearLayout>
             </HorizontalScrollView>
 
+            <!-- The episode list (CP40), at the right end of the row, where a streaming player keeps
+                 it: words beside the glyph, since a stack of frames alone says little. Shown only
+                 for a video that belongs to a series, once the chat has said so. -->
+            <TextView
+                android:id="@+id/control_episodes"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_control_pill"
+                android:clickable="true"
+                android:drawableStart="@drawable/ic_episodes"
+                android:drawablePadding="8dp"
+                android:drawableTint="@color/player_control_icon"
+                android:focusable="true"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center_vertical"
+                android:maxLines="1"
+                android:nextFocusUp="@id/controls_timebar"
+                android:paddingStart="12dp"
+                android:paddingEnd="16dp"
+                android:text="Episodes"
+                android:textColor="@color/player_control_icon"
+                android:textSize="15sp"
+                android:visibility="gone" />
+
             <!-- On a television OK here flips the total to the time left, and its focus cue is
                  a white pill with the text turned dark (bg_tv_focus_pill), like the buttons. -->
             <TextView

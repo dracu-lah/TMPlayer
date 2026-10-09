@@ -105,6 +105,13 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 
 /** What a menu entry asks for, beyond the plain [PlayerAction]s. */
 internal sealed interface MenuAction {
@@ -250,6 +257,8 @@ internal fun BoxScope.PlayerOverlay(
     onOpenMenu: (MenuAt) -> Unit,
     onCloseMenu: () -> Unit,
     onMenuAction: (MenuAction) -> Unit,
+    /** Opens the episode list; null (a film, or before the chat has answered) leaves the button out. */
+    onEpisodes: (() -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     // The right click menu hangs at the cursor whether or not the controls are up.
@@ -391,6 +400,8 @@ internal fun BoxScope.PlayerOverlay(
                         if (fullscreen) s.playerExitFullscreenHint else s.playerFullscreenHint,
                         onToggleFullscreen,
                     )
+                    // The bar's right end, where a streaming player keeps its episode list.
+                    if (onEpisodes != null) EpisodesButton(onEpisodes)
                 }
             }
         }
@@ -597,7 +608,9 @@ internal fun PlayerMenu(
     @Composable
     fun Entry(text: String, checked: Boolean = false, trailing: String? = null, onClick: () -> Unit) {
         DropdownMenuItem(
-            text = { Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            // Two lines rather than an ellipsis: Material caps a menu item at 280 dp, which a
+            // Malayalam or German line outgrows, and shrinking the type would go under the floor.
+            text = { Text(text, maxLines = 2, overflow = TextOverflow.Ellipsis) },
             onClick = onClick,
             leadingIcon = { Box(Modifier.size(18.dp)) { if (checked) Icon(PlayerIcons.Check, null, Modifier.size(18.dp)) } },
             trailingIcon = trailing?.let { { Text(it, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp) } },
@@ -611,12 +624,12 @@ internal fun PlayerMenu(
     @Composable
     fun Nudge(text: String, value: String, less: String, more: String, onLess: (() -> Unit)?, onMore: (() -> Unit)?) {
         Row(
-            Modifier.fillMaxWidth().height(48.dp).padding(start = 12.dp, end = 4.dp),
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 12.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Lines up with the entries' text, past the space their tick takes.
             Spacer(Modifier.width(30.dp))
-            Text(text, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 1)
+            Text(text, fontSize = 14.sp, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
             TextButton(onClick = { onLess?.invoke() }, enabled = onLess != null) { Text(less) }
             Text(value, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.widthIn(min = 64.dp))
             TextButton(onClick = { onMore?.invoke() }, enabled = onMore != null) { Text(more) }
@@ -830,6 +843,104 @@ internal fun BoxScope.NextUpCard(label: String, secondsLeft: Int, lifted: Boolea
                 }
             }
         }
+    }
+}
+
+/** "Episodes" with its glyph, a pill on the bar: words, since a stack of frames alone says little. */
+@Composable
+private fun EpisodesButton(onClick: () -> Unit) {
+    val s = LocalStrings.current
+    val hover = remember { MutableInteractionSource() }
+    val hovered by hover.collectIsHoveredAsState()
+    Row(
+        Modifier.padding(start = 4.dp).height(36.dp).clip(RoundedCornerShape(18.dp))
+            .background(if (hovered) Color(0x33FFFFFF) else Color.Transparent)
+            .hoverable(hover)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(com.tmplayer.ui.components.TmIcons.Episodes, null, tint = Color.White, modifier = Modifier.size(22.dp))
+        Text(s.episodesTitle, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+    }
+}
+
+/**
+ * The episode list over the dimmed picture: [com.tmplayer.ui.player.EpisodesPanel] in the player's
+ * dialog surface. A click on the dim or Esc (the player's key handler) closes it; the arrow keys
+ * walk it, as Tab does, with the episode playing focused first.
+ */
+@Composable
+internal fun BoxScope.EpisodesSheet(
+    state: com.tmplayer.ui.player.EpisodesState,
+    watch: com.tmplayer.ui.browse.SeriesWatch,
+    actions: com.tmplayer.ui.player.EpisodesActions,
+    position: () -> Long,
+    onClose: () -> Unit,
+) {
+    val s = LocalStrings.current
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    BoxWithConstraints(
+        Modifier.matchParentSize().background(FloatingTone.scrim).clickable(onClick = onClose),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            shape = Floating.DialogShape,
+            color = FloatingTone.dialog,
+            border = floatingBorder(),
+            modifier = Modifier
+                .widthIn(max = 1040.dp)
+                .heightIn(max = maxHeight - 32.dp)
+                .padding(16.dp)
+                // A click inside the panel is the panel's, not the dim's.
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val direction = when (event.key) {
+                        Key.DirectionDown -> androidx.compose.ui.focus.FocusDirection.Down
+                        Key.DirectionUp -> androidx.compose.ui.focus.FocusDirection.Up
+                        Key.DirectionLeft -> androidx.compose.ui.focus.FocusDirection.Left
+                        Key.DirectionRight -> androidx.compose.ui.focus.FocusDirection.Right
+                        else -> return@onPreviewKeyEvent false
+                    }
+                    focus.moveFocus(direction)
+                    true
+                },
+        ) {
+            com.tmplayer.ui.player.EpisodesPanel(
+                state = state,
+                watch = watch,
+                actions = actions,
+                position = position,
+                modifier = Modifier.padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 4.dp),
+                focusCurrent = true,
+                trailing = { OverlayButton(PlayerIcons.Close, s.commonClose, onClose, size = 36) },
+            )
+        }
+    }
+}
+
+/**
+ * "Skip intro", at the bottom end over the picture while a show's marked intro runs (see
+ * [com.tmplayer.data.IntroSkip]). A click or Enter jumps to its end.
+ */
+@Composable
+internal fun BoxScope.SkipIntroPill(lifted: Boolean, onSkip: () -> Unit) {
+    val s = LocalStrings.current
+    Row(
+        Modifier.align(Alignment.BottomEnd)
+            .padding(end = 16.dp, bottom = if (lifted) 120.dp else 32.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color(0xE61C1C1E))
+            .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(24.dp))
+            .clickable(onClick = onSkip)
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(PlayerIcons.SkipNext, null, tint = Color.White, modifier = Modifier.size(20.dp))
+        Text(s.episodesSkipIntro, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

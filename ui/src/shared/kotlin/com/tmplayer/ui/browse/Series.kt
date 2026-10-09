@@ -56,6 +56,13 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -417,10 +424,19 @@ fun EpisodeRow(
     onLongClick: (() -> Unit)? = null,
     chosen: MediaItem = episode.item,
     onCopy: ((MediaItem) -> Unit)? = null,
+    /** The episode playing, in the player's episode list: tinted and badged as such. */
+    current: Boolean = false,
+    /**
+     * On a television, holding OK is [onLongClick]: the player's episode list marks an episode
+     * watched that way. Off elsewhere, where OK only plays.
+     */
+    holdOk: Boolean = false,
+    /** Hung on the row itself rather than on the copies under it, for focus to land on. */
+    lineModifier: Modifier = Modifier,
 ) {
     val tv = !isTouch()
     if (episode.copies.size <= 1 || onCopy == null) {
-        EpisodeLine(episode, chosen, point, finished, upNext, onClick, modifier, onLongClick)
+        EpisodeLine(episode, chosen, point, finished, upNext, onClick, modifier.then(lineModifier), onLongClick, current, holdOk)
         return
     }
     // DOWN from the row goes to the chip of the copy it plays, not to whichever chip sits nearest
@@ -428,7 +444,7 @@ fun EpisodeRow(
     val chips = remember(episode.copies.size) { List(episode.copies.size) { FocusRequester() } }
     val landing = chips[episode.copies.indexOfFirst { it.id == chosen.id }.coerceAtLeast(0)]
     Column(modifier.fillMaxWidth()) {
-        EpisodeLine(episode, chosen, point, finished, upNext, onClick, Modifier.focusProperties { down = landing }, onLongClick)
+        EpisodeLine(episode, chosen, point, finished, upNext, onClick, lineModifier.focusProperties { down = landing }, onLongClick, current, holdOk)
         Row(
             Modifier
                 .fillMaxWidth()
@@ -497,6 +513,8 @@ private fun EpisodeLine(
     onClick: () -> Unit,
     modifier: Modifier,
     onLongClick: (() -> Unit)?,
+    current: Boolean = false,
+    holdOk: Boolean = false,
 ) {
     val s = LocalStrings.current
     val tv = !isTouch()
@@ -507,10 +525,26 @@ private fun EpisodeLine(
         modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(if (focused) Tone.surfaceHigh else Color.Transparent)
-            .border(if (focused) 3.dp else 0.dp, if (focused) Tone.accent else Color.Transparent, shape)
+            .background(
+                when {
+                    focused -> Tone.surfaceHigh
+                    current -> Tone.accent.copy(alpha = 0.14f)
+                    else -> Color.Transparent
+                },
+            )
+            .border(
+                if (focused || current) (if (focused) 3.dp else 1.dp) else 0.dp,
+                when {
+                    focused -> Tone.accent
+                    current -> Tone.accent.copy(alpha = 0.5f)
+                    else -> Color.Transparent
+                },
+                shape,
+            )
             .then(
-                if (onLongClick != null && !tv) {
+                if (onLongClick != null && tv && holdOk) {
+                    Modifier.okHold(interactions, onClick, onLongClick)
+                } else if (onLongClick != null && !tv) {
                     Modifier.combinedClickable(interactionSource = interactions, indication = androidx.compose.foundation.LocalIndication.current, onClick = onClick, onLongClick = onLongClick)
                 } else {
                     Modifier.clickable(interactionSource = interactions, indication = if (tv) null else androidx.compose.foundation.LocalIndication.current, onClick = onClick)
@@ -570,7 +604,18 @@ private fun EpisodeLine(
                     color = Tone.muted,
                     maxLines = 1,
                 )
-                if (upNext && !finished) {
+                if (current) {
+                    Text(
+                        s.episodesPlaying,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Tone.onAccent,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(Corner.ExtraSmall))
+                            .background(Tone.accent)
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                    )
+                } else if (upNext && !finished) {
                     Text(
                         s.seriesUpNextBadge,
                         style = MaterialTheme.typography.labelSmall,
@@ -799,3 +844,55 @@ private val SEASONS_BESIDE_MIN: Dp = 560.dp
 private val SERIES_POSTER_TV: Dp = 112.dp
 private val EPISODE_ART_TOUCH: Dp = 128.dp
 private val EPISODE_ART_TV: Dp = 176.dp
+
+/**
+ * OK plays, holding OK is [onHold]: the remote's long press, written out of key events because
+ * a D-pad hold does not reach `combinedClickable` on a television. A hold is a repeat of the key
+ * while it is still down, which the system sends first at its own long-press interval (the signal
+ * the app's `holdable` reads too); the press then counts on the way up, so a hold is never also a
+ * play. A release with no press seen here (the OK that opened the window) does nothing.
+ */
+private fun Modifier.okHold(
+    interactions: MutableInteractionSource,
+    onClick: () -> Unit,
+    onHold: () -> Unit,
+): Modifier {
+    // Not state: nothing draws from it. [0] 1 while a press is live; [1] 1 once this press has
+    // been taken as a hold.
+    val press = longArrayOf(0L, 0L)
+    return this
+        .semantics {
+            role = Role.Button
+            onClick { onClick(); true }
+            onLongClick { onHold(); true }
+        }
+        .onPreviewKeyEvent { event ->
+            if (event.key !in OK_KEYS) return@onPreviewKeyEvent false
+            when (event.type) {
+                KeyEventType.KeyDown -> {
+                    if (press[0] == 0L) {
+                        press[0] = 1L
+                        press[1] = 0L
+                    } else if (press[1] == 0L) {
+                        press[1] = 1L
+                        onHold()
+                    }
+                    true
+                }
+                KeyEventType.KeyUp -> {
+                    val pressed = press[0] != 0L
+                    val held = press[1] != 0L
+                    press[0] = 0L
+                    press[1] = 0L
+                    if (pressed && !held) onClick()
+                    true
+                }
+                else -> false
+            }
+        }
+        .focusable(interactionSource = interactions)
+}
+
+private val OK_KEYS = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)
+
+

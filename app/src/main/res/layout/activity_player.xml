@@ -26,6 +26,32 @@
     <include layout="@layout/player_controls" />
 
     <!--
+      Skip intro (CP40): up while a show's marked intro runs, controls or not, at the bottom end
+      where every streaming app puts it, lifted over the row while the row is up. A tap on a phone;
+      OK on a television, where it is not a focus stop, since the row's own walk is left alone.
+    -->
+    <TextView
+        android:id="@+id/skip_intro"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="24dp"
+        android:layout_marginBottom="@dimen/player_skip_intro_bottom"
+        android:background="@drawable/bg_skip_intro"
+        android:drawableStart="@drawable/ic_player_next"
+        android:drawablePadding="8dp"
+        android:drawableTint="#FFFFFFFF"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center_vertical"
+        android:minHeight="48dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="20dp"
+        android:text="Skip intro"
+        android:textColor="#FFFFFFFF"
+        android:textSize="16sp"
+        android:visibility="gone" />
+
+    <!--
       Full-screen while the video opens.
 
       It used to be a title, a sentence and a spinner on a flat sheet of #0E0E12, centred in a

@@ -26,6 +26,7 @@ import com.tmplayer.i18n.L
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MediaItem
 import com.tmplayer.player.PlayerControls
+import com.tmplayer.player.PlayerEpisodes
 import com.tmplayer.player.NextUpCard
 import com.tmplayer.player.PlayerFeedback
 import com.tmplayer.player.PlayerTvMenu
@@ -49,6 +50,11 @@ import androidx.media3.common.C
  *         [--ez nextup true] [--ez menu true] [--ez overflow true] [--ez trickplay true] [--el scrub_at 1265000]
  *         [--es picker subtitles|online] [--ez subtitles true]
  *         [--es online signed_out|signed_in|quota|expired|unavailable|empty|offline|subdl|none|live]
+ *         [--ez episodes true] [--es playing S02E02] [--ez intro true]
+ *
+ * `episodes` opens the episode list (CP40) over a two season show, `playing` picks the episode it
+ * opens on (S01E04 otherwise), and `intro` puts up the Skip intro pill. The Episodes button is on
+ * the row either way; a hold or long press on a row really marks it, in memory.
  *
  * `nextup` raises the next-up card over the bare picture, `menu` the television's More menu,
  * `jump` the remote's side figure for a ten second jump. The stand-in player really plays and
@@ -119,7 +125,9 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
             onPickSpeed = {},
             onCycleOrientation = {},
             onPlayEpisode = {},
+            onEpisodes = { openPromoEpisodes() },
         )
+        controls.setEpisodesAvailable(true)
         controls.setTitle("The Coast", "S01E04 · Nature Channel · 1.4 GB")
         controls.setEpisodes(demoEpisode(3), demoEpisode(5), L.playerPreviousUp("S01E03"), L.playerNextUp("S01E05"), "S01E03", "S01E05")
         controls.timeoutMs = 0
@@ -205,14 +213,23 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
                 card.show("S01E05", 12)
                 if (tv) card.play.requestFocus()
             }
+            if (intent.getBooleanExtra("episodes", false)) openPromoEpisodes()
+            if (intent.getBooleanExtra("intro", false)) {
+                findViewById<TextView>(R.id.skip_intro).apply {
+                    text = L.episodesSkipIntro
+                    visibility = View.VISIBLE
+                    // Over the raised row, as the player lifts it.
+                    val cluster = this@PromoPlayerActivity.findViewById<View>(R.id.controls_cluster)
+                    val margin = resources.getDimension(R.dimen.player_skip_intro_bottom)
+                    post { translationY = -(cluster.height + 8 * resources.displayMetrics.density - margin).coerceAtLeast(0f) }
+                }
+            }
             if (intent.getBooleanExtra("menu", false)) {
                 PlayerTvMenu(
                     activity = this,
                     root = findViewById(R.id.player_root),
                     title = { "The Coast S01E04" },
                     pictureInPicture = { true },
-                    nextEpisode = { L.playerNextUp("S01E05") },
-                    previousEpisode = { L.playerPreviousUp("S01E03") },
                     onEntry = {},
                     onClosed = {},
                 ).open()
@@ -279,6 +296,87 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
             },
         )
     }
+
+    // ---- the episode list (CP40) -------------------------------------------------------------
+
+    private val promoWatched = kotlinx.coroutines.flow.MutableStateFlow<Map<String, Unit>>(
+        mapOf(key(1, 1) to Unit, key(1, 2) to Unit),
+    )
+    private val promoProgress = kotlinx.coroutines.flow.MutableStateFlow(
+        mapOf(key(1, 3) to com.tmplayer.data.WatchPoint(1_300_000, 2_634_000)),
+    )
+    private var promoOrder = com.tmplayer.data.EpisodeOrder.Number
+    private var promoIntro: Long? = 92_000L
+    private var promoAutoplay = true
+
+    private fun key(season: Int, episode: Int) = com.tmplayer.data.SettingsStore.progressKey(1, (season * 100 + episode).toLong())
+
+    private val coastNames = listOf(
+        "Low Tide", "The Lighthouse", "Fog Bank", "Night Ferry", "Salt Marsh", "Gulls", "Breakwater", "Spring Tide",
+    )
+
+    private val coast: List<MediaItem> by lazy {
+        (1..8).map { coastEpisode(1, it) } + (1..4).map { coastEpisode(2, it) }
+    }
+
+    private fun coastEpisode(season: Int, number: Int) = MediaItem(
+        chatId = 1, messageId = (season * 100 + number).toLong(), fileId = season * 100 + number,
+        title = "The Coast S0${season}E0$number ${coastNames[(number - 1 + (season - 1) * 3) % coastNames.size]}",
+        sizeBytes = 1_400_000_000, durationSec = 2634, mimeType = "video/x-matroska", thumbnailFileId = 0,
+        miniThumbnail = null, date = season * 100 + number,
+        fileName = "The.Coast.S0${season}E0$number.${coastNames[(number - 1 + (season - 1) * 3) % coastNames.size].replace(' ', '.')}.1080p.mkv",
+    )
+
+    private val promoPlaying: MediaItem by lazy {
+        val code = intent.getStringExtra("playing")?.uppercase() ?: "S01E04"
+        coast.firstOrNull { it.fileName.contains(".$code.") } ?: coast[3]
+    }
+
+    private val promoEpisodes: PlayerEpisodes by lazy {
+        PlayerEpisodes(
+            activity = this,
+            root = findViewById(R.id.player_root),
+            progress = promoProgress,
+            watched = promoWatched,
+            position = { 61_000L },
+            actions = com.tmplayer.ui.player.EpisodesActions(
+                onPlay = { promoEpisodes.close() },
+                onToggleWatched = { item ->
+                    val k = com.tmplayer.data.SettingsStore.progressKey(item.chatId, item.messageId)
+                    promoWatched.value = if (k in promoWatched.value) promoWatched.value - k else promoWatched.value + (k to Unit)
+                },
+                onAutoplay = { promoAutoplay = it; refreshPromoEpisodes() },
+                onOrder = { promoOrder = it; refreshPromoEpisodes() },
+                onSetIntro = { promoIntro = 61_000L; refreshPromoEpisodes() },
+                onClearIntro = { promoIntro = null; refreshPromoEpisodes() },
+            ),
+            onClosed = {
+                controls?.show()
+                controls?.focusEpisodes()
+            },
+        )
+    }
+
+    private fun promoEpisodesState(): com.tmplayer.ui.player.EpisodesState {
+        val steps = com.tmplayer.data.EpisodeNeighbours.around(promoPlaying, coast, promoOrder)
+        return com.tmplayer.ui.player.EpisodesState(
+            series = steps.series!!,
+            playing = promoPlaying,
+            previous = steps.previous,
+            previousLabel = steps.previousTag?.let { L.playerPreviousUp(it.label) },
+            next = steps.next,
+            nextLabel = steps.nextTag?.let { L.playerNextUp(it.label) },
+            previousCode = steps.previousTag?.code,
+            nextCode = steps.nextTag?.code,
+            autoplay = promoAutoplay,
+            order = promoOrder,
+            introEndMs = promoIntro,
+        )
+    }
+
+    private fun openPromoEpisodes() = promoEpisodes.open(promoEpisodesState())
+
+    private fun refreshPromoEpisodes() = promoEpisodes.update(promoEpisodesState())
 
     private fun demoEpisode(number: Int) = MediaItem(
         chatId = 1, messageId = number.toLong(), fileId = number, title = "The Coast S01E0$number",

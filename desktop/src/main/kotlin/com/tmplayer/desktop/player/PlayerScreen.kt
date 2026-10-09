@@ -47,6 +47,8 @@ import com.tmplayer.online.OnlineSubtitles
 import com.tmplayer.online.SubtitleTarget
 import com.tmplayer.data.MediaName
 import com.tmplayer.data.EpisodeNeighbours
+import com.tmplayer.data.EpisodeOrder
+import com.tmplayer.data.IntroSkip
 import com.tmplayer.data.SeriesShelf
 import com.tmplayer.online.EpisodeNames
 import com.tmplayer.online.OnlineMetadata
@@ -196,6 +198,8 @@ fun PlayerScreen(
     loaderThumbnail: androidx.compose.ui.graphics.ImageBitmap? = null,
     onlineOpen: Boolean = false,
     onlinePreset: com.tmplayer.online.SearchResult? = null,
+    /** Start with the episode list up, once the chat has answered: the render test's and the promo's. */
+    episodesOpen: Boolean = false,
 ) {
     val s = LocalStrings.current
     val engine = remember { engineFactory() }
@@ -228,6 +232,7 @@ fun PlayerScreen(
     var showDetails by remember { mutableStateOf(detailsOpen) }
     var showOnline by remember { mutableStateOf(onlineOpen) }
     var showShortcuts by remember { mutableStateOf(shortcutsOpen) }
+    var showEpisodes by remember { mutableStateOf(episodesOpen) }
     var flash by remember { mutableStateOf<Flash?>(null) }
     var seekRun by remember { mutableStateOf(0L to 0L) } // (accumulated ms, last at)
     val downloaded by current.downloaded.collectAsState()
@@ -257,6 +262,12 @@ fun PlayerScreen(
     val focus = remember { FocusRequester() }
     val item = current.item
     val seriesKey = remember(item) { seriesKeyOf(item) }
+    // The show, as the per series choices of the episode list are filed: its next-up order and
+    // where its intro ends. Null for a film.
+    val show = remember(item) { EpisodeNeighbours.showOf(item) }
+    var episodeOrder by remember(current) { mutableStateOf(EpisodeOrder.Number) }
+    var introEnd by remember(current) { mutableStateOf<Long?>(null) }
+    val progressMap by remember(settings) { settings.watchProgress }.collectAsState(initial = emptyMap())
 
     fun showFlash(kind: Flash.Kind, text: String = "") {
         flash = Flash(kind, text, System.nanoTime())
@@ -277,7 +288,11 @@ fun PlayerScreen(
             // What the file says of itself straight away, for the title; the chat's answer, then
             // the providers' episode names where lookups are on.
             episodes = Episodes(current = EpisodeNeighbours.tagOf(item))
-            val found = runCatching { current.episodes() }.getOrDefault(episodes)
+            if (show != null) {
+                episodeOrder = runCatching { settings.episodeOrder(show) }.getOrDefault(EpisodeOrder.Number)
+                introEnd = runCatching { settings.introEnd(show) }.getOrNull()
+            }
+            val found = runCatching { current.episodes(episodeOrder) }.getOrDefault(episodes)
             episodes = found
             val named = runCatching {
                 kotlinx.coroutines.withContext(Dispatchers.IO) { EpisodeNames.named(found, item, OnlineMetadata.current) }
@@ -745,6 +760,66 @@ fun PlayerScreen(
         }
     }
 
+    /** The episode list's mark, for any episode: the one playing goes through [toggleWatched]. */
+    fun toggleWatchedOf(target: MediaItem) {
+        if (target.id == item.id) {
+            toggleWatched()
+            return
+        }
+        val store = watched ?: return
+        if (!hasMessage(target)) return
+        val key = SettingsStore.progressKey(target.chatId, target.messageId)
+        val chatTitle = current.chatTitle
+        playerScope.launch {
+            runCatching {
+                if (key in watchedKeys) {
+                    store.markUnwatched(target.chatId, target.messageId)
+                } else {
+                    store.markWatched(WatchedRecord.of(target, chatTitle, System.currentTimeMillis(), manual = true))
+                    settings.clearResumePosition(target.chatId, target.messageId)
+                }
+            }
+        }
+    }
+
+    /** The next-up order changed in the episode list: kept for the show, and the steps read again. */
+    fun setEpisodeOrder(order: EpisodeOrder) {
+        episodeOrder = order
+        show?.let { name -> playerScope.launch { runCatching { settings.setEpisodeOrder(name, order) } } }
+        val series = episodes.series ?: return
+        val found = EpisodeNeighbours.around(item, series.episodes.flatMap { it.copies }, order)
+        episodes = found
+        scope.launch {
+            val named = runCatching {
+                kotlinx.coroutines.withContext(Dispatchers.IO) { EpisodeNames.named(found, item, OnlineMetadata.current) }
+            }.getOrDefault(found)
+            if (named != found && episodes == found) episodes = named
+        }
+    }
+
+    /** "Set intro end here": the show's intro ends where playback is now. */
+    fun markIntroEnd() {
+        val name = show ?: return
+        val at = engine.state.value.positionMs
+        if (!IntroSkip.canMark(at)) return
+        introEnd = at
+        playerScope.launch { runCatching { settings.setIntroEnd(name, at) } }
+        showFlash(Flash.Kind.Text, L.episodesIntroSaved(SeekMath.clock(at)))
+    }
+
+    fun clearIntroEnd() {
+        val name = show ?: return
+        introEnd = null
+        playerScope.launch { runCatching { settings.setIntroEnd(name, null) } }
+        showFlash(Flash.Kind.Text, L.episodesIntroCleared)
+    }
+
+    fun skipIntro() {
+        val end = introEnd ?: return
+        engine.seekTo(end)
+        showFlash(Flash.Kind.Text, SeekMath.clock(end))
+    }
+
     fun startOver() {
         engine.seekTo(0)
         engine.play()
@@ -921,6 +996,23 @@ fun PlayerScreen(
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     noteInput()
+                    // The episode list has the keyboard while it is up: Esc closes it, and every
+                    // other key (the arrows, Enter) is its own, not a seek or a fullscreen.
+                    if (showEpisodes) {
+                        if (event.key == androidx.compose.ui.input.key.Key.Escape) {
+                            showEpisodes = false
+                            refocus()
+                            return@onPreviewKeyEvent true
+                        }
+                        return@onPreviewKeyEvent false
+                    }
+                    // Enter takes the Skip intro pill while it is up, as a click on it does.
+                    if ((event.key == Key.Enter || event.key == Key.NumPadEnter) && phase == Phase.Playing &&
+                        IntroSkip.offers(status.positionMs, introEnd)
+                    ) {
+                        skipIntro()
+                        return@onPreviewKeyEvent true
+                    }
                     // Sheets peel off before Esc means anything else.
                     if (event.key == androidx.compose.ui.input.key.Key.Escape && (showShortcuts || showDetails || showOnline)) {
                         showShortcuts = false
@@ -1061,7 +1153,19 @@ fun PlayerScreen(
                         MenuAction.SearchOnline -> showOnline = true
                     }
                 },
+                onEpisodes = if (episodes.series != null) {
+                    {
+                        menu = null
+                        showEpisodes = true
+                    }
+                } else {
+                    null
+                },
             )
+
+            if (phase == Phase.Playing && !showEpisodes && IntroSkip.offers(status.positionMs, introEnd)) {
+                SkipIntroPill(lifted = showControls, onSkip = ::skipIntro)
+            }
 
             FeedbackLayer(
                 flash = flash,
@@ -1158,6 +1262,52 @@ fun PlayerScreen(
                 onKeepWatching = { (phase as? Phase.StillWatching)?.let(::keepWatching) },
                 nextLabel = { episodes.labelFor(it) },
             )
+
+            val series = episodes.series
+            if (showEpisodes && series != null) {
+                val watch = remember(progressMap, watchedKeys) {
+                    com.tmplayer.ui.browse.SeriesWatch(
+                        point = { progressMap[SettingsStore.progressKey(it.chatId, it.messageId)] },
+                        finished = { SettingsStore.progressKey(it.chatId, it.messageId) in watchedKeys },
+                    )
+                }
+                fun closeEpisodes() {
+                    showEpisodes = false
+                    refocus()
+                }
+                EpisodesSheet(
+                    state = com.tmplayer.ui.player.EpisodesState(
+                        series = series,
+                        playing = item,
+                        previous = episodes.previous,
+                        previousLabel = episodes.previous?.let { s.playerPreviousUp(episodes.labelFor(it)) },
+                        next = episodes.next,
+                        nextLabel = episodes.next?.let { s.playerNextUp(episodes.labelFor(it)) },
+                        previousCode = episodes.previousTag?.code,
+                        nextCode = episodes.nextTag?.code,
+                        autoplay = autoplayNext,
+                        order = episodeOrder,
+                        introEndMs = introEnd,
+                    ),
+                    watch = watch,
+                    actions = com.tmplayer.ui.player.EpisodesActions(
+                        onPlay = { target ->
+                            closeEpisodes()
+                            if (target.id != item.id) switchTo(target)
+                        },
+                        onToggleWatched = ::toggleWatchedOf,
+                        onAutoplay = { on ->
+                            autoplayNext = on
+                            playerScope.launch { runCatching { settings.setAutoplayNext(on) } }
+                        },
+                        onOrder = ::setEpisodeOrder,
+                        onSetIntro = ::markIntroEnd,
+                        onClearIntro = ::clearIntroEnd,
+                    ),
+                    position = { engine.state.value.positionMs },
+                    onClose = ::closeEpisodes,
+                )
+            }
 
             if (showShortcuts) {
                 ShortcutSheet(

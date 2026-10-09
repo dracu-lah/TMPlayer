@@ -491,7 +491,7 @@ class PlayerMouseTest {
         override val chatTitle = "Film Club"
         override val savable = MutableStateFlow(true)
         override suspend fun open(): MediaData = UriMediaData("night-train.mkv")
-        override suspend fun episodes() = Episodes()
+        override suspend fun episodes(order: com.tmplayer.data.EpisodeOrder) = Episodes()
         override fun episode(other: MediaItem): PlayerMedia = this
         override val downloaded: StateFlow<Float?> = MutableStateFlow(null)
         override suspend fun tdlibVersion(): String? = null

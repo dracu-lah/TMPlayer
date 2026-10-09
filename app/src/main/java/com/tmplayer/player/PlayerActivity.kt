@@ -78,7 +78,9 @@ import com.tmplayer.data.WatchNext
 import com.tmplayer.data.WatchNextPublisher
 import com.tmplayer.data.MediaName
 import com.tmplayer.data.EpisodeNeighbours
+import com.tmplayer.data.EpisodeOrder
 import com.tmplayer.data.EpisodeSteps
+import com.tmplayer.data.IntroSkip
 import com.tmplayer.data.EpisodeTag
 import com.tmplayer.data.SeriesShelf
 import com.tmplayer.data.MessageLink
@@ -229,6 +231,25 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** The speed, sleep timer and playback details sheets, on a phone and a television alike. */
     private var sheets: PlayerSheets? = null
+
+    /** The episode list the row's Episodes button opens (CP40), on a phone and a television. */
+    private var episodesList: PlayerEpisodes? = null
+
+    /** [episodesList] is up. */
+    private var episodesOpen = false
+
+    /**
+     * This show's next-up order and where its intro ends, as the episode list keeps them per
+     * series; read with the chat's episodes in [findEpisodes].
+     */
+    private var episodeOrder = EpisodeOrder.Number
+    private var introEndMs: Long? = null
+
+    /** The autoplay setting as the episode list shows it, read when the list opens. */
+    private var autoplayNext = true
+
+    /** The Skip intro pill, up while this show's marked intro runs. */
+    private lateinit var skipIntro: TextView
 
     /** The overflow or the television's More menu is open. */
     private var menuOpen = false
@@ -540,6 +561,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             onPickSpeed = ::pickSpeed,
             onCycleOrientation = ::cycleOrientation,
             onPlayEpisode = ::playEpisode,
+            onEpisodes = ::openEpisodes,
             onBack = ::finish,
             onMore = ::showOverflow,
             onRemainingToggled = { remaining ->
@@ -567,8 +589,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 sleepTimer = ::sleepTimerDetail,
                 onSleepTimer = ::setSleepTimer,
                 sleepChoice = ::sleepChoice,
-                nextEpisode = { _episodes.value.takeIf { it.next != null }?.let { episodeLabel(next = true, it.nextTag) } },
-                previousEpisode = { _episodes.value.takeIf { it.previous != null }?.let { episodeLabel(next = false, it.previousTag) } },
                 onEntry = ::onTvMenuEntry,
                 onShape = ::applyScale,
                 onClosed = { menuOpen = false; holdControls(); controls?.show(); controls?.focusRow() },
@@ -582,6 +602,31 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 controls?.focusRow()
             }
         }
+        episodesList = PlayerEpisodes(
+            activity = this,
+            root = findViewById(R.id.player_root),
+            progress = settings.watchProgress,
+            watched = watchedStore.watched,
+            position = { player?.currentPosition ?: 0L },
+            actions = com.tmplayer.ui.player.EpisodesActions(
+                onPlay = ::playFromEpisodes,
+                onToggleWatched = ::toggleWatchedOf,
+                onAutoplay = ::setAutoplayFromEpisodes,
+                onOrder = ::setEpisodeOrder,
+                onSetIntro = ::markIntroEnd,
+                onClearIntro = ::clearIntroEnd,
+            ),
+            onClosed = {
+                episodesOpen = false
+                holdControls()
+                controls?.show()
+                controls?.focusEpisodes()
+            },
+        )
+        skipIntro = findViewById(R.id.skip_intro)
+        skipIntro.text = L.episodesSkipIntro
+        skipIntro.setOnClickListener { skipIntroNow() }
+        watchIntro()
         buildNextUpCard()
         startTrickplay()
         startStillWatchingCounts()
@@ -780,7 +825,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 onHold = ::holdFastForward,
                 onTapControls = ::toggleControls,
                 onTogglePlay = ::togglePlaybackFromPicture,
-                isOnChrome = { x, y -> controls?.isOnChrome(x, y) == true || isOnNextUpCard(x, y) },
+                isOnChrome = { x, y -> controls?.isOnChrome(x, y) == true || isOnNextUpCard(x, y) || isOnSkipIntro(x, y) },
                 systemEdges = ::systemGestureEdges,
             ).also { it.prefs = touchPrefs }
         }
@@ -973,6 +1018,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 episodes.collect { found ->
+                    controls?.setEpisodesAvailable(found.series != null)
+                    episodesState()?.let { episodesList?.update(it) }
                     controls?.setEpisodes(
                         previousEpisode = found.previous,
                         nextEpisode = found.next,
@@ -1917,21 +1964,22 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     private fun findEpisodes() {
         val here = currentItem()
-        val show = EpisodeNeighbours.tagOf(here)?.show
-            ?: listOfNotNull(mediaFileName.ifBlank { mediaTitle }.ifBlank { null }, mediaCaption.lineSequence().firstOrNull { it.isNotBlank() })
-                .firstNotNullOfOrNull { MediaName.looseEpisode(it) }?.title
-            ?: return
+        val show = EpisodeNeighbours.showOf(here) ?: return
         _episodes.value = EpisodeSteps(current = EpisodeNeighbours.tagOf(here))
-        if (chatId == 0L) return
 
         lifecycleScope.launch {
+            // The show's own choices from the episode list first: the order decides which
+            // neighbour is next, and the intro's end is wanted from the first frame.
+            episodeOrder = runCatching { settings.episodeOrder(show) }.getOrDefault(EpisodeOrder.Number)
+            introEndMs = runCatching { settings.introEnd(show) }.getOrNull()
+            if (chatId == 0L) return@launch
             val session = Td.awaitAuthorizedSession()
             val repository = ChatRepository(session.client)
             suspend fun page(query: String) =
                 runCatching { repository.mediaPage(chatId, query = query).items }.getOrNull().orEmpty()
-            var steps = EpisodeNeighbours.around(here, page(show))
+            var steps = EpisodeNeighbours.around(here, page(show), episodeOrder)
             if (steps.previous == null && steps.next == null) {
-                steps = EpisodeNeighbours.around(here, page(""))
+                steps = EpisodeNeighbours.around(here, page(""), episodeOrder)
             }
             _episodes.value = steps
             // The providers' episode names, where lookups are on: a label first, then a better one.
@@ -2371,6 +2419,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                     // middle. With the row up and the bar focused it is play or pause as well.
                     // Repeats are ignored so a held OK stays the long press it is about to become.
                     if (!controlsUp) {
+                        // The Skip intro pill is up: OK takes it, as a tap does on a phone.
+                        if (skipIntroShown()) {
+                            if (event.repeatCount == 0) skipIntroNow()
+                            return true
+                        }
                         if (event.repeatCount == 0) togglePlayback()
                         return true
                     }
@@ -2783,8 +2836,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             PlayerMenuEntry.SaveToDownloads -> saveToDownloads()
             PlayerMenuEntry.MarkWatched -> toggleWatched()
             PlayerMenuEntry.VolumeBoost -> toggleVolumeBoost()
-            PlayerMenuEntry.NextEpisode -> _episodes.value.next?.let(::playEpisode)
-            PlayerMenuEntry.PreviousEpisode -> _episodes.value.previous?.let(::playEpisode)
             // Pages of the menu itself, opened there.
             PlayerMenuEntry.PictureShape, PlayerMenuEntry.SleepTimer, PlayerMenuEntry.RemoteKeys -> Unit
         }
@@ -3196,7 +3247,164 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** Keeps the row up while anything opened from it is still on screen; see [PlayerControls.held]. */
     private fun holdControls() {
-        controls?.held = menuOpen || detailsOpen || pickerOpen
+        controls?.held = menuOpen || detailsOpen || pickerOpen || episodesOpen
+    }
+
+    // ---- the episode list and Skip intro (CP40) ---------------------------------------------
+
+    /** What the episode list shows now, or null for a video the chat has not placed in a series. */
+    private fun episodesState(): com.tmplayer.ui.player.EpisodesState? {
+        val found = _episodes.value
+        val series = found.series ?: return null
+        return com.tmplayer.ui.player.EpisodesState(
+            series = series,
+            playing = currentItem(),
+            previous = found.previous,
+            previousLabel = found.previous?.let { episodeLabel(next = false, found.previousTag) },
+            next = found.next,
+            nextLabel = found.next?.let { episodeLabel(next = true, found.nextTag) },
+            previousCode = found.previousTag?.code,
+            nextCode = found.nextTag?.code,
+            autoplay = autoplayNext,
+            order = episodeOrder,
+            introEndMs = introEndMs,
+        )
+    }
+
+    /** The row's Episodes button. The autoplay setting is read first, so the switch tells the truth. */
+    private fun openEpisodes() {
+        if (episodesState() == null || episodesOpen) return
+        episodesOpen = true
+        holdControls()
+        lifecycleScope.launch {
+            autoplayNext = runCatching { settings.autoplayNextNow() }.getOrDefault(true)
+            val state = episodesState()
+            if (state == null || !episodesOpen) {
+                episodesOpen = false
+                holdControls()
+                return@launch
+            }
+            episodesList?.open(state)
+        }
+    }
+
+    private fun refreshEpisodes() {
+        episodesState()?.let { episodesList?.update(it) }
+    }
+
+    /** A row of the list, or a step at its top: through the same path as the next-episode button. */
+    private fun playFromEpisodes(item: MediaItem) {
+        episodesList?.close()
+        if (item.id != currentItem().id) playEpisode(item)
+    }
+
+    /** A row's long press (a held OK on a television): marks that episode, or the one playing. */
+    private fun toggleWatchedOf(item: MediaItem) {
+        if (item.id == currentItem().id) {
+            toggleWatched()
+            return
+        }
+        if (item.chatId == 0L || item.messageId == 0L) return
+        val store = watchedStore
+        val title = chatTitle
+        App.backgroundScope.launch {
+            runCatching {
+                if (store.isWatched(item.chatId, item.messageId)) {
+                    store.markUnwatched(item.chatId, item.messageId)
+                } else {
+                    store.markWatched(WatchedRecord.of(item, title, System.currentTimeMillis(), manual = true))
+                    settings.clearResumePosition(item.chatId, item.messageId)
+                }
+            }
+        }
+    }
+
+    /** The list's autoplay switch: the same setting Settings shows. */
+    private fun setAutoplayFromEpisodes(on: Boolean) {
+        autoplayNext = on
+        refreshEpisodes()
+        lifecycleScope.launch { runCatching { settings.setAutoplayNext(on) } }
+    }
+
+    /** The list's next-up order: kept for the show, and the steps read again in that order. */
+    private fun setEpisodeOrder(order: EpisodeOrder) {
+        episodeOrder = order
+        val show = EpisodeNeighbours.showOf(currentItem())
+        if (show != null) lifecycleScope.launch { runCatching { settings.setEpisodeOrder(show, order) } }
+        val series = _episodes.value.series ?: return
+        val here = currentItem()
+        val steps = EpisodeNeighbours.around(here, series.episodes.flatMap { it.copies }, order)
+        _episodes.value = steps
+        lifecycleScope.launch {
+            val named = withContext(Dispatchers.IO) { EpisodeNames.named(steps, here, OnlineMetadata.current) }
+            if (named != steps && _episodes.value == steps) _episodes.value = named
+        }
+    }
+
+    /** "Set intro end here": this show's intro ends where playback is now. */
+    private fun markIntroEnd() {
+        val show = EpisodeNeighbours.showOf(currentItem()) ?: return
+        val at = player?.currentPosition ?: return
+        if (!IntroSkip.canMark(at)) return
+        introEndMs = at
+        refreshEpisodes()
+        lifecycleScope.launch { runCatching { settings.setIntroEnd(show, at) } }
+        showGestureFeedback(L.episodesIntroSaved(Translator.messages.formatter.clock(at)))
+    }
+
+    private fun clearIntroEnd() {
+        val show = EpisodeNeighbours.showOf(currentItem()) ?: return
+        introEndMs = null
+        refreshEpisodes()
+        lifecycleScope.launch { runCatching { settings.setIntroEnd(show, null) } }
+        showGestureFeedback(L.episodesIntroCleared)
+    }
+
+    /** Whether the Skip intro pill is up, which is when OK on a television means it. */
+    private fun skipIntroShown(): Boolean = this::skipIntro.isInitialized && skipIntro.visibility == View.VISIBLE
+
+    private fun skipIntroNow() {
+        val end = introEndMs ?: return
+        player?.seekTo(end)
+        skipIntro.visibility = View.GONE
+        showGestureFeedback(Translator.messages.formatter.clock(end))
+    }
+
+    /**
+     * Twice a second while the activity is started: the pill up while the marked intro runs and
+     * nothing covers the picture, lifted over the row while the row is up.
+     */
+    private fun watchIntro() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    renderSkipIntro()
+                    delay(SKIP_INTRO_TICK_MS)
+                }
+            }
+        }
+    }
+
+    private fun renderSkipIntro() {
+        val exo = player
+        val show = exo != null &&
+            statusOverlay.visibility != View.VISIBLE &&
+            !episodesOpen && !inPictureInPicture && !locked &&
+            IntroSkip.offers(exo.currentPosition, introEndMs)
+        skipIntro.visibility = if (show) View.VISIBLE else View.GONE
+        if (!show) return
+        val cluster = findViewById<View>(R.id.controls_cluster)
+        val margin = (skipIntro.layoutParams as? android.view.ViewGroup.MarginLayoutParams)?.bottomMargin ?: 0
+        val gap = 8 * resources.displayMetrics.density
+        val lift = if (controlsUp) (cluster.height + gap - margin).coerceAtLeast(0f) else 0f
+        if (skipIntro.translationY != -lift) skipIntro.animate().translationY(-lift).setDuration(SUBTITLE_LIFT_MS).start()
+    }
+
+    private fun isOnSkipIntro(rawX: Float, rawY: Float): Boolean {
+        if (!skipIntroShown()) return false
+        val at = IntArray(2)
+        skipIntro.getLocationInWindow(at)
+        return rawX >= at[0] && rawX < at[0] + skipIntro.width && rawY >= at[1] && rawY < at[1] + skipIntro.height
     }
 
     /** The transport row coming or going; the chips and the system bars ride with it. */
@@ -4091,6 +4299,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         /** The captions' climb out from under the raised transport row, and back. */
         private const val SUBTITLE_LIFT_MS = 200L
+
+        /** How often the Skip intro pill checks the position: the next-up card's own beat. */
+        private const val SKIP_INTRO_TICK_MS = 500L
 
         /** A thumbnail at least this wide for its height is a frame of the film, not a logo. */
         private const val REAL_FRAME_ASPECT = 1.3f

@@ -42,9 +42,11 @@ import com.tmplayer.i18n.Translator
  * subtitles, audio, speed and rotate. The jumps are the double tap and the keys, and lock,
  * picture in picture and picture shape sit in the overflow. A television shows none of the phone
  * pieces and keeps one row: subtitles, audio, speed and More at the end. Play, pause, the jumps
- * and the episode steps are the remote's keys, and the episode steps are also in More, labelled
- * with the episode they open. What a television keeps of the centre is the play disc as a cue
- * rather than a button, drawn only while the video is paused.
+ * and the episode steps are the remote's keys. What a television keeps of the centre is the play
+ * disc as a cue rather than a button, drawn only while the video is paused.
+ *
+ * Both rows end in Episodes, on a video that belongs to a series: the episode list with the
+ * previous and next steps at its top ([PlayerEpisodes]).
  *
  * The activity stays the owner of every action. This class decides nothing about playback; it
  * raises, lowers and repaints the furniture, and forwards each press to the lambda wired for it.
@@ -66,6 +68,8 @@ class PlayerControls(
     private val onMore: (anchor: View) -> Unit = {},
     /** The total was flipped between total and remaining: a tap on a phone, OK on a television. */
     private val onRemainingToggled: (Boolean) -> Unit = {},
+    /** The row's Episodes button: opens the episode list. */
+    private val onEpisodes: () -> Unit = {},
 ) {
 
     private val container: View = root.findViewById(R.id.player_controls)
@@ -94,6 +98,7 @@ class PlayerControls(
     private val timesPosition: TextView = root.findViewById(R.id.times_position)
     private val timesDuration: TextView = root.findViewById(R.id.times_duration)
     private val cluster: View = root.findViewById(R.id.controls_cluster)
+    private val episodesButton: TextView = root.findViewById(R.id.control_episodes)
 
     /** The phone's times line shows what is left rather than the total. */
     var showRemaining = false
@@ -153,6 +158,8 @@ class PlayerControls(
         wire(root.findViewById(R.id.control_audio)) { onPickAudio() }
         wire(root.findViewById(R.id.control_speed)) { onPickSpeed() }
         wire(rotate) { onCycleOrientation() }
+        wire(episodesButton) { onEpisodes() }
+        episodesButton.text = L.episodesTitle
         rotate.visibility = if (isTv) View.GONE else View.VISIBLE
         describeFromCatalog(root)
         if (!isTv) setUpPhone(root) else setUpTv(root)
@@ -377,6 +384,7 @@ class PlayerControls(
             R.id.control_speed to L.playerPlaybackSpeed,
             R.id.control_rotate to L.playerScreenOrientation,
             R.id.control_tv_more to L.commonMore,
+            R.id.control_episodes to L.episodesTitle,
         )
         for ((id, name) in names) root.findViewById<View>(id)?.contentDescription = name
     }
@@ -459,6 +467,26 @@ class PlayerControls(
         describe(centerNext, nextLabel)
         centerNext.setOnClickListener { nextEpisode?.let(onPlayEpisode) }
         caption(centerNextCaption, nextCaption.takeIf { nextEpisode != null })
+    }
+
+    /**
+     * Shows the Episodes button for a video the chat has placed in a series, and takes it away
+     * otherwise: a film has no list to open.
+     */
+    fun setEpisodesAvailable(available: Boolean) {
+        val wanted = if (available) View.VISIBLE else View.GONE
+        if (episodesButton.visibility == wanted) return
+        // Leaving the button the remote stands on would drop focus on the floor: back to the row.
+        val hadFocus = episodesButton.hasFocus()
+        episodesButton.visibility = wanted
+        if (hadFocus) focusRow()
+    }
+
+    /** Puts the remote back on the Episodes button, for when the list it opened closes. */
+    fun focusEpisodes() {
+        if (!isTv || !visible || episodesButton.visibility != View.VISIBLE) return
+        episodesButton.requestFocus()
+        poke()
     }
 
     private fun caption(view: TextView, text: String?) {

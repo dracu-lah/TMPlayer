@@ -30,7 +30,22 @@ data class EpisodeSteps(
     val current: EpisodeTag? = null,
     val previousTag: EpisodeTag? = null,
     val nextTag: EpisodeTag? = null,
+    /**
+     * The whole show the episode belongs to, as the series view groups it, for the player's
+     * episode list. Null for a film, and until the chat has answered.
+     */
+    val series: Series? = null,
+    /** The order [previous] and [next] were read in: see [EpisodeOrder]. */
+    val order: EpisodeOrder = EpisodeOrder.Number,
 )
+
+/**
+ * Which episode comes next. [Number] is the series view's own order, season by season. [Upload]
+ * follows the chat instead, oldest post first, for a channel that posts a show out of its
+ * numbering (a recap, a special, a second cut of an episode). Chosen per series in the player's
+ * episode list and remembered there.
+ */
+enum class EpisodeOrder { Number, Upload }
 
 /**
  * The episode before and after one video, in the order the series view lists them.
@@ -47,14 +62,14 @@ object EpisodeNeighbours {
      * Where [current] sits among [items], the chat's videos. [current] need not be among them: a
      * search narrowed to the show's name can leave it out, and it is added for the grouping.
      */
-    fun around(current: MediaItem, items: List<MediaItem>): EpisodeSteps {
+    fun around(current: MediaItem, items: List<MediaItem>, order: EpisodeOrder = EpisodeOrder.Number): EpisodeSteps {
         val all = if (items.any { it.id == current.id }) items else items + current
         val show = SeriesShelf.arrange(all).asSequence()
             .filterIsInstance<ShelfEntry.Show>()
             .map { it.series }
             .firstOrNull { series -> series.episodes.any { holds(it, current) } }
-            ?: return EpisodeSteps(current = tagOf(current))
-        val episodes = show.episodes
+            ?: return EpisodeSteps(current = tagOf(current), order = order)
+        val episodes = ordered(show, order)
         val at = episodes.indexOfFirst { holds(it, current) }
         val before = episodes.getOrNull(at - 1)
         val after = episodes.getOrNull(at + 1)
@@ -67,7 +82,33 @@ object EpisodeNeighbours {
             current = tag(episodes[at], current, show.title),
             previousTag = before?.let { tag(it, previous!!, show.title) },
             nextTag = after?.let { tag(it, next!!, show.title) },
+            series = show,
+            order = order,
         )
+    }
+
+    /**
+     * [series]' episodes in the order the next one is chosen by. By upload, an episode is placed by
+     * its first post, so a later second copy of it does not move it to the end.
+     */
+    fun ordered(series: Series, order: EpisodeOrder): List<SeriesEpisode> = when (order) {
+        EpisodeOrder.Number -> series.episodes
+        EpisodeOrder.Upload -> series.episodes.sortedWith(
+            compareBy<SeriesEpisode> { episode -> episode.copies.minOf { it.date } }
+                .thenBy { episode -> episode.copies.minOf { it.messageId } },
+        )
+    }
+
+    /**
+     * The show a video belongs to, as its own name or caption says, or null for a film: what the
+     * chat is searched for, and what the per series choices ([EpisodeOrder], the intro's end) are
+     * filed under. A bare "E5" counts once a show is named with it.
+     */
+    fun showOf(item: MediaItem): String? {
+        tagOf(item)?.show?.takeIf { it.isNotBlank() }?.let { return it }
+        val caption = item.caption.lineSequence().firstOrNull { it.isNotBlank() }
+        return listOfNotNull(item.fileName.ifBlank { item.title }.ifBlank { null }, caption)
+            .firstNotNullOfOrNull { MediaName.looseEpisode(it) }?.title?.takeIf { it.isNotBlank() }
     }
 
     /**
@@ -95,4 +136,25 @@ object EpisodeNeighbours {
 
     private fun tag(episode: SeriesEpisode, item: MediaItem, show: String) =
         EpisodeTag(episode.code, nameOf(item), show, episode.season, episode.episode)
+}
+
+/**
+ * Skip intro, learned rather than read: Telegram files carry no chapter for the intro, so the
+ * viewer marks where it ends once ("Set intro end here" in the episode list), and every episode of
+ * that show offers a jump to that point until playback passes it.
+ */
+object IntroSkip {
+
+    /** Shorter than this is not an intro, and a mark this early is a slip of the finger. */
+    const val MIN_END_MS = 5_000L
+
+    /** The offer goes this long before the end, so the jump never lands a second short of it. */
+    const val LEAD_MS = 2_000L
+
+    /** Whether the Skip intro pill shows at [positionMs], for a show whose intro ends at [endMs]. */
+    fun offers(positionMs: Long, endMs: Long?): Boolean =
+        endMs != null && endMs >= MIN_END_MS && positionMs >= 0 && positionMs < endMs - LEAD_MS
+
+    /** Whether [positionMs] can be saved as the intro's end. */
+    fun canMark(positionMs: Long): Boolean = positionMs >= MIN_END_MS
 }

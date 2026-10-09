@@ -481,6 +481,25 @@
     "waiting_connection": "Waiting for a connection",
     "waiting_wifi": "Waiting for Wi-Fi"
   },
+  "episodes": {
+    "autoplay": "Autoplay next episode",
+    "hint_desktop": "Right click an episode to mark it watched or unwatched",
+    "hint_touch": "Long press an episode to mark it watched or unwatched",
+    "hint_tv": "Hold OK on an episode to mark it watched or unwatched",
+    "intro_clear": "Clear",
+    "intro_cleared": "Skip intro cleared for this show",
+    "intro_detail": "Later episodes of this show then offer Skip intro until that point",
+    "intro_ends": "Intro ends at {time}",
+    "intro_saved": "Skip intro set to {time} for this show",
+    "intro_set": "Set intro end here ({time})",
+    "intro_too_early": "Play past the intro, then set its end here",
+    "order": "Next up by",
+    "order_number": "Episode number",
+    "order_upload": "Upload order",
+    "playing": "Playing",
+    "skip_intro": "Skip intro",
+    "title": "Episodes"
+  },
   "errors": {
     "channel_private": "You're not in this channel any more, so its videos aren't available.",
     "chat_gone": "That chat isn't there any more. It was deleted, or you left it.",

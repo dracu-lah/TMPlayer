@@ -12,8 +12,6 @@ class PlayerMenuTest {
     fun `the menu carries the phone overflow's actions and the remote keys, in a fixed order`() {
         assertEquals(
             listOf(
-                PlayerMenuEntry.NextEpisode,
-                PlayerMenuEntry.PreviousEpisode,
                 PlayerMenuEntry.PlaybackDetails,
                 PlayerMenuEntry.StartOver,
                 PlayerMenuEntry.VolumeBoost,
@@ -29,21 +27,14 @@ class PlayerMenuTest {
                 pictureInPicture = true,
                 saveToDownloads = true,
                 markWatched = true,
-                nextEpisode = true,
-                previousEpisode = true,
             ),
         )
     }
 
     @Test
-    fun `the episode steps are only offered when the chat has a neighbour`() {
-        val none = PlayerMenu.tvEntries(pictureInPicture = true)
-        assertFalse(PlayerMenuEntry.NextEpisode in none)
-        assertFalse(PlayerMenuEntry.PreviousEpisode in none)
-        assertEquals(
-            listOf(PlayerMenuEntry.NextEpisode, PlayerMenuEntry.PlaybackDetails),
-            PlayerMenu.tvEntries(pictureInPicture = true, nextEpisode = true).take(2),
-        )
+    fun `the episode steps are left to the Episodes button and the media keys`() {
+        assertEquals(PlayerMenuEntry.PlaybackDetails, PlayerMenu.tvEntries(pictureInPicture = true).first())
+        assertFalse(PlayerMenuEntry.entries.any { it.name.contains("Episode") })
     }
 
     @Test
@@ -73,8 +64,6 @@ class PlayerMenuTest {
             pictureInPicture = false,
             saveToDownloads = true,
             markWatched = true,
-            nextEpisode = true,
-            previousEpisode = true,
         )
         assertFalse(PlayerMenuEntry.PictureInPicture in entries)
         assertEquals(PlayerMenuEntry.entries.size - 1, entries.size)
@@ -88,8 +77,6 @@ class PlayerMenuTest {
                 pictureInPicture = true,
                 saveToDownloads = true,
                 markWatched = true,
-                nextEpisode = true,
-                previousEpisode = true,
             ).toSet(),
         )
     }

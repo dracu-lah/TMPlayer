@@ -65,6 +65,27 @@ class PlayerDeclutterShotsTest {
         shot("shortcuts-narrow", width = 800) { Box(Modifier.fillMaxSize()) { ShortcutSheet(onClose = {}) } }
     }
 
+    /**
+     * The menus and the shortcut sheet in Malayalam and Arabic: every line from the catalog (none
+     * left in English) and none cut short with an ellipsis at the menu's width.
+     */
+    @Test
+    fun `the menus read in the viewer's language`() {
+        for (tag in listOf("ml", "ar")) {
+            com.tmplayer.i18n.Translator.use(tag)
+            try {
+                val s = com.tmplayer.i18n.L
+                listOf(s.playerPlaybackOptions, s.playerSubtitleStyleAndTiming, s.playerHelp, s.keysGroupPlayback, s.keysGroupWindow, s.keysGroupAudioSubtitles, s.keysGroupOther)
+                    .forEach { assertTrue("$tag still English: $it", it.none { c -> c in 'a'..'z' }) }
+                shot("$tag-menu-main") { overlay(MenuAt(MenuPage.Main, MenuAt.Anchor.Overflow)) }
+                shot("$tag-menu-options") { overlay(MenuAt(MenuPage.Options, MenuAt.Anchor.Overflow)) }
+                shot("$tag-shortcuts") { Box(Modifier.fillMaxSize()) { ShortcutSheet(onClose = {}) } }
+            } finally {
+                com.tmplayer.i18n.Translator.use(com.tmplayer.i18n.Languages.ENGLISH)
+            }
+        }
+    }
+
     @Composable
     private fun overlay(menu: MenuAt?) {
         Box(Modifier.fillMaxSize().background(Color(0xFF203040))) {

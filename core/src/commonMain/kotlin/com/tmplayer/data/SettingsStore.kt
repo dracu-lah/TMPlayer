@@ -144,6 +144,8 @@ private fun seriesKey(series: String): String =
 private fun audioKey(series: String) = stringPreferencesKey("audio_$series")
 private fun textKey(series: String) = stringPreferencesKey("text_$series")
 private fun subtitlesKey(series: String) = booleanPreferencesKey("subs_$series")
+private fun orderKey(series: String) = stringPreferencesKey("episode_order_$series")
+private fun introKey(series: String) = longPreferencesKey("intro_end_$series")
 
 /** Where playback stopped, so the next launch can offer to continue. */
 private fun resumeKey(chatId: Long, messageId: Long) =
@@ -813,6 +815,29 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
             choice.textLanguage?.let { prefs[textKey(key)] = it } ?: prefs.remove(textKey(key))
             prefs[subtitlesKey(key)] = choice.subtitlesOn
         }
+    }
+
+    // ---- per series choices from the player's episode list -----------------------------------
+
+    /** Which episode comes next in [series]: see [EpisodeOrder]. Episode number until changed. */
+    suspend fun episodeOrder(series: String): EpisodeOrder {
+        val saved = prefs.data.first()[orderKey(seriesKey(series))]
+        return EpisodeOrder.entries.firstOrNull { it.name == saved } ?: EpisodeOrder.Number
+    }
+
+    suspend fun setEpisodeOrder(series: String, order: EpisodeOrder) {
+        val key = orderKey(seriesKey(series))
+        prefs.edit { if (order == EpisodeOrder.Number) it.remove(key) else it[key] = order.name }
+    }
+
+    /** Where [series]' intro ends, as the viewer marked it, or null for none: see [IntroSkip]. */
+    suspend fun introEnd(series: String): Long? =
+        prefs.data.first()[introKey(seriesKey(series))]?.takeIf { it > 0 }
+
+    /** Marks [series]' intro as ending at [ms]; null clears it. */
+    suspend fun setIntroEnd(series: String, ms: Long?) {
+        val key = introKey(seriesKey(series))
+        prefs.edit { if (ms == null || ms <= 0) it.remove(key) else it[key] = ms }
     }
 
     // ---- size filter ------------------------------------------------------------------------
