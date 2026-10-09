@@ -1101,8 +1101,11 @@ html:not(.js) .js-only { display: none; }
   border: 1px solid var(--outline-variant);
   border-radius: var(--shape-s);
   padding: 8px 12px;
-  overflow-x: auto;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  /* A command reads left to right on an Arabic or Persian page too. */
+  direction: ltr;
+  text-align: left;
   color: var(--on-surface);
   max-width: 100%;
 }
@@ -1444,11 +1447,15 @@ kbd {
   border-radius: var(--shape-m);
   padding: 16px 18px;
   margin: 0 0 1rem;
-  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  /* A command reads left to right on an Arabic or Persian page too. */
+  direction: ltr;
+  text-align: left;
   color: var(--on-surface);
   max-width: 100%;
 }
-.code code { background: none; padding: 0; font-size: inherit; }
+.code code { background: none; border: 0; border-radius: 0; padding: 0; font-size: inherit; }
 
 @media (max-width: 600px) {
   .steps > li { grid-template-columns: minmax(0, 1fr); gap: 14px; }
