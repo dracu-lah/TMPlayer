@@ -332,7 +332,6 @@
     "one_file_for_every_phone": "One file for every phone, 32-bit and 64-bit. Open it and allow the install.",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "How to install on a phone",
-    "add_to_obtainium": "Add to Obtainium",
     "android_tv_8_0_and": "Android TV 8.0 and above: sticks, boxes and televisions",
     "the_same_file_as_the": "The same file as the phone's. Send it to the TV with Downloader, Send files to TV or {code1}.",
     "how_to_install_on_a_2": "How to install on a television",
@@ -374,7 +373,8 @@
     "no_store_updates_tmplayer_looks": "No store updates. TMPlayer looks for a new version itself and offers it in the side bar instead; the Windows installer and the AppImage update in place from there.",
     "an_app_from_outside_the": "An app from outside the store that signs into Telegram asks for a lot of trust. A star helps the next person decide.",
     "download_tmplayer_free_the_apk": "Download TMPlayer free: the APK for Android TV and phones, a Windows installer, and an AppImage for Linux.",
-    "platforms": "Platforms"
+    "platforms": "Platforms",
+    "add_to_obtainium": "Add to Obtainium"
   },
   "install": {
     "how_to_install_tmplayer_on": "How to install TMPlayer on Android TV, Windows and Linux",
@@ -436,7 +436,6 @@
     "or_tick_in_the_file": "Or tick {em1} in the file's properties and double click it.",
     "or_tick_in_the_file__em1": "Allow executing file as program",
     "build_the_package_from_the": "Build the package from the recipe in {a1} with {code1}, or use the AppImage.",
-    "build_the_package_from_the__a1": "",
     "moving_from_the_deb_rpm": "Moving from the deb, rpm or Flatpak",
     "these_are_no_longer_published": "These are no longer published. Remove the old one ({code1}, {code2} or {code3}) and take the AppImage. After the deb or rpm, your sign-in and settings carry over. The Flatpak kept them inside its sandbox, so {a1} or sign in again.",
     "these_are_no_longer_published__a1": "copy them out first",
@@ -772,7 +771,6 @@
     "say_which_page_or_screen__a2": "an issue on GitHub",
     "edit_the_file_yourself": "Edit the file yourself",
     "every_language_is_one_json": "Every language is one JSON file. The website's are in {a1}, the app's in {code1}, each named after its code, such as {code2}. Press the pencil on GitHub, change the text, and propose the change as a pull request.",
-    "every_language_is_one_json__a1": "",
     "english_is_the_source_is": "English is the source: {code1} is never translated, only the other files are.",
     "review_a_whole_language": "Review a whole language",
     "read_the_site_or_the": "Read the site or the app in your language from start to finish and send one list of fixes. A reviewed language is marked as reviewed, and later machine runs never overwrite it.",

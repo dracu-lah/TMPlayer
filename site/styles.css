@@ -1121,6 +1121,10 @@ html:not(.js) .js-only { display: none; }
 
 .platform-foot { margin: 16px 0 0; font-size: 0.92rem; }
 .platform-foot .sep { padding: 0 10px; color: var(--on-surface-variant); }
+.platform-badges { margin: 12px 0 0; line-height: 0; }
+.store-badge { display: inline-block; border-radius: 8px; }
+.store-badge img { display: block; width: 161px; height: 48px; }
+.store-badge:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 
 .platform-jump {
   display: flex;

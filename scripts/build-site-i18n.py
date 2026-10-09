@@ -313,8 +313,13 @@ def is_unit(src, node):
 # ---------------------------------------------------------------------------- templates
 
 def is_verbatim(src, node):
-    return (node.tag in VERBATIM or opted_out(node)
-            or not translatable_text(all_text(src, node)))
+    if node.tag in VERBATIM or opted_out(node) or not translatable_text(all_text(src, node)):
+        return True
+    # A link around nothing but code, <a><code>site/i18n/</code></a>, has no words of its own:
+    # keying it would put an empty string in the catalog that no language can ever fill.
+    if not node.children or direct_text(src, node).strip():
+        return False
+    return all(is_verbatim(src, child) for child in node.children)
 
 
 def template(src, node):

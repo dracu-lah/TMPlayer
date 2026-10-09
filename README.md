@@ -60,6 +60,11 @@ Everything is on the same [GitHub release](../../releases), and
 Grab the universal APK from [Releases](../../releases). The same file works on every supported
 architecture, so there is no CPU variant to identify.
 
+On a phone, [Obtainium](https://github.com/ImranR98/Obtainium) can install it straight from the
+releases and keep it up to date:
+
+<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/dracu-lah/TMPlayer"><img src="site/badges/obtainium.png" width="161" height="48" alt="Get it on Obtainium" /></a>
+
 On the TV, turn on Developer options (Settings, About, press *Build* seven times), enable network
 debugging, then:
 
