@@ -2775,11 +2775,12 @@ private val HOLD_HINT: String get() = L.browseHoldHint
  * One rail row, heading or item, back to back. The old 44 dp item plus a 4 dp gap had the same
  * pitch; this gives the whole of it to the target, the 48 dp floor of the v1 design.
  */
-private val RAIL_ROW = 48.dp
+private val RAIL_ROW = 42.dp
 
 // Outside each row's fill, so the selected row and a focused one beside it read as two rows rather
-// than one block when focus moves off Home onto History.
-private val RAIL_GAP = 8.dp
+// than one block when focus moves off Home onto History. Row and gap add up to the 48 dp pitch the
+// rail always had, so a 1080p screen still fits Watch, an open Telegram group and the foot.
+private val RAIL_GAP = 6.dp
 
 /** The mark beside the name and version at the top of the rail. */
 private val RAIL_MARK = 32.dp
