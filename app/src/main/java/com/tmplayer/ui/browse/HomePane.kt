@@ -350,12 +350,13 @@ private fun RowHeading(
     val s = LocalStrings.current
     val touch = isTouch()
     Row(
-        // The button's own padding is the gap at the end, so its label lines up with the row's
-        // last tile rather than sitting 12 dp short of it.
-        Modifier.fillMaxWidth().padding(start = start, end = if (seeAll != null) (end - 12.dp).coerceAtLeast(0.dp) else end, bottom = if (touch) 4.dp else 0.dp)
-            // The button's touch target is 48 dp; a heading without one keeps the same height, so
-            // the gap between rows does not change with whether a row offers See all.
-            .then(if (touch) Modifier.heightIn(min = 48.dp) else Modifier),
+        // On a phone the text button's own padding is the gap at the end, so its label lines up
+        // with the row's last tile rather than sitting 12 dp short of it. The television's pill
+        // has its edge drawn, so it keeps the content's end, the same edge as the header's avatar.
+        Modifier.fillMaxWidth().padding(start = start, end = if (seeAll != null && touch) (end - 12.dp).coerceAtLeast(0.dp) else end, bottom = if (touch) 4.dp else 0.dp)
+            // Every heading is as tall as its button, with or without one, so the gap between a
+            // title and its tiles is the same on every row.
+            .heightIn(min = if (touch) 48.dp else TV_SEE_ALL_HEIGHT),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (touch) {
@@ -374,7 +375,7 @@ private fun RowHeading(
                 color = Tone.text,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).alignByBaseline(),
+                modifier = Modifier.weight(1f),
             )
         }
         if (seeAll != null && !touch) {
@@ -383,7 +384,6 @@ private fun RowHeading(
             TmSecondaryButton(
                 onClick = seeAll,
                 modifier = Modifier
-                    .alignByBaseline()
                     .focusProperties { canFocus = armed }
                     .focusRequester(focus)
                     .onFocusChanged { if (!it.hasFocus) onLeft() },
@@ -477,3 +477,6 @@ private fun tileWidth(touch: Boolean): Dp = if (touch) 152.dp else 208.dp
 /** The phone's dense tile pads its art by this much, as [MediaCard] does. */
 private val DENSE_PAD = 4.dp
 private const val PLACEHOLDER_TILES = 5
+
+/** The TV button's own height, which every TV row heading takes so the rows space evenly. */
+private val TV_SEE_ALL_HEIGHT = 40.dp
