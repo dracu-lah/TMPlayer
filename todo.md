@@ -2,7 +2,7 @@
 
 State on 2026-10-10. Everything is pushed. The full plan is `docs/PLAN.md`.
 
-## Done in this session (for the release notes)
+## Shipped in 1.25.0
 
 - Episodes list in the player (phone, TV, desktop), with autoplay, previous and next, and mark watched.
 - Labels that were cut short in German, Russian and Malayalam fit; the support prompts in all 20 languages.
@@ -18,10 +18,11 @@ State on 2026-10-10. Everything is pushed. The full plan is `docs/PLAN.md`.
 
 ## Release
 
-- [ ] Cut the release. The user approved one on 2026-10-09 despite the cadence guard (1.24.0 was
-  2026-10-06); it is now a later day, so confirm again first. Release notes go in the annotated tag.
-- [ ] After the release: the Telegram post, the site's update feed, the AUR package, and check that
-  `tmplayer.org/apk` downloads.
+- [x] 1.25.0 shipped 2026-10-10. Feed, changelog page, Telegram post, `/apk` and an attestation
+  checked; AUR PKGBUILD and .SRCINFO bumped (package() run and self tested); issues #2, #3, #6
+  answered and closed, #5 (MalayalamSubtitles.org) answered and left open.
+- Next release: no sooner than 2026-10-17 (cadence guard). Notes are a "- " list, see
+  `docs/RELEASING.md`; tag a commit CI has passed so the release skips the unit tests.
 
 ## Testing
 
