@@ -1407,6 +1407,9 @@ kbd {
   transition: background-color 0.25s var(--ease-standard), border-color 0.25s var(--ease-standard);
 }
 .steps > li:hover { border-color: var(--outline); }
+/* The one action the page asks for, again once the steps have been read. */
+.steps-cta { margin: 28px 0 0; text-align: center; }
+.steps-cta .btn { min-width: 200px; justify-content: center; }
 .steps > li::before {
   content: counter(step);
   grid-column: 1;

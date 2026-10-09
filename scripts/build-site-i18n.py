@@ -831,17 +831,10 @@ def regions(lang, page_id, langs, strings):
         f'\n        <ul class="lang-picker-menu">\n          ' + "\n          ".join(items)
         + "\n        </ul>\n      </details>\n      ")
 
-    # The footer list goes to each language's home page rather than to this page, so it stays
-    # right when scripts/build-changelog.py lifts the footer into the English-only changelog.
-    links = []
-    for other in langs:
-        current = ' aria-current="true"' if other is lang else ""
-        links.append(f'<a href="{page_url(other, "home")}" hreflang="{other["hreflang"]}" '
-                     f'lang="{other["tag"]}" data-lang-pick="{other["hreflang"]}"{current}>'
-                     f'{html.escape(other["name"])}</a>')
-    out["footer"] = (f'\n    <nav class="footer-links footer-langs" '
-                     f'aria-label="{html.escape(t["build.languages"], quote=True)}">\n      '
-                     + "\n      ".join(links) + "\n    </nav>\n    ")
+    # No language list in the footer: the picker in the header already offers every language,
+    # and search engines find them through the hreflang alternates in the head. The region stays
+    # (empty) so an older page that still carries a list is cleared on the next build.
+    out["footer"] = ""
 
     count = html.escape(t["build.languages_count"], quote=False).replace(
         "{count}", f"<b>{len(langs)}</b>")
