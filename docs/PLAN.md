@@ -61,7 +61,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [ ] CP15 Android verification token in the APK (needs U08)
 - [ ] CP16 winget auto-update job (needs the first winget PR merged and U14)
 - [ ] CP17 F-Droid MR: get the pipeline green
-- [ ] CP18 Obtainium badge on README and download page
+- [x] CP18 Obtainium badge on README and download page (93c8a38, official badge trimmed losslessly to 564x168, shown at 161x48 under Android phone in all 21 languages with the translated alt, and in the README; download page checked at 390x844, 844x390 and 1440 in headless Chromium, English and Arabic)
 - [ ] U07 Android developer account and identity check
 - [ ] U08 Register `com.tmplayer` and the signing key, send Claude the token
 - [x] U09 Pick the Windows signing route: stay unsigned (2026-10-06)
@@ -86,7 +86,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [x] CP23 P5 language setting, what's new, feedback, localized metadata (94d8d4c, language resolution, the "Now in" card rule, lastSeenVersion and the issue and mailto URLs unit tested against a test-only `de` catalog; Settings row, picker, a live switch to en-XA and to Arabic, the card, What's new, Report a problem with its QR decoded, and right to left including the player overlay checked on the phone and TV emulator fixtures and the desktop render test; desktop scripts render from system fonts, so the package grew 0 bytes and no font notice was needed; `WhatsNew.VERSION` and the `whatsnew.highlight_*` keys move with each release; the PWA manifest goes to CP26 with the site; the star prompt was left out; the real first run of a new version and Android's own language page not yet seen on a device)
 - [ ] CP24 P6 translations (go-ahead given 2026-10-06, 16 languages). All 16 translated by Claude directly, then Persian (fa), Traditional Chinese (zh-TW), Polish (pl) and Bengali (bn) added the same day, 21 languages in all (app catalog 1696 strings, site 940) on 2026-10-06 after the three-language cut; machine quality, no native review yet. Still open: review pass (Telegram and Fire OS menu names, Spanish "tú"), review request on issue #2, desktop fonts for CJK, Devanagari and Malayalam, TV overflow check for de and ru. Desktop fonts: bundle subset Noto fonts (user, 2026-10-09). New strings from CP40 to CP43: Claude translates them directly into all 20 locales, no langsync (user, 2026-10-09)
 - [ ] CP25 P7 verification, then release "Languages" on request
-- [ ] CP26 P14b site localization and the remaining site pages
+- [x] CP26 P14b site localization and the remaining site pages (ac034f6 and ef9a156 had already built it: data-i18n, 20 languages under site/<lang>/, hreflang with x-default, og:locale, sitemap alternates, header picker, suggestion bar without redirect, the CI --check, /translate/ and the three guides; 93c8a38 closes the last gap, two code-only links that left empty strings falling back to English. The "Now in" line and the macOS promise stay out on purpose (259ff14, 0d1bdf6). /, /es/, /download/, /ar/download/ and /fire-tv/ checked at 390x844, 844x390 and 1440 in headless Chromium)
 - [ ] U22 Review hi and ml; ask the issue #2 author to review es
 
 **Phase E. The "Browse" release**
