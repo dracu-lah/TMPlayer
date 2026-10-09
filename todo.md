@@ -1,40 +1,43 @@
 # TODO
 
-Left over from the 2026-10-09 run. The full plan is `docs/PLAN.md`.
+State at the end of the 2026-10-09/10 session. The full plan is `docs/PLAN.md`.
 
-## Not pushed yet (committed on local branches)
+## Not pushed yet
 
-- [ ] **CP40 Episodes button and list** (phone, TV, desktop): branch `worktree-agent-af34a76a1abdf858c`,
-  commits c961089, 4ac8650, 83c5262. All committed; the last build was not run. Build, rebase onto main,
-  push.
-- [ ] **Text that was cut short in German, Russian and Malayalam**: branch
-  `worktree-agent-ad03dac91ec236616`, commits b5ec6d4, 7ea985c, plus 3595014 (unfinished, not built).
-  Check 3595014, build, rebase, push.
+- [ ] `main` is about 26 commits ahead of `origin/main`, all committed and nothing half done. A full
+  `./gradlew build -x lint` (every module, unit tests, desktop render tests) passed at 8061ac8. After that
+  only the TV rail pitch, the TV See all alignment, the promoShots flag and the site changed.
+  `:app:testDebugUnitTest :app:compileReleaseKotlin :core:jvmTest` was started on the final tree and its
+  result was not seen. Run it, then push.
 
-## Translation
+## Done in this session (for the release notes)
 
-- [ ] Translate the new English text from CP40 into the 20 other languages (the agents switched to English
-  only near the end). Find the keys that are in `en.json` but missing elsewhere and fill them in.
-  Do not run langsync.
+- Episodes list in the player (phone, TV, desktop), with autoplay, previous and next, and mark watched.
+- Labels that were cut short in German, Russian and Malayalam fit; the support prompts in all 20 languages.
+- Light theme: button labels (Open Saved Messages, Retry, onboarding Next and more) were invisible, now fixed.
+- Sidebar rows have a gap on TV, phone and desktop; the TV rail keeps the 48 dp pitch so it still fits.
+- TV Home: See all and its count sit on the row heading, aligned with the header; Down never stops on it.
+- First sign in card: Home text scrolls clear of it, and it is one row on a short screen.
+- Removed as half done or as chores: Skip intro, the per show next-up order, the Series / All files
+  setting, the videos hidden note, dead settings and about 50 unused strings.
+- Site: honest about the unsigned Windows installer, download links survive the GitHub API limit, a 404
+  page, 1.24 features, the Keep Android Open bar on phones, new screenshots and demo videos.
+- Release workflow attaches `TMPlayer.apk`; `tmplayer.org/apk` redirects to it (works from the next release).
 
 ## Release
 
-- [ ] Full `./gradlew build` and unit tests on main after the two branches above and the translation land.
-- [ ] Cut the release. The user approved it on 2026-10-09 despite the cadence guard (1.24.0 was
-  2026-10-06); confirm again if this is picked up on a later day. Release notes go in the annotated tag.
-- [ ] After the release: the Telegram post, the site's update feed, the AUR package.
+- [ ] Cut the release. The user approved one on 2026-10-09 despite the cadence guard (1.24.0 was
+  2026-10-06); it is now a later day, so confirm again first. Release notes go in the annotated tag.
+- [ ] After the release: the Telegram post, the site's update feed, the AUR package, and check that
+  `tmplayer.org/apk` downloads.
 
-## Not checked on a screen (testing was stopped on 2026-10-09)
+## Testing
 
-- [ ] AppImage on this machine and the MSI in the podman `win11` VM (how-to in the session notes).
-- [ ] Phone in portrait and landscape and TV: the Episodes list, Only my folders and its prompt, the
-  first sign in card, the new two page tour, the shorter sidebar with chips, the new confirm prompts.
-- [ ] Anything with a real Telegram account: unread badge on Chats, real folder counts, the card after a
-  real first sign in.
-- [ ] TV: focus falls to the rail's Home after the first sign in card closes.
-- [ ] Site: the TV chat list screenshots still show the old sidebar.
+- Emulators only, never the real TV stick. Both AVDs (`tmplayer_phone_api36`, `tmplayer_tv_api36`) are signed
+  in to the user's Telegram in the debug build; keep it with `adb install -r` of debug builds.
+- [ ] AppImage on this machine and the MSI in the podman `win11` VM: not done in this session.
 
 ## On hold
 
-- [ ] F-Droid: needs a decision on the Telegram API key. Nothing about F-Droid in the app, site or README
-  until then.
+- [ ] F-Droid: needs a decision on the Telegram API key. Nothing about F-Droid in the app, site or README.
+- [ ] `/signing` says the SignPath application is pending; update it when it is approved.
