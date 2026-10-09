@@ -173,7 +173,10 @@ source on its build server and signs it with its own key (unless reproducible). 
   `api_id` and `api_hash` would have to be public in the F-Droid metadata (Telegram FOSS does
   this), which you may not want for your own app's id.
 - **Sentry** would likely have to be stripped from the F-Droid build or flagged as Tracking.
-- **The in-app updater** must be disabled in F-Droid builds.
+- **The in-app updater** must be disabled in F-Droid builds. Done: building with
+  `-PtmFdroid=true` turns off the update check and its UI and drops `REQUEST_INSTALL_PACKAGES`
+  from the manifest. The recipe passes it as `gradleprops: [tmFdroid=true]`, from the first
+  release after 1.24.0 that contains the switch.
 - **Anti-features:** NonFreeNet at least.
 - **Signing:** an F-Droid signed APK cannot update a GitHub one or the other way round, unless
   reproducible builds are set up so F-Droid ships your signature.

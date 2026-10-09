@@ -34,6 +34,16 @@ val releaseAbis: List<String> = (findProperty("tmAbis") as String?)
     ?.filter { it.isNotEmpty() }
     ?: listOf("armeabi-v7a", "arm64-v8a")
 
+// The build F-Droid makes from source, switched on by its recipe:
+//
+//     ./gradlew :app:assembleRelease -PtmFdroid=true
+//
+// F-Droid installs and updates the app itself, so in that build the app never asks GitHub for a
+// newer release, draws nothing about one (BuildConfig.UPDATE_CHECK, read into Updates.enabled),
+// and leaves REQUEST_INSTALL_PACKAGES out of the release manifest (src/fdroid/AndroidManifest.xml).
+// Off, which is every other build, nothing changes.
+val fdroidBuild: Boolean = (findProperty("tmFdroid") as String?)?.trim()?.toBoolean() ?: false
+
 android {
     namespace = "com.tmplayer"
     // 37 because tdl-coroutines 14+ refuses to be compiled against anything older. targetSdk is
@@ -94,6 +104,10 @@ android {
         // The `play` flavor planned in CP35 sets this to false: Play does not allow donation links
         // that bypass its billing.
         buildConfigField("boolean", "SUPPORT_LINKS", "true")
+
+        // The update check and the APK install that follows it, off in the F-Droid build (see
+        // fdroidBuild above): F-Droid is what updates that build.
+        buildConfigField("boolean", "UPDATE_CHECK", "${!fdroidBuild}")
 
         // English only. Every androidx and Media3 dependency ships translations for ~80
         // locales, and none of this app's own strings are translated, so the rest is dead
@@ -186,6 +200,12 @@ android {
             versionNameSuffix = "-promo"
             matchingFallbacks += listOf("debug")
         }
+    }
+
+    // The F-Droid build's manifest overlay, which removes the install permission. On the release
+    // source set because a release is all F-Droid builds; debug and promo keep main's manifest.
+    if (fdroidBuild) {
+        sourceSets.getByName("release").manifest.srcFile("src/fdroid/AndroidManifest.xml")
     }
 
     compileOptions {

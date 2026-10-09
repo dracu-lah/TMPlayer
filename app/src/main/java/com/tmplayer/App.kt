@@ -44,6 +44,7 @@ class App : Application() {
         // The shared code logs through a facade; on Android it goes to logcat as it always has.
         Logger.sink = AndroidLogSink
         Updates.configureForAndroid()
+        Updates.enabled = BuildConfig.UPDATE_CHECK
         SupportReminder.enabled = BuildConfig.SUPPORT_LINKS
         // The UI language: the Settings choice, else the system's list, else English. Before the
         // promo return, so the screenshot fixture speaks whatever the emulator is set to. Only a

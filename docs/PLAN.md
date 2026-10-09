@@ -484,6 +484,17 @@ jobs, `fdroid build` and `check apk` included. What fixed it:
   wants native code built from source, so expect a request to build TDLib and FFmpeg from source (srclibs) or a
   refusal. Sentry is opt-in, which may still draw a `Tracking` anti-feature. Reproducible builds are not set up
   (F-Droid would sign with its own key), and the template asks for a reason if not.
+- **The F-Droid build switch (2026-10-09):** `-PtmFdroid=true` turns off the GitHub update check and its UI
+  (`BuildConfig.UPDATE_CHECK`, read into `Updates.enabled`) and removes `REQUEST_INSTALL_PACKAGES` from the
+  release manifest (overlay `app/src/fdroid/AndroidManifest.xml`). Once the first release that contains it
+  ships, the recipe's build entry for that version must pass it through `gradleprops`:
+  `gradleprops: [tmFdroid=true]`. Recipes for 1.24.0 and earlier must not, since those tags do not have it.
+- Telegram sign in needs `TG_API_ID` and `TG_API_HASH`, read from `local.properties` only (no environment
+  fallback, unlike the Sentry, OpenSubtitles and TMDB keys). F-Droid has no secrets, so a build without them
+  compiles but every sign in stops at "no API credentials". The recipe would have to write them into
+  `local.properties` in `prebuild`, which makes them public in fdroiddata. The other keys degrade quietly:
+  no DSN means no crash reporting switch, no OpenSubtitles key hides online subtitles, no TMDB key falls back to
+  TVmaze and AniList.
 **STOP**
 
 ### CP18 Obtainium badge

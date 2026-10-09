@@ -63,6 +63,16 @@ object Updates {
     /** The releases page without the scheme, as the Android dialogs print it. */
     const val RELEASES_PAGE = "github.com/dracu-lah/TMPlayer/releases"
 
+    /**
+     * Whether this build looks for updates at all. Off in a build that a store installs and keeps
+     * up to date itself, F-Droid's being the one today (BuildConfig.UPDATE_CHECK on Android):
+     * there a check would ask GitHub about a file the store did not build, and an offer to install
+     * it would go around the store. With it off nothing is fetched or downloaded, the state stays
+     * [UpdateState.Idle], and every surface that reads the state stays empty.
+     */
+    @Volatile
+    var enabled: Boolean = true
+
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state.asStateFlow()
 
@@ -128,6 +138,7 @@ object Updates {
      * a skipped release is offered again with a note.
      */
     suspend fun check(quiet: Boolean = false, skipped: String = ""): Boolean {
+        if (!enabled) return false
         val before = _state.value
         // A download or a finished one is further along than anything a check could say.
         if (before is UpdateState.Downloading || before is UpdateState.Ready) return false
@@ -172,6 +183,7 @@ object Updates {
      * to keep a second copy of the app around on a stick with eight gigabytes on it.
      */
     suspend fun download(release: Release, dir: File): File? {
+        if (!enabled) return null
         val asset = apkFor(release)
         if (asset == null) {
             _state.value = UpdateState.Failed(L.updateNoApk, release)

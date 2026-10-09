@@ -358,6 +358,8 @@ private fun Root() {
     var showUpdate by remember { mutableStateOf(false) }
     val updates = remember { updateScheduler(context) }
     LaunchedEffect(Unit) {
+        // Never in a build a store keeps up to date (Updates.enabled, the F-Droid build).
+        if (!Updates.enabled) return@LaunchedEffect
         withFrameNanos { }
         updates.run()
     }

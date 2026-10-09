@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Merged over main's manifest in the F-Droid build only (-PtmFdroid=true, see app/build.gradle.kts).
+  F-Droid installs and updates that build itself, and the app never fetches an APK there, so it has
+  no use for the permission that hands one to Android's installer.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission
+        android:name="android.permission.REQUEST_INSTALL_PACKAGES"
+        tools:node="remove" />
+
+</manifest>

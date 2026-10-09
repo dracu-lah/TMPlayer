@@ -975,40 +975,45 @@ fun SettingsScreen(
             SettingsPage.About -> {
                 // ---- version -------------------------------------------------------------------------
 
-                item { SectionTitle(s.settingsVersion) }
-                updateState.release?.let { offered ->
+                // Not in a build that a store keeps up to date (Updates.enabled, the F-Droid
+                // build): the store is what updates it, and the version is still on the About
+                // row and the About screen. The page then lands on the first help row instead.
+                if (Updates.enabled) {
+                    item { SectionTitle(s.settingsVersion) }
+                    updateState.release?.let { offered ->
+                        item {
+                            ActionRow(
+                                title = UpdateWords.settingsRow(offered),
+                                modifier = Modifier.focusRequester(landing),
+                                subtitle = s.settingsUpdateDetail(s.formatter.bytes(Updates.apkFor(offered)?.size ?: 0L)),
+                                icon = Icons.Filled.Refresh,
+                                tint = Tone.caution,
+                                onClick = { showUpdate = true },
+                            )
+                        }
+                    }
                     item {
                         ActionRow(
-                            title = UpdateWords.settingsRow(offered),
-                            modifier = Modifier.focusRequester(landing),
-                            subtitle = s.settingsUpdateDetail(s.formatter.bytes(Updates.apkFor(offered)?.size ?: 0L)),
+                            title = s.settingsCheckUpdates,
+                            modifier = if (updateState.release == null) Modifier.focusRequester(landing) else Modifier,
+                            subtitle = s.settingsCheckUpdatesDetail(Updates.installedVersion, Updates.RELEASES_PAGE),
                             icon = Icons.Filled.Refresh,
-                            tint = Tone.caution,
-                            onClick = { showUpdate = true },
+                            onClick = {
+                                showUpdate = true
+                                // Past the six hour wait and the skipped version: the viewer asked.
+                                scope.launch { updateScheduler(context).checkNow() }
+                            },
                         )
                     }
-                }
-                item {
-                    ActionRow(
-                        title = s.settingsCheckUpdates,
-                        modifier = if (updateState.release == null) Modifier.focusRequester(landing) else Modifier,
-                        subtitle = s.settingsCheckUpdatesDetail(Updates.installedVersion, Updates.RELEASES_PAGE),
-                        icon = Icons.Filled.Refresh,
-                        onClick = {
-                            showUpdate = true
-                            // Past the six hour wait and the skipped version: the viewer asked.
-                            scope.launch { updateScheduler(context).checkNow() }
-                        },
-                    )
-                }
-                item {
-                    ToggleRow(
-                        title = s.settingsUpdateNotify,
-                        subtitle = s.settingsUpdateNotifyDetail,
-                        icon = TmIcons.Bell,
-                        checked = updateNotify,
-                        onToggle = { scope.launch { settings.setUpdateNotify(!updateNotify) } },
-                    )
+                    item {
+                        ToggleRow(
+                            title = s.settingsUpdateNotify,
+                            subtitle = s.settingsUpdateNotifyDetail,
+                            icon = TmIcons.Bell,
+                            checked = updateNotify,
+                            onToggle = { scope.launch { settings.setUpdateNotify(!updateNotify) } },
+                        )
+                    }
                 }
 
                 // ---- help ----------------------------------------------------------------------------
@@ -1017,6 +1022,7 @@ fun SettingsScreen(
                 item {
                     ActionRow(
                         title = s.settingsWalkthrough,
+                        modifier = if (Updates.enabled) Modifier else Modifier.focusRequester(landing),
                         subtitle = s.settingsWalkthroughBody,
                         icon = TmIcons.Help,
                         onClick = { scope.launch { settings.replayOverview() } },

@@ -249,4 +249,31 @@ class UpdateFeedTest {
         assertFalse(Updates.check(quiet = false))
         assertEquals("Could not reach GitHub. Try again in a moment.", (Updates.state.value as UpdateState.Failed).message)
     }
+
+    @Test
+    fun `a build with updates switched off never asks and never downloads`() = runBlocking {
+        Updates.configure(installedVersion = "1.19.1", abis = listOf("armeabi-v7a"))
+        var asked = 0
+        Updates.fetch = { asked++; UpdateFeed.parseFeed(feed)!! }
+        Updates.enabled = false
+        try {
+            assertFalse(Updates.check(quiet = true))
+            assertFalse(Updates.check(quiet = false))
+            assertEquals(0, asked)
+            assertEquals(UpdateState.Idle, Updates.state.value)
+            val release = UpdateFeed.parseFeed(feed)!!
+            val dir = kotlin.io.path.createTempDirectory("updates").toFile()
+            assertNull(Updates.download(release, dir))
+            assertEquals(UpdateState.Idle, Updates.state.value)
+            assertTrue(dir.listFiles().isNullOrEmpty())
+            dir.deleteRecursively()
+        } finally {
+            Updates.enabled = true
+        }
+
+        // Switched back on, the same build checks as before.
+        assertTrue(Updates.check(quiet = true))
+        assertEquals(1, asked)
+        assertTrue(Updates.state.value is UpdateState.Available)
+    }
 }
