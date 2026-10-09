@@ -48,7 +48,7 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
             val deleteDownloads = alsoDownloads
             scope.launch {
                 signOut(settings, deleteDownloads, state.watched)
-                state.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.All))
+                state.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.Chats))
                 Td.logOut()
             }
         },

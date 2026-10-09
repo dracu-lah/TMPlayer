@@ -131,6 +131,22 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.runtime.key
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.horizontalScroll
+import kotlinx.coroutines.flow.map
 import com.tmplayer.player.StreamStats
 import com.tmplayer.ui.components.MenuAction
 import com.tmplayer.ui.components.holdable
@@ -258,9 +274,9 @@ fun BrowseScreen(
     // empty. Those are read from disk after the first frame, so the tab settles once they arrive;
     // an explicit pick always wins. [picked] is hoisted rather than remembered here because
     // opening a chat swaps this screen out of the composition.
-    val sections = remember(folders) { browseSections(folders, withWatched = true) }
+    val sections = remember(folders) { browseSections(folders) }
     // How many chats have something unread in them, not how many messages are unread across them:
-    // the rail badge sits beside "Unread", which names a list of chats.
+    // the badge sits beside "Chats", whose Unread chip lists those chats.
     val allChats = (state as? UiState.Content)?.value?.chats
     val unreadChats = remember(allChats) {
         allChats.orEmpty().count { it.unreadCount > 0 && !it.isArchived }
@@ -296,13 +312,13 @@ fun BrowseScreen(
                 AllChatsSearchViewModel(videoSearch, onSearched) as T
         },
     )
+    val panelScope = rememberCoroutineScope()
+    val panelContext = LocalContext.current
     val searchingVideos = searchScope == SearchScope.AllVideos && !tab.isHome && !tab.listsVideos
     LaunchedEffect(searchingVideos, query) {
         allSearch.search(if (searchingVideos) query else "")
     }
     val videoResults by allSearch.state.collectAsState()
-    val panelScope = rememberCoroutineScope()
-    val panelContext = LocalContext.current
     // A hold, the info key or a right click: the quick menu, which leads to the page by Details.
     var held by remember { mutableStateOf<Pair<MediaItem, String>?>(null) }
     val holdMedia: (MediaItem, String) -> Unit = { item, title -> held = item to title }
@@ -314,6 +330,20 @@ fun BrowseScreen(
     val openResume: (ResumeRecord) -> Unit =
         if (detailFirst) ({ record -> showDetail(record.toMediaItem(), record.chatTitle) }) else onResumeMedia
 
+    // The chips over Chats and History, remembered across launches like the card layout.
+    val browseSettings = remember(panelContext) { SettingsStore(panelContext) }
+    val chatFilter by remember(browseSettings) { browseSettings.chatFilter.map(ChatFilter::decode) }
+        .collectAsState(initial = ChatFilter.All)
+    val chatSort by remember(browseSettings) { browseSettings.chatSort.map(ChatSort::decode) }
+        .collectAsState(initial = ChatSort.Recent)
+    val historyTab by remember(browseSettings) { browseSettings.historyTab.map(HistoryTab::decode) }
+        .collectAsState(initial = HistoryTab.Continue)
+    val pickFilter: (ChatFilter) -> Unit = { panelScope.launch { browseSettings.setChatFilter(it.name) } }
+    val pickSort: (ChatSort) -> Unit = { panelScope.launch { browseSettings.setChatSort(it.name) } }
+    val pickHistory: (HistoryTab) -> Unit = { panelScope.launch { browseSettings.setHistoryTab(it.name) } }
+    val showsContinue = tab.listsVideos && historyTab == HistoryTab.Continue
+    val showsWatched = tab.listsVideos && historyTab == HistoryTab.Watched
+
     // One question decides the whole shape of this screen: a permanent rail beside the listing on
     // a television, a drawer behind a hamburger on a phone. Everything below the chrome is the
     // same composition either way, told only how much room it has and how far in it may start.
@@ -323,14 +353,50 @@ fun BrowseScreen(
     // when the viewer does, so the grid is asked for a tile width instead and works out the rest.
     val tiles = if (touch) GridCells.Adaptive(TOUCH_TILE_MIN) else GridCells.Fixed(TILE_COLUMNS)
 
+    // While a chip has the remote's focus, a list that changes under it (because OK picked that
+    // chip) must not pull focus down to its first row: the viewer is still choosing.
+    var chipsFocused by remember { mutableStateOf(false) }
+    val listMayTakeFocus: () -> Boolean = { !chipsFocused }
+    val chatChips: @Composable () -> Unit = {
+        ChipRow(
+            insets = insets,
+            onFocus = { chipsFocused = it },
+            chips = buildList {
+                add(
+                    ChipSpec(
+                        key = SORT_CHIP,
+                        label = chatSort.label,
+                        icon = chatSort.icon,
+                        selected = false,
+                        description = s.browseSortBy(chatSort.label),
+                    ) { pickSort(chatSort.toggled) },
+                )
+                ChatFilter.entries.forEach { filter ->
+                    add(ChipSpec(filter.name, filter.label, filter.icon, selected = filter == chatFilter) { pickFilter(filter) })
+                }
+            },
+        )
+    }
+    val historyChips: @Composable () -> Unit = {
+        ChipRow(
+            insets = insets,
+            onFocus = { chipsFocused = it },
+            chips = buildList {
+                HistoryTab.entries.forEach { entry ->
+                    add(ChipSpec(entry.name, entry.label, entry.icon, selected = entry == historyTab) { pickHistory(entry) })
+                }
+            },
+        )
+    }
+
     val pane: @Composable () -> Unit = {
         StateScaffold(
             state,
             onRetry = onRetry,
             loading = { ChatListSkeleton(layout = layout) },
         ) { data ->
-            val visible = remember(data.chats, tab, favorites, query) {
-                filterChats(data.chats, tab, favorites, query)
+            val visible = remember(data.chats, tab, favorites, query, chatFilter, chatSort) {
+                filterChats(data.chats, tab, favorites, query, chatFilter, chatSort)
             }
 
             // The signed in account, for the picture in the heading's top right corner.
@@ -354,48 +420,34 @@ fun BrowseScreen(
                             onResume = openResume,
                             onPlay = openMedia,
                             onHoldMedia = holdMedia,
-                            onSeeContinue = { onPickTab(BrowseSection.of(BrowseTab.Continue)); query = "" },
+                            onSeeContinue = {
+                                pickHistory(HistoryTab.Continue)
+                                onPickTab(BrowseSection.of(BrowseTab.History))
+                                query = ""
+                            },
                             onOpenChat = { id -> data.chats.firstOrNull { it.id == id }?.let(onOpenChat) },
                             noFavourites = favorites.isEmpty(),
                             onOpenSaved = { onPickTab(BrowseSection.of(BrowseTab.Saved)); query = "" },
                         )
-                    } else if (tab.isContinue) {
+                    } else if (tab.listsVideos) {
+                        // One branch for both tabs, so the chip row stays the same composition when
+                        // OK switches tab and the remote's focus stays on the chip it pressed.
                         // On a phone the heading, the count and the actions live in the app bar, so
                         // the content area starts with the content.
                         if (!touch) {
-                            TabHeading(tab, continueWatching.size, insets, headerAccount) {
+                            val shown = if (showsContinue) continueWatching.size else watchedHistory.size
+                            TabHeading(tab, shown, insets, headerAccount, blurb = historyTab.blurb) {
                                 LayoutAction(layout, onToggleLayout)
-                                // No Refresh here: this tab is read off this device and cannot be
+                                // No Refresh here: History is read off this device and cannot be
                                 // behind, so the button would be one that visibly does nothing.
-                                if (continueWatching.isNotEmpty()) {
+                                if (showsContinue && continueWatching.isNotEmpty()) {
                                     HeaderAction(
                                         label = s.browseClearHistory,
                                         icon = Icons.Filled.Close,
                                         onClick = { confirmClearHistory = true },
                                     )
                                 }
-                            }
-                            Spacer(Modifier.height(20.dp))
-                        }
-                        if (continueWatching.isEmpty()) {
-                            EmptyTab(tab, query = "")
-                        } else {
-                            ContinueSection(
-                                records = continueWatching,
-                                layout = layout,
-                                insets = insets,
-                                tiles = tiles,
-                                autoFocus = !touch,
-                                text = { it.cardText() },
-                                onResume = openResume,
-                                onHold = { mediaMenu = it },
-                            )
-                        }
-                    } else if (tab.isWatched) {
-                        if (!touch) {
-                            TabHeading(tab, watchedHistory.size, insets, headerAccount) {
-                                LayoutAction(layout, onToggleLayout)
-                                if (watchedHistory.isNotEmpty()) {
+                                if (showsWatched && watchedHistory.isNotEmpty()) {
                                     HeaderAction(
                                         label = s.browseClearWatched,
                                         icon = Icons.Filled.Close,
@@ -403,25 +455,44 @@ fun BrowseScreen(
                                     )
                                 }
                             }
-                            Spacer(Modifier.height(20.dp))
                         }
-                        if (watchedHistory.isEmpty()) {
-                            EmptyTab(tab, query = "")
+                        historyChips()
+                        if (showsContinue) {
+                            if (continueWatching.isEmpty()) {
+                                EmptyTab(tab, query = "", history = HistoryTab.Continue)
+                            } else {
+                                ContinueSection(
+                                    records = continueWatching,
+                                    layout = layout,
+                                    insets = insets,
+                                    tiles = tiles,
+                                    autoFocus = !touch,
+                                    mayTakeFocus = listMayTakeFocus,
+                                    text = { it.cardText() },
+                                    onResume = openResume,
+                                    onHold = { mediaMenu = it },
+                                )
+                            }
                         } else {
-                            // Read once per visit rather than ticking: "5 minutes ago" going stale
-                            // while the tab is open is harmless, and a clock here would recompose
-                            // every card each minute for it.
-                            val now = remember(watchedHistory) { System.currentTimeMillis() }
-                            ContinueSection(
-                                records = watchedHistory,
-                                text = { it.cardText(now) },
-                                layout = layout,
-                                insets = insets,
-                                tiles = tiles,
-                                autoFocus = !touch,
-                                onResume = onOpenWatched,
-                                onHold = { watchedMenu = it },
-                            )
+                            if (watchedHistory.isEmpty()) {
+                                EmptyTab(tab, query = "", history = HistoryTab.Watched)
+                            } else {
+                                // Read once per visit rather than ticking: "5 minutes ago" going
+                                // stale while the tab is open is harmless, and a clock here would
+                                // recompose every card each minute for it.
+                                val now = remember(watchedHistory) { System.currentTimeMillis() }
+                                ContinueSection(
+                                    records = watchedHistory,
+                                    text = { it.cardText(now) },
+                                    layout = layout,
+                                    insets = insets,
+                                    tiles = tiles,
+                                    autoFocus = !touch,
+                                    mayTakeFocus = listMayTakeFocus,
+                                    onResume = onOpenWatched,
+                                    onHold = { watchedMenu = it },
+                                )
+                            }
                         }
                     } else {
                         if (!touch) {
@@ -445,8 +516,10 @@ fun BrowseScreen(
                                 scope = searchScope,
                                 onScope = { searchScope = it },
                             )
-                            Spacer(Modifier.height(20.dp))
+                            Spacer(Modifier.height(if (tab.isChats) 4.dp else 20.dp))
                         }
+                        // Up from the top of the list reaches the chips, and Up again the search.
+                        if (tab.isChats && !(searchingVideos && query.isNotBlank())) chatChips()
 
                         if (searchingVideos && query.isNotBlank()) {
                             AllChatsResults(
@@ -472,7 +545,7 @@ fun BrowseScreen(
                                 onRetry = allSearch::retry,
                             )
                         } else if (visible.isEmpty()) {
-                            EmptyTab(tab, query)
+                            EmptyTab(tab, query, chatFilter)
                         } else {
                             // A first run's chat list says how to get a first video in (CP42).
                             if (query.isBlank() && tab != BrowseSection.of(BrowseTab.Saved)) {
@@ -490,7 +563,9 @@ fun BrowseScreen(
                                 // grid view: the grid's own first row is those same chats, and the
                                 // two together read as the list repeating itself.
                                 recent = if (
-                                    tab == BrowseSection.of(BrowseTab.Recent) &&
+                                    tab.isChats &&
+                                    chatFilter == ChatFilter.All &&
+                                    chatSort == ChatSort.Recent &&
                                     query.isBlank() &&
                                     layout == CardLayout.List
                                 ) {
@@ -502,6 +577,7 @@ fun BrowseScreen(
                                 insets = insets,
                                 tiles = tiles,
                                 autoFocus = !touch,
+                                mayTakeFocus = listMayTakeFocus,
                                 onOpenChat = onOpenChat,
                                 onHold = { chatMenu = it },
                                 launchChatId = launchChatId,
@@ -561,13 +637,13 @@ fun BrowseScreen(
         val chats = (state as? UiState.Content)?.value?.chats
         val count = if (tab.isHome) {
             0
-        } else if (tab.isContinue) {
+        } else if (showsContinue) {
             continueWatching.size
-        } else if (tab.isWatched) {
+        } else if (showsWatched) {
             watchedHistory.size
         } else {
-            remember(chats, tab, favorites, query) {
-                chats?.let { filterChats(it, tab, favorites, query).size } ?: 0
+            remember(chats, tab, favorites, query, chatFilter, chatSort) {
+                chats?.let { filterChats(it, tab, favorites, query, chatFilter, chatSort).size } ?: 0
             }
         }
         TouchBrowseShell(
@@ -608,9 +684,9 @@ fun BrowseScreen(
                 }
                 // Everything destructive goes behind the overflow. A "Clear history" button
                 // sitting in the bar beside Refresh is one mis-tap from emptying the tab.
-                val clearHistory = tab.isContinue && continueWatching.isNotEmpty()
+                val clearHistory = showsContinue && continueWatching.isNotEmpty()
                 val clearFavorites = tab == BrowseSection.of(BrowseTab.Favorites) && favorites.isNotEmpty()
-                val clearWatched = tab.isWatched && watchedHistory.isNotEmpty()
+                val clearWatched = showsWatched && watchedHistory.isNotEmpty()
                 if (clearHistory || clearFavorites || clearWatched) {
                     BarOverflow(
                         items = buildList {
@@ -931,6 +1007,8 @@ private fun <T : Any> ContinueSection(
     autoFocus: Boolean,
     onResume: (T) -> Unit,
     onHold: (T) -> Unit,
+    /** Asked before [autoFocus] acts: false while the chips over the list hold the focus. */
+    mayTakeFocus: () -> Boolean = { true },
 ) {
     val first = remember { FocusRequester() }
     // Only the first card asks for focus, and which card that is does not change with the
@@ -984,7 +1062,7 @@ private fun <T : Any> ContinueSection(
     // until something holds focus. Re-run on a change of arrangement too: switching rebuilds the
     // list from scratch, and the card that was holding focus leaves the composition with it.
     LaunchedEffect(records.firstOrNull()?.let { text(it).key }, layout, autoFocus) {
-        if (autoFocus) runCatching { first.requestFocus() }
+        if (autoFocus && mayTakeFocus()) runCatching { first.requestFocus() }
     }
 }
 
@@ -1339,13 +1417,7 @@ private fun NavRail(
                                 is NavEntry.Section -> RailItem(
                                     label = entry.section.label,
                                     icon = entry.section.icon,
-                                    badge = when {
-                                        entry.section == BrowseSection.of(BrowseTab.Favorites) && favoriteCount > 0 ->
-                                            favoriteCount.toString()
-                                        entry.section == BrowseSection.of(BrowseTab.Unread) && unreadCount > 0 ->
-                                            unreadCount.toString()
-                                        else -> null
-                                    },
+                                    badge = navBadge(entry.section, favoriteCount, unreadCount),
                                     selected = entry.section == selected,
                                     onClick = { onSelect(entry.section) },
                                 )
@@ -1693,9 +1765,11 @@ private fun TabHeading(
     count: Int,
     insets: BrowseInsets,
     account: Account?,
+    /** History's line follows its tab rather than the section's. */
+    blurb: String = tab.blurb,
     action: @Composable () -> Unit = {},
 ) {
-    // The number always carries its unit, and the two video tabs count videos rather than chats.
+    // The number always carries its unit, and History counts videos rather than chats.
     val s = LocalStrings.current
     val counted = if (tab.listsVideos) s.browseVideosCount(count) else s.browseChatsCount(count)
     Row(
@@ -1714,7 +1788,7 @@ private fun TabHeading(
                 color = Tone.text,
             )
             Text(
-                if (count > 0) "${tab.blurb}  ·  $counted" else tab.blurb,
+                if (count > 0) "$blurb  ·  $counted" else blurb,
                 style = MaterialTheme.typography.bodyMedium,
                 color = Tone.muted,
                 maxLines = 1,
@@ -1835,6 +1909,156 @@ private fun SearchRow(
     }
 }
 
+private const val SORT_CHIP = "sort"
+
+/**
+ * One chip over Chats or History: a filter, a tab, or the sort toggle (which is never "selected",
+ * since it shows the order in use rather than one of several to pick).
+ */
+@androidx.compose.runtime.Immutable
+private class ChipSpec(
+    val key: String,
+    val label: String,
+    val icon: ImageVector,
+    val selected: Boolean,
+    /** What a screen reader says instead of [label], when the label alone is unclear. */
+    val description: String? = null,
+    val onClick: () -> Unit,
+)
+
+/**
+ * The chips over Chats (the order, then All, Unread, Channels, Groups, People and Archived) and
+ * over History (Continue and Watched). The choices themselves are the shared ones in :ui
+ * ([ChatFilter], [ChatSort], [HistoryTab]), so the desktop offers the same chips.
+ *
+ * A phone gets Material filter chips that scroll sideways. A television gets 48 dp pills in the
+ * rail's colours: Left and Right walk them, OK picks one, Down goes into the list and Up from the
+ * list's first row comes back here.
+ */
+@Composable
+private fun ChipRow(
+    chips: List<ChipSpec>,
+    insets: BrowseInsets,
+    onFocus: (Boolean) -> Unit,
+) {
+    val touch = isTouch()
+    // Coming up from the list lands on the chip in use (or the last one the remote was on), not on
+    // whichever chip happens to sit nearest the row the focus left.
+    val chosen = remember { FocusRequester() }
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .onFocusChanged { onFocus(it.hasFocus) }
+            .then(if (touch || chips.none { it.selected }) Modifier else Modifier.focusRestorer(chosen))
+            .horizontalScroll(rememberScrollState())
+            .padding(
+                start = insets.start,
+                end = insets.end,
+                top = if (touch) 4.dp else 8.dp,
+                bottom = if (touch) 8.dp else 20.dp,
+            ),
+        horizontalArrangement = Arrangement.spacedBy(if (touch) 8.dp else 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        chips.forEach { chip ->
+            key(chip.key) {
+                // The chosen chip scrolls into view, so a choice remembered from last time is
+                // never hidden past the edge of a narrow screen.
+                // The margin keeps a gap between it and the edge rather than parking it there.
+                val view = remember { BringIntoViewRequester() }
+                var size by remember { mutableStateOf(IntSize.Zero) }
+                val margin = with(LocalDensity.current) { insets.end.toPx() }
+                if (chip.selected && size != IntSize.Zero) {
+                    LaunchedEffect(Unit) {
+                        runCatching { view.bringIntoView(Rect(-margin, 0f, size.width + margin, size.height.toFloat())) }
+                    }
+                }
+                val last = chip === chips.last()
+                Box(
+                    Modifier
+                        .bringIntoViewRequester(view)
+                        .onSizeChanged { size = it }
+                        .then(if (chip.selected) Modifier.focusRequester(chosen) else Modifier)
+                        // The row stops at its end (Right, or Left in a right-to-left language) rather than
+                        // jumping up to the heading.
+                        .then(
+                            when {
+                                !last || touch -> Modifier
+                                rtl -> Modifier.focusProperties { left = FocusRequester.Cancel }
+                                else -> Modifier.focusProperties { right = FocusRequester.Cancel }
+                            },
+                        ),
+                ) {
+                    if (touch) TouchChip(chip) else TvChip(chip)
+                }
+            }
+            // The order is a different kind of control from the filters after it, so a hairline
+            // sets it apart rather than letting it read as one more filter.
+            if (chip.key == SORT_CHIP) {
+                Box(Modifier.width(1.dp).height(24.dp).background(Tone.outline))
+            }
+        }
+    }
+}
+
+@Composable
+private fun TouchChip(chip: ChipSpec) {
+    androidx.compose.material3.FilterChip(
+        selected = chip.selected,
+        onClick = chip.onClick,
+        label = { M3Text(chip.label, maxLines = 1) },
+        leadingIcon = {
+            M3Icon(chip.icon, contentDescription = null, modifier = Modifier.size(18.dp))
+        },
+        modifier = chip.description?.let { words -> Modifier.semantics { contentDescription = words } } ?: Modifier,
+    )
+}
+
+@Composable
+private fun TvChip(chip: ChipSpec) {
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusedAsState()
+    val background by animateColorAsState(
+        targetValue = when {
+            focused -> Tone.focusFill
+            chip.selected -> Tone.accent.copy(alpha = 0.16f)
+            else -> Tone.surfaceHigh
+        },
+        animationSpec = tween(FOCUS_FADE_MS),
+        label = "chipBackground",
+    )
+    val foreground = when {
+        focused -> Tone.onFocusFill
+        chip.selected -> Tone.accent
+        else -> Tone.text
+    }
+    Row(
+        Modifier
+            .height(48.dp)
+            .clip(CircleShape)
+            .background(background)
+            .focusRing(focused, CircleShape)
+            .semantics {
+                selected = chip.selected
+                chip.description?.let { contentDescription = it }
+            }
+            .clickable(interactionSource = interactions, indication = null, role = Role.Tab, onClick = chip.onClick)
+            .padding(horizontal = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(chip.icon, contentDescription = null, tint = foreground, modifier = Modifier.size(22.dp))
+        Text(
+            chip.label,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = if (chip.selected || focused) FontWeight.SemiBold else FontWeight.Normal,
+            color = foreground,
+            maxLines = 1,
+        )
+    }
+}
+
 @Composable
 private fun PillButton(
     label: String,
@@ -1898,6 +2122,8 @@ private fun ChatSection(
     onOpenChat: (ChatSummary) -> Unit,
     onHold: (ChatSummary) -> Unit,
     launchChatId: Long,
+    /** Asked before [autoFocus] acts: false while the chips over the list hold the focus. */
+    mayTakeFocus: () -> Boolean = { true },
 ) {
     val s = LocalStrings.current
     val rowsAreFullBleed = isTouch()
@@ -2018,7 +2244,7 @@ private fun ChatSection(
     // The remote has nowhere to go until something holds focus. Switching arrangement is included:
     // it rebuilds the list, and the card that was holding focus leaves the composition with it.
     LaunchedEffect(chats.firstOrNull()?.id, recent.firstOrNull()?.id, layout, autoFocus) {
-        if (autoFocus) runCatching { first.requestFocus() }
+        if (autoFocus && mayTakeFocus()) runCatching { first.requestFocus() }
     }
 }
 
@@ -2215,9 +2441,9 @@ private fun ChatRow(
  */
 private fun chatCaption(chat: ChatSummary): String = when (chat.kind) {
     ChatKind.Saved -> L.browseTabSavedHeading
-    ChatKind.Channel -> L.browseTabChannels
-    ChatKind.Group -> L.browseTabGroups
-    ChatKind.Direct -> L.browseTabPeople
+    ChatKind.Channel -> L.browseFilterChannels
+    ChatKind.Group -> L.browseFilterGroups
+    ChatKind.Direct -> L.browseFilterPeople
 }
 
 /**
@@ -2357,7 +2583,7 @@ private fun TouchChatRow(
 }
 
 @Composable
-private fun EmptyTab(tab: BrowseSection, query: String) {
+private fun EmptyTab(tab: BrowseSection, query: String, filter: ChatFilter = ChatFilter.All, history: HistoryTab? = null) {
     val s = LocalStrings.current
     // Each empty tab says what to do about it, in its own words. A folder is the one section this
     // app has no way to fill from here: folders are made and edited in Telegram itself, so the
@@ -2366,21 +2592,27 @@ private fun EmptyTab(tab: BrowseSection, query: String) {
         query.isNotBlank() -> s.browseEmptyNoMatch(query)
         tab is BrowseSection.Folder ->
             s.browseEmptyFolder
-        tab == BrowseSection.of(BrowseTab.Continue) ->
+        history == HistoryTab.Continue ->
             s.browseEmptyContinue
-        tab == BrowseSection.of(BrowseTab.Watched) ->
+        history == HistoryTab.Watched ->
             s.browseEmptyWatched
         tab == BrowseSection.of(BrowseTab.Favorites) ->
             s.browseEmptyFavourites
-        tab == BrowseSection.of(BrowseTab.Unread) -> s.browseEmptyUnread
-        tab == BrowseSection.of(BrowseTab.Archived) -> s.browseEmptyArchived
+        tab.isChats && filter == ChatFilter.Unread -> s.browseEmptyUnread
+        tab.isChats && filter == ChatFilter.Archived -> s.browseEmptyArchived
         tab == BrowseSection.of(BrowseTab.Saved) ->
             s.browseEmptySaved
         else -> s.browseEmptyOther
     }
     // A search that came back empty is a different situation from a tab with nothing in it yet, so
     // the glyph follows whichever one the viewer is looking at.
-    BigEmpty(message, icon = if (query.isNotBlank()) Icons.Filled.Search else tab.icon)
+    val icon = when {
+        query.isNotBlank() -> Icons.Filled.Search
+        history != null -> history.icon
+        tab.isChats -> filter.icon
+        else -> tab.icon
+    }
+    BigEmpty(message, icon = icon)
 }
 
 /**

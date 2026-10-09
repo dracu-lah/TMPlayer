@@ -1,5 +1,8 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.browse.HistoryTab
+import com.tmplayer.ui.browse.ChatSort
+import com.tmplayer.ui.browse.ChatFilter
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -51,10 +54,10 @@ val POSTER_STEPS = listOf(160.dp, 208.dp, 264.dp, 320.dp)
 /** The places the sidebar (or the rail, in a narrow window) goes to. */
 enum class Destination(private val labelText: () -> String) {
     Home({ L.browseTabHome }),
-    Chats({ L.navChats }),
+    /** Continue watching and Previously watched, as the two tabs of one page. */
+    History({ L.browseTabHistory }),
     Favourites({ L.navFavourites }),
-    Continue({ L.navContinue }),
-    Watched({ L.navWatched }),
+    Chats({ L.navChats }),
     Downloads({ L.navDownloads }),
     Settings({ L.navSettings }),
     ;
@@ -111,11 +114,25 @@ class ShellState(
         private set
 
     /**
-     * Which slice of the chat list the Chats page shows: one of the phone's tabs or a Telegram
-     * folder. Kept here rather than on the page so the side bar can pick it.
+     * Which slice of the chat list the Chats page shows: Chats (with its chips), Saved Messages or
+     * a Telegram folder. Kept here rather than on the page so the side bar can pick it.
      */
-    var chatSection by mutableStateOf<BrowseSection>(BrowseSection.of(BrowseTab.All))
+    var chatSection by mutableStateOf<BrowseSection>(BrowseSection.of(BrowseTab.Chats))
         private set
+
+    /**
+     * The chips over the Chats list and the open tab of History. The shell reads them back from
+     * [SettingsStore] at start and writes each change there, as the phone and the TV do.
+     */
+    var chatFilter by mutableStateOf(ChatFilter.All)
+    var chatSort by mutableStateOf(ChatSort.Recent)
+    var historyTab by mutableStateOf(HistoryTab.Continue)
+
+    /** History, on [tab]. */
+    fun showHistory(tab: HistoryTab) {
+        historyTab = tab
+        go(Destination.History)
+    }
 
     /** The side bar group holding where the window is, which is always open; null on Settings. */
     val currentGroup: NavGroup?

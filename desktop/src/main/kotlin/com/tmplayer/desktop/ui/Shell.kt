@@ -1,5 +1,10 @@
 package com.tmplayer.desktop.ui
 
+import kotlinx.coroutines.flow.drop
+import androidx.compose.runtime.snapshotFlow
+import com.tmplayer.ui.browse.HistoryTab
+import com.tmplayer.ui.browse.ChatSort
+import com.tmplayer.ui.browse.ChatFilter
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -154,6 +159,21 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     val chats = rememberViewModel(Unit) { ChatListViewModel(state.settings) }
     DisposableEffect(chats) { onDispose { chats.reset() } }
     LaunchedEffect(Unit) { chats.refreshIfStale() }
+    // The chips over Chats and History: the saved choice first, then every change written back.
+    LaunchedEffect(state) {
+        runCatching {
+            state.chatFilter = ChatFilter.decode(state.settings.chatFilter.first())
+            state.chatSort = ChatSort.decode(state.settings.chatSort.first())
+            state.historyTab = HistoryTab.decode(state.settings.historyTab.first())
+        }
+        snapshotFlow { Triple(state.chatFilter, state.chatSort, state.historyTab) }.drop(1).collect { (filter, sort, tab) ->
+            runCatching {
+                state.settings.setChatFilter(filter.name)
+                state.settings.setChatSort(sort.name)
+                state.settings.setHistoryTab(tab.name)
+            }
+        }
+    }
     // "Open the last chat on launch": once the list has it, open it, once per sign in.
     LaunchedEffect(Unit) {
         val target = runCatching { state.settings.autoOpenTarget() }.getOrNull() ?: return@LaunchedEffect
@@ -217,8 +237,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
                             Destination.Home -> HomePage(state, chats)
                             Destination.Chats -> ChatsPage(state, chats, favouritesOnly = false, showSections = !wide)
                             Destination.Favourites -> ChatsPage(state, chats, favouritesOnly = true)
-                            Destination.Continue -> ContinuePage(state)
-                            Destination.Watched -> WatchedPage(state)
+                            Destination.History -> HistoryPage(state)
                             Destination.Downloads -> DownloadsPage(state)
                             Destination.Settings -> SettingsPage(state, BuildInfo.VERSION)
                         }
@@ -255,10 +274,9 @@ private const val HOUSEKEEPING_DELAY_MS = 20_000L
 
 private fun Destination.icon(): ImageVector = when (this) {
     Destination.Home -> Icons.Filled.Home
-    Destination.Chats -> BrowseTab.All.icon
+    Destination.Chats -> BrowseTab.Chats.icon
     Destination.Favourites -> Icons.Filled.Star
-    Destination.Continue -> Icons.Filled.PlayArrow
-    Destination.Watched -> BrowseTab.Watched.icon
+    Destination.History -> BrowseTab.History.icon
     Destination.Downloads -> TmIcons.Download
     Destination.Settings -> Icons.Filled.Settings
 }
@@ -276,7 +294,7 @@ internal fun Sidebar(
 ) {
     val s = LocalStrings.current
     val groups = rememberNavGroups(state.currentGroup)
-    val sections = remember(folders) { browseSections(folders, withWatched = true) }
+    val sections = remember(folders) { browseSections(folders) }
     val inFlight = rememberDownloadsInFlight()
     Column(Modifier.width(240.dp).fillMaxHeight().padding(12.dp)) {
         NavBrand(BuildInfo.VERSION, Modifier.padding(horizontal = 12.dp, vertical = 10.dp))
@@ -342,8 +360,7 @@ private fun NavEntry.destination(): Destination? = when (this) {
     NavEntry.Downloads -> Destination.Downloads
     is NavEntry.Section -> when (section) {
         BrowseSection.of(BrowseTab.Home) -> Destination.Home
-        BrowseSection.of(BrowseTab.Continue) -> Destination.Continue
-        BrowseSection.of(BrowseTab.Watched) -> Destination.Watched
+        BrowseSection.of(BrowseTab.History) -> Destination.History
         BrowseSection.of(BrowseTab.Favorites) -> Destination.Favourites
         else -> null
     }

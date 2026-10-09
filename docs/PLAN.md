@@ -682,17 +682,18 @@ chats outside every folder are not listed anywhere except search, and the Watch 
 watching, not a Telegram grouping) stays. Open for the user: should Watch also be optional? Default: no.
 **What "default grouping" means (confirmed 2026-10-06):** the user's friend wants the app's fixed groupings
 disabled completely, keeping only the custom ones. Default: the Chats group of the sidebar built by
-`browseSections` in `ui/src/shared/.../browse/BrowseSections.kt`: Recent, Unread, Saved, Channels, Groups,
-People, All and Archived (the `ChatKind` split in `ChatRepository.kt`). Custom: the account's own Telegram
-folders (the Folders group), which stay. Watch (Home, Continue, Watched, Favourites, Downloads) stays too. All
-eight default sections go together, with no per-section choice. With no folders on the account the sidebar
-would hold Watch only, so the toggle's prompt says to make folders in Telegram first, and Home and the empty
-states point there instead of at "All".
+`browseSections` in `ui/src/shared/.../browse/BrowseSections.kt`. Since CP43 that group (`NavGroup.Chats`,
+headed "Telegram" on screen) holds two entries, Chats (`BrowseTab.Chats`, with the `ChatFilter` chips All,
+Unread, Channels, Groups, People, Archived and the `ChatSort` toggle over it) and Saved (`BrowseTab.Saved`,
+headed Saved Messages). Custom: the account's own Telegram folders (the Folders group), which stay. Watch (Home,
+History with its Continue and Watched tabs, Favourites, Downloads) stays too. Both default entries go together,
+with no per-entry choice. With no folders on the account the sidebar would hold Watch only, so the toggle's
+prompt says to make folders in Telegram first, and Home and the empty states point there instead of at Chats.
 **Do:**
 - A Settings toggle "Hide Telegram's default groups" (name to settle), off by default, stored in `SettingsStore`.
   When on, `browseSections` and `navGroups` leave the Chats group out on phone drawer, TV rail and desktop side
-  bar, and every other surface that lists those sections stops offering them (the section switchers in
-  `BrowseScreen`, the Home empty states and hints that point at "All" or "Channels", search scope, and the
+  bar, and every other surface that lists those sections stops offering them (the chip rows in
+  `BrowseScreen` and the desktop `ChatsPage`, the Home empty states and hints, search scope, and the
   desktop dropdown). With the group gone, chats are reached through Folders, Favourites, search and Home.
 - Favourites: chats are favourited by id (`favorite_chats`), so switching the option on must not leave a
   favourite the viewer can no longer reach. Work out which favourited chats would become unreachable (in no

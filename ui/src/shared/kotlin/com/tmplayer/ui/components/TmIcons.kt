@@ -37,6 +37,9 @@ object TmIcons {
         )
     }
 
+    /** Three lines, shortest last: the chat list sorted by name rather than by recency. */
+    val Sort: ImageVector by lazy { icon("Sort", "M3,18H9V16H3V18M3,6V8H21V6H3M3,13H15V11H3V13Z") }
+
     /** Wi-Fi with a slash, for the passive offline status chip. */
     val WifiOff: ImageVector by lazy {
         icon("WifiOff") {

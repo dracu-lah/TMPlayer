@@ -102,13 +102,20 @@ class BrowseRenderTest {
             chat(2, "Film Club", ChatKind.Channel, 12, 0xFFE5484D.toInt()),
             chat(4, "Weekend series", ChatKind.Group, 3, 0xFFF5A524.toInt()),
         )
-        // On Unread, so Chats is open because the viewer is in it; Watch is open by default and
-        // Folders is the group left closed.
-        shell.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.Unread))
+        // On Chats with the Unread chip, so Chats is open because the viewer is in it; Watch is
+        // open by default and Folders is the group left closed.
+        shell.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.Chats))
+        shell.chatFilter = com.tmplayer.ui.browse.ChatFilter.Unread
         for (dark in listOf(true, false)) {
             val png = render(update = NavUpdate("Update", "2.0.1"), dark = dark, folders = folders) {
                 Column(Modifier.fillMaxSize()) {
-                    PageHeader("Unread", "Chats with messages you haven't read")
+                    PageHeader(com.tmplayer.ui.browse.BrowseTab.Chats.heading, com.tmplayer.ui.browse.BrowseTab.Chats.blurb)
+                    ChoiceChips(
+                        listOf(Choice("sort", shell.chatSort.label, shell.chatSort.icon, selected = false) {}) +
+                            com.tmplayer.ui.browse.ChatFilter.entries.map {
+                                Choice(it.name, it.label, it.icon, selected = it == shell.chatFilter) {}
+                            },
+                    )
                     chats.forEach { ChatRow(it, favourite = false, onOpen = {}, onStar = {}) }
                 }
             }
@@ -119,7 +126,7 @@ class BrowseRenderTest {
         com.tmplayer.ui.browse.NavGroupState.toggle(com.tmplayer.ui.browse.NavGroup.Watch)
         save("sidebar-watch-folded.png", render(dark = true, folders = folders) {})
         com.tmplayer.ui.browse.NavGroupState.toggle(com.tmplayer.ui.browse.NavGroup.Watch)
-        shell.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.All))
+        shell.chatFilter = com.tmplayer.ui.browse.ChatFilter.All
     }
 
     @Test
@@ -342,8 +349,11 @@ class BrowseRenderTest {
         settings.saveResumePosition(2, 2, 600_000, 2_400_000, "")
         val grid = render { VideoGrid(shell, items, "Weekend series", hiddenBySize = 3, hiddenSelfDestructing = 1) }
         save("watched-grid.png", grid)
-        val page = render { WatchedPage(shell) }
+        shell.showHistory(com.tmplayer.ui.browse.HistoryTab.Watched)
+        val page = render { HistoryPage(shell) }
         save("watched-page.png", page)
+        shell.showHistory(com.tmplayer.ui.browse.HistoryTab.Continue)
+        save("history-continue.png", render { HistoryPage(shell) })
     }
 
     @Test

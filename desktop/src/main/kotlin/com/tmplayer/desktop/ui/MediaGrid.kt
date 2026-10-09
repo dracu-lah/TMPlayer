@@ -1,5 +1,7 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.browse.HistoryTab
+import com.tmplayer.ui.browse.BrowseTab
 import androidx.compose.runtime.produceState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -352,11 +354,12 @@ fun PosterSizeStep(state: ShellState) {
 }
 
 /**
- * The page Continue watching: what the viewer was part way through, newest first, as posters.
+ * History's Continue tab: what the viewer was part way through, newest first, as posters.
  * The records keep no artwork (see the phone's ContinueArt), so each poster is the play mark.
+ * [tabs] is History's tab row, drawn under the heading.
  */
 @Composable
-fun ContinuePage(state: ShellState) {
+fun ContinuePage(state: ShellState, tabs: @Composable () -> Unit = {}) {
     val s = LocalStrings.current
     val records by state.settings.continueWatching.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
@@ -377,7 +380,8 @@ fun ContinuePage(state: ShellState) {
         )
     }
     Column(Modifier.fillMaxSize()) {
-        PageHeader(s.navContinue, s.continueSubtitle, actions = { PosterSizeStep(state) })
+        PageHeader(BrowseTab.History.heading, HistoryTab.Continue.blurb, actions = { PosterSizeStep(state) })
+        tabs()
         val list = records
         when {
             list == null -> Centred { CircularProgressIndicator() }

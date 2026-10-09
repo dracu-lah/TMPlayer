@@ -1,11 +1,16 @@
 package com.tmplayer.desktop.ui
 
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.layout.size
+import com.tmplayer.ui.browse.ChatFilter
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -85,16 +90,18 @@ import com.tmplayer.ui.browse.AllChatsSearchViewModel
 import com.tmplayer.ui.browse.SearchScopeToggle
 
 /**
- * The chat list: the shared [ChatListViewModel], the phone's tabs and the account's own Telegram
- * folders as chips, and a search that ranks with the same fuzzy matcher. With [favouritesOnly] it
- * is the Favourites page: the starred chats and no chips.
+ * The chat list: the shared [ChatListViewModel], the Chats filter chips (the order, then All,
+ * Unread, Channels, Groups, People and Archived, the same [ChatFilter]s as the phone and the TV),
+ * and a search that ranks with the same fuzzy matcher. In a narrow window, which has no side bar,
+ * a second row above picks Chats, Saved Messages or a folder. With [favouritesOnly] it is the
+ * Favourites page: the starred chats and no chips.
  */
 @Composable
 fun ChatsPage(
     state: ShellState,
     model: ChatListViewModel,
     favouritesOnly: Boolean,
-    /** False beside the wide side bar, which lists the same sections in its Chats group. */
+    /** False beside the wide side bar, which lists Chats, Saved Messages and the folders itself. */
     showSections: Boolean = true,
 ) {
     val s = LocalStrings.current
@@ -115,9 +122,9 @@ fun ChatsPage(
     val listState = if (favouritesOnly) androidx.compose.foundation.lazy.rememberLazyListState() else state.chatListState
     val nav = rememberKeyboardNav(remember(listState) { ListSurface(listState) })
 
-    // The Continue tab lists videos and has a page of its own; Favourites has its own page too.
+    // Home, History and Favourites have pages of their own.
     val sections = remember(folders) {
-        browseSections(folders).filterNot { it.isHome || it.isContinue || it == BrowseSection.of(BrowseTab.Favorites) }
+        browseSections(folders).filterNot { it.isHome || it.listsVideos || it == BrowseSection.of(BrowseTab.Favorites) }
     }
     val section = if (favouritesOnly) {
         BrowseSection.of(BrowseTab.Favorites)
@@ -147,19 +154,26 @@ fun ChatsPage(
             },
         )
         if (!favouritesOnly && showSections && !allVideos) {
-            LazyRow(
-                Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(sections, key = { BrowseSection.encode(it) }) { entry ->
-                    FilterChip(
-                        selected = entry == section,
-                        onClick = { state.showChats(entry) },
-                        label = { Text(entry.label) },
-                        leadingIcon = { Icon(entry.icon, contentDescription = null) },
+            ChoiceChips(
+                sections.map { entry ->
+                    Choice(BrowseSection.encode(entry), entry.label, entry.icon, selected = entry == section) { state.showChats(entry) }
+                },
+            )
+        }
+        if (!favouritesOnly && section.isChats && !allVideos) {
+            ChoiceChips(
+                buildList {
+                    val sort = state.chatSort
+                    add(
+                        Choice("sort", sort.label, sort.icon, selected = false, description = s.browseSortBy(sort.label)) {
+                            state.chatSort = sort.toggled
+                        },
                     )
-                }
-            }
+                    ChatFilter.entries.forEach { filter ->
+                        add(Choice(filter.name, filter.label, filter.icon, selected = filter == state.chatFilter) { state.chatFilter = filter })
+                    }
+                },
+            )
         }
         StateBox(ui, onRetry = { model.load() }) { data ->
             LaunchedEffect(data.chats) { state.noteChatTitles(data.chats) }
@@ -176,8 +190,10 @@ fun ChatsPage(
                 )
                 return@StateBox
             }
-            val visible = remember(data.chats, section, favourites, query) {
-                filterChats(data.chats, section, favourites, query)
+            val filter = state.chatFilter
+            val sort = state.chatSort
+            val visible = remember(data.chats, section, favourites, query, filter, sort) {
+                filterChats(data.chats, section, favourites, query, filter, sort)
             }
             if (visible.isEmpty()) {
                 Centred {
@@ -185,6 +201,7 @@ fun ChatsPage(
                         when {
                             query.isNotBlank() -> s.chatsNoMatch(query)
                             favouritesOnly -> s.chatsFavouritesEmpty
+                            section.isChats && filter != ChatFilter.All -> s.chatsSectionEmpty(filter.label)
                             else -> s.chatsSectionEmpty(section.label)
                         },
                         color = Tone.muted,
@@ -219,6 +236,45 @@ fun ChatsPage(
                         },
                     ),
                 )
+            }
+        }
+    }
+}
+
+/** One chip in a [ChoiceChips] row. */
+@androidx.compose.runtime.Immutable
+internal class Choice(
+    val key: String,
+    val label: String,
+    val icon: ImageVector,
+    val selected: Boolean,
+    /** What a screen reader says instead of [label], when the label alone is unclear. */
+    val description: String? = null,
+    val onClick: () -> Unit,
+)
+
+/**
+ * A row of chips under a page's heading: the Chats filters and order, History's two tabs, and in
+ * a narrow window the chat sections. Scrolls sideways when the window is too narrow for all of it.
+ */
+@Composable
+internal fun ChoiceChips(choices: List<Choice>) {
+    LazyRow(
+        Modifier.fillMaxWidth().padding(bottom = 4.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(choices, key = { it.key }) { choice ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = choice.selected,
+                    onClick = choice.onClick,
+                    label = { Text(choice.label, maxLines = 1) },
+                    leadingIcon = { Icon(choice.icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    modifier = choice.description?.let { words -> Modifier.semantics { contentDescription = words } } ?: Modifier,
+                )
+                // The order is a different kind of control from the filters after it.
+                if (choice.key == "sort") Box(Modifier.width(1.dp).height(24.dp).background(Tone.outline))
             }
         }
     }

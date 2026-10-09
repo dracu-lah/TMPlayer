@@ -44,6 +44,9 @@ private val LAST_CHAT = longPreferencesKey("last_chat")
 private val MIN_SIZE = longPreferencesKey("min_size_bytes")
 private val MAX_SIZE = longPreferencesKey("max_size_bytes")
 private val CHAT_LAYOUT = stringPreferencesKey("chat_layout")
+private val CHAT_FILTER = stringPreferencesKey("chat_filter")
+private val CHAT_SORT = stringPreferencesKey("chat_sort")
+private val HISTORY_TAB = stringPreferencesKey("history_tab")
 private val MEDIA_LAYOUT = stringPreferencesKey("media_layout")
 private val SERIES_VIEW = booleanPreferencesKey("series_view")
 private val CHAT_SNAPSHOT = stringPreferencesKey("chat_snapshot")
@@ -924,6 +927,33 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
 
     suspend fun setChatLayout(value: CardLayout) {
         prefs.edit { it[CHAT_LAYOUT] = value.name }
+    }
+
+    // ---- the chips over Chats and History -----------------------------------------------------
+
+    /**
+     * The chip chosen over the Chats list (All, Unread, Channels and so on), by name; null until
+     * one is picked. Held as text because the chips themselves live in :ui (`ChatFilter`), which
+     * reads it back and falls back to All for a name it does not know.
+     */
+    val chatFilter: Flow<String?> = read { it[CHAT_FILTER] }
+
+    suspend fun setChatFilter(name: String) {
+        prefs.edit { it[CHAT_FILTER] = name }
+    }
+
+    /** The Chats list's order, `ChatSort` by name: Telegram's recency or by title. */
+    val chatSort: Flow<String?> = read { it[CHAT_SORT] }
+
+    suspend fun setChatSort(name: String) {
+        prefs.edit { it[CHAT_SORT] = name }
+    }
+
+    /** Which tab of History was last open, `HistoryTab` by name. */
+    val historyTab: Flow<String?> = read { it[HISTORY_TAB] }
+
+    suspend fun setHistoryTab(name: String) {
+        prefs.edit { it[HISTORY_TAB] = name }
     }
 
     /**

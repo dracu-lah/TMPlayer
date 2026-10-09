@@ -45,6 +45,7 @@ import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.ShelfEntry
 import com.tmplayer.ui.browse.BrowseSection
 import com.tmplayer.ui.browse.BrowseTab
+import com.tmplayer.ui.browse.HistoryTab
 import com.tmplayer.ui.browse.ChatListViewModel
 import com.tmplayer.ui.browse.HomeViewModel
 import com.tmplayer.ui.browse.rememberHomeRows
@@ -147,7 +148,7 @@ internal fun HomeRowsView(
                 }
                 LaunchedEffect(row.key, loaded) { if (!loaded) onRowShown(row) }
                 val heading: Pair<String, (() -> Unit)?> = when (row) {
-                    is HomeRow.Continue -> s.homeRowContinue to { state.go(Destination.Continue) }
+                    is HomeRow.Continue -> s.homeRowContinue to { state.showHistory(HistoryTab.Continue) }
                     is HomeRow.Chat -> row.title to { chats.firstOrNull { it.id == row.chatId }?.let(state::openChat); Unit }
                     is HomeRow.Recent -> s.homeRowRecent to null
                 }

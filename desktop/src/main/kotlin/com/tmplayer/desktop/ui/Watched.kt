@@ -1,5 +1,6 @@
 package com.tmplayer.desktop.ui
 
+import com.tmplayer.ui.browse.HistoryTab
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -47,12 +48,32 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * The page Previously watched: every video played to the end or marked by hand, most recently
+ * History: Continue watching and Previously watched as two tabs of one page, since both are lists
+ * of videos already played. The tab is [ShellState.historyTab], the same choice the phone and the
+ * TV remember.
+ */
+@Composable
+fun HistoryPage(state: ShellState) {
+    val tabs: @Composable () -> Unit = {
+        ChoiceChips(
+            HistoryTab.entries.map { tab ->
+                Choice(tab.name, tab.label, tab.icon, selected = tab == state.historyTab) { state.historyTab = tab }
+            },
+        )
+    }
+    when (state.historyTab) {
+        HistoryTab.Continue -> ContinuePage(state, tabs)
+        HistoryTab.Watched -> WatchedPage(state, tabs)
+    }
+}
+
+/**
+ * History's Watched tab: every video played to the end or marked by hand, most recently
  * finished first, as posters. Like Continue watching, the records keep no artwork, so each poster
  * is the play mark with the watched tick on it.
  */
 @Composable
-fun WatchedPage(state: ShellState) {
+fun WatchedPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
     val s = LocalStrings.current
     val records by state.watched.history.collectAsState(initial = null)
     val progress by state.settings.watchProgress.collectAsState(initial = emptyMap())
@@ -70,8 +91,8 @@ fun WatchedPage(state: ShellState) {
     }
     Column(Modifier.fillMaxSize()) {
         PageHeader(
-            BrowseTab.Watched.heading,
-            BrowseTab.Watched.blurb,
+            BrowseTab.History.heading,
+            HistoryTab.Watched.blurb,
             actions = {
                 if (!records.isNullOrEmpty()) {
                     OutlinedButton(onClick = { confirmClear = true }) { Text(s.watchedClear) }
@@ -79,6 +100,7 @@ fun WatchedPage(state: ShellState) {
                 PosterSizeStep(state)
             },
         )
+        tabs()
         val list = records
         when {
             list == null -> Centred { CircularProgressIndicator() }

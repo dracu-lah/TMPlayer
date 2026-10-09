@@ -439,13 +439,7 @@ private fun DrawerSection(
         selected = entry == selected,
         // Only counts get a badge: a badge promises something that changes and is worth
         // noticing, which static text is not.
-        badge = when {
-            entry == BrowseSection.of(BrowseTab.Favorites) && favoriteCount > 0 ->
-                favoriteCount.toString()
-            entry == BrowseSection.of(BrowseTab.Unread) && unreadCount > 0 ->
-                unreadCount.toString()
-            else -> null
-        },
+        badge = navBadge(entry, favoriteCount, unreadCount),
         icon = { Icon(entry.icon, contentDescription = null) },
         onClick = { onPick(entry) },
     )

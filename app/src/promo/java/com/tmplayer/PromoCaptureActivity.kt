@@ -268,6 +268,7 @@ class PromoCaptureActivity : ComponentActivity() {
                             onOpenSettings = { screen = "settings" },
                             onOpenDownloads = { screen = "downloads" },
                             home = intent.getStringExtra("variant") ?: "rows",
+                            section = intent.getStringExtra("section"),
                         )
                         else -> PromoChatsScreen(
                             onOpenChat = { screen = "media" },
@@ -279,6 +280,8 @@ class PromoCaptureActivity : ComponentActivity() {
                             updateVersion = intent.getStringExtra("update"),
                             // `--es layout grid` for the chat tiles rather than the list.
                             layout = if (intent.getStringExtra("layout") == "grid") CardLayout.Grid else CardLayout.List,
+                            // `--es section saved|favorites|history` opens on that sidebar entry.
+                            section = intent.getStringExtra("section"),
                         )
                     }
                     if (supportRung > 0 && screen == "chats") {
@@ -382,11 +385,14 @@ private fun PromoChatsScreen(
     updateVersion: String? = null,
     /** Null for the chat list; otherwise Home, in the named variant (see the "home" screen). */
     home: String? = null,
+    /** A [BrowseTab] by name, any case, to open on instead of the default. */
+    section: String? = null,
 ) {
     val chats = promoChats()
     // Picking a tab moves the highlight, so a walk down the sidebar shows its groups following.
     var picked by remember {
-        mutableStateOf<BrowseSection>(BrowseSection.of(if (home != null) BrowseTab.Home else BrowseTab.Recent))
+        val named = BrowseTab.entries.firstOrNull { it.name.equals(section, ignoreCase = true) }
+        mutableStateOf<BrowseSection>(BrowseSection.of(named ?: if (home != null) BrowseTab.Home else BrowseTab.Chats))
     }
     val account = Account("Demo", "demo", null, 0)
     val homeData = promoHome(home)

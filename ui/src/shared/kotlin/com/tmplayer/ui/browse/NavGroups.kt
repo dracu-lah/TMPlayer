@@ -31,7 +31,9 @@ enum class NavGroup {
     /** The heading's words. */
     val label: String get() = when (this) {
         Watch -> L.navWatch
-        Chats -> L.navChats
+        // "Telegram" rather than "Chats": the group's first entry is itself called Chats, and a
+        // heading that repeats the row under it reads as a mistake.
+        Chats -> L.navTelegram
         Folders -> L.navFolders
     }
 
@@ -57,9 +59,9 @@ data class NavGroupEntries(val group: NavGroup, val entries: List<NavEntry>)
 
 /**
  * The tabs about the viewer's own watching, in the order the Watch group lists them. Home leads:
- * it is the first destination on every device, and its rows are made of the other three.
+ * it is the first destination on every device, and its rows are made of the other two.
  */
-private val WATCH_TABS = listOf(BrowseTab.Home, BrowseTab.Continue, BrowseTab.Watched, BrowseTab.Favorites)
+private val WATCH_TABS = listOf(BrowseTab.Home, BrowseTab.History, BrowseTab.Favorites)
 
 /** Which group a section sits in. Every section has exactly one. */
 fun navGroupOf(section: BrowseSection): NavGroup = when (section) {
@@ -151,4 +153,15 @@ class NavGroupsHolder internal constructor(
 fun rememberNavGroups(current: NavGroup?): NavGroupsHolder {
     val open by NavGroupState.open.collectAsState()
     return remember(current, open) { NavGroupsHolder(open, current) }
+}
+
+/**
+ * The count beside an entry, the same on every sidebar: how many chats are starred on Favourites,
+ * and how many chats have something unread on Chats (the Unread chip's count, which used to sit on
+ * an Unread entry of its own). Null where there is nothing worth a badge.
+ */
+fun navBadge(section: BrowseSection, favoriteCount: Int, unreadChats: Int): String? = when {
+    section == BrowseSection.of(BrowseTab.Favorites) && favoriteCount > 0 -> favoriteCount.toString()
+    section == BrowseSection.of(BrowseTab.Chats) && unreadChats > 0 -> unreadChats.toString()
+    else -> null
 }

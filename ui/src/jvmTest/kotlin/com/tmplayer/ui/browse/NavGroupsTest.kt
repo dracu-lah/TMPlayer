@@ -12,7 +12,7 @@ class NavGroupsTest {
 
     @Test
     fun `every tab sits in the group the plan gives it`() {
-        val watch = listOf(BrowseTab.Home, BrowseTab.Continue, BrowseTab.Watched, BrowseTab.Favorites)
+        val watch = listOf(BrowseTab.Home, BrowseTab.History, BrowseTab.Favorites)
         for (entry in BrowseTab.entries) {
             val expected = if (entry in watch) NavGroup.Watch else NavGroup.Chats
             assertEquals(entry.name, expected, navGroupOf(BrowseSection.of(entry)))
@@ -22,25 +22,28 @@ class NavGroupsTest {
     }
 
     @Test
-    fun `groups in order, Downloads closing Watch, Recent among the chats`() {
-        val groups = navGroups(browseSections(emptyList(), withWatched = true))
+    fun `six fixed entries, Home, History, Favourites and Downloads, then Chats and Saved Messages`() {
+        val groups = navGroups(browseSections(emptyList()))
         assertEquals(listOf(NavGroup.Watch, NavGroup.Chats), groups.map { it.group })
         assertEquals(
-            listOf(tab(BrowseTab.Home), tab(BrowseTab.Continue), tab(BrowseTab.Watched), tab(BrowseTab.Favorites), NavEntry.Downloads),
+            listOf(tab(BrowseTab.Home), tab(BrowseTab.History), tab(BrowseTab.Favorites), NavEntry.Downloads),
             groups[0].entries,
         )
-        assertEquals(
-            listOf(
-                BrowseTab.Recent, BrowseTab.Unread, BrowseTab.Saved, BrowseTab.Channels,
-                BrowseTab.Groups, BrowseTab.People, BrowseTab.All, BrowseTab.Archived,
-            ).map(::tab),
-            groups[1].entries,
-        )
+        assertEquals(listOf(BrowseTab.Chats, BrowseTab.Saved).map(::tab), groups[1].entries)
+        assertEquals(6, groups.sumOf { it.entries.size })
+    }
+
+    @Test
+    fun `badges count favourites on Favourites and unread chats on Chats, nothing elsewhere`() {
+        assertEquals("3", navBadge(BrowseSection.of(BrowseTab.Favorites), favoriteCount = 3, unreadChats = 5))
+        assertEquals("5", navBadge(BrowseSection.of(BrowseTab.Chats), favoriteCount = 3, unreadChats = 5))
+        assertEquals(null, navBadge(BrowseSection.of(BrowseTab.Chats), favoriteCount = 3, unreadChats = 0))
+        assertEquals(null, navBadge(BrowseSection.of(BrowseTab.Saved), favoriteCount = 3, unreadChats = 5))
     }
 
     @Test
     fun `Folders only when the account has some, and every section appears exactly once`() {
-        val sections = browseSections(listOf(ChatFolderSummary(3, "Films"), ChatFolderSummary(7, "Family")), withWatched = true)
+        val sections = browseSections(listOf(ChatFolderSummary(3, "Films"), ChatFolderSummary(7, "Family")))
         val groups = navGroups(sections)
         assertEquals(listOf(NavGroup.Watch, NavGroup.Chats, NavGroup.Folders), groups.map { it.group })
         assertEquals(
@@ -56,8 +59,7 @@ class NavGroupsTest {
     fun `Downloads can be left out`() {
         val groups = navGroups(browseSections(emptyList()), withDownloads = false)
         assertFalse(NavEntry.Downloads in groups[0].entries)
-        // Without the Watched tab the group still holds what there is.
-        assertEquals(listOf(tab(BrowseTab.Home), tab(BrowseTab.Continue), tab(BrowseTab.Favorites)), groups[0].entries)
+        assertEquals(listOf(tab(BrowseTab.Home), tab(BrowseTab.History), tab(BrowseTab.Favorites)), groups[0].entries)
     }
 
     @Test
