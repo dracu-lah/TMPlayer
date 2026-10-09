@@ -15,7 +15,10 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -74,6 +77,7 @@ import com.tmplayer.data.Updates
 import com.tmplayer.data.release
 import com.tmplayer.data.updateScheduler
 import com.tmplayer.player.PlayerActivity
+import com.tmplayer.ui.components.BottomCardInset
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.LocalDarkTheme
 import com.tmplayer.ui.theme.Tone
@@ -1264,6 +1268,7 @@ private fun Root() {
                 signInCard = false
                 scope.launch { runCatching { settings.markFirstSignInCardDone() } }
             }
+            val density = LocalDensity.current
             FirstSignInCard(
                 onEverything = { answered() },
                 onOnlyFolders = {
@@ -1273,8 +1278,11 @@ private fun Root() {
                 modifier = Modifier
                     .align(if (FormFactor.isTv(context)) Alignment.BottomEnd else Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(if (FormFactor.isTv(context)) 40.dp else 16.dp),
+                    .padding(if (FormFactor.isTv(context)) 40.dp else 16.dp)
+                    // The card and the gap under it, so Home's first-video text scrolls clear of it.
+                    .onSizeChanged { BottomCardInset.height = with(density) { it.height.toDp() } + 16.dp },
             )
+            DisposableEffect(Unit) { onDispose { BottomCardInset.height = 0.dp } }
         }
         if (hideGroupsPrompt) {
             val unreachable = remember(favorites, chats) { DefaultGroups.unreachableFavorites(favorites, chats) }

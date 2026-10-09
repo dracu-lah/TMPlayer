@@ -43,6 +43,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.SettingsStore
+import com.tmplayer.ui.components.BottomCardInset
 import com.tmplayer.ui.components.PhonePad
 import com.tmplayer.ui.components.TmButton
 import com.tmplayer.ui.components.TmIcons
@@ -70,7 +71,8 @@ internal fun FirstVideoEmpty(step: DefaultGroups.FirstStep, onOpen: (BrowseSecti
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = if (touch) PhonePad.Side else 72.dp, vertical = 24.dp),
+            .padding(horizontal = if (touch) PhonePad.Side else 72.dp, vertical = 24.dp)
+            .padding(bottom = BottomCardInset.height),
         contentAlignment = Alignment.Center,
     ) {
         Column(

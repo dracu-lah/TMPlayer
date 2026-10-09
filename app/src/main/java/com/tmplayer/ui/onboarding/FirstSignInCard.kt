@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
@@ -45,29 +46,52 @@ fun FirstSignInCard(onEverything: () -> Unit, onOnlyFolders: () -> Unit, modifie
     val touch = isTouch()
     val everything = remember { FocusRequester() }
     if (!touch) BackHandler(onBack = onEverything)
-    Column(
-        modifier
-            .widthIn(max = if (touch) 520.dp else 600.dp)
-            .floatingSurface()
-            .padding(if (touch) 16.dp else 24.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(TmIcons.Folder, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(24.dp))
-            Text(s.groupsCardTitle, style = MaterialTheme.typography.titleMedium, color = Tone.text)
-        }
-        Text(s.groupsCardBody, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+    // A phone on its side has the width and not the height, so there the words and the buttons
+    // share one row and the card covers about a third less of the screen.
+    val short = touch && LocalConfiguration.current.screenHeightDp < SHORT_SCREEN_DP
+    val buttons: @Composable () -> Unit = {
         CompositionLocalProvider(LocalOnFloating provides true) {
             // Wraps rather than squeezing: two labels side by side outgrow a portrait phone in
             // the longer languages.
             FlowRow(
-                Modifier.fillMaxWidth(),
+                if (short) Modifier else Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 TmSecondaryButton(onClick = onOnlyFolders) { Label(s.groupsCardFolders) }
                 TmButton(onClick = onEverything, modifier = Modifier.focusRequester(everything)) { Label(s.groupsCardEverything) }
             }
+        }
+    }
+    val words: @Composable () -> Unit = {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Icon(TmIcons.Folder, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(24.dp))
+            Text(s.groupsCardTitle, style = MaterialTheme.typography.titleMedium, color = Tone.text)
+        }
+        Text(s.groupsCardBody, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+    }
+    if (short) {
+        Row(
+            modifier
+                .widthIn(max = 760.dp)
+                .floatingSurface()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) { words() }
+            buttons()
+        }
+    } else {
+        Column(
+            modifier
+                .widthIn(max = if (touch) 520.dp else 600.dp)
+                .floatingSurface()
+                .padding(if (touch) 16.dp else 24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            words()
+            buttons()
         }
     }
     // A moment late, so the chat list's own first focus, which lands as its rows arrive, does not
@@ -81,6 +105,9 @@ fun FirstSignInCard(onEverything: () -> Unit, onOnlyFolders: () -> Unit, modifie
 }
 
 private const val FOCUS_DELAY_MS = 400L
+
+/** Below this height a touch screen gets the one-row card. */
+private const val SHORT_SCREEN_DP = 480
 
 /** A button's words, in the library the button is drawn with (see Support.kt). */
 @Composable
