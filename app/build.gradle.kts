@@ -197,7 +197,9 @@ android {
         create("promo") {
             initWith(getByName("debug"))
             applicationIdSuffix = ".promo"
-            versionNameSuffix = "-promo"
+            // `-PpromoShots` drops the suffix, so the site's screenshots show the version people
+            // download rather than "1.24.0-promo" in the rail and on the About line.
+            versionNameSuffix = if (project.hasProperty("promoShots")) null else "-promo"
             matchingFallbacks += listOf("debug")
         }
     }
