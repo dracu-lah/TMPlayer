@@ -32,7 +32,6 @@
     "a_ten_foot_layout_for": "Kumanda için uzaktan okunan bir arayüz ve QR kodla giriş.",
     "made_for_the_television": "Televizyon için yapıldı",
     "what_it_is_not": "Ne olmadığı",
-    "not_a_media_service_or": "Bir medya hizmeti ya da sohbet uygulaması değil. Mesajlarını okuyamaz.",
     "questions_and_limits": "Sorular ve sınırlar",
     "set_up_in_three_steps": "Üç adımda kur",
     "you_do_it_once_then": "Bir kez yaparsın. Sonra diğer TV uygulamaları gibi çalışır.",
@@ -76,7 +75,8 @@
     "tmplayer_on_a_television_showing": "Televizyonda TMPlayer, bir Telegram sohbetindeki videoları süre ve dosya boyutuyla birlikte kutucuklar halinde gösteriyor.",
     "a_phone_opening_a_telegram": "TMPlayer'da bir Telegram sohbetini açan ve videolarını ızgara olarak gösteren bir telefon.",
     "email_hello_tmplayer_org_with": "TMPlayer özellik isteğiyle hello@tmplayer.org adresine e-posta gönder",
-    "open_an_issue_in_the": "GitHub'daki TMPlayer deposunda issue aç"
+    "open_an_issue_in_the": "GitHub'daki TMPlayer deposunda issue aç",
+    "not_a_media_service_messages": "Bir medya hizmeti ya da sohbet uygulaması değil. Mesajların asla içinde görünmez."
   },
   "common": {
     "skip_to_content": "İçeriğe geç",
@@ -200,7 +200,9 @@
     "pick_a_chat_pick_b7cf": "Bir sohbet seç, bir video seç ve OK'e bas. İnerken oynar.",
     "telegram_on_tv_without_5532": "Yansıtmadan TV'de Telegram",
     "telegram_on_your_tv_bb50": "TV'nde yansıtmadan Telegram",
-    "watch_telegram_videos_on_3a48": "Telegram videolarını telefonunu yansıtmadan ya da aynalamadan televizyonda izle: TV'nin kendisindeki bir oynatıcı hesabınla giriş yapar ve sohbetlerindeki videoları akıtır."
+    "watch_telegram_videos_on_3a48": "Telegram videolarını telefonunu yansıtmadan ya da aynalamadan televizyonda izle: TV'nin kendisindeki bir oynatıcı hesabınla giriş yapar ve sohbetlerindeki videoları akıtır.",
+    "finds_subtitles_online_through_a322": "OpenSubtitles üzerinden internette altyazı bulma, altyazıyı ya da sesi eşleşecek şekilde kaydırma",
+    "groups_series_by_season_709a": "Dizileri kendi sayfasında sezonlara göre gruplama, isteğe bağlı afiş ve özetlerle"
   },
   "features": {
     "tmplayer_features_stream_telegram_videos": "TMPlayer özellikleri: Telegram videolarını TV'de ve bilgisayarda akıt",
@@ -316,7 +318,15 @@
     "the_same_chat_list_on": "Aynı sohbet listesi televizyonda; solda Devam et, Favoriler, Son, Kanallar, Gruplar, Kişiler ve Tüm sohbetler için bir gezinme rayı var.",
     "tmplayer_settings_on_a_television": "Televizyonda TMPlayer ayarları; video boyutu sınırları, sonraki bölümün otomatik oynatılması ve ne kadar depolama alanı boş olduğu görünüyor.",
     "the_tmplayer_desktop_app_on": "Windows ya da Linux'ta TMPlayer masaüstü uygulaması: sohbet bölümlerinin kenar çubuğu ve yanında demo videoların ızgarası; her afişte süre, boyut ve çözünürlük var.",
-    "the_tmplayer_desktop_player_over": "Bir demo video üzerinde TMPlayer masaüstü oynatıcı: üstte başlık ve sohbet, bir zaman çubuğu ve altyazı, ses, hız, görüntü oranı, ses düzeyi, mini oynatıcı ve tam ekran düğmeleri."
+    "the_tmplayer_desktop_player_over": "Bir demo video üzerinde TMPlayer masaüstü oynatıcı: üstte başlık ve sohbet, bir zaman çubuğu ve altyazı, ses, hız, görüntü oranı, ses düzeyi, mini oynatıcı ve tam ekran düğmeleri.",
+    "subtitles_found_online": "{strong1} Bir dosyada altyazı yoksa oynatıcıdan OpenSubtitles'ta ara, sonra altyazıyı ya da sesi ileri veya geri kaydır.",
+    "subtitles_found_online__strong1": "Altyazıları internette bulur.",
+    "downloads_you_choose": "{strong1} İndirdiğin bir video sen kaldırana kadar durur, istersen izlendikten sonra silinir.",
+    "downloads_you_choose__strong1": "Seçtiklerini saklar.",
+    "home_and_series_pages": "{strong1} Ana sayfa, sıradaki izlenecekleri tüm sohbetlerden toplar ve her dizinin bölümleri sezonlara göre gruplanmış kendi sayfası olur.",
+    "home_and_series_pages__strong1": "Dizileri düzene sokar.",
+    "posters_and_overviews": "{strong1} TMDB, TVmaze ve AniList'te yalnızca videonun temizlenmiş başlığıyla aranır, başka hiçbir şeyle değil.",
+    "posters_and_overviews__strong1": "İstersen afiş ve özet ekler."
   },
   "download": {
     "download_tmplayer_for_android_tv": "TMPlayer'ı Android TV, telefonlar, Windows ve Linux için indir",
@@ -326,9 +336,6 @@
     "how_to_install_it": "Nasıl kurulur",
     "android_phone": "Android telefon",
     "every_platform_one_release": "Her platform, tek sürüm",
-    "every_file_comes_from_one": "Her dosya tek bir GitHub sürümünden gelir. Android dosyaları projenin anahtarıyla imzalanır. Windows derlemeleri, {a1} tarafından açık kaynak projelere sunulan ücretsiz bir sertifikayla imzalanır ({a2}).",
-    "every_file_comes_from_one__a1": "SignPath Foundation",
-    "every_file_comes_from_one__a2": "Kod İmzalama Politikası",
     "latest_release": "Son sürüm",
     "android_8_0_and_above": "Android 8.0 ve üzeri",
     "your_device": "Cihazın",
@@ -350,7 +357,6 @@
     "installer__span1": "Buradan başla",
     "adds_a_start_menu_entry": "Başlat menüsüne bir giriş ve masaüstüne bir kısayol ekler. Yönetici gerekmez.",
     "tmplayer_version_windows_x64_msi": "TMPlayer-<version>-windows-x64.msi",
-    "windows_binaries_are_signed_via": "Windows ikili dosyaları, bütünlüklerini doğrulamak ve yetkisiz değişiklikleri önlemek için SignPath ile imzalanır.",
     "how_to_install_on_windows": "Windows'a nasıl kurulur",
     "x86_64_with_glibc_2": "x86_64, glibc 2.38 veya üzeriyle: Ubuntu 24.04, Debian 13, Fedora 39 ve sonrası",
     "any_distribution": "Herhangi bir dağıtım",
@@ -381,7 +387,13 @@
     "an_app_from_outside_the": "Telegram'a giriş yapan, mağaza dışı bir uygulama çok güven ister. Yıldız, bir sonraki kişinin karar vermesine yardım eder.",
     "download_tmplayer_free_the_apk": "TMPlayer'ı ücretsiz indir: Android TV ve telefonlar için APK, bir Windows yükleyicisi ve Linux için bir AppImage.",
     "platforms": "Platformlar",
-    "add_to_obtainium": "Obtainium'a ekle"
+    "add_to_obtainium": "Obtainium'a ekle",
+    "every_file_comes_from_one_github": "Her dosya tek bir GitHub sürümünden gelir. Android dosyaları projenin anahtarıyla imzalanır. Windows yükleyicisi henüz kod imzalı değil: proje, açık kaynak projeler için ücretsiz bir sertifika almak üzere {a1}'a başvurdu ({a2}).",
+    "every_file_comes_from_one_github__a1": "SignPath Foundation",
+    "every_file_comes_from_one_github__a2": "Kod İmzalama Politikası",
+    "the_installer_is_not_code_signed": "Yükleyici henüz kod imzalı değil, bu yüzden SmartScreen ilk seferde seni uyarabilir. {em1} üzerine tıkla, sonra {em2}.",
+    "the_installer_is_not_code_signed__em1": "Daha fazla bilgi",
+    "the_installer_is_not_code_signed__em2": "Yine de çalıştır"
   },
   "install": {
     "how_to_install_tmplayer_on": "TMPlayer Android TV, Windows ve Linux'a nasıl kurulur",

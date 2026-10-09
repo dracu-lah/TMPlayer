@@ -32,7 +32,6 @@
     "a_ten_foot_layout_for": "專為遙控器設計的大螢幕介面，並支援 QR 碼登入。",
     "made_for_the_television": "為電視量身打造",
     "what_it_is_not": "它不是什麼",
-    "not_a_media_service_or": "不是影音服務，也不是聊天軟體。它無法讀取你的訊息。",
     "questions_and_limits": "常見問題與限制",
     "set_up_in_three_steps": "三步驟完成設定",
     "you_do_it_once_then": "只需設定一次，之後就像其他電視 App 一樣使用。",
@@ -76,7 +75,8 @@
     "tmplayer_on_a_television_showing": "TMPlayer 在電視上的畫面，以磚塊格狀顯示 Telegram 聊天中的影片，並標示片長與檔案大小。",
     "a_phone_opening_a_telegram": "手機上的 TMPlayer 開啟一個 Telegram 聊天，並以格狀顯示其中的影片。",
     "email_hello_tmplayer_org_with": "寄信到 hello@tmplayer.org 提出 TMPlayer 功能建議",
-    "open_an_issue_in_the": "在 GitHub 的 TMPlayer 專案中開 Issue"
+    "open_an_issue_in_the": "在 GitHub 的 TMPlayer 專案中開 Issue",
+    "not_a_media_service_messages": "不是影音服務，也不是聊天軟體。你的訊息永遠不會出現在裡面。"
   },
   "common": {
     "skip_to_content": "跳到內容",
@@ -200,7 +200,9 @@
     "pick_a_chat_pick_b7cf": "選一個聊天，選一部影片，按 OK 鍵。邊下載邊播放。",
     "telegram_on_tv_without_5532": "不用投放的電視 Telegram",
     "telegram_on_your_tv_bb50": "不用投放，直接在電視上看 Telegram",
-    "watch_telegram_videos_on_3a48": "不用投放或鏡像手機，就能在電視上觀看 Telegram 影片：電視上的播放器會登入你的帳號，並串流播放你聊天中的影片。"
+    "watch_telegram_videos_on_3a48": "不用投放或鏡像手機，就能在電視上觀看 Telegram 影片：電視上的播放器會登入你的帳號，並串流播放你聊天中的影片。",
+    "finds_subtitles_online_through_a322": "透過 OpenSubtitles 在線上尋找字幕，並調整字幕或音訊的時間以對上畫面",
+    "groups_series_by_season_709a": "影集依季分組，各有獨立頁面，可選擇顯示海報與簡介"
   },
   "features": {
     "tmplayer_features_stream_telegram_videos": "TMPlayer 功能：在電視與電腦上串流播放 Telegram 影片",
@@ -316,7 +318,15 @@
     "the_same_chat_list_on": "電視上的同一份聊天清單，左側有導覽列，包含繼續觀賞、我的最愛、最近、頻道、群組、聯絡人與所有聊天。",
     "tmplayer_settings_on_a_television": "電視上的 TMPlayer 設定畫面，顯示影片大小限制、自動播放下一集，以及剩餘儲存空間。",
     "the_tmplayer_desktop_app_on": "Windows 或 Linux 上的 TMPlayer 桌面版：左側是聊天分類的側邊欄，旁邊是示範影片的格狀畫面，每張海報都標示片長、大小與解析度。",
-    "the_tmplayer_desktop_player_over": "TMPlayer 桌面播放器播放示範影片的畫面：頂端是標題與聊天名稱，下方有時間軸，以及字幕、音軌、速度、畫面比例、音量、迷你播放器與全螢幕按鈕。"
+    "the_tmplayer_desktop_player_over": "TMPlayer 桌面播放器播放示範影片的畫面：頂端是標題與聊天名稱，下方有時間軸，以及字幕、音軌、速度、畫面比例、音量、迷你播放器與全螢幕按鈕。",
+    "subtitles_found_online": "{strong1} 檔案沒有字幕時，可在播放器中搜尋 OpenSubtitles，再把字幕或聲音調早或調晚。",
+    "subtitles_found_online__strong1": "在線上尋找字幕。",
+    "downloads_you_choose": "{strong1} 下載的影片會保留到你自己移除為止，也可以設定成看完就刪除。",
+    "downloads_you_choose__strong1": "保存你選擇的影片。",
+    "home_and_series_pages": "{strong1} 首頁彙整所有聊天中接下來要看的內容，每部影集都有自己的頁面，各集依季分組。",
+    "home_and_series_pages__strong1": "把影集整理得井然有序。",
+    "posters_and_overviews": "{strong1} 只用影片整理過的標題在 TMDB、TVmaze 與 AniList 上查詢，不使用其他任何資訊。",
+    "posters_and_overviews__strong1": "加上海報與簡介，看你需要。"
   },
   "download": {
     "download_tmplayer_for_android_tv": "下載 TMPlayer：支援 Android TV、手機、Windows 與 Linux",
@@ -326,9 +336,6 @@
     "how_to_install_it": "安裝方式",
     "android_phone": "Android 手機",
     "every_platform_one_release": "所有平台，同一個版本",
-    "every_file_comes_from_one": "所有檔案都來自同一個 GitHub 發布版本。Android 檔案以專案的金鑰簽署。Windows 版本則使用 {a1} 為開源專案提供的免費憑證簽署（{a2}）。",
-    "every_file_comes_from_one__a1": "SignPath Foundation",
-    "every_file_comes_from_one__a2": "程式碼簽署政策",
     "latest_release": "最新版本",
     "android_8_0_and_above": "Android 8.0 以上",
     "your_device": "你的裝置",
@@ -350,7 +357,6 @@
     "installer__span1": "從這裡開始",
     "adds_a_start_menu_entry": "會加入開始功能表項目與桌面捷徑。不需要系統管理員權限。",
     "tmplayer_version_windows_x64_msi": "TMPlayer-<version>-windows-x64.msi",
-    "windows_binaries_are_signed_via": "Windows 執行檔透過 SignPath 簽署，以驗證其完整性並防止遭到未經授權的修改。",
     "how_to_install_on_windows": "如何在 Windows 上安裝",
     "x86_64_with_glibc_2": "x86_64，glibc 2.38 或更新版本：Ubuntu 24.04、Debian 13、Fedora 39 以後",
     "any_distribution": "任何發行版",
@@ -381,7 +387,13 @@
     "an_app_from_outside_the": "來自商店以外、又要登入 Telegram 的 App，需要很高的信任。加星可以幫助下一個人做決定。",
     "download_tmplayer_free_the_apk": "免費下載 TMPlayer：Android TV 與手機的 APK、Windows 安裝程式，以及 Linux 的 AppImage。",
     "platforms": "平台",
-    "add_to_obtainium": "加入 Obtainium"
+    "add_to_obtainium": "加入 Obtainium",
+    "every_file_comes_from_one_github": "所有檔案都來自同一個 GitHub 發布版本。Android 檔案以專案的金鑰簽署。Windows 安裝程式目前還沒有程式碼簽署：專案已向 {a1} 申請為開源專案提供的免費憑證（{a2}）。",
+    "every_file_comes_from_one_github__a1": "SignPath Foundation",
+    "every_file_comes_from_one_github__a2": "程式碼簽署政策",
+    "the_installer_is_not_code_signed": "安裝程式目前還沒有程式碼簽署，所以第一次執行時 SmartScreen 可能會發出警告。請按 {em1}，然後按 {em2}。",
+    "the_installer_is_not_code_signed__em1": "其他資訊",
+    "the_installer_is_not_code_signed__em2": "仍要執行"
   },
   "install": {
     "how_to_install_tmplayer_on": "如何在 Android TV、Windows 與 Linux 上安裝 TMPlayer",

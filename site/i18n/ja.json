@@ -32,7 +32,6 @@
     "a_ten_foot_layout_for": "リモコンで操作しやすいテレビ向けレイアウトと、QRコードでのサインインに対応。",
     "made_for_the_television": "テレビのために作りました",
     "what_it_is_not": "できないこと",
-    "not_a_media_service_or": "メディアサービスでもチャットアプリでもありません。メッセージを読むことはできません。",
     "questions_and_limits": "よくある質問と制限事項",
     "set_up_in_three_steps": "3ステップで設定",
     "you_do_it_once_then": "設定は最初の1回だけ。そのあとは、ほかのテレビアプリと同じように使えます。",
@@ -76,7 +75,8 @@
     "tmplayer_on_a_television_showing": "テレビで動作するTMPlayer。Telegramチャットの動画を、再生時間とファイルサイズ付きのタイルのグリッドで表示しています。",
     "a_phone_opening_a_telegram": "スマートフォンのTMPlayerでTelegramチャットを開き、動画をグリッドで表示しているところ。",
     "email_hello_tmplayer_org_with": "TMPlayerの機能リクエストをhello@tmplayer.orgにメールで送る",
-    "open_an_issue_in_the": "GitHubのTMPlayerリポジトリでissueを作成"
+    "open_an_issue_in_the": "GitHubのTMPlayerリポジトリでissueを作成",
+    "not_a_media_service_messages": "メディアサービスでもチャットアプリでもありません。メッセージが表示されることはありません。"
   },
   "common": {
     "skip_to_content": "本文へスキップ",
@@ -200,7 +200,9 @@
     "pick_a_chat_pick_b7cf": "チャットを選び、動画を選んで、OKを押します。ダウンロードしながら再生します。",
     "telegram_on_tv_without_5532": "キャストなしでテレビでTelegram",
     "telegram_on_your_tv_bb50": "キャストなしで、テレビでTelegram",
-    "watch_telegram_videos_on_3a48": "スマートフォンのキャストやミラーリングなしで、テレビでTelegramの動画を見られます。テレビ上のプレーヤーがあなたのアカウントにサインインし、チャットの動画をストリーミング再生します。"
+    "watch_telegram_videos_on_3a48": "スマートフォンのキャストやミラーリングなしで、テレビでTelegramの動画を見られます。テレビ上のプレーヤーがあなたのアカウントにサインインし、チャットの動画をストリーミング再生します。",
+    "finds_subtitles_online_through_a322": "OpenSubtitlesでオンラインの字幕を検索し、字幕や音声のタイミングを調整",
+    "groups_series_by_season_709a": "シリーズを専用ページでシーズン別に整理、ポスターとあらすじは任意"
   },
   "features": {
     "tmplayer_features_stream_telegram_videos": "TMPlayerの機能: TVとPCでTelegram動画をストリーミング再生",
@@ -316,7 +318,15 @@
     "the_same_chat_list_on": "テレビで表示した同じチャット一覧。左のナビゲーションレールに、続きから見る、お気に入り、最近、チャンネル、グループ、ユーザー、すべてのチャットが並びます。",
     "tmplayer_settings_on_a_television": "テレビのTMPlayer設定画面。動画サイズの上限、次のエピソードの自動再生、ストレージの空き容量を表示しています。",
     "the_tmplayer_desktop_app_on": "WindowsまたはLinuxのTMPlayerデスクトップアプリ。チャット項目のサイドバーと、デモ動画のグリッドが並び、各ポスターに再生時間、サイズ、解像度が付いています。",
-    "the_tmplayer_desktop_player_over": "デモ動画を再生中のTMPlayerデスクトッププレーヤー。上部にタイトルとチャット、シークバー、そして字幕、音声、速度、画面の形、音量、ミニプレーヤー、全画面のボタンがあります。"
+    "the_tmplayer_desktop_player_over": "デモ動画を再生中のTMPlayerデスクトッププレーヤー。上部にタイトルとチャット、シークバー、そして字幕、音声、速度、画面の形、音量、ミニプレーヤー、全画面のボタンがあります。",
+    "subtitles_found_online": "{strong1}字幕のないファイルでは、プレーヤーからOpenSubtitlesを検索し、字幕や音声を前後にずらせます。",
+    "subtitles_found_online__strong1": "字幕をオンラインで探せます。",
+    "downloads_you_choose": "{strong1}ダウンロードした動画は削除するまで残ります。お好みで、見終わったら消すこともできます。",
+    "downloads_you_choose__strong1": "選んだ動画を保存できます。",
+    "home_and_series_pages": "{strong1}ホームにはすべてのチャットから次に見るものが集まり、シリーズごとに専用のページがあり、エピソードはシーズン別にまとめられます。",
+    "home_and_series_pages__strong1": "番組を整理します。",
+    "posters_and_overviews": "{strong1}動画のタイトルを整えたものだけを使って、TMDB、TVmaze、AniListで検索します。",
+    "posters_and_overviews__strong1": "必要なら、ポスターとあらすじを追加します。"
   },
   "download": {
     "download_tmplayer_for_android_tv": "Android TV、スマートフォン、Windows、Linux向けTMPlayerをダウンロード",
@@ -326,9 +336,6 @@
     "how_to_install_it": "インストール方法",
     "android_phone": "Androidスマートフォン",
     "every_platform_one_release": "すべての環境を、ひとつのリリースで",
-    "every_file_comes_from_one": "すべてのファイルは、ひとつのGitHubリリースから提供されます。Android用ファイルは、プロジェクトの鍵で署名されています。Windows版は、オープンソースプロジェクト向けに{a1}が提供する無料の証明書で署名されています({a2})。",
-    "every_file_comes_from_one__a1": "SignPath Foundation",
-    "every_file_comes_from_one__a2": "コード署名ポリシー",
     "latest_release": "最新リリース",
     "android_8_0_and_above": "Android 8.0以降",
     "your_device": "お使いの端末",
@@ -350,7 +357,6 @@
     "installer__span1": "まずはこちら",
     "adds_a_start_menu_entry": "スタートメニューとデスクトップにショートカットを追加します。管理者権限は不要です。",
     "tmplayer_version_windows_x64_msi": "TMPlayer-<version>-windows-x64.msi",
-    "windows_binaries_are_signed_via": "Windows版のバイナリは、整合性を確認し不正な改ざんを防ぐため、SignPathで署名されています。",
     "how_to_install_on_windows": "Windowsへのインストール方法",
     "x86_64_with_glibc_2": "x86_64、glibc 2.38以降: Ubuntu 24.04、Debian 13、Fedora 39以降",
     "any_distribution": "どのディストリビューションでも",
@@ -381,7 +387,13 @@
     "an_app_from_outside_the": "Telegramにサインインするストア外のアプリには、大きな信頼が求められます。スターは、次の人が判断する助けになります。",
     "download_tmplayer_free_the_apk": "TMPlayerを無料でダウンロード: Android TVとスマートフォン向けのAPK、Windowsのインストーラー、Linux向けのAppImage。",
     "platforms": "対応環境",
-    "add_to_obtainium": "Obtainiumに追加"
+    "add_to_obtainium": "Obtainiumに追加",
+    "every_file_comes_from_one_github": "すべてのファイルは、ひとつのGitHubリリースから提供されます。Android用ファイルは、プロジェクトの鍵で署名されています。Windowsのインストーラーはまだコード署名されていません。オープンソースプロジェクト向けに{a1}が提供する無料の証明書を申請中です({a2})。",
+    "every_file_comes_from_one_github__a1": "SignPath Foundation",
+    "every_file_comes_from_one_github__a2": "コード署名ポリシー",
+    "the_installer_is_not_code_signed": "インストーラーはまだコード署名されていないため、初回はSmartScreenが警告を表示することがあります。{em1}をクリックし、{em2}をクリックしてください。",
+    "the_installer_is_not_code_signed__em1": "詳細情報",
+    "the_installer_is_not_code_signed__em2": "実行"
   },
   "install": {
     "how_to_install_tmplayer_on": "Android TV、Windows、LinuxにTMPlayerをインストールする方法",

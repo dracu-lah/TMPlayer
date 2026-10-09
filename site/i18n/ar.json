@@ -32,7 +32,6 @@
     "a_ten_foot_layout_for": "واجهة مصممة للمشاهدة من بعيد والتحكم بجهاز التحكم عن بُعد، مع تسجيل دخول برمز QR.",
     "made_for_the_television": "مصمم للتلفاز",
     "what_it_is_not": "ما ليس هو",
-    "not_a_media_service_or": "ليس خدمة وسائط ولا تطبيق دردشة. ولا يستطيع قراءة رسائلك.",
     "questions_and_limits": "الأسئلة والقيود",
     "set_up_in_three_steps": "الإعداد في ثلاث خطوات",
     "you_do_it_once_then": "تقوم بذلك مرة واحدة فقط، ثم يعمل مثل أي تطبيق تلفاز آخر.",
@@ -76,7 +75,8 @@
     "tmplayer_on_a_television_showing": "TMPlayer على شاشة تلفاز يعرض فيديوهات إحدى محادثات Telegram في شبكة من المربعات مع مدة كل فيديو وحجم ملفه.",
     "a_phone_opening_a_telegram": "هاتف يفتح محادثة Telegram في TMPlayer ويعرض فيديوهاتها في شبكة.",
     "email_hello_tmplayer_org_with": "راسل hello@tmplayer.org بطلب ميزة جديدة في TMPlayer",
-    "open_an_issue_in_the": "افتح بلاغًا في مستودع TMPlayer على GitHub"
+    "open_an_issue_in_the": "افتح بلاغًا في مستودع TMPlayer على GitHub",
+    "not_a_media_service_messages": "ليس خدمة وسائط ولا تطبيق دردشة. ولا تظهر رسائلك فيه أبدًا."
   },
   "common": {
     "skip_to_content": "تخطَّ إلى المحتوى",
@@ -200,7 +200,9 @@
     "pick_a_chat_pick_b7cf": "اختر محادثة، ثم فيديو، واضغط OK. يبدأ التشغيل أثناء التنزيل.",
     "telegram_on_tv_without_5532": "Telegram على التلفاز دون بث من الهاتف",
     "telegram_on_your_tv_bb50": "Telegram على تلفازك دون بث من الهاتف",
-    "watch_telegram_videos_on_3a48": "شاهد فيديوهات Telegram على التلفاز دون بث شاشة هاتفك أو عكسها: مشغّل على التلفاز نفسه يسجّل الدخول إلى حسابك ويبث الفيديوهات الموجودة في محادثاتك."
+    "watch_telegram_videos_on_3a48": "شاهد فيديوهات Telegram على التلفاز دون بث شاشة هاتفك أو عكسها: مشغّل على التلفاز نفسه يسجّل الدخول إلى حسابك ويبث الفيديوهات الموجودة في محادثاتك.",
+    "finds_subtitles_online_through_a322": "العثور على الترجمات عبر الإنترنت من خلال OpenSubtitles، وتقديم الترجمة أو الصوت أو تأخيره لمطابقتهما",
+    "groups_series_by_season_709a": "تجميع المسلسلات حسب الموسم في صفحة خاصة بكل منها، مع ملصقات وملخّصات اختيارية"
   },
   "features": {
     "tmplayer_features_stream_telegram_videos": "ميزات TMPlayer: بث فيديوهات Telegram على التلفاز والكمبيوتر",
@@ -316,7 +318,15 @@
     "the_same_chat_list_on": "قائمة المحادثات نفسها على التلفاز، مع شريط تنقل على اليسار يضم المتابعة والمفضّلة والأخيرة والقنوات والمجموعات والأشخاص وكل المحادثات.",
     "tmplayer_settings_on_a_television": "إعدادات TMPlayer على التلفاز، تعرض حدود حجم الفيديو، وتشغيل الحلقة التالية تلقائيًا، والمساحة المتاحة في التخزين.",
     "the_tmplayer_desktop_app_on": "تطبيق TMPlayer لسطح المكتب على Windows أو Linux: شريط جانبي لأقسام المحادثات بجانب شبكة من الفيديوهات التجريبية، يحمل كل ملصق مدته وحجمه ودقته.",
-    "the_tmplayer_desktop_player_over": "مشغّل TMPlayer لسطح المكتب فوق فيديو تجريبي: العنوان والمحادثة في الأعلى، وشريط زمني، وأزرار للترجمة والصوت والسرعة وشكل الصورة ومستوى الصوت والمشغّل المصغّر وملء الشاشة."
+    "the_tmplayer_desktop_player_over": "مشغّل TMPlayer لسطح المكتب فوق فيديو تجريبي: العنوان والمحادثة في الأعلى، وشريط زمني، وأزرار للترجمة والصوت والسرعة وشكل الصورة ومستوى الصوت والمشغّل المصغّر وملء الشاشة.",
+    "subtitles_found_online": "{strong1} إذا لم يكن للملف ترجمة، فابحث في OpenSubtitles من داخل المشغّل، ثم قدّم الترجمة أو الصوت أو أخّره.",
+    "subtitles_found_online__strong1": "يجد الترجمات عبر الإنترنت.",
+    "downloads_you_choose": "{strong1} يبقى الفيديو الذي تنزّله حتى تحذفه، أو يُحذف بعد مشاهدته إن فضّلت ذلك.",
+    "downloads_you_choose__strong1": "يحفظ ما تختاره.",
+    "home_and_series_pages": "{strong1} تجمع الصفحة الرئيسية ما ستشاهده تاليًا من كل المحادثات، ولكل مسلسل صفحته الخاصة، مع الحلقات مرتّبة حسب الموسم.",
+    "home_and_series_pages__strong1": "يرتّب المسلسلات.",
+    "posters_and_overviews": "{strong1} يُبحث عنها في TMDB وTVmaze وAniList بعنوان الفيديو بعد تنظيفه، ولا شيء غيره.",
+    "posters_and_overviews__strong1": "يضيف الملصقات والملخّصات، إن أردتها."
   },
   "download": {
     "download_tmplayer_for_android_tv": "نزّل TMPlayer لأجهزة Android TV والهواتف وWindows وLinux",
@@ -326,9 +336,6 @@
     "how_to_install_it": "طريقة تثبيته",
     "android_phone": "هاتف Android",
     "every_platform_one_release": "كل المنصات في إصدار واحد",
-    "every_file_comes_from_one": "كل ملف يأتي من إصدار واحد على GitHub. ملفات Android موقّعة بمفتاح المشروع. وإصدارات Windows موقّعة بشهادة مجانية تقدّمها {a1} للمشاريع مفتوحة المصدر ({a2}).",
-    "every_file_comes_from_one__a1": "SignPath Foundation",
-    "every_file_comes_from_one__a2": "سياسة توقيع الشيفرة",
     "latest_release": "أحدث إصدار",
     "android_8_0_and_above": "Android 8.0 فما فوق",
     "your_device": "جهازك",
@@ -350,7 +357,6 @@
     "installer__span1": "ابدأ من هنا",
     "adds_a_start_menu_entry": "يضيف عنصرًا في قائمة ابدأ واختصارًا على سطح المكتب. ولا يحتاج إلى صلاحيات المسؤول.",
     "tmplayer_version_windows_x64_msi": "TMPlayer-<version>-windows-x64.msi",
-    "windows_binaries_are_signed_via": "ملفات Windows التنفيذية موقّعة عبر SignPath للتحقق من سلامتها ومنع أي تعديل غير مصرّح به.",
     "how_to_install_on_windows": "طريقة التثبيت على Windows",
     "x86_64_with_glibc_2": "x86_64، مع glibc 2.38 أو أحدث: Ubuntu 24.04 وDebian 13 وFedora 39 وما بعدها",
     "any_distribution": "أي توزيعة",
@@ -381,7 +387,13 @@
     "an_app_from_outside_the": "تطبيق من خارج المتجر يسجّل الدخول إلى Telegram يتطلب ثقة كبيرة. والنجمة تساعد الشخص التالي على اتخاذ قراره.",
     "download_tmplayer_free_the_apk": "نزّل TMPlayer مجانًا: ملف APK لأجهزة Android TV والهواتف، ومثبّت لنظام Windows، وملف AppImage لنظام Linux.",
     "platforms": "المنصات",
-    "add_to_obtainium": "أضفه إلى Obtainium"
+    "add_to_obtainium": "أضفه إلى Obtainium",
+    "every_file_comes_from_one_github": "كل ملف يأتي من إصدار واحد على GitHub. ملفات Android موقّعة بمفتاح المشروع. أما مثبّت Windows فليس موقّعًا رقميًا بعد: فقد تقدّم المشروع بطلب إلى {a1} للحصول على شهادة مجانية مخصّصة للمشاريع مفتوحة المصدر ({a2}).",
+    "every_file_comes_from_one_github__a1": "SignPath Foundation",
+    "every_file_comes_from_one_github__a2": "سياسة توقيع الشيفرة",
+    "the_installer_is_not_code_signed": "المثبّت ليس موقّعًا رقميًا بعد، لذا قد يحذّرك SmartScreen في المرة الأولى. انقر على {em1}، ثم {em2}.",
+    "the_installer_is_not_code_signed__em1": "More info",
+    "the_installer_is_not_code_signed__em2": "Run anyway"
   },
   "install": {
     "how_to_install_tmplayer_on": "كيفية تثبيت TMPlayer على Android TV وWindows وLinux",

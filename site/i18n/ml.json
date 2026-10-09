@@ -32,7 +32,6 @@
     "a_ten_foot_layout_for": "റിമോട്ടിനായുള്ള ടെൻ-ഫൂട്ട് ലേഔട്ട്, QR കോഡ് സൈൻ ഇന്നോടെ.",
     "made_for_the_television": "ടെലിവിഷനു വേണ്ടി നിർമ്മിച്ചത്",
     "what_it_is_not": "ഇത് എന്തല്ല",
-    "not_a_media_service_or": "ഇത് ഒരു മീഡിയ സേവനമോ ചാറ്റ് ആപ്പോ അല്ല. നിങ്ങളുടെ സന്ദേശങ്ങൾ ഇതിന് വായിക്കാൻ കഴിയില്ല.",
     "questions_and_limits": "ചോദ്യങ്ങളും പരിമിതികളും",
     "set_up_in_three_steps": "മൂന്ന് ഘട്ടങ്ങളിൽ സജ്ജമാക്കാം",
     "you_do_it_once_then": "ഒരിക്കൽ ചെയ്താൽ മതി. പിന്നെ മറ്റേതു ടിവി ആപ്പും പോലെ പ്രവർത്തിക്കും.",
@@ -76,7 +75,8 @@
     "tmplayer_on_a_television_showing": "ടെലിവിഷനിൽ TMPlayer, ഒരു Telegram ചാറ്റിലെ വീഡിയോകൾ ദൈർഘ്യവും ഫയൽ വലുപ്പവുമുള്ള ടൈലുകളുടെ ഗ്രിഡായി കാണിക്കുന്നു.",
     "a_phone_opening_a_telegram": "ഒരു ഫോൺ TMPlayer-ൽ ഒരു Telegram ചാറ്റ് തുറന്ന് അതിലെ വീഡിയോകൾ ഗ്രിഡായി കാണിക്കുന്നു.",
     "email_hello_tmplayer_org_with": "ഒരു TMPlayer ഫീച്ചർ അഭ്യർത്ഥനയുമായി hello@tmplayer.org-ലേക്ക് ഇമെയിൽ അയയ്ക്കുക",
-    "open_an_issue_in_the": "GitHub-ലെ TMPlayer റിപ്പോസിറ്ററിയിൽ ഒരു ഇഷ്യു തുറക്കുക"
+    "open_an_issue_in_the": "GitHub-ലെ TMPlayer റിപ്പോസിറ്ററിയിൽ ഒരു ഇഷ്യു തുറക്കുക",
+    "not_a_media_service_messages": "ഇത് ഒരു മീഡിയ സേവനമോ ചാറ്റ് ആപ്പോ അല്ല. നിങ്ങളുടെ സന്ദേശങ്ങൾ ഇതിൽ ഒരിക്കലും കാണില്ല."
   },
   "common": {
     "skip_to_content": "ഉള്ളടക്കത്തിലേക്ക് പോകുക",
@@ -200,7 +200,9 @@
     "pick_a_chat_pick_b7cf": "ഒരു ചാറ്റും ഒരു വീഡിയോയും തിരഞ്ഞെടുത്ത് OK അമർത്തുക. ഡൗൺലോഡ് ചെയ്യുന്നതിനൊപ്പം പ്ലേ ആകും.",
     "telegram_on_tv_without_5532": "കാസ്റ്റിങ് ഇല്ലാതെ ടിവിയിൽ Telegram",
     "telegram_on_your_tv_bb50": "കാസ്റ്റിങ് ഇല്ലാതെ നിങ്ങളുടെ ടിവിയിൽ Telegram",
-    "watch_telegram_videos_on_3a48": "ഫോൺ കാസ്റ്റ് ചെയ്യുകയോ മിറർ ചെയ്യുകയോ ചെയ്യാതെ ടെലിവിഷനിൽ Telegram വീഡിയോകൾ കാണുക: ടിവിയിലെ തന്നെ ഒരു പ്ലേയർ നിങ്ങളുടെ അക്കൗണ്ടിൽ സൈൻ ഇൻ ചെയ്ത് ചാറ്റുകളിലെ വീഡിയോകൾ സ്ട്രീം ചെയ്യുന്നു."
+    "watch_telegram_videos_on_3a48": "ഫോൺ കാസ്റ്റ് ചെയ്യുകയോ മിറർ ചെയ്യുകയോ ചെയ്യാതെ ടെലിവിഷനിൽ Telegram വീഡിയോകൾ കാണുക: ടിവിയിലെ തന്നെ ഒരു പ്ലേയർ നിങ്ങളുടെ അക്കൗണ്ടിൽ സൈൻ ഇൻ ചെയ്ത് ചാറ്റുകളിലെ വീഡിയോകൾ സ്ട്രീം ചെയ്യുന്നു.",
+    "finds_subtitles_online_through_a322": "OpenSubtitles വഴി സബ്ടൈറ്റിലുകൾ ഓൺലൈനിൽ കണ്ടെത്തുന്നു, സബ്ടൈറ്റിലുകളോ ഓഡിയോയോ ഒത്തുപോകാൻ നീക്കുന്നു",
+    "groups_series_by_season_709a": "സീരീസുകൾ സ്വന്തം പേജിൽ സീസൺ തിരിച്ച്, ഓപ്ഷണൽ പോസ്റ്ററുകളും സംഗ്രഹങ്ങളും സഹിതം"
   },
   "features": {
     "tmplayer_features_stream_telegram_videos": "TMPlayer ഫീച്ചറുകൾ: ടിവിയിലും PC-യിലും Telegram വീഡിയോകൾ സ്ട്രീം ചെയ്യുക",
@@ -316,7 +318,15 @@
     "the_same_chat_list_on": "ടെലിവിഷനിൽ അതേ ചാറ്റ് പട്ടിക, ഇടതുവശത്ത് Continue, പ്രിയപ്പെട്ടവ, സമീപകാലം, ചാനലുകൾ, ഗ്രൂപ്പുകൾ, ആളുകൾ, എല്ലാ ചാറ്റുകളും എന്നിവയ്ക്കുള്ള നാവിഗേഷൻ റെയിൽ.",
     "tmplayer_settings_on_a_television": "ടെലിവിഷനിൽ TMPlayer ക്രമീകരണങ്ങൾ, വീഡിയോ വലുപ്പ പരിധികൾ, അടുത്ത എപ്പിസോഡ് ഓട്ടോപ്ലേ, എത്ര സ്റ്റോറേജ് ബാക്കിയുണ്ടെന്ന് എന്നിവ കാണിക്കുന്നു.",
     "the_tmplayer_desktop_app_on": "Windows-ലോ Linux-ലോ TMPlayer ഡെസ്ക്ടോപ്പ് ആപ്പ്: ചാറ്റ് വിഭാഗങ്ങളുടെ സൈഡ്ബാറും അതിനടുത്ത് ഡെമോ വീഡിയോകളുടെ ഗ്രിഡും, ഓരോ പോസ്റ്ററിലും ദൈർഘ്യവും വലുപ്പവും റെസല്യൂഷനും.",
-    "the_tmplayer_desktop_player_over": "ഒരു ഡെമോ വീഡിയോയ്ക്കു മുകളിൽ TMPlayer ഡെസ്ക്ടോപ്പ് പ്ലേയർ: മുകളിൽ ശീർഷകവും ചാറ്റും, ഒരു ടൈം ബാർ, സബ്ടൈറ്റിലുകൾ, ഓഡിയോ, വേഗത, ചിത്രത്തിന്റെ ആകൃതി, വോളിയം, മിനി പ്ലേയർ, ഫുൾസ്ക്രീൻ എന്നിവയ്ക്കുള്ള ബട്ടണുകൾ."
+    "the_tmplayer_desktop_player_over": "ഒരു ഡെമോ വീഡിയോയ്ക്കു മുകളിൽ TMPlayer ഡെസ്ക്ടോപ്പ് പ്ലേയർ: മുകളിൽ ശീർഷകവും ചാറ്റും, ഒരു ടൈം ബാർ, സബ്ടൈറ്റിലുകൾ, ഓഡിയോ, വേഗത, ചിത്രത്തിന്റെ ആകൃതി, വോളിയം, മിനി പ്ലേയർ, ഫുൾസ്ക്രീൻ എന്നിവയ്ക്കുള്ള ബട്ടണുകൾ.",
+    "subtitles_found_online": "{strong1} ഒരു ഫയലിൽ സബ്ടൈറ്റിലുകൾ ഇല്ലെങ്കിൽ, പ്ലേയറിൽ നിന്ന് തന്നെ OpenSubtitles-ൽ തിരയുക, പിന്നെ സബ്ടൈറ്റിലുകളോ ശബ്ദമോ മുന്നോട്ടോ പിന്നോട്ടോ നീക്കുക.",
+    "subtitles_found_online__strong1": "സബ്ടൈറ്റിലുകൾ ഓൺലൈനിൽ കണ്ടെത്തുന്നു.",
+    "downloads_you_choose": "{strong1} ഡൗൺലോഡ് ചെയ്ത വീഡിയോ നിങ്ങൾ നീക്കം ചെയ്യുന്നതുവരെ നിലനിൽക്കും, അല്ലെങ്കിൽ വേണമെങ്കിൽ കണ്ടുകഴിഞ്ഞാൽ പോകും.",
+    "downloads_you_choose__strong1": "നിങ്ങൾ തിരഞ്ഞെടുക്കുന്നവ സൂക്ഷിക്കുന്നു.",
+    "home_and_series_pages": "{strong1} എല്ലാ ചാറ്റുകളിൽ നിന്നും അടുത്തതായി കാണേണ്ടവ ഹോം ഒരുമിച്ച് കാണിക്കുന്നു, ഓരോ സീരീസിനും സ്വന്തം പേജുണ്ട്, എപ്പിസോഡുകൾ സീസൺ തിരിച്ച്.",
+    "home_and_series_pages__strong1": "ഷോകൾ ക്രമത്തിലാക്കുന്നു.",
+    "posters_and_overviews": "{strong1} വീഡിയോയുടെ വൃത്തിയാക്കിയ തലക്കെട്ട് മാത്രം ഉപയോഗിച്ച് TMDB, TVmaze, AniList എന്നിവയിൽ തിരയുന്നു, മറ്റൊന്നുമില്ല.",
+    "posters_and_overviews__strong1": "വേണമെങ്കിൽ പോസ്റ്ററുകളും സംഗ്രഹങ്ങളും ചേർക്കുന്നു."
   },
   "download": {
     "download_tmplayer_for_android_tv": "Android TV, ഫോൺ, Windows, Linux എന്നിവയ്ക്കായി TMPlayer ഡൗൺലോഡ് ചെയ്യുക",
@@ -326,9 +336,6 @@
     "how_to_install_it": "ഇത് ഇൻസ്റ്റാൾ ചെയ്യുന്ന വിധം",
     "android_phone": "Android ഫോൺ",
     "every_platform_one_release": "എല്ലാ പ്ലാറ്റ്ഫോമിനും, ഒരു റിലീസ്",
-    "every_file_comes_from_one": "ഓരോ ഫയലും ഒരു GitHub റിലീസിൽ നിന്നാണ് വരുന്നത്. Android ഫയലുകൾ പ്രോജക്റ്റിന്റെ കീ ഉപയോഗിച്ച് സൈൻ ചെയ്തവയാണ്. Windows ബിൽഡുകൾ ഓപ്പൺ സോഴ്സ് പ്രോജക്റ്റുകൾക്കായി {a1} നൽകുന്ന സൗജന്യ സർട്ടിഫിക്കറ്റ് ഉപയോഗിച്ച് സൈൻ ചെയ്തിരിക്കുന്നു ({a2}).",
-    "every_file_comes_from_one__a1": "SignPath Foundation",
-    "every_file_comes_from_one__a2": "Code Signing Policy",
     "latest_release": "ഏറ്റവും പുതിയ റിലീസ്",
     "android_8_0_and_above": "Android 8.0-ഉം അതിനു മുകളിലും",
     "your_device": "നിങ്ങളുടെ ഉപകരണം",
@@ -350,7 +357,6 @@
     "installer__span1": "ഇവിടെ തുടങ്ങുക",
     "adds_a_start_menu_entry": "ഒരു Start മെനു എൻട്രിയും ഡെസ്ക്ടോപ്പ് ഷോർട്ട്കട്ടും ചേർക്കുന്നു. അഡ്മിനിസ്ട്രേറ്റർ ആവശ്യമില്ല.",
     "tmplayer_version_windows_x64_msi": "TMPlayer-<version>-windows-x64.msi",
-    "windows_binaries_are_signed_via": "Windows ബൈനറികൾ അവയുടെ സമഗ്രത ഉറപ്പാക്കാനും അനധികൃത മാറ്റങ്ങൾ തടയാനും SignPath വഴി സൈൻ ചെയ്തിരിക്കുന്നു.",
     "how_to_install_on_windows": "Windows-ൽ ഇൻസ്റ്റാൾ ചെയ്യുന്ന വിധം",
     "x86_64_with_glibc_2": "x86_64, glibc 2.38 അല്ലെങ്കിൽ പുതിയതിനൊപ്പം: Ubuntu 24.04, Debian 13, Fedora 39, അതിനു ശേഷമുള്ളവ",
     "any_distribution": "ഏത് ഡിസ്ട്രിബ്യൂഷനും",
@@ -381,7 +387,13 @@
     "an_app_from_outside_the": "Telegram-ൽ സൈൻ ഇൻ ചെയ്യുന്ന, സ്റ്റോറിനു പുറത്തുള്ള ഒരു ആപ്പ് ഏറെ വിശ്വാസം ആവശ്യപ്പെടുന്നു. ഒരു സ്റ്റാർ അടുത്തയാൾക്ക് തീരുമാനിക്കാൻ സഹായിക്കും.",
     "download_tmplayer_free_the_apk": "TMPlayer സൗജന്യമായി ഡൗൺലോഡ് ചെയ്യുക: Android TV, ഫോൺ എന്നിവയ്ക്കുള്ള APK, Windows ഇൻസ്റ്റാളർ, Linux-നുള്ള AppImage.",
     "platforms": "പ്ലാറ്റ്ഫോമുകൾ",
-    "add_to_obtainium": "Obtainium-ലേക്ക് ചേർക്കുക"
+    "add_to_obtainium": "Obtainium-ലേക്ക് ചേർക്കുക",
+    "every_file_comes_from_one_github": "ഓരോ ഫയലും ഒരു GitHub റിലീസിൽ നിന്നാണ് വരുന്നത്. Android ഫയലുകൾ പ്രോജക്റ്റിന്റെ കീ ഉപയോഗിച്ച് സൈൻ ചെയ്തവയാണ്. Windows ഇൻസ്റ്റാളർ ഇതുവരെ കോഡ് സൈൻ ചെയ്തിട്ടില്ല: ഓപ്പൺ സോഴ്സ് പ്രോജക്റ്റുകൾക്കുള്ള സൗജന്യ സർട്ടിഫിക്കറ്റിനായി പ്രോജക്റ്റ് {a1}-ൽ അപേക്ഷിച്ചിട്ടുണ്ട് ({a2}).",
+    "every_file_comes_from_one_github__a1": "SignPath Foundation",
+    "every_file_comes_from_one_github__a2": "Code Signing Policy",
+    "the_installer_is_not_code_signed": "ഇൻസ്റ്റാളർ ഇതുവരെ കോഡ് സൈൻ ചെയ്തിട്ടില്ല, അതിനാൽ ആദ്യതവണ SmartScreen മുന്നറിയിപ്പ് നൽകിയേക്കാം. {em1} ക്ലിക്ക് ചെയ്ത്, പിന്നെ {em2}.",
+    "the_installer_is_not_code_signed__em1": "More info",
+    "the_installer_is_not_code_signed__em2": "Run anyway"
   },
   "install": {
     "how_to_install_tmplayer_on": "Android TV, Windows, Linux എന്നിവയിൽ TMPlayer ഇൻസ്റ്റാൾ ചെയ്യുന്ന വിധം",

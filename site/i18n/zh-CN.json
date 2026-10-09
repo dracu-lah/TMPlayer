@@ -32,7 +32,6 @@
     "a_ten_foot_layout_for": "专为遥控器设计的大屏界面，支持二维码登录。",
     "made_for_the_television": "为电视而生",
     "what_it_is_not": "它不是什么",
-    "not_a_media_service_or": "不是媒体服务，也不是聊天应用，无法读取你的消息。",
     "questions_and_limits": "常见问题与限制",
     "set_up_in_three_steps": "三步完成设置",
     "you_do_it_once_then": "只需设置一次，之后就像其他电视应用一样使用。",
@@ -76,7 +75,8 @@
     "tmplayer_on_a_television_showing": "TMPlayer 在电视上以网格方块显示 Telegram 聊天中的视频，并标有时长和文件大小。",
     "a_phone_opening_a_telegram": "手机上在 TMPlayer 中打开 Telegram 聊天，以网格显示其中的视频。",
     "email_hello_tmplayer_org_with": "发邮件到 hello@tmplayer.org，提出 TMPlayer 功能建议",
-    "open_an_issue_in_the": "在 GitHub 上的 TMPlayer 仓库中提交 Issue"
+    "open_an_issue_in_the": "在 GitHub 上的 TMPlayer 仓库中提交 Issue",
+    "not_a_media_service_messages": "不是媒体服务，也不是聊天应用。你的消息永远不会出现在其中。"
   },
   "common": {
     "skip_to_content": "跳到正文",
@@ -200,7 +200,9 @@
     "pick_a_chat_pick_b7cf": "选一个聊天，选一个视频，按确定。边下载边播放。",
     "telegram_on_tv_without_5532": "无需投屏的电视版 Telegram",
     "telegram_on_your_tv_bb50": "无需投屏的电视版 Telegram",
-    "watch_telegram_videos_on_3a48": "无需投屏或镜像手机，就能在电视上观看 Telegram 视频：电视上的播放器直接登录你的账号，串流你聊天中的视频。"
+    "watch_telegram_videos_on_3a48": "无需投屏或镜像手机，就能在电视上观看 Telegram 视频：电视上的播放器直接登录你的账号，串流你聊天中的视频。",
+    "finds_subtitles_online_through_a322": "通过 OpenSubtitles 在线查找字幕，并调整字幕或音频的时间使其同步",
+    "groups_series_by_season_709a": "剧集按季分组并拥有独立页面，可选显示海报和简介"
   },
   "features": {
     "tmplayer_features_stream_telegram_videos": "TMPlayer 功能：在电视和电脑上串流 Telegram 视频",
@@ -316,7 +318,15 @@
     "the_same_chat_list_on": "电视上同样的聊天列表，左侧是导航栏，包含继续观看、收藏、最近、频道、群组、联系人和所有聊天。",
     "tmplayer_settings_on_a_television": "电视上的 TMPlayer 设置，显示视频大小限制、自动播放下一集以及剩余存储空间。",
     "the_tmplayer_desktop_app_on": "Windows 或 Linux 上的 TMPlayer 桌面应用：聊天分区的侧边栏，旁边是演示视频网格，每张海报都标有时长、大小和分辨率。",
-    "the_tmplayer_desktop_player_over": "TMPlayer 桌面播放器播放演示视频：顶部是标题和聊天，下方是进度条，以及字幕、音轨、速度、画面比例、音量、迷你播放器和全屏按钮。"
+    "the_tmplayer_desktop_player_over": "TMPlayer 桌面播放器播放演示视频：顶部是标题和聊天，下方是进度条，以及字幕、音轨、速度、画面比例、音量、迷你播放器和全屏按钮。",
+    "subtitles_found_online": "{strong1} 文件没有字幕时，可在播放器里搜索 OpenSubtitles，再把字幕或声音调早或调晚。",
+    "subtitles_found_online__strong1": "在线查找字幕。",
+    "downloads_you_choose": "{strong1} 下载的视频会一直保留到你删除为止，也可以设为看完即删。",
+    "downloads_you_choose__strong1": "保存你选中的视频。",
+    "home_and_series_pages": "{strong1} 首页汇集所有聊天中接下来要看的内容，每部剧集都有自己的页面，剧集按季分组。",
+    "home_and_series_pages__strong1": "把剧集整理有序。",
+    "posters_and_overviews": "{strong1} 仅凭视频整理后的标题在 TMDB、TVmaze 和 AniList 上查询，不涉及其他任何信息。",
+    "posters_and_overviews__strong1": "添加海报和简介，按需开启。"
   },
   "download": {
     "download_tmplayer_for_android_tv": "下载适用于 Android TV、手机、Windows 和 Linux 的 TMPlayer",
@@ -326,9 +336,6 @@
     "how_to_install_it": "安装方法",
     "android_phone": "Android 手机",
     "every_platform_one_release": "所有平台，同一个版本",
-    "every_file_comes_from_one": "所有文件都来自同一个 GitHub 版本。Android 文件使用项目密钥签名。Windows 版本使用 {a1} 为开源项目提供的免费证书签名（{a2}）。",
-    "every_file_comes_from_one__a1": "SignPath Foundation",
-    "every_file_comes_from_one__a2": "代码签名政策",
     "latest_release": "最新版本",
     "android_8_0_and_above": "Android 8.0 及以上",
     "your_device": "你的设备",
@@ -350,7 +357,6 @@
     "installer__span1": "从这里开始",
     "adds_a_start_menu_entry": "添加“开始”菜单项和桌面快捷方式。无需管理员权限。",
     "tmplayer_version_windows_x64_msi": "TMPlayer-<version>-windows-x64.msi",
-    "windows_binaries_are_signed_via": "Windows 版本通过 SignPath 签名，以验证其完整性并防止未经授权的修改。",
     "how_to_install_on_windows": "如何在 Windows 上安装",
     "x86_64_with_glibc_2": "x86_64，glibc 2.38 或更高：Ubuntu 24.04、Debian 13、Fedora 39 及更新版本",
     "any_distribution": "任何发行版",
@@ -381,7 +387,13 @@
     "an_app_from_outside_the": "一个来自商店之外、还要登录 Telegram 的应用，需要你给予很多信任。点个星能帮助下一个人做决定。",
     "download_tmplayer_free_the_apk": "免费下载 TMPlayer：适用于 Android TV 和手机的 APK、Windows 安装程序，以及 Linux 的 AppImage。",
     "platforms": "平台",
-    "add_to_obtainium": "添加到 Obtainium"
+    "add_to_obtainium": "添加到 Obtainium",
+    "every_file_comes_from_one_github": "所有文件都来自同一个 GitHub 版本。Android 文件使用项目密钥签名。Windows 安装程序目前还没有代码签名：项目已向 {a1} 申请为开源项目提供的免费证书（{a2}）。",
+    "every_file_comes_from_one_github__a1": "SignPath Foundation",
+    "every_file_comes_from_one_github__a2": "代码签名政策",
+    "the_installer_is_not_code_signed": "安装程序目前还没有代码签名，所以第一次运行时 SmartScreen 可能会发出警告。点击 {em1}，然后点击 {em2}。",
+    "the_installer_is_not_code_signed__em1": "更多信息",
+    "the_installer_is_not_code_signed__em2": "仍要运行"
   },
   "install": {
     "how_to_install_tmplayer_on": "如何在 Android TV、Windows 和 Linux 上安装 TMPlayer",

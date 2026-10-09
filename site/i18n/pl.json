@@ -32,7 +32,6 @@
     "a_ten_foot_layout_for": "Interfejs na odległość dla pilota, z logowaniem kodem QR.",
     "made_for_the_television": "Stworzony dla telewizora",
     "what_it_is_not": "Czym nie jest",
-    "not_a_media_service_or": "Nie jest serwisem z filmami ani komunikatorem. Nie może czytać twoich wiadomości.",
     "questions_and_limits": "Pytania i ograniczenia",
     "set_up_in_three_steps": "Konfiguracja w trzech krokach",
     "you_do_it_once_then": "Robisz to raz. Potem działa jak każda inna aplikacja na telewizor.",
@@ -76,7 +75,8 @@
     "tmplayer_on_a_television_showing": "TMPlayer na telewizorze, z wideo z czatu w Telegramie w formie siatki kafelków z czasem trwania i rozmiarem plików.",
     "a_phone_opening_a_telegram": "Telefon z otwartym czatem z Telegrama w TMPlayerze, wideo pokazane w formie siatki.",
     "email_hello_tmplayer_org_with": "Napisz na hello@tmplayer.org z propozycją funkcji dla TMPlayera",
-    "open_an_issue_in_the": "Otwórz zgłoszenie w repozytorium TMPlayera na GitHubie"
+    "open_an_issue_in_the": "Otwórz zgłoszenie w repozytorium TMPlayera na GitHubie",
+    "not_a_media_service_messages": "Nie jest serwisem z filmami ani komunikatorem. Twoje wiadomości nigdy się w nim nie pojawiają."
   },
   "common": {
     "skip_to_content": "Przejdź do treści",
@@ -200,7 +200,9 @@
     "pick_a_chat_pick_b7cf": "Wybierz czat, wybierz wideo i naciśnij OK. Odtwarza się w trakcie pobierania.",
     "telegram_on_tv_without_5532": "Telegram na telewizorze bez przesyłania obrazu",
     "telegram_on_your_tv_bb50": "Telegram na telewizorze bez przesyłania obrazu",
-    "watch_telegram_videos_on_3a48": "Oglądaj wideo z Telegrama na telewizorze bez przesyłania ani duplikowania ekranu telefonu: odtwarzacz na samym telewizorze loguje się na twoje konto i odtwarza wideo z twoich czatów."
+    "watch_telegram_videos_on_3a48": "Oglądaj wideo z Telegrama na telewizorze bez przesyłania ani duplikowania ekranu telefonu: odtwarzacz na samym telewizorze loguje się na twoje konto i odtwarza wideo z twoich czatów.",
+    "finds_subtitles_online_through_a322": "Wyszukuje napisy w sieci przez OpenSubtitles i przesuwa napisy lub dźwięk, by pasowały",
+    "groups_series_by_season_709a": "Grupuje seriale według sezonów na osobnej stronie, z opcjonalnymi plakatami i opisami"
   },
   "features": {
     "tmplayer_features_stream_telegram_videos": "Funkcje TMPlayera: wideo z Telegrama na telewizorze i komputerze",
@@ -316,7 +318,15 @@
     "the_same_chat_list_on": "Ta sama lista czatów na telewizorze, z paskiem nawigacji po lewej: Kontynuuj, Ulubione, Ostatnie, Kanały, Grupy, Osoby i Wszystkie czaty.",
     "tmplayer_settings_on_a_television": "Ustawienia TMPlayera na telewizorze, z limitami rozmiaru wideo, automatycznym odtwarzaniem następnego odcinka i ilością wolnego miejsca.",
     "the_tmplayer_desktop_app_on": "Aplikacja TMPlayer na Windows lub Linuxie: panel boczny z sekcjami czatów obok siatki przykładowych wideo, każdy plakat z czasem trwania, rozmiarem i rozdzielczością.",
-    "the_tmplayer_desktop_player_over": "Odtwarzacz TMPlayer na komputerze nad przykładowym wideo: tytuł i czat u góry, pasek czasu oraz przyciski napisów, dźwięku, prędkości, kształtu obrazu, głośności, mini odtwarzacza i pełnego ekranu."
+    "the_tmplayer_desktop_player_over": "Odtwarzacz TMPlayer na komputerze nad przykładowym wideo: tytuł i czat u góry, pasek czasu oraz przyciski napisów, dźwięku, prędkości, kształtu obrazu, głośności, mini odtwarzacza i pełnego ekranu.",
+    "subtitles_found_online": "{strong1} Gdy plik ich nie ma, wyszukaj je w OpenSubtitles prosto z odtwarzacza, a potem przesuń napisy lub dźwięk wcześniej albo później.",
+    "subtitles_found_online__strong1": "Znajduje napisy w sieci.",
+    "downloads_you_choose": "{strong1} Pobrane wideo zostaje, dopóki go nie usuniesz, albo znika po obejrzeniu, jeśli wolisz.",
+    "downloads_you_choose__strong1": "Zapisuje te, które wybierzesz.",
+    "home_and_series_pages": "{strong1} Ekran główny zbiera to, co obejrzeć dalej, ze wszystkich czatów, a każdy serial ma własną stronę z odcinkami pogrupowanymi według sezonów.",
+    "home_and_series_pages__strong1": "Porządkuje seriale.",
+    "posters_and_overviews": "{strong1} Wyszukiwane w TMDB, TVmaze i AniList tylko po oczyszczonym tytule wideo, niczym więcej.",
+    "posters_and_overviews__strong1": "Dodaje plakaty i opisy, jeśli chcesz."
   },
   "download": {
     "download_tmplayer_for_android_tv": "Pobierz TMPlayera na Android TV, telefony, Windows i Linuxa",
@@ -326,9 +336,6 @@
     "how_to_install_it": "Jak zainstalować",
     "android_phone": "Telefon z Androidem",
     "every_platform_one_release": "Każda platforma, jedno wydanie",
-    "every_file_comes_from_one": "Każdy plik pochodzi z jednego wydania na GitHubie. Pliki na Androida są podpisane kluczem projektu. Wersje na Windows są podpisane darmowym certyfikatem od {a1} dla projektów open source ({a2}).",
-    "every_file_comes_from_one__a1": "SignPath Foundation",
-    "every_file_comes_from_one__a2": "Polityka podpisywania kodu",
     "latest_release": "Najnowsze wydanie",
     "android_8_0_and_above": "Android 8.0 i nowszy",
     "your_device": "Twoje urządzenie",
@@ -350,7 +357,6 @@
     "installer__span1": "Zacznij tutaj",
     "adds_a_start_menu_entry": "Dodaje wpis w menu Start i skrót na pulpicie. Nie wymaga uprawnień administratora.",
     "tmplayer_version_windows_x64_msi": "TMPlayer-<version>-windows-x64.msi",
-    "windows_binaries_are_signed_via": "Pliki dla Windows są podpisane przez SignPath, aby potwierdzić ich integralność i zapobiec nieautoryzowanym zmianom.",
     "how_to_install_on_windows": "Jak zainstalować na Windows",
     "x86_64_with_glibc_2": "x86_64, z glibc 2.38 lub nowszą: Ubuntu 24.04, Debian 13, Fedora 39 i nowsze",
     "any_distribution": "Dowolna dystrybucja",
@@ -381,7 +387,13 @@
     "an_app_from_outside_the": "Aplikacja spoza sklepu, która loguje się do Telegrama, wymaga dużego zaufania. Gwiazdka pomaga następnej osobie zdecydować.",
     "download_tmplayer_free_the_apk": "Pobierz TMPlayera za darmo: APK na Android TV i telefony, instalator na Windows i AppImage na Linuxa.",
     "platforms": "Platformy",
-    "add_to_obtainium": "Dodaj do Obtainium"
+    "add_to_obtainium": "Dodaj do Obtainium",
+    "every_file_comes_from_one_github": "Każdy plik pochodzi z jednego wydania na GitHubie. Pliki na Androida są podpisane kluczem projektu. Instalator na Windows nie jest jeszcze podpisany: projekt złożył wniosek do {a1} o darmowy certyfikat dla projektów open source ({a2}).",
+    "every_file_comes_from_one_github__a1": "SignPath Foundation",
+    "every_file_comes_from_one_github__a2": "Polityka podpisywania kodu",
+    "the_installer_is_not_code_signed": "Instalator nie jest jeszcze podpisany, więc SmartScreen może za pierwszym razem pokazać ostrzeżenie. Kliknij {em1}, potem {em2}.",
+    "the_installer_is_not_code_signed__em1": "Więcej informacji",
+    "the_installer_is_not_code_signed__em2": "Uruchom mimo to"
   },
   "install": {
     "how_to_install_tmplayer_on": "Jak zainstalować TMPlayera na Android TV, Windows i Linuxie",

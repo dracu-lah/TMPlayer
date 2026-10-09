@@ -943,6 +943,8 @@ summary {
 
 .dl {
   display: inline-flex;
+  /* "Download" in Japanese or Malayalam otherwise breaks inside the word on a phone. */
+  white-space: nowrap;
   align-items: center;
   gap: 8px;
   min-height: 46px;
@@ -2204,7 +2206,10 @@ a.card:active,
    than the home hero, because a reader who clicked Download wants the card,
    not another full screen of pitch. */
 
-.page-head { padding: clamp(104px, 13vw, 168px) 0 clamp(24px, 3.5vw, 44px); }
+/* The header is sticky and takes its own room in the flow, so this is the whole gap above the
+   crumbs. It used to start at 104px, which on a phone pushed the download buttons a third of a
+   screen down for no reason. */
+.page-head { padding: clamp(28px, 4.5vw, 64px) 0 clamp(24px, 3.5vw, 44px); }
 .page-head-wrap { max-width: 900px; text-align: center; }
 .page-head h1 {
   margin: 0 0 clamp(14px, 2vw, 20px);
@@ -2806,3 +2811,15 @@ a[lang="ar"] { font-family: "Noto Sans Arabic", "Segoe UI", Tahoma, sans-serif; 
 
 /* The download page note on Android developer registration, under the phone files. */
 .platform-note { margin: 14px 0 0; font-size: 0.88rem; line-height: 1.6; color: var(--on-surface-variant); max-width: 62ch; }
+
+/* ---------- Short landscape screens ---------- */
+
+/* A phone on its side is about 390px tall. With the full size headline the download control
+   fell below the first screen; a smaller headline and tighter spacing keep it in view. */
+@media (max-height: 520px) and (orientation: landscape) {
+  .hero { padding-top: 8px; }
+  .hero .eyebrow { margin-bottom: 10px; }
+  .hero h1 { font-size: clamp(2rem, 5.4vw, 2.7rem); margin-bottom: 10px; max-width: 22ch; }
+  .hero .lede { margin-bottom: 14px; }
+  .page-head { padding-top: 16px; }
+}

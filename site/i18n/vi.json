@@ -32,7 +32,6 @@
     "a_ten_foot_layout_for": "Giao diện cho màn hình lớn, dùng bằng điều khiển từ xa, đăng nhập bằng mã QR.",
     "made_for_the_television": "Làm riêng cho TV",
     "what_it_is_not": "Những gì nó không phải",
-    "not_a_media_service_or": "Không phải dịch vụ phim ảnh hay ứng dụng nhắn tin. Nó không thể đọc tin nhắn của bạn.",
     "questions_and_limits": "Câu hỏi và giới hạn",
     "set_up_in_three_steps": "Thiết lập trong ba bước",
     "you_do_it_once_then": "Chỉ làm một lần. Sau đó nó chạy như mọi ứng dụng TV khác.",
@@ -76,7 +75,8 @@
     "tmplayer_on_a_television_showing": "TMPlayer trên TV, hiển thị video của một cuộc trò chuyện Telegram dưới dạng lưới ô kèm thời lượng và dung lượng tệp.",
     "a_phone_opening_a_telegram": "Điện thoại mở một cuộc trò chuyện Telegram trong TMPlayer và hiển thị video dưới dạng lưới.",
     "email_hello_tmplayer_org_with": "Gửi email đến hello@tmplayer.org để đề xuất tính năng cho TMPlayer",
-    "open_an_issue_in_the": "Mở issue trong kho mã nguồn TMPlayer trên GitHub"
+    "open_an_issue_in_the": "Mở issue trong kho mã nguồn TMPlayer trên GitHub",
+    "not_a_media_service_messages": "Không phải dịch vụ phim ảnh hay ứng dụng nhắn tin. Tin nhắn của bạn không bao giờ xuất hiện trong đó."
   },
   "common": {
     "skip_to_content": "Chuyển đến nội dung",
@@ -200,7 +200,9 @@
     "pick_a_chat_pick_b7cf": "Chọn một cuộc trò chuyện, chọn một video và bấm OK. Video phát trong khi tải.",
     "telegram_on_tv_without_5532": "Telegram trên TV không cần truyền màn hình",
     "telegram_on_your_tv_bb50": "Telegram trên TV của bạn mà không cần truyền màn hình",
-    "watch_telegram_videos_on_3a48": "Xem video Telegram trên TV mà không cần truyền hay chiếu màn hình điện thoại: trình phát ngay trên TV đăng nhập vào tài khoản của bạn và phát các video trong cuộc trò chuyện."
+    "watch_telegram_videos_on_3a48": "Xem video Telegram trên TV mà không cần truyền hay chiếu màn hình điện thoại: trình phát ngay trên TV đăng nhập vào tài khoản của bạn và phát các video trong cuộc trò chuyện.",
+    "finds_subtitles_online_through_a322": "Tìm phụ đề trực tuyến qua OpenSubtitles, và chỉnh phụ đề hoặc âm thanh cho khớp",
+    "groups_series_by_season_709a": "Nhóm phim bộ theo mùa trên trang riêng, kèm poster và phần giới thiệu tùy chọn"
   },
   "features": {
     "tmplayer_features_stream_telegram_videos": "Tính năng TMPlayer: phát video Telegram trên TV và PC",
@@ -316,7 +318,15 @@
     "the_same_chat_list_on": "Cùng danh sách trò chuyện đó trên TV, với thanh điều hướng bên trái gồm Xem tiếp, Yêu thích, Gần đây, Kênh, Nhóm, Mọi người và Tất cả cuộc trò chuyện.",
     "tmplayer_settings_on_a_television": "Cài đặt TMPlayer trên TV, hiển thị giới hạn kích thước video, tự phát tập tiếp theo và dung lượng còn trống.",
     "the_tmplayer_desktop_app_on": "Ứng dụng TMPlayer trên Windows hoặc Linux: thanh bên các mục trò chuyện cạnh một lưới video mẫu, mỗi poster ghi thời lượng, dung lượng và độ phân giải.",
-    "the_tmplayer_desktop_player_over": "Trình phát TMPlayer trên máy tính đang phát một video mẫu: tiêu đề và cuộc trò chuyện ở trên cùng, thanh thời gian, và các nút phụ đề, âm thanh, tốc độ, tỷ lệ hình, âm lượng, trình phát mini và toàn màn hình."
+    "the_tmplayer_desktop_player_over": "Trình phát TMPlayer trên máy tính đang phát một video mẫu: tiêu đề và cuộc trò chuyện ở trên cùng, thanh thời gian, và các nút phụ đề, âm thanh, tốc độ, tỷ lệ hình, âm lượng, trình phát mini và toàn màn hình.",
+    "subtitles_found_online": "{strong1} Khi tệp không có phụ đề, hãy tìm trên OpenSubtitles ngay trong trình phát, rồi chỉnh phụ đề hoặc âm thanh sớm hơn hay muộn hơn.",
+    "subtitles_found_online__strong1": "Tìm phụ đề trực tuyến.",
+    "downloads_you_choose": "{strong1} Video bạn tải xuống được giữ cho đến khi bạn xóa, hoặc tự xóa sau khi xem xong nếu bạn muốn.",
+    "downloads_you_choose__strong1": "Lưu những video bạn chọn.",
+    "home_and_series_pages": "{strong1} Trang chủ gom những gì nên xem tiếp từ mọi cuộc trò chuyện, và mỗi bộ phim có trang riêng, với các tập được nhóm theo mùa.",
+    "home_and_series_pages__strong1": "Sắp xếp phim bộ gọn gàng.",
+    "posters_and_overviews": "{strong1} Được tra cứu trên TMDB, TVmaze và AniList chỉ bằng tiêu đề đã làm gọn của video, ngoài ra không gì khác.",
+    "posters_and_overviews__strong1": "Thêm poster và phần giới thiệu, nếu bạn muốn."
   },
   "download": {
     "download_tmplayer_for_android_tv": "Tải TMPlayer cho Android TV, điện thoại, Windows và Linux",
@@ -326,9 +336,6 @@
     "how_to_install_it": "Cách cài đặt",
     "android_phone": "Điện thoại Android",
     "every_platform_one_release": "Mọi nền tảng, một bản phát hành",
-    "every_file_comes_from_one": "Mọi tệp đều đến từ một bản phát hành trên GitHub. Các tệp Android được ký bằng khóa của dự án. Bản dựng Windows được ký bằng chứng chỉ miễn phí do {a1} cấp cho các dự án mã nguồn mở ({a2}).",
-    "every_file_comes_from_one__a1": "SignPath Foundation",
-    "every_file_comes_from_one__a2": "Chính sách ký mã",
     "latest_release": "Bản phát hành mới nhất",
     "android_8_0_and_above": "Android 8.0 trở lên",
     "your_device": "Thiết bị của bạn",
@@ -350,7 +357,6 @@
     "installer__span1": "Bắt đầu từ đây",
     "adds_a_start_menu_entry": "Thêm một mục vào menu Start và một lối tắt ngoài màn hình nền. Không cần quyền quản trị.",
     "tmplayer_version_windows_x64_msi": "TMPlayer-<version>-windows-x64.msi",
-    "windows_binaries_are_signed_via": "Các tệp thực thi Windows được ký qua SignPath để xác minh tính toàn vẹn và ngăn chỉnh sửa trái phép.",
     "how_to_install_on_windows": "Cách cài trên Windows",
     "x86_64_with_glibc_2": "x86_64, với glibc 2.38 trở lên: Ubuntu 24.04, Debian 13, Fedora 39 trở lên",
     "any_distribution": "Mọi bản phân phối",
@@ -381,7 +387,13 @@
     "an_app_from_outside_the": "Một ứng dụng ngoài cửa hàng mà lại đăng nhập vào Telegram đòi hỏi rất nhiều sự tin tưởng. Một ngôi sao giúp người sau quyết định.",
     "download_tmplayer_free_the_apk": "Tải TMPlayer miễn phí: APK cho Android TV và điện thoại, trình cài đặt Windows và AppImage cho Linux.",
     "platforms": "Nền tảng",
-    "add_to_obtainium": "Thêm vào Obtainium"
+    "add_to_obtainium": "Thêm vào Obtainium",
+    "every_file_comes_from_one_github": "Mọi tệp đều đến từ một bản phát hành trên GitHub. Các tệp Android được ký bằng khóa của dự án. Trình cài đặt Windows chưa được ký mã: dự án đã nộp đơn xin {a1} cấp chứng chỉ miễn phí dành cho các dự án mã nguồn mở ({a2}).",
+    "every_file_comes_from_one_github__a1": "SignPath Foundation",
+    "every_file_comes_from_one_github__a2": "Chính sách ký mã",
+    "the_installer_is_not_code_signed": "Trình cài đặt chưa được ký mã, nên SmartScreen có thể cảnh báo bạn ở lần đầu. Bấm {em1}, rồi {em2}.",
+    "the_installer_is_not_code_signed__em1": "Thông tin khác",
+    "the_installer_is_not_code_signed__em2": "Vẫn chạy"
   },
   "install": {
     "how_to_install_tmplayer_on": "Cách cài TMPlayer trên Android TV, Windows và Linux",

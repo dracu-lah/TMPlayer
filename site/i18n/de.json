@@ -32,7 +32,6 @@
     "a_ten_foot_layout_for": "Ein Layout für die Couch und die Fernbedienung, mit Anmeldung per QR-Code.",
     "made_for_the_television": "Gemacht für den Fernseher",
     "what_it_is_not": "Was es nicht ist",
-    "not_a_media_service_or": "Kein Mediendienst und keine Chat-App. Es kann deine Nachrichten nicht lesen.",
     "questions_and_limits": "Fragen und Grenzen",
     "set_up_in_three_steps": "In drei Schritten eingerichtet",
     "you_do_it_once_then": "Du machst es einmal. Danach läuft es wie jede andere TV-App.",
@@ -76,7 +75,8 @@
     "tmplayer_on_a_television_showing": "TMPlayer auf einem Fernseher, der die Videos eines Telegram-Chats als Raster aus Kacheln mit Laufzeiten und Dateigrößen zeigt.",
     "a_phone_opening_a_telegram": "Ein Smartphone, das einen Telegram-Chat in TMPlayer öffnet und die Videos als Raster zeigt.",
     "email_hello_tmplayer_org_with": "Schreib an hello@tmplayer.org mit einem Funktionswunsch für TMPlayer",
-    "open_an_issue_in_the": "Ein Issue im TMPlayer-Repository auf GitHub öffnen"
+    "open_an_issue_in_the": "Ein Issue im TMPlayer-Repository auf GitHub öffnen",
+    "not_a_media_service_messages": "Kein Mediendienst und keine Chat-App. Deine Nachrichten erscheinen darin nie."
   },
   "common": {
     "skip_to_content": "Zum Inhalt springen",
@@ -200,7 +200,9 @@
     "pick_a_chat_pick_b7cf": "Chat wählen, Video wählen und OK drücken. Es spielt, während es lädt.",
     "telegram_on_tv_without_5532": "Telegram auf dem TV ohne Casting",
     "telegram_on_your_tv_bb50": "Telegram auf deinem TV ohne Casting",
-    "watch_telegram_videos_on_3a48": "Schau Telegram-Videos auf dem Fernseher, ohne dein Smartphone zu casten oder zu spiegeln: Ein Player auf dem Fernseher selbst meldet sich in deinem Konto an und streamt die Videos in deinen Chats."
+    "watch_telegram_videos_on_3a48": "Schau Telegram-Videos auf dem Fernseher, ohne dein Smartphone zu casten oder zu spiegeln: Ein Player auf dem Fernseher selbst meldet sich in deinem Konto an und streamt die Videos in deinen Chats.",
+    "finds_subtitles_online_through_a322": "Findet Untertitel online über OpenSubtitles und verschiebt Untertitel oder Ton passend",
+    "groups_series_by_season_709a": "Gruppiert Serien nach Staffeln auf einer eigenen Seite, optional mit Postern und Beschreibungen"
   },
   "features": {
     "tmplayer_features_stream_telegram_videos": "TMPlayer-Funktionen: Telegram-Videos auf TV und PC streamen",
@@ -316,7 +318,15 @@
     "the_same_chat_list_on": "Dieselbe Chat-Liste auf einem Fernseher, mit einer Navigationsleiste links für Weiter ansehen, Favoriten, Zuletzt, Kanäle, Gruppen, Personen und Alle Chats.",
     "tmplayer_settings_on_a_television": "TMPlayer-Einstellungen auf einem Fernseher, mit den Größenlimits für Videos, dem Autoplay der nächsten Folge und dem freien Speicher.",
     "the_tmplayer_desktop_app_on": "Die TMPlayer-Desktop-App unter Windows oder Linux: eine Seitenleiste mit Chat-Bereichen neben einem Raster aus Demo-Videos, jedes Poster mit Laufzeit, Größe und Auflösung.",
-    "the_tmplayer_desktop_player_over": "Der TMPlayer-Desktop-Player über einem Demo-Video: Titel und Chat oben, eine Zeitleiste und Schaltflächen für Untertitel, Ton, Geschwindigkeit, Bildformat, Lautstärke, den Mini-Player und Vollbild."
+    "the_tmplayer_desktop_player_over": "Der TMPlayer-Desktop-Player über einem Demo-Video: Titel und Chat oben, eine Zeitleiste und Schaltflächen für Untertitel, Ton, Geschwindigkeit, Bildformat, Lautstärke, den Mini-Player und Vollbild.",
+    "subtitles_found_online": "{strong1} Hat eine Datei keine, suche direkt im Player auf OpenSubtitles und verschiebe dann die Untertitel oder den Ton nach vorn oder hinten.",
+    "subtitles_found_online__strong1": "Findet Untertitel online.",
+    "downloads_you_choose": "{strong1} Ein heruntergeladenes Video bleibt, bis du es entfernst, oder verschwindet nach dem Ansehen, wenn dir das lieber ist.",
+    "downloads_you_choose__strong1": "Behält die, die du auswählst.",
+    "home_and_series_pages": "{strong1} Die Startseite sammelt aus allen Chats, was du als Nächstes schauen kannst, und jede Serie bekommt eine eigene Seite mit Folgen nach Staffeln gruppiert.",
+    "home_and_series_pages__strong1": "Bringt Serien in Ordnung.",
+    "posters_and_overviews": "{strong1} Abgefragt bei TMDB, TVmaze und AniList über den bereinigten Titel des Videos, und sonst nichts.",
+    "posters_and_overviews__strong1": "Ergänzt Poster und Beschreibungen, wenn du willst."
   },
   "download": {
     "download_tmplayer_for_android_tv": "TMPlayer für Android TV, Smartphones, Windows und Linux herunterladen",
@@ -326,9 +336,6 @@
     "how_to_install_it": "So installierst du es",
     "android_phone": "Android-Smartphone",
     "every_platform_one_release": "Jede Plattform, eine Version",
-    "every_file_comes_from_one": "Jede Datei stammt aus einer GitHub-Version. Die Android-Dateien sind mit dem Schlüssel des Projekts signiert. Windows-Builds werden mit einem kostenlosen Zertifikat signiert, das die {a1} für Open-Source-Projekte bereitstellt ({a2}).",
-    "every_file_comes_from_one__a1": "SignPath Foundation",
-    "every_file_comes_from_one__a2": "Code-Signing-Richtlinie",
     "latest_release": "Neueste Version",
     "android_8_0_and_above": "Android 8.0 und neuer",
     "your_device": "Dein Gerät",
@@ -350,7 +357,6 @@
     "installer__span1": "Hier anfangen",
     "adds_a_start_menu_entry": "Legt einen Eintrag im Startmenü und eine Desktop-Verknüpfung an. Keine Administratorrechte nötig.",
     "tmplayer_version_windows_x64_msi": "TMPlayer-<version>-windows-x64.msi",
-    "windows_binaries_are_signed_via": "Windows-Programmdateien werden über SignPath signiert, um ihre Integrität zu bestätigen und unbefugte Änderungen zu verhindern.",
     "how_to_install_on_windows": "So installierst du es unter Windows",
     "x86_64_with_glibc_2": "x86_64, mit glibc 2.38 oder neuer: Ubuntu 24.04, Debian 13, Fedora 39 und neuer",
     "any_distribution": "Jede Distribution",
@@ -381,7 +387,13 @@
     "an_app_from_outside_the": "Eine App von außerhalb des Stores, die sich bei Telegram anmeldet, verlangt viel Vertrauen. Ein Stern hilft der nächsten Person bei der Entscheidung.",
     "download_tmplayer_free_the_apk": "TMPlayer kostenlos herunterladen: die APK für Android TV und Smartphones, ein Windows-Installer und ein AppImage für Linux.",
     "platforms": "Plattformen",
-    "add_to_obtainium": "Zu Obtainium hinzufügen"
+    "add_to_obtainium": "Zu Obtainium hinzufügen",
+    "every_file_comes_from_one_github": "Jede Datei stammt aus einer GitHub-Version. Die Android-Dateien sind mit dem Schlüssel des Projekts signiert. Der Windows-Installer ist noch nicht codesigniert: Das Projekt hat sich bei der {a1} um ein kostenloses Zertifikat für Open-Source-Projekte beworben ({a2}).",
+    "every_file_comes_from_one_github__a1": "SignPath Foundation",
+    "every_file_comes_from_one_github__a2": "Code-Signing-Richtlinie",
+    "the_installer_is_not_code_signed": "Der Installer ist noch nicht codesigniert, deshalb warnt SmartScreen beim ersten Mal womöglich. Klicke auf {em1}, dann auf {em2}.",
+    "the_installer_is_not_code_signed__em1": "Weitere Informationen",
+    "the_installer_is_not_code_signed__em2": "Trotzdem ausführen"
   },
   "install": {
     "how_to_install_tmplayer_on": "So installierst du TMPlayer auf Android TV, Windows und Linux",

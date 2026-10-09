@@ -3,17 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Code signing policy - TMPlayer</title>
-<meta name="description" content="How TMPlayer releases are built and signed.">
-<link rel="canonical" href="https://tmplayer.org/signing">
-<meta name="robots" content="index, follow">
+<title>Page not found - TMPlayer</title>
+<meta name="description" content="This page does not exist on tmplayer.org. Download TMPlayer, the free Telegram video player, or go to the home page.">
+<meta name="robots" content="noindex">
 <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0B0C0E" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
-<meta property="og:title" content="Code signing policy - TMPlayer">
-<meta property="og:description" content="How TMPlayer releases are built and signed.">
-<meta property="og:url" content="https://tmplayer.org/signing">
-<meta property="og:image" content="https://tmplayer.org/og.png">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preload" href="/fonts/poppins-400.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/poppins-600.woff2" as="font" type="font/woff2" crossorigin>
@@ -35,12 +30,6 @@
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
-<!-- i18n:notice -->
-<aside class="kao" id="kao" aria-label="Keep Android Open">
-  <div class="kao-bar"><p><span>From 2027, Android plans to install only apps from developers registered with Google.</span> <a href="https://keepandroidopen.org/" target="_blank" rel="noopener">Learn more</a></p><button type="button" class="kao-close" data-kao-close aria-label="Close this notice" title="Close this notice"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="currentColor" d="M18.3 7.1 13.4 12l4.9 4.9a1 1 0 0 1-1.4 1.4L12 13.4l-4.9 4.9a1 1 0 0 1-1.4-1.4l4.9-4.9-4.9-4.9a1 1 0 0 1 1.4-1.4l4.9 4.9 4.9-4.9a1 1 0 0 1 1.4 1.4Z"/></svg></button></div>
-  <div class="kao-sheet"><p class="kao-tag" lang="en" dir="ltr">#KeepAndroidOpen</p><p class="kao-text">From 2027, Android plans to install only apps whose developers have registered with Google and shown ID. That includes apps from outside the Play Store, like TMPlayer.</p><div class="kao-actions"><a class="kao-learn" href="https://keepandroidopen.org/" target="_blank" rel="noopener">Learn more</a><button type="button" class="kao-share" data-kao-share data-url="https://keepandroidopen.org/" data-text="From 2027, Android plans to install only apps from developers registered with Google. #KeepAndroidOpen" data-copied="Link copied"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="M18 16a3 3 0 0 0-2.4 1.2l-6.7-3.4a3 3 0 0 0 0-1.6l6.7-3.4A3 3 0 1 0 15 7l-6.7 3.4a3 3 0 1 0 0 3.2L15 17a3 3 0 1 0 3-1Z"/></svg><span>Share</span></button><span class="kao-copied" role="status" aria-live="polite"></span></div><button type="button" class="kao-close" data-kao-close aria-label="Close this notice" title="Close this notice"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="currentColor" d="M18.3 7.1 13.4 12l4.9 4.9a1 1 0 0 1-1.4 1.4L12 13.4l-4.9 4.9a1 1 0 0 1-1.4-1.4l4.9-4.9-4.9-4.9a1 1 0 0 1 1.4-1.4l4.9 4.9 4.9-4.9a1 1 0 0 1 1.4 1.4Z"/></svg></button></div>
-</aside>
-<!-- /i18n:notice -->
 <header class="site-header">
   <div class="wrap header-inner">
     <a class="brand" href="/" aria-label="TMPlayer home"><img class="brand-mark" src="/favicon.svg" width="30" height="30" alt=""><span class="brand-name">TMPlayer</span></a>
@@ -49,35 +38,20 @@
 </header>
 <main id="main" class="policy-page">
   <div class="wrap policy-wrap">
-    <p class="eyebrow">Effective 5 October 2026</p>
-    <h1>Code Signing Policy</h1>
-    <p class="policy-lede">This document outlines the code signing policy for TMPlayer binaries, detailing how we ensure the integrity and authenticity of our releases.</p>
-    <p class="policy-lede"><strong>Status:</strong> our application to the SignPath Foundation is pending. Until it is approved, the Windows installer is not code signed, and Windows SmartScreen may warn before it runs. The policy below is what applies once signing starts.</p>
-
+    <p class="eyebrow">404</p>
+    <h1>Page not found</h1>
+    <p class="policy-lede">This address does not lead anywhere on tmplayer.org. The page may have moved, or the link may have a typo.</p>
+    <div class="page-actions" style="justify-content: flex-start; margin: 24px 0 8px;">
+      <a class="btn btn-filled" href="/download/">Download TMPlayer</a>
+      <a class="btn btn-outline" href="/">Go to the home page</a>
+    </div>
     <section>
-      <h2>Build Process</h2>
-      <p>All TMPlayer releases are built exclusively via automated Continuous Integration (CI) pipelines on GitHub Actions. No releases are built manually on developer machines. The CI pipeline pulls the source code directly from the repository, builds the artifacts, and prepares them for signing.</p>
-    </section>
-
-    <section>
-      <h2>Code Signing</h2>
-      <p>To ensure that users receive untampered binaries, we will digitally sign our Windows releases using a certificate provided by the <a href="https://about.signpath.io/" rel="noopener">SignPath Foundation</a>. The signing step will run in our automated CI pipeline and only for official release tags.</p>
-      <p>Android releases are signed with our own secure keystore, managed via GitHub Secrets.</p>
-    </section>
-
-    <section>
-      <h2>Access Control</h2>
-      <p>Only authorized maintainers (currently dracu-lah) have write access to the TMPlayer repository and the ability to push tags that trigger the release and signing pipeline. Branch protection rules are in place for the main branch to ensure all changes go through proper review.</p>
-    </section>
-
-    <section>
-      <h2>Verification</h2>
-      <p>Once signing starts, users can verify the signature of our Windows binaries by checking the digital signature properties in Windows Explorer. The certificate should be issued to our open source project via SignPath Foundation.</p>
-    </section>
-
-    <section>
-      <h2>Questions</h2>
-      <p>Email <a href="mailto:hello@tmplayer.org?subject=TMPlayer%20signing">hello@tmplayer.org</a> with a question about signing. For what the app and this website collect, see the <a href="/privacy">privacy page</a>. Material changes to this page will update the effective date above.</p>
+      <h2>Looking for one of these?</h2>
+      <ul>
+        <li><a href="/install/">How to install</a> on a phone, a TV, Windows or Linux</li>
+        <li><a href="/fire-tv/">Fire TV</a> and <a href="/android-tv/">Android TV</a></li>
+        <li><a href="/faq/">Questions</a> and <a href="/changelog/">what is new</a></li>
+      </ul>
     </section>
   </div>
 </main>
@@ -118,11 +92,6 @@
     <p class="footer-legal muted small">GPL-3.0, &copy; 2026 dracu-lah. An unofficial Telegram video player, not affiliated with Telegram FZ-LLC. TMPlayer does not provide media: use it only with content you own or are authorized to access. Player mark via <a href="https://www.svgrepo.com" rel="noopener">SVG Repo</a>, set in Poppins under the SIL Open Font License and served from this domain.</p>
   </div>
 </footer>
-<!--
-  The same script the rest of the site loads. It used to be a copy of the theme control inline
-  here, because these two pages had no release card for app.js to fill in. They now have a menu
-  to open as well, and two copies of the same control is how the two drift apart.
--->
 <script src="/app.js"></script>
 <!--
   Vercel Web Analytics. Served from this domain rather than from anybody else, sets no cookie and

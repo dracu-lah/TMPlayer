@@ -32,7 +32,6 @@
     "a_ten_foot_layout_for": "Tampilan jarak jauh untuk remote, dengan login lewat kode QR.",
     "made_for_the_television": "Dibuat untuk televisi",
     "what_it_is_not": "Yang bukan TMPlayer",
-    "not_a_media_service_or": "Bukan layanan media atau aplikasi obrolan. Aplikasi ini tidak bisa membaca pesan kamu.",
     "questions_and_limits": "Pertanyaan dan batasan",
     "set_up_in_three_steps": "Pasang dalam tiga langkah",
     "you_do_it_once_then": "Cukup sekali. Setelah itu jalannya seperti aplikasi TV lainnya.",
@@ -76,7 +75,8 @@
     "tmplayer_on_a_television_showing": "TMPlayer di televisi, menampilkan video dalam obrolan Telegram sebagai kotak-kotak ubin lengkap dengan durasi dan ukuran file.",
     "a_phone_opening_a_telegram": "HP yang membuka obrolan Telegram di TMPlayer dan menampilkan videonya sebagai grid.",
     "email_hello_tmplayer_org_with": "Kirim email ke hello@tmplayer.org untuk permintaan fitur TMPlayer",
-    "open_an_issue_in_the": "Buka issue di repositori TMPlayer di GitHub"
+    "open_an_issue_in_the": "Buka issue di repositori TMPlayer di GitHub",
+    "not_a_media_service_messages": "Bukan layanan media atau aplikasi obrolan. Pesan kamu tidak pernah muncul di dalamnya."
   },
   "common": {
     "skip_to_content": "Lewati ke konten",
@@ -200,7 +200,9 @@
     "pick_a_chat_pick_b7cf": "Pilih obrolan, pilih video, lalu tekan OK. Video diputar selagi mengunduh.",
     "telegram_on_tv_without_5532": "Telegram di TV tanpa casting",
     "telegram_on_your_tv_bb50": "Telegram di TV kamu tanpa casting",
-    "watch_telegram_videos_on_3a48": "Tonton video Telegram di televisi tanpa casting atau mirroring HP: pemutar di TV itu sendiri masuk ke akun kamu dan memutar video di obrolan kamu secara streaming."
+    "watch_telegram_videos_on_3a48": "Tonton video Telegram di televisi tanpa casting atau mirroring HP: pemutar di TV itu sendiri masuk ke akun kamu dan memutar video di obrolan kamu secara streaming.",
+    "finds_subtitles_online_through_a322": "Mencari subtitle online lewat OpenSubtitles, dan menggeser subtitle atau audio agar pas",
+    "groups_series_by_season_709a": "Mengelompokkan serial per musim di halaman sendiri, dengan poster dan sinopsis opsional"
   },
   "features": {
     "tmplayer_features_stream_telegram_videos": "Fitur TMPlayer: streaming video Telegram di TV dan PC",
@@ -316,7 +318,15 @@
     "the_same_chat_list_on": "Daftar obrolan yang sama di televisi, dengan rail navigasi di sisi kiri untuk Lanjutkan, Favorit, Terbaru, Channel, Grup, Orang, dan Semua obrolan.",
     "tmplayer_settings_on_a_television": "Pengaturan TMPlayer di televisi, menampilkan batas ukuran video, putar otomatis episode berikutnya, dan sisa penyimpanan.",
     "the_tmplayer_desktop_app_on": "Aplikasi desktop TMPlayer di Windows atau Linux: sidebar bagian obrolan di samping grid video contoh, setiap poster menampilkan durasi, ukuran, dan resolusinya.",
-    "the_tmplayer_desktop_player_over": "Pemutar desktop TMPlayer di atas video contoh: judul dan obrolan di bagian atas, bilah waktu, dan tombol untuk subtitle, audio, kecepatan, bentuk gambar, volume, pemutar mini, dan layar penuh."
+    "the_tmplayer_desktop_player_over": "Pemutar desktop TMPlayer di atas video contoh: judul dan obrolan di bagian atas, bilah waktu, dan tombol untuk subtitle, audio, kecepatan, bentuk gambar, volume, pemutar mini, dan layar penuh.",
+    "subtitles_found_online": "{strong1} Kalau file tidak punya subtitle, cari di OpenSubtitles langsung dari pemutar, lalu geser subtitle atau suara lebih awal atau lebih lambat.",
+    "subtitles_found_online__strong1": "Mencari subtitle online.",
+    "downloads_you_choose": "{strong1} Video yang kamu unduh tetap ada sampai kamu menghapusnya, atau hilang setelah ditonton kalau kamu mau.",
+    "downloads_you_choose__strong1": "Menyimpan yang kamu pilih.",
+    "home_and_series_pages": "{strong1} Beranda mengumpulkan tontonan berikutnya dari semua obrolan, dan tiap serial punya halaman sendiri dengan episode dikelompokkan per musim.",
+    "home_and_series_pages__strong1": "Merapikan serial.",
+    "posters_and_overviews": "{strong1} Dicari di TMDB, TVmaze, dan AniList hanya dengan judul video yang sudah dibersihkan, tidak lebih.",
+    "posters_and_overviews__strong1": "Menambahkan poster dan sinopsis, kalau kamu mau."
   },
   "download": {
     "download_tmplayer_for_android_tv": "Unduh TMPlayer untuk Android TV, HP, Windows, dan Linux",
@@ -326,9 +336,6 @@
     "how_to_install_it": "Cara memasangnya",
     "android_phone": "HP Android",
     "every_platform_one_release": "Semua platform, satu rilis",
-    "every_file_comes_from_one": "Semua file berasal dari satu rilis GitHub. File Android ditandatangani dengan kunci proyek. Build Windows ditandatangani dengan sertifikat gratis dari {a1} untuk proyek open source ({a2}).",
-    "every_file_comes_from_one__a1": "SignPath Foundation",
-    "every_file_comes_from_one__a2": "Code Signing Policy",
     "latest_release": "Rilis terbaru",
     "android_8_0_and_above": "Android 8.0 ke atas",
     "your_device": "Perangkat kamu",
@@ -350,7 +357,6 @@
     "installer__span1": "Mulai dari sini",
     "adds_a_start_menu_entry": "Menambahkan entri menu Start dan pintasan di desktop. Tidak perlu administrator.",
     "tmplayer_version_windows_x64_msi": "TMPlayer-<version>-windows-x64.msi",
-    "windows_binaries_are_signed_via": "Biner Windows ditandatangani lewat SignPath untuk memastikan keasliannya dan mencegah perubahan tanpa izin.",
     "how_to_install_on_windows": "Cara memasang di Windows",
     "x86_64_with_glibc_2": "x86_64, dengan glibc 2.38 atau lebih baru: Ubuntu 24.04, Debian 13, Fedora 39 ke atas",
     "any_distribution": "Distribusi apa pun",
@@ -381,7 +387,13 @@
     "an_app_from_outside_the": "Aplikasi dari luar toko yang masuk ke Telegram butuh banyak kepercayaan. Bintang membantu orang berikutnya memutuskan.",
     "download_tmplayer_free_the_apk": "Unduh TMPlayer gratis: APK untuk Android TV dan HP, installer Windows, dan AppImage untuk Linux.",
     "platforms": "Platform",
-    "add_to_obtainium": "Tambahkan ke Obtainium"
+    "add_to_obtainium": "Tambahkan ke Obtainium",
+    "every_file_comes_from_one_github": "Semua file berasal dari satu rilis GitHub. File Android ditandatangani dengan kunci proyek. Installer Windows belum ditandatangani: proyek ini sudah mendaftar ke {a1} untuk sertifikat gratis bagi proyek open source ({a2}).",
+    "every_file_comes_from_one_github__a1": "SignPath Foundation",
+    "every_file_comes_from_one_github__a2": "Code Signing Policy",
+    "the_installer_is_not_code_signed": "Installer belum ditandatangani, jadi SmartScreen mungkin memberi peringatan saat pertama kali. Klik {em1}, lalu {em2}.",
+    "the_installer_is_not_code_signed__em1": "Informasi selengkapnya",
+    "the_installer_is_not_code_signed__em2": "Tetap jalankan"
   },
   "install": {
     "how_to_install_tmplayer_on": "Cara memasang TMPlayer di Android TV, Windows, dan Linux",

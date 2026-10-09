@@ -32,7 +32,6 @@
     "a_ten_foot_layout_for": "Інтерфейс для екрана на відстані, керування пультом і вхід за QR-кодом.",
     "made_for_the_television": "Створено для телевізора",
     "what_it_is_not": "Чим він не є",
-    "not_a_media_service_or": "Це не медіасервіс і не месенджер. Він не може читати ваші повідомлення.",
     "questions_and_limits": "Запитання та обмеження",
     "set_up_in_three_steps": "Налаштування в три кроки",
     "you_do_it_once_then": "Робите це один раз. Далі він працює як будь-який інший застосунок для телевізора.",
@@ -76,7 +75,8 @@
     "tmplayer_on_a_television_showing": "TMPlayer на телевізорі: відео з чату Telegram у вигляді сітки плиток із тривалістю та розміром файлів.",
     "a_phone_opening_a_telegram": "Телефон відкриває чат Telegram у TMPlayer і показує відео сіткою.",
     "email_hello_tmplayer_org_with": "Напишіть на hello@tmplayer.org з побажанням щодо функцій TMPlayer",
-    "open_an_issue_in_the": "Створити issue в репозиторії TMPlayer на GitHub"
+    "open_an_issue_in_the": "Створити issue в репозиторії TMPlayer на GitHub",
+    "not_a_media_service_messages": "Це не медіасервіс і не месенджер. Ваші повідомлення в ньому ніколи не з’являються."
   },
   "common": {
     "skip_to_content": "Перейти до вмісту",
@@ -200,7 +200,9 @@
     "pick_a_chat_pick_b7cf": "Виберіть чат, виберіть відео й натисніть OK. Воно грає під час завантаження.",
     "telegram_on_tv_without_5532": "Telegram на ТВ без трансляції",
     "telegram_on_your_tv_bb50": "Telegram на вашому телевізорі без трансляції",
-    "watch_telegram_videos_on_3a48": "Дивіться відео з Telegram на телевізорі без трансляції чи дзеркалення телефона: плеєр на самому телевізорі входить у ваш обліковий запис і відтворює відео з ваших чатів."
+    "watch_telegram_videos_on_3a48": "Дивіться відео з Telegram на телевізорі без трансляції чи дзеркалення телефона: плеєр на самому телевізорі входить у ваш обліковий запис і відтворює відео з ваших чатів.",
+    "finds_subtitles_online_through_a322": "Пошук субтитрів в інтернеті через OpenSubtitles і зсув субтитрів чи звуку для синхронізації",
+    "groups_series_by_season_709a": "Серіали на окремій сторінці, згруповані за сезонами, з постерами й описами за бажанням"
   },
   "features": {
     "tmplayer_features_stream_telegram_videos": "Можливості TMPlayer: відтворення відео з Telegram на ТВ і ПК",
@@ -316,7 +318,15 @@
     "the_same_chat_list_on": "Той самий список чатів на телевізорі, з панеллю навігації ліворуч: Продовжити, Вибране, Нещодавні, Канали, Групи, Люди та Усі чати.",
     "tmplayer_settings_on_a_television": "Налаштування TMPlayer на телевізорі: обмеження розміру відео, автовідтворення наступної серії та скільки місця вільно.",
     "the_tmplayer_desktop_app_on": "Застосунок TMPlayer для комп’ютера на Windows або Linux: бічна панель із розділами чатів поруч із сіткою демонстраційних відео, на кожному постері тривалість, розмір і роздільна здатність.",
-    "the_tmplayer_desktop_player_over": "Плеєр TMPlayer для комп’ютера над демонстраційним відео: угорі назва й чат, смуга часу та кнопки субтитрів, звуку, швидкості, формату картинки, гучності, міні-плеєра й повного екрана."
+    "the_tmplayer_desktop_player_over": "Плеєр TMPlayer для комп’ютера над демонстраційним відео: угорі назва й чат, смуга часу та кнопки субтитрів, звуку, швидкості, формату картинки, гучності, міні-плеєра й повного екрана.",
+    "subtitles_found_online": "{strong1} Якщо у файлі їх немає, знайдіть їх в OpenSubtitles просто з плеєра, а потім зсуньте субтитри чи звук раніше або пізніше.",
+    "subtitles_found_online__strong1": "Знаходить субтитри в інтернеті.",
+    "downloads_you_choose": "{strong1} Завантажене відео лишається, доки ви його не видалите, або зникає після перегляду, якщо вам так зручніше.",
+    "downloads_you_choose__strong1": "Зберігає ті, що ви оберете.",
+    "home_and_series_pages": "{strong1} Головна збирає з усіх чатів те, що дивитися далі, а кожен серіал має власну сторінку із серіями, згрупованими за сезонами.",
+    "home_and_series_pages__strong1": "Упорядковує серіали.",
+    "posters_and_overviews": "{strong1} Шукаються в TMDB, TVmaze і AniList лише за очищеною назвою відео, і більше ні за чим.",
+    "posters_and_overviews__strong1": "Додає постери й описи, якщо ви цього хочете."
   },
   "download": {
     "download_tmplayer_for_android_tv": "Завантажити TMPlayer для Android TV, телефонів, Windows і Linux",
@@ -326,9 +336,6 @@
     "how_to_install_it": "Як установити",
     "android_phone": "Телефон Android",
     "every_platform_one_release": "Кожна платформа, один випуск",
-    "every_file_comes_from_one": "Кожен файл походить з одного випуску на GitHub. Файли для Android підписано ключем проєкту. Збірки для Windows підписано безкоштовним сертифікатом, який надає {a1} для проєктів із відкритим кодом ({a2}).",
-    "every_file_comes_from_one__a1": "SignPath Foundation",
-    "every_file_comes_from_one__a2": "Політика підпису коду",
     "latest_release": "Останній випуск",
     "android_8_0_and_above": "Android 8.0 і новіший",
     "your_device": "Ваш пристрій",
@@ -350,7 +357,6 @@
     "installer__span1": "Почніть звідси",
     "adds_a_start_menu_entry": "Додає пункт у меню «Пуск» і ярлик на робочому столі. Права адміністратора не потрібні.",
     "tmplayer_version_windows_x64_msi": "TMPlayer-<version>-windows-x64.msi",
-    "windows_binaries_are_signed_via": "Виконувані файли для Windows підписано через SignPath, щоб підтвердити їхню цілісність і запобігти несанкціонованим змінам.",
     "how_to_install_on_windows": "Як установити на Windows",
     "x86_64_with_glibc_2": "x86_64, з glibc 2.38 або новішою: Ubuntu 24.04, Debian 13, Fedora 39 і новіші",
     "any_distribution": "Будь-який дистрибутив",
@@ -381,7 +387,13 @@
     "an_app_from_outside_the": "Застосунок не з магазину, що входить у Telegram, потребує великої довіри. Зірка допомагає наступній людині вирішити.",
     "download_tmplayer_free_the_apk": "Завантажте TMPlayer безкоштовно: APK для Android TV і телефонів, інсталятор для Windows і AppImage для Linux.",
     "platforms": "Платформи",
-    "add_to_obtainium": "Додати в Obtainium"
+    "add_to_obtainium": "Додати в Obtainium",
+    "every_file_comes_from_one_github": "Кожен файл походить з одного випуску на GitHub. Файли для Android підписано ключем проєкту. Інсталятор для Windows ще не підписано: проєкт подав заявку до {a1} на безкоштовний сертифікат для проєктів із відкритим кодом ({a2}).",
+    "every_file_comes_from_one_github__a1": "SignPath Foundation",
+    "every_file_comes_from_one_github__a2": "Політика підпису коду",
+    "the_installer_is_not_code_signed": "Інсталятор ще не підписано, тому під час першого запуску SmartScreen може показати попередження. Натисніть {em1}, потім {em2}.",
+    "the_installer_is_not_code_signed__em1": "Додаткові відомості",
+    "the_installer_is_not_code_signed__em2": "Усе одно виконати"
   },
   "install": {
     "how_to_install_tmplayer_on": "Як установити TMPlayer на Android TV, Windows і Linux",

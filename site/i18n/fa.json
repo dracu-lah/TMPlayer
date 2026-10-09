@@ -32,7 +32,6 @@
     "a_ten_foot_layout_for": "رابطی برای تماشا از فاصلهٔ دور و کنترل با ریموت، با ورود از طریق کد QR.",
     "made_for_the_television": "ساخته‌شده برای تلویزیون",
     "what_it_is_not": "چه چیزی نیست",
-    "not_a_media_service_or": "نه سرویس رسانه است و نه برنامهٔ پیام‌رسان. نمی‌تواند پیام‌های شما را بخواند.",
     "questions_and_limits": "پرسش‌ها و محدودیت‌ها",
     "set_up_in_three_steps": "راه‌اندازی در سه مرحله",
     "you_do_it_once_then": "فقط یک بار انجام می‌دهید. بعد از آن مثل هر برنامهٔ تلویزیونی دیگر کار می‌کند.",
@@ -76,7 +75,8 @@
     "tmplayer_on_a_television_showing": "TMPlayer روی تلویزیون، با ویدیوهای یک چت Telegram به‌صورت شبکه‌ای از کاشی‌ها همراه با مدت زمان و حجم فایل.",
     "a_phone_opening_a_telegram": "گوشی‌ای که یک چت Telegram را در TMPlayer باز کرده و ویدیوهایش را به‌صورت شبکه نشان می‌دهد.",
     "email_hello_tmplayer_org_with": "ارسال درخواست امکان جدید TMPlayer به ایمیل hello@tmplayer.org",
-    "open_an_issue_in_the": "ثبت مشکل در مخزن TMPlayer در GitHub"
+    "open_an_issue_in_the": "ثبت مشکل در مخزن TMPlayer در GitHub",
+    "not_a_media_service_messages": "نه سرویس رسانه است و نه برنامهٔ پیام‌رسان. پیام‌های شما هرگز در آن نمایش داده نمی‌شوند."
   },
   "common": {
     "skip_to_content": "رفتن به محتوا",
@@ -200,7 +200,9 @@
     "pick_a_chat_pick_b7cf": "یک چت و یک ویدیو انتخاب کنید و OK بزنید. هنگام دانلود پخش می‌شود.",
     "telegram_on_tv_without_5532": "Telegram روی تلویزیون بدون کست",
     "telegram_on_your_tv_bb50": "Telegram روی تلویزیون شما بدون کست",
-    "watch_telegram_videos_on_3a48": "ویدیوهای Telegram را روی تلویزیون ببینید، بدون کست یا آینه‌کردن گوشی: پخش‌کننده‌ای روی خود تلویزیون وارد حسابتان می‌شود و ویدیوهای چت‌هایتان را پخش می‌کند."
+    "watch_telegram_videos_on_3a48": "ویدیوهای Telegram را روی تلویزیون ببینید، بدون کست یا آینه‌کردن گوشی: پخش‌کننده‌ای روی خود تلویزیون وارد حسابتان می‌شود و ویدیوهای چت‌هایتان را پخش می‌کند.",
+    "finds_subtitles_online_through_a322": "پیدا کردن زیرنویس آنلاین از طریق OpenSubtitles، و جابه‌جا کردن زیرنویس یا صدا برای هماهنگی",
+    "groups_series_by_season_709a": "دسته‌بندی سریال‌ها بر اساس فصل در صفحهٔ جداگانه، با پوستر و خلاصهٔ اختیاری"
   },
   "features": {
     "tmplayer_features_stream_telegram_videos": "امکانات TMPlayer: پخش ویدیوهای Telegram روی تلویزیون و رایانه",
@@ -316,7 +318,15 @@
     "the_same_chat_list_on": "همان فهرست چت‌ها روی تلویزیون، با نوار پیمایش در سمت چپ برای ادامه، علاقه‌مندی‌ها، اخیر، کانال‌ها، گروه‌ها، افراد و همهٔ چت‌ها.",
     "tmplayer_settings_on_a_television": "تنظیمات TMPlayer روی تلویزیون، با محدودیت حجم ویدیو، پخش خودکار قسمت بعدی و میزان فضای خالی.",
     "the_tmplayer_desktop_app_on": "برنامهٔ رایانهٔ TMPlayer روی Windows یا Linux: نوار کناری بخش‌های چت در کنار شبکه‌ای از ویدیوهای نمونه، که هر پوستر مدت زمان، حجم و کیفیتش را نشان می‌دهد.",
-    "the_tmplayer_desktop_player_over": "پخش‌کنندهٔ رایانهٔ TMPlayer روی یک ویدیوی نمونه: عنوان و چت در بالا، نوار زمان، و دکمه‌هایی برای زیرنویس، صدا، سرعت، شکل تصویر، میزان صدا، پخش‌کنندهٔ کوچک و تمام‌صفحه."
+    "the_tmplayer_desktop_player_over": "پخش‌کنندهٔ رایانهٔ TMPlayer روی یک ویدیوی نمونه: عنوان و چت در بالا، نوار زمان، و دکمه‌هایی برای زیرنویس، صدا، سرعت، شکل تصویر، میزان صدا، پخش‌کنندهٔ کوچک و تمام‌صفحه.",
+    "subtitles_found_online": "{strong1} اگر فایلی زیرنویس نداشته باشد، از داخل پخش‌کننده در OpenSubtitles جستجو کنید، سپس زیرنویس یا صدا را جلوتر یا عقب‌تر ببرید.",
+    "subtitles_found_online__strong1": "زیرنویس را آنلاین پیدا می‌کند.",
+    "downloads_you_choose": "{strong1} ویدیویی که دانلود می‌کنید تا وقتی پاکش نکنید می‌ماند، یا اگر بخواهید پس از تماشا پاک می‌شود.",
+    "downloads_you_choose__strong1": "همان‌هایی را که انتخاب می‌کنید نگه می‌دارد.",
+    "home_and_series_pages": "{strong1} صفحهٔ خانه آنچه را باید بعداً تماشا کنید از همهٔ چت‌ها جمع می‌کند، و هر سریال صفحهٔ خودش را دارد، با قسمت‌هایی که بر اساس فصل دسته‌بندی شده‌اند.",
+    "home_and_series_pages__strong1": "سریال‌ها را مرتب می‌کند.",
+    "posters_and_overviews": "{strong1} در TMDB، TVmaze و AniList فقط با عنوان تمیزشدهٔ ویدیو جستجو می‌شوند، نه با چیز دیگری.",
+    "posters_and_overviews__strong1": "پوستر و خلاصه اضافه می‌کند، اگر بخواهید."
   },
   "download": {
     "download_tmplayer_for_android_tv": "دانلود TMPlayer برای Android TV، گوشی، Windows و Linux",
@@ -326,9 +336,6 @@
     "how_to_install_it": "نحوهٔ نصب",
     "android_phone": "گوشی Android",
     "every_platform_one_release": "همهٔ پلتفرم‌ها، یک نسخه",
-    "every_file_comes_from_one": "همهٔ فایل‌ها از یک نسخهٔ GitHub می‌آیند. فایل‌های Android با کلید پروژه امضا شده‌اند. نسخه‌های Windows با گواهی رایگانی امضا می‌شوند که {a1} برای پروژه‌های متن‌باز ارائه می‌دهد ({a2}).",
-    "every_file_comes_from_one__a1": "SignPath Foundation",
-    "every_file_comes_from_one__a2": "سیاست امضای کد",
     "latest_release": "آخرین نسخه",
     "android_8_0_and_above": "Android 8.0 و بالاتر",
     "your_device": "دستگاه شما",
@@ -350,7 +357,6 @@
     "installer__span1": "از اینجا شروع کنید",
     "adds_a_start_menu_entry": "یک مورد در منوی Start و یک میان‌بر روی دسکتاپ اضافه می‌کند. نیازی به دسترسی مدیر نیست.",
     "tmplayer_version_windows_x64_msi": "TMPlayer-<version>-windows-x64.msi",
-    "windows_binaries_are_signed_via": "فایل‌های اجرایی Windows با SignPath امضا می‌شوند تا یکپارچگی‌شان تأیید شود و از دستکاری غیرمجاز جلوگیری شود.",
     "how_to_install_on_windows": "نحوهٔ نصب روی Windows",
     "x86_64_with_glibc_2": "x86_64، با glibc 2.38 یا جدیدتر: Ubuntu 24.04، Debian 13، Fedora 39 و بعدتر",
     "any_distribution": "هر توزیعی",
@@ -381,7 +387,13 @@
     "an_app_from_outside_the": "برنامه‌ای از خارج از فروشگاه که وارد Telegram می‌شود اعتماد زیادی می‌خواهد. یک ستاره به نفر بعدی در تصمیم‌گیری کمک می‌کند.",
     "download_tmplayer_free_the_apk": "TMPlayer را رایگان دانلود کنید: APK برای Android TV و گوشی، نصب‌کنندهٔ Windows، و AppImage برای Linux.",
     "platforms": "پلتفرم‌ها",
-    "add_to_obtainium": "افزودن به Obtainium"
+    "add_to_obtainium": "افزودن به Obtainium",
+    "every_file_comes_from_one_github": "همهٔ فایل‌ها از یک نسخهٔ GitHub می‌آیند. فایل‌های Android با کلید پروژه امضا شده‌اند. نصب‌کنندهٔ Windows هنوز امضای کد ندارد: پروژه از {a1} درخواست گواهی رایگانی را کرده است که برای پروژه‌های متن‌باز ارائه می‌شود ({a2}).",
+    "every_file_comes_from_one_github__a1": "SignPath Foundation",
+    "every_file_comes_from_one_github__a2": "سیاست امضای کد",
+    "the_installer_is_not_code_signed": "نصب‌کننده هنوز امضای کد ندارد، پس ممکن است SmartScreen بار اول به شما هشدار دهد. روی {em1} کلیک کنید، سپس {em2}.",
+    "the_installer_is_not_code_signed__em1": "More info",
+    "the_installer_is_not_code_signed__em2": "Run anyway"
   },
   "install": {
     "how_to_install_tmplayer_on": "نحوهٔ نصب TMPlayer روی Android TV، Windows و Linux",

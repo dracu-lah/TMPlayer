@@ -409,7 +409,52 @@ var tmT = (function () {
     el.prevWrap.hidden = false;
   }
 
+  /* The site's own update feed, latest.json, names the newest release and the
+     exact URL of every file in it. It is served from this domain, so neither
+     GitHub's hourly limit nor a slow API stands between a visitor and the file.
+     Used when the API fails; it has no download counts and no older releases,
+     which is all that is missing. */
+  function fromFeed(feed) {
+    if (!feed || !feed.version || !feed.assets) { return null; }
+    var assets = [];
+    for (var id in feed.assets) {
+      if (!Object.prototype.hasOwnProperty.call(feed.assets, id)) { continue; }
+      var a = feed.assets[id];
+      if (!a || !a.url) { continue; }
+      assets.push({
+        name: decodeURIComponent(String(a.url).split('/').pop()),
+        browser_download_url: a.url,
+        size: a.size
+      });
+    }
+    if (assets.length === 0) { return null; }
+    return {
+      tag_name: 'v' + feed.version,
+      published_at: feed.published,
+      html_url: feed.releaseUrl || LATEST_PAGE,
+      body: feed.notes || '',
+      assets: assets
+    };
+  }
+
   function fail(reason) {
+    if (typeof fetch === 'function') {
+      fetch('/latest.json', { cache: 'no-cache' }).then(function (res) {
+        if (!res.ok) { throw new Error('feed-' + res.status); }
+        return res.json();
+      }).then(function (feed) {
+        var release = fromFeed(feed);
+        if (!release) { throw new Error('feed-shape'); }
+        renderLatest(release);
+      }).catch(function () {
+        showFailure(reason);
+      });
+      return;
+    }
+    showFailure(reason);
+  }
+
+  function showFailure(reason) {
     settled();
     el.version.textContent = tmT('unavailable', 'Unavailable');
     el.date.textContent = '';
