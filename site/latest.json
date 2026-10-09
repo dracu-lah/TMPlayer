@@ -1,30 +1,30 @@
 {
   "schema": 1,
-  "version": "1.24.0",
-  "versionCode": 12400,
-  "published": "2026-10-06T20:48:35Z",
-  "releaseUrl": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.24.0",
-  "notes": "release: 1.24.0 TMPlayer now speaks 21 languages (machine translated for now, corrections welcome on GitHub). Home has rows, series get their own page, and search covers all your chats. Optional posters and overviews come from TMDB, TVmaze and AniList, and subtitles can be found online through OpenSubtitles. The player adds volume boost, a sleep timer, a \"still watching?\" check, subtitle and audio delay, subtitle size and position, and simpler controls on phone, TV and desktop. Downloads can be removed after watching. On TV: Fire TV remotes, Watch Next and seek previews. On desktop the QR sign in works in release builds, and there is a new About screen everywhere.",
+  "version": "1.25.0",
+  "versionCode": 12500,
+  "published": "2026-10-09T22:03:02Z",
+  "releaseUrl": "https://github.com/dracu-lah/TMPlayer/releases/tag/v1.25.0",
+  "notes": "release: 1.25.0 Series now have an Episodes list in the player on phone, TV and desktop, with autoplay to the next episode and marking episodes watched right from the list. The side bar is simpler: Home, History, Favourites, Chats, Downloads and Settings, and Only my folders hides Telegram's own Chats and Saved groups. There is a shorter welcome tour, and Home says how to get a first video in. TMPlayer now asks before forgetting progress, clearing caches or deleting downloads. On desktop, Chinese, Japanese, Korean, Hindi, Bengali, Malayalam, Arabic and Persian show even without system fonts, and the AppImage updates only what changed. On TV, OK pauses in one press and See all sits on each Home row. Labels that were cut short in German, Russian and Malayalam fit, and buttons in the light theme are readable again.",
   "assets": {
     "android-universal": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.24.0/TMPlayer-1.24.0-universal.apk",
-      "sha256": "0b38942f7a01f3019d935ac22876a9937fbfc3f3eb62fbb9411f0d46a3332ccc",
-      "size": 28006412
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.25.0/TMPlayer-1.25.0-universal.apk",
+      "sha256": "5b8c7ed18898a676d3da07554e52d228801a02b53d6c3411d4f3b44a838490bd",
+      "size": 27382772
     },
     "windows-x64-msi": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.24.0/TMPlayer-1.24.0-windows-x64.msi",
-      "sha256": "5d1cd29c073199043a5ff0efb5fd8f59fa4c73f1ac578e2269f29b4b86fe7715",
-      "size": 96363636
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.25.0/TMPlayer-1.25.0-windows-x64.msi",
+      "sha256": "f20c83436b63dffe17f7c103409e924802707841a86d52448d143ec28f78a368",
+      "size": 101815436
     },
     "linux-x64-appimage": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.24.0/TMPlayer-1.24.0-x86_64.AppImage",
-      "sha256": "9e2cc0023aa3a212d0d8fb66573f1994a8a641e722f908a0d88411e4f4b5e1a9",
-      "size": 92207608
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.25.0/TMPlayer-1.25.0-x86_64.AppImage",
+      "sha256": "0e976dc08384a952a262c268038ed95f88e88b4f1ca9e8fc7716c641ceb745ce",
+      "size": 97077752
     },
     "linux-x64-tarball": {
-      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.24.0/TMPlayer-1.24.0-linux-x64.tar.xz",
-      "sha256": "45ed04dbfaad31e056afb5daa037bfc2fd4df682d798ddf047a17012bdd1c1c7",
-      "size": 66288996
+      "url": "https://github.com/dracu-lah/TMPlayer/releases/download/v1.25.0/TMPlayer-1.25.0-linux-x64.tar.xz",
+      "sha256": "eac624cf346395d1899a50e2711f2d936d0aca158e0a4c72a725f326d9d6dffe",
+      "size": 72016712
     }
   }
 }
