@@ -2779,7 +2779,7 @@ private val RAIL_ROW = 48.dp
 
 // Outside each row's fill, so the selected row and a focused one beside it read as two rows rather
 // than one block when focus moves off Home onto History.
-private val RAIL_GAP = 4.dp
+private val RAIL_GAP = 8.dp
 
 /** The mark beside the name and version at the top of the rail. */
 private val RAIL_MARK = 32.dp
