@@ -50,6 +50,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -284,11 +288,21 @@ fun EpisodesPanel(
 
         // The episode playing in view, and under a remote, focused: once the rows are laid out.
         val lead = if (series.seasons.size > 1) 1 else 0
-        // Tried for a few frames: the dialog window's first layout can arrive late (a stick
-        // drawing Arabic for the first time took long enough that one frame found no rows).
+        // Only once the window has focus: a window that gains it moves focus to its first control
+        // (Previous), over a request made before that, which on a slow stick it often was. Then
+        // tried for a few frames, in case the first layout arrives late as well.
+        val window = LocalWindowInfo.current
         LaunchedEffect(series.key, wide) {
-            val at = shown.episodes.indexOfFirst { playingEpisode?.sameAs(it) == true }
-            if (at < 0 || season != playingEpisode?.season) return@LaunchedEffect
+            val playingSeason = playingEpisode?.season ?: return@LaunchedEffect
+            val at = series.seasons.firstOrNull { it.number == playingSeason }?.episodes
+                ?.indexOfFirst { playingEpisode.sameAs(it) } ?: -1
+            if (at < 0) return@LaunchedEffect
+            // A touch screen places no focus, so it scrolls at once.
+            if (focusCurrent) withTimeoutOrNull(WINDOW_FOCUS_WAIT_MS) { snapshotFlow { window.isWindowFocused }.first { it } }
+            // The window's own first focus can land on a season tab, and on a television a
+            // focused tab shows its season (right to left, that was Season 2): back to the one
+            // playing before the row is looked for.
+            season = playingSeason
             repeat(FOCUS_TRIES) {
                 withFrameNanos { }
                 if (list.layoutInfo.totalItemsCount == 0) return@repeat
@@ -595,6 +609,9 @@ private val SkipPrevious: ImageVector by lazy { glyph("SkipPrevious", "M6 6h2v12
 private val WIDE_FROM: Dp = 640.dp
 
 private val CHOICES_WIDTH: Dp = 280.dp
+
+/** How long the open-time focus waits for the window to take focus before trying anyway. */
+private const val WINDOW_FOCUS_WAIT_MS = 2_000L
 
 /** Frames the open-time scroll and focus are tried for before giving up. */
 private const val FOCUS_TRIES = 30

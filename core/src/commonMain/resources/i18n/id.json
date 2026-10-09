@@ -1041,7 +1041,7 @@
     "details_unknown": "tidak diketahui",
     "details_video_codec": "Codec video: {codec}",
     "details_video_output": "Output video",
-    "double_tap_hint": "Ketuk dua kali sisi kiri atau kanan untuk melompat {seconds, plural, one {# detik} other {# detik}}",
+    "double_tap_hint": "Ketuk dua kali sisi kiri atau kanan untuk melompat {seconds, plural, other {# detik}}",
     "download_incomplete": "Unduhan tidak selesai. Periksa koneksi dan coba lagi.",
     "download_only_telegram": "Hanya video Telegram yang bisa diunduh",
     "download_unfinished": "Unduhan tidak selesai. Sambungkan ke internet dan coba lagi.",

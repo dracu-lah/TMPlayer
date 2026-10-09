@@ -1041,7 +1041,7 @@
     "details_unknown": "inconnu",
     "details_video_codec": "Codec vidéo : {codec}",
     "details_video_output": "Sortie vidéo",
-    "double_tap_hint": "Touchez deux fois à gauche ou à droite pour sauter {seconds, plural, one {# seconde} other {# secondes}}",
+    "double_tap_hint": "Touchez deux fois à gauche ou à droite pour sauter {seconds, plural, one {# seconde} many {# secondes} other {# secondes}}",
     "download_incomplete": "Le téléchargement ne s'est pas terminé. Vérifiez la connexion et réessayez.",
     "download_only_telegram": "Seules les vidéos Telegram peuvent être téléchargées",
     "download_unfinished": "Le téléchargement ne s'est pas terminé. Connectez-vous à internet et réessayez.",
