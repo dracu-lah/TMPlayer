@@ -141,6 +141,10 @@ jobs:
             exit 1
           fi
           cp "$SRC" "dist/TMPlayer-$VERSION-universal.apk"
+          # The same file under a name that never changes, so tmplayer.org/apk can redirect to
+          # releases/latest/download/TMPlayer.apk and a remote's Downloader app gets a short URL.
+          # No "universal" in it, so the updater and the site's file list pass it by.
+          cp "$SRC" "dist/TMPlayer.apk"
 
           # R8 renames every class, so a crash report from a released APK is unreadable without
           # the mapping for that exact build. It is generated once and then gone, so it is kept
@@ -310,6 +314,7 @@ jobs:
           # instead of publishing a short one. The site and the Android updater match these names.
           for f in \
             "TMPlayer-$VERSION-universal.apk" \
+            "TMPlayer.apk" \
             "TMPlayer-$VERSION-windows-x64.msi" \
             "TMPlayer-$VERSION-x86_64.AppImage" \
             "TMPlayer-$VERSION-x86_64.AppImage.zsync" \
@@ -322,7 +327,7 @@ jobs:
           # And nothing else: a file the list above does not name would go up unannounced.
           for path in dist/*; do
             case "${path#dist/}" in
-              "TMPlayer-$VERSION-universal.apk" | "TMPlayer-$VERSION-windows-x64.msi" | \
+              "TMPlayer-$VERSION-universal.apk" | "TMPlayer.apk" | "TMPlayer-$VERSION-windows-x64.msi" | \
                 "TMPlayer-$VERSION-x86_64.AppImage" | "TMPlayer-$VERSION-x86_64.AppImage.zsync" | \
                 "TMPlayer-$VERSION-linux-x64.tar.xz") ;;
               *) echo "::error::$path is not one of the release's files"; exit 1 ;;
