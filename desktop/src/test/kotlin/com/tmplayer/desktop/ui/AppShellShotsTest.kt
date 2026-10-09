@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -154,7 +155,10 @@ class AppShellShotsTest {
         }
     }
 
-    /** A line in every script the languages need, in the default font family and nothing bundled. */
+    /**
+     * A line in every script the languages need, in the default font family, regular and SemiBold.
+     * Where the system has no font for a script, the bundled Noto fallbacks draw it.
+     */
     @Test
     fun everyScriptRenders() {
         shot("scripts", sidebar = false) {
@@ -163,6 +167,7 @@ class AppShellShotsTest {
                     Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                         Text(tag, style = MaterialTheme.typography.titleMedium, color = Tone.muted, modifier = Modifier.padding(top = 6.dp))
                         Text(line, fontSize = 30.sp, color = Tone.text)
+                        Text(line, fontSize = 30.sp, fontWeight = FontWeight.SemiBold, color = Tone.text)
                     }
                 }
             }
@@ -215,10 +220,13 @@ class AppShellShotsTest {
 
         val SCRIPTS = listOf(
             "zh-CN" to "简体中文：继续观看，字幕和音轨",
+            "zh-TW" to "繁體中文：繼續觀看，字幕和音軌",
             "ja" to "日本語：続きから再生、字幕と音声",
             "ko" to "한국어: 이어서 보기, 자막과 오디오",
             "ar" to "العربية: متابعة المشاهدة والترجمة",
+            "fa" to "فارسی: ادامهٔ تماشا، زیرنویس",
             "hi" to "हिन्दी: देखना जारी रखें, उपशीर्षक",
+            "bn" to "বাংলা: দেখা চালিয়ে যান, সাবটাইটেল",
             "ml" to "മലയാളം: കാണുന്നത് തുടരുക, സബ്ടൈറ്റിൽ",
             "ru" to "Русский: продолжить просмотр",
             "vi" to "Tiếng Việt: tiếp tục xem, phụ đề",

@@ -263,7 +263,7 @@ fun TmMaterialTheme(
             LocalContentColor provides scheme.onSurface,
             LocalDarkTheme provides dark,
         ) {
-            ProvideStrings(content)
+            ProvideFallbackFonts { ProvideStrings(content) }
         }
     }
 }

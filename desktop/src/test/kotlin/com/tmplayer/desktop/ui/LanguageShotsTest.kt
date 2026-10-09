@@ -59,7 +59,8 @@ import java.nio.file.Files
 /**
  * The desktop's text in English and in the en-XA pseudo-locale, so text that does not go through
  * the catalog shows up unaccented and text that does not fit shows up cut: browse, Settings, the
- * player's menu, the "?" sheet, the update popup and a dialog. With TMPLAYER_SHOTS=<dir> the frames
+ * player's menu, the "?" sheet, the update popup and a dialog. The same frames in each language
+ * that leans on the bundled fallback fonts. With TMPLAYER_SHOTS=<dir> the frames
  * are written there as `lang-<tag>-<name>.png`.
  */
 class LanguageShotsTest {
@@ -105,6 +106,23 @@ class LanguageShotsTest {
     @Test
     fun englishAndPseudo() {
         for (tag in listOf(Languages.ENGLISH, Languages.PSEUDO)) {
+            Translator.use(tag)
+            try {
+                shots(tag)
+            } finally {
+                Translator.use(Languages.ENGLISH)
+            }
+        }
+    }
+
+    /**
+     * The languages whose scripts a desktop may have no font for, drawn through the bundled Noto
+     * fallbacks when the system has none. To see them without the system's own fonts, point
+     * FONTCONFIG_FILE at a configuration that lists only a Latin font before running the tests.
+     */
+    @Test
+    fun scriptsTheSystemMayLack() {
+        for (tag in listOf("zh-CN", "zh-TW", "ja", "ko", "hi", "bn", "ml", "ar", "fa")) {
             Translator.use(tag)
             try {
                 shots(tag)

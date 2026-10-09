@@ -280,9 +280,9 @@ tasks.matching { it.name == "proguardReleaseJars" }.configureEach {
     }
 }
 
-// LICENSE, the OpenSSL permission and the third-party notices travel inside the app image, so the
-// MSI, the tarball, the AppImage and the AUR package all carry them without each packaging step
-// copying them again. Compose copies appResourcesRootDir/common into the image's app/resources
+// LICENSE, the OpenSSL permission, the third-party notices and the fonts' OFL travel inside the
+// app image, so the MSI, the tarball, the AppImage and the AUR package all carry them without each
+// packaging step copying them again. Compose copies appResourcesRootDir/common into the image's app/resources
 // (lib/app/resources on Linux) and names that folder in the compose.application.resources.dir
 // system property, which is where the About screen reads them from.
 val legalResources = layout.buildDirectory.dir("legal-resources")
@@ -292,6 +292,8 @@ val syncLegalResources by tasks.registering(Sync::class) {
         rootProject.file("LICENSE-OPENSSL-EXCEPTION.md"),
         rootProject.file("THIRD_PARTY_NOTICES.md"),
     )
+    // The OFL text and copyright lines of the Noto fonts :ui bundles for scripts the system lacks.
+    from(project(":ui").file("src/jvmMain/resources/fonts/OFL.txt")) { rename { "OFL-Noto.txt" } }
     into(legalResources.map { it.dir("common") })
 }
 tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(syncLegalResources) }

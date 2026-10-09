@@ -133,6 +133,18 @@ source at <https://github.com/adoptium/jdk21u>.
 - AppDirs 1.4.0: Apache License 2.0: <https://github.com/harawata/appdirs>
 - SLF4J 2.0.17 (no-operation binding): MIT: <https://github.com/qos-ch/slf4j>
 
+### Fonts on the desktop
+
+The desktop app bundles subsets of Noto Sans SC, Noto Sans TC, Noto Sans JP, Noto Sans KR, Noto Sans
+Devanagari, Noto Sans Bengali, Noto Sans Malayalam and Noto Sans Arabic UI, so Chinese, Japanese,
+Korean, Hindi, Bengali, Malayalam, Arabic and Persian text draws where the system has no font for
+it. SIL Open Font License 1.1. Copyright 2014-2021 Adobe (http://www.adobe.com/), with Reserved
+Font Name 'Source' (the CJK fonts), and The Noto Project Authors (the others):
+<https://github.com/notofonts>. The subsets keep only the characters TMPlayer uses and the common
+characters of each script; nothing else in them is changed. The full licence text with each
+copyright line travels beside the fonts as `fonts/OFL.txt` inside the app and as `OFL-Noto.txt`
+next to these notices in every desktop package.
+
 ## Shared
 
 ### tdl-coroutines 15.0.0 and TDLib 1.8.67
