@@ -20,6 +20,8 @@ on:
 
 permissions:
   contents: write
+  # Read only: the Android job looks up whether CI already passed on the tagged code.
+  actions: read
 
 jobs:
   version:
@@ -54,6 +56,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The whole history, so the test skip below can tell what changed since CI last passed.
+          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v5
@@ -117,8 +122,32 @@ jobs:
           TMDB_API_KEY=$TMDB_API_KEY
           EOF
 
+      # CI runs the same tests on every push to main, so a tag on code CI has already passed
+      # does not run them again: that took about an hour of the 1.25.0 run. The tests do run
+      # when no passing CI run is found on an ancestor of the tag, or when anything since that
+      # run touches more than the paths CI itself skips (plus the store listing text).
+      - name: Check whether CI already tested this code
+        id: tested
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          safe='^(site/|docs/|fastlane/|desktop/packaging/aur/)|\.md$'
+          for sha in $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&status=success&per_page=30" --jq '.workflow_runs[].head_sha'); do
+            git merge-base --is-ancestor "$sha" HEAD 2>/dev/null || continue
+            changed="$(git diff --name-only "$sha" HEAD | grep -Ev "$safe" || true)"
+            if [ -z "$changed" ]; then
+              echo "::notice::CI passed on $sha and nothing since changes the build, so the unit tests are not run again."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      # Debug only: the promo and release variants run the same test sources, so :app:test ran
+      # every test three times for nothing.
       - name: Run unit tests
-        run: ./gradlew :core:jvmTest :app:test
+        if: steps.tested.outputs.skip != 'true'
+        run: ./gradlew :core:jvmTest :app:testDebugUnitTest
 
       - name: Build the signed APK
         run: |

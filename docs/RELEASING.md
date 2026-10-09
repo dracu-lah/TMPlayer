@@ -64,6 +64,12 @@ Ordinary pushes and pull requests run `.github/workflows/ci.yml`, which tests an
 debug APK. That job never sees the signing key or the Telegram credentials, so a pull request
 from a stranger cannot reach them.
 
+So tag a commit CI has already passed. The release's Android job then skips the unit tests,
+because it finds that passing CI run on an ancestor of the tag with nothing since but docs, the
+site, Markdown, the store listing text or the PKGBUILD. Tagging code CI has not seen still works,
+it just runs the tests itself, which adds about 20 minutes. The desktop jobs always run their
+own tests, because they also check the installers.
+
 ## Repository secrets
 
 The release job needs six secrets. Set them once with the GitHub CLI:

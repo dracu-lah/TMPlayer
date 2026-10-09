@@ -3,10 +3,10 @@ name: CI
 # Every push and every pull request that touches the build. This job never touches signing keys
 # or Telegram credentials, so it is safe to run on contributions from people you do not know.
 #
-# A change confined to the site, the docs, Markdown or the PKGBUILD cannot break a build, so it
-# does not start one: that covers the release job's own "site: the update feed names x.y.z"
-# commit and ordinary doc edits. A push that also touches anything else still runs everything,
-# and workflow_dispatch runs it by hand whatever changed.
+# A change confined to the site, the docs, Markdown, the store listing text under fastlane/ or
+# the PKGBUILD cannot break a build, so it does not start one: that covers the release job's own
+# "site: the update feed names x.y.z" commit and ordinary doc edits. A push that also touches
+# anything else still runs everything, and workflow_dispatch runs it by hand whatever changed.
 on:
   push:
     branches: [main]
@@ -14,6 +14,7 @@ on:
       - "site/**"
       - "docs/**"
       - "**/*.md"
+      - "fastlane/**"
       - "desktop/packaging/aur/**"
   pull_request:
     branches: [main]
@@ -21,6 +22,7 @@ on:
       - "site/**"
       - "docs/**"
       - "**/*.md"
+      - "fastlane/**"
       - "desktop/packaging/aur/**"
   workflow_dispatch:
 
@@ -52,8 +54,10 @@ jobs:
       - name: Run core tests
         run: ./gradlew :core:jvmTest
 
+      # Debug only: the promo and release variants run the same test sources, so :app:test ran
+      # every test three times.
       - name: Run unit tests
-        run: ./gradlew :app:test
+        run: ./gradlew :app:testDebugUnitTest
 
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug
