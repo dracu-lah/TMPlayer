@@ -315,7 +315,7 @@
     "stream_telegram_videos_while_they": "Guarda i video Telegram mentre scaricano, spostati subito, riproduci MKV con i sottotitoli e passa da solo all'episodio successivo su Android TV, telefoni, Windows e Linux.",
     "tmplayer_on_a_phone_listing": "TMPlayer su un telefono, con chat dimostrative: Clip del weekend, Progetti di casa, Note di ricette, Diario di viaggio, Studio di design e Archivio di famiglia.",
     "a_dense_grid_of_demo": "Una griglia fitta di video dimostrativi di una chat Telegram su un telefono, ogni riquadro con risoluzione e durata.",
-    "the_same_chat_list_on": "Lo stesso elenco di chat su una televisione, con una barra di navigazione a sinistra per Continua, Preferiti, Recenti, Canali, Gruppi, Persone e Tutte le chat.",
+    "the_same_chat_list_on": "Lo stesso elenco di chat su un televisore, con una barra di navigazione a sinistra.",
     "tmplayer_settings_on_a_television": "Le impostazioni di TMPlayer su una televisione, con i limiti di dimensione dei video, la riproduzione automatica dell'episodio successivo e lo spazio libero.",
     "the_tmplayer_desktop_app_on": "L'app desktop di TMPlayer su Windows o Linux: una barra laterale con le sezioni delle chat accanto a una griglia di video dimostrativi, ogni locandina con durata, dimensione e risoluzione.",
     "the_tmplayer_desktop_player_over": "Il lettore desktop di TMPlayer su un video dimostrativo: titolo e chat in alto, una barra del tempo e pulsanti per sottotitoli, audio, velocità, formato dell'immagine, volume, mini lettore e schermo intero.",
@@ -540,7 +540,7 @@
     "not_a_device_where_sideloading": "Non un dispositivo in cui l'installazione da fonti esterne è bloccata.",
     "a_tv_app_outside_the": "Un'app per TV fuori dal Play Store vive di passaparola. Una stella è il modo più semplice per farla conoscere.",
     "watch_telegram_videos_on_android": "Guarda i video Telegram su Android TV e Google TV. TMPlayer è gratuito e open source, con un'interfaccia pensata per il telecomando, accesso con QR e riproduzione fluida su chiavette da 1 GB.",
-    "the_tmplayer_chat_list_on": "L'elenco delle chat di TMPlayer su Android TV, con una barra di navigazione a sinistra per Continua, Preferiti, Recenti, Canali, Gruppi, Persone e Tutte le chat.",
+    "the_tmplayer_chat_list_on": "L'elenco delle chat di TMPlayer su Android TV, con una barra di navigazione a sinistra.",
     "videos_from_a_telegram_chat": "Video di una chat Telegram mostrati su Android TV in una griglia di riquadri con durata e dimensione dei file."
   },
   "fire_tv": {

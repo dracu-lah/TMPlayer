@@ -315,7 +315,7 @@
     "stream_telegram_videos_while_they": "邊下載邊串流播放 Telegram 影片、瞬間跳轉進度、播放帶字幕的 MKV，並在 Android TV、手機、Windows 與 Linux 上自動播放下一集。",
     "tmplayer_on_a_phone_listing": "手機上的 TMPlayer，列出示範聊天：週末短片、居家專案、食譜筆記、旅行日記、設計研究與家庭相簿。",
     "a_dense_grid_of_demo": "手機上顯示 Telegram 聊天中示範影片的密集格狀畫面，每個磚塊都標示解析度與片長。",
-    "the_same_chat_list_on": "電視上的同一份聊天清單，左側有導覽列，包含繼續觀賞、我的最愛、最近、頻道、群組、聯絡人與所有聊天。",
+    "the_same_chat_list_on": "電視上的同一個聊天列表，左側有導覽列。",
     "tmplayer_settings_on_a_television": "電視上的 TMPlayer 設定畫面，顯示影片大小限制、自動播放下一集，以及剩餘儲存空間。",
     "the_tmplayer_desktop_app_on": "Windows 或 Linux 上的 TMPlayer 桌面版：左側是聊天分類的側邊欄，旁邊是示範影片的格狀畫面，每張海報都標示片長、大小與解析度。",
     "the_tmplayer_desktop_player_over": "TMPlayer 桌面播放器播放示範影片的畫面：頂端是標題與聊天名稱，下方有時間軸，以及字幕、音軌、速度、畫面比例、音量、迷你播放器與全螢幕按鈕。",
@@ -540,7 +540,7 @@
     "not_a_device_where_sideloading": "側載功能被鎖住的裝置也不行。",
     "a_tv_app_outside_the": "不在 Play 商店的電視 App，只能靠口耳相傳。加星是最簡單的推廣方式。",
     "watch_telegram_videos_on_android": "在 Android TV 與 Google TV 上觀看 Telegram 影片。TMPlayer 免費開源，以遙控器為優先設計，支援 QR 碼登入，在 1 GB 的電視棒上也能順暢播放。",
-    "the_tmplayer_chat_list_on": "Android TV 上的 TMPlayer 聊天清單，左側有導覽列，包含繼續觀賞、我的最愛、最近、頻道、群組、聯絡人與所有聊天。",
+    "the_tmplayer_chat_list_on": "Android TV 上的 TMPlayer 聊天列表，左側有導覽列。",
     "videos_from_a_telegram_chat": "Android TV 上以磚塊格狀顯示的 Telegram 聊天影片，每個磚塊都標示片長與檔案大小。"
   },
   "fire_tv": {

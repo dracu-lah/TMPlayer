@@ -315,7 +315,7 @@
     "stream_telegram_videos_while_they": "Streame Telegram-Videos, während sie laden, spule sofort, spiele MKV mit Untertiteln ab und starte die nächste Folge automatisch, auf Android TV, Smartphones, Windows und Linux.",
     "tmplayer_on_a_phone_listing": "TMPlayer auf einem Smartphone mit Demo-Chats: Weekend Clips, Home Projects, Recipe Notes, Travel Diary, Design Study und Family Archive.",
     "a_dense_grid_of_demo": "Ein dichtes Raster aus Demo-Videos eines Telegram-Chats auf einem Smartphone, jede Kachel mit Auflösung und Laufzeit.",
-    "the_same_chat_list_on": "Dieselbe Chat-Liste auf einem Fernseher, mit einer Navigationsleiste links für Weiter ansehen, Favoriten, Zuletzt, Kanäle, Gruppen, Personen und Alle Chats.",
+    "the_same_chat_list_on": "Dieselbe Chat-Liste auf einem Fernseher, mit einer Navigationsleiste links.",
     "tmplayer_settings_on_a_television": "TMPlayer-Einstellungen auf einem Fernseher, mit den Größenlimits für Videos, dem Autoplay der nächsten Folge und dem freien Speicher.",
     "the_tmplayer_desktop_app_on": "Die TMPlayer-Desktop-App unter Windows oder Linux: eine Seitenleiste mit Chat-Bereichen neben einem Raster aus Demo-Videos, jedes Poster mit Laufzeit, Größe und Auflösung.",
     "the_tmplayer_desktop_player_over": "Der TMPlayer-Desktop-Player über einem Demo-Video: Titel und Chat oben, eine Zeitleiste und Schaltflächen für Untertitel, Ton, Geschwindigkeit, Bildformat, Lautstärke, den Mini-Player und Vollbild.",
@@ -540,7 +540,7 @@
     "not_a_device_where_sideloading": "Kein Gerät, auf dem Sideloading gesperrt ist.",
     "a_tv_app_outside_the": "Eine TV-App außerhalb des Play Stores lebt von Mundpropaganda. Ein Stern ist der einfachste Weg, sie zu verbreiten.",
     "watch_telegram_videos_on_android": "Schau Telegram-Videos auf Android TV und Google TV. TMPlayer ist kostenlos und Open Source, mit einem Layout für die Fernbedienung, QR-Anmeldung und flüssiger Wiedergabe auf 1-GB-Sticks.",
-    "the_tmplayer_chat_list_on": "Die TMPlayer-Chat-Liste auf Android TV, mit einer Navigationsleiste links für Weiter ansehen, Favoriten, Zuletzt, Kanäle, Gruppen, Personen und Alle Chats.",
+    "the_tmplayer_chat_list_on": "Die TMPlayer-Chat-Liste auf Android TV, mit einer Navigationsleiste links.",
     "videos_from_a_telegram_chat": "Videos aus einem Telegram-Chat auf Android TV, als Raster aus Kacheln mit Laufzeiten und Dateigrößen."
   },
   "fire_tv": {

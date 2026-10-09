@@ -315,7 +315,7 @@
     "stream_telegram_videos_while_they": "Android TV、スマートフォン、Windows、Linuxで、Telegramの動画をダウンロードしながらストリーミング再生。瞬時にシークでき、MKVも字幕付きで再生し、次のエピソードも自動再生します。",
     "tmplayer_on_a_phone_listing": "デモ用のチャットを並べたスマートフォンのTMPlayer。Weekend Clips、Home Projects、Recipe Notes、Travel Diary、Design Study、Family Archive。",
     "a_dense_grid_of_demo": "スマートフォンで表示した、Telegramチャットのデモ動画の密なグリッド。各タイルに解像度と再生時間が付いています。",
-    "the_same_chat_list_on": "テレビで表示した同じチャット一覧。左のナビゲーションレールに、続きから見る、お気に入り、最近、チャンネル、グループ、ユーザー、すべてのチャットが並びます。",
+    "the_same_chat_list_on": "テレビで表示した同じチャット一覧。左側にナビゲーションレールがあります。",
     "tmplayer_settings_on_a_television": "テレビのTMPlayer設定画面。動画サイズの上限、次のエピソードの自動再生、ストレージの空き容量を表示しています。",
     "the_tmplayer_desktop_app_on": "WindowsまたはLinuxのTMPlayerデスクトップアプリ。チャット項目のサイドバーと、デモ動画のグリッドが並び、各ポスターに再生時間、サイズ、解像度が付いています。",
     "the_tmplayer_desktop_player_over": "デモ動画を再生中のTMPlayerデスクトッププレーヤー。上部にタイトルとチャット、シークバー、そして字幕、音声、速度、画面の形、音量、ミニプレーヤー、全画面のボタンがあります。",
@@ -540,7 +540,7 @@
     "not_a_device_where_sideloading": "サイドロードが禁止されている端末でも動きません。",
     "a_tv_app_outside_the": "Playストア以外のテレビアプリは、口コミで広がります。スターが、いちばん簡単な広め方です。",
     "watch_telegram_videos_on_android": "Android TVとGoogle TVでTelegramの動画を見ましょう。TMPlayerは無料のオープンソースで、リモコン操作を第一にしたレイアウト、QRコードでのサインイン、RAM 1 GBのスティックでの快適な再生に対応しています。",
-    "the_tmplayer_chat_list_on": "Android TVのTMPlayerチャット一覧。左のナビゲーションレールに、続きから見る、お気に入り、最近、チャンネル、グループ、ユーザー、すべてのチャットが並びます。",
+    "the_tmplayer_chat_list_on": "Android TV の TMPlayer チャット一覧。左側にナビゲーションレールがあります。",
     "videos_from_a_telegram_chat": "Android TVに表示した、Telegramチャットの動画。再生時間とファイルサイズ付きのタイルのグリッドです。"
   },
   "fire_tv": {

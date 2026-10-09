@@ -315,7 +315,7 @@
     "stream_telegram_videos_while_they": "Android TV'de, telefonlarda, Windows'ta ve Linux'ta Telegram videolarını inerken akıt, anında sar, MKV'yi altyazıyla oynat ve sonraki bölümü otomatik başlat.",
     "tmplayer_on_a_phone_listing": "Telefonda TMPlayer, demo sohbetleri listeliyor: Weekend Clips, Home Projects, Recipe Notes, Travel Diary, Design Study ve Family Archive.",
     "a_dense_grid_of_demo": "Telefonda bir Telegram sohbetindeki demo videolardan oluşan sık bir ızgara; her kutucukta çözünürlük ve süre var.",
-    "the_same_chat_list_on": "Aynı sohbet listesi televizyonda; solda Devam et, Favoriler, Son, Kanallar, Gruplar, Kişiler ve Tüm sohbetler için bir gezinme rayı var.",
+    "the_same_chat_list_on": "Televizyonda aynı sohbet listesi, solda bir gezinme çubuğuyla.",
     "tmplayer_settings_on_a_television": "Televizyonda TMPlayer ayarları; video boyutu sınırları, sonraki bölümün otomatik oynatılması ve ne kadar depolama alanı boş olduğu görünüyor.",
     "the_tmplayer_desktop_app_on": "Windows ya da Linux'ta TMPlayer masaüstü uygulaması: sohbet bölümlerinin kenar çubuğu ve yanında demo videoların ızgarası; her afişte süre, boyut ve çözünürlük var.",
     "the_tmplayer_desktop_player_over": "Bir demo video üzerinde TMPlayer masaüstü oynatıcı: üstte başlık ve sohbet, bir zaman çubuğu ve altyazı, ses, hız, görüntü oranı, ses düzeyi, mini oynatıcı ve tam ekran düğmeleri.",
@@ -540,7 +540,7 @@
     "not_a_device_where_sideloading": "Yan yüklemenin kilitli olduğu bir cihaz değil.",
     "a_tv_app_outside_the": "Play Store dışındaki bir TV uygulaması ağızdan ağza yayılır. Yıldız, yaymanın en kolay yolu.",
     "watch_telegram_videos_on_android": "Telegram videolarını Android TV ve Google TV'de izle. TMPlayer ücretsiz ve açık kaynak; kumanda öncelikli arayüz, QR ile giriş ve 1 GB'lık çubuklarda akıcı oynatma sunar.",
-    "the_tmplayer_chat_list_on": "Android TV'de TMPlayer sohbet listesi; solda Devam et, Favoriler, Son, Kanallar, Gruplar, Kişiler ve Tüm sohbetler için bir gezinme rayı var.",
+    "the_tmplayer_chat_list_on": "Android TV'de TMPlayer sohbet listesi, solda bir gezinme çubuğuyla.",
     "videos_from_a_telegram_chat": "Android TV'de bir Telegram sohbetinden videolar, süre ve dosya boyutu taşıyan kutucuklardan oluşan bir ızgara olarak gösteriliyor."
   },
   "fire_tv": {

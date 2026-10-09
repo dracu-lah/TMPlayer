@@ -315,7 +315,7 @@
     "stream_telegram_videos_while_they": "Android TV, 휴대폰, Windows, Linux에서 Telegram 동영상을 다운로드하며 스트리밍하고, 즉시 탐색하고, MKV를 자막과 함께 재생하고, 다음 에피소드를 자동 재생하세요.",
     "tmplayer_on_a_phone_listing": "휴대폰의 TMPlayer, 데모 채팅 목록: Weekend Clips, Home Projects, Recipe Notes, Travel Diary, Design Study, Family Archive.",
     "a_dense_grid_of_demo": "휴대폰에서 Telegram 채팅의 데모 동영상을 빽빽한 격자로 보여 주는 화면. 각 타일에 해상도와 재생 시간이 표시돼요.",
-    "the_same_chat_list_on": "TV에서 본 같은 채팅 목록. 왼쪽 탐색 레일에 이어보기, 즐겨찾기, 최근, 채널, 그룹, 사람, 모든 채팅이 있어요.",
+    "the_same_chat_list_on": "TV에서 본 같은 채팅 목록, 왼쪽에 탐색 레일이 있습니다.",
     "tmplayer_settings_on_a_television": "TV의 TMPlayer 설정 화면. 동영상 크기 제한, 다음 에피소드 자동 재생, 남은 저장 공간이 보여요.",
     "the_tmplayer_desktop_app_on": "Windows 또는 Linux의 TMPlayer 데스크톱 앱. 채팅 섹션 사이드바 옆에 데모 동영상 격자가 있고, 각 포스터에 재생 시간, 크기, 해상도가 표시돼요.",
     "the_tmplayer_desktop_player_over": "데모 동영상 위의 TMPlayer 데스크톱 플레이어. 위쪽에 제목과 채팅이 있고, 타임바와 자막, 오디오, 속도, 화면 비율, 볼륨, 미니 플레이어, 전체 화면 버튼이 있어요.",
@@ -540,7 +540,7 @@
     "not_a_device_where_sideloading": "직접 설치가 막힌 기기도 안 돼요.",
     "a_tv_app_outside_the": "Play 스토어 밖의 TV 앱은 입소문으로 알려져요. 별을 누르는 게 가장 쉬운 방법이에요.",
     "watch_telegram_videos_on_android": "Android TV와 Google TV에서 Telegram 동영상을 보세요. TMPlayer는 무료 오픈 소스이고, 리모컨 중심 화면, QR 로그인, 1GB 스틱에서도 부드러운 재생을 지원해요.",
-    "the_tmplayer_chat_list_on": "Android TV의 TMPlayer 채팅 목록. 왼쪽 탐색 레일에 이어보기, 즐겨찾기, 최근, 채널, 그룹, 사람, 모든 채팅이 있어요.",
+    "the_tmplayer_chat_list_on": "Android TV의 TMPlayer 채팅 목록, 왼쪽에 탐색 레일이 있습니다.",
     "videos_from_a_telegram_chat": "Android TV에서 Telegram 채팅의 동영상을 재생 시간과 파일 크기가 표시된 타일 격자로 보여 주는 화면."
   },
   "fire_tv": {

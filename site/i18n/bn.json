@@ -315,7 +315,7 @@
     "stream_telegram_videos_while_they": "Android TV, ফোন, Windows ও Linux-এ Telegram ভিডিও ডাউনলোডের সঙ্গে সঙ্গে স্ট্রিম করুন, সঙ্গে সঙ্গে সিক করুন, সাবটাইটেলসহ MKV চালান এবং পরের পর্ব অটোপ্লে করুন।",
     "tmplayer_on_a_phone_listing": "ফোনে TMPlayer, ডেমো চ্যাটের তালিকা সহ: Weekend Clips, Home Projects, Recipe Notes, Travel Diary, Design Study ও Family Archive।",
     "a_dense_grid_of_demo": "ফোনে একটি Telegram চ্যাটের ডেমো ভিডিওর ঘন গ্রিড, প্রতিটি টাইলে রেজোলিউশন ও দৈর্ঘ্য দেখা যাচ্ছে।",
-    "the_same_chat_list_on": "টিভিতে একই চ্যাট তালিকা, বাঁ দিকে নেভিগেশন রেল সহ: চালিয়ে যান, পছন্দের, সাম্প্রতিক, চ্যানেল, গ্রুপ, ব্যক্তি ও সব চ্যাট।",
+    "the_same_chat_list_on": "টিভিতে একই চ্যাট তালিকা, বাঁ দিকে একটি নেভিগেশন রেল সহ।",
     "tmplayer_settings_on_a_television": "টিভিতে TMPlayer-এর সেটিংস, যেখানে ভিডিওর সাইজের সীমা, পরের পর্বের অটোপ্লে এবং কতটা স্টোরেজ খালি তা দেখা যাচ্ছে।",
     "the_tmplayer_desktop_app_on": "Windows বা Linux-এ TMPlayer ডেস্কটপ অ্যাপ: চ্যাট বিভাগের সাইডবারের পাশে ডেমো ভিডিওর গ্রিড, প্রতিটি পোস্টারে দৈর্ঘ্য, সাইজ ও রেজোলিউশন।",
     "the_tmplayer_desktop_player_over": "একটি ডেমো ভিডিওর ওপর TMPlayer ডেস্কটপ প্লেয়ার: ওপরে শিরোনাম ও চ্যাট, একটি টাইমবার, এবং সাবটাইটেল, অডিও, গতি, ছবির আকার, ভলিউম, মিনি প্লেয়ার ও ফুলস্ক্রিনের বোতাম।",
@@ -540,7 +540,7 @@
     "not_a_device_where_sideloading": "যে ডিভাইসে সাইডলোডিং বন্ধ করা, সেটিও নয়।",
     "a_tv_app_outside_the": "Play Store-এর বাইরের একটি টিভি অ্যাপ মুখে মুখেই ছড়ায়। একটি স্টার দেওয়াই এটা ছড়ানোর সবচেয়ে সহজ উপায়।",
     "watch_telegram_videos_on_android": "Android TV ও Google TV-তে Telegram ভিডিও দেখুন। TMPlayer বিনামূল্যের ও ওপেন সোর্স, রিমোট-প্রথম লেআউট, QR সাইন ইন এবং 1 GB-এর স্টিকেও মসৃণ প্লেব্যাক সহ।",
-    "the_tmplayer_chat_list_on": "Android TV-তে TMPlayer-এর চ্যাট তালিকা, বাঁ দিকে নেভিগেশন রেল সহ: চালিয়ে যান, পছন্দের, সাম্প্রতিক, চ্যানেল, গ্রুপ, ব্যক্তি ও সব চ্যাট।",
+    "the_tmplayer_chat_list_on": "Android TV-তে TMPlayer-এর চ্যাট তালিকা, বাঁ দিকে একটি নেভিগেশন রেল সহ।",
     "videos_from_a_telegram_chat": "Android TV-তে একটি Telegram চ্যাটের ভিডিও টাইলের গ্রিডে দেখানো হয়েছে, প্রতিটিতে দৈর্ঘ্য ও ফাইলের সাইজ।"
   },
   "fire_tv": {

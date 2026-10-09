@@ -315,7 +315,7 @@
     "stream_telegram_videos_while_they": "Phát video Telegram trong khi tải, tua tức thì, phát MKV kèm phụ đề và tự phát tập tiếp theo trên Android TV, điện thoại, Windows và Linux.",
     "tmplayer_on_a_phone_listing": "TMPlayer trên điện thoại, liệt kê các cuộc trò chuyện mẫu: Weekend Clips, Home Projects, Recipe Notes, Travel Diary, Design Study và Family Archive.",
     "a_dense_grid_of_demo": "Lưới dày các video mẫu từ một cuộc trò chuyện Telegram trên điện thoại, mỗi ô ghi độ phân giải và thời lượng.",
-    "the_same_chat_list_on": "Cùng danh sách trò chuyện đó trên TV, với thanh điều hướng bên trái gồm Xem tiếp, Yêu thích, Gần đây, Kênh, Nhóm, Mọi người và Tất cả cuộc trò chuyện.",
+    "the_same_chat_list_on": "Cùng danh sách trò chuyện trên TV, với thanh điều hướng ở bên trái.",
     "tmplayer_settings_on_a_television": "Cài đặt TMPlayer trên TV, hiển thị giới hạn kích thước video, tự phát tập tiếp theo và dung lượng còn trống.",
     "the_tmplayer_desktop_app_on": "Ứng dụng TMPlayer trên Windows hoặc Linux: thanh bên các mục trò chuyện cạnh một lưới video mẫu, mỗi poster ghi thời lượng, dung lượng và độ phân giải.",
     "the_tmplayer_desktop_player_over": "Trình phát TMPlayer trên máy tính đang phát một video mẫu: tiêu đề và cuộc trò chuyện ở trên cùng, thanh thời gian, và các nút phụ đề, âm thanh, tốc độ, tỷ lệ hình, âm lượng, trình phát mini và toàn màn hình.",
@@ -540,7 +540,7 @@
     "not_a_device_where_sideloading": "Không phải thiết bị đã khóa việc cài thủ công.",
     "a_tv_app_outside_the": "Một ứng dụng TV ngoài Play Store sống nhờ truyền miệng. Gắn sao là cách dễ nhất để lan tỏa nó.",
     "watch_telegram_videos_on_android": "Xem video Telegram trên Android TV và Google TV. TMPlayer miễn phí và mã nguồn mở, với giao diện ưu tiên điều khiển từ xa, đăng nhập bằng QR và phát mượt trên TV stick 1 GB.",
-    "the_tmplayer_chat_list_on": "Danh sách trò chuyện TMPlayer trên Android TV, với thanh điều hướng bên trái gồm Xem tiếp, Yêu thích, Gần đây, Kênh, Nhóm, Mọi người và Tất cả cuộc trò chuyện.",
+    "the_tmplayer_chat_list_on": "Danh sách trò chuyện của TMPlayer trên Android TV, với thanh điều hướng ở bên trái.",
     "videos_from_a_telegram_chat": "Video từ một cuộc trò chuyện Telegram hiển thị trên Android TV dưới dạng lưới ô ghi thời lượng và dung lượng tệp."
   },
   "fire_tv": {

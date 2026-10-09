@@ -315,7 +315,7 @@
     "stream_telegram_videos_while_they": "Android TV, फ़ोन, Windows और Linux पर Telegram वीडियो डाउनलोड होते-होते स्ट्रीम करें, तुरंत सीक करें, सबटाइटल के साथ MKV चलाएँ और अगला एपिसोड अपने आप चलाएँ।",
     "tmplayer_on_a_phone_listing": "फ़ोन पर TMPlayer, डेमो चैट की सूची के साथ: Weekend Clips, Home Projects, Recipe Notes, Travel Diary, Design Study और Family Archive।",
     "a_dense_grid_of_demo": "फ़ोन पर Telegram चैट के डेमो वीडियो का घना ग्रिड, हर टाइल पर उसका रेज़ोल्यूशन और अवधि।",
-    "the_same_chat_list_on": "टीवी पर वही चैट सूची, बाईं ओर नेविगेशन रेल के साथ: जारी रखें, पसंदीदा, हाल के, चैनल, ग्रुप, लोग और सभी चैट।",
+    "the_same_chat_list_on": "टीवी पर वही चैट सूची, बाईं ओर नेविगेशन रेल के साथ।",
     "tmplayer_settings_on_a_television": "टीवी पर TMPlayer की सेटिंग्स, जिनमें वीडियो साइज़ की सीमा, अगले एपिसोड का ऑटोप्ले और बची हुई स्टोरेज दिख रही है।",
     "the_tmplayer_desktop_app_on": "Windows या Linux पर TMPlayer डेस्कटॉप ऐप: चैट सेक्शन की साइडबार, और डेमो वीडियो का ग्रिड, हर पोस्टर पर अवधि, साइज़ और रेज़ोल्यूशन।",
     "the_tmplayer_desktop_player_over": "डेमो वीडियो पर TMPlayer डेस्कटॉप प्लेयर: ऊपर शीर्षक और चैट, टाइमबार, और सबटाइटल, ऑडियो, गति, तस्वीर का आकार, आवाज़, मिनी प्लेयर और फ़ुलस्क्रीन के बटन।",
@@ -540,7 +540,7 @@
     "not_a_device_where_sideloading": "ऐसा डिवाइस नहीं जहाँ साइडलोडिंग बंद कर दी गई हो।",
     "a_tv_app_outside_the": "Play Store के बाहर का टीवी ऐप लोगों के बताने से ही फैलता है। स्टार इसे फैलाने का सबसे आसान तरीका है।",
     "watch_telegram_videos_on_android": "Android TV और Google TV पर Telegram वीडियो देखें। TMPlayer मुफ़्त और ओपन सोर्स है, रिमोट-पहले लेआउट, QR से साइन इन और 1 GB स्टिक पर स्मूद प्लेबैक के साथ।",
-    "the_tmplayer_chat_list_on": "Android TV पर TMPlayer की चैट सूची, बाईं ओर नेविगेशन रेल के साथ: जारी रखें, पसंदीदा, हाल के, चैनल, ग्रुप, लोग और सभी चैट।",
+    "the_tmplayer_chat_list_on": "Android TV पर TMPlayer की चैट सूची, बाईं ओर नेविगेशन रेल के साथ।",
     "videos_from_a_telegram_chat": "Android TV पर दिखते Telegram चैट के वीडियो, टाइल के ग्रिड में, हर टाइल पर अवधि और फ़ाइल साइज़।"
   },
   "fire_tv": {

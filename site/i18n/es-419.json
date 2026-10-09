@@ -315,7 +315,7 @@
     "stream_telegram_videos_while_they": "Mira videos de Telegram mientras se descargan, adelanta al instante, reproduce MKV con subtítulos y pasa solo al siguiente episodio en Android TV, teléfonos, Windows y Linux.",
     "tmplayer_on_a_phone_listing": "TMPlayer en un teléfono, con una lista de chats de demostración: Weekend Clips, Home Projects, Recipe Notes, Travel Diary, Design Study y Family Archive.",
     "a_dense_grid_of_demo": "Una cuadrícula compacta de videos de demostración de un chat de Telegram en un teléfono, cada miniatura con su resolución y duración.",
-    "the_same_chat_list_on": "La misma lista de chats en una televisión, con un menú lateral a la izquierda para Seguir viendo, Favoritos, Recientes, Canales, Grupos, Personas y Todos los chats.",
+    "the_same_chat_list_on": "La misma lista de chats en un televisor, con una barra de navegación a la izquierda.",
     "tmplayer_settings_on_a_television": "Los ajustes de TMPlayer en una televisión, con los límites de tamaño de video, la reproducción automática del siguiente episodio y el espacio libre.",
     "the_tmplayer_desktop_app_on": "La app de escritorio de TMPlayer en Windows o Linux: una barra lateral con secciones de chats junto a una cuadrícula de videos de demostración, cada póster con su duración, tamaño y resolución.",
     "the_tmplayer_desktop_player_over": "El reproductor de escritorio de TMPlayer sobre un video de demostración: el título y el chat arriba, una barra de tiempo y botones para subtítulos, audio, velocidad, formato de imagen, volumen, el minirreproductor y la pantalla completa.",
@@ -540,7 +540,7 @@
     "not_a_device_where_sideloading": "No en un dispositivo que bloquee la instalación de apps externas.",
     "a_tv_app_outside_the": "Una app de TV fuera de la Play Store vive del boca a boca. Una estrella es la forma más fácil de difundirla.",
     "watch_telegram_videos_on_android": "Mira videos de Telegram en Android TV y Google TV. TMPlayer es gratis y de código abierto, con una interfaz pensada para el control remoto, inicio de sesión con QR y reproducción fluida en sticks de 1 GB.",
-    "the_tmplayer_chat_list_on": "La lista de chats de TMPlayer en Android TV, con un riel de navegación a la izquierda para Continuar, Favoritos, Recientes, Canales, Grupos, Personas y Todos los chats.",
+    "the_tmplayer_chat_list_on": "La lista de chats de TMPlayer en Android TV, con una barra de navegación a la izquierda.",
     "videos_from_a_telegram_chat": "Videos de un chat de Telegram en Android TV, en una cuadrícula de mosaicos con su duración y tamaño."
   },
   "fire_tv": {

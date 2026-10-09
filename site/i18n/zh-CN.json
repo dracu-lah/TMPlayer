@@ -315,7 +315,7 @@
     "stream_telegram_videos_while_they": "在 Android TV、手机、Windows 和 Linux 上边下载边串流 Telegram 视频，即时拖动进度，播放带字幕的 MKV，并自动播放下一集。",
     "tmplayer_on_a_phone_listing": "手机上的 TMPlayer，列出演示聊天：周末片段、家庭项目、食谱笔记、旅行日记、设计研究和家庭档案。",
     "a_dense_grid_of_demo": "手机上 Telegram 聊天中的演示视频密集网格，每个方块都标有分辨率和时长。",
-    "the_same_chat_list_on": "电视上同样的聊天列表，左侧是导航栏，包含继续观看、收藏、最近、频道、群组、联系人和所有聊天。",
+    "the_same_chat_list_on": "电视上的同一个聊天列表，左侧有导航栏。",
     "tmplayer_settings_on_a_television": "电视上的 TMPlayer 设置，显示视频大小限制、自动播放下一集以及剩余存储空间。",
     "the_tmplayer_desktop_app_on": "Windows 或 Linux 上的 TMPlayer 桌面应用：聊天分区的侧边栏，旁边是演示视频网格，每张海报都标有时长、大小和分辨率。",
     "the_tmplayer_desktop_player_over": "TMPlayer 桌面播放器播放演示视频：顶部是标题和聊天，下方是进度条，以及字幕、音轨、速度、画面比例、音量、迷你播放器和全屏按钮。",
@@ -540,7 +540,7 @@
     "not_a_device_where_sideloading": "不支持锁定了侧载功能的设备。",
     "a_tv_app_outside_the": "Play 商店之外的电视应用靠口碑传播。点个星是最简单的推广方式。",
     "watch_telegram_videos_on_android": "在 Android TV 和 Google TV 上观看 Telegram 视频。TMPlayer 免费开源，遥控器优先的界面，二维码登录，在 1 GB 电视棒上也能流畅播放。",
-    "the_tmplayer_chat_list_on": "Android TV 上的 TMPlayer 聊天列表，左侧导航栏包含继续观看、收藏、最近、频道、群组、联系人和所有聊天。",
+    "the_tmplayer_chat_list_on": "Android TV 上的 TMPlayer 聊天列表，左侧有导航栏。",
     "videos_from_a_telegram_chat": "Telegram 聊天中的视频在 Android TV 上以方块网格显示，带有时长和文件大小。"
   },
   "fire_tv": {

@@ -315,7 +315,7 @@
     "stream_telegram_videos_while_they": "Odtwarzaj wideo z Telegrama w trakcie pobierania, przewijaj natychmiast, oglądaj MKV z napisami i automatycznie odtwarzaj następny odcinek na Android TV, telefonach, Windows i Linuxie.",
     "tmplayer_on_a_phone_listing": "TMPlayer na telefonie z listą przykładowych czatów: Weekend Clips, Home Projects, Recipe Notes, Travel Diary, Design Study i Family Archive.",
     "a_dense_grid_of_demo": "Gęsta siatka przykładowych wideo z czatu w Telegramie na telefonie, każdy kafelek z rozdzielczością i czasem trwania.",
-    "the_same_chat_list_on": "Ta sama lista czatów na telewizorze, z paskiem nawigacji po lewej: Kontynuuj, Ulubione, Ostatnie, Kanały, Grupy, Osoby i Wszystkie czaty.",
+    "the_same_chat_list_on": "Ta sama lista czatów na telewizorze, z paskiem nawigacji po lewej.",
     "tmplayer_settings_on_a_television": "Ustawienia TMPlayera na telewizorze, z limitami rozmiaru wideo, automatycznym odtwarzaniem następnego odcinka i ilością wolnego miejsca.",
     "the_tmplayer_desktop_app_on": "Aplikacja TMPlayer na Windows lub Linuxie: panel boczny z sekcjami czatów obok siatki przykładowych wideo, każdy plakat z czasem trwania, rozmiarem i rozdzielczością.",
     "the_tmplayer_desktop_player_over": "Odtwarzacz TMPlayer na komputerze nad przykładowym wideo: tytuł i czat u góry, pasek czasu oraz przyciski napisów, dźwięku, prędkości, kształtu obrazu, głośności, mini odtwarzacza i pełnego ekranu.",
@@ -540,7 +540,7 @@
     "not_a_device_where_sideloading": "Nie urządzenie, na którym instalacja spoza sklepu jest zablokowana.",
     "a_tv_app_outside_the": "Aplikacja na telewizor spoza Sklepu Play żyje z polecania. Gwiazdka to najprostszy sposób, żeby ją rozpowszechnić.",
     "watch_telegram_videos_on_android": "Oglądaj wideo z Telegrama na Android TV i Google TV. TMPlayer jest darmowy i open source, z układem dla pilota, logowaniem kodem QR i płynnym odtwarzaniem na stikach z 1 GB.",
-    "the_tmplayer_chat_list_on": "Lista czatów TMPlayera na Android TV, z paskiem nawigacji po lewej: Kontynuuj, Ulubione, Ostatnie, Kanały, Grupy, Osoby i Wszystkie czaty.",
+    "the_tmplayer_chat_list_on": "Lista czatów TMPlayer na Android TV, z paskiem nawigacji po lewej.",
     "videos_from_a_telegram_chat": "Wideo z czatu w Telegramie pokazane na Android TV jako siatka kafelków z czasem trwania i rozmiarem plików."
   },
   "fire_tv": {

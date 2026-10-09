@@ -315,7 +315,7 @@
     "stream_telegram_videos_while_they": "بث فيديوهات Telegram أثناء تنزيلها، وتنقّل فوري داخل الفيديو، وتشغيل MKV مع الترجمات، وتشغيل الحلقة التالية تلقائيًا على Android TV والهواتف وWindows وLinux.",
     "tmplayer_on_a_phone_listing": "TMPlayer على هاتف يعرض محادثات تجريبية: Weekend Clips وHome Projects وRecipe Notes وTravel Diary وDesign Study وFamily Archive.",
     "a_dense_grid_of_demo": "شبكة كثيفة من الفيديوهات التجريبية من محادثة Telegram على هاتف، يحمل كل مربع دقته ومدته.",
-    "the_same_chat_list_on": "قائمة المحادثات نفسها على التلفاز، مع شريط تنقل على اليسار يضم المتابعة والمفضّلة والأخيرة والقنوات والمجموعات والأشخاص وكل المحادثات.",
+    "the_same_chat_list_on": "قائمة المحادثات نفسها على التلفاز، مع شريط تنقل على اليسار.",
     "tmplayer_settings_on_a_television": "إعدادات TMPlayer على التلفاز، تعرض حدود حجم الفيديو، وتشغيل الحلقة التالية تلقائيًا، والمساحة المتاحة في التخزين.",
     "the_tmplayer_desktop_app_on": "تطبيق TMPlayer لسطح المكتب على Windows أو Linux: شريط جانبي لأقسام المحادثات بجانب شبكة من الفيديوهات التجريبية، يحمل كل ملصق مدته وحجمه ودقته.",
     "the_tmplayer_desktop_player_over": "مشغّل TMPlayer لسطح المكتب فوق فيديو تجريبي: العنوان والمحادثة في الأعلى، وشريط زمني، وأزرار للترجمة والصوت والسرعة وشكل الصورة ومستوى الصوت والمشغّل المصغّر وملء الشاشة.",
@@ -540,7 +540,7 @@
     "not_a_device_where_sideloading": "ولا على جهاز يمنع التثبيت اليدوي.",
     "a_tv_app_outside_the": "تطبيق التلفاز خارج Play Store يعيش على التوصية الشفهية. والنجمة أسهل طريقة لنشره.",
     "watch_telegram_videos_on_android": "شاهد مقاطع Telegram على Android TV وGoogle TV. TMPlayer مجاني ومفتوح المصدر، بواجهة مصممة لجهاز التحكم، وتسجيل دخول برمز QR، وتشغيل سلس على عصي بذاكرة 1 GB.",
-    "the_tmplayer_chat_list_on": "قائمة محادثات TMPlayer على Android TV، مع شريط تنقل على الجانب الأيسر يضم: متابعة المشاهدة، والمفضلة، والأحدث، والقنوات، والمجموعات، والأشخاص، وكل المحادثات.",
+    "the_tmplayer_chat_list_on": "قائمة محادثات TMPlayer على Android TV، مع شريط تنقل على اليسار.",
     "videos_from_a_telegram_chat": "مقاطع من محادثة في Telegram معروضة على Android TV في شبكة من البطاقات تحمل المدة وحجم الملف."
   },
   "fire_tv": {

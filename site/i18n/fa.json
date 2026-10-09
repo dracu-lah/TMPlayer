@@ -315,7 +315,7 @@
     "stream_telegram_videos_while_they": "ویدیوهای Telegram را هنگام دانلود پخش کنید، فوری جلو و عقب بروید، MKV را با زیرنویس ببینید و قسمت بعدی را روی Android TV، گوشی، Windows و Linux خودکار پخش کنید.",
     "tmplayer_on_a_phone_listing": "TMPlayer روی گوشی، با چت‌های نمونه: Weekend Clips، Home Projects، Recipe Notes، Travel Diary، Design Study و Family Archive.",
     "a_dense_grid_of_demo": "شبکه‌ای فشرده از ویدیوهای نمونهٔ یک چت Telegram روی گوشی، که هر کاشی کیفیت تصویر و مدت زمانش را نشان می‌دهد.",
-    "the_same_chat_list_on": "همان فهرست چت‌ها روی تلویزیون، با نوار پیمایش در سمت چپ برای ادامه، علاقه‌مندی‌ها، اخیر، کانال‌ها، گروه‌ها، افراد و همهٔ چت‌ها.",
+    "the_same_chat_list_on": "همان فهرست گفتگوها روی تلویزیون، با نوار پیمایش در سمت چپ.",
     "tmplayer_settings_on_a_television": "تنظیمات TMPlayer روی تلویزیون، با محدودیت حجم ویدیو، پخش خودکار قسمت بعدی و میزان فضای خالی.",
     "the_tmplayer_desktop_app_on": "برنامهٔ رایانهٔ TMPlayer روی Windows یا Linux: نوار کناری بخش‌های چت در کنار شبکه‌ای از ویدیوهای نمونه، که هر پوستر مدت زمان، حجم و کیفیتش را نشان می‌دهد.",
     "the_tmplayer_desktop_player_over": "پخش‌کنندهٔ رایانهٔ TMPlayer روی یک ویدیوی نمونه: عنوان و چت در بالا، نوار زمان، و دکمه‌هایی برای زیرنویس، صدا، سرعت، شکل تصویر، میزان صدا، پخش‌کنندهٔ کوچک و تمام‌صفحه.",
@@ -540,7 +540,7 @@
     "not_a_device_where_sideloading": "نه دستگاهی که نصب دستی در آن قفل شده است.",
     "a_tv_app_outside_the": "برنامهٔ تلویزیونی خارج از Play Store با دهان‌به‌دهان زنده می‌ماند. ستاره دادن ساده‌ترین راه پخش آن است.",
     "watch_telegram_videos_on_android": "ویدیوهای Telegram را روی Android TV و Google TV ببینید. TMPlayer رایگان و متن‌باز است، با رابط مخصوص ریموت، ورود با QR و پخش روان روی Stickهای 1 گیگابایتی.",
-    "the_tmplayer_chat_list_on": "فهرست چت‌های TMPlayer روی Android TV، با نوار پیمایش در سمت چپ برای ادامه، علاقه‌مندی‌ها، اخیر، کانال‌ها، گروه‌ها، افراد و همهٔ چت‌ها.",
+    "the_tmplayer_chat_list_on": "فهرست گفتگوهای TMPlayer روی Android TV، با نوار پیمایش در سمت چپ.",
     "videos_from_a_telegram_chat": "ویدیوهای یک چت Telegram روی Android TV به‌صورت شبکه‌ای از کاشی‌ها همراه با مدت زمان و حجم فایل."
   },
   "fire_tv": {

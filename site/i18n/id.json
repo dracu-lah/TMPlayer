@@ -315,7 +315,7 @@
     "stream_telegram_videos_while_they": "Streaming video Telegram selagi mengunduh, geser posisi seketika, putar MKV dengan subtitle, dan putar episode berikutnya otomatis di Android TV, HP, Windows, dan Linux.",
     "tmplayer_on_a_phone_listing": "TMPlayer di HP, menampilkan obrolan contoh: Weekend Clips, Home Projects, Recipe Notes, Travel Diary, Design Study, dan Family Archive.",
     "a_dense_grid_of_demo": "Grid rapat berisi video contoh dari obrolan Telegram di HP, setiap ubin menampilkan resolusi dan durasinya.",
-    "the_same_chat_list_on": "Daftar obrolan yang sama di televisi, dengan rail navigasi di sisi kiri untuk Lanjutkan, Favorit, Terbaru, Channel, Grup, Orang, dan Semua obrolan.",
+    "the_same_chat_list_on": "Daftar chat yang sama di televisi, dengan rel navigasi di sebelah kiri.",
     "tmplayer_settings_on_a_television": "Pengaturan TMPlayer di televisi, menampilkan batas ukuran video, putar otomatis episode berikutnya, dan sisa penyimpanan.",
     "the_tmplayer_desktop_app_on": "Aplikasi desktop TMPlayer di Windows atau Linux: sidebar bagian obrolan di samping grid video contoh, setiap poster menampilkan durasi, ukuran, dan resolusinya.",
     "the_tmplayer_desktop_player_over": "Pemutar desktop TMPlayer di atas video contoh: judul dan obrolan di bagian atas, bilah waktu, dan tombol untuk subtitle, audio, kecepatan, bentuk gambar, volume, pemutar mini, dan layar penuh.",
@@ -540,7 +540,7 @@
     "not_a_device_where_sideloading": "Bukan perangkat yang sideload-nya dikunci.",
     "a_tv_app_outside_the": "Aplikasi TV di luar Play Store hidup dari mulut ke mulut. Bintang adalah cara termudah untuk menyebarkannya.",
     "watch_telegram_videos_on_android": "Tonton video Telegram di Android TV dan Google TV. TMPlayer gratis dan open source, dengan tampilan yang mengutamakan remote, login QR, dan pemutaran lancar di stick 1 GB.",
-    "the_tmplayer_chat_list_on": "Daftar obrolan TMPlayer di Android TV, dengan rail navigasi di sisi kiri untuk Lanjutkan, Favorit, Terbaru, Channel, Grup, Orang, dan Semua obrolan.",
+    "the_tmplayer_chat_list_on": "Daftar chat TMPlayer di Android TV, dengan rel navigasi di sebelah kiri.",
     "videos_from_a_telegram_chat": "Video dari obrolan Telegram yang tampil di Android TV sebagai grid ubin lengkap dengan durasi dan ukuran file."
   },
   "fire_tv": {

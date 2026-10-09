@@ -318,7 +318,7 @@
     "stream_telegram_videos_while_they": "Stream Telegram videos while they download, seek instantly, play MKV with subtitles and autoplay the next episode on Android TV, phones, Windows and Linux.",
     "tmplayer_on_a_phone_listing": "TMPlayer on a phone, listing demo chats: Weekend Clips, Home Projects, Recipe Notes, Travel Diary, Design Study and Family Archive.",
     "a_dense_grid_of_demo": "A dense grid of demo videos from a Telegram chat on a phone, each tile carrying its resolution and running time.",
-    "the_same_chat_list_on": "The same chat list on a television, with a navigation rail down the left for Continue, Favourites, Recent, Channels, Groups, People and All chats.",
+    "the_same_chat_list_on": "The same chat list on a television, with a navigation rail down the left.",
     "tmplayer_settings_on_a_television": "TMPlayer settings on a television, showing the video size limits, autoplay of the next episode and how much storage is free.",
     "the_tmplayer_desktop_app_on": "The TMPlayer desktop app on Windows or Linux: a sidebar of chat sections beside a grid of demo videos, each poster carrying its running time, size and resolution.",
     "the_tmplayer_desktop_player_over": "The TMPlayer desktop player over a demo video: the title and chat at the top, a timebar, and buttons for subtitles, audio, speed, picture shape, volume, the mini player and fullscreen."
@@ -535,7 +535,7 @@
     "not_a_device_where_sideloading": "Not a device where sideloading is locked off.",
     "a_tv_app_outside_the": "A TV app outside the Play Store lives on word of mouth. A star is the easiest way to spread it.",
     "watch_telegram_videos_on_android": "Watch Telegram videos on Android TV and Google TV. TMPlayer is free and open source, with a remote-first layout, QR sign-in and smooth playback on 1 GB sticks.",
-    "the_tmplayer_chat_list_on": "The TMPlayer chat list on Android TV, with a navigation rail down the left for Continue, Favourites, Recent, Channels, Groups, People and All chats.",
+    "the_tmplayer_chat_list_on": "The TMPlayer chat list on Android TV, with a navigation rail down the left.",
     "videos_from_a_telegram_chat": "Videos from a Telegram chat shown on Android TV as a grid of tiles carrying running times and file sizes."
   },
   "fire_tv": {

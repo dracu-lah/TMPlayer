@@ -315,7 +315,7 @@
     "stream_telegram_videos_while_they": "Lisez les vidéos Telegram pendant leur téléchargement, avancez instantanément, lisez du MKV avec sous-titres et lancez automatiquement l'épisode suivant sur Android TV, téléphones, Windows et Linux.",
     "tmplayer_on_a_phone_listing": "TMPlayer sur un téléphone, avec des discussions de démonstration : Weekend Clips, Home Projects, Recipe Notes, Travel Diary, Design Study et Family Archive.",
     "a_dense_grid_of_demo": "Une grille dense de vidéos de démonstration d'une discussion Telegram sur un téléphone, chaque vignette indiquant sa résolution et sa durée.",
-    "the_same_chat_list_on": "La même liste de discussions sur une télévision, avec un bandeau de navigation à gauche pour Reprendre, Favoris, Récents, Canaux, Groupes, Contacts et Toutes les discussions.",
+    "the_same_chat_list_on": "La même liste de discussions sur un téléviseur, avec une barre de navigation à gauche.",
     "tmplayer_settings_on_a_television": "Les paramètres de TMPlayer sur une télévision, avec les limites de taille des vidéos, la lecture automatique de l'épisode suivant et l'espace de stockage libre.",
     "the_tmplayer_desktop_app_on": "L'appli de bureau TMPlayer sur Windows ou Linux : une barre latérale de sections de discussions à côté d'une grille de vidéos de démonstration, chaque affiche indiquant sa durée, sa taille et sa résolution.",
     "the_tmplayer_desktop_player_over": "Le lecteur de bureau TMPlayer sur une vidéo de démonstration : le titre et la discussion en haut, une barre de temps, et des boutons pour les sous-titres, l'audio, la vitesse, le format d'image, le volume, le mini-lecteur et le plein écran.",
@@ -540,7 +540,7 @@
     "not_a_device_where_sideloading": "Ni un appareil où l'installation hors boutique est verrouillée.",
     "a_tv_app_outside_the": "Une appli TV hors du Play Store vit du bouche-à-oreille. Une étoile est le moyen le plus simple de la faire connaître.",
     "watch_telegram_videos_on_android": "Regardez des vidéos Telegram sur Android TV et Google TV. TMPlayer est gratuit et open source, avec une interface pensée pour la télécommande, la connexion par QR code et une lecture fluide sur les clés de 1 Go.",
-    "the_tmplayer_chat_list_on": "La liste des discussions TMPlayer sur Android TV, avec un bandeau de navigation à gauche pour Reprendre, Favoris, Récents, Canaux, Groupes, Contacts et Toutes les discussions.",
+    "the_tmplayer_chat_list_on": "La liste des discussions de TMPlayer sur Android TV, avec une barre de navigation à gauche.",
     "videos_from_a_telegram_chat": "Les vidéos d'une discussion Telegram affichées sur Android TV sous forme de grille de vignettes avec durées et tailles de fichier."
   },
   "fire_tv": {
