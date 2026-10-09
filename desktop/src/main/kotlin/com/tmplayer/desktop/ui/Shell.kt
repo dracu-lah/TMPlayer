@@ -479,7 +479,8 @@ private fun SidebarItem(
         badge = badge?.let { { Text(it) } },
         selected = selected,
         onClick = onClick,
-        modifier = Modifier.height(SIDEBAR_ROW),
+        // The gap keeps a hovered or focused row from merging into the selected one beside it.
+        modifier = Modifier.padding(vertical = 2.dp).height(SIDEBAR_ROW),
         colors = colors,
     )
 }

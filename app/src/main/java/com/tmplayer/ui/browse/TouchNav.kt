@@ -420,7 +420,11 @@ private fun DrawerDestination(
         onClick = onClick,
         // 48 dp rather than Material's 56: still a full thumb target, and the drawer holds a dozen
         // of them.
-        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding).height(DRAWER_ROW),
+        // The vertical gap keeps a selected row and a pressed one beside it from merging.
+        modifier = Modifier
+            .padding(NavigationDrawerItemDefaults.ItemPadding)
+            .padding(vertical = 2.dp)
+            .height(DRAWER_ROW),
         colors = colors,
     )
 }
