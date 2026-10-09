@@ -1,8 +1,8 @@
-# Created by hand from the 1.22.0 release. Goes to winget-pkgs at manifests/d/dracu-lah/TMPlayer/1.22.0/
-# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+# Created by hand from the 1.24.0 release. Goes to winget-pkgs at manifests/d/dracu-lah/TMPlayer/1.24.0/
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.12.0.schema.json
 
 PackageIdentifier: dracu-lah.TMPlayer
-PackageVersion: 1.22.0
+PackageVersion: 1.24.0
 PackageLocale: en-US
 Publisher: dracu-lah
 PublisherUrl: https://github.com/dracu-lah
@@ -12,6 +12,7 @@ PackageName: TMPlayer
 PackageUrl: https://tmplayer.org
 License: GPL-3.0-or-later
 LicenseUrl: https://github.com/dracu-lah/TMPlayer/blob/main/LICENSE
+PrivacyUrl: https://tmplayer.org/privacy/
 ShortDescription: Watch the videos in your Telegram chats while they download. Unofficial, not affiliated with Telegram.
 Description: |-
   TMPlayer plays the videos in your own Telegram chats and channels. It starts within seconds while
@@ -30,8 +31,12 @@ Tags:
 - video
 - video-player
 ReleaseNotes: |-
-  Smaller downloads. The Android APK is about half its old size, and the Windows and Linux packages
-  are a third to almost two thirds smaller. The Linux tarball is now a .tar.xz.
-ReleaseNotesUrl: https://github.com/dracu-lah/TMPlayer/releases/tag/v1.22.0
+  TMPlayer now speaks 21 languages (machine translated for now, corrections welcome on GitHub). Home
+  has rows, series get their own page, and search covers all your chats. Optional posters and
+  overviews come from TMDB, TVmaze and AniList, and subtitles can be found online through
+  OpenSubtitles. The player adds volume boost, a sleep timer, a "still watching?" check, subtitle and
+  audio delay, subtitle size and position, and simpler controls. Downloads can be removed after
+  watching. On desktop the QR sign in works in release builds, and there is a new About screen.
+ReleaseNotesUrl: https://github.com/dracu-lah/TMPlayer/releases/tag/v1.24.0
 ManifestType: defaultLocale
-ManifestVersion: 1.6.0
+ManifestVersion: 1.12.0

@@ -1,8 +1,8 @@
-# Created by hand from the 1.22.0 release. Goes to winget-pkgs at manifests/d/dracu-lah/TMPlayer/1.22.0/
-# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json
+# Created by hand from the 1.24.0 release. Goes to winget-pkgs at manifests/d/dracu-lah/TMPlayer/1.24.0/
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.12.0.schema.json
 
 PackageIdentifier: dracu-lah.TMPlayer
-PackageVersion: 1.22.0
+PackageVersion: 1.24.0
 DefaultLocale: en-US
 ManifestType: version
-ManifestVersion: 1.6.0
+ManifestVersion: 1.12.0

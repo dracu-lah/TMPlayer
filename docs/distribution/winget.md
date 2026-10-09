@@ -1,15 +1,15 @@
 # winget (Windows Package Manager)
 
-Status: draft manifests ready, nothing submitted. The three files are in [winget/](winget/).
+Status: draft manifests for 1.24.0 ready, nothing submitted. The three files are in [winget/](winget/).
 
 ## What gets submitted
 
 A pull request to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) that adds:
 
 ```
-manifests/d/dracu-lah/TMPlayer/1.22.0/dracu-lah.TMPlayer.yaml
-manifests/d/dracu-lah/TMPlayer/1.22.0/dracu-lah.TMPlayer.installer.yaml
-manifests/d/dracu-lah/TMPlayer/1.22.0/dracu-lah.TMPlayer.locale.en-US.yaml
+manifests/d/dracu-lah/TMPlayer/1.24.0/dracu-lah.TMPlayer.yaml
+manifests/d/dracu-lah/TMPlayer/1.24.0/dracu-lah.TMPlayer.installer.yaml
+manifests/d/dracu-lah/TMPlayer/1.24.0/dracu-lah.TMPlayer.locale.en-US.yaml
 ```
 
 - **PackageIdentifier `dracu-lah.TMPlayer`.** winget's convention is `Publisher.Package`, and the
@@ -18,20 +18,22 @@ manifests/d/dracu-lah/TMPlayer/1.22.0/dracu-lah.TMPlayer.locale.en-US.yaml
   `manifests/d/dracu-lah`, 404). The identifier is permanent once merged, so decide now; an
   alternative is `TMPlayer.TMPlayer`, matching the MSI's Manufacturer, but `dracu-lah.TMPlayer`
   matches the GitHub account that owns the release URLs, which is what reviewers look at.
-- **Schema 1.6.0**, as asked. winget-pkgs still accepts it; newer schema versions exist and
-  `wingetcreate` writes whatever is current, which is also fine.
+- **Schema 1.12.0**, the current one, which is also what `wingetcreate` writes. The three files
+  validate against the 1.12.0 JSON schemas from `microsoft/winget-cli`.
+- **PrivacyUrl** is `https://tmplayer.org/privacy/`, in the locale file next to the licence.
 - **InstallerType `msi`, Scope `user`.** The MSI is made by jpackage (Compose Desktop's
   `packageReleaseMsi`) from the WiX template in `desktop/packaging/windows/main.wxs`, with
   `perUserInstall = true`, so it installs per user and needs no administrator. It has no
   `ALLUSERS` property, which is what makes it per user. jpackage MSIs take `/quiet` like any WiX
   MSI, so winget's silent install works.
-- **ProductCode `{A989562B-541B-3A74-BA84-4D34ED8EF145}`**, read from the 1.22.0 MSI itself
-  (downloaded, sha256 matched `site/latest.json`, Property table parsed). jpackage derives a new
+- **ProductCode `{3718F8E0-3706-3384-95B0-E511D72F4561}`**, read from the 1.24.0 MSI itself
+  (downloaded 2026-10-09, sha256 matched `site/latest.json` and the GitHub asset digest, Property
+  table parsed). jpackage derives a new
   ProductCode for every version, so it changes each release; the **UpgradeCode
   `{6F1D3C0E-2B8A-4B7E-9D2C-7A1E5F4C3B21}`** is the fixed one from `desktop/build.gradle.kts`
   (`upgradeUuid`) and never changes. winget uses the ProductCode to tell which version is
   installed, so it must be right for each version.
-- **InstallerSha256** is `5A36263B...ABD78`, the same hash as `site/latest.json`, upper case as
+- **InstallerSha256** is `5D1CD29C...FE7715`, the same hash as `site/latest.json`, upper case as
   winget writes it.
 - **Publisher in Apps and Features is `TMPlayer`** (the MSI's Manufacturer, from `vendor =
   "TMPlayer"`), while the manifest's `Publisher` is `dracu-lah`. That is allowed; the
@@ -68,12 +70,23 @@ Any of these, on the MSI of the version being submitted:
 
 ```powershell
 winget install Microsoft.WingetCreate
-wingetcreate new https://github.com/dracu-lah/TMPlayer/releases/download/v1.22.0/TMPlayer-1.22.0-windows-x64.msi
+wingetcreate new https://github.com/dracu-lah/TMPlayer/releases/download/v1.24.0/TMPlayer-1.24.0-windows-x64.msi
 ```
 
 It downloads the MSI, reads it, and asks for the identifier (`dracu-lah.TMPlayer`), the publisher,
-name, licence and description; the answers are in the locale file here. Finish with `--submit`
-(or answer yes at the end), with a GitHub token that can fork, and it opens the PR itself.
+name, licence and description; the answers are in the locale file here. `wingetcreate new` has
+no `--submit` flag: it asks at the end whether to submit, and on yes it signs in to GitHub (a
+browser prompt, or a token in the `WINGET_CREATE_GITHUB_TOKEN` environment variable), forks
+winget-pkgs and opens the PR itself.
+
+To submit the three hand-written files here as they are, skip `new` and point `submit` at the
+folder that holds them:
+
+```powershell
+wingetcreate submit docs\distribution\winget
+```
+
+`--submit` exists only on `wingetcreate update`, the command the release job below uses.
 
 ## Later: every release updates winget by itself
 
@@ -87,7 +100,7 @@ It has to run on Windows, after the release is published:
     steps:
       - name: Submit to winget
         env:
-          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.WINGET_CREATE_GITHUB_TOKEN }}
           VERSION: ${{ github.ref_name }}
         run: |
           $v = $env:VERSION.TrimStart('v')
@@ -95,10 +108,11 @@ It has to run on Windows, after the release is published:
           .\wingetcreate.exe update dracu-lah.TMPlayer `
             --version $v `
             --urls "https://github.com/dracu-lah/TMPlayer/releases/download/v$v/TMPlayer-$v-windows-x64.msi" `
-            --submit --token $env:WINGET_TOKEN
+            --submit
 ```
 
-`WINGET_TOKEN` is a classic personal access token with `public_repo` scope (wingetcreate pushes
+wingetcreate reads the token from the `WINGET_CREATE_GITHUB_TOKEN` environment variable, so it
+never appears on the command line or in the job log. It is a classic personal access token with `public_repo` scope (wingetcreate pushes
 to your fork of winget-pkgs and opens the PR from it); the default `GITHUB_TOKEN` cannot do that.
 `wingetcreate update` re-reads the new MSI, so the new ProductCode and hash are filled in without
 anyone looking them up. The community action `vedantmgoyal9/winget-releaser` does the same job
