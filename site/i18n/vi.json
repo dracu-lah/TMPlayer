@@ -337,7 +337,7 @@
     "one_file_for_every_phone": "Một tệp cho mọi điện thoại, cả 32 bit và 64 bit. Mở tệp và cho phép cài đặt.",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "Cách cài trên điện thoại",
-    "kao_note": "Từ năm 2027, Google dự kiến để Android chỉ cài ứng dụng có nhà phát triển đã đăng ký với Google, trả phí và xuất trình giấy tờ tùy thân chính thức. Điều này áp dụng cả với ứng dụng cài từ ngoài Play Store, như tệp APK này và F-Droid. {a1} giải thích điều đó có nghĩa là gì và cách bạn lên tiếng.",
+    "kao_note": "Từ năm 2027, Google dự kiến để Android chỉ cài ứng dụng có nhà phát triển đã đăng ký với Google, trả phí và xuất trình giấy tờ tùy thân chính thức. Điều này áp dụng cả với ứng dụng cài từ ngoài Play Store, như tệp APK này. {a1} giải thích điều đó có nghĩa là gì và cách bạn lên tiếng.",
     "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0 trở lên: TV stick, TV box và TV",
     "the_same_file_as_the": "Cùng tệp với điện thoại. Gửi sang TV bằng Downloader, Send files to TV hoặc {code1}.",

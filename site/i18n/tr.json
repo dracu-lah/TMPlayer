@@ -337,7 +337,7 @@
     "one_file_for_every_phone": "Her telefon için tek dosya, 32 bit ve 64 bit. Aç ve kuruluma izin ver.",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "Telefona nasıl kurulur",
-    "kao_note": "Google, 2027'den itibaren Android'in yalnızca geliştiricisi Google'a kaydolmuş, ücret ödemiş ve resmi kimlik göstermiş uygulamaları yüklemesini planlıyor. Bu, bu APK ve F-Droid gibi Play Store dışından yüklenen uygulamaları da kapsıyor. {a1} bunun ne anlama geldiğini ve sesinizi nasıl duyurabileceğinizi anlatıyor.",
+    "kao_note": "Google, 2027'den itibaren Android'in yalnızca geliştiricisi Google'a kaydolmuş, ücret ödemiş ve resmi kimlik göstermiş uygulamaları yüklemesini planlıyor. Bu, bu APK gibi Play Store dışından yüklenen uygulamaları da kapsıyor. {a1} bunun ne anlama geldiğini ve sesinizi nasıl duyurabileceğinizi anlatıyor.",
     "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0 ve üzeri: çubuklar, kutular ve televizyonlar",
     "the_same_file_as_the": "Telefondakiyle aynı dosya. TV'ye Downloader, Send files to TV ya da {code1} ile gönder.",

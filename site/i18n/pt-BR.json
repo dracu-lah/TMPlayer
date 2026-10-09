@@ -337,7 +337,7 @@
     "one_file_for_every_phone": "Um arquivo para todo celular, de 32 e 64 bits. Abra e permita a instalação.",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "Como instalar no celular",
-    "kao_note": "A partir de 2027, o Google planeja que o Android instale só apps cujos desenvolvedores tenham se registrado com ele, pago uma taxa e apresentado documento oficial de identidade. Isso vale também para apps instalados fora da Play Store, como este APK e o F-Droid. {a1} explica o que isso significa e como se manifestar.",
+    "kao_note": "A partir de 2027, o Google planeja que o Android instale só apps cujos desenvolvedores tenham se registrado com ele, pago uma taxa e apresentado documento oficial de identidade. Isso vale também para apps instalados fora da Play Store, como este APK. {a1} explica o que isso significa e como se manifestar.",
     "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0 ou superior: sticks, boxes e televisões",
     "the_same_file_as_the": "O mesmo arquivo do celular. Envie para a TV com o Downloader, o Send files to TV ou o {code1}.",

@@ -337,7 +337,7 @@
     "one_file_for_every_phone": "Jeden plik na każdy telefon, 32-bitowy i 64-bitowy. Otwórz go i zezwól na instalację.",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "Jak zainstalować na telefonie",
-    "kao_note": "Od 2027 roku Google planuje, że Android będzie instalować tylko aplikacje, których deweloperzy zarejestrowali się w Google, wnieśli opłatę i okazali urzędowy dokument tożsamości. Dotyczy to także aplikacji instalowanych spoza Sklepu Play, takich jak ten plik APK i F-Droid. {a1} wyjaśnia, co to oznacza i jak zabrać głos.",
+    "kao_note": "Od 2027 roku Google planuje, że Android będzie instalować tylko aplikacje, których deweloperzy zarejestrowali się w Google, wnieśli opłatę i okazali urzędowy dokument tożsamości. Dotyczy to także aplikacji instalowanych spoza Sklepu Play, takich jak ten plik APK. {a1} wyjaśnia, co to oznacza i jak zabrać głos.",
     "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0 i nowszy: stiki, przystawki i telewizory",
     "the_same_file_as_the": "Ten sam plik co na telefon. Wyślij go na telewizor przez Downloader, Send files to TV lub {code1}.",

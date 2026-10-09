@@ -332,7 +332,7 @@
     "one_file_for_every_phone": "One file for every phone, 32-bit and 64-bit. Open it and allow the install.",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "How to install on a phone",
-    "kao_note": "From 2027, Google plans to let Android install only apps whose developers have registered with it, paid a fee and shown government ID. That covers apps installed from outside the Play Store too, like this APK and F-Droid. {a1} explains what it means and how to have a say.",
+    "kao_note": "From 2027, Google plans to let Android install only apps whose developers have registered with it, paid a fee and shown government ID. That covers apps installed from outside the Play Store too, like this APK. {a1} explains what it means and how to have a say.",
     "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0 and above: sticks, boxes and televisions",
     "the_same_file_as_the": "The same file as the phone's. Send it to the TV with Downloader, Send files to TV or {code1}.",

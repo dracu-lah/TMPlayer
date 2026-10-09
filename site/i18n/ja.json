@@ -337,7 +337,7 @@
     "one_file_for_every_phone": "32ビットと64ビットのどちらのスマートフォンでも使える、1つのファイル。開いて、インストールを許可してください。",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "スマートフォンへのインストール方法",
-    "kao_note": "Google は 2027 年から、開発者が Google に登録し、手数料を支払い、公的な身分証明書を提示したアプリだけを Android がインストールするようにする予定です。この APK や F-Droid のように Play ストア以外からインストールするアプリも対象です。{a1} では、その意味と意見を届ける方法を説明しています。",
+    "kao_note": "Google は 2027 年から、開発者が Google に登録し、手数料を支払い、公的な身分証明書を提示したアプリだけを Android がインストールするようにする予定です。この APK のように Play ストア以外からインストールするアプリも対象です。{a1} では、その意味と意見を届ける方法を説明しています。",
     "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0以降: スティック、ボックス、テレビ",
     "the_same_file_as_the": "スマートフォンと同じファイルです。Downloader、Send files to TV、または{code1}でテレビに送ってください。",

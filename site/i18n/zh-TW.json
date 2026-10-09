@@ -337,7 +337,7 @@
     "one_file_for_every_phone": "一個檔案適用所有手機，32 位元與 64 位元皆可。開啟後允許安裝即可。",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "如何在手機上安裝",
-    "kao_note": "從 2027 年起，Google 計劃讓 Android 只安裝開發者已向 Google 登記、繳交費用並出示官方身分證件的應用程式。從 Play 商店以外安裝的應用程式也包括在內，例如這個 APK 和 F-Droid。{a1} 說明了這代表什麼，以及如何表達你的意見。",
+    "kao_note": "從 2027 年起，Google 計劃讓 Android 只安裝開發者已向 Google 登記、繳交費用並出示官方身分證件的應用程式。從 Play 商店以外安裝的應用程式也包括在內，例如這個 APK。{a1} 說明了這代表什麼，以及如何表達你的意見。",
     "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0 以上：電視棒、機上盒與電視",
     "the_same_file_as_the": "與手機相同的檔案。可用 Downloader、Send files to TV 或 {code1} 傳到電視。",

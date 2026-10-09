@@ -337,7 +337,7 @@
     "one_file_for_every_phone": "Un fichier pour tous les téléphones, 32 bits et 64 bits. Ouvrez-le et autorisez l'installation.",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "Comment l'installer sur un téléphone",
-    "kao_note": "À partir de 2027, Google prévoit qu'Android n'installe que les applis dont les développeurs se sont enregistrés auprès de lui, ont payé des frais et fourni une pièce d'identité officielle. Cela vaut aussi pour les applis installées hors du Play Store, comme cet APK et F-Droid. {a1} explique ce que cela signifie et comment faire entendre votre voix.",
+    "kao_note": "À partir de 2027, Google prévoit qu'Android n'installe que les applis dont les développeurs se sont enregistrés auprès de lui, ont payé des frais et fourni une pièce d'identité officielle. Cela vaut aussi pour les applis installées hors du Play Store, comme cet APK. {a1} explique ce que cela signifie et comment faire entendre votre voix.",
     "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0 et versions ultérieures : clés, box et télévisions",
     "the_same_file_as_the": "Le même fichier que pour le téléphone. Envoyez-le à la TV avec Downloader, Send files to TV ou {code1}.",
