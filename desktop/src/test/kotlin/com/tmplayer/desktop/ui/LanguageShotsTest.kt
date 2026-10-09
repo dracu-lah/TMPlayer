@@ -154,6 +154,21 @@ class LanguageShotsTest {
 
         shot("browse") { Grid() }
         shot("settings") { SettingsPage(shell, "2.0.0") }
+        // A download in flight, so Downloads carries its count beside the label.
+        com.tmplayer.data.OfflineDownloads.note(
+            com.tmplayer.data.OfflineDownloads.Progress(
+                request = DownloadRequest.from(items.first().copy(fileId = 99), "Weekend Clips"),
+                downloadedBytes = 60L * 1024 * 1024,
+                totalBytes = 180L * 1024 * 1024,
+                stage = com.tmplayer.data.OfflineDownloads.Stage.Running,
+                bytesPerSecond = 3_000_000,
+            ),
+        )
+        try {
+            shot("busy") { Grid() }
+        } finally {
+            com.tmplayer.data.OfflineDownloads.forget(99)
+        }
         shot("about") { AboutPage("2.0.0", onBack = {}) }
         shot("downloads") { DownloadsPage(shell, dir.resolve("Downloads").apply { mkdirs() }) }
         shot("playermenu", sidebar = false) {

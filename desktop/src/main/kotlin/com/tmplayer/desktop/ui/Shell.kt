@@ -25,9 +25,11 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
@@ -56,6 +58,7 @@ import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.tmplayer.data.AuthState
 import com.tmplayer.desktop.BuildInfo
 import com.tmplayer.desktop.DesktopConnectivity
@@ -461,7 +464,17 @@ private fun SidebarItem(
     colors: androidx.compose.material3.NavigationDrawerItemColors = NavigationDrawerItemDefaults.colors(),
 ) {
     NavigationDrawerItem(
-        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        // Steps down to 12 sp rather than cut: with a download count beside it, Malayalam's
+        // "ഡൗൺലോഡുകൾ" was "ഡൗൺലോഡു..." at the full size. Clip, not Ellipsis, because an
+        // ellipsized line never reports an overflow and so never steps down.
+        label = {
+            Text(
+                label,
+                maxLines = 1,
+                overflow = TextOverflow.Clip,
+                autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = LocalTextStyle.current.fontSize),
+            )
+        },
         icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
         badge = badge?.let { { Text(it) } },
         selected = selected,

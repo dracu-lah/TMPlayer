@@ -91,6 +91,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.layout.layout
@@ -1357,10 +1358,21 @@ private fun NavRail(
     onUpdate: () -> Unit = {},
 ) {
     val s = LocalStrings.current
+    // 180dp of room for the items, or as much more as the longest label needs up to RAIL_WIDE:
+    // "ഡൗൺലോഡുകൾ" and "ക്രമീകരണങ്ങൾ" are single words that cannot wrap, and at 180dp a
+    // Malayalam rail read "ഡൗൺലോ..." and "ക്രമീകരണ...".
+    val labelStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
+    val measurer = rememberTextMeasurer()
+    val labels = sections.map { it.label } + listOf(s.navDownloads, s.navSettings, s.navUpdate)
+    val widest = remember(labels, labelStyle) {
+        labels.maxOf { measurer.measure(it, labelStyle, maxLines = 1, softWrap = false).size.width }
+    }
+    // Inset either side, the icon and its gap, a count badge, and the column's end padding.
+    val itemRoom = with(LocalDensity.current) { widest.toDp() } + RAIL_INSET * 2 + 22.dp + 12.dp + 20.dp + 12.dp
+    val railRoom = itemRoom.coerceIn(180.dp, RAIL_WIDE)
     Column(
         Modifier
-            // 180dp of room for the items, whatever the overscan margin takes on the left.
-            .width(180.dp + Tv.SafeH - RAIL_INSET)
+            .width(railRoom + Tv.SafeH - RAIL_INSET)
             .fillMaxHeight()
             .keepsVerticalFocus()
             .background(Tone.surface)
@@ -1475,7 +1487,7 @@ private fun NavRail(
 /**
  * The logo, the name and the version, at the top of the rail.
  *
- * Two lines beside the mark rather than one, because the rail is 180 dp wide and the version has
+ * Two lines beside the mark rather than one, because the rail can be 180 dp wide and the version has
  * to stay at a readable 14 sp from across the room. Not focusable: it is a label, not a place.
  */
 @Composable
@@ -2763,6 +2775,9 @@ private val RAIL_MARK = 32.dp
 
 /** Horizontal padding every rail child carries, which is what keeps them out of the overscan. */
 private val RAIL_INSET = 16.dp
+
+/** The most the rail widens for a language whose labels are long single words. */
+private val RAIL_WIDE = 240.dp
 
 /** Enough for a version name, and never enough to eat the item's own label. */
 private val RAIL_BADGE_MAX = 64.dp

@@ -161,7 +161,7 @@
     "tab_continue": "തുടരുക",
     "tab_continue_blurb": "നിർത്തിയിടത്ത് നിന്ന് തുടരുക",
     "tab_continue_heading": "കാണുന്നത് തുടരുക",
-    "tab_favourites": "ഇഷ്ടപ്പെട്ടവ",
+    "tab_favourites": "ഇഷ്ടങ്ങൾ",
     "tab_favourites_blurb": "നിങ്ങൾ നക്ഷത്രമിട്ട ചാറ്റുകൾ",
     "tab_favourites_heading": "ഇഷ്ടപ്പെട്ടവ",
     "tab_history": "ചരിത്രം",
@@ -856,7 +856,7 @@
   "nav": {
     "chats": "ചാറ്റുകൾ",
     "downloads": "ഡൗൺലോഡുകൾ",
-    "favourites": "ഇഷ്ടപ്പെട്ടവ",
+    "favourites": "ഇഷ്ടങ്ങൾ",
     "fold": "ചുരുക്കുക",
     "folded": "ചുരുക്കി",
     "folders": "ഫോൾഡറുകൾ",
