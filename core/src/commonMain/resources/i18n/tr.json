@@ -155,10 +155,8 @@
     "searching": "Aranıyor…",
     "select_all": "Tümünü seç",
     "selected_count": "{count, plural, one {# seçili} other {# seçili}}",
-    "self_destructing_hidden": "{count, plural, one {# kendini imha eden video gösterilmiyor: Telegram'da aç} other {# kendini imha eden video gösterilmiyor: Telegram'da aç}}",
     "show_as_rows": "Satır olarak göster",
     "show_as_tiles": "Kutucuk olarak göster",
-    "show_them": "Göster",
     "signed_in": "Oturum açık",
     "smaller_posters": "Daha küçük afişler",
     "some_did_not_fit": "{queued}. {count, plural, one {# tanesi sığmadı} other {# tanesi sığmadı}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "Birkaçını birden indir",
     "selected": "Seçili",
     "selected_count": "{count, plural, one {# seçili} other {# seçili}}",
-    "self_destructing_hidden": "{count, plural, one {# kendini imha eden video gösterilmiyor: Telegram'da aç.} other {# kendini imha eden video gösterilmiyor: Telegram'da aç.}}",
     "share_failed": "Bu video başka bir uygulamaya verilemez.",
     "share_not_here": "Bu video henüz bu telefonda değil.",
     "some_fit": "{needed} içinden {taken} sıraya alındı. {room}",
@@ -639,8 +636,7 @@
     "row_recent": "Yıldızlı sohbetlere son eklenenler",
     "see_all": "Tümünü gör",
     "see_all_count": "{count, plural, one {# video} other {# video}}",
-    "see_all_count_at_least": "{count, plural, one {#+ video} other {#+ video}}",
-    "see_all_more": "{count, plural, one {+#} other {+#}}"
+    "see_all_count_at_least": "{count, plural, one {#+ video} other {#+ video}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "Telegram oturumu kapatılsın mı?"
   },
   "size": {
-    "hidden": "{count, plural, one {# video boyut sınırları nedeniyle gizlendi} other {# video boyut sınırları nedeniyle gizlendi}}",
     "no_limit": "Sınır yok",
     "no_minimum": "Alt sınır yok",
     "range_all": "Sohbetteki her videoyu, boyutu ne olursa olsun göreceksin.",

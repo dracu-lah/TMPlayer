@@ -155,10 +155,8 @@
     "searching": "Buscando…",
     "select_all": "Seleccionar todo",
     "selected_count": "{count, plural, one {# seleccionado} many {# de seleccionados} other {# seleccionados}}",
-    "self_destructing_hidden": "{count, plural, one {# video autodestructivo no se muestra: ábrelo en Telegram} many {# de videos autodestructivos no se muestran: ábrelos en Telegram} other {# videos autodestructivos no se muestran: ábrelos en Telegram}}",
     "show_as_rows": "Ver en filas",
     "show_as_tiles": "Ver en mosaico",
-    "show_them": "Mostrarlos",
     "signed_in": "Sesión iniciada",
     "smaller_posters": "Pósteres más pequeños",
     "some_did_not_fit": "{queued}. {count, plural, one {# no cupo} many {# de ellos no cupieron} other {# no cupieron}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "Descarga varios a la vez",
     "selected": "Seleccionado",
     "selected_count": "{count, plural, one {# seleccionado} many {# de seleccionados} other {# seleccionados}}",
-    "self_destructing_hidden": "{count, plural, one {# video autodestructivo no se muestra: ábrelo en Telegram.} many {# de videos autodestructivos no se muestran: ábrelos en Telegram.} other {# videos autodestructivos no se muestran: ábrelos en Telegram.}}",
     "share_failed": "Ese video no se puede pasar a otra app.",
     "share_not_here": "Ese video todavía no está en este teléfono.",
     "some_fit": "En cola {taken} de {needed}. {room}",
@@ -639,8 +636,7 @@
     "row_recent": "Agregados recientemente en chats destacados",
     "see_all": "Ver todo",
     "see_all_count": "{count, plural, one {# video} many {# de videos} other {# videos}}",
-    "see_all_count_at_least": "{count, plural, one {#+ video} many {#+ de videos} other {#+ videos}}",
-    "see_all_more": "{count, plural, one {+#} many {+#} other {+#}}"
+    "see_all_count_at_least": "{count, plural, one {#+ video} many {#+ de videos} other {#+ videos}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "¿Cerrar sesión de Telegram?"
   },
   "size": {
-    "hidden": "{count, plural, one {# video oculto por los límites de tamaño} many {# videos ocultos por los límites de tamaño} other {# videos ocultos por los límites de tamaño}}",
     "no_limit": "Sin límite",
     "no_minimum": "Sin mínimo",
     "range_all": "Verás todos los videos del chat, sin importar su tamaño.",

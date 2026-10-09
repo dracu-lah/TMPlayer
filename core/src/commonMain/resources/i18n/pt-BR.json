@@ -155,10 +155,8 @@
     "searching": "Buscando…",
     "select_all": "Selecionar tudo",
     "selected_count": "{count, plural, one {# selecionado} many {# de selecionados} other {# selecionados}}",
-    "self_destructing_hidden": "{count, plural, one {# vídeo autodestrutivo não é exibido: abra-o no Telegram} many {# de vídeos autodestrutivos não são exibidos: abra-os no Telegram} other {# vídeos autodestrutivos não são exibidos: abra-os no Telegram}}",
     "show_as_rows": "Mostrar em linhas",
     "show_as_tiles": "Mostrar em blocos",
-    "show_them": "Mostrar",
     "signed_in": "Conectado",
     "smaller_posters": "Pôsteres menores",
     "some_did_not_fit": "{queued}. {count, plural, one {# não coube} many {# de itens não couberam} other {# não couberam}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "Baixe vários de uma vez",
     "selected": "Selecionado",
     "selected_count": "{count, plural, one {# selecionado} many {# de selecionados} other {# selecionados}}",
-    "self_destructing_hidden": "{count, plural, one {# vídeo autodestrutivo não é exibido: abra-o no Telegram.} many {# de vídeos autodestrutivos não são exibidos: abra-os no Telegram.} other {# vídeos autodestrutivos não são exibidos: abra-os no Telegram.}}",
     "share_failed": "Esse vídeo não pode ser enviado para outro app.",
     "share_not_here": "Esse vídeo ainda não está neste celular.",
     "some_fit": "{taken} de {needed} na fila. {room}",
@@ -639,8 +636,7 @@
     "row_recent": "Adicionados recentemente nos chats com estrela",
     "see_all": "Ver tudo",
     "see_all_count": "{count, plural, one {# vídeo} many {# de vídeos} other {# vídeos}}",
-    "see_all_count_at_least": "{count, plural, one {#+ vídeo} many {#+ de vídeos} other {#+ vídeos}}",
-    "see_all_more": "{count, plural, one {+#} many {+#} other {+#}}"
+    "see_all_count_at_least": "{count, plural, one {#+ vídeo} many {#+ de vídeos} other {#+ vídeos}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "Sair do Telegram?"
   },
   "size": {
-    "hidden": "{count, plural, one {# vídeo oculto pelos limites de tamanho} many {# de vídeos ocultos pelos limites de tamanho} other {# vídeos ocultos pelos limites de tamanho}}",
     "no_limit": "Sem limite",
     "no_minimum": "Sem mínimo",
     "range_all": "Você verá todos os vídeos do chat, seja qual for o tamanho.",

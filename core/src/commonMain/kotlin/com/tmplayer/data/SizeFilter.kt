@@ -154,8 +154,4 @@ object SizeFilter {
         val kept = items.filter { matches(sizeOf(it), minBytes, maxBytes) }
         return Split(kept, items.size - kept.size)
     }
-
-    /** "1 video hidden by the size limits", the line every platform puts beside Show them. */
-    fun hiddenLabel(count: Int): String =
-        L.sizeHidden(count)
 }

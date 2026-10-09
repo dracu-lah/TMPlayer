@@ -154,7 +154,6 @@ import com.tmplayer.data.cancel
 import com.tmplayer.data.isSponsoredTextFullyVisible
 import com.tmplayer.data.placeSponsored
 import com.tmplayer.data.start
-import com.tmplayer.i18n.L
 import com.tmplayer.ui.components.ChoiceLine
 import com.tmplayer.ui.components.ChoiceList
 import com.tmplayer.ui.components.ChoiceSheet
@@ -165,7 +164,6 @@ import com.tmplayer.ui.components.MediaPreview
 import com.tmplayer.ui.components.Spinner
 import com.tmplayer.ui.components.StateScaffold
 import com.tmplayer.ui.components.TmIcons
-import com.tmplayer.ui.components.TmSecondaryButton
 import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.TvSearchField
 import com.tmplayer.ui.components.WatchedBadge
@@ -2153,53 +2151,3 @@ private const val REFRESH_TIMEOUT_MS = 20_000L
 
 /** How long a gap in focus has to last before the name strip counts it as having left. */
 private const val FOCUS_SETTLE_MS = 150L
-
-/**
- * Says how many videos the size limits kept out of this chat, and how many self-destructing ones.
- *
- * At the top rather than the bottom: a remote only scrolls as far as the last focusable card, so a
- * line under the grid would never be seen on a TV. An episode missing with no word about why reads
- * as TMPlayer having lost it, which is what viewers reported.
- */
-@Composable
-internal fun HiddenVideosNote(
-    bySize: Int,
-    selfDestructing: Int,
-    modifier: Modifier = Modifier,
-    onShowHidden: () -> Unit,
-) {
-    val s = LocalStrings.current
-    Row(
-        modifier.padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Text(
-            hiddenVideosText(bySize, selfDestructing),
-            style = MaterialTheme.typography.bodyMedium,
-            color = Tone.muted,
-            modifier = Modifier.weight(1f, fill = false),
-        )
-        // Lifts the limits for this chat only, for as long as it is open; Settings keeps them.
-        // A self-destructing video has nothing to show here, so only the size count earns it.
-        if (bySize > 0) {
-            TmSecondaryButton(onClick = onShowHidden) { Text(s.commonShowHidden) }
-        }
-    }
-}
-
-internal fun hiddenBySizeText(count: Int): String = L.browseHiddenBySize(count)
-
-/**
- * A self-destructing video is gone once it has been opened, which only Telegram itself can honour,
- * so the listing leaves it out and says where it can be watched instead.
- */
-internal fun hiddenSelfDestructingText(count: Int): String =
-    L.gridSelfDestructingHidden(count)
-
-/** Both sentences, each only when it has something to count. */
-internal fun hiddenVideosText(bySize: Int, selfDestructing: Int): String =
-    listOfNotNull(
-        hiddenBySizeText(bySize).takeIf { bySize > 0 },
-        hiddenSelfDestructingText(selfDestructing).takeIf { selfDestructing > 0 },
-    ).joinToString(" ")

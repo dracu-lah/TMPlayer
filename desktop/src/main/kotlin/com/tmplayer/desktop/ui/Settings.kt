@@ -15,8 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,14 +33,12 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -126,15 +122,6 @@ fun SettingsPage(
     var stylingSubtitles by remember { mutableStateOf(false) }
     var whatsNew by remember { mutableStateOf(false) }
     var reporting by remember { mutableStateOf(false) }
-    // The "Change" under a chat's grid lands here, on the size limits.
-    val sizeLimits = remember { BringIntoViewRequester() }
-    LaunchedEffect(state.showSizeLimits) {
-        if (!state.showSizeLimits) return@LaunchedEffect
-        // One frame, so the rows exist before they are asked to come into view.
-        withFrameNanos { }
-        runCatching { sizeLimits.bringIntoView() }
-        state.showSizeLimits = false
-    }
 
     val scroll = rememberScrollState()
     Box(Modifier.fillMaxSize()) {
@@ -230,7 +217,7 @@ fun SettingsPage(
                     }
                 }
                 // A Column, not a Box: in a Box the two rows drew over each other.
-                Column(Modifier.bringIntoViewRequester(sizeLimits)) {
+                Column {
                 Setting(s.settingsSmallest, SizeFilter.label(minSize)) {
                     Stepper(
                         onLess = { scope.launch { settings.setMinSizeBytes(SizeFilter.clampMin(SizeFilter.step(minSize, -1), maxSize)) } },

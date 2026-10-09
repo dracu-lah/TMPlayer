@@ -155,10 +155,8 @@
     "searching": "Ищем…",
     "select_all": "Выбрать все",
     "selected_count": "{count, plural, one {Выбран #} few {Выбрано #} many {Выбрано #} other {Выбрано #}}",
-    "self_destructing_hidden": "{count, plural, one {# самоуничтожающееся видео не показано: откройте его в Telegram} few {# самоуничтожающихся видео не показано: откройте их в Telegram} many {# самоуничтожающихся видео не показано: откройте их в Telegram} other {# самоуничтожающегося видео не показано: откройте его в Telegram}}",
     "show_as_rows": "Показывать списком",
     "show_as_tiles": "Показывать плитками",
-    "show_them": "Показать",
     "signed_in": "Вы вошли",
     "smaller_posters": "Мельче постеры",
     "some_did_not_fit": "{queued}. {count, plural, one {# не поместился} few {# не поместились} many {# не поместились} other {# не поместилось}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "Скачать сразу несколько",
     "selected": "Выбрано",
     "selected_count": "{count, plural, one {Выбран #} few {Выбрано #} many {Выбрано #} other {Выбрано #}}",
-    "self_destructing_hidden": "{count, plural, one {# самоуничтожающееся видео не показано: откройте его в Telegram.} few {# самоуничтожающихся видео не показано: откройте их в Telegram.} many {# самоуничтожающихся видео не показано: откройте их в Telegram.} other {# самоуничтожающегося видео не показано: откройте его в Telegram.}}",
     "share_failed": "Это видео нельзя передать другому приложению.",
     "share_not_here": "Этого видео ещё нет на телефоне.",
     "some_fit": "В очереди {taken} из {needed}. {room}",
@@ -639,8 +636,7 @@
     "row_recent": "Новое в чатах со звёздочкой",
     "see_all": "Все",
     "see_all_count": "{count, plural, one {# видео} few {# видео} many {# видео} other {# видео}}",
-    "see_all_count_at_least": "{count, plural, one {#+ видео} few {#+ видео} many {#+ видео} other {#+ видео}}",
-    "see_all_more": "{count, plural, one {+#} few {+#} many {+#} other {+#}}"
+    "see_all_count_at_least": "{count, plural, one {#+ видео} few {#+ видео} many {#+ видео} other {#+ видео}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "Выйти из Telegram?"
   },
   "size": {
-    "hidden": "{count, plural, one {# видео скрыто ограничениями по размеру} few {# видео скрыто ограничениями по размеру} many {# видео скрыто ограничениями по размеру} other {# видео скрыто ограничениями по размеру}}",
     "no_limit": "Без ограничений",
     "no_minimum": "Без минимума",
     "range_all": "Вы увидите все видео в чате, независимо от размера.",

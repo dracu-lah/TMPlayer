@@ -155,10 +155,8 @@
     "searching": "সার্চ হচ্ছে…",
     "select_all": "সব নির্বাচন করুন",
     "selected_count": "{count, plural, one {#টি নির্বাচিত} other {#টি নির্বাচিত}}",
-    "self_destructing_hidden": "{count, plural, one {#টি সেলফ-ডিস্ট্রাক্টিং ভিডিও দেখানো হচ্ছে না: Telegram-এ খুলুন} other {#টি সেলফ-ডিস্ট্রাক্টিং ভিডিও দেখানো হচ্ছে না: Telegram-এ খুলুন}}",
     "show_as_rows": "সারি হিসেবে দেখান",
     "show_as_tiles": "টাইল হিসেবে দেখান",
-    "show_them": "দেখান",
     "signed_in": "সাইন ইন করা আছে",
     "smaller_posters": "ছোট পোস্টার",
     "some_did_not_fit": "{queued}। {count, plural, one {#টি জায়গায় কুলায়নি} other {#টি জায়গায় কুলায়নি}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "একসঙ্গে কয়েকটি ডাউনলোড করুন",
     "selected": "নির্বাচিত",
     "selected_count": "{count, plural, one {#টি নির্বাচিত} other {#টি নির্বাচিত}}",
-    "self_destructing_hidden": "{count, plural, one {#টি সেলফ-ডিস্ট্রাক্টিং ভিডিও দেখানো হচ্ছে না: Telegram-এ খুলুন।} other {#টি সেলফ-ডিস্ট্রাক্টিং ভিডিও দেখানো হচ্ছে না: Telegram-এ খুলুন।}}",
     "share_failed": "ওই ভিডিও অন্য অ্যাপে দেওয়া যাচ্ছে না।",
     "share_not_here": "ওই ভিডিও এখনও এই ফোনে নেই।",
     "some_fit": "{needed}-এর মধ্যে {taken}টি সারিতে রাখা হয়েছে। {room}",
@@ -639,8 +636,7 @@
     "row_recent": "স্টার দেওয়া চ্যাটে সম্প্রতি যোগ হয়েছে",
     "see_all": "সব দেখুন",
     "see_all_count": "{count, plural, one {#টি ভিডিও} other {#টি ভিডিও}}",
-    "see_all_count_at_least": "{count, plural, one {#+টি ভিডিও} other {#+টি ভিডিও}}",
-    "see_all_more": "{count, plural, one {+#} other {+#}}"
+    "see_all_count_at_least": "{count, plural, one {#+টি ভিডিও} other {#+টি ভিডিও}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "Telegram থেকে সাইন আউট করবেন?"
   },
   "size": {
-    "hidden": "{count, plural, one {সাইজ সীমার কারণে #টি ভিডিও লুকানো} other {সাইজ সীমার কারণে #টি ভিডিও লুকানো}}",
     "no_limit": "কোনো সীমা নেই",
     "no_minimum": "ন্যূনতম নেই",
     "range_all": "সাইজ যাই হোক, চ্যাটের প্রতিটি ভিডিও দেখতে পাবেন।",

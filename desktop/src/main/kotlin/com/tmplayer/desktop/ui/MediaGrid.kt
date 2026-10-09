@@ -212,17 +212,10 @@ internal fun VideoGrid(
     onNav: (KeyboardNav) -> Unit = {},
     header: (@Composable () -> Unit)? = null,
     loadingMore: Boolean = false,
-    /** Videos the size limits kept out; above zero, a quiet line over the posters says so. */
-    hiddenBySize: Int = 0,
-    /** Self-destructing videos left out of the listing; counted in the same line. */
-    hiddenSelfDestructing: Int = 0,
-    /** Lifts the size limits for this listing; offered beside the count. */
-    onShowHidden: () -> Unit = {},
 ) {
     // Every file on its own, episodes included: a chat lists what was posted, one by one.
     val cells by rememberUpdatedState(items)
-    val note = WatchedWords.hiddenNote(hiddenBySize, hiddenSelfDestructing)
-    val headerItems by rememberUpdatedState((if (header != null) 1 else 0) + (if (note != null) 1 else 0))
+    val headerItems by rememberUpdatedState(if (header != null) 1 else 0)
     val nav = rememberKeyboardNav(remember(grid) { GridSurface(grid, { headerItems }, { cells.size }) })
     LaunchedEffect(nav) { onNav(nav) }
     val history by state.settings.downloadHistory.collectAsState(initial = emptyList())
@@ -241,15 +234,6 @@ internal fun VideoGrid(
         ) {
             if (header != null) {
                 item(key = "sponsored", span = { GridItemSpan(maxLineSpan) }) { header() }
-            }
-            if (note != null) {
-                item(key = "hidden-by-size", span = { GridItemSpan(maxLineSpan) }) {
-                    SizeLimitNote(
-                        note,
-                        onShow = if (hiddenBySize > 0) onShowHidden else null,
-                        onChange = if (hiddenBySize > 0) ({ state.openSizeLimits() }) else null,
-                    )
-                }
             }
             itemsIndexed(items, key = { _, it -> "media-${it.id}" }) { index, item ->
                 MediaTile(state, item, chatTitle, nav, index)
@@ -270,22 +254,6 @@ internal fun VideoGrid(
         if (selection.active) {
             SelectionBar(state, selection, items, chatTitle, index, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
         }
-    }
-}
-
-/**
- * The line over a chat's posters when the size limits kept some of its videos out, so a missing
- * episode is explained rather than looking lost. Quiet on purpose: muted text and a text button.
- */
-@Composable
-internal fun SizeLimitNote(text: String, onShow: (() -> Unit)?, onChange: (() -> Unit)?) {
-    val s = LocalStrings.current
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(text, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
-        // Show them lifts the limits for this chat while it is open; Change goes to Settings.
-        if (onShow != null) TextButton(onClick = onShow) { Text(s.browseShowThem, style = MaterialTheme.typography.bodySmall) }
-        // Change opens the size limits, which is no answer to a self-destructing video.
-        if (onChange != null) TextButton(onClick = onChange) { Text(s.commonChange, style = MaterialTheme.typography.bodySmall) }
     }
 }
 

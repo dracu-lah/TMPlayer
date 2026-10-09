@@ -155,10 +155,8 @@
     "searching": "Searching…",
     "select_all": "Select all",
     "selected_count": "{count, plural, one {# selected} other {# selected}}",
-    "self_destructing_hidden": "{count, plural, one {# self-destructing video not shown: open it in Telegram} other {# self-destructing videos not shown: open them in Telegram}}",
     "show_as_rows": "Show as rows",
     "show_as_tiles": "Show as tiles",
-    "show_them": "Show them",
     "signed_in": "Signed in",
     "smaller_posters": "Smaller posters",
     "some_did_not_fit": "{queued}. {count, plural, one {# did not fit} other {# did not fit}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "Download several at once",
     "selected": "Selected",
     "selected_count": "{count, plural, one {# selected} other {# selected}}",
-    "self_destructing_hidden": "{count, plural, one {# self-destructing video is not shown: open it in Telegram.} other {# self-destructing videos are not shown: open them in Telegram.}}",
     "share_failed": "That video cannot be handed to another app.",
     "share_not_here": "That video is not on this phone yet.",
     "some_fit": "Queued {taken} of {needed}. {room}",
@@ -639,8 +636,7 @@
     "row_recent": "Recently added in starred chats",
     "see_all": "See all",
     "see_all_count": "{count, plural, one {# video} other {# videos}}",
-    "see_all_count_at_least": "{count, plural, one {#+ video} other {#+ videos}}",
-    "see_all_more": "{count, plural, one {+#} other {+#}}"
+    "see_all_count_at_least": "{count, plural, one {#+ video} other {#+ videos}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "Sign out of Telegram?"
   },
   "size": {
-    "hidden": "{count, plural, one {# video hidden by the size limits} other {# videos hidden by the size limits}}",
     "no_limit": "No limit",
     "no_minimum": "No minimum",
     "range_all": "You'll see every video in the chat, whatever its size.",

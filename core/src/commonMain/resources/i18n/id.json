@@ -155,10 +155,8 @@
     "searching": "Mencari…",
     "select_all": "Pilih semua",
     "selected_count": "{count, plural, other {# dipilih}}",
-    "self_destructing_hidden": "{count, plural, other {# video yang hilang otomatis tidak ditampilkan: buka di Telegram}}",
     "show_as_rows": "Tampilkan sebagai baris",
     "show_as_tiles": "Tampilkan sebagai petak",
-    "show_them": "Tampilkan",
     "signed_in": "Sudah masuk",
     "smaller_posters": "Poster lebih kecil",
     "some_did_not_fit": "{queued}. {count, plural, other {# tidak muat}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "Unduh beberapa sekaligus",
     "selected": "Dipilih",
     "selected_count": "{count, plural, other {# dipilih}}",
-    "self_destructing_hidden": "{count, plural, other {# video yang hilang otomatis tidak ditampilkan: buka di Telegram.}}",
     "share_failed": "Video itu tidak bisa diserahkan ke aplikasi lain.",
     "share_not_here": "Video itu belum ada di ponsel ini.",
     "some_fit": "{taken} dari {needed} masuk antrean. {room}",
@@ -639,8 +636,7 @@
     "row_recent": "Baru ditambahkan di chat berbintang",
     "see_all": "Lihat semua",
     "see_all_count": "{count, plural, other {# video}}",
-    "see_all_count_at_least": "{count, plural, other {#+ video}}",
-    "see_all_more": "{count, plural, other {+#}}"
+    "see_all_count_at_least": "{count, plural, other {#+ video}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "Keluar dari Telegram?"
   },
   "size": {
-    "hidden": "{count, plural, other {# video disembunyikan oleh batas ukuran}}",
     "no_limit": "Tanpa batas",
     "no_minimum": "Tanpa minimum",
     "range_all": "Kamu akan melihat semua video di chat, berapa pun ukurannya.",

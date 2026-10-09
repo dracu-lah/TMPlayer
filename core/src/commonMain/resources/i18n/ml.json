@@ -155,10 +155,8 @@
     "searching": "തിരയുന്നു…",
     "select_all": "എല്ലാം തിരഞ്ഞെടുക്കുക",
     "selected_count": "{count, plural, one {# തിരഞ്ഞെടുത്തു} other {# തിരഞ്ഞെടുത്തു}}",
-    "self_destructing_hidden": "{count, plural, one {സ്വയം നശിക്കുന്ന # വീഡിയോ കാണിക്കുന്നില്ല: Telegram-ൽ തുറക്കുക} other {സ്വയം നശിക്കുന്ന # വീഡിയോകൾ കാണിക്കുന്നില്ല: Telegram-ൽ തുറക്കുക}}",
     "show_as_rows": "വരികളായി കാണിക്കുക",
     "show_as_tiles": "ടൈലുകളായി കാണിക്കുക",
-    "show_them": "കാണിക്കുക",
     "signed_in": "സൈൻ ഇൻ ചെയ്തു",
     "smaller_posters": "ചെറിയ പോസ്റ്ററുകൾ",
     "some_did_not_fit": "{queued}. {count, plural, one {# എണ്ണം ഉൾക്കൊണ്ടില്ല} other {# എണ്ണം ഉൾക്കൊണ്ടില്ല}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "ഒരേസമയം പലതും ഡൗൺലോഡ് ചെയ്യുക",
     "selected": "തിരഞ്ഞെടുത്തു",
     "selected_count": "{count, plural, one {# തിരഞ്ഞെടുത്തു} other {# തിരഞ്ഞെടുത്തു}}",
-    "self_destructing_hidden": "{count, plural, one {സ്വയം നശിക്കുന്ന # വീഡിയോ കാണിക്കുന്നില്ല: Telegram-ൽ തുറക്കുക.} other {സ്വയം നശിക്കുന്ന # വീഡിയോകൾ കാണിക്കുന്നില്ല: Telegram-ൽ തുറക്കുക.}}",
     "share_failed": "ആ വീഡിയോ മറ്റൊരു ആപ്പിന് കൈമാറാൻ കഴിയില്ല.",
     "share_not_here": "ആ വീഡിയോ ഇതുവരെ ഈ ഫോണിൽ ഇല്ല.",
     "some_fit": "{needed}-ൽ {taken} ക്യൂവിൽ ചേർത്തു. {room}",
@@ -639,8 +636,7 @@
     "row_recent": "നക്ഷത്രമിട്ട ചാറ്റുകളിൽ അടുത്തിടെ ചേർത്തവ",
     "see_all": "എല്ലാം കാണുക",
     "see_all_count": "{count, plural, one {# വീഡിയോ} other {# വീഡിയോകൾ}}",
-    "see_all_count_at_least": "{count, plural, one {#+ വീഡിയോ} other {#+ വീഡിയോകൾ}}",
-    "see_all_more": "{count, plural, one {+#} other {+#}}"
+    "see_all_count_at_least": "{count, plural, one {#+ വീഡിയോ} other {#+ വീഡിയോകൾ}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "Telegram-ൽ നിന്ന് സൈൻ ഔട്ട് ചെയ്യണോ?"
   },
   "size": {
-    "hidden": "{count, plural, one {# വീഡിയോ വലുപ്പ പരിധി കാരണം മറച്ചിരിക്കുന്നു} other {# വീഡിയോകൾ വലുപ്പ പരിധി കാരണം മറച്ചിരിക്കുന്നു}}",
     "no_limit": "പരിധിയില്ല",
     "no_minimum": "കുറഞ്ഞ പരിധിയില്ല",
     "range_all": "വലുപ്പം എന്തായാലും ചാറ്റിലെ എല്ലാ വീഡിയോയും കാണാം.",

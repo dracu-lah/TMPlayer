@@ -155,10 +155,8 @@
     "searching": "Recherche…",
     "select_all": "Tout sélectionner",
     "selected_count": "{count, plural, one {# sélectionnée} many {# sélectionnées} other {# sélectionnées}}",
-    "self_destructing_hidden": "{count, plural, one {# vidéo éphémère non affichée : ouvrez-la dans Telegram} many {# de vidéos éphémères non affichées : ouvrez-les dans Telegram} other {# vidéos éphémères non affichées : ouvrez-les dans Telegram}}",
     "show_as_rows": "Afficher en lignes",
     "show_as_tiles": "Afficher en vignettes",
-    "show_them": "Les afficher",
     "signed_in": "Connecté",
     "smaller_posters": "Affiches plus petites",
     "some_did_not_fit": "{queued}. {count, plural, one {# n'a pas tenu} many {# n'ont pas tenu} other {# n'ont pas tenu}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "En télécharger plusieurs à la fois",
     "selected": "Sélectionnée",
     "selected_count": "{count, plural, one {# sélectionnée} many {# sélectionnées} other {# sélectionnées}}",
-    "self_destructing_hidden": "{count, plural, one {# vidéo éphémère n'est pas affichée : ouvrez-la dans Telegram.} many {# de vidéos éphémères ne sont pas affichées : ouvrez-les dans Telegram.} other {# vidéos éphémères ne sont pas affichées : ouvrez-les dans Telegram.}}",
     "share_failed": "Cette vidéo ne peut pas être transmise à une autre application.",
     "share_not_here": "Cette vidéo n'est pas encore sur ce téléphone.",
     "some_fit": "{taken} sur {needed} en file d'attente. {room}",
@@ -639,8 +636,7 @@
     "row_recent": "Ajoutées récemment dans les favoris",
     "see_all": "Tout voir",
     "see_all_count": "{count, plural, one {# vidéo} many {# de vidéos} other {# vidéos}}",
-    "see_all_count_at_least": "{count, plural, one {#+ vidéo} many {#+ de vidéos} other {#+ vidéos}}",
-    "see_all_more": "{count, plural, one {+#} many {+#} other {+#}}"
+    "see_all_count_at_least": "{count, plural, one {#+ vidéo} many {#+ de vidéos} other {#+ vidéos}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "Se déconnecter de Telegram ?"
   },
   "size": {
-    "hidden": "{count, plural, one {# vidéo masquée par les limites de taille} many {# de vidéos masquées par les limites de taille} other {# vidéos masquées par les limites de taille}}",
     "no_limit": "Aucune limite",
     "no_minimum": "Aucun minimum",
     "range_all": "Vous verrez toutes les vidéos de la discussion, quelle que soit leur taille.",

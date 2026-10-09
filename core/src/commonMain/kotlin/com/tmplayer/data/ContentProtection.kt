@@ -42,7 +42,7 @@ object ContentProtection {
      * Maps [entries] to videos, leaving out the self-destructing ones and counting them.
      *
      * Only entries that would have been videos are counted, so a self-destructing photo in the
-     * same chat does not show up as a missing video in the grid's note.
+     * same chat does not count as a missing video.
      */
     fun <T> screen(
         entries: List<T>,

@@ -155,10 +155,8 @@
     "searching": "Suche läuft…",
     "select_all": "Alle auswählen",
     "selected_count": "{count, plural, one {# ausgewählt} other {# ausgewählt}}",
-    "self_destructing_hidden": "{count, plural, one {# selbstzerstörendes Video wird nicht angezeigt: Öffne es in Telegram} other {# selbstzerstörende Videos werden nicht angezeigt: Öffne sie in Telegram}}",
     "show_as_rows": "Als Zeilen anzeigen",
     "show_as_tiles": "Als Kacheln anzeigen",
-    "show_them": "Anzeigen",
     "signed_in": "Angemeldet",
     "smaller_posters": "Kleinere Poster",
     "some_did_not_fit": "{queued}. {count, plural, one {# hat nicht gepasst} other {# haben nicht gepasst}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "Mehrere auf einmal herunterladen",
     "selected": "Ausgewählt",
     "selected_count": "{count, plural, one {# ausgewählt} other {# ausgewählt}}",
-    "self_destructing_hidden": "{count, plural, one {# selbstzerstörendes Video wird nicht angezeigt: Öffne es in Telegram.} other {# selbstzerstörende Videos werden nicht angezeigt: Öffne sie in Telegram.}}",
     "share_failed": "Dieses Video kann nicht an eine andere App übergeben werden.",
     "share_not_here": "Dieses Video ist noch nicht auf diesem Handy.",
     "some_fit": "{taken} von {needed} in die Warteschlange gestellt. {room}",
@@ -639,8 +636,7 @@
     "row_recent": "Neu in Chats mit Stern",
     "see_all": "Alle anzeigen",
     "see_all_count": "{count, plural, one {# Video} other {# Videos}}",
-    "see_all_count_at_least": "{count, plural, one {#+ Video} other {#+ Videos}}",
-    "see_all_more": "{count, plural, one {+#} other {+#}}"
+    "see_all_count_at_least": "{count, plural, one {#+ Video} other {#+ Videos}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "Von Telegram abmelden?"
   },
   "size": {
-    "hidden": "{count, plural, one {# Video durch die Größenlimits ausgeblendet} other {# Videos durch die Größenlimits ausgeblendet}}",
     "no_limit": "Kein Limit",
     "no_minimum": "Kein Minimum",
     "range_all": "Du siehst jedes Video im Chat, egal wie groß.",

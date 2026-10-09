@@ -8,8 +8,7 @@ import com.tmplayer.i18n.L
 
 /**
  * The small decisions behind the desktop's Watched list, kept apart from Compose so they can be
- * tested: which way a menu's mark line reads, how full a poster's bar is, and the note under a
- * chat's grid when the size limits, or a video's own timer, kept videos out.
+ * tested: which way a menu's mark line reads, and how full a poster's bar is.
  */
 object WatchedWords {
 
@@ -29,24 +28,6 @@ object WatchedWords {
 
     /** "Watched" under a finished poster's title, unless a second viewing is part way through. */
     fun showsWatched(fraction: Float?, finished: Boolean): Boolean = finished && (fraction == null || fraction <= 0f)
-
-    /** The quiet line at the end of a chat's grid, or null when nothing was kept out. */
-    fun sizeLimitNote(hidden: Int): String? = when {
-        hidden <= 0 -> null
-        else -> com.tmplayer.data.SizeFilter.hiddenLabel(hidden)
-    }
-
-    /**
-     * The same line with the self-destructing videos added. Those are left out of every listing,
-     * because they are meant to be seen once in Telegram itself, so the line says where to go.
-     */
-    fun hiddenNote(bySize: Int, selfDestructing: Int): String? {
-        val destructing = when {
-            selfDestructing <= 0 -> null
-            else -> L.browseSelfDestructingHidden(selfDestructing)
-        }
-        return listOfNotNull(sizeLimitNote(bySize), destructing).joinToString(". ").ifEmpty { null }
-    }
 }
 
 /**

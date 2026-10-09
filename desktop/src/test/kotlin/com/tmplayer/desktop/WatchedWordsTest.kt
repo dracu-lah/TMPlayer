@@ -39,26 +39,6 @@ class WatchedWordsTest {
     }
 
     @Test
-    fun `the size note counts in the right number`() {
-        assertNull(WatchedWords.sizeLimitNote(0))
-        assertNull(WatchedWords.sizeLimitNote(-2))
-        assertEquals("1 video hidden by the size limits", WatchedWords.sizeLimitNote(1))
-        assertEquals("3 videos hidden by the size limits", WatchedWords.sizeLimitNote(3))
-    }
-
-    @Test
-    fun `the hidden note adds the self-destructing videos to the size sentence`() {
-        assertNull(WatchedWords.hiddenNote(0, 0))
-        assertEquals("3 videos hidden by the size limits", WatchedWords.hiddenNote(3, 0))
-        assertEquals("1 self-destructing video not shown: open it in Telegram", WatchedWords.hiddenNote(0, 1))
-        assertEquals("2 self-destructing videos not shown: open them in Telegram", WatchedWords.hiddenNote(0, 2))
-        assertEquals(
-            "1 video hidden by the size limits. 4 self-destructing videos not shown: open them in Telegram",
-            WatchedWords.hiddenNote(1, 4),
-        )
-    }
-
-    @Test
     fun `marking forgets the position and unmarking takes it off the list`() = runBlocking {
         val dir = Files.createTempDirectory("tm-watched").toFile()
         val settings = SettingsStore(SettingsStore.openDataStore(dir.resolve(SettingsStore.FILE_NAME)))

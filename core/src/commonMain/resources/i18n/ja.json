@@ -155,10 +155,8 @@
     "searching": "検索中…",
     "select_all": "すべて選択",
     "selected_count": "{count, plural, other {#件を選択中}}",
-    "self_destructing_hidden": "{count, plural, other {自動消滅する動画#本は表示されません。Telegramで開いてください}}",
     "show_as_rows": "リスト表示にする",
     "show_as_tiles": "タイル表示にする",
-    "show_them": "表示する",
     "signed_in": "ログイン中",
     "smaller_posters": "ポスターを小さく",
     "some_did_not_fit": "{queued}。{count, plural, other {#件は入りませんでした}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "まとめてダウンロード",
     "selected": "選択中",
     "selected_count": "{count, plural, other {#件を選択中}}",
-    "self_destructing_hidden": "{count, plural, other {自動消滅する動画#本は表示されません。Telegramで開いてください。}}",
     "share_failed": "その動画は別のアプリに渡せません。",
     "share_not_here": "その動画はまだこのスマートフォンにありません。",
     "some_fit": "{needed}件中{taken}件を待機に入れました。{room}",
@@ -639,8 +636,7 @@
     "row_recent": "スター付きチャットの新着",
     "see_all": "すべて表示",
     "see_all_count": "{count, plural, other {#本の動画}}",
-    "see_all_count_at_least": "{count, plural, other {#本以上の動画}}",
-    "see_all_more": "{count, plural, other {+#}}"
+    "see_all_count_at_least": "{count, plural, other {#本以上の動画}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "Telegramからログアウトしますか?"
   },
   "size": {
-    "hidden": "{count, plural, other {サイズ制限により#本の動画を非表示}}",
     "no_limit": "制限なし",
     "no_minimum": "下限なし",
     "range_all": "チャット内のすべての動画が、サイズに関係なく表示されます。",

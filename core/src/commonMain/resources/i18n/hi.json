@@ -155,10 +155,8 @@
     "searching": "खोजा जा रहा है…",
     "select_all": "सभी चुनें",
     "selected_count": "{count, plural, one {# चुना गया} other {# चुने गए}}",
-    "self_destructing_hidden": "{count, plural, one {# सेल्फ-डिस्ट्रक्ट वीडियो नहीं दिखाया गया: उसे Telegram में खोलें} other {# सेल्फ-डिस्ट्रक्ट वीडियो नहीं दिखाए गए: उन्हें Telegram में खोलें}}",
     "show_as_rows": "पंक्तियों में दिखाएँ",
     "show_as_tiles": "टाइल में दिखाएँ",
-    "show_them": "दिखाएँ",
     "signed_in": "साइन इन है",
     "smaller_posters": "छोटे पोस्टर",
     "some_did_not_fit": "{queued}। {count, plural, one {# के लिए जगह नहीं थी} other {# के लिए जगह नहीं थी}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "एक साथ कई डाउनलोड करें",
     "selected": "चुना गया",
     "selected_count": "{count, plural, one {# चुना गया} other {# चुने गए}}",
-    "self_destructing_hidden": "{count, plural, one {# सेल्फ-डिस्ट्रक्ट वीडियो नहीं दिखाया गया: उसे Telegram में खोलें।} other {# सेल्फ-डिस्ट्रक्ट वीडियो नहीं दिखाए गए: उन्हें Telegram में खोलें।}}",
     "share_failed": "वह वीडियो दूसरे ऐप को नहीं दिया जा सकता।",
     "share_not_here": "वह वीडियो अभी इस फ़ोन पर नहीं है।",
     "some_fit": "{needed} में से {taken} कतार में लगे। {room}",
@@ -639,8 +636,7 @@
     "row_recent": "स्टार वाली चैट में हाल में जोड़े गए",
     "see_all": "सभी देखें",
     "see_all_count": "{count, plural, one {# वीडियो} other {# वीडियो}}",
-    "see_all_count_at_least": "{count, plural, one {#+ वीडियो} other {#+ वीडियो}}",
-    "see_all_more": "{count, plural, one {+#} other {+#}}"
+    "see_all_count_at_least": "{count, plural, one {#+ वीडियो} other {#+ वीडियो}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "Telegram से साइन आउट करें?"
   },
   "size": {
-    "hidden": "{count, plural, one {# वीडियो साइज़ सीमा के कारण छिपा है} other {# वीडियो साइज़ सीमा के कारण छिपे हैं}}",
     "no_limit": "कोई सीमा नहीं",
     "no_minimum": "कोई न्यूनतम नहीं",
     "range_all": "आपको चैट का हर वीडियो दिखेगा, चाहे उसका साइज़ कुछ भी हो।",

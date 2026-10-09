@@ -155,10 +155,8 @@
     "searching": "搜尋中…",
     "select_all": "全選",
     "selected_count": "{count, plural, other {已選取 #}}",
-    "self_destructing_hidden": "{count, plural, other {有 # 部自動銷毀的影片未顯示：請在 Telegram 中開啟}}",
     "show_as_rows": "以列表顯示",
     "show_as_tiles": "以圖磚顯示",
-    "show_them": "顯示",
     "signed_in": "已登入",
     "smaller_posters": "較小的海報",
     "some_did_not_fit": "{queued}。{count, plural, other {有 # 部放不下}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "一次下載多部",
     "selected": "已選取",
     "selected_count": "{count, plural, other {已選取 #}}",
-    "self_destructing_hidden": "{count, plural, other {有 # 部自動銷毀的影片未顯示：請在 Telegram 中開啟。}}",
     "share_failed": "無法將那部影片交給其他應用程式。",
     "share_not_here": "那部影片還不在這支手機上。",
     "some_fit": "已將 {needed} 部中的 {taken} 部加入佇列。{room}",
@@ -639,8 +636,7 @@
     "row_recent": "加星號聊天的最新內容",
     "see_all": "查看全部",
     "see_all_count": "{count, plural, other {# 部影片}}",
-    "see_all_count_at_least": "{count, plural, other {#+ 部影片}}",
-    "see_all_more": "{count, plural, other {+#}}"
+    "see_all_count_at_least": "{count, plural, other {#+ 部影片}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "登出 Telegram？"
   },
   "size": {
-    "hidden": "{count, plural, other {# 部影片因大小限制而隱藏}}",
     "no_limit": "無限制",
     "no_minimum": "無下限",
     "range_all": "你會看到聊天中的所有影片，不論大小。",

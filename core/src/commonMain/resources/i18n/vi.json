@@ -155,10 +155,8 @@
     "searching": "Đang tìm…",
     "select_all": "Chọn tất cả",
     "selected_count": "{count, plural, other {Đã chọn #}}",
-    "self_destructing_hidden": "{count, plural, other {# video tự hủy không được hiển thị: hãy mở trong Telegram}}",
     "show_as_rows": "Hiện dạng hàng",
     "show_as_tiles": "Hiện dạng ô",
-    "show_them": "Hiện chúng",
     "signed_in": "Đã đăng nhập",
     "smaller_posters": "Poster nhỏ hơn",
     "some_did_not_fit": "{queued}. {count, plural, other {# video không đủ chỗ}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "Tải nhiều video cùng lúc",
     "selected": "Đã chọn",
     "selected_count": "{count, plural, other {Đã chọn #}}",
-    "self_destructing_hidden": "{count, plural, other {# video tự hủy không được hiển thị: hãy mở trong Telegram.}}",
     "share_failed": "Không chuyển được video đó cho ứng dụng khác.",
     "share_not_here": "Video đó chưa có trên điện thoại này.",
     "some_fit": "Đã xếp hàng {taken} trên {needed}. {room}",
@@ -639,8 +636,7 @@
     "row_recent": "Mới thêm trong các cuộc trò chuyện đã gắn sao",
     "see_all": "Xem tất cả",
     "see_all_count": "{count, plural, other {# video}}",
-    "see_all_count_at_least": "{count, plural, other {#+ video}}",
-    "see_all_more": "{count, plural, other {+#}}"
+    "see_all_count_at_least": "{count, plural, other {#+ video}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "Đăng xuất khỏi Telegram?"
   },
   "size": {
-    "hidden": "{count, plural, other {# video bị ẩn do giới hạn dung lượng}}",
     "no_limit": "Không giới hạn",
     "no_minimum": "Không tối thiểu",
     "range_all": "Bạn sẽ thấy mọi video trong cuộc trò chuyện, dù dung lượng bao nhiêu.",

@@ -155,10 +155,8 @@
     "searching": "正在搜索…",
     "select_all": "全选",
     "selected_count": "{count, plural, other {已选择 #}}",
-    "self_destructing_hidden": "{count, plural, other {# 个阅后即焚视频未显示：请在 Telegram 中打开}}",
     "show_as_rows": "以列表显示",
     "show_as_tiles": "以磁贴显示",
-    "show_them": "显示",
     "signed_in": "已登录",
     "smaller_posters": "更小的海报",
     "some_did_not_fit": "{queued}。{count, plural, other {# 个放不下}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "一次下载多个",
     "selected": "已选择",
     "selected_count": "{count, plural, other {已选择 #}}",
-    "self_destructing_hidden": "{count, plural, other {# 个阅后即焚视频未显示：请在 Telegram 中打开。}}",
     "share_failed": "无法把该视频交给其他应用。",
     "share_not_here": "该视频还不在这部手机上。",
     "some_fit": "已加入队列 {taken} / {needed}。{room}",
@@ -639,8 +636,7 @@
     "row_recent": "星标聊天中的最新视频",
     "see_all": "查看全部",
     "see_all_count": "{count, plural, other {# 个视频}}",
-    "see_all_count_at_least": "{count, plural, other {#+ 个视频}}",
-    "see_all_more": "{count, plural, other {+#}}"
+    "see_all_count_at_least": "{count, plural, other {#+ 个视频}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "退出 Telegram 登录？"
   },
   "size": {
-    "hidden": "{count, plural, other {# 个视频因大小限制被隐藏}}",
     "no_limit": "无限制",
     "no_minimum": "无最小值",
     "range_all": "你会看到聊天中的所有视频，不论大小。",

@@ -155,10 +155,8 @@
     "searching": "Пошук…",
     "select_all": "Вибрати все",
     "selected_count": "{count, plural, one {Вибрано #} few {Вибрано #} many {Вибрано #} other {Вибрано #}}",
-    "self_destructing_hidden": "{count, plural, one {# відео, що самознищується, не показано: відкрийте його в Telegram} few {# відео, що самознищуються, не показано: відкрийте їх у Telegram} many {# відео, що самознищуються, не показано: відкрийте їх у Telegram} other {# відео, що самознищуються, не показано: відкрийте їх у Telegram}}",
     "show_as_rows": "Показати рядками",
     "show_as_tiles": "Показати плитками",
-    "show_them": "Показати їх",
     "signed_in": "Ви ввійшли",
     "smaller_posters": "Менші постери",
     "some_did_not_fit": "{queued}. {count, plural, one {# не поміщається} few {# не поміщаються} many {# не поміщаються} other {# не поміщаються}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "Завантажити кілька одразу",
     "selected": "Вибрано",
     "selected_count": "{count, plural, one {Вибрано #} few {Вибрано #} many {Вибрано #} other {Вибрано #}}",
-    "self_destructing_hidden": "{count, plural, one {# відео, що самознищується, не показано: відкрийте його в Telegram.} few {# відео, що самознищуються, не показано: відкрийте їх у Telegram.} many {# відео, що самознищуються, не показано: відкрийте їх у Telegram.} other {# відео, що самознищуються, не показано: відкрийте їх у Telegram.}}",
     "share_failed": "Це відео не можна передати іншому застосунку.",
     "share_not_here": "Цього відео ще немає на цьому телефоні.",
     "some_fit": "У чергу додано {taken} із {needed}. {room}",
@@ -639,8 +636,7 @@
     "row_recent": "Нещодавно додано в чатах із зірочкою",
     "see_all": "Показати все",
     "see_all_count": "{count, plural, one {# відео} few {# відео} many {# відео} other {# відео}}",
-    "see_all_count_at_least": "{count, plural, one {#+ відео} few {#+ відео} many {#+ відео} other {#+ відео}}",
-    "see_all_more": "{count, plural, one {+#} few {+#} many {+#} other {+#}}"
+    "see_all_count_at_least": "{count, plural, one {#+ відео} few {#+ відео} many {#+ відео} other {#+ відео}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "Вийти з Telegram?"
   },
   "size": {
-    "hidden": "{count, plural, one {# відео приховано через ліміти розміру} few {# відео приховано через ліміти розміру} many {# відео приховано через ліміти розміру} other {# відео приховано через ліміти розміру}}",
     "no_limit": "Без обмежень",
     "no_minimum": "Без мінімуму",
     "range_all": "Ви бачитимете кожне відео в чаті, незалежно від розміру.",

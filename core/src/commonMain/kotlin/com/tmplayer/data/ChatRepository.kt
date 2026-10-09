@@ -149,7 +149,7 @@ data class MediaPage(
     val items: List<MediaItem>,
     val cursors: MediaCursors,
     val endReached: Boolean,
-    /** Self-destructing videos this page left out, for the grid's "hidden" note. */
+    /** Self-destructing videos this page left out. */
     val hiddenSelfDestructing: Int = 0,
 )
 

@@ -50,7 +50,6 @@ import com.tmplayer.data.Series
 import com.tmplayer.data.SeriesShelf
 import com.tmplayer.data.ShelfEntry
 import com.tmplayer.data.WatchPoint
-import com.tmplayer.ui.browse.SeriesCard
 import com.tmplayer.ui.browse.SeriesOpened
 import com.tmplayer.ui.browse.SeriesWatch
 import com.tmplayer.ui.browse.BrowseData
@@ -74,10 +73,8 @@ import com.tmplayer.ui.components.TvConfirm
 import com.tmplayer.ui.components.MediaGridSkeleton
 import com.tmplayer.ui.browse.noVideosWithin
 import com.tmplayer.ui.browse.STILL_MORE_TO_SEARCH
-import com.tmplayer.ui.browse.HiddenVideosNote
 import com.tmplayer.ui.browse.FIRST_LOAD_TIP
 import com.tmplayer.data.SizeFilter
-import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.layout.padding
 import com.tmplayer.ui.onboarding.OnboardingPage
 import com.tmplayer.ui.onboarding.OnboardingScreen
@@ -104,7 +101,7 @@ import com.tmplayer.ui.theme.Tv
  *
  * Start it with `--es screen chats`, `media` or `settings`. The empty, error and loading states have
  * screens of their own: `chats-first` (the first chat list, with its tip, and after fifteen seconds
- * the slow-answer line), and `media` with `--es variant hidden|empty-hidden|empty-more|slow|recent`.
+ * the slow-answer line), and `media` with `--es variant empty-hidden|empty-more|slow|recent`.
  * `--es variant menu` opens the first video's menu over the grid, with its "x GB free" line, and
  * `--es screen downloads` is the Downloads screen, `--es screen support` the support codes over
  * Settings, and `--ei support_rung 1` to `3` (or `--ez support_reminder true`) the support card over the chat list,
@@ -614,23 +611,8 @@ private fun PhoneMediaScreen(variant: String, onBack: () -> Unit = {}) {
             val tiles = (0 until 3).flatMap { pass ->
                 media.map { it.copy(messageId = it.messageId + pass * media.size) }
             }
-            if (variant == "hidden") {
-                item(key = "hidden", span = { GridItemSpan(maxLineSpan) }) {
-                    Box(Modifier.padding(horizontal = 12.dp)) { HiddenVideosNote(12, 0) {} }
-                }
-            }
             if (series != null) {
-                items(series.entries, key = { it.key }) { entry ->
-                    when (entry) {
-                        is ShelfEntry.Show -> SeriesCard(
-                            series = entry.series,
-                            progress = PROMO_WATCH.progress(entry.series),
-                            onClick = { series.open(entry.series.key) },
-                            dense = true,
-                        )
-                        is ShelfEntry.File -> PromoCard(entry.item, dense = true)
-                    }
-                }
+                items(series.files, key = { it.messageId }) { PromoCard(it, dense = true) }
             } else {
                 items(tiles, key = { it.messageId }) { item ->
                     MediaCard(
@@ -736,21 +718,10 @@ private fun TvMediaScreen(variant: String) {
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            if (variant == "hidden") {
-                item(key = "hidden", span = { GridItemSpan(maxLineSpan) }) { HiddenVideosNote(12, 0) {} }
-            }
             if (series != null) {
-                items(series.entries, key = { it.key }) { entry ->
-                    val focus = if (entry === series.entries.first()) Modifier.focusRequester(first) else Modifier
-                    when (entry) {
-                        is ShelfEntry.Show -> SeriesCard(
-                            series = entry.series,
-                            progress = PROMO_WATCH.progress(entry.series),
-                            onClick = { series.open(entry.series.key) },
-                            modifier = focus,
-                        )
-                        is ShelfEntry.File -> PromoCard(entry.item, modifier = focus)
-                    }
+                items(series.files, key = { it.messageId }) { item ->
+                    val focus = if (item === series.files.first()) Modifier.focusRequester(first) else Modifier
+                    PromoCard(item, modifier = focus)
                 }
             } else {
                 items(media, key = { it.id }) { item ->
@@ -808,13 +779,12 @@ private fun promoMedia(): List<MediaItem> {
 }
 
 /**
- * The series variants: `--es variant series` folds the demo shows into tiles, `series-open` opens
- * the first show (a bottom sheet on the phone, a page on the TV), and `files` is the same chat
- * with every file on its own.
+ * `--es variant series-open`: the chat with the demo shows in it, every file on its own as the real
+ * grid lists them, and the first show's page open over it (a bottom sheet on the phone, a page on
+ * the TV).
  */
 private class PromoSeries(
-    val entries: List<ShelfEntry>,
-    val open: (String) -> Unit,
+    val files: List<MediaItem>,
     private val opened: Series?,
     private val close: () -> Unit,
 ) {
@@ -827,15 +797,15 @@ private class PromoSeries(
 
 @Composable
 private fun promoSeries(variant: String): PromoSeries? {
-    if (variant != "series" && variant != "series-open" && variant != "files") return null
+    if (variant != "series-open") return null
     val media = promoSeriesMedia() + promoMedia()
     val arranged = remember(media) { SeriesShelf.arrange(media) }
-    var openKey by remember { mutableStateOf(if (variant == "series-open") "harbour notes" else null) }
+    var open by remember { mutableStateOf(true) }
     return PromoSeries(
-        entries = if (variant != "files") arranged else media.map { ShelfEntry.File(it) },
-        open = { openKey = it },
-        opened = arranged.firstNotNullOfOrNull { (it as? ShelfEntry.Show)?.series?.takeIf { s -> s.key == openKey } },
-        close = { openKey = null },
+        files = media,
+        opened = arranged.firstNotNullOfOrNull { (it as? ShelfEntry.Show)?.series?.takeIf { s -> s.key == "harbour notes" } }
+            ?.takeIf { open },
+        close = { open = false },
     )
 }
 

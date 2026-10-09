@@ -155,10 +155,8 @@
     "searching": "검색 중…",
     "select_all": "모두 선택",
     "selected_count": "{count, plural, other {#개 선택됨}}",
-    "self_destructing_hidden": "{count, plural, other {자동 삭제 영상 #개는 표시되지 않아요. Telegram에서 열어 보세요}}",
     "show_as_rows": "목록으로 보기",
     "show_as_tiles": "타일로 보기",
-    "show_them": "보기",
     "signed_in": "로그인됨",
     "smaller_posters": "포스터 작게",
     "some_did_not_fit": "{queued}. {count, plural, other {#개는 공간이 부족했어요}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "여러 개를 한 번에 다운로드해요",
     "selected": "선택됨",
     "selected_count": "{count, plural, other {#개 선택됨}}",
-    "self_destructing_hidden": "{count, plural, other {자동 삭제 영상 #개는 표시되지 않아요. Telegram에서 열어 보세요.}}",
     "share_failed": "그 영상을 다른 앱으로 넘길 수 없어요.",
     "share_not_here": "그 영상은 아직 이 휴대폰에 없어요.",
     "some_fit": "{needed}개 중 {taken}개를 대기열에 추가했어요. {room}",
@@ -639,8 +636,7 @@
     "row_recent": "별표 채팅의 새 영상",
     "see_all": "모두 보기",
     "see_all_count": "{count, plural, other {영상 #개}}",
-    "see_all_count_at_least": "{count, plural, other {영상 #개 이상}}",
-    "see_all_more": "{count, plural, other {+#}}"
+    "see_all_count_at_least": "{count, plural, other {영상 #개 이상}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "Telegram에서 로그아웃할까요?"
   },
   "size": {
-    "hidden": "{count, plural, other {크기 제한 때문에 영상 #개가 숨겨졌어요}}",
     "no_limit": "제한 없음",
     "no_minimum": "최소 제한 없음",
     "range_all": "크기와 상관없이 채팅의 모든 영상이 표시돼요.",

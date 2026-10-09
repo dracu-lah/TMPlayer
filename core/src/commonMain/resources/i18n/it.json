@@ -155,10 +155,8 @@
     "searching": "Ricerca…",
     "select_all": "Seleziona tutto",
     "selected_count": "{count, plural, one {# selezionato} many {# selezionati} other {# selezionati}}",
-    "self_destructing_hidden": "{count, plural, one {# video ad autodistruzione non mostrato: aprilo in Telegram} many {# di video ad autodistruzione non mostrati: aprili in Telegram} other {# video ad autodistruzione non mostrati: aprili in Telegram}}",
     "show_as_rows": "Mostra in righe",
     "show_as_tiles": "Mostra in riquadri",
-    "show_them": "Mostrali",
     "signed_in": "Accesso effettuato",
     "smaller_posters": "Locandine più piccole",
     "some_did_not_fit": "{queued}. {count, plural, one {# non c'entrava} many {# non c'entravano} other {# non c'entravano}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "Scarica più video insieme",
     "selected": "Selezionato",
     "selected_count": "{count, plural, one {# selezionato} many {# selezionati} other {# selezionati}}",
-    "self_destructing_hidden": "{count, plural, one {# video ad autodistruzione non è mostrato: aprilo in Telegram.} many {# di video ad autodistruzione non sono mostrati: aprili in Telegram.} other {# video ad autodistruzione non sono mostrati: aprili in Telegram.}}",
     "share_failed": "Quel video non può essere passato a un'altra app.",
     "share_not_here": "Quel video non è ancora su questo telefono.",
     "some_fit": "In coda {taken} su {needed}. {room}",
@@ -639,8 +636,7 @@
     "row_recent": "Aggiunti di recente nelle chat con stella",
     "see_all": "Vedi tutto",
     "see_all_count": "{count, plural, one {# video} many {# di video} other {# video}}",
-    "see_all_count_at_least": "{count, plural, one {#+ video} many {#+ di video} other {#+ video}}",
-    "see_all_more": "{count, plural, one {+#} many {+#} other {+#}}"
+    "see_all_count_at_least": "{count, plural, one {#+ video} many {#+ di video} other {#+ video}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "Uscire da Telegram?"
   },
   "size": {
-    "hidden": "{count, plural, one {# video nascosto dai limiti di dimensione} many {# di video nascosti dai limiti di dimensione} other {# video nascosti dai limiti di dimensione}}",
     "no_limit": "Nessun limite",
     "no_minimum": "Nessun minimo",
     "range_all": "Vedrai ogni video della chat, qualunque sia la sua dimensione.",

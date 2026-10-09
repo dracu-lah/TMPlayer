@@ -155,10 +155,8 @@
     "searching": "در حال جستجو…",
     "select_all": "انتخاب همه",
     "selected_count": "{count, plural, one {# انتخاب‌شده} other {# انتخاب‌شده}}",
-    "self_destructing_hidden": "{count, plural, one {# ویدیوی خودتخریب‌شونده نمایش داده نمی‌شود: آن را در Telegram باز کنید} other {# ویدیوی خودتخریب‌شونده نمایش داده نمی‌شوند: آن‌ها را در Telegram باز کنید}}",
     "show_as_rows": "نمایش به‌صورت ردیف",
     "show_as_tiles": "نمایش به‌صورت کاشی",
-    "show_them": "نمایش آن‌ها",
     "signed_in": "وارد شده‌اید",
     "smaller_posters": "پوسترهای کوچک‌تر",
     "some_did_not_fit": "{queued}. {count, plural, one {# مورد جا نشد} other {# مورد جا نشد}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "دانلود چند ویدیو یک‌جا",
     "selected": "انتخاب‌شده",
     "selected_count": "{count, plural, one {# انتخاب‌شده} other {# انتخاب‌شده}}",
-    "self_destructing_hidden": "{count, plural, one {# ویدیوی خودتخریب‌شونده نمایش داده نمی‌شود: آن را در Telegram باز کنید.} other {# ویدیوی خودتخریب‌شونده نمایش داده نمی‌شوند: آن‌ها را در Telegram باز کنید.}}",
     "share_failed": "آن ویدیو را نمی‌شود به برنامهٔ دیگری داد.",
     "share_not_here": "آن ویدیو هنوز روی این گوشی نیست.",
     "some_fit": "{taken} از {needed} در صف رفت. {room}",
@@ -639,8 +636,7 @@
     "row_recent": "تازه‌های گفتگوهای ستاره‌دار",
     "see_all": "مشاهدهٔ همه",
     "see_all_count": "{count, plural, one {# ویدیو} other {# ویدیو}}",
-    "see_all_count_at_least": "{count, plural, one {+# ویدیو} other {+# ویدیو}}",
-    "see_all_more": "{count, plural, one {+#} other {+#}}"
+    "see_all_count_at_least": "{count, plural, one {+# ویدیو} other {+# ویدیو}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "از Telegram خارج می‌شوید؟"
   },
   "size": {
-    "hidden": "{count, plural, one {# ویدیو به‌خاطر محدودیت اندازه پنهان شد} other {# ویدیو به‌خاطر محدودیت اندازه پنهان شد}}",
     "no_limit": "بدون محدودیت",
     "no_minimum": "بدون حداقل",
     "range_all": "هر ویدیوی گفتگو را با هر اندازه‌ای می‌بینید.",

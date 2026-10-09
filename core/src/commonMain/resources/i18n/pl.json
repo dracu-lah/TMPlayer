@@ -155,10 +155,8 @@
     "searching": "Szukanie…",
     "select_all": "Zaznacz wszystko",
     "selected_count": "{count, plural, one {Wybrano #} few {Wybrano #} many {Wybrano #} other {Wybrano #}}",
-    "self_destructing_hidden": "{count, plural, one {# film samoniszczący nie jest wyświetlany: otwórz go w Telegramie} few {# filmy samoniszczące nie są wyświetlane: otwórz je w Telegramie} many {# filmów samoniszczących nie jest wyświetlanych: otwórz je w Telegramie} other {# filmu samoniszczącego nie jest wyświetlane: otwórz je w Telegramie}}",
     "show_as_rows": "Pokaż jako wiersze",
     "show_as_tiles": "Pokaż jako kafelki",
-    "show_them": "Pokaż je",
     "signed_in": "Zalogowano",
     "smaller_posters": "Mniejsze plakaty",
     "some_did_not_fit": "{queued}. {count, plural, one {# się nie zmieścił} few {# się nie zmieściły} many {# się nie zmieściło} other {# się nie zmieściło}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "Pobierz kilka naraz",
     "selected": "Wybrano",
     "selected_count": "{count, plural, one {Wybrano #} few {Wybrano #} many {Wybrano #} other {Wybrano #}}",
-    "self_destructing_hidden": "{count, plural, one {# film samoniszczący nie jest wyświetlany: otwórz go w Telegramie.} few {# filmy samoniszczące nie są wyświetlane: otwórz je w Telegramie.} many {# filmów samoniszczących nie jest wyświetlanych: otwórz je w Telegramie.} other {# filmu samoniszczącego nie jest wyświetlane: otwórz je w Telegramie.}}",
     "share_failed": "Nie można przekazać tego filmu innej aplikacji.",
     "share_not_here": "Tego filmu nie ma jeszcze na tym telefonie.",
     "some_fit": "W kolejce {taken} z {needed}. {room}",
@@ -639,8 +636,7 @@
     "row_recent": "Ostatnio dodane w czatach z gwiazdką",
     "see_all": "Zobacz wszystko",
     "see_all_count": "{count, plural, one {# film} few {# filmy} many {# filmów} other {# filmu}}",
-    "see_all_count_at_least": "{count, plural, one {#+ film} few {#+ filmy} many {#+ filmów} other {#+ filmu}}",
-    "see_all_more": "{count, plural, one {+#} few {+#} many {+#} other {+#}}"
+    "see_all_count_at_least": "{count, plural, one {#+ film} few {#+ filmy} many {#+ filmów} other {#+ filmu}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "Wylogować z Telegrama?"
   },
   "size": {
-    "hidden": "{count, plural, one {# film ukryty przez limity rozmiaru} few {# filmy ukryte przez limity rozmiaru} many {# filmów ukrytych przez limity rozmiaru} other {# filmu ukrytego przez limity rozmiaru}}",
     "no_limit": "Bez limitu",
     "no_minimum": "Bez minimum",
     "range_all": "Zobaczysz każdy film w czacie, niezależnie od rozmiaru.",

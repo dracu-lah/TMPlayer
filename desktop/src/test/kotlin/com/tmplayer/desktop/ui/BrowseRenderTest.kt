@@ -402,7 +402,7 @@ class BrowseRenderTest {
         shell.watched.markWatched(com.tmplayer.data.WatchedRecord.of(items[1], "Weekend series", now - 26 * 3_600_000L, manual = true))
         // A second viewing part way through: the tick stays, the bar shows where it is.
         settings.saveResumePosition(2, 2, 600_000, 2_400_000, "")
-        val grid = render { VideoGrid(shell, items, "Weekend series", hiddenBySize = 3, hiddenSelfDestructing = 1) }
+        val grid = render { VideoGrid(shell, items, "Weekend series") }
         save("watched-grid.png", grid)
         shell.showHistory(com.tmplayer.ui.browse.HistoryTab.Watched)
         val page = render { HistoryPage(shell) }
@@ -420,12 +420,12 @@ class BrowseRenderTest {
                 StateBox(state, onRetry = {}, onAction = {}, slowAfterMs = 100) {}
             }
         }
-        val hidden = com.tmplayer.data.SizeFilter.hiddenLabel(12)
+        val hidden = com.tmplayer.i18n.L.browseHiddenBySize(12)
         save(
             "state-empty-hidden.png",
             page(
                 com.tmplayer.ui.components.UiState.Empty(
-                    "${com.tmplayer.ui.browse.noVideosWithin(com.tmplayer.data.SizeFilter.DEFAULT_MIN, com.tmplayer.data.SizeFilter.DEFAULT_MAX)}\n\n$hidden.",
+                    "${com.tmplayer.ui.browse.noVideosWithin(com.tmplayer.data.SizeFilter.DEFAULT_MIN, com.tmplayer.data.SizeFilter.DEFAULT_MAX)}\n\n$hidden",
                     com.tmplayer.ui.components.StateAction.ShowHidden,
                 ),
             ),
@@ -447,14 +447,6 @@ class BrowseRenderTest {
             "state-recent-searches.png",
             page(com.tmplayer.ui.components.UiState.Loading("Finding videos…"), listOf("coast walk", "shelf part 2", "birthday", "recipe")),
         )
-        val items = (1..4).map { at ->
-            MediaItem(
-                chatId = 2, messageId = at.toLong(), fileId = 0, title = "Harbour Lights S02E0$at",
-                sizeBytes = 400L * 1024 * 1024, durationSec = 2400, mimeType = "video/mp4", thumbnailFileId = 0,
-                miniThumbnail = jpeg(0xFF12A594.toInt()), date = 0, fileName = "Harbour Lights S02E0$at.mkv",
-            )
-        }
-        save("state-hidden-note.png", render { VideoGrid(shell, items, "Weekend series", hiddenBySize = 12) })
     }
 
     @Test

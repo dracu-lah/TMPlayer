@@ -28,10 +28,4 @@ class HiddenBySizeTest {
     fun `an empty page hides nothing`() {
         assertEquals(0, SizeFilter.split(emptyList<Long>(), 50 * MB, CEILING) { it }.hidden)
     }
-
-    @Test
-    fun `the label counts in English`() {
-        assertEquals("1 video hidden by the size limits", SizeFilter.hiddenLabel(1))
-        assertEquals("12 videos hidden by the size limits", SizeFilter.hiddenLabel(12))
-    }
 }

@@ -155,10 +155,8 @@
     "searching": "جارٍ البحث…",
     "select_all": "تحديد الكل",
     "selected_count": "{count, plural, zero {لم يُحدَّد شيء} one {عنصر واحد محدد} two {عنصران محددان} few {# عناصر محددة} many {# عنصرًا محددًا} other {# عنصر محدد}}",
-    "self_destructing_hidden": "{count, plural, zero {لا فيديوهات ذاتية الحذف مخفية} one {فيديو واحد ذاتي الحذف غير معروض: افتحه في Telegram} two {فيديوهان ذاتيا الحذف غير معروضين: افتحهما في Telegram} few {# فيديوهات ذاتية الحذف غير معروضة: افتحها في Telegram} many {# فيديو ذاتي الحذف غير معروض: افتحها في Telegram} other {# فيديو ذاتي الحذف غير معروض: افتحها في Telegram}}",
     "show_as_rows": "العرض كصفوف",
     "show_as_tiles": "العرض كمربعات",
-    "show_them": "إظهارها",
     "signed_in": "تم تسجيل الدخول",
     "smaller_posters": "ملصقات أصغر",
     "some_did_not_fit": "{queued}. {count, plural, zero {اتسعت المساحة لها كلها} one {تعذّر استيعاب واحد} two {تعذّر استيعاب اثنين} few {تعذّر استيعاب #} many {تعذّر استيعاب #} other {تعذّر استيعاب #}}",
@@ -585,7 +583,6 @@
     "select_videos_detail": "تنزيل عدة فيديوهات دفعة واحدة",
     "selected": "محدد",
     "selected_count": "{count, plural, zero {لم يُحدَّد شيء} one {عنصر واحد محدد} two {عنصران محددان} few {# عناصر محددة} many {# عنصرًا محددًا} other {# عنصر محدد}}",
-    "self_destructing_hidden": "{count, plural, zero {لا فيديوهات ذاتية الحذف مخفية.} one {فيديو واحد ذاتي الحذف غير معروض: افتحه في Telegram.} two {فيديوهان ذاتيا الحذف غير معروضين: افتحهما في Telegram.} few {# فيديوهات ذاتية الحذف غير معروضة: افتحها في Telegram.} many {# فيديو ذاتي الحذف غير معروض: افتحها في Telegram.} other {# فيديو ذاتي الحذف غير معروض: افتحها في Telegram.}}",
     "share_failed": "لا يمكن تمرير ذلك الفيديو إلى تطبيق آخر.",
     "share_not_here": "ذلك الفيديو ليس على هذا الهاتف بعد.",
     "some_fit": "أُضيف {taken} من {needed} إلى قائمة الانتظار. {room}",
@@ -639,8 +636,7 @@
     "row_recent": "أُضيف مؤخرًا في المحادثات المميّزة",
     "see_all": "عرض الكل",
     "see_all_count": "{count, plural, zero {لا فيديوهات} one {فيديو واحد} two {فيديوهان} few {# فيديوهات} many {# فيديو} other {# فيديو}}",
-    "see_all_count_at_least": "{count, plural, zero {لا فيديوهات} one {فيديو واحد أو أكثر} two {فيديوهان أو أكثر} few {#+ فيديوهات} many {#+ فيديو} other {#+ فيديو}}",
-    "see_all_more": "{count, plural, zero {+#} one {+#} two {+#} few {+#} many {+#} other {+#}}"
+    "see_all_count_at_least": "{count, plural, zero {لا فيديوهات} one {فيديو واحد أو أكثر} two {فيديوهان أو أكثر} few {#+ فيديوهات} many {#+ فيديو} other {#+ فيديو}}"
   },
   "install": {
     "appimage": "AppImage",
@@ -1527,7 +1523,6 @@
     "title": "تسجيل الخروج من Telegram؟"
   },
   "size": {
-    "hidden": "{count, plural, zero {لا فيديوهات مخفية بسبب حدود الحجم} one {فيديو واحد مخفي بسبب حدود الحجم} two {فيديوهان مخفيان بسبب حدود الحجم} few {# فيديوهات مخفية بسبب حدود الحجم} many {# فيديو مخفيًا بسبب حدود الحجم} other {# فيديو مخفي بسبب حدود الحجم}}",
     "no_limit": "بلا حد",
     "no_minimum": "بلا حد أدنى",
     "range_all": "سترى كل فيديو في الدردشة، مهما كان حجمه.",

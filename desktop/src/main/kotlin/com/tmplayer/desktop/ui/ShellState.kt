@@ -214,17 +214,6 @@ class ShellState(
 
     fun chatOf(chatId: Long): ChatSummary? = knownChats[chatId]
 
-    /**
-     * Set by the "Change" under a chat's grid, so Settings opens scrolled to the size limits.
-     * Settings clears it once it has scrolled.
-     */
-    var showSizeLimits by mutableStateOf(false)
-
-    fun openSizeLimits() {
-        go(Destination.Settings)
-        showSizeLimits = true
-    }
-
     fun go(to: Destination) {
         openChat = null
         detail = null

@@ -494,13 +494,6 @@ data class MediaListState(
     val sponsored: SponsoredBatch? = null,
     val loadingMore: Boolean = false,
     val endReached: Boolean = false,
-    /**
-     * How many videos the size limits have kept out of this listing so far. The grid says so,
-     * because a missing episode with no explanation reads as TMPlayer losing it.
-     */
-    val hiddenBySize: Int = 0,
-    /** Self-destructing videos left out of this listing so far; see [com.tmplayer.data.ContentProtection]. */
-    val hiddenSelfDestructing: Int = 0,
 )
 
 /**
@@ -537,9 +530,6 @@ class MediaListViewModel(
 
     /** Videos [keep] has turned away since the listing last started over. */
     private var hiddenBySize = 0
-
-    /** Self-destructing videos the pages have left out since the listing last started over. */
-    private var hiddenSelfDestructing = 0
 
     /**
      * What Telegram is actually being asked for, which is not always [query].
@@ -605,13 +595,13 @@ class MediaListViewModel(
             is UiState.Content -> {
                 val items = VideoChanges.merge(current.value.items, batch, added, edits)
                 if (items !== current.value.items) {
-                    _state.value = UiState.Content(current.value.copy(items = items, hiddenBySize = hiddenBySize))
+                    _state.value = UiState.Content(current.value.copy(items = items))
                 }
             }
             // A chat that had nothing to show has its first video.
             is UiState.Empty -> if (added.isNotEmpty()) {
                 _state.value = UiState.Content(
-                    MediaListState(items = added, sponsored = sponsored, endReached = true, hiddenBySize = hiddenBySize),
+                    MediaListState(items = added, sponsored = sponsored, endReached = true),
                 )
             }
             else -> Unit
@@ -681,7 +671,6 @@ class MediaListViewModel(
         val previousCursors = cursors
         cursors = MediaCursors()
         hiddenBySize = 0
-        hiddenSelfDestructing = 0
         val searching = query.isNotBlank()
         if (previous == null) {
             _state.value = UiState.Loading(if (searching) L.browseSearching else L.browseFindingVideos)
@@ -695,7 +684,6 @@ class MediaListViewModel(
             runCatching { firstPage(repository) }
                 .onSuccess { rawPage ->
                     if (!session.isCurrent()) return@onSuccess
-                    hiddenSelfDestructing += rawPage.hiddenSelfDestructing
                     val page = rawPage.copy(items = marked(keep(rawPage.items)))
                     cursors = page.cursors
                     // A first page can come back empty while older pages still hold videos: a chat
@@ -722,8 +710,6 @@ class MediaListViewModel(
                                 items = page.items,
                                 sponsored = sponsored,
                                 endReached = page.endReached,
-                                hiddenBySize = hiddenBySize,
-                                hiddenSelfDestructing = hiddenSelfDestructing,
                             ),
                         )
                     }
@@ -986,7 +972,6 @@ class MediaListViewModel(
         ) {
             runCatching { repository.mediaPage(chatId, cursors, serverQuery) }
                 .onSuccess { rawPage ->
-                    hiddenSelfDestructing += rawPage.hiddenSelfDestructing
                     val page = rawPage.copy(items = marked(keep(rawPage.items)))
                     cursors = page.cursors
                     items = (items + page.items).distinctBy { it.messageId }
@@ -1015,8 +1000,6 @@ class MediaListViewModel(
                     // Leaving the listing open means scrolling on retries it, rather than a single
                     // dropped connection cutting the chat short for as long as it stays open.
                     endReached = reachedEnd,
-                    hiddenBySize = hiddenBySize,
-                    hiddenSelfDestructing = hiddenSelfDestructing,
                 ),
             )
         }
