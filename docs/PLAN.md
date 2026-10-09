@@ -56,11 +56,11 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [ ] U06 Check the 1.22.1 post on @tmplayerapp went out
 
 **Phase C. Distribution (each submission only on the user's go-ahead)**
-- [ ] CP13 winget manifests for the new release
+- [x] CP13 winget manifests for the new release (c1c994f, 1.24.0 MSI downloaded, SHA-256 matches the release digest and latest.json, ProductCode read from its Property table, all three files validate against the 1.12.0 schemas; nothing submitted, next is U13)
 - [-] CP14 Windows signing in release.yml (set aside 2026-10-06: installers stay unsigned)
 - [ ] CP15 Android verification token in the APK (needs U08)
 - [ ] CP16 winget auto-update job (needs the first winget PR merged and U14)
-- [ ] CP17 F-Droid MR: get the pipeline green
+- [x] CP17 F-Droid MR: get the pipeline green (2026-10-09, fork pipeline 2930107122 on 1bc08d44 green in all 9 jobs incl. build and check apk, recipe on 1.24.0; but the MR was closed by linsui on 2026-10-06 for not following the template, so reopening it or opening a new one is the user's call, see CP17)
 - [x] CP18 Obtainium badge on README and download page (93c8a38, official badge trimmed losslessly to 564x168, shown at 161x48 under Android phone in all 21 languages with the translated alt, and in the README; download page checked at 390x844, 844x390 and 1440 in headless Chromium, English and Arabic)
 - [ ] U07 Android developer account and identity check
 - [ ] U08 Register `com.tmplayer` and the signing key, send Claude the token
@@ -460,6 +460,30 @@ Gradle does not read the root `gradle.properties`, so `android.suppressUnsupport
 fine, commenting on the MR needs the user's OK). Expect reviewer questions on prebuilt native libraries
 (TDLib from tdl-coroutines, nextlib FFmpeg) and Sentry (Tracking anti-feature even when opt-in). Report those
 honestly rather than hiding them. If the prebuilt TDLib is a hard no for F-Droid, say so and recommend closing.
+**Result (2026-10-09):** fork pipeline 2930107122 (commit 1bc08d44 on `add-com-tmplayer`) is green in all nine
+jobs, `fdroid build` and `check apk` included. What fixed it:
+- The real build error: AGP installed build-tools 35 in the middle of the build, and an SDK install mid-run
+  leaves that run unable to resolve `android-37` (reproduced locally with F-Droid's own `sdkmanager` from PyPI).
+  `prebuild: sdkmanager "platforms;android-37.0" "build-tools;35.0.0"` puts both in place first. No sudo, no
+  copies, no hand-written `package.xml`, no `gradleprops` (Gradle does read the root `gradle.properties`).
+- `output: build/outputs/apk/release/app-universal-release-unsigned.apk`, since the release build makes
+  three APKs (two ABIs plus universal) with one versionCode.
+- `UpdateCheckData: app/build.gradle.kts|Code.*\?:\s*(\d+)|.|Name.*\?:\s*"([\d.]+)"` with
+  `UpdateCheckMode: Tags ^v[0-9.]+$` and `AutoUpdateMode: Version` (the old `Version v%v` fails the schema).
+- Category `Video` does not exist; now `Multimedia` and `Online Media Player`.
+- Recipe moved to 1.24.0, `commit` is the full hash `4341b1a7...` as the template asks.
+
+**Still open, for the user:**
+- The MR itself is **closed**: linsui closed it on 2026-10-06, "Merge Request template is not followed". The
+  pipeline above ran on the fork branch, not on the MR. Reopening it (or a new MR) needs the "App inclusion"
+  template filled in as the description: what the app does with screenshots, why it is needed, and the
+  checklist ticked. Nothing was posted or reopened.
+- Reviewer decisions the green pipeline does not settle: the APK ships prebuilt `libtdjsonjava.so` (TDLib from the
+  tdl-coroutines AAR) and prebuilt FFmpeg (`libavcodec`, `libavutil`, `libswresample`, `libswscale`,
+  `libmedia3ext` from nextlib). The scanner does not look inside Maven AARs, but F-Droid's inclusion policy
+  wants native code built from source, so expect a request to build TDLib and FFmpeg from source (srclibs) or a
+  refusal. Sentry is opt-in, which may still draw a `Tracking` anti-feature. Reproducible builds are not set up
+  (F-Droid would sign with its own key), and the template asks for a reason if not.
 **STOP**
 
 ### CP18 Obtainium badge
