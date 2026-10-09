@@ -486,18 +486,7 @@
     "hint_desktop": "에피소드를 마우스 오른쪽 버튼으로 클릭해 시청 완료 또는 시청 전으로 표시하세요",
     "hint_touch": "에피소드를 길게 눌러 시청 완료 또는 시청 전으로 표시하세요",
     "hint_tv": "에피소드에서 OK를 길게 눌러 시청 완료 또는 시청 전으로 표시하세요",
-    "intro_clear": "지우기",
-    "intro_cleared": "이 프로그램의 인트로 건너뛰기를 지웠습니다",
-    "intro_detail": "이 프로그램의 다음 에피소드부터 그 지점까지 인트로 건너뛰기가 표시됩니다",
-    "intro_ends": "인트로는 {time}에 끝납니다",
-    "intro_saved": "이 프로그램의 인트로 건너뛰기를 {time}(으)로 설정했습니다",
-    "intro_set": "여기를 인트로 끝으로 설정 ({time})",
-    "intro_too_early": "인트로가 지난 뒤 여기서 끝을 설정하세요",
-    "order": "다음 에피소드 기준",
-    "order_number": "에피소드 번호",
-    "order_upload": "업로드 순서",
     "playing": "재생 중",
-    "skip_intro": "인트로 건너뛰기",
     "title": "에피소드"
   },
   "errors": {

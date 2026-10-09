@@ -486,18 +486,7 @@
     "hint_desktop": "İzlendi veya izlenmedi olarak işaretlemek için bir bölüme sağ tıklayın",
     "hint_touch": "İzlendi veya izlenmedi olarak işaretlemek için bir bölüme uzun basın",
     "hint_tv": "İzlendi veya izlenmedi olarak işaretlemek için bir bölümde OK tuşunu basılı tutun",
-    "intro_clear": "Temizle",
-    "intro_cleared": "Bu dizi için Girişi atla temizlendi",
-    "intro_detail": "Bu dizinin sonraki bölümleri o noktaya kadar Girişi atla seçeneği sunar",
-    "intro_ends": "Giriş {time} anında bitiyor",
-    "intro_saved": "Bu dizi için Girişi atla {time} olarak ayarlandı",
-    "intro_set": "Girişin sonunu burası yap ({time})",
-    "intro_too_early": "Girişi geçene kadar oynatın, sonra sonunu burada ayarlayın",
-    "order": "Sonraki bölüm sırası",
-    "order_number": "Bölüm numarası",
-    "order_upload": "Yükleme sırası",
     "playing": "Oynatılıyor",
-    "skip_intro": "Girişi atla",
     "title": "Bölümler"
   },
   "errors": {

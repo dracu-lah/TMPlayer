@@ -47,8 +47,6 @@ import com.tmplayer.online.OnlineSubtitles
 import com.tmplayer.online.SubtitleTarget
 import com.tmplayer.data.MediaName
 import com.tmplayer.data.EpisodeNeighbours
-import com.tmplayer.data.EpisodeOrder
-import com.tmplayer.data.IntroSkip
 import com.tmplayer.data.SeriesShelf
 import com.tmplayer.online.EpisodeNames
 import com.tmplayer.online.OnlineMetadata
@@ -262,11 +260,6 @@ fun PlayerScreen(
     val focus = remember { FocusRequester() }
     val item = current.item
     val seriesKey = remember(item) { seriesKeyOf(item) }
-    // The show, as the per series choices of the episode list are filed: its next-up order and
-    // where its intro ends. Null for a film.
-    val show = remember(item) { EpisodeNeighbours.showOf(item) }
-    var episodeOrder by remember(current) { mutableStateOf(EpisodeOrder.Number) }
-    var introEnd by remember(current) { mutableStateOf<Long?>(null) }
     val progressMap by remember(settings) { settings.watchProgress }.collectAsState(initial = emptyMap())
 
     fun showFlash(kind: Flash.Kind, text: String = "") {
@@ -288,11 +281,7 @@ fun PlayerScreen(
             // What the file says of itself straight away, for the title; the chat's answer, then
             // the providers' episode names where lookups are on.
             episodes = Episodes(current = EpisodeNeighbours.tagOf(item))
-            if (show != null) {
-                episodeOrder = runCatching { settings.episodeOrder(show) }.getOrDefault(EpisodeOrder.Number)
-                introEnd = runCatching { settings.introEnd(show) }.getOrNull()
-            }
-            val found = runCatching { current.episodes(episodeOrder) }.getOrDefault(episodes)
+            val found = runCatching { current.episodes() }.getOrDefault(episodes)
             episodes = found
             val named = runCatching {
                 kotlinx.coroutines.withContext(Dispatchers.IO) { EpisodeNames.named(found, item, OnlineMetadata.current) }
@@ -782,44 +771,6 @@ fun PlayerScreen(
         }
     }
 
-    /** The next-up order changed in the episode list: kept for the show, and the steps read again. */
-    fun setEpisodeOrder(order: EpisodeOrder) {
-        episodeOrder = order
-        show?.let { name -> playerScope.launch { runCatching { settings.setEpisodeOrder(name, order) } } }
-        val series = episodes.series ?: return
-        val found = EpisodeNeighbours.around(item, series.episodes.flatMap { it.copies }, order)
-        episodes = found
-        scope.launch {
-            val named = runCatching {
-                kotlinx.coroutines.withContext(Dispatchers.IO) { EpisodeNames.named(found, item, OnlineMetadata.current) }
-            }.getOrDefault(found)
-            if (named != found && episodes == found) episodes = named
-        }
-    }
-
-    /** "Set intro end here": the show's intro ends where playback is now. */
-    fun markIntroEnd() {
-        val name = show ?: return
-        val at = engine.state.value.positionMs
-        if (!IntroSkip.canMark(at)) return
-        introEnd = at
-        playerScope.launch { runCatching { settings.setIntroEnd(name, at) } }
-        showFlash(Flash.Kind.Text, L.episodesIntroSaved(SeekMath.clock(at)))
-    }
-
-    fun clearIntroEnd() {
-        val name = show ?: return
-        introEnd = null
-        playerScope.launch { runCatching { settings.setIntroEnd(name, null) } }
-        showFlash(Flash.Kind.Text, L.episodesIntroCleared)
-    }
-
-    fun skipIntro() {
-        val end = introEnd ?: return
-        engine.seekTo(end)
-        showFlash(Flash.Kind.Text, SeekMath.clock(end))
-    }
-
     fun startOver() {
         engine.seekTo(0)
         engine.play()
@@ -1006,13 +957,6 @@ fun PlayerScreen(
                         }
                         return@onPreviewKeyEvent false
                     }
-                    // Enter takes the Skip intro pill while it is up, as a click on it does.
-                    if ((event.key == Key.Enter || event.key == Key.NumPadEnter) && phase == Phase.Playing &&
-                        IntroSkip.offers(status.positionMs, introEnd)
-                    ) {
-                        skipIntro()
-                        return@onPreviewKeyEvent true
-                    }
                     // Sheets peel off before Esc means anything else.
                     if (event.key == androidx.compose.ui.input.key.Key.Escape && (showShortcuts || showDetails || showOnline)) {
                         showShortcuts = false
@@ -1163,10 +1107,6 @@ fun PlayerScreen(
                 },
             )
 
-            if (phase == Phase.Playing && !showEpisodes && IntroSkip.offers(status.positionMs, introEnd)) {
-                SkipIntroPill(lifted = showControls, onSkip = ::skipIntro)
-            }
-
             FeedbackLayer(
                 flash = flash,
                 spinner = phase == Phase.Playing && status.buffering && !showControls,
@@ -1286,8 +1226,6 @@ fun PlayerScreen(
                         previousCode = episodes.previousTag?.code,
                         nextCode = episodes.nextTag?.code,
                         autoplay = autoplayNext,
-                        order = episodeOrder,
-                        introEndMs = introEnd,
                     ),
                     watch = watch,
                     actions = com.tmplayer.ui.player.EpisodesActions(
@@ -1300,11 +1238,7 @@ fun PlayerScreen(
                             autoplayNext = on
                             playerScope.launch { runCatching { settings.setAutoplayNext(on) } }
                         },
-                        onOrder = ::setEpisodeOrder,
-                        onSetIntro = ::markIntroEnd,
-                        onClearIntro = ::clearIntroEnd,
                     ),
-                    position = { engine.state.value.positionMs },
                     onClose = ::closeEpisodes,
                 )
             }

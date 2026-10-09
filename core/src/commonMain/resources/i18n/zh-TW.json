@@ -486,18 +486,7 @@
     "hint_desktop": "在某一集上按右鍵可標示為已觀看或未觀看",
     "hint_touch": "長按某一集可標示為已觀看或未觀看",
     "hint_tv": "在某一集上按住 OK 可標示為已觀看或未觀看",
-    "intro_clear": "清除",
-    "intro_cleared": "已清除此劇的略過片頭",
-    "intro_detail": "此劇之後的集數會在該位置之前顯示「略過片頭」",
-    "intro_ends": "片頭於 {time} 結束",
-    "intro_saved": "已為此劇將略過片頭設為 {time}",
-    "intro_set": "將此處設為片頭結尾 ({time})",
-    "intro_too_early": "請播放過片頭，再於此處設定片頭結尾",
-    "order": "下一集順序",
-    "order_number": "依集數",
-    "order_upload": "依上傳順序",
     "playing": "正在播放",
-    "skip_intro": "略過片頭",
     "title": "集數"
   },
   "errors": {

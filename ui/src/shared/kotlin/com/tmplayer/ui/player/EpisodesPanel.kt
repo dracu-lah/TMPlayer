@@ -39,13 +39,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -64,15 +62,12 @@ import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.DeviceForm
-import com.tmplayer.data.EpisodeOrder
-import com.tmplayer.data.IntroSkip
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.Series
 import com.tmplayer.data.SeriesEpisode
@@ -86,7 +81,6 @@ import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.focusRing
-import kotlinx.coroutines.delay
 
 /**
  * What the player's episode list shows: the show the video playing belongs to, the steps either
@@ -107,9 +101,6 @@ data class EpisodesState(
     val nextCode: String? = null,
     /** The app's autoplay setting, the same one Settings shows. */
     val autoplay: Boolean = true,
-    val order: EpisodeOrder = EpisodeOrder.Number,
-    /** Where this show's intro ends, as marked here, or null. */
-    val introEndMs: Long? = null,
 )
 
 /** What the episode list asks of the player. Every one of these is the player's to carry out. */
@@ -118,32 +109,25 @@ class EpisodesActions(
     val onPlay: (MediaItem) -> Unit,
     val onToggleWatched: (MediaItem) -> Unit,
     val onAutoplay: (Boolean) -> Unit,
-    val onOrder: (EpisodeOrder) -> Unit,
-    /** Marks the intro as ending where playback is now. */
-    val onSetIntro: () -> Unit,
-    val onClearIntro: () -> Unit,
 )
 
 /**
  * The player's episode list (CP40), shared by the phone, the television and the desktop: each puts
- * its own window round it. The show's name, the previous and next episode, the choices that belong
- * to watching a series (autoplay, which episode counts as next, the learned Skip intro), then the
- * seasons as tabs and the chosen season's episodes in the series view's own rows, the one playing
+ * its own window round it. The show's name, the previous and next episode, the autoplay switch,
+ * then the seasons as tabs and the chosen season's episodes in the series view's own rows, the one playing
  * tinted, scrolled to and, under a remote, focused.
  *
  * Wide (a landscape phone, a television, a desktop window) the choices take a column at the start
  * and the episodes the rest; narrow they lead the list and scroll away with it, so a phone held
  * upright still shows the episodes rather than a screen of switches.
  *
- * [position] is read twice a second for the "Set intro end here" line's time. [trailing] sits at the
- * end of the heading, for the window's own way out.
+ * [trailing] sits at the end of the heading, for the window's own way out.
  */
 @Composable
 fun EpisodesPanel(
     state: EpisodesState,
     watch: SeriesWatch,
     actions: EpisodesActions,
-    position: () -> Long,
     modifier: Modifier = Modifier,
     contentPadding: Dp = 0.dp,
     /** Focus the episode playing on open: under a remote, and on a desktop for the keyboard. */
@@ -167,12 +151,6 @@ fun EpisodesPanel(
     var currentFocused by remember { mutableStateOf(false) }
     val progress = watch.progress(series)
     val next = progress.next
-    val now by produceState(position()) {
-        while (true) {
-            value = position()
-            delay(500)
-        }
-    }
 
     BoxWithConstraints(modifier) {
         val wide = maxWidth >= WIDE_FROM
@@ -255,7 +233,7 @@ fun EpisodesPanel(
                             .padding(start = contentPadding, bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        Choices(state, actions, now)
+                        Choices(state, actions)
                     }
                     LazyColumn(
                         state = list,
@@ -280,7 +258,7 @@ fun EpisodesPanel(
                         Column(
                             Modifier.padding(pad).padding(top = 16.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp),
-                        ) { Choices(state, actions, now, withSteps = false) }
+                        ) { Choices(state, actions, withSteps = false) }
                     }
                 }
             }
@@ -325,51 +303,17 @@ private suspend fun bringIntoView(list: LazyListState, index: Int) {
     list.scrollToItem((index - 1).coerceAtLeast(0))
 }
 
-/** The steps, autoplay, the next-up order, Skip intro and how to mark an episode. */
+/** The steps, autoplay and how to mark an episode. */
 @Composable
 private fun ColumnScope.Choices(
     state: EpisodesState,
     actions: EpisodesActions,
-    positionMs: Long,
     withSteps: Boolean = true,
 ) {
     val s = LocalStrings.current
-    val f = s.formatter
     if (withSteps) Steps(state, actions, sideBySide = false)
 
     SwitchLine(s.episodesAutoplay, state.autoplay) { actions.onAutoplay(!state.autoplay) }
-
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Heading(s.episodesOrder)
-        // Two lines rather than a two-segment pill: a translated "Episode number" does not fit
-        // half a column.
-        OrderLine(s.episodesOrderNumber, state.order == EpisodeOrder.Number) { actions.onOrder(EpisodeOrder.Number) }
-        OrderLine(s.episodesOrderUpload, state.order == EpisodeOrder.Upload) { actions.onOrder(EpisodeOrder.Upload) }
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Heading(s.episodesSkipIntro)
-        val end = state.introEndMs
-        if (end != null) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    s.episodesIntroEnds(f.clock(end)),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Tone.text,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                PanelButton(s.episodesIntroClear, onClick = actions.onClearIntro, quiet = true)
-            }
-        }
-        val markable = IntroSkip.canMark(positionMs)
-        PanelButton(
-            label = if (markable) s.episodesIntroSet(f.clock(positionMs)) else s.episodesIntroTooEarly,
-            onClick = actions.onSetIntro,
-            enabled = markable,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text(s.episodesIntroDetail, style = MaterialTheme.typography.bodySmall, color = Tone.muted)
-    }
 
     Text(
         when (deviceForm()) {
@@ -415,25 +359,13 @@ private fun Steps(state: EpisodesState, actions: EpisodesActions, sideBySide: Bo
     }
 }
 
-@Composable
-private fun Heading(text: String) {
-    Text(text, style = MaterialTheme.typography.titleSmall, color = Tone.accent, maxLines = 1)
-}
-
-/**
- * A button of the panel: the surface step at rest, the focus fill and ring under a remote or a
- * keyboard. [quiet] draws it without the fill, for a small action beside a line of text. A button
- * that cannot be used now ([enabled] false) is drawn faint and still takes focus, so the remote is
- * never dropped.
- */
+/** A button of the panel: the surface step at rest, the focus fill and ring under a remote or a keyboard. */
 @Composable
 private fun PanelButton(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
-    enabled: Boolean = true,
-    quiet: Boolean = false,
     lines: Int = 2,
 ) {
     val tv = !isTouch()
@@ -445,29 +377,23 @@ private fun PanelButton(
         modifier
             .heightIn(min = if (tv) 48.dp else 44.dp)
             .clip(shape)
-            .background(
-                when {
-                    focused -> Tone.focusFill
-                    quiet -> Color.Transparent
-                    else -> Tone.surfaceHigh
-                },
-            )
+            .background(if (focused) Tone.focusFill else Tone.surfaceHigh)
             .then(if (!focused) Modifier.border(1.dp, Tone.outline, shape) else Modifier)
             .focusRing(focused, shape)
             .clickable(
                 interactionSource = interactions,
                 indication = if (tv) null else androidx.compose.foundation.LocalIndication.current,
                 role = Role.Button,
-            ) { if (enabled) onClick() }
+                onClick = onClick,
+            )
             .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        val faint = Modifier.alpha(if (enabled) 1f else 0.5f)
         if (icon != null) {
             // Not mirrored right to left: the step glyphs point the way time runs, which is left
             // to right in every language, as the player's own transport keeps it.
-            Icon(icon, contentDescription = null, tint = ink, modifier = faint.size(20.dp))
+            Icon(icon, contentDescription = null, tint = ink, modifier = Modifier.size(20.dp))
         }
         Text(
             label,
@@ -475,7 +401,6 @@ private fun PanelButton(
             color = ink,
             maxLines = lines,
             overflow = TextOverflow.Ellipsis,
-            modifier = faint,
         )
     }
 }
@@ -530,48 +455,6 @@ private fun SwitchLine(label: String, on: Boolean, onToggle: () -> Unit) {
                     .background(if (on) Tone.onAccent else Color.White),
             )
         }
-    }
-}
-
-/** One of the next-up orders: a radio and its words, the whole line the target. */
-@Composable
-private fun OrderLine(label: String, chosen: Boolean, onClick: () -> Unit) {
-    val tv = !isTouch()
-    val interactions = remember { MutableInteractionSource() }
-    val focused by interactions.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(Corner.Medium)
-    val ink = if (focused) Tone.onFocusFill else Tone.text
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = if (tv) 48.dp else 44.dp)
-            .clip(shape)
-            .background(
-                when {
-                    focused -> Tone.focusFill
-                    chosen -> Tone.accent.copy(alpha = 0.14f)
-                    else -> Color.Transparent
-                },
-            )
-            .focusRing(focused, shape)
-            .semantics {
-                role = Role.RadioButton
-                selected = chosen
-            }
-            .clickable(
-                interactionSource = interactions,
-                indication = if (tv) null else androidx.compose.foundation.LocalIndication.current,
-                onClick = onClick,
-            )
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        val ring = if (focused) ink else if (chosen) Tone.accent else Tone.muted
-        Box(Modifier.size(20.dp).border(2.dp, ring, CircleShape), contentAlignment = Alignment.Center) {
-            if (chosen) Box(Modifier.size(10.dp).clip(CircleShape).background(ring))
-        }
-        Text(label, style = MaterialTheme.typography.labelLarge, color = ink, modifier = Modifier.weight(1f))
     }
 }
 

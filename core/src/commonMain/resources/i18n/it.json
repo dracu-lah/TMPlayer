@@ -486,18 +486,7 @@
     "hint_desktop": "Fai clic destro su un episodio per segnarlo come visto o non visto",
     "hint_touch": "Tieni premuto un episodio per segnarlo come visto o non visto",
     "hint_tv": "Tieni premuto OK su un episodio per segnarlo come visto o non visto",
-    "intro_clear": "Cancella",
-    "intro_cleared": "Salta intro cancellato per questa serie",
-    "intro_detail": "Gli episodi successivi di questa serie offriranno Salta intro fino a quel punto",
-    "intro_ends": "L'intro finisce a {time}",
-    "intro_saved": "Salta intro impostato a {time} per questa serie",
-    "intro_set": "Fine dell'intro qui ({time})",
-    "intro_too_early": "Supera l'intro, poi imposta qui la sua fine",
-    "order": "Episodio successivo per",
-    "order_number": "Numero dell'episodio",
-    "order_upload": "Ordine di caricamento",
     "playing": "In riproduzione",
-    "skip_intro": "Salta intro",
     "title": "Episodi"
   },
   "errors": {

@@ -7,7 +7,6 @@ import android.view.KeyEvent
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
-import android.widget.TextView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -50,11 +49,11 @@ import androidx.media3.common.C
  *         [--ez nextup true] [--ez menu true] [--ez overflow true] [--ez trickplay true] [--el scrub_at 1265000]
  *         [--es picker subtitles|online] [--ez subtitles true]
  *         [--es online signed_out|signed_in|quota|expired|unavailable|empty|offline|subdl|none|live]
- *         [--ez episodes true] [--es playing S02E02] [--ez intro true]
+ *         [--ez episodes true] [--es playing S02E02]
  *
  * `episodes` opens the episode list (CP40) over a two season show, `playing` picks the episode it
- * opens on (S01E04 otherwise), and `intro` puts up the Skip intro pill. The Episodes button is on
- * the row either way; a hold or long press on a row really marks it, in memory.
+ * opens on (S01E04 otherwise). The Episodes button is on the row either way; a hold or long press
+ * on a row really marks it, in memory.
  *
  * `nextup` raises the next-up card over the bare picture, `menu` the television's More menu,
  * `jump` the remote's side figure for a ten second jump. The stand-in player really plays and
@@ -214,16 +213,6 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
                 if (tv) card.play.requestFocus()
             }
             if (intent.getBooleanExtra("episodes", false)) openPromoEpisodes()
-            if (intent.getBooleanExtra("intro", false)) {
-                findViewById<TextView>(R.id.skip_intro).apply {
-                    text = L.episodesSkipIntro
-                    visibility = View.VISIBLE
-                    // Over the raised row, as the player lifts it.
-                    val cluster = this@PromoPlayerActivity.findViewById<View>(R.id.controls_cluster)
-                    val margin = resources.getDimension(R.dimen.player_skip_intro_bottom)
-                    post { translationY = -(cluster.height + 8 * resources.displayMetrics.density - margin).coerceAtLeast(0f) }
-                }
-            }
             if (intent.getBooleanExtra("menu", false)) {
                 PlayerTvMenu(
                     activity = this,
@@ -305,8 +294,6 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
     private val promoProgress = kotlinx.coroutines.flow.MutableStateFlow(
         mapOf(key(1, 3) to com.tmplayer.data.WatchPoint(1_300_000, 2_634_000)),
     )
-    private var promoOrder = com.tmplayer.data.EpisodeOrder.Number
-    private var promoIntro: Long? = 92_000L
     private var promoAutoplay = true
 
     private fun key(season: Int, episode: Int) = com.tmplayer.data.SettingsStore.progressKey(1, (season * 100 + episode).toLong())
@@ -338,7 +325,6 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
             root = findViewById(R.id.player_root),
             progress = promoProgress,
             watched = promoWatched,
-            position = { 61_000L },
             actions = com.tmplayer.ui.player.EpisodesActions(
                 onPlay = { promoEpisodes.close() },
                 onToggleWatched = { item ->
@@ -346,9 +332,6 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
                     promoWatched.value = if (k in promoWatched.value) promoWatched.value - k else promoWatched.value + (k to Unit)
                 },
                 onAutoplay = { promoAutoplay = it; refreshPromoEpisodes() },
-                onOrder = { promoOrder = it; refreshPromoEpisodes() },
-                onSetIntro = { promoIntro = 61_000L; refreshPromoEpisodes() },
-                onClearIntro = { promoIntro = null; refreshPromoEpisodes() },
             ),
             onClosed = {
                 controls?.show()
@@ -358,7 +341,7 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     private fun promoEpisodesState(): com.tmplayer.ui.player.EpisodesState {
-        val steps = com.tmplayer.data.EpisodeNeighbours.around(promoPlaying, coast, promoOrder)
+        val steps = com.tmplayer.data.EpisodeNeighbours.around(promoPlaying, coast)
         return com.tmplayer.ui.player.EpisodesState(
             series = steps.series!!,
             playing = promoPlaying,
@@ -369,8 +352,6 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
             previousCode = steps.previousTag?.code,
             nextCode = steps.nextTag?.code,
             autoplay = promoAutoplay,
-            order = promoOrder,
-            introEndMs = promoIntro,
         )
     }
 

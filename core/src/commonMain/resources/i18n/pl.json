@@ -486,18 +486,7 @@
     "hint_desktop": "Kliknij odcinek prawym przyciskiem, aby oznaczyć go jako obejrzany lub nieobejrzany",
     "hint_touch": "Przytrzymaj odcinek, aby oznaczyć go jako obejrzany lub nieobejrzany",
     "hint_tv": "Przytrzymaj OK na odcinku, aby oznaczyć go jako obejrzany lub nieobejrzany",
-    "intro_clear": "Wyczyść",
-    "intro_cleared": "Wyczyszczono Pomiń czołówkę dla tego serialu",
-    "intro_detail": "Kolejne odcinki tego serialu zaproponują wtedy Pomiń czołówkę do tego miejsca",
-    "intro_ends": "Czołówka kończy się na {time}",
-    "intro_saved": "Pomiń czołówkę ustawiono na {time} dla tego serialu",
-    "intro_set": "Ustaw tu koniec czołówki ({time})",
-    "intro_too_early": "Odtwórz dalej niż czołówka, a potem ustaw tu jej koniec",
-    "order": "Następny odcinek według",
-    "order_number": "Numer odcinka",
-    "order_upload": "Kolejność przesłania",
     "playing": "Odtwarzany",
-    "skip_intro": "Pomiń czołówkę",
     "title": "Odcinki"
   },
   "errors": {

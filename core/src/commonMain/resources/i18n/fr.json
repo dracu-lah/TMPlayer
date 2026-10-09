@@ -486,18 +486,7 @@
     "hint_desktop": "Faites un clic droit sur un épisode pour le marquer comme vu ou non vu",
     "hint_touch": "Appuyez longuement sur un épisode pour le marquer comme vu ou non vu",
     "hint_tv": "Maintenez OK sur un épisode pour le marquer comme vu ou non vu",
-    "intro_clear": "Effacer",
-    "intro_cleared": "Passer l'intro effacé pour cette série",
-    "intro_detail": "Les épisodes suivants de cette série proposeront alors Passer l'intro jusqu'à ce point",
-    "intro_ends": "L'intro se termine à {time}",
-    "intro_saved": "Passer l'intro réglé sur {time} pour cette série",
-    "intro_set": "Fin de l'intro ici ({time})",
-    "intro_too_early": "Dépassez l'intro, puis indiquez sa fin ici",
-    "order": "Épisode suivant selon",
-    "order_number": "Numéro d'épisode",
-    "order_upload": "Ordre de mise en ligne",
     "playing": "En cours",
-    "skip_intro": "Passer l'intro",
     "title": "Épisodes"
   },
   "errors": {

@@ -876,7 +876,6 @@ internal fun BoxScope.EpisodesSheet(
     state: com.tmplayer.ui.player.EpisodesState,
     watch: com.tmplayer.ui.browse.SeriesWatch,
     actions: com.tmplayer.ui.player.EpisodesActions,
-    position: () -> Long,
     onClose: () -> Unit,
 ) {
     val s = LocalStrings.current
@@ -912,35 +911,11 @@ internal fun BoxScope.EpisodesSheet(
                 state = state,
                 watch = watch,
                 actions = actions,
-                position = position,
                 modifier = Modifier.padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 4.dp),
                 focusCurrent = true,
                 trailing = { OverlayButton(PlayerIcons.Close, s.commonClose, onClose, size = 36) },
             )
         }
-    }
-}
-
-/**
- * "Skip intro", at the bottom end over the picture while a show's marked intro runs (see
- * [com.tmplayer.data.IntroSkip]). A click or Enter jumps to its end.
- */
-@Composable
-internal fun BoxScope.SkipIntroPill(lifted: Boolean, onSkip: () -> Unit) {
-    val s = LocalStrings.current
-    Row(
-        Modifier.align(Alignment.BottomEnd)
-            .padding(end = 16.dp, bottom = if (lifted) 120.dp else 32.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(Color(0xE61C1C1E))
-            .border(1.dp, Color.White.copy(alpha = 0.7f), RoundedCornerShape(24.dp))
-            .clickable(onClick = onSkip)
-            .padding(horizontal = 18.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Icon(PlayerIcons.SkipNext, null, tint = Color.White, modifier = Modifier.size(20.dp))
-        Text(s.episodesSkipIntro, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

@@ -1,9 +1,7 @@
 package com.tmplayer.data
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class EpisodeStepsTest {
@@ -134,7 +132,7 @@ class EpisodeStepsTest {
     }
 
     @Test
-    fun `upload order steps through the chat's posts rather than the numbering`() {
+    fun `episodes step by their numbers whatever order they were posted in`() {
         // Posted out of order: E01, then E03, then E02 (dates follow the list).
         val items = listOf(
             video("Harbour.Notes.S01E01.mkv"),
@@ -144,13 +142,8 @@ class EpisodeStepsTest {
         val byNumber = EpisodeNeighbours.around(items[1], items)
         assertEquals("S01E02", byNumber.previousTag?.code)
         assertNull(byNumber.next)
-
-        val byUpload = EpisodeNeighbours.around(items[1], items, EpisodeOrder.Upload)
-        assertEquals("S01E01", byUpload.previousTag?.code)
-        assertEquals("S01E02", byUpload.nextTag?.code)
-        assertEquals(EpisodeOrder.Upload, byUpload.order)
-        // The series view's grouping comes along for the episode list, numbered as ever.
-        assertEquals(listOf("S01E01", "S01E02", "S01E03"), byUpload.series?.episodes?.map { it.code })
+        // The series view's grouping comes along for the episode list.
+        assertEquals(listOf("S01E01", "S01E02", "S01E03"), byNumber.series?.episodes?.map { it.code })
     }
 
     @Test
@@ -159,18 +152,5 @@ class EpisodeStepsTest {
         assertNull(EpisodeNeighbours.around(film, listOf(film)).series)
         assertNull(EpisodeNeighbours.showOf(film))
         assertEquals("Harbour Notes", EpisodeNeighbours.showOf(video("Harbour.Notes.S01E02.mkv")))
-    }
-
-    @Test
-    fun `skip intro is offered until the marked end comes close`() {
-        assertFalse(IntroSkip.offers(0, null))
-        assertTrue(IntroSkip.offers(0, 90_000))
-        assertTrue(IntroSkip.offers(80_000, 90_000))
-        assertFalse(IntroSkip.offers(88_500, 90_000))
-        assertFalse(IntroSkip.offers(120_000, 90_000))
-        // A mark in the first seconds is a slip, not an intro.
-        assertFalse(IntroSkip.offers(0, 3_000))
-        assertFalse(IntroSkip.canMark(2_000))
-        assertTrue(IntroSkip.canMark(65_000))
     }
 }

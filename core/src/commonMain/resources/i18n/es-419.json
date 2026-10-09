@@ -486,18 +486,7 @@
     "hint_desktop": "Haz clic derecho en un episodio para marcarlo como visto o no visto",
     "hint_touch": "Mantén presionado un episodio para marcarlo como visto o no visto",
     "hint_tv": "Mantén presionado OK sobre un episodio para marcarlo como visto o no visto",
-    "intro_clear": "Borrar",
-    "intro_cleared": "Omitir intro borrado para esta serie",
-    "intro_detail": "Los episodios posteriores de esta serie ofrecerán Omitir intro hasta ese punto",
-    "intro_ends": "La intro termina en {time}",
-    "intro_saved": "Omitir intro fijado en {time} para esta serie",
-    "intro_set": "Marcar aquí el final de la intro ({time})",
-    "intro_too_early": "Reproduce pasada la intro y luego marca aquí su final",
-    "order": "Siguiente episodio por",
-    "order_number": "Número de episodio",
-    "order_upload": "Orden de subida",
     "playing": "Reproduciendo",
-    "skip_intro": "Omitir intro",
     "title": "Episodios"
   },
   "errors": {

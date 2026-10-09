@@ -13,7 +13,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.use
 import com.tmplayer.data.EpisodeNeighbours
-import com.tmplayer.data.EpisodeOrder
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.WatchPoint
 import com.tmplayer.ui.browse.SeriesWatch
@@ -28,7 +27,7 @@ import java.io.File
 /**
  * The player's episode list (CP40) drawn: the bar with its Episodes button, the list over the
  * picture with the episode playing tinted and a watched tick, a second season's list, a window
- * too narrow for the two columns, right to left, and the Skip intro pill. With
+ * too narrow for the two columns, and right to left. With
  * TMPLAYER_SHOTS=<dir> the frames are written there as `player-episodes-<name>.png`.
  */
 class EpisodesShotsTest {
@@ -52,9 +51,9 @@ class EpisodesShotsTest {
         finished = { it.messageId == 101L || it.messageId == 102L },
     )
 
-    private val actions = EpisodesActions({}, {}, {}, {}, {}, {})
+    private val actions = EpisodesActions({}, {}, {})
 
-    private fun state(playing: MediaItem, introEnd: Long? = 92_000): EpisodesState {
+    private fun state(playing: MediaItem): EpisodesState {
         val steps = EpisodeNeighbours.around(playing, items)
         return EpisodesState(
             series = steps.series!!,
@@ -66,8 +65,6 @@ class EpisodesShotsTest {
             previousCode = steps.previousTag?.code,
             nextCode = steps.nextTag?.code,
             autoplay = true,
-            order = EpisodeOrder.Number,
-            introEndMs = introEnd,
         )
     }
 
@@ -83,19 +80,16 @@ class EpisodesShotsTest {
         shot("bar") { bar() }
         shot("sheet") { sheet(state(items[3])) }
         shot("sheet-season-2") { sheet(state(items[7])) }
-        shot("sheet-narrow", width = 600, height = 800) { sheet(state(items[3], introEnd = null)) }
+        shot("sheet-narrow", width = 600, height = 800) { sheet(state(items[3])) }
         shot("sheet-rtl") {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) { sheet(state(items[3])) }
-        }
-        shot("skip-intro") {
-            Box(Modifier.fillMaxSize().background(Color(0xFF203040))) { SkipIntroPill(lifted = false, onSkip = {}) }
         }
     }
 
     @Composable
     private fun sheet(state: EpisodesState) {
         Box(Modifier.fillMaxSize().background(Color(0xFF203040))) {
-            EpisodesSheet(state, watch, actions, position = { 61_000 }, onClose = {})
+            EpisodesSheet(state, watch, actions, onClose = {})
         }
     }
 
@@ -134,7 +128,6 @@ class EpisodesShotsTest {
                 onMenuAction = {},
                 onEpisodes = {},
             )
-            SkipIntroPill(lifted = true, onSkip = {})
         }
     }
 

@@ -486,18 +486,7 @@
     "hint_desktop": "Klik kanan sebuah episode untuk menandainya sudah atau belum ditonton",
     "hint_touch": "Tekan lama sebuah episode untuk menandainya sudah atau belum ditonton",
     "hint_tv": "Tahan OK pada sebuah episode untuk menandainya sudah atau belum ditonton",
-    "intro_clear": "Hapus",
-    "intro_cleared": "Lewati intro dihapus untuk acara ini",
-    "intro_detail": "Episode berikutnya dari acara ini akan menawarkan Lewati intro sampai titik itu",
-    "intro_ends": "Intro berakhir di {time}",
-    "intro_saved": "Lewati intro diatur ke {time} untuk acara ini",
-    "intro_set": "Tetapkan akhir intro di sini ({time})",
-    "intro_too_early": "Putar melewati intro, lalu tetapkan akhirnya di sini",
-    "order": "Episode berikutnya menurut",
-    "order_number": "Nomor episode",
-    "order_upload": "Urutan unggahan",
     "playing": "Diputar",
-    "skip_intro": "Lewati intro",
     "title": "Episode"
   },
   "errors": {

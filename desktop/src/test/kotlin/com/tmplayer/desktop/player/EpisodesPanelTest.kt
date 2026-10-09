@@ -15,7 +15,6 @@ import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.EpisodeNeighbours
-import com.tmplayer.data.EpisodeOrder
 import com.tmplayer.data.MediaItem
 import com.tmplayer.ui.browse.SeriesWatch
 import com.tmplayer.ui.player.EpisodesActions
@@ -26,7 +25,7 @@ import org.junit.Test
 /**
  * The episode list (CP40) driven with a mouse and keys on the desktop: the playing episode takes
  * focus first, a season tab switches the list, a right click marks a row, a click plays it, and
- * the switches and the order report back.
+ * the autoplay switch reports back.
  */
 @OptIn(ExperimentalTestApi::class)
 class EpisodesPanelTest {
@@ -44,11 +43,10 @@ class EpisodesPanelTest {
     fun `the list is walked and answered from the keyboard and the mouse`() = runComposeUiTest {
         val played = mutableListOf<String>()
         val marked = mutableListOf<String>()
-        var order by mutableStateOf(EpisodeOrder.Number)
         var autoplay by mutableStateOf(true)
         val playing = items[2]
         setContent {
-            val steps = EpisodeNeighbours.around(playing, items, order)
+            val steps = EpisodeNeighbours.around(playing, items)
             PlayerTheme {
                 Box(Modifier.size(1280.dp, 720.dp)) {
                     EpisodesSheet(
@@ -60,18 +58,13 @@ class EpisodesPanelTest {
                             next = steps.next,
                             nextLabel = "Next",
                             autoplay = autoplay,
-                            order = order,
                         ),
                         watch = SeriesWatch.None,
                         actions = EpisodesActions(
                             onPlay = { played += it.fileName },
                             onToggleWatched = { marked += it.fileName },
                             onAutoplay = { autoplay = it },
-                            onOrder = { order = it },
-                            onSetIntro = {},
-                            onClearIntro = {},
                         ),
-                        position = { 61_000 },
                         onClose = {},
                     )
                 }
@@ -97,7 +90,5 @@ class EpisodesPanelTest {
 
         onNodeWithText("Autoplay next episode").performClick()
         assertEquals(false, autoplay)
-        onNodeWithText("Upload order").performClick()
-        assertEquals(EpisodeOrder.Upload, order)
     }
 }

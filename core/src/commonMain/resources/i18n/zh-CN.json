@@ -486,18 +486,7 @@
     "hint_desktop": "右键点击某一集可标为已观看或未观看",
     "hint_touch": "长按某一集可标为已观看或未观看",
     "hint_tv": "在某一集上按住 OK 可标为已观看或未观看",
-    "intro_clear": "清除",
-    "intro_cleared": "已清除此剧的跳过片头",
-    "intro_detail": "此剧之后的剧集会在该位置之前显示“跳过片头”",
-    "intro_ends": "片头在 {time} 结束",
-    "intro_saved": "已为此剧将跳过片头设为 {time}",
-    "intro_set": "将此处设为片头结尾 ({time})",
-    "intro_too_early": "请播放过片头，再在此处设置片头结尾",
-    "order": "下一集顺序",
-    "order_number": "按集数",
-    "order_upload": "按上传顺序",
     "playing": "正在播放",
-    "skip_intro": "跳过片头",
     "title": "剧集"
   },
   "errors": {

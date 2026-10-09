@@ -440,7 +440,7 @@ class PromoShots {
     private class PromoMedia(override val item: MediaItem) : PlayerMedia {
         override val chatTitle = "Weekend Clips"
         override suspend fun open(): MediaData = UriMediaData("promo.mp4")
-        override suspend fun episodes(order: com.tmplayer.data.EpisodeOrder) = Episodes()
+        override suspend fun episodes() = Episodes()
         override fun episode(other: MediaItem): PlayerMedia = PromoMedia(other)
         override val downloaded: StateFlow<Float?> = MutableStateFlow(null)
         override suspend fun tdlibVersion(): String? = null

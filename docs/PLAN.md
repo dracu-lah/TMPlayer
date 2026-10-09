@@ -667,6 +667,9 @@ browse (`ui/src/shared/.../browse/`) so the modal matches the series view.
   intro. Telegram files carry no intro markers, so Skip intro is learned: a "Set intro end here" action in the
   modal stores the position per series, and later episodes of that series show a "Skip intro" pill until that
   point passes (Enter or OK on TV, tap on phone, click on desktop). Clearing it lives in the same place.
+- Removed 2026-10-09: Skip intro, because marking it per show by hand added work rather than saving it.
+- Removed 2026-10-09: the next-up order choice, another per show chore; series are found by episode number,
+  so that order is always the right one.
 **Done when:** emulator screenshots of the button and modal on phone and TV (current episode highlighted, a
 season switch, a watched tick), the desktop render test, a D-pad walk, and tests green.
 **STOP**

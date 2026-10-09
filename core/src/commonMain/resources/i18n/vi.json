@@ -486,18 +486,7 @@
     "hint_desktop": "Nhấp chuột phải vào một tập để đánh dấu đã xem hoặc chưa xem",
     "hint_touch": "Nhấn giữ một tập để đánh dấu đã xem hoặc chưa xem",
     "hint_tv": "Giữ OK trên một tập để đánh dấu đã xem hoặc chưa xem",
-    "intro_clear": "Xóa",
-    "intro_cleared": "Đã xóa bỏ qua đoạn mở đầu cho chương trình này",
-    "intro_detail": "Các tập sau của chương trình này sẽ hiện Bỏ qua đoạn mở đầu cho tới điểm đó",
-    "intro_ends": "Đoạn mở đầu kết thúc ở {time}",
-    "intro_saved": "Đã đặt bỏ qua đoạn mở đầu tới {time} cho chương trình này",
-    "intro_set": "Đặt điểm kết thúc mở đầu tại đây ({time})",
-    "intro_too_early": "Phát qua đoạn mở đầu rồi đặt điểm kết thúc tại đây",
-    "order": "Tập tiếp theo theo",
-    "order_number": "Số tập",
-    "order_upload": "Thứ tự tải lên",
     "playing": "Đang phát",
-    "skip_intro": "Bỏ qua đoạn mở đầu",
     "title": "Tập"
   },
   "errors": {

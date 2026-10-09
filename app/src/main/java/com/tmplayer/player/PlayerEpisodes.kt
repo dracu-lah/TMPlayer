@@ -59,7 +59,6 @@ class PlayerEpisodes(
     root: ViewGroup,
     private val progress: Flow<Map<String, WatchPoint>>,
     private val watched: Flow<Map<String, *>>,
-    private val position: () -> Long,
     private val actions: EpisodesActions,
     private val onClosed: () -> Unit,
 ) {
@@ -79,7 +78,7 @@ class PlayerEpisodes(
         shown.value = state
     }
 
-    /** New answers for a list already up (autoplay switched, the order changed, the intro marked). */
+    /** New answers for a list already up (autoplay switched). */
     fun update(state: EpisodesState) {
         if (shown.value != null) shown.value = state
     }
@@ -117,7 +116,6 @@ class PlayerEpisodes(
                         state = state,
                         watch = watch,
                         actions = actions,
-                        position = position,
                         modifier = Modifier.padding(top = 4.dp),
                         contentPadding = 16.dp,
                         trailing = { CloseButton() },
@@ -136,7 +134,6 @@ class PlayerEpisodes(
                         state = state,
                         watch = watch,
                         actions = actions,
-                        position = position,
                         // A tablet keeps its close button; a remote has Back.
                         trailing = { if (touch) CloseButton() },
                     )

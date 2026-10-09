@@ -57,8 +57,8 @@ interface PlayerMedia {
     /** The file as mediamp should open it. Throws with a message a viewer can read. */
     suspend fun open(): MediaData
 
-    /** The episodes either side of this one, the next chosen by [order]. */
-    suspend fun episodes(order: com.tmplayer.data.EpisodeOrder = com.tmplayer.data.EpisodeOrder.Number): Episodes
+    /** The episodes either side of this one. */
+    suspend fun episodes(): Episodes
 
     /** The same kind of source, for another episode. */
     fun episode(other: MediaItem): PlayerMedia
@@ -287,7 +287,7 @@ class TelegramPlayerMedia(
      * The chat searched for the show's name first, then listed plainly when that finds no
      * neighbour. A video that names no episode, not even a bare "E5", is a film and asks nothing.
      */
-    override suspend fun episodes(order: com.tmplayer.data.EpisodeOrder): Episodes {
+    override suspend fun episodes(): Episodes {
         val tag = EpisodeNeighbours.tagOf(item)
         val show = EpisodeNeighbours.showOf(item) ?: return Episodes()
         if (item.chatId == 0L) return Episodes(current = tag)
@@ -295,9 +295,9 @@ class TelegramPlayerMedia(
         val repository = ChatRepository(session.client)
         suspend fun page(query: String) = runCatching { repository.mediaPage(item.chatId, query = query).items }
             .onFailure { Logger.w(TAG, "Episode lookup failed", it) }.getOrNull().orEmpty()
-        val steps = EpisodeNeighbours.around(item, page(show), order)
+        val steps = EpisodeNeighbours.around(item, page(show))
         if (steps.previous != null || steps.next != null) return steps
-        return EpisodeNeighbours.around(item, page(""), order)
+        return EpisodeNeighbours.around(item, page(""))
     }
 
     override fun episode(other: MediaItem): PlayerMedia =
@@ -414,10 +414,10 @@ class LocalPlayerMedia(
         return TdMediaData(bytes, "growing/${file.name}", prefetchTail = TailPrefetch.wanted(file.name, ""))
     }
 
-    override suspend fun episodes(order: com.tmplayer.data.EpisodeOrder): Episodes {
+    override suspend fun episodes(): Episodes {
         val siblings = file.parentFile?.listFiles { f -> f.isFile && f.extension.lowercase() in VIDEO_EXTENSIONS }
             .orEmpty().map(::itemFor)
-        return EpisodeNeighbours.around(item, siblings, order)
+        return EpisodeNeighbours.around(item, siblings)
     }
 
     override fun episode(other: MediaItem): PlayerMedia =

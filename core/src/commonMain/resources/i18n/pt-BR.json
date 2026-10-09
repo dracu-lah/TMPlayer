@@ -486,18 +486,7 @@
     "hint_desktop": "Clique com o botão direito em um episódio para marcá-lo como assistido ou não assistido",
     "hint_touch": "Toque e segure um episódio para marcá-lo como assistido ou não assistido",
     "hint_tv": "Segure OK em um episódio para marcá-lo como assistido ou não assistido",
-    "intro_clear": "Limpar",
-    "intro_cleared": "Pular abertura removido para esta série",
-    "intro_detail": "Os próximos episódios desta série vão oferecer Pular abertura até esse ponto",
-    "intro_ends": "A abertura termina em {time}",
-    "intro_saved": "Pular abertura definido em {time} para esta série",
-    "intro_set": "Marcar aqui o fim da abertura ({time})",
-    "intro_too_early": "Assista além da abertura e depois marque o fim dela aqui",
-    "order": "Próximo episódio por",
-    "order_number": "Número do episódio",
-    "order_upload": "Ordem de envio",
     "playing": "Reproduzindo",
-    "skip_intro": "Pular abertura",
     "title": "Episódios"
   },
   "errors": {
