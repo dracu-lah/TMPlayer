@@ -26,6 +26,8 @@ import java.io.File
 private val FAVORITES = stringSetPreferencesKey("favorite_chats")
 private val OVERVIEW_SEEN = booleanPreferencesKey("overview_seen")
 private val PLAYER_HINT_SEEN = booleanPreferencesKey("player_hint_seen")
+private val FIRST_VIDEO_TIP_DISMISSED = booleanPreferencesKey("first_video_tip_dismissed")
+private val TV_BROWSE_HINT_SEEN = booleanPreferencesKey("tv_browse_hint_seen")
 private val OPEN_LAST_CHAT = booleanPreferencesKey("open_last_chat")
 private val DOWNLOAD_FIRST = booleanPreferencesKey("download_before_playing")
 private val AUTOPLAY_NEXT = booleanPreferencesKey("autoplay_next")
@@ -670,6 +672,26 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
     }
 
     /**
+     * Whether the chat list's first-run tip (forward a video to Saved Messages) was put away. It
+     * also goes by itself once anything has been played; this is for somebody who closed it first.
+     */
+    val firstVideoTipDismissed: Flow<Boolean> = read { it[FIRST_VIDEO_TIP_DISMISSED] ?: false }
+
+    suspend fun setFirstVideoTipDismissed(dismissed: Boolean = true) {
+        prefs.edit { it[FIRST_VIDEO_TIP_DISMISSED] = dismissed }
+    }
+
+    /**
+     * Whether the television's one-time browse hint (OK opens, hold OK for favourites, Back goes up)
+     * has been shown. Marked as it appears, so it is said once even if the app is left mid-way.
+     */
+    suspend fun tvBrowseHintSeenNow(): Boolean = prefs.data.first()[TV_BROWSE_HINT_SEEN] ?: false
+
+    suspend fun markTvBrowseHintSeen() {
+        prefs.edit { it[TV_BROWSE_HINT_SEEN] = true }
+    }
+
+    /**
      * Which way up the player opens, on a phone.
      *
      * Kept beside the scale: both describe how this viewer likes to watch rather than the video in
@@ -984,8 +1006,9 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
     // ---- prompts ----------------------------------------------------------------------------
 
     /**
-     * Whether the tour (the language, what TMPlayer is, signing in, chats, videos) has been seen.
-     * It comes before sign in on the first run, and Settings asks for it again with [replayOverview].
+     * Whether the tour (Welcome, then How it works) has been seen. It comes before sign in on the
+     * first run, and Settings asks for it again with [replayOverview]. The two page tour kept the
+     * key the six page one used, so an install that saw the old tour is not shown the new one.
      * Installs from before the shared tour may still carry an old "intro_seen" key; nothing reads it.
      */
     val overviewSeen: Flow<Boolean> = read { it[OVERVIEW_SEEN] ?: false }

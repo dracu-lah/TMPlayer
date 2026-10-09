@@ -177,7 +177,8 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
      * undo something the player did on its own, such as resuming where the viewer left off, with
      * "Start over" one tap away instead of a menu line.
      */
-    fun offer(text: String, action: String, onAction: () -> Unit) = offer.show(text, action, onAction)
+    fun offer(text: String, action: String, holdMs: Long = OFFER_MS, onAction: () -> Unit) =
+        offer.show(text, action, holdMs, onAction)
 
     // ---- double tap --------------------------------------------------------------------------
 
@@ -566,8 +567,10 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
             isClickable = true
         }
 
-        fun show(text: String, action: String, onAction: () -> Unit) {
+        fun show(text: String, action: String, holdMs: Long, onAction: () -> Unit) {
             label.text = text
+            // A few lines of hint must wrap beside the button rather than push it off a narrow screen.
+            label.maxWidth = (resources.displayMetrics.widthPixels - dp(OFFER_SIDE_ROOM_DP)).coerceAtLeast(dp(160f))
             button.text = action
             button.setOnClickListener {
                 dismiss()
@@ -577,7 +580,7 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
             animate().cancel()
             alpha = 1f
             visibility = VISIBLE
-            postDelayed(hide, OFFER_MS)
+            postDelayed(hide, holdMs)
         }
 
         fun dismiss() {
@@ -592,6 +595,9 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
         const val NOTE_MS = 900L
         const val OFFER_MS = 7_000L
         const val OFFER_BOTTOM_DP = 148f
+
+        /** What the offer leaves of the screen's width for its text: the button, the padding and a margin. */
+        const val OFFER_SIDE_ROOM_DP = 160f
         const val SPINNER_DELAY_MS = 400L
         const val FLASH_MS = 450L
         const val WAVE_MS = 650L

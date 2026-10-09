@@ -458,7 +458,7 @@ class PromoShots {
 
         init {
             // The tour reads these names; keep the fixture's output and the classpath in step.
-            check(onboardingImageName(OnboardingPage.SignIn, dark = true) == "signin-dark.webp")
+            check(onboardingImageName(OnboardingPage.HowItWorks, dark = true) == "chats-dark.webp")
         }
     }
 }

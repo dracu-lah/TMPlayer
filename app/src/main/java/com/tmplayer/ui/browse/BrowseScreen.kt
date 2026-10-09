@@ -357,6 +357,7 @@ fun BrowseScreen(
                             onSeeContinue = { onPickTab(BrowseSection.of(BrowseTab.Continue)); query = "" },
                             onOpenChat = { id -> data.chats.firstOrNull { it.id == id }?.let(onOpenChat) },
                             noFavourites = favorites.isEmpty(),
+                            onOpenSaved = { onPickTab(BrowseSection.of(BrowseTab.Saved)); query = "" },
                         )
                     } else if (tab.isContinue) {
                         // On a phone the heading, the count and the actions live in the app bar, so
@@ -473,6 +474,14 @@ fun BrowseScreen(
                         } else if (visible.isEmpty()) {
                             EmptyTab(tab, query)
                         } else {
+                            // A first run's chat list says how to get a first video in (CP42).
+                            if (query.isBlank() && tab != BrowseSection.of(BrowseTab.Saved)) {
+                                FirstVideoTip(
+                                    nothingPlayed = continueWatching.isEmpty() && watchedHistory.isEmpty(),
+                                    start = insets.start,
+                                    end = insets.end,
+                                )
+                            }
                             ChatSection(
                                 chats = visible,
                                 favorites = favorites,

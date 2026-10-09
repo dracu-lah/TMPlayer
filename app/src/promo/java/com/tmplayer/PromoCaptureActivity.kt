@@ -172,6 +172,10 @@ class PromoCaptureActivity : ComponentActivity() {
             runBlocking { SettingsStore(applicationContext).markSupporter() }
         }
 
+        // `--ez firsttip true` shows the chat list's first-run tip (forward a video to Saved
+        // Messages); without it the tip stays away, so the usual chat list shots are unchanged.
+        com.tmplayer.ui.browse.FirstVideoTipOverride.show = intent.getBooleanExtra("firsttip", false)
+
         val start = intent.getStringExtra("screen") ?: "chats"
         if (start == "signin") {
             // The number field takes focus the moment it appears, which is right in the app and
@@ -193,7 +197,7 @@ class PromoCaptureActivity : ComponentActivity() {
             // `--ez confirm true` puts the sign out prompt over whatever screen is open, so the
             // confirm dialog can be captured beside the other modals.
             var confirming by remember { mutableStateOf(intent.getBooleanExtra("confirm", false)) }
-            // `--es overlay language|whatsnew|feedback` opens the language picker, the "What's new"
+            // `--es overlay language|whatsnew|feedback|tvhint` opens the language picker, the "What's new"
             // sheet or "Report a problem" over the screen, and `--ez language_notice true` puts
             // the "Now in ..." card over the chat list, in whatever language is active.
             var overlay by remember { mutableStateOf(intent.getStringExtra("overlay")) }
@@ -233,13 +237,13 @@ class PromoCaptureActivity : ComponentActivity() {
                             onSubmitPassword = {},
                             submitError = null,
                         )
-                        // The tour, from `--es page language|about|signin|chats|videos`.
+                        // The tour, from `--es page welcome|howitworks`.
                         "overview" -> OnboardingScreen(
                             firstRun = true,
                             onDone = { screen = "chats" },
                             start = OnboardingPage.entries.firstOrNull {
                                 it.name.equals(intent.getStringExtra("page"), ignoreCase = true)
-                            } ?: OnboardingPage.Language,
+                            } ?: OnboardingPage.Welcome,
                         )
                         // A page of it from `--es page appearance|playback|subtitles|...`.
                         "settings" -> SettingsScreen(
@@ -327,6 +331,10 @@ class PromoCaptureActivity : ComponentActivity() {
                             confirmLabel = L.commonClear,
                             onConfirm = { overlay = null },
                             onDismiss = { overlay = null },
+                        )
+                        // The television's one-time browse hint, as it sits over the first chat list.
+                        "tvhint" -> com.tmplayer.ui.browse.TvBrowseHintCard(
+                            Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp),
                         )
                     }
                     if (confirming) {

@@ -175,10 +175,17 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
                 }
                 "hint" -> {
                     controls.hideNow()
-                    feedback.message(
-                        if (tv) L.playerRemoteHint else L.playerDoubleTapHint(10),
-                        holdMs = 60_000L,
-                    )
+                    // As the first playback says it: the remote's keys on a television, the
+                    // gestures that are on (one line each) with "Got it" on a phone.
+                    if (tv) {
+                        feedback.message(L.playerRemoteHint, holdMs = 60_000L)
+                    } else {
+                        feedback.offer(
+                            com.tmplayer.player.FirstRunHint.phone(com.tmplayer.player.TouchPrefs(), L).joinToString("\n"),
+                            L.commonGotIt,
+                            holdMs = 60_000L,
+                        ) {}
+                    }
                 }
             }
             val pinned = intent.getLongExtra("scrub_at", -1L)

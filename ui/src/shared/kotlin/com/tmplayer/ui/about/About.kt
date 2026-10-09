@@ -148,6 +148,8 @@ object About {
                 Link(L.aboutTelegramChannel, L.aboutTelegramChannelDetail, "https://t.me/tmplayerapp"),
                 Link(L.aboutTelegramGroup, L.aboutTelegramGroupDetail, "https://t.me/tmplayer_chat"),
                 Link("GitHub Discussions", L.aboutDiscussionsDetail, "$SOURCE/discussions"),
+                // Moved here (and to Settings' language picker) from the tour's first page.
+                Link(L.onboardingHelpTranslate, L.onboardingHelpTranslateBody, com.tmplayer.ui.onboarding.Onboarding.TRANSLATE_URL),
             ),
         ),
         if (online) {

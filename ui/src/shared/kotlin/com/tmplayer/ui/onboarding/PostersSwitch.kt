@@ -33,9 +33,11 @@ import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.focusRing
 
 /**
- * Posters start on with the first run's tour, before any page of it: Skip passes the Posters
- * page, and a skipped tour takes the defaults. The Posters page then says what is sent and to
- * whom, and is where a viewer turns it off. A tour asked for again from Settings changes nothing.
+ * Posters start on with the first run's tour, before any page of it. The switch sits on the
+ * Welcome page, which the first run cannot skip past, so it is on screen, showing that it is on
+ * and saying what is sent, before anybody can leave the tour: whatever the tour ends with, by
+ * Start or by Skip, is exactly what the switch showed. A tour asked for again from Settings
+ * changes nothing.
  */
 @Composable
 fun PostersDefaultOn(firstRun: Boolean) {
@@ -49,12 +51,12 @@ fun PostersDefaultOn(firstRun: Boolean) {
 }
 
 /**
- * The Posters page's switch: posters, cast, ratings and trailers from TMDB, TVmaze and AniList,
- * showing what is set. Nothing at all where the build has no online metadata.
+ * The Welcome page's switch: posters and descriptions looked up on TMDB, TVmaze and AniList, with
+ * the one line on what is sent, showing what is set. Nothing at all where the build has no online
+ * metadata.
  */
 @Composable
-@Suppress("UNUSED_PARAMETER")
-fun PostersSwitch(firstRun: Boolean, modifier: Modifier = Modifier) {
+fun PostersSwitch(modifier: Modifier = Modifier) {
     val online = OnlineMetadata.current ?: return
     val s = LocalStrings.current
     val settings by online.settings.collectAsState()
@@ -80,12 +82,12 @@ fun PostersSwitch(firstRun: Boolean, modifier: Modifier = Modifier) {
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                s.onboardingPostersSwitch,
+                s.onboardingPostersLookup,
                 style = MaterialTheme.typography.titleMedium,
                 color = if (focused) Tone.onFocusFill else Tone.text,
             )
             Text(
-                s.onboardingPostersSwitchDetail,
+                s.onboardingPostersLookupDetail,
                 style = MaterialTheme.typography.bodySmall,
                 color = if (focused) Tone.onFocusFill.copy(alpha = 0.85f) else Tone.muted,
             )

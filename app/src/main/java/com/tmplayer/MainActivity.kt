@@ -33,6 +33,7 @@ import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -78,6 +79,8 @@ import com.tmplayer.ui.theme.LocalDarkTheme
 import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.auth.LoginScreen
 import com.tmplayer.ui.browse.BrowseScreen
+import com.tmplayer.ui.browse.KeyPresses
+import com.tmplayer.ui.browse.TvBrowseHint
 import com.tmplayer.ui.browse.BrowseSection
 import com.tmplayer.ui.browse.HomeViewModel
 import com.tmplayer.ui.browse.SeriesWatch
@@ -802,7 +805,18 @@ private fun Root() {
         openStored(record.toMediaItem(), record.chatTitle)
     }
 
-    Box(Modifier.fillMaxSize().background(Tone.background)) {
+    // Any key on the remote puts the one-time browse hint away (see TvBrowseHint), without
+    // recomposing this screen for every press.
+    val remoteKeys = remember { KeyPresses() }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Tone.background)
+            .onPreviewKeyEvent {
+                remoteKeys.fire()
+                false
+            },
+    ) {
         if (auth !is AuthState.Ready) {
             // Signing out drops straight back to the login screen, so forget where we were.
             LaunchedEffect(Unit) {
@@ -811,8 +825,9 @@ private fun Root() {
                 autoOpenDecided = false
             }
             if (!overviewSeen) {
-                // The tour first: the language, what the app is, then how to work it, then the
-                // sign in. A beginner has seen the whole shape of it before they sign in.
+                // The tour first: what the app is (with the language and the posters choice), then
+                // how it works, then the sign in. How to work the player and the remote is told
+                // later, once, at the moment it is useful (the first-run hints).
                 OnboardingScreen(firstRun = true, onDone = { scope.launch { settings.markOverviewSeen() } })
             } else {
                 LoginScreen(
@@ -1210,6 +1225,17 @@ private fun Root() {
             )
         }
         if (pickingLanguage) LanguageDialog(settings, onClose = { pickingLanguage = false })
+        // CP41 hook (not built yet): the one contextual card after the first sign in goes here,
+        // beside the language card and under the same "in the shell, on the chat list, no update
+        // dialog up" rule. When the account has Telegram folders it asks "Show everything" or
+        // "Only my folders" (CP41's hide default groups setting, with CP41's confirm prompt);
+        // with no folders it is skipped. Decide with FirstSignIn.shouldAsk.
+        if (FormFactor.isTv(context) && inShell && screen is Screen.Chats) {
+            TvBrowseHint(
+                keys = remoteKeys,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp),
+            )
+        }
         if (whatsNew.showing && !showUpdate) {
             WhatsNewDialog(
                 onClose = { whatsNew.showing = false },

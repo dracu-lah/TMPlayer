@@ -3004,9 +3004,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     /**
-     * What the row and the menus no longer show: on a phone that a double tap jumps, on a television
-     * that the arrows jump and More lists every key. Said once ever, the first time the row goes
-     * away over a playing video, and not while the resume offer is up.
+     * What the row and the menus no longer show: on a phone that a double tap jumps and which swipes
+     * are on (see [FirstRunHint]), with "Got it" to put it away sooner; on a television that the
+     * arrows jump and More lists every key. Said once ever, the first time the row goes away over a
+     * playing video, and not while the resume offer is up. The tour leaves these to this moment.
      */
     private fun showFirstRunHint() {
         if (firstRunHintShown || !firstFrameReady) return
@@ -3015,12 +3016,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             val seen = runCatching { settings.playerHintSeenNow() }.getOrDefault(true)
             if (seen) return@launch
             runCatching { settings.markPlayerHintSeen() }
-            val text = if (FormFactor.isTv(this@PlayerActivity)) {
-                L.playerRemoteHint
+            if (FormFactor.isTv(this@PlayerActivity)) {
+                feedback?.message(L.playerRemoteHint, holdMs = HINT_MS)
             } else {
-                L.playerDoubleTapHint(touchPrefs.doubleTapMs / 1000)
+                val lines = FirstRunHint.phone(touchPrefs, L)
+                feedback?.offer(lines.joinToString("\n"), L.commonGotIt, holdMs = PHONE_HINT_MS) {}
             }
-            feedback?.message(text, holdMs = HINT_MS)
         }
     }
 
@@ -4084,6 +4085,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         /** How long the first-run hint stays up. */
         private const val HINT_MS = 5_000L
+
+        /** The phone's gesture hint, up to four lines: long enough to read, "Got it" ends it sooner. */
+        private const val PHONE_HINT_MS = 12_000L
 
         /** The captions' climb out from under the raised transport row, and back. */
         private const val SUBTITLE_LIFT_MS = 200L

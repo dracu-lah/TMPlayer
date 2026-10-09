@@ -27,9 +27,17 @@ fun OnboardingImage(page: OnboardingPage, modifier: Modifier = Modifier) {
     )
 }
 
-/** The name of a page's picture on the classpath, for the fixture that writes it and the tour that reads it. */
-fun onboardingImageName(page: OnboardingPage, dark: Boolean): String =
-    "${page.name.lowercase()}-${if (dark) "dark" else "light"}.webp"
+/**
+ * The name of a page's picture on the classpath, for the fixture that writes it and the tour that
+ * reads it. How it works shows the chat list, the promo fixture's `chats` shot.
+ */
+fun onboardingImageName(page: OnboardingPage, dark: Boolean): String {
+    val shot = when (page) {
+        OnboardingPage.HowItWorks -> "chats"
+        else -> page.name.lowercase()
+    }
+    return "$shot-${if (dark) "dark" else "light"}.webp"
+}
 
 private fun load(page: OnboardingPage, dark: Boolean): ImageBitmap? {
     if (!page.illustrated) return null

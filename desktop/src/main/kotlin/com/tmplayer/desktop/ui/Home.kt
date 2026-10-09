@@ -10,12 +10,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.ChatSummary
@@ -40,11 +43,13 @@ import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.Series
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.ShelfEntry
+import com.tmplayer.ui.browse.BrowseSection
 import com.tmplayer.ui.browse.BrowseTab
 import com.tmplayer.ui.browse.ChatListViewModel
 import com.tmplayer.ui.browse.HomeViewModel
 import com.tmplayer.ui.browse.rememberHomeRows
 import com.tmplayer.ui.components.MediaArt
+import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.UiState
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.theme.Tone
@@ -113,7 +118,20 @@ internal fun HomeRowsView(
             },
         )
         if (rows.isEmpty()) {
-            Centred { Text(s.homeEmpty, color = Tone.muted) }
+            // Nothing played and nothing starred: a first run, so say how to get a first video in.
+            Centred {
+                Column(
+                    Modifier,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(TmIcons.Bookmark, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(48.dp))
+                    Text(s.homeFirstTitle, style = MaterialTheme.typography.titleLarge, color = Tone.text, textAlign = TextAlign.Center)
+                    Text(s.homeFirstBody, style = MaterialTheme.typography.bodyLarge, color = Tone.muted, textAlign = TextAlign.Center)
+                    Button(onClick = { state.showChats(BrowseSection.of(BrowseTab.Saved)) }) { Text(s.homeFirstOpenSaved) }
+                    Text(s.homeFirstMore, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, textAlign = TextAlign.Center)
+                }
+            }
             return@Column
         }
         LazyColumn(

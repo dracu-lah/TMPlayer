@@ -63,7 +63,6 @@ import com.tmplayer.data.Series
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.ShelfEntry
 import com.tmplayer.data.WatchPoint
-import com.tmplayer.ui.components.BigEmpty
 import com.tmplayer.ui.components.isTouch
 import com.tmplayer.ui.components.pressable
 import com.tmplayer.ui.i18n.LocalStrings
@@ -108,10 +107,13 @@ internal fun HomePane(
      * Not needed when [rows] is empty: the empty state already says the same.
      */
     noFavourites: Boolean = false,
+    /** Opens Saved Messages, from the first-run state's button. */
+    onOpenSaved: () -> Unit = {},
 ) {
     val s = LocalStrings.current
     if (rows.isEmpty()) {
-        BigEmpty(s.homeEmpty, icon = BrowseTab.Home.icon)
+        // Nothing played and nothing starred: a first run, so say how to get a first video in.
+        FirstVideoEmpty(onOpenSaved)
         return
     }
     val touch = isTouch()

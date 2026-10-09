@@ -155,27 +155,14 @@ class App : Application() {
 }
 
 /**
- * The screenshot for a tour page. A television gets its one dark landscape shot; a phone gets the
- * top of a phone screen, light or dark to match the theme. The sign in shot is deliberately
- * blurred: the real code on that screen is a live sign in token.
+ * The screenshot for a tour page: How it works shows the chat list. A television gets its dark
+ * landscape shot; a phone gets the top of a phone screen, light or dark to match the theme.
  */
 private fun onboardingDrawable(page: OnboardingPage, tv: Boolean, dark: Boolean): Int = when (page) {
-    OnboardingPage.SignIn -> when {
-        tv -> R.drawable.overview_signin
-        dark -> R.drawable.overview_signin_touch_dark
-        else -> R.drawable.overview_signin_touch
-    }
-    OnboardingPage.Chats -> when {
+    OnboardingPage.HowItWorks -> when {
         tv -> R.drawable.overview_chats
         dark -> R.drawable.overview_chats_touch_dark
         else -> R.drawable.overview_chats_touch
     }
-    // One picture for every device: the website's television with a phone in front of it.
-    OnboardingPage.Posters -> if (dark) R.drawable.overview_posters_dark else R.drawable.overview_posters
-    OnboardingPage.Videos -> when {
-        tv -> R.drawable.overview_media
-        dark -> R.drawable.overview_media_touch_dark
-        else -> R.drawable.overview_media_touch
-    }
-    else -> 0
+    OnboardingPage.Welcome -> 0
 }

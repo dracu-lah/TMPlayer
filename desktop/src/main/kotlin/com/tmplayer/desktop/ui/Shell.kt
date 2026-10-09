@@ -171,6 +171,8 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     }
     val update = rememberNavUpdate(state)
     UpdatePopupTrigger(state, update)
+    // CP41 hook (not built yet): the one card after the first sign in, "Show everything" or "Only
+    // my folders", goes here once CP41's setting exists. See FirstSignIn.shouldAsk for the rule.
     DownloadToasts(state)
     // Half watched entries that can no longer become a card are swept once per sign in, as on the
     // phone. Left alone they are invisible: the page skips them, so nothing can ever clear them.

@@ -17,18 +17,9 @@ import java.nio.file.Files
 class OnboardingTest {
 
     @Test
-    fun `the pages, in order`() {
-        assertEquals(
-            listOf(
-                OnboardingPage.Language, OnboardingPage.About, OnboardingPage.SignIn, OnboardingPage.Chats,
-                OnboardingPage.Videos, OnboardingPage.Posters,
-            ),
-            Onboarding.pages,
-        )
-        assertEquals(
-            listOf(OnboardingPage.SignIn, OnboardingPage.Chats, OnboardingPage.Videos, OnboardingPage.Posters),
-            Onboarding.pages.filter { it.illustrated },
-        )
+    fun `two pages, in order`() {
+        assertEquals(listOf(OnboardingPage.Welcome, OnboardingPage.HowItWorks), Onboarding.pages)
+        assertEquals(listOf(OnboardingPage.HowItWorks), Onboarding.pages.filter { it.illustrated })
     }
 
     @Test
@@ -41,8 +32,7 @@ class OnboardingTest {
 
     @Test
     fun `show the walkthrough again puts the tour over the app, and finishing it goes back`() = runBlocking {
-        val file = Files.createTempDirectory("tm-tour").resolve(SettingsStore.FILE_NAME).toFile()
-        val settings = SettingsStore(SettingsStore.openDataStore(file))
+        val settings = store()
         assertEquals(Entry.Tour, Onboarding.entry(false, settings.overviewSeen.first()))
         settings.markOverviewSeen()
         assertEquals(Entry.SignIn, Onboarding.entry(false, settings.overviewSeen.first()))
@@ -54,25 +44,32 @@ class OnboardingTest {
     }
 
     @Test
-    fun `on the first run the About page cannot be skipped past and Back does not leave`() {
+    fun `an install that saw the six page tour is not shown the new one`() = runBlocking {
+        // The flag the old tour wrote is the one the new tour reads.
+        val settings = store()
+        settings.markOverviewSeen()
+        assertEquals(Entry.App, Onboarding.entry(signedIn = true, overviewSeen = settings.overviewSeen.first()))
+        assertEquals(Entry.SignIn, Onboarding.entry(signedIn = false, overviewSeen = settings.overviewSeen.first()))
+    }
+
+    @Test
+    fun `on the first run the Welcome page cannot be skipped past and Back does not leave`() {
         val tour = TourState(firstRun = true)
+        assertEquals(OnboardingPage.Welcome, tour.page)
         assertFalse(tour.canLeave)
+        assertFalse("Back has nothing to do on the first page", tour.backEnabled)
         assertFalse(tour.back())
-        assertFalse("no Skip on Language", tour.canSkip)
+        assertFalse("no Skip on Welcome, which carries the Telegram terms line", tour.canSkip)
         assertTrue(tour.next())
-        assertEquals(OnboardingPage.About, tour.page)
-        assertFalse("no Skip on About", tour.canSkip)
-        assertTrue(tour.next())
-        assertTrue("Skip once About is read", tour.canSkip)
-        assertTrue(tour.next())
-        assertTrue(tour.next())
-        assertTrue(tour.next())
-        assertEquals(OnboardingPage.Posters, tour.page)
+        assertEquals(OnboardingPage.HowItWorks, tour.page)
         assertTrue(tour.isLast)
         assertFalse("Start, not Skip, on the last page", tour.canSkip)
+        assertTrue(tour.backEnabled)
+        // Start on the last page finishes the tour: a fresh install that taps Start has passed
+        // Welcome, so the terms line has been on screen.
         assertFalse(tour.next())
         assertTrue(tour.back())
-        assertEquals(OnboardingPage.Videos, tour.page)
+        assertEquals(OnboardingPage.Welcome, tour.page)
     }
 
     @Test
@@ -80,42 +77,67 @@ class OnboardingTest {
         val tour = TourState(firstRun = false)
         assertTrue(tour.canSkip)
         assertTrue(tour.canLeave)
+        assertTrue(tour.backEnabled)
         assertFalse(tour.back())
-        assertEquals(OnboardingPage.Posters, TourState(firstRun = false, start = 99).page)
+        assertEquals(OnboardingPage.HowItWorks, TourState(firstRun = false, start = 99).page)
+    }
+
+    @Test
+    fun `Back closes the language picker before it moves a page`() {
+        val tour = TourState(firstRun = true)
+        tour.choosingLanguage = true
+        assertTrue("Back closes the picker even on the first page of a first run", tour.backEnabled)
+        assertTrue(tour.back())
+        assertFalse(tour.choosingLanguage)
+        assertEquals(OnboardingPage.Welcome, tour.page)
+        assertFalse(tour.backEnabled)
+
+        tour.choosingLanguage = true
+        assertTrue("Next closes the picker as it moves on", tour.next())
+        assertFalse(tour.choosingLanguage)
+        assertEquals(OnboardingPage.HowItWorks, tour.page)
     }
 
     @Test
     fun `each device reads its own wording`() {
         val s = Translator.english()
         for (page in Onboarding.pages) {
-            val copies = DeviceForm.entries.map { s.onboarding(page, it) }
-            for (copy in copies) {
+            for (copy in DeviceForm.entries.map { s.onboarding(page, it) }) {
                 assertTrue("$page title", copy.title.isNotBlank())
                 assertTrue("$page body", copy.body.isNotBlank())
-                assertFalse("$page has a dash", Regex("[\u2013\u2014]").containsMatchIn(copy.title + copy.body))
+                assertEquals("$page has three points", 3, copy.points.size)
+                val words = copy.title + copy.body + copy.points.joinToString { it.title + it.body }
+                assertFalse("$page has a dash", Regex("[\u2013\u2014]").containsMatchIn(words))
             }
         }
-        val chats = DeviceForm.entries.map { s.onboarding(OnboardingPage.Chats, it).body }
-        assertEquals("phone, TV and desktop each say how they are operated", 3, chats.toSet().size)
-        assertTrue(s.onboarding(OnboardingPage.Chats, DeviceForm.Tv).body.contains("press"))
-        assertTrue(s.onboarding(OnboardingPage.Chats, DeviceForm.Desktop).body.contains("click"))
-        assertTrue(s.onboarding(OnboardingPage.Chats, DeviceForm.Phone).body.contains("tap"))
-        assertNotEquals(
-            s.onboarding(OnboardingPage.SignIn, DeviceForm.Tv).title,
-            s.onboarding(OnboardingPage.SignIn, DeviceForm.Phone).title,
-        )
+        val signIn = DeviceForm.entries.map { form ->
+            s.onboarding(OnboardingPage.HowItWorks, form).points.first { it.kind == OnboardingPoint.Kind.SignIn }.body
+        }
+        assertEquals("phone, TV and desktop each say how they sign in", 3, signIn.toSet().size)
+        assertTrue(signIn[DeviceForm.entries.indexOf(DeviceForm.Tv)].contains("QR"))
+        assertTrue(signIn[DeviceForm.entries.indexOf(DeviceForm.Phone)].contains("number"))
     }
 
     @Test
-    fun `the About page carries the unofficial line Telegram asks for`() {
+    fun `the Welcome page carries the unofficial line Telegram asks for`() {
         val s = Translator.english()
-        val about = s.onboarding(OnboardingPage.About, DeviceForm.Phone)
-        assertEquals(OnboardingPoint.Kind.entries, about.points.map { it.kind })
-        assertTrue(about.points.first().body.contains("unofficial app that uses the Telegram API"))
+        val welcome = s.onboarding(OnboardingPage.Welcome, DeviceForm.Phone)
+        assertEquals(
+            listOf(OnboardingPoint.Kind.Unofficial, OnboardingPoint.Kind.NoServer, OnboardingPoint.Kind.NoData),
+            welcome.points.map { it.kind },
+        )
+        assertTrue(welcome.points.first().body.contains("unofficial app that uses the Telegram API"))
     }
 
     @Test
-    fun `the language page lists the system first, then every language by its own name`() {
+    fun `How it works says how to get a first video in`() {
+        val s = Translator.english()
+        val how = s.onboarding(OnboardingPage.HowItWorks, DeviceForm.Phone)
+        assertTrue(how.points.first { it.kind == OnboardingPoint.Kind.FirstVideo }.body.contains("Saved Messages"))
+    }
+
+    @Test
+    fun `the language picker lists the system first, then every language by its own name`() {
         val choices = Onboarding.languages()
         assertEquals("", choices.first().tag)
         assertNull(choices.first().name)
@@ -130,5 +152,17 @@ class OnboardingTest {
         for (page in Onboarding.pages) {
             assertNotEquals(page.name, en.onboarding(page, DeviceForm.Tv).title, xa.onboarding(page, DeviceForm.Tv).title)
         }
+    }
+
+    @Test
+    fun `the first sign in card is asked once, and only with folders to choose between`() {
+        assertTrue(FirstSignIn.shouldAsk(folderCount = 2, alreadyAsked = false))
+        assertFalse("no folders, nothing to choose", FirstSignIn.shouldAsk(folderCount = 0, alreadyAsked = false))
+        assertFalse("asked already", FirstSignIn.shouldAsk(folderCount = 2, alreadyAsked = true))
+    }
+
+    private fun store(): SettingsStore {
+        val file = Files.createTempDirectory("tm-tour").resolve(SettingsStore.FILE_NAME).toFile()
+        return SettingsStore(SettingsStore.openDataStore(file))
     }
 }

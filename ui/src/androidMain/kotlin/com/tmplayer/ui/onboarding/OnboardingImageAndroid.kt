@@ -34,6 +34,6 @@ fun OnboardingImage(page: OnboardingPage, modifier: Modifier = Modifier) {
         // The title beside it is the description; a second reading of the same thing is noise.
         contentDescription = null,
         contentScale = ContentScale.Fit,
-        modifier = modifier.aspectRatio(if (tv || page == OnboardingPage.Posters) 16f / 9f else 108f / 140f).onboardingFrame(),
+        modifier = modifier.aspectRatio(if (tv) 16f / 9f else 108f / 140f).onboardingFrame(),
     )
 }

@@ -2,10 +2,12 @@ package com.tmplayer.ui.onboarding
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -30,6 +32,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -53,8 +57,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.DeviceForm
 import com.tmplayer.data.SettingsStore
@@ -62,8 +68,10 @@ import com.tmplayer.i18n.Languages
 import com.tmplayer.i18n.Translator
 import com.tmplayer.ui.components.AppLogo
 import com.tmplayer.ui.components.ChoiceRow
+import com.tmplayer.ui.components.TmIcons
 import com.tmplayer.ui.components.deviceForm
 import com.tmplayer.ui.i18n.LocalStrings
+import com.tmplayer.ui.i18n.languageRowDetail
 import com.tmplayer.ui.nav.BackHandler
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.LocalDarkTheme
@@ -87,9 +95,10 @@ fun OnboardingTour(
     firstRun: Boolean = true,
     tour: TourState = remember(firstRun) { TourState(firstRun) },
 ) {
-    // Back walks the pages in reverse, as it does everywhere else in the app. From the first page
-    // it leaves a tour Settings asked for; on the first run it is the system's, which closes the app.
-    BackHandler(enabled = !tour.isFirst || tour.canLeave) { if (!tour.back()) onDone() }
+    // Back closes the language picker, then walks the pages in reverse, as it does everywhere else
+    // in the app. From the first page it leaves a tour Settings asked for; on the first run it is
+    // the system's, which closes the app.
+    BackHandler(enabled = tour.backEnabled) { if (!tour.back()) onDone() }
     PostersDefaultOn(tour.firstRun)
     if (deviceForm() == DeviceForm.Desktop) {
         DesktopTour(settings, tour, onDone, modifier)
@@ -119,34 +128,37 @@ private fun PhoneTour(settings: SettingsStore, tour: TourState, onDone: () -> Un
                 .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (tour.choosingLanguage) {
+                LanguagePicker(settings, tour, desktop = false, rows = Modifier.weight(1f, fill = false))
+                Spacer(Modifier.weight(0.001f))
+                FilledTonalButton(onClick = { tour.back() }, modifier = Modifier.fillMaxWidth()) { Text(s.onboardingBack) }
+                return@Column
+            }
             val step = s.onboardingStep(tour.index + 1, pages.size)
             LinearProgressIndicator(
                 progress = { (tour.index + 1).toFloat() / pages.size },
                 modifier = Modifier.fillMaxWidth().semantics { contentDescription = step },
             )
             // The pages take what the buttons leave and scroll inside it, so Next stays on screen
-            // however long a page is (a phone on its side, a large font, the languages).
+            // however long a page is (a phone on its side, a large font).
             HorizontalPager(
                 state = pager,
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 pageSpacing = 16.dp,
                 verticalAlignment = Alignment.Top,
             ) { at ->
-                BoxWithConstraints(Modifier.fillMaxSize()) {
-                    // The languages run down to the buttons when there is the height for it; a
-                    // phone on its side scrolls the page instead, with the list in a box of its own.
-                    val fill = pages[at] == OnboardingPage.Language && maxHeight >= FILL_MIN
-                    Column(
-                        Modifier.fillMaxSize().then(if (fill) Modifier else Modifier.verticalScroll(rememberScrollState())),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        PageWords(
-                            pages[at], DeviceForm.Phone, settings,
-                            modifier = if (fill) Modifier.weight(1f, fill = false) else Modifier,
-                            fillList = fill,
-                            firstRun = tour.firstRun,
+                Column(
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    PageWords(pages[at], DeviceForm.Phone, settings, tour)
+                    if (pages[at].illustrated) {
+                        // The chat list's shot is a whole phone screen; at full width it would be
+                        // taller than the page, so it keeps to a width that leaves the words in view.
+                        OnboardingImage(
+                            pages[at],
+                            Modifier.padding(top = 4.dp).widthIn(max = PHONE_IMAGE_MAX).fillMaxWidth().align(Alignment.CenterHorizontally),
                         )
-                        if (pages[at].illustrated) OnboardingImage(pages[at], Modifier.fillMaxWidth())
                     }
                 }
             }
@@ -166,13 +178,19 @@ private fun DesktopTour(settings: SettingsStore, tour: TourState, onDone: () -> 
     Box(modifier.fillMaxSize().verticalScroll(rememberScrollState()), contentAlignment = Alignment.Center) {
         Column(
             Modifier.widthIn(max = when {
-                page.illustrated -> 1120.dp
                 // Three columns of languages, so the whole list fits a window without scrolling.
-                page == OnboardingPage.Language -> 920.dp
-                else -> 640.dp
+                tour.choosingLanguage -> 920.dp
+                page.illustrated -> 1120.dp
+                else -> 680.dp
             }).fillMaxWidth().padding(40.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            if (tour.choosingLanguage) {
+                LanguagePicker(settings, tour, desktop = true, rows = Modifier.heightIn(max = DESKTOP_LIST_MAX))
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = { tour.back() }, modifier = Modifier.focusRequester(next)) { Text(s.onboardingBack) }
+                return@Column
+            }
             Text(
                 s.onboardingStep(tour.index + 1, tour.pages.size),
                 style = MaterialTheme.typography.labelLarge,
@@ -188,21 +206,21 @@ private fun DesktopTour(settings: SettingsStore, tour: TourState, onDone: () -> 
             if (page.illustrated) {
                 Row(horizontalArrangement = Arrangement.spacedBy(40.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        PageWords(page, DeviceForm.Desktop, settings, firstRun = tour.firstRun)
+                        PageWords(page, DeviceForm.Desktop, settings, tour)
                         Spacer(Modifier.height(8.dp))
                         buttons()
                     }
-                    OnboardingImage(page, Modifier.weight(1.5f))
+                    OnboardingImage(page, Modifier.weight(1.2f))
                 }
             } else {
-                PageWords(page, DeviceForm.Desktop, settings, firstRun = tour.firstRun)
+                PageWords(page, DeviceForm.Desktop, settings, tour)
                 Spacer(Modifier.height(8.dp))
                 buttons()
             }
         }
     }
     // Focus follows the page, so Enter walks the whole tour from the keyboard.
-    LaunchedEffect(tour.index) { runCatching { next.requestFocus() } }
+    LaunchedEffect(tour.index, tour.choosingLanguage) { runCatching { next.requestFocus() } }
 }
 
 /** Next, or Start on the last page, in the filled style the app's primary buttons share. */
@@ -228,23 +246,17 @@ private fun PrimaryButton(last: Boolean, modifier: Modifier, onClick: () -> Unit
     }
 }
 
-/** A page's title, body and whatever the page holds besides: the points, or the languages. */
+/**
+ * A page's title, body and points. The Welcome page adds the language row under the body (so a
+ * reader in the wrong language finds it before the rest) and the posters switch at the end.
+ */
 @Composable
-private fun PageWords(
-    page: OnboardingPage,
-    form: DeviceForm,
-    settings: SettingsStore,
-    modifier: Modifier = Modifier,
-    /** The page gave [modifier] a height to fill, and the languages take what the words leave of it. */
-    fillList: Boolean = false,
-    /** The tour before sign in, where the Posters switch starts on. */
-    firstRun: Boolean = false,
-) {
+private fun PageWords(page: OnboardingPage, form: DeviceForm, settings: SettingsStore, tour: TourState) {
     val s = LocalStrings.current
     val copy = s.onboarding(page, form)
     val desktop = form == DeviceForm.Desktop
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (page == OnboardingPage.About) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (page == OnboardingPage.Welcome) {
             Image(
                 AppLogo.Mark,
                 contentDescription = null,
@@ -261,19 +273,66 @@ private fun PageWords(
             style = if (desktop) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium,
             color = Tone.muted,
         )
+        if (page == OnboardingPage.Welcome) LanguageRow(settings) { tour.choosingLanguage = true }
         for (point in copy.points) PointRow(point, desktop)
-        if (page == OnboardingPage.Posters) PostersSwitch(firstRun)
-        if (page == OnboardingPage.Language) {
-            // On a phone with the room the list runs down to the buttons; otherwise it scrolls in
-            // a box of a set height inside the scrolling page.
-            val rows = when {
-                desktop -> Modifier.heightIn(max = DESKTOP_LIST_MAX)
-                fillList -> Modifier.weight(1f, fill = false)
-                else -> Modifier.heightIn(max = PHONE_LIST_MAX)
-            }
-            LanguageList(settings, columns = if (desktop) 3 else 1, rows = rows)
-        }
+        if (page == OnboardingPage.Welcome) PostersSwitch(Modifier.padding(top = 4.dp))
     }
+}
+
+/**
+ * The Welcome page's compact language row: the language in use, named in itself, and "Change",
+ * which opens the full list over the page. The system's language is preselected, so most readers
+ * never need it, and it no longer costs everybody a page.
+ */
+@Composable
+private fun LanguageRow(settings: SettingsStore, onChange: () -> Unit) {
+    val s = LocalStrings.current
+    val saved by settings.language.collectAsState(initial = "")
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(Corner.Medium))
+            .clickable(role = Role.Button, onClick = onChange)
+            .padding(start = 0.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(TmIcons.Language, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(s.onboardingLanguageLabel, style = MaterialTheme.typography.titleSmall, color = Tone.text)
+            Text(
+                s.languageRowDetail(saved),
+                style = MaterialTheme.typography.bodySmall,
+                color = Tone.muted,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        TextButton(onClick = onChange) { Text(s.commonChange) }
+    }
+}
+
+/** The full list of languages, opened from [LanguageRow]; picking one applies it and closes the list. */
+@Composable
+private fun ColumnScope.LanguagePicker(settings: SettingsStore, tour: TourState, desktop: Boolean, rows: Modifier) {
+    val s = LocalStrings.current
+    Text(
+        s.onboardingLanguageTitle,
+        style = if (desktop) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.headlineSmall,
+        color = Tone.text,
+    )
+    Text(
+        s.onboardingLanguageBody,
+        style = if (desktop) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium,
+        color = Tone.muted,
+    )
+    LanguageList(
+        settings,
+        columns = if (desktop) 3 else 1,
+        helpTranslate = false,
+        rows = rows,
+        onPicked = { tour.choosingLanguage = false },
+    )
 }
 
 @Composable
@@ -296,11 +355,14 @@ private fun PointRow(point: OnboardingPoint, desktop: Boolean) {
     }
 }
 
-/** The icon beside an About point, the same on every device. */
+/** The icon beside a tour point, the same on every device. */
 fun OnboardingPoint.Kind.icon(): ImageVector = when (this) {
     OnboardingPoint.Kind.Unofficial -> Icons.Filled.Info
     OnboardingPoint.Kind.NoServer -> Icons.Filled.Lock
     OnboardingPoint.Kind.NoData -> Icons.Filled.CheckCircle
+    OnboardingPoint.Kind.FirstVideo -> Icons.AutoMirrored.Filled.Send
+    OnboardingPoint.Kind.Folders -> TmIcons.Folder
+    OnboardingPoint.Kind.SignIn -> Icons.Filled.Phone
 }
 
 /**
@@ -315,16 +377,23 @@ fun systemLanguageName(): String? {
 
 /**
  * Every language, each named in itself, with "System default" first and picked until somebody
- * picks another. The choice is the Settings one, so the app switches the moment a row is chosen.
- * The tour and the Settings picker on a phone and a computer both draw this. [helpTranslate] adds
- * the "Help translate" link under the list.
+ * picks another. The choice is the Settings one, so the app switches the moment a row is chosen,
+ * and [onPicked] hears of it. The tour's picker and the Settings picker on a phone and a computer
+ * both draw this. [helpTranslate] adds the "Help translate" link under the list (Settings has it;
+ * the tour leaves it to Settings and About).
  *
  * With [rows] (a height limit or a weight) the rows scroll inside that, with a hairline over and
  * under them while there is more to see, so a page with buttons under the list keeps them in sight.
  * Without it the rows take their full height, for a picker that already scrolls them in its panel.
  */
 @Composable
-fun LanguageList(settings: SettingsStore, columns: Int, helpTranslate: Boolean = true, rows: Modifier? = null) {
+fun LanguageList(
+    settings: SettingsStore,
+    columns: Int,
+    helpTranslate: Boolean = true,
+    rows: Modifier? = null,
+    onPicked: () -> Unit = {},
+) {
     val s = LocalStrings.current
     val scope = rememberCoroutineScope()
     val uri = LocalUriHandler.current
@@ -344,7 +413,10 @@ fun LanguageList(settings: SettingsStore, columns: Int, helpTranslate: Boolean =
                         detail = if (choice.name == null) system else null,
                         selected = saved.equals(choice.tag, ignoreCase = true),
                         modifier = Modifier.weight(1f),
-                    ) { scope.launch { settings.setLanguage(choice.tag) } }
+                    ) {
+                        scope.launch { settings.setLanguage(choice.tag) }
+                        onPicked()
+                    }
                 }
                 repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
             }
@@ -364,11 +436,8 @@ internal fun Modifier.onboardingFrame(): Modifier =
 
 private val PHONE_MAX = 600.dp
 
-/** About five rows, the last one cut by the edge, which says the list scrolls. */
-private val PHONE_LIST_MAX = 308.dp
-
-/** The page height under which the languages stop running down to the buttons and scroll the page. */
-private val FILL_MIN = 440.dp
+/** The chat list's shot on a phone page: wide enough to read, narrow enough to keep the words in view. */
+private val PHONE_IMAGE_MAX = 240.dp
 
 /** Six rows of three (the first one taller, for the system language under it): the whole list today. */
 private val DESKTOP_LIST_MAX = 360.dp
