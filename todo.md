@@ -1,14 +1,6 @@
 # TODO
 
-State at the end of the 2026-10-09/10 session. The full plan is `docs/PLAN.md`.
-
-## Not pushed yet
-
-- [ ] `main` is about 26 commits ahead of `origin/main`, all committed and nothing half done. A full
-  `./gradlew build -x lint` (every module, unit tests, desktop render tests) passed at 8061ac8. After that
-  only the TV rail pitch, the TV See all alignment, the promoShots flag and the site changed.
-  `:app:testDebugUnitTest :app:compileReleaseKotlin :core:jvmTest` was started on the final tree and its
-  result was not seen. Run it, then push.
+State on 2026-10-10. Everything is pushed. The full plan is `docs/PLAN.md`.
 
 ## Done in this session (for the release notes)
 
