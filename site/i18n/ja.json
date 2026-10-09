@@ -981,11 +981,7 @@
     "suggest_go": "{language}で読む",
     "suggest_dismiss": "この言語のまま",
     "kao_bar": "2027 年から、Android は Google に登録した開発者のアプリだけをインストールする予定です。",
-    "kao_sheet": "2027 年から、Android は開発者が Google に登録して身分証明書を提示したアプリだけをインストールする予定です。TMPlayer のような Play ストア以外のアプリも対象です。",
     "kao_learn": "詳しく見る",
-    "kao_share": "共有",
-    "kao_share_text": "2027 年から、Android は Google に登録した開発者のアプリだけをインストールする予定です。#KeepAndroidOpen",
-    "kao_copied": "リンクをコピーしました",
     "kao_close": "このお知らせを閉じる"
   }
 }

@@ -981,11 +981,7 @@
     "suggest_go": "{language} dilinde oku",
     "suggest_dismiss": "Bu dilde kal",
     "kao_bar": "Android, 2027'den itibaren yalnızca Google'a kayıtlı geliştiricilerin uygulamalarını yüklemeyi planlıyor.",
-    "kao_sheet": "Android, 2027'den itibaren yalnızca geliştiricisi Google'a kaydolmuş ve kimlik göstermiş uygulamaları yüklemeyi planlıyor. Buna TMPlayer gibi Play Store dışından gelen uygulamalar da dahil.",
     "kao_learn": "Daha fazla bilgi",
-    "kao_share": "Paylaş",
-    "kao_share_text": "Android, 2027'den itibaren yalnızca Google'a kayıtlı geliştiricilerin uygulamalarını yüklemeyi planlıyor. #KeepAndroidOpen",
-    "kao_copied": "Bağlantı kopyalandı",
     "kao_close": "Bu bildirimi kapat"
   }
 }

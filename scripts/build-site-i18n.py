@@ -110,16 +110,9 @@ BUILD_STRINGS = {
     "build.suggest": "This page is also in {language}.",
     "build.suggest_go": "Read it in {language}",
     "build.suggest_dismiss": "Stay in this language",
-    # The Keep Android Open notice at the top of every page (a bar on wide screens, a card pinned
-    # to the bottom on a phone). The facts follow keepandroidopen.org; the detail stays there.
+    # The Keep Android Open notice, a slim bar at the top of every page. The facts follow keepandroidopen.org; the detail stays there.
     "build.kao_bar": "From 2027, Android plans to install only apps from developers registered with Google.",
-    "build.kao_sheet": "From 2027, Android plans to install only apps whose developers have registered with "
-                       "Google and shown ID. That includes apps from outside the Play Store, like TMPlayer.",
     "build.kao_learn": "Learn more",
-    "build.kao_share": "Share",
-    "build.kao_share_text": "From 2027, Android plans to install only apps from developers registered "
-                            "with Google. #KeepAndroidOpen",
-    "build.kao_copied": "Link copied",
     "build.kao_close": "Close this notice",
 }
 
@@ -859,31 +852,20 @@ def regions(lang, page_id, langs, strings):
 CLOSE_X = ('<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">'
            '<path fill="currentColor" d="M18.3 7.1 13.4 12l4.9 4.9a1 1 0 0 1-1.4 1.4L12 13.4l-4.9 4.9a1 1 0 '
            '0 1-1.4-1.4l4.9-4.9-4.9-4.9a1 1 0 0 1 1.4-1.4l4.9 4.9 4.9-4.9a1 1 0 0 1 1.4 1.4Z"/></svg>')
-SHARE_ICON = ('<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">'
-              '<path fill="currentColor" d="M18 16a3 3 0 0 0-2.4 1.2l-6.7-3.4a3 3 0 0 0 0-1.6l6.7-3.4A3 3 0 1 0 '
-              '15 7l-6.7 3.4a3 3 0 1 0 0 3.2L15 17a3 3 0 1 0 3-1Z"/></svg>')
 
 
 def notice(lang, t):
     """The Keep Android Open notice. Its markup is in the page, so nothing shifts once it loads;
     the theme script in every page's head hides it before the first paint once the reader closed it,
-    and app.js wires the close and share buttons. Nothing is loaded from the campaign's site."""
+    and app.js wires the close button. Nothing is loaded from the campaign's site."""
     def e(k):
         return html.escape(t[k], quote=True)
     link = f'<a href="{KAO_URL}" target="_blank" rel="noopener">{e("build.kao_learn")}</a>'
-    learn = f'<a class="kao-learn" href="{KAO_URL}" target="_blank" rel="noopener">{e("build.kao_learn")}</a>'
     close = (f'<button type="button" class="kao-close" data-kao-close aria-label="{e("build.kao_close")}" '
              f'title="{e("build.kao_close")}">{CLOSE_X}</button>')
     return (
         '\n<aside class="kao" id="kao" aria-label="Keep Android Open">'
         f'\n  <div class="kao-bar"><p><span>{e("build.kao_bar")}</span> {link}</p>{close}</div>'
-        '\n  <div class="kao-sheet"><p class="kao-tag" lang="en" dir="ltr">#KeepAndroidOpen</p>'
-        f'<p class="kao-text">{e("build.kao_sheet")}</p>'
-        f'<div class="kao-actions">{learn}'
-        f'<button type="button" class="kao-share" data-kao-share data-url="{KAO_URL}" '
-        f'data-text="{e("build.kao_share_text")}" data-copied="{e("build.kao_copied")}">'
-        f'{SHARE_ICON}<span>{e("build.kao_share")}</span></button>'
-        f'<span class="kao-copied" role="status" aria-live="polite"></span></div>{close}</div>'
         "\n</aside>\n")
 
 

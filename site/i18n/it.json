@@ -981,11 +981,7 @@
     "suggest_go": "Leggila in {language}",
     "suggest_dismiss": "Resta in questa lingua",
     "kao_bar": "Dal 2027 Android prevede di installare solo app di sviluppatori registrati presso Google.",
-    "kao_sheet": "Dal 2027 Android prevede di installare solo app i cui sviluppatori si sono registrati presso Google e hanno mostrato un documento d'identità. Vale anche per le app fuori dal Play Store, come TMPlayer.",
     "kao_learn": "Scopri di più",
-    "kao_share": "Condividi",
-    "kao_share_text": "Dal 2027 Android prevede di installare solo app di sviluppatori registrati presso Google. #KeepAndroidOpen",
-    "kao_copied": "Link copiato",
     "kao_close": "Chiudi questo avviso"
   }
 }

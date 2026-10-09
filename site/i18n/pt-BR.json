@@ -981,11 +981,7 @@
     "suggest_go": "Ler em {language}",
     "suggest_dismiss": "Continuar neste idioma",
     "kao_bar": "A partir de 2027, o Android planeja instalar só apps de desenvolvedores registrados no Google.",
-    "kao_sheet": "A partir de 2027, o Android planeja instalar só apps cujos desenvolvedores tenham se registrado no Google e apresentado documento de identidade. Isso inclui apps de fora da Play Store, como o TMPlayer.",
     "kao_learn": "Saiba mais",
-    "kao_share": "Compartilhar",
-    "kao_share_text": "A partir de 2027, o Android planeja instalar só apps de desenvolvedores registrados no Google. #KeepAndroidOpen",
-    "kao_copied": "Link copiado",
     "kao_close": "Fechar este aviso"
   }
 }

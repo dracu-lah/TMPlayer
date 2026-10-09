@@ -981,11 +981,7 @@
     "suggest_go": "La lire en {language}",
     "suggest_dismiss": "Rester dans cette langue",
     "kao_bar": "À partir de 2027, Android prévoit de n'installer que les applis de développeurs enregistrés auprès de Google.",
-    "kao_sheet": "À partir de 2027, Android prévoit de n'installer que les applis dont les développeurs se sont enregistrés auprès de Google et ont fourni une pièce d'identité. Cela concerne aussi les applis hors Play Store, comme TMPlayer.",
     "kao_learn": "En savoir plus",
-    "kao_share": "Partager",
-    "kao_share_text": "À partir de 2027, Android prévoit de n'installer que les applis de développeurs enregistrés auprès de Google. #KeepAndroidOpen",
-    "kao_copied": "Lien copié",
     "kao_close": "Fermer cet avis"
   }
 }

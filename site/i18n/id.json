@@ -981,11 +981,7 @@
     "suggest_go": "Baca dalam bahasa {language}",
     "suggest_dismiss": "Tetap di bahasa ini",
     "kao_bar": "Mulai 2027, Android berencana hanya memasang aplikasi dari developer yang terdaftar di Google.",
-    "kao_sheet": "Mulai 2027, Android berencana hanya memasang aplikasi yang developernya sudah mendaftar ke Google dan menunjukkan identitas. Termasuk aplikasi dari luar Play Store, seperti TMPlayer.",
     "kao_learn": "Pelajari lebih lanjut",
-    "kao_share": "Bagikan",
-    "kao_share_text": "Mulai 2027, Android berencana hanya memasang aplikasi dari developer yang terdaftar di Google. #KeepAndroidOpen",
-    "kao_copied": "Tautan disalin",
     "kao_close": "Tutup pemberitahuan ini"
   }
 }

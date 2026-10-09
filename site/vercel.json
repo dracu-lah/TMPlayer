@@ -40,5 +40,12 @@
         }
       ]
     }
+  ],
+  "redirects": [
+    {
+      "source": "/apk",
+      "destination": "https://github.com/dracu-lah/TMPlayer/releases/latest/download/TMPlayer.apk",
+      "permanent": false
+    }
   ]
 }

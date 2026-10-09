@@ -981,11 +981,7 @@
     "suggest_go": "{language}로 보기",
     "suggest_dismiss": "이 언어 그대로 보기",
     "kao_bar": "2027년부터 Android는 Google에 등록한 개발자의 앱만 설치할 계획입니다.",
-    "kao_sheet": "2027년부터 Android는 개발자가 Google에 등록하고 신분증을 제시한 앱만 설치할 계획입니다. TMPlayer처럼 Play 스토어 밖의 앱도 포함됩니다.",
     "kao_learn": "자세히 알아보기",
-    "kao_share": "공유",
-    "kao_share_text": "2027년부터 Android는 Google에 등록한 개발자의 앱만 설치할 계획입니다. #KeepAndroidOpen",
-    "kao_copied": "링크를 복사했습니다",
     "kao_close": "이 알림 닫기"
   }
 }

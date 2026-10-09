@@ -981,11 +981,7 @@
     "suggest_go": "Đọc bằng {language}",
     "suggest_dismiss": "Giữ nguyên ngôn ngữ này",
     "kao_bar": "Từ năm 2027, Android dự kiến chỉ cài ứng dụng của nhà phát triển đã đăng ký với Google.",
-    "kao_sheet": "Từ năm 2027, Android dự kiến chỉ cài ứng dụng có nhà phát triển đã đăng ký với Google và xuất trình giấy tờ tùy thân. Điều này áp dụng cả với ứng dụng ngoài Play Store, như TMPlayer.",
     "kao_learn": "Tìm hiểu thêm",
-    "kao_share": "Chia sẻ",
-    "kao_share_text": "Từ năm 2027, Android dự kiến chỉ cài ứng dụng của nhà phát triển đã đăng ký với Google. #KeepAndroidOpen",
-    "kao_copied": "Đã sao chép liên kết",
     "kao_close": "Đóng thông báo này"
   }
 }

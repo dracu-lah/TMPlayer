@@ -976,11 +976,7 @@
     "suggest_go": "Read it in {language}",
     "suggest_dismiss": "Stay in this language",
     "kao_bar": "From 2027, Android plans to install only apps from developers registered with Google.",
-    "kao_sheet": "From 2027, Android plans to install only apps whose developers have registered with Google and shown ID. That includes apps from outside the Play Store, like TMPlayer.",
     "kao_learn": "Learn more",
-    "kao_share": "Share",
-    "kao_share_text": "From 2027, Android plans to install only apps from developers registered with Google. #KeepAndroidOpen",
-    "kao_copied": "Link copied",
     "kao_close": "Close this notice"
   }
 }

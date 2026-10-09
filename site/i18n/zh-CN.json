@@ -981,11 +981,7 @@
     "suggest_go": "阅读{language}版",
     "suggest_dismiss": "保持当前语言",
     "kao_bar": "从 2027 年起，Android 计划只安装已在 Google 登记的开发者的应用。",
-    "kao_sheet": "从 2027 年起，Android 计划只安装开发者已在 Google 登记并出示身份证件的应用。Play 商店以外的应用也包括在内，例如 TMPlayer。",
     "kao_learn": "了解更多",
-    "kao_share": "分享",
-    "kao_share_text": "从 2027 年起，Android 计划只安装已在 Google 登记的开发者的应用。#KeepAndroidOpen",
-    "kao_copied": "链接已复制",
     "kao_close": "关闭此通知"
   }
 }

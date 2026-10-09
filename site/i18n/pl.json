@@ -981,11 +981,7 @@
     "suggest_go": "Czytaj w języku: {language}",
     "suggest_dismiss": "Zostań przy tym języku",
     "kao_bar": "Od 2027 roku Android ma instalować tylko aplikacje deweloperów zarejestrowanych w Google.",
-    "kao_sheet": "Od 2027 roku Android ma instalować tylko aplikacje, których deweloperzy zarejestrowali się w Google i okazali dokument tożsamości. Dotyczy to także aplikacji spoza Sklepu Play, takich jak TMPlayer.",
     "kao_learn": "Dowiedz się więcej",
-    "kao_share": "Udostępnij",
-    "kao_share_text": "Od 2027 roku Android ma instalować tylko aplikacje deweloperów zarejestrowanych w Google. #KeepAndroidOpen",
-    "kao_copied": "Skopiowano link",
     "kao_close": "Zamknij to powiadomienie"
   }
 }

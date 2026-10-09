@@ -981,11 +981,7 @@
     "suggest_go": "Auf {language} lesen",
     "suggest_dismiss": "In dieser Sprache bleiben",
     "kao_bar": "Ab 2027 will Android nur noch Apps von bei Google registrierten Entwicklern installieren.",
-    "kao_sheet": "Ab 2027 will Android nur noch Apps installieren, deren Entwickler sich bei Google registriert und ausgewiesen haben. Das betrifft auch Apps außerhalb des Play Store, wie TMPlayer.",
     "kao_learn": "Mehr erfahren",
-    "kao_share": "Teilen",
-    "kao_share_text": "Ab 2027 will Android nur noch Apps von bei Google registrierten Entwicklern installieren. #KeepAndroidOpen",
-    "kao_copied": "Link kopiert",
     "kao_close": "Diesen Hinweis schließen"
   }
 }

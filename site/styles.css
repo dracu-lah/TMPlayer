@@ -2705,9 +2705,7 @@ a[lang="ar"] { font-family: "Noto Sans Arabic", "Segoe UI", Tahoma, sans-serif; 
 /* ---------- Keep Android Open ----------
 
    A notice for the keepandroidopen.org campaign, written here rather than loaded from it. On a
-   wide screen it is a slim bar above the header that scrolls away with the page; on a phone it is
-   a card pinned to the bottom, clear of the header, with a share button, and the page gets that
-   much padding at the bottom while it shows so the footer stays reachable. Closing it sets
+   every screen it is a slim bar above the header that scrolls away with the page. Closing it sets
    tm-kao-closed in local storage, and the head script in every page puts .kao-off on <html>
    before the first paint, so a closed notice never flashes. */
 
@@ -2747,66 +2745,13 @@ a[lang="ar"] { font-family: "Noto Sans Arabic", "Segoe UI", Tahoma, sans-serif; 
 .kao-bar p { flex: 1 1 auto; text-align: center; padding: 6px 0; }
 .kao-bar a { white-space: nowrap; }
 .kao-bar .kao-close:focus-visible { outline-color: var(--surface); }
-.kao-sheet { display: none; }
 
+/* Phones get the same bar rather than a card pinned over the bottom quarter of the first screen,
+   right beside the download button, where "only apps from registered developers" read as "this
+   app is about to stop working". The bar scrolls away with the page like it does on a wide one. */
 @media (max-width: 699px) {
-  .kao-bar { display: none; }
-  .kao-sheet {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 2px 4px;
-    position: fixed;
-    left: 8px;
-    right: 8px;
-    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
-    z-index: 35;
-    padding: 12px 6px 14px 16px;
-    background: var(--surface-container-lowest);
-    color: var(--on-surface);
-    border: 1px solid var(--outline-variant);
-    border-radius: var(--shape-l);
-    box-shadow: var(--shadow-3);
-    font-size: 0.9rem;
-    line-height: 1.45;
-    animation: kao-in 0.3s var(--ease-standard) both;
-  }
-  [dir="rtl"] .kao-sheet { padding: 12px 16px 14px 6px; }
-  .kao-tag { grid-column: 1; grid-row: 1; align-self: center; font-weight: 700; font-size: 0.82rem;
-             letter-spacing: 0.02em; color: var(--primary); }
-  [dir="rtl"] .kao-tag { text-align: right; }
-  .kao-sheet .kao-close { grid-column: 2; grid-row: 1; margin: -10px 0 -6px; }
-  .kao-text { grid-column: 1 / -1; padding-inline-end: 10px; color: var(--on-surface-variant); }
-  .kao-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center;
-                 gap: 6px 10px; margin-top: 8px; }
-  .kao-learn, .kao-share {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 40px;
-    padding: 0 16px;
-    border-radius: var(--shape-full);
-    font: inherit;
-    font-weight: 600;
-  }
-  .kao .kao-learn { background: var(--primary); color: var(--on-primary); text-decoration: none; }
-  .kao .kao-learn:hover { color: var(--on-primary); text-decoration: none; }
-  .kao-share { border: 1px solid var(--outline); background: transparent; color: var(--on-surface);
-               cursor: pointer; }
-  .kao-share:hover { background: var(--surface-container-high); }
-  .kao-copied { font-size: 0.84rem; color: var(--secondary); }
-
-  /* Room for the card under the footer, and the back-to-top button sits above it. app.js keeps
-     --kao-h at the card's real height; the fallback covers the first paint. */
-  html:not(.kao-off) body { padding-bottom: calc(var(--kao-h, 170px) + 16px + env(safe-area-inset-bottom, 0px)); }
-  html:not(.kao-off) .to-top { bottom: calc(var(--kao-h, 170px) + 20px + env(safe-area-inset-bottom, 0px)); }
-}
-
-@keyframes kao-in {
-  from { opacity: 0; transform: translate3d(0, 12px, 0); }
-  to { opacity: 1; transform: none; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .kao-sheet { animation: none; }
+  .kao-bar { font-size: 0.84rem; }
+  .kao-bar p { padding: 8px 0; }
 }
 
 /* The download page note on Android developer registration, under the phone files. */
