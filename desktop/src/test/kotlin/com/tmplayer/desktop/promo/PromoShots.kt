@@ -38,7 +38,6 @@ import com.tmplayer.data.SeriesShelf
 import com.tmplayer.data.ShelfEntry
 import com.tmplayer.desktop.ui.SeriesPage
 import com.tmplayer.desktop.ui.rememberSeriesWatch
-import com.tmplayer.ui.browse.SeriesViewToggle
 import com.tmplayer.desktop.DesktopPrefs
 import com.tmplayer.desktop.DesktopWatchCache
 import com.tmplayer.desktop.player.AbLoop
@@ -251,26 +250,6 @@ class PromoShots {
                 )
                 body()
             }
-        }
-    }
-
-    /** The chat with its shows folded into posters, and the switch above them. */
-    @Test
-    fun series() = both("series", before = ::seedWatching) {
-        chatPage("${seriesVideos.size} videos") {
-            VideoGrid(
-                shell, seriesVideos, "Weekend Clips",
-                shelf = SeriesShelf.arrange(seriesVideos),
-                viewSwitch = { SeriesViewToggle(true, {}) },
-            )
-        }
-    }
-
-    /** The same chat with "All files" chosen. */
-    @Test
-    fun allFiles() = both("series-all-files", before = ::seedWatching) {
-        chatPage("${seriesVideos.size} videos") {
-            VideoGrid(shell, seriesVideos, "Weekend Clips", viewSwitch = { SeriesViewToggle(false, {}) })
         }
     }
 

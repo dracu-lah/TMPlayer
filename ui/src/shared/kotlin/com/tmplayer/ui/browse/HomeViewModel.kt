@@ -293,13 +293,12 @@ fun rememberHomeRows(
     chats: List<ChatSummary>,
     favourites: Set<Long>,
     continueWatching: List<ResumeRecord>,
-    seriesView: Boolean,
 ): List<HomeRow> {
     val loaded by model.loaded.collectAsState()
     val recent by model.recent.collectAsState()
     val partial by model.partial.collectAsState()
     val starred = remember(chats, favourites) { HomeRows.favouriteChats(chats, favourites) }
-    return remember(continueWatching, starred, loaded, recent, seriesView, partial) {
-        HomeRows.build(continueWatching, starred, loaded, recent, seriesView, partial)
+    return remember(continueWatching, starred, loaded, recent, partial) {
+        HomeRows.build(continueWatching, starred, loaded, recent, partial = partial)
     }
 }

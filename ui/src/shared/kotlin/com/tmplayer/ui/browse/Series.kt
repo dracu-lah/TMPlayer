@@ -97,9 +97,8 @@ import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.focusRing
 
 /*
- * The series view (R5), shared by the phone, the television and the desktop: the "Series" and
- * "All files" switch, a show's picture for its tile, and the panel with the season picker and the
- * episode list. Each platform puts its own chrome round these: a bottom sheet on the phone, a full
+ * The series view (R5), shared by the phone, the television and the desktop: a show's picture for
+ * its tile, and the panel with the season picker and the episode list. Each platform puts its own chrome round these: a bottom sheet on the phone, a full
  * screen page on the television, and a page with a season dropdown on the desktop.
  */
 
@@ -128,34 +127,8 @@ class SeriesWatch(
 }
 
 /**
- * "Series" or "All files". Two segments in one pill: the chosen one in the accent, the other on the
- * surface. On a television the remote lands on a segment and OK picks it, like any other button.
- */
-@Composable
-fun SeriesViewToggle(
-    seriesView: Boolean,
-    onChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val s = LocalStrings.current
-    val tv = !isTouch()
-    Row(
-        modifier
-            // A grid row hands its items the full width; the pill keeps to its own.
-            .wrapContentWidth(Alignment.Start)
-            .clip(CircleShape)
-            .background(Tone.surfaceHigh)
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Segment(s.seriesSeries, chosen = seriesView, tv = tv) { onChange(true) }
-        Segment(s.seriesAllFiles, chosen = !seriesView, tv = tv) { onChange(false) }
-    }
-}
-
-/**
  * Where a chat-list search looks: the chats by name, or the videos in every chat as well (see
- * [com.tmplayer.data.SearchScope]). The same two-segment pill as [SeriesViewToggle].
+ * [com.tmplayer.data.SearchScope]).
  */
 @Composable
 fun SearchScopeToggle(

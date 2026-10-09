@@ -346,7 +346,6 @@ private fun Root() {
     val minSize by settings.minSizeBytes.collectAsStateWithLifecycle(initialValue = SizeFilter.DEFAULT_MIN)
     val maxSize by settings.maxSizeBytes.collectAsStateWithLifecycle(initialValue = SizeFilter.DEFAULT_MAX)
     val chatLayout by settings.chatLayout.collectAsStateWithLifecycle(initialValue = CardLayout.List)
-    val seriesView by settings.seriesView.collectAsStateWithLifecycle(initialValue = true)
     val homeWatch = remember(watchProgress, watchedVideos) {
         SeriesWatch(
             point = { watchProgress[SettingsStore.progressKey(it.chatId, it.messageId)] },
@@ -1062,7 +1061,7 @@ private fun Root() {
                     folders = folders,
                     onToggleLayout = { scope.launch { settings.setChatLayout(chatLayout.toggled()) } },
                     layout = chatLayout,
-                    homeRows = rememberHomeRows(homeViewModel, chats, favorites, continueWatching, seriesView),
+                    homeRows = rememberHomeRows(homeViewModel, chats, favorites, continueWatching),
                     homeArt = homeViewModel.art.collectAsStateWithLifecycle().value,
                     homeWatch = homeWatch,
                     onHomeRowShown = { row ->

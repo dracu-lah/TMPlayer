@@ -99,10 +99,6 @@ import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.ContentProtection
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
-import com.tmplayer.data.Series
-import com.tmplayer.data.SeriesShelf
-import com.tmplayer.data.ShelfEntry
-import com.tmplayer.ui.browse.SeriesViewToggle
 import com.tmplayer.data.OfflineDownloads
 import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.SettingsStore
@@ -185,19 +181,7 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
         if (query.isBlank()) {
             RecentSearchRow(recent, onPick = { query = it }, onClear = { scope.launch { state.settings.clearRecentSearches() } })
         }
-        val seriesView by state.settings.seriesView.collectAsState(initial = true)
-        var openSeries by remember(chat.id) { mutableStateOf<String?>(null) }
         StateBox(ui, onRetry = { model.load() }, onAction = model::act) { content ->
-            // Folded only while browsing: a search ranks files against what was typed.
-            val arranged = remember(content.items) { SeriesShelf.arrange(content.items) }
-            val hasShows = query.isBlank() && arranged.any { it is ShelfEntry.Show }
-            val opened = openSeries?.let { key ->
-                arranged.firstNotNullOfOrNull { (it as? ShelfEntry.Show)?.series?.takeIf { s -> s.key == key } }
-            }
-            if (opened != null) {
-                SeriesPage(state, opened, rememberSeriesWatch(state), onClose = { openSeries = null })
-                return@StateBox
-            }
             val grid = rememberLazyGridState()
             LoadMoreNearEnd(grid, enabled = !content.endReached && !content.loadingMore) { model.loadMore() }
             val ad = content.sponsored?.messages?.firstOrNull()
@@ -209,9 +193,6 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 onNav = { gridNav = it },
                 header = ad?.let { { SponsoredCard(it, model) } },
                 loadingMore = content.loadingMore,
-                // Every file on its own, episodes included; no switch, no hidden count.
-                shelf = null,
-                onOpenSeries = { openSeries = it.key },
             )
         }
     }
@@ -237,28 +218,16 @@ internal fun VideoGrid(
     hiddenSelfDestructing: Int = 0,
     /** Lifts the size limits for this listing; offered beside the count. */
     onShowHidden: () -> Unit = {},
-    /**
-     * The listing with each show folded into one poster, or null for every file on its own. The
-     * keyboard and the selection count posters, so they walk these entries rather than [items].
-     */
-    shelf: List<ShelfEntry>? = null,
-    /** A show's poster was opened. */
-    onOpenSeries: (Series) -> Unit = {},
-    /** The "Series" and "All files" switch, over the posters, when the chat has a show in it. */
-    viewSwitch: (@Composable () -> Unit)? = null,
 ) {
-    val entries = shelf ?: remember(items) { items.map { ShelfEntry.File(it) } }
-    val cells by rememberUpdatedState(entries)
-    val watch = rememberSeriesWatch(state)
+    // Every file on its own, episodes included: a chat lists what was posted, one by one.
+    val cells by rememberUpdatedState(items)
     val note = WatchedWords.hiddenNote(hiddenBySize, hiddenSelfDestructing)
-    val headerItems by rememberUpdatedState(
-        (if (header != null) 1 else 0) + (if (note != null) 1 else 0) + (if (viewSwitch != null) 1 else 0),
-    )
+    val headerItems by rememberUpdatedState((if (header != null) 1 else 0) + (if (note != null) 1 else 0))
     val nav = rememberKeyboardNav(remember(grid) { GridSurface(grid, { headerItems }, { cells.size }) })
     LaunchedEffect(nav) { onNav(nav) }
     val history by state.settings.downloadHistory.collectAsState(initial = emptyList())
     val index = remember(history) { history.associateBy { "${it.chatId}:${it.messageId}" } }
-    val selection = remember(grid) { GridSelection { (cells.getOrNull(it) as? ShelfEntry.File)?.item?.id } }
+    val selection = remember(grid) { GridSelection { cells.getOrNull(it)?.id } }
     BackHandler(enabled = selection.active) { selection.clear() }
     Box(Modifier.fillMaxSize()) {
       CompositionLocalProvider(LocalGridSelection provides selection, LocalDownloadIndex provides index) {
@@ -273,9 +242,6 @@ internal fun VideoGrid(
             if (header != null) {
                 item(key = "sponsored", span = { GridItemSpan(maxLineSpan) }) { header() }
             }
-            if (viewSwitch != null) {
-                item(key = "series-toggle", span = { GridItemSpan(maxLineSpan) }) { viewSwitch() }
-            }
             if (note != null) {
                 item(key = "hidden-by-size", span = { GridItemSpan(maxLineSpan) }) {
                     SizeLimitNote(
@@ -285,11 +251,8 @@ internal fun VideoGrid(
                     )
                 }
             }
-            itemsIndexed(entries, key = { _, it -> it.key }) { index, entry ->
-                when (entry) {
-                    is ShelfEntry.File -> MediaTile(state, entry.item, chatTitle, nav, index)
-                    is ShelfEntry.Show -> SeriesPoster(entry.series, watch, onOpen = { onOpenSeries(entry.series) }, nav = nav, index = index)
-                }
+            itemsIndexed(items, key = { _, it -> "media-${it.id}" }) { index, item ->
+                MediaTile(state, item, chatTitle, nav, index)
             }
             if (loadingMore) {
                 item(key = "more", span = { GridItemSpan(maxLineSpan) }) {

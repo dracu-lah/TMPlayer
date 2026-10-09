@@ -370,16 +370,12 @@ fun MediaGridScreen(
     val scope = rememberCoroutineScope()
     val settings = remember(context) { SettingsStore(context) }
     val detailFirst by settings.detailFirst.collectAsState(initial = true)
-    // "Series" folds a show's episodes into one tile; "All files" lists every video as before.
-    val seriesView by settings.seriesView.collectAsStateWithLifecycle(initialValue = true)
     val watch = remember(watchProgress, watchedVideos) {
         SeriesWatch(
             point = { watchProgress[SettingsStore.progressKey(it.chatId, it.messageId)] },
             finished = { SettingsStore.progressKey(it.chatId, it.messageId) in watchedVideos },
         )
     }
-    // The show opened from its tile, by key, so it keeps up as more of its episodes page in.
-    var openSeries by remember(chatId) { mutableStateOf<String?>(null) }
 
     fun leaveSelection() {
         selecting = false
@@ -435,15 +431,8 @@ fun MediaGridScreen(
             } else {
                 COLUMNS
             }
-            // Folded only while browsing: a search ranks files against what was typed, and picking
-            // videos to download picks files, so both see every file on its own.
-            val arranged = remember(list.items) { SeriesShelf.arrange(list.items) }
-            val hasShows = arranged.any { it is ShelfEntry.Show }
             // Every file on its own, episodes included: a chat lists what was posted, one by one.
-            val grouping = false
-            val shelf = remember(arranged, list.items, grouping) {
-                if (grouping) arranged else list.items.map { ShelfEntry.File(it) }
-            }
+            val shelf = remember(list.items) { list.items.map { ShelfEntry.File(it) } }
             val feed = remember(shelf, list.sponsored) {
                 placeSponsored(shelf, list.sponsored)
             }
@@ -453,10 +442,8 @@ fun MediaGridScreen(
             val firstItem = remember { FocusRequester() }
             val firstKey = shelf.firstOrNull()?.key
             // The first row of a television's listing, by key. Focus landing there asks to be
-            // brought into view with the focus clearance above it, which scrolls the Series switch
-            // and the hidden videos note above the row a little way off the top and leaves the
-            // switch cut in half. Back to the very top instead, once that scroll has settled, so
-            // both stay whole above the row the remote is on.
+            // brought into view with the focus clearance above it, which scrolls the listing a
+            // little way off the top. Back to the very top instead, once that scroll has settled.
             val firstRowKeys = remember(feed, columns, layout) {
                 if (touch) {
                     emptySet()
@@ -539,16 +526,8 @@ fun MediaGridScreen(
                             },
                         ) { entry ->
                             when (entry) {
-                                is MediaFeedEntry.Media -> when (val shelved = entry.item) {
-                                    is ShelfEntry.Show -> SeriesCard(
-                                        series = shelved.series,
-                                        progress = watch.progress(shelved.series),
-                                        onClick = { openSeries = shelved.series.key },
-                                        onFocused = { standingOn = null },
-                                        modifier = focusOf(shelved),
-                                        dense = dense,
-                                    )
-                                    is ShelfEntry.File -> {
+                                is MediaFeedEntry.Media -> {
+                                    val shelved = entry.item
                                     val item = shelved.item
                                     MediaCard(
                                         item = item,
@@ -565,7 +544,6 @@ fun MediaGridScreen(
                                         onFocused = { standingOn = item },
                                         modifier = focusOf(shelved),
                                     )
-                                    }
                                 }
                                 is MediaFeedEntry.Sponsored -> SponsoredCard(
                                     item = entry.item,
@@ -596,15 +574,8 @@ fun MediaGridScreen(
                             },
                         ) { entry ->
                             when (entry) {
-                                is MediaFeedEntry.Media -> when (val shelved = entry.item) {
-                                    is ShelfEntry.Show -> SeriesListRow(
-                                        series = shelved.series,
-                                        progress = watch.progress(shelved.series),
-                                        onClick = { openSeries = shelved.series.key },
-                                        onFocused = { standingOn = null },
-                                        modifier = focusOf(shelved),
-                                    )
-                                    is ShelfEntry.File -> {
+                                is MediaFeedEntry.Media -> {
+                                    val shelved = entry.item
                                     val item = shelved.item
                                     MediaRow(
                                         item = item,
@@ -620,7 +591,6 @@ fun MediaGridScreen(
                                         onFocused = { standingOn = item },
                                         modifier = focusOf(shelved),
                                     )
-                                    }
                                 }
                                 is MediaFeedEntry.Sponsored -> SponsoredCard(
                                     item = entry.item,
@@ -633,23 +603,6 @@ fun MediaGridScreen(
                                 )
                             }
                         }
-                    }
-                }
-
-                // Before the video menu, so a held episode's menu draws over the show.
-                openSeries?.let { key ->
-                    val series = arranged.firstNotNullOfOrNull { (it as? ShelfEntry.Show)?.series?.takeIf { s -> s.key == key } }
-                    if (series == null) {
-                        LaunchedEffect(key) { openSeries = null }
-                    } else {
-                        SeriesOpened(
-                            series = series,
-                            watch = watch,
-                            // An episode opens its page too, unless Settings says play at once.
-                            onPlay = { if (detailFirst) showingDetailsOf = it else onPlay(it) },
-                            onDismiss = { openSeries = null },
-                            onLongClick = { heldMenuOf = it },
-                        )
                     }
                 }
 

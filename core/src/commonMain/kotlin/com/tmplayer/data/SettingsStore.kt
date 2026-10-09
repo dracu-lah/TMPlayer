@@ -50,7 +50,6 @@ private val HIDE_DEFAULT_GROUPS = booleanPreferencesKey("hide_default_groups")
 private val FIRST_SIGN_IN_CARD = stringPreferencesKey("first_sign_in_card")
 private val HISTORY_TAB = stringPreferencesKey("history_tab")
 private val MEDIA_LAYOUT = stringPreferencesKey("media_layout")
-private val SERIES_VIEW = booleanPreferencesKey("series_view")
 private val CHAT_SNAPSHOT = stringPreferencesKey("chat_snapshot")
 private val ACCOUNT_SNAPSHOT = stringPreferencesKey("account_snapshot")
 private val THEME_CHOICE = stringPreferencesKey("theme_choice")
@@ -64,8 +63,6 @@ private val LAST_SEEN_VERSION = stringPreferencesKey("last_seen_version")
 private val DYNAMIC_COLOUR = booleanPreferencesKey("dynamic_colour")
 private val VIDEO_SCALE = stringPreferencesKey("video_scale")
 
-/** Which of the sidebar's folding groups the viewer left open. Absent until the first fold. */
-
 /** The last few searches inside a chat, one per line, newest first. See [RecentSearches]. */
 private val RECENT_SEARCHES = stringPreferencesKey("recent_searches")
 
@@ -77,10 +74,11 @@ private val UPDATE_SNOOZED_UNTIL = longPreferencesKey("update_snoozed_until")
 private val UPDATE_POPUP_SHOWN = stringPreferencesKey("update_popup_shown")
 
 // The support card's memory. See [SupportReminder]. About this device's viewer rather than the
-// Telegram account, so signing out keeps them: "Don't ask again" must not come undone.
+// Telegram account, so signing out keeps them: "I already support" must not come undone.
 private val SUPPORT_FIRST_SEEN = longPreferencesKey("support_first_seen")
-private val SUPPORT_PLAYS = longPreferencesKey("support_plays")
 private val SUPPORT_SNOOZED_UNTIL = longPreferencesKey("support_snoozed_until")
+// Written by the old "Don't ask again", which is gone. Still read, so an install that asked for
+// no more cards keeps getting none.
 private val SUPPORT_NEVER = booleanPreferencesKey("support_never")
 private val SUPPORT_WATCHES = longPreferencesKey("support_watches")
 private val SUPPORT_WATCH_MS = longPreferencesKey("support_watch_ms")
@@ -88,7 +86,7 @@ private val SUPPORT_ASKED = longPreferencesKey("support_asked")
 private val SUPPORT_SUPPORTER = booleanPreferencesKey("support_supporter")
 private val SUPPORT_RECENT = stringPreferencesKey("support_recent")
 private val SUPPORT_KEYS = listOf(
-    SUPPORT_FIRST_SEEN, SUPPORT_PLAYS, SUPPORT_SNOOZED_UNTIL, SUPPORT_WATCHES, SUPPORT_WATCH_MS, SUPPORT_ASKED,
+    SUPPORT_FIRST_SEEN, SUPPORT_SNOOZED_UNTIL, SUPPORT_WATCHES, SUPPORT_WATCH_MS, SUPPORT_ASKED,
 )
 
 /**
@@ -544,14 +542,6 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
         prefs.edit { if ((it[SUPPORT_FIRST_SEEN] ?: 0L) <= 0L) it[SUPPORT_FIRST_SEEN] = now }
     }
 
-    /** One more video started. Only informational now: the ladder counts finished videos. */
-    suspend fun noteSupportPlay(now: Long) {
-        prefs.edit {
-            if ((it[SUPPORT_FIRST_SEEN] ?: 0L) <= 0L) it[SUPPORT_FIRST_SEEN] = now
-            it[SUPPORT_PLAYS] = (it[SUPPORT_PLAYS] ?: 0L) + 1
-        }
-    }
-
     /**
      * A video watched to the end ([SupportReminder.Finished]). Counts once per hour for the same
      * video, however often it is opened again.
@@ -585,11 +575,6 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
     /** "I already support", or the last ask's "Done": no more cards, and About says thank you. */
     suspend fun markSupporter() {
         prefs.edit { it[SUPPORT_SUPPORTER] = true }
-    }
-
-    /** The old "Don't ask again". The Settings row and About keep the links. */
-    suspend fun neverAskSupport() {
-        prefs.edit { it[SUPPORT_NEVER] = true }
     }
 
     // ---- updates ----------------------------------------------------------------------------
@@ -647,10 +632,6 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
      * Somebody who watches everything at 1.25x should say so once rather than every episode, and
      * on a television there is no gear menu to say it in twice.
      */
-    val playbackSpeed: Flow<Float> = read {
-        PlaybackSpeed.sanitise(it[PLAYBACK_SPEED] ?: PlaybackSpeed.DEFAULT)
-    }
-
     suspend fun setPlaybackSpeed(value: Float) {
         prefs.edit { it[PLAYBACK_SPEED] = PlaybackSpeed.sanitise(value) }
     }
@@ -966,8 +947,6 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
      */
     val hideDefaultGroups: Flow<Boolean> = read { it[HIDE_DEFAULT_GROUPS] ?: false }
 
-    suspend fun hideDefaultGroupsNow(): Boolean = prefs.data.first()[HIDE_DEFAULT_GROUPS] ?: false
-
     /**
      * Turns the option on or off. Turning it on also unstars [unstar] in the same write, the
      * favourites hiding the groups would leave out of reach (`DefaultGroups.unreachableFavorites`
@@ -1019,16 +998,6 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
 
     suspend fun setMediaLayout(value: CardLayout) {
         prefs.edit { it[MEDIA_LAYOUT] = value.name }
-    }
-
-    /**
-     * Whether a chat folds its episodes into one tile per show ("Series") or lists every file
-     * ("All files"). On by default: a chat of forty episodes reads better as the three shows it is.
-     */
-    val seriesView: Flow<Boolean> = read { it[SERIES_VIEW] ?: true }
-
-    suspend fun setSeriesView(value: Boolean) {
-        prefs.edit { it[SERIES_VIEW] = value }
     }
 
     // ---- appearance -------------------------------------------------------------------------

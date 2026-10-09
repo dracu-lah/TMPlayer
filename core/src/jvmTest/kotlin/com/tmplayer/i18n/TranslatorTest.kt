@@ -166,9 +166,9 @@ class TranslatorTest {
         assertEquals("Retry", L.commonRetry)
         assertEquals("1 video", L.browseVideosCount(1))
         assertEquals("12 videos", L.browseVideosCount(12))
-        assertEquals("No videos hidden", L.browseVideosHidden(0))
-        assertEquals("Subtitle track", L.playerTrackKind("subtitle"))
-        assertEquals("Now in Deutsch. You can change it in Settings.", L.settingsLanguageSwitched("Deutsch"))
+        assertEquals("Take the watched tick off every video", L.settingsClearWatchedSummary(0))
+        assertEquals("What stays on this TV and which services TMPlayer contacts", L.settingsPrivacyDetail("tv"))
+        assertEquals("Sort order: Newest", L.browseSortBy("Newest"))
     }
 
     @Test

@@ -92,7 +92,6 @@ object HomeRows {
      * @param loaded each starred chat's newest videos, by chat id; a chat missing here is still loading.
      * @param recent the newest videos across every chat, or null while that search is running. Only
      *   the starred chats' are kept, together with what [loaded] already has of them.
-     * @param seriesView fold a row's episodes of one show into a single tile, as the chat grid does.
      * @param partial the starred chats whose fetch stopped short of their oldest video.
      */
     fun build(
@@ -100,7 +99,6 @@ object HomeRows {
         favourites: List<ChatSummary>,
         loaded: Map<Long, List<MediaItem>>,
         recent: List<MediaItem>?,
-        seriesView: Boolean = true,
         partial: Set<Long> = emptySet(),
     ): List<HomeRow> = buildList {
         val seen = HashSet<String>()
@@ -118,7 +116,7 @@ object HomeRows {
                 add(HomeRow.Chat(chat.id, chat.title, emptyList(), loaded = false))
                 return@forEach
             }
-            val entries = row(items, seen, seriesView)
+            val entries = row(items, seen)
             if (entries.isNotEmpty()) {
                 val all = items.distinctBy { it.id }
                 add(
@@ -143,7 +141,7 @@ object HomeRows {
             // The search across chats reaches a starred chat further back than its own row's
             // fetch, and a starred chat's fetch fills in whatever the search did not reach.
             val pool = recent.filter { it.chatId in starredIds } + starredIds.flatMap { loaded[it].orEmpty() }
-            val entries = row(pool, inContinue, seriesView)
+            val entries = row(pool, inContinue)
             if (entries.isNotEmpty()) add(HomeRow.Recent(entries, loaded = true))
         }
     }
@@ -153,13 +151,12 @@ object HomeRows {
      * [LIMIT]. Whatever ends up in the row is added to [seen], every episode of a folded show
      * included (every copy of each), so a later row cannot show one of them again on its own.
      */
-    private fun row(items: List<MediaItem>, seen: MutableSet<String>, seriesView: Boolean): List<ShelfEntry> {
+    private fun row(items: List<MediaItem>, seen: MutableSet<String>): List<ShelfEntry> {
         val fresh = items
             .filterNot { keyOf(it.chatId, it.messageId) in seen }
             .distinctBy { it.id }
             .sortedWith(compareByDescending<MediaItem> { it.date }.thenByDescending { it.messageId })
-        val entries = (if (seriesView) SeriesShelf.arrange(fresh) else fresh.map { ShelfEntry.File(it) })
-            .take(LIMIT)
+        val entries = SeriesShelf.arrange(fresh).take(LIMIT)
         entries.forEach { entry ->
             when (entry) {
                 is ShelfEntry.File -> seen += keyOf(entry.item.chatId, entry.item.messageId)

@@ -651,12 +651,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         startResumeHeartbeat()
         findEpisodes()
 
-        // One more video started, for the support card's "after real use" (SupportReminder).
-        // Not again when the activity is only being recreated, which is the same video.
-        if (savedInstanceState == null) {
-            lifecycleScope.launch { runCatching { settings.noteSupportPlay(System.currentTimeMillis()) } }
-        }
-
         // Reading the saved position is a disk hit; do it off the main thread and seek once it
         // lands. Under "download the whole video first" there is no player to seek yet, so
         // [startPlayback] applies the same position as well; whichever arrives second sets it again.

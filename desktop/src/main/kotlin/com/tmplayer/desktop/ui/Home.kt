@@ -71,11 +71,10 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
     val list = (chatState as? UiState.Content)?.value?.chats.orEmpty()
     val favourites by state.settings.favorites.collectAsState(initial = emptySet())
     val history by state.settings.continueWatching.collectAsState(initial = emptyList())
-    val seriesView by state.settings.seriesView.collectAsState(initial = true)
     val art by model.art.collectAsState()
     HomeRowsView(
         state = state,
-        rows = rememberHomeRows(model, list, favourites, history, seriesView),
+        rows = rememberHomeRows(model, list, favourites, history),
         chats = list,
         art = art,
         onRowShown = { row ->

@@ -137,11 +137,9 @@ class SupportReminderTest {
         repeat(6) { settings.noteSupportCompleted("1_$it", start + it * 2 * hour) }
         assertEquals(1, SupportReminder.claim(settings, start + 8 * day))
         settings.markSupporter()
-        settings.neverAskSupport()
         settings.clearEverything()
         val kept = settings.supportCountersNow()
         assertTrue(kept.supporter)
-        assertTrue(kept.neverAgain)
         assertEquals(start, kept.firstSeenAt)
         assertEquals(6, kept.completedWatches)
         assertEquals(1, kept.asked)

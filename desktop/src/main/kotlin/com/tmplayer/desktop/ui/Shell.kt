@@ -102,8 +102,7 @@ import com.tmplayer.ui.onboarding.OnboardingTour
 /**
  * What the player draws for a [PlayRequest], given a way to close itself.
  *
- * The player lives in `com.tmplayer.desktop.player` and is passed in from `Main.kt`; until then
- * the shell draws [PlayerPlaceholder].
+ * The player lives in `com.tmplayer.desktop.player` and is passed in from `Main.kt`.
  */
 typealias PlayerContent = @Composable (request: PlayRequest, onClose: () -> Unit) -> Unit
 
@@ -116,7 +115,7 @@ typealias PlayerContent = @Composable (request: PlayRequest, onClose: () -> Unit
 @Composable
 fun DesktopShell(
     state: ShellState,
-    player: PlayerContent = { request, onClose -> PlayerPlaceholder(request, onClose) },
+    player: PlayerContent,
 ) {
     val toasts = remember { SnackbarHostState() }
     CompositionLocalProvider(

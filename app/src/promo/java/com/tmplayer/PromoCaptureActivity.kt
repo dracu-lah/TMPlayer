@@ -52,7 +52,6 @@ import com.tmplayer.data.ShelfEntry
 import com.tmplayer.data.WatchPoint
 import com.tmplayer.ui.browse.SeriesCard
 import com.tmplayer.ui.browse.SeriesOpened
-import com.tmplayer.ui.browse.SeriesViewToggle
 import com.tmplayer.ui.browse.SeriesWatch
 import com.tmplayer.ui.browse.BrowseData
 import com.tmplayer.ui.browse.BrowseScreen
@@ -621,9 +620,6 @@ private fun PhoneMediaScreen(variant: String, onBack: () -> Unit = {}) {
                 }
             }
             if (series != null) {
-                item(key = "series-toggle", span = { GridItemSpan(maxLineSpan) }) {
-                    SeriesViewToggle(series.on, series.onChange, Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp))
-                }
                 items(series.entries, key = { it.key }) { entry ->
                     when (entry) {
                         is ShelfEntry.Show -> SeriesCard(
@@ -744,9 +740,6 @@ private fun TvMediaScreen(variant: String) {
                 item(key = "hidden", span = { GridItemSpan(maxLineSpan) }) { HiddenVideosNote(12, 0) {} }
             }
             if (series != null) {
-                item(key = "series-toggle", span = { GridItemSpan(maxLineSpan) }) {
-                    SeriesViewToggle(series.on, series.onChange)
-                }
                 items(series.entries, key = { it.key }) { entry ->
                     val focus = if (entry === series.entries.first()) Modifier.focusRequester(first) else Modifier
                     when (entry) {
@@ -817,11 +810,9 @@ private fun promoMedia(): List<MediaItem> {
 /**
  * The series variants: `--es variant series` folds the demo shows into tiles, `series-open` opens
  * the first show (a bottom sheet on the phone, a page on the TV), and `files` is the same chat
- * with "All files" chosen. The toggle works in all three, so one run can walk between them.
+ * with every file on its own.
  */
 private class PromoSeries(
-    val on: Boolean,
-    val onChange: (Boolean) -> Unit,
     val entries: List<ShelfEntry>,
     val open: (String) -> Unit,
     private val opened: Series?,
@@ -838,13 +829,10 @@ private class PromoSeries(
 private fun promoSeries(variant: String): PromoSeries? {
     if (variant != "series" && variant != "series-open" && variant != "files") return null
     val media = promoSeriesMedia() + promoMedia()
-    var on by remember { mutableStateOf(variant != "files") }
     val arranged = remember(media) { SeriesShelf.arrange(media) }
     var openKey by remember { mutableStateOf(if (variant == "series-open") "harbour notes" else null) }
     return PromoSeries(
-        on = on,
-        onChange = { on = it },
-        entries = if (on) arranged else media.map { ShelfEntry.File(it) },
+        entries = if (variant != "files") arranged else media.map { ShelfEntry.File(it) },
         open = { openKey = it },
         opened = arranged.firstNotNullOfOrNull { (it as? ShelfEntry.Show)?.series?.takeIf { s -> s.key == openKey } },
         close = { openKey = null },

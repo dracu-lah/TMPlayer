@@ -109,10 +109,10 @@ class HomeRowsTest {
     }
 
     @Test
-    fun `series view off keeps every file a tile of its own`() {
+    fun `a show's episodes always fold into one tile`() {
         val episodes = (1..3).map { video(1, "Harbour.Notes.S01E%02d.mkv".format(it)) }
-        val rows = HomeRows.build(emptyList(), listOf(chat(1)), mapOf(1L to episodes), recent = emptyList(), seriesView = false)
-        assertTrue((rows.single() as HomeRow.Chat).entries.all { it is ShelfEntry.File })
+        val rows = HomeRows.build(emptyList(), listOf(chat(1)), mapOf(1L to episodes), recent = emptyList())
+        assertTrue((rows.single() as HomeRow.Chat).entries.single() is ShelfEntry.Show)
     }
 
     @Test

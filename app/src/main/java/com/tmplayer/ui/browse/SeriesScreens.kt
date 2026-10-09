@@ -9,8 +9,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -126,56 +124,6 @@ internal fun SeriesCard(
             Spacer(Modifier.height(6.dp))
             Text(
                 summary,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (progress.watched > 0) Tone.accent else Tone.muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-/** The same show as a full-width row, for the list arrangement. */
-@Composable
-internal fun SeriesListRow(
-    series: Series,
-    progress: SeriesProgress,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    onFocused: () -> Unit = {},
-) {
-    val interactions = remember { MutableInteractionSource() }
-    val focused by interactions.collectIsFocusedAsState()
-    LaunchedEffect(focused) { if (focused) onFocused() }
-    val touch = isTouch()
-    Row(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Corner.Medium))
-            .background(if (focused) Tone.surfaceHigh else Tone.surface)
-            .border(1.dp, Tone.outline, RoundedCornerShape(Corner.Medium))
-            .border(3.dp, if (focused) Tone.accent else Color.Transparent, RoundedCornerShape(Corner.Medium))
-            .pressable(interactions, onClick)
-            .padding(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        SeriesArt(
-            series,
-            progress,
-            if (touch) Modifier.weight(0.4f) else Modifier.width(176.dp),
-            compact = touch,
-        )
-        Column(Modifier.weight(if (touch) 0.6f else 1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                series.title,
-                style = MaterialTheme.typography.titleLarge,
-                color = Tone.text,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                listOfNotNull(seriesSummary(series), seriesProgressLine(progress)).joinToString("  ·  "),
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (progress.watched > 0) Tone.accent else Tone.muted,
                 maxLines = 1,
