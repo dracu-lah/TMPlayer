@@ -84,7 +84,7 @@ Tick `[x]` and add the commit or date. `U` items are yours, `CP` items are Claud
 - [x] CP21 P3 extract phone and TV text (7d0b42a, 783 new keys over :app and :ui, formatter switch, notifications, track picker and accessibility labels; English compared with the phone and TV emulator fixtures, en-XA shows only :core text, brand names and demo data; 1 leftover by the literal scan, the "TMPlayer" brand)
 - [x] CP22 P4 extract desktop and core text (d05ff55, 611 new keys over :desktop and :core, including the :core labels phone and TV showed in English; English compared and en-XA checked on browse, Settings, the player menu, the "?" sheet, the update popup and the sign out dialog in the desktop render test; `--self-test` reads every catalog; 0 leftovers by `scripts/i18n-leftovers.py`, protocol strings, brand names and TDLib error text are allowlisted with reasons; no tray exists on the desktop, so none was extracted)
 - [x] CP23 P5 language setting, what's new, feedback, localized metadata (94d8d4c, language resolution, the "Now in" card rule, lastSeenVersion and the issue and mailto URLs unit tested against a test-only `de` catalog; Settings row, picker, a live switch to en-XA and to Arabic, the card, What's new, Report a problem with its QR decoded, and right to left including the player overlay checked on the phone and TV emulator fixtures and the desktop render test; desktop scripts render from system fonts, so the package grew 0 bytes and no font notice was needed; `WhatsNew.VERSION` and the `whatsnew.highlight_*` keys move with each release; the PWA manifest goes to CP26 with the site; the star prompt was left out; the real first run of a new version and Android's own language page not yet seen on a device)
-- [ ] CP24 P6 translations (go-ahead given 2026-10-06, 16 languages). All 16 translated by Claude directly, then Persian (fa), Traditional Chinese (zh-TW), Polish (pl) and Bengali (bn) added the same day, 21 languages in all (app catalog 1696 strings, site 940) on 2026-10-06 after the three-language cut; machine quality, no native review yet. Still open: review pass (Telegram and Fire OS menu names, Spanish "tú"), review request on issue #2, desktop fonts for CJK, Devanagari and Malayalam, TV overflow check for de and ru
+- [ ] CP24 P6 translations (go-ahead given 2026-10-06, 16 languages). All 16 translated by Claude directly, then Persian (fa), Traditional Chinese (zh-TW), Polish (pl) and Bengali (bn) added the same day, 21 languages in all (app catalog 1696 strings, site 940) on 2026-10-06 after the three-language cut; machine quality, no native review yet. Still open: review pass (Telegram and Fire OS menu names, Spanish "tú"), review request on issue #2, desktop fonts for CJK, Devanagari and Malayalam, TV overflow check for de and ru. Desktop fonts: bundle subset Noto fonts (user, 2026-10-09). New strings from CP40 to CP43: Claude translates them directly into all 20 locales, no langsync (user, 2026-10-09)
 - [ ] CP25 P7 verification, then release "Languages" on request
 - [ ] CP26 P14b site localization and the remaining site pages
 - [ ] U22 Review hi and ml; ask the issue #2 author to review es
@@ -626,8 +626,12 @@ browse (`ui/src/shared/.../browse/`) so the modal matches the series view.
   navigable, Esc closes.
 - Once it exists, remove the TV More-menu previous and next lines and the TV row episode buttons (CP37 leaves
   them until then). Phone centre previous and next stay.
-- Open: which extra features to include (autoplay toggle, mark watched from the list, skip intro, next up
-  order). Ask the user for their list before building.
+- Extras (user, 2026-10-09: all four): an autoplay next toggle in the modal (the existing autoplay setting,
+  shown here too); mark watched or unwatched from a row (long press on phone, OK hold on TV, right click on
+  desktop); a next-up order choice, episode number or upload order in the chat, remembered per series; and Skip
+  intro. Telegram files carry no intro markers, so Skip intro is learned: a "Set intro end here" action in the
+  modal stores the position per series, and later episodes of that series show a "Skip intro" pill until that
+  point passes (Enter or OK on TV, tap on phone, click on desktop). Clearing it lives in the same place.
 **Done when:** emulator screenshots of the button and modal on phone and TV (current episode highlighted, a
 season switch, a watched tick), the desktop render test, a D-pad walk, and tests green.
 **STOP**
