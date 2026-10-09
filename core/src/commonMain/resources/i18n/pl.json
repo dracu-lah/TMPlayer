@@ -270,6 +270,20 @@
     "watched": "Obejrzane",
     "with_detail": "{label} ({detail})"
   },
+  "confirm": {
+    "forget_resume_message": "„{title}” zapomni, gdzie skończyłeś. Ponowne odtworzenie zacznie się od początku.",
+    "forget_resume_title": "Usunąć z Oglądaj dalej?",
+    "metadata_cache_message": "Spowoduje to usunięcie {size} plakatów i szczegółów zapisanych na tym urządzeniu. Zostaną wyszukane ponownie przy następnym wyświetleniu.",
+    "metadata_cache_title": "Wyczyścić plakaty i szczegóły?",
+    "online_cache_message": "Spowoduje to usunięcie {size} napisów i wyszukiwań zapisanych na tym urządzeniu. Napisy zostaną pobrane ponownie, a OpenSubtitles wlicza każde pobranie do dziennego limitu.",
+    "online_cache_title": "Wyczyścić napisy online?",
+    "remove_after_watching_detail": "Nic nie jest usuwane z Telegrama, więc możesz pobrać go ponownie. Wyłączysz to w Pobranych.",
+    "remove_after_watching_message": "Od teraz pobrany plik jest usuwany z tego urządzenia, gdy tylko zostanie oznaczony jako obejrzany, przez ciebie lub na końcu odtwarzania. Filmy już oznaczone zostają.",
+    "remove_after_watching_title": "Usuwać pobrane po obejrzeniu?",
+    "turn_on": "Włącz",
+    "unlisted_message": "„{name}” zostanie usunięty z folderu pobranych. TMPlayer nie ma go na swojej liście, więc może to być plik dodany przez ciebie.",
+    "unlisted_title": "Usunąć ten plik?"
+  },
   "connection": {
     "back_online": "Połączenie wróciło. Biblioteka zaktualizowana.",
     "offline": "Brak połączenia. Zapisane filmy nadal działają.",

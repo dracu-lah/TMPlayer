@@ -1,12 +1,8 @@
 package com.tmplayer.desktop.ui
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import com.tmplayer.ui.components.TmAlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -16,7 +12,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.unit.dp
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.StorageRelocationPlan
 import com.tmplayer.data.Td
@@ -24,7 +19,6 @@ import com.tmplayer.data.WatchedStore
 import com.tmplayer.desktop.DesktopPaths
 import com.tmplayer.desktop.DownloadIndex
 import com.tmplayer.ui.i18n.LocalStrings
-import com.tmplayer.ui.theme.Tone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -43,32 +37,27 @@ internal fun SignOutDialog(state: ShellState, onDismiss: () -> Unit) {
     LaunchedEffect(Unit) {
         size = withContext(Dispatchers.IO) { DownloadIndex.bytesOnDisk(runCatching { settings.downloadsNow() }.getOrDefault(emptyList())) }
     }
-    TmAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(s.signoutTitle) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    s.signoutBody(DesktopPaths.downloadsDir.path),
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = alsoDownloads, onCheckedChange = { alsoDownloads = it })
-                    Text(if (size > 0) s.commonWithDetail(s.signoutDeleteDownloads, StorageRelocationPlan.size(size)) else s.signoutDeleteDownloads)
-                }
+    // The shared prompt, so Cancel holds focus here as it does before every other deletion.
+    ConfirmDialog(
+        title = s.signoutTitle,
+        message = s.signoutBody(DesktopPaths.downloadsDir.path),
+        confirmLabel = s.signoutConfirm,
+        onDismiss = onDismiss,
+        onConfirm = {
+            onDismiss()
+            val deleteDownloads = alsoDownloads
+            scope.launch {
+                signOut(settings, deleteDownloads, state.watched)
+                state.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.All))
+                Td.logOut()
             }
         },
-        confirmButton = {
-            TextButton(onClick = {
-                onDismiss()
-                val deleteDownloads = alsoDownloads
-                scope.launch {
-                    signOut(settings, deleteDownloads, state.watched)
-                    state.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.All))
-                    Td.logOut()
-                }
-            }) { Text(s.signoutConfirm, color = Tone.danger) }
+        extra = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = alsoDownloads, onCheckedChange = { alsoDownloads = it })
+                Text(if (size > 0) s.commonWithDetail(s.signoutDeleteDownloads, StorageRelocationPlan.size(size)) else s.signoutDeleteDownloads)
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(s.commonCancel) } },
     )
 }
 

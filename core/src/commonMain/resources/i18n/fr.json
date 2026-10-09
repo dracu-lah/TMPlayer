@@ -270,6 +270,20 @@
     "watched": "Vue",
     "with_detail": "{label} ({detail})"
   },
+  "confirm": {
+    "forget_resume_message": "« {title} » oublie où vous vous êtes arrêté. La prochaine lecture repart du début.",
+    "forget_resume_title": "Retirer de Reprendre la lecture ?",
+    "metadata_cache_message": "Cela supprime {size} d'affiches et de détails gardés sur cet appareil. Ils seront recherchés de nouveau au prochain affichage.",
+    "metadata_cache_title": "Effacer les affiches et les détails ?",
+    "online_cache_message": "Cela supprime {size} de sous-titres et de recherches gardés sur cet appareil. Un sous-titre sera téléchargé de nouveau, et OpenSubtitles compte chaque téléchargement dans votre limite quotidienne.",
+    "online_cache_title": "Effacer les sous-titres en ligne ?",
+    "remove_after_watching_detail": "Rien n'est supprimé de Telegram, vous pourrez donc le télécharger de nouveau. Désactivez cette option dans Téléchargements.",
+    "remove_after_watching_message": "Désormais, un téléchargement est supprimé de cet appareil dès qu'il est marqué comme vu, par vous ou à la fin de la lecture. Les vidéos déjà marquées sont conservées.",
+    "remove_after_watching_title": "Supprimer les téléchargements après visionnage ?",
+    "turn_on": "Activer",
+    "unlisted_message": "« {name} » est supprimé du dossier des téléchargements. TMPlayer ne l'a pas dans sa liste, il s'agit peut-être d'un fichier que vous avez ajouté vous-même.",
+    "unlisted_title": "Supprimer ce fichier ?"
+  },
   "connection": {
     "back_online": "De nouveau en ligne. Bibliothèque mise à jour.",
     "offline": "Hors ligne. Les vidéos enregistrées fonctionnent toujours.",

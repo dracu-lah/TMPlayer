@@ -49,6 +49,8 @@ internal fun OnlineSubtitlesGroup() {
     val toast = rememberToast()
     var signingIn by remember { mutableStateOf(false) }
     var editingKey by remember { mutableStateOf(false) }
+    var clearingCache by remember { mutableStateOf(false) }
+    var signingOut by remember { mutableStateOf(false) }
     var bytes by remember { mutableLongStateOf(0L) }
     LaunchedEffect(Unit) { bytes = withContext(Dispatchers.IO) { online.cacheBytes() } }
 
@@ -64,7 +66,7 @@ internal fun OnlineSubtitlesGroup() {
             OnlineWords.quota(status),
             titleColor = if (status is OnlineStatus.QuotaUsed) Tone.caution else androidx.compose.ui.graphics.Color.Unspecified,
         ) {
-            OutlinedButton(onClick = { scope.launch { online.signOut() } }) { Text(s.onlineSignOut) }
+            OutlinedButton(onClick = { signingOut = true }) { Text(s.onlineSignOut) }
         }
     }
     Setting(s.onlineMachineToggle, if (account.includeMachine) s.onlineMachineOn else s.onlineMachineOff) {
@@ -81,15 +83,39 @@ internal fun OnlineSubtitlesGroup() {
         OutlinedButton(onClick = { editingKey = true }) { Text(s.commonChange) }
     }
     Setting(s.onlineClearCache, if (bytes > 0) s.onlineCacheDetail(Translator.messages.formatter.size(bytes)) else s.onlineCacheEmpty) {
-        OutlinedButton(enabled = bytes > 0, onClick = {
-            scope.launch {
-                withContext(Dispatchers.IO) { online.purge() }
-                bytes = 0
-                toast(s.onlineCacheCleared)
-            }
-        }) { Text(s.commonClear) }
+        OutlinedButton(enabled = bytes > 0, onClick = { clearingCache = true }) { Text(s.commonClear) }
+    }
+    if (clearingCache) {
+        ConfirmDialog(
+            title = s.confirmOnlineCacheTitle,
+            message = s.confirmOnlineCacheMessage(Translator.messages.formatter.size(bytes)),
+            confirmLabel = s.commonClear,
+            onDismiss = { clearingCache = false },
+            onConfirm = {
+                clearingCache = false
+                scope.launch {
+                    withContext(Dispatchers.IO) { online.purge() }
+                    bytes = 0
+                    toast(s.onlineCacheCleared)
+                }
+            },
+        )
     }
 
+    // The same question the phone and the television ask: signing back in needs the password.
+    if (signingOut) {
+        ConfirmDialog(
+            title = s.onlineSignOut,
+            message = OnlineWords.status(status),
+            confirmLabel = s.onlineSignOut,
+            destructive = false,
+            onDismiss = { signingOut = false },
+            onConfirm = {
+                signingOut = false
+                scope.launch { online.signOut() }
+            },
+        )
+    }
     if (signingIn) SignInDialog(onClose = { signingIn = false })
     if (editingKey) SubdlKeyDialog(onClose = { editingKey = false })
 }

@@ -124,6 +124,27 @@ class ThemeAuditRenderTest {
                     )
                 }
             }
+            // The real sign out prompt on the shared ConfirmDialog, its tick box in the extra slot.
+            shot("signout") {
+                Box(Modifier.fillMaxSize()) {
+                    SettingsPage(shell, "2.0.0")
+                    SignOutDialog(shell, onDismiss = {})
+                }
+            }
+            // One of the prompts the CP41 sweep added, with a detail line.
+            shot("confirm-remove-after-watching") {
+                Box(Modifier.fillMaxSize()) {
+                    SettingsPage(shell, "2.0.0")
+                    ConfirmDialog(
+                        title = com.tmplayer.i18n.L.confirmRemoveAfterWatchingTitle,
+                        message = com.tmplayer.i18n.L.confirmRemoveAfterWatchingMessage,
+                        detail = com.tmplayer.i18n.L.confirmRemoveAfterWatchingDetail,
+                        confirmLabel = com.tmplayer.i18n.L.confirmTurnOn,
+                        onConfirm = {},
+                        onDismiss = {},
+                    )
+                }
+            }
             shot("settings") { SettingsPage(shell, "2.0.0") }
             shot("support") {
                 Box(Modifier.fillMaxSize()) {

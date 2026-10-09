@@ -235,6 +235,9 @@ fun ConfirmDialog(
     onDismiss: () -> Unit,
     detail: String? = null,
     destructive: Boolean = true,
+    cancelLabel: String? = null,
+    /** Drawn under the message and detail, for a choice that belongs to the question, such as a tick box. */
+    extra: (@Composable () -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     val cancelFocus = remember { FocusRequester() }
@@ -245,6 +248,7 @@ fun ConfirmDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(message)
                 if (detail != null) Text(detail, color = Tone.muted, style = MaterialTheme.typography.bodySmall)
+                extra?.invoke()
             }
         },
         confirmButton = {
@@ -253,7 +257,7 @@ fun ConfirmDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.focusRequester(cancelFocus)) { Text(s.commonCancel) }
+            TextButton(onClick = onDismiss, modifier = Modifier.focusRequester(cancelFocus)) { Text(cancelLabel ?: s.commonCancel) }
         },
     )
     LaunchedEffect(Unit) { runCatching { cancelFocus.requestFocus() } }

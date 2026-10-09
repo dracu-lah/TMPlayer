@@ -533,6 +533,8 @@ private fun Root() {
     // One slot for whatever the current login pane got wrong: only one of them is ever on screen.
     var signInError by rememberSaveable { mutableStateOf<String?>(null) }
     var roomPrompt by remember { mutableStateOf<RoomPrompt?>(null) }
+    // The Continue watching entry waiting on "Remove from Continue watching?".
+    var forgetPrompt by remember { mutableStateOf<ResumeRecord?>(null) }
     // The machine the space message is about, since "this phone is 2 GB short" on a television
     // reads as the app talking about something else entirely.
     val device = remember { if (FormFactor.isTv(context)) "tv" else "phone" }
@@ -993,12 +995,9 @@ private fun Root() {
                             resumeMedia(record)
                         }
                     },
-                    onForgetMedia = { record ->
-                        scope.launch {
-                            settings.clearResumePosition(record.chatId, record.messageId)
-                            toast(L.mainForgotResume(title = record.title))
-                        }
-                    },
+                    // Asked first: the saved place is the whole of what this forgets, and there
+                    // is no getting it back short of finding the spot by hand.
+                    onForgetMedia = { record -> forgetPrompt = record },
                     onClearFavorites = {
                         scope.launch {
                             val count = favorites.size
@@ -1171,6 +1170,23 @@ private fun Root() {
                     screen = Screen.Downloads
                 },
                 onDismiss = { roomPrompt = null },
+            )
+        }
+
+        forgetPrompt?.let { record ->
+            TvConfirm(
+                title = L.confirmForgetResumeTitle,
+                message = L.confirmForgetResumeMessage(title = record.title),
+                detail = L.browseForgetResumeDetail,
+                confirmLabel = L.commonRemove,
+                onConfirm = {
+                    forgetPrompt = null
+                    scope.launch {
+                        settings.clearResumePosition(record.chatId, record.messageId)
+                        toast(L.mainForgotResume(title = record.title))
+                    }
+                },
+                onDismiss = { forgetPrompt = null },
             )
         }
 

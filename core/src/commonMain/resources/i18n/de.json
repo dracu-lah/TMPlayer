@@ -270,6 +270,20 @@
     "watched": "Gesehen",
     "with_detail": "{label} ({detail})"
   },
+  "confirm": {
+    "forget_resume_message": "„{title}“ vergisst, wo du aufgehört hast. Beim nächsten Abspielen geht es von vorn los.",
+    "forget_resume_title": "Aus „Weiter ansehen“ entfernen?",
+    "metadata_cache_message": "Damit werden {size} an Postern und Details auf diesem Gerät gelöscht. Sie werden beim nächsten Anzeigen neu abgerufen.",
+    "metadata_cache_title": "Poster und Details leeren?",
+    "online_cache_message": "Damit werden {size} an Untertiteln und Suchen auf diesem Gerät gelöscht. Ein Untertitel wird dann erneut heruntergeladen, und OpenSubtitles rechnet jeden Download auf dein Tageslimit an.",
+    "online_cache_title": "Online-Untertitel leeren?",
+    "remove_after_watching_detail": "Aus Telegram wird nichts entfernt, du kannst es erneut herunterladen. Ausschalten kannst du das unter Downloads.",
+    "remove_after_watching_message": "Ab jetzt wird ein Download von diesem Gerät gelöscht, sobald er als gesehen markiert ist, von dir oder am Ende der Wiedergabe. Bereits markierte Videos bleiben.",
+    "remove_after_watching_title": "Downloads nach dem Ansehen entfernen?",
+    "turn_on": "Einschalten",
+    "unlisted_message": "„{name}“ wird aus dem Download-Ordner gelöscht. TMPlayer hat sie nicht in seiner Liste, vielleicht hast du sie selbst dort abgelegt.",
+    "unlisted_title": "Diese Datei löschen?"
+  },
   "connection": {
     "back_online": "Wieder online. Bibliothek aktualisiert.",
     "offline": "Offline. Gespeicherte Videos funktionieren weiterhin.",

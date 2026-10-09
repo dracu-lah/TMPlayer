@@ -270,6 +270,20 @@
     "watched": "İzlendi",
     "with_detail": "{label} ({detail})"
   },
+  "confirm": {
+    "forget_resume_message": "\"{title}\" kaldığın yeri unutur. Yeniden oynatınca baştan başlar.",
+    "forget_resume_title": "Devam edenlerden kaldırılsın mı?",
+    "metadata_cache_message": "Bu, bu cihazda tutulan {size} afiş ve ayrıntıyı siler. Bir sonraki gösterimde yeniden aranırlar.",
+    "metadata_cache_title": "Afişler ve ayrıntılar temizlensin mi?",
+    "online_cache_message": "Bu, bu cihazda tutulan {size} altyazı ve aramayı siler. Bir altyazıyı yeniden almak onu yeniden indirir ve OpenSubtitles her indirmeyi günlük sınırından sayar.",
+    "online_cache_title": "Çevrimiçi altyazılar temizlensin mi?",
+    "remove_after_watching_detail": "Telegram'dan hiçbir şey silinmez, yeniden indirebilirsin. Bunu İndirilenler'den kapatabilirsin.",
+    "remove_after_watching_message": "Bundan sonra bir indirme, izlendi olarak işaretlendiği anda, senin tarafından ya da oynatmanın sonunda, bu cihazdan silinir. Zaten işaretli videolar kalır.",
+    "remove_after_watching_title": "İndirmeler izledikten sonra kaldırılsın mı?",
+    "turn_on": "Aç",
+    "unlisted_message": "\"{name}\" indirme klasöründen silinir. TMPlayer onu listesine eklemedi, bu yüzden senin eklediğin bir dosya olabilir.",
+    "unlisted_title": "Bu dosya silinsin mi?"
+  },
   "connection": {
     "back_online": "Yeniden çevrimiçi. Kitaplık güncellendi.",
     "offline": "Çevrimdışı. Kayıtlı videolar yine çalışır.",

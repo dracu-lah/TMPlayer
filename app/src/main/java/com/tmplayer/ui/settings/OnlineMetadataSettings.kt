@@ -83,18 +83,32 @@ private fun MetadataCacheRow() {
     val toast = rememberToast()
     var bytes by remember { mutableLongStateOf(0L) }
     LaunchedEffect(Unit) { bytes = withContext(Dispatchers.IO) { online.cacheBytes() } }
+    var asking by remember { mutableStateOf(false) }
+    val clear: () -> Unit = {
+        scope.launch {
+            withContext(Dispatchers.IO) { online.purge() }
+            bytes = 0
+            toast(s.metadataCacheCleared)
+        }
+    }
     ActionRow(
         title = s.metadataClearCache,
         subtitle = if (bytes > 0) s.metadataCacheDetail(Translator.messages.formatter.size(bytes)) else s.metadataCacheEmpty,
         icon = Icons.Filled.Delete,
-        onClick = {
-            scope.launch {
-                withContext(Dispatchers.IO) { online.purge() }
-                bytes = 0
-                toast(s.metadataCacheCleared)
-            }
-        },
+        onClick = { if (bytes > 0) asking = true else clear() },
     )
+    if (asking) {
+        TvConfirm(
+            title = s.confirmMetadataCacheTitle,
+            message = s.confirmMetadataCacheMessage(Translator.messages.formatter.size(bytes)),
+            confirmLabel = s.commonClear,
+            onConfirm = {
+                asking = false
+                clear()
+            },
+            onDismiss = { asking = false },
+        )
+    }
 }
 
 /** The viewer's own TMDB key, over Settings. Empty goes back to the build's. */

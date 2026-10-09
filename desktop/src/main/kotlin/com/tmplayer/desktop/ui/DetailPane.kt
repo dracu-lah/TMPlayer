@@ -24,9 +24,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -146,8 +148,14 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
     ).filterNot { it == DetailAction.Share }
 
     fun close() = state.closeDetail()
+    // "Remove from Downloads?" is asked over the pane, which stays open until it is answered.
+    var confirmingRemove by remember(item.id) { mutableStateOf(false) }
 
     fun run(action: DetailAction) {
+        if (action == DetailAction.RemoveDownload) {
+            confirmingRemove = record != null
+            return
+        }
         close()
         when (action) {
             DetailAction.Resume, DetailAction.Play -> state.openPlayer(item, startFromBeginning = false)
@@ -168,10 +176,7 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
                 toast(s.downloadsSavingTitle(item.title))
             }
             DetailAction.InDownloads -> state.go(Destination.Downloads)
-            DetailAction.RemoveDownload -> scope.launch {
-                val kept = record ?: return@launch
-                toast(if (DownloadIndex.delete(state.settings, kept)) s.downloadsRemoved(item.title) else s.downloadsInUse)
-            }
+            DetailAction.RemoveDownload -> Unit
             DetailAction.CancelDownload -> OfflineDownloads.cancel(state.downloads, item.fileId)
             DetailAction.SelectVideos -> request.selectThis?.invoke()
             DetailAction.Share -> Unit
@@ -236,4 +241,23 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
         }
     }
     LaunchedEffect(item.id) { runCatching { first.requestFocus() } }
+
+    if (confirmingRemove) {
+        ConfirmDialog(
+            title = s.gridRemoveDownloadTitle,
+            message = s.gridRemoveDownloadMessage(item.title),
+            confirmLabel = s.commonRemove,
+            onDismiss = { confirmingRemove = false },
+            onConfirm = {
+                confirmingRemove = false
+                val kept = record
+                scope.launch {
+                    if (kept != null) {
+                        toast(if (DownloadIndex.delete(state.settings, kept)) s.downloadsRemoved(item.title) else s.downloadsInUse)
+                    }
+                    close()
+                }
+            },
+        )
+    }
 }

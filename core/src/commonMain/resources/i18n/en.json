@@ -286,6 +286,20 @@
     "watched": "Watched",
     "with_detail": "{label} ({detail})"
   },
+  "confirm": {
+    "forget_resume_message": "\"{title}\" forgets where you stopped. Playing it again starts from the beginning.",
+    "forget_resume_title": "Remove from Continue watching?",
+    "metadata_cache_message": "This deletes {size} of posters and details kept on this device. They are looked up again the next time they are shown.",
+    "metadata_cache_title": "Clear posters and details?",
+    "online_cache_message": "This deletes {size} of subtitles and searches kept on this device. Getting a subtitle again downloads it again, and OpenSubtitles counts each download against your daily limit.",
+    "online_cache_title": "Clear online subtitles?",
+    "remove_after_watching_detail": "Nothing is removed from Telegram, so you can download it again. Turn this off in Downloads.",
+    "remove_after_watching_message": "From now on, a download is deleted from this device as soon as it is marked watched, by you or at the end of playback. Videos already marked watched are kept.",
+    "remove_after_watching_title": "Remove downloads after watching?",
+    "turn_on": "Turn on",
+    "unlisted_message": "\"{name}\" is deleted from the downloads folder. TMPlayer did not put it on its list, so it may be a file you added yourself.",
+    "unlisted_title": "Delete this file?"
+  },
   "connection": {
     "back_online": "Back online. Library updated.",
     "offline": "Offline. Saved videos still work.",

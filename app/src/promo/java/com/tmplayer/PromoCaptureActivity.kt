@@ -309,6 +309,24 @@ class PromoCaptureActivity : ComponentActivity() {
                         "language" -> LanguageDialog(SettingsStore(applicationContext), onClose = { overlay = null })
                         "whatsnew" -> WhatsNewDialog(onClose = { overlay = null }, onChangelog = { overlay = null })
                         "feedback" -> FeedbackDialog(onClose = { overlay = null })
+                        // The CP41 sweep's prompts that the fixture cannot reach on its own: a
+                        // Continue watching entry lives in MainActivity, and the online caches
+                        // here are empty, which skips the question.
+                        "forget" -> TvConfirm(
+                            title = L.confirmForgetResumeTitle,
+                            message = L.confirmForgetResumeMessage(title = "Big Buck Bunny"),
+                            detail = L.browseForgetResumeDetail,
+                            confirmLabel = L.commonRemove,
+                            onConfirm = { overlay = null },
+                            onDismiss = { overlay = null },
+                        )
+                        "online-cache" -> TvConfirm(
+                            title = L.confirmOnlineCacheTitle,
+                            message = L.confirmOnlineCacheMessage(size = "2.4 MB"),
+                            confirmLabel = L.commonClear,
+                            onConfirm = { overlay = null },
+                            onDismiss = { overlay = null },
+                        )
                     }
                     if (confirming) {
                         TvConfirm(

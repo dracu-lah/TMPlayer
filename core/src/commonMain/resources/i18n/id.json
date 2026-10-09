@@ -270,6 +270,20 @@
     "watched": "Ditonton",
     "with_detail": "{label} ({detail})"
   },
+  "confirm": {
+    "forget_resume_message": "\"{title}\" lupa di mana kamu berhenti. Memutarnya lagi akan mulai dari awal.",
+    "forget_resume_title": "Hapus dari Lanjutkan menonton?",
+    "metadata_cache_message": "Ini menghapus {size} poster dan detail yang disimpan di perangkat ini. Semuanya dicari lagi saat ditampilkan berikutnya.",
+    "metadata_cache_title": "Hapus poster dan detail?",
+    "online_cache_message": "Ini menghapus {size} subtitle dan pencarian yang disimpan di perangkat ini. Mengambil subtitle lagi berarti mengunduhnya lagi, dan OpenSubtitles menghitung setiap unduhan dalam batas harianmu.",
+    "online_cache_title": "Hapus subtitle online?",
+    "remove_after_watching_detail": "Tidak ada yang dihapus dari Telegram, jadi kamu bisa mengunduhnya lagi. Matikan ini di Unduhan.",
+    "remove_after_watching_message": "Mulai sekarang, unduhan dihapus dari perangkat ini begitu ditandai sudah ditonton, olehmu atau di akhir pemutaran. Video yang sudah ditandai tetap disimpan.",
+    "remove_after_watching_title": "Hapus unduhan setelah ditonton?",
+    "turn_on": "Nyalakan",
+    "unlisted_message": "\"{name}\" dihapus dari folder unduhan. TMPlayer tidak mencatatnya di daftarnya, jadi mungkin itu file yang kamu tambahkan sendiri.",
+    "unlisted_title": "Hapus file ini?"
+  },
   "connection": {
     "back_online": "Kembali online. Pustaka diperbarui.",
     "offline": "Offline. Video yang tersimpan tetap bisa diputar.",

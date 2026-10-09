@@ -105,6 +105,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -1221,7 +1222,15 @@ fun SettingsScreen(
                         },
                         icon = Icons.Filled.Info,
                         tint = if (offered != null) Tone.caution else Color.Unspecified,
-                        modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.About)),
+                        modifier = Modifier
+                            .focusRequester(categoryFocus.getValue(SettingsPage.About))
+                            // A held Down stops here. Sign out is the only row below, and a remote
+                            // whose key is held to reach the end of the list should land on a page
+                            // to open, not on the way out of the account: one fresh press reaches it.
+                            .onPreviewKeyEvent { event ->
+                                !touch && event.key == Key.DirectionDown && event.type == KeyEventType.KeyDown &&
+                                    event.nativeKeyEvent.repeatCount > 0
+                            },
                         onClick = { showPage(SettingsPage.About) },
                     )
                 }

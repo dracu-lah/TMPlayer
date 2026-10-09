@@ -48,6 +48,7 @@ internal fun OnlineMetadataGroup() {
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
     var editingKey by remember { mutableStateOf(false) }
+    var clearingCache by remember { mutableStateOf(false) }
     var bytes by remember { mutableLongStateOf(0L) }
     LaunchedEffect(Unit) { bytes = withContext(Dispatchers.IO) { online.cacheBytes() } }
 
@@ -66,13 +67,23 @@ internal fun OnlineMetadataGroup() {
         s.metadataClearCache,
         if (bytes > 0) s.metadataCacheDetail(Translator.messages.formatter.size(bytes)) else s.metadataCacheEmpty,
     ) {
-        OutlinedButton(enabled = bytes > 0, onClick = {
-            scope.launch {
-                withContext(Dispatchers.IO) { online.purge() }
-                bytes = 0
-                toast(s.metadataCacheCleared)
-            }
-        }) { Text(s.commonClear) }
+        OutlinedButton(enabled = bytes > 0, onClick = { clearingCache = true }) { Text(s.commonClear) }
+    }
+    if (clearingCache) {
+        ConfirmDialog(
+            title = s.confirmMetadataCacheTitle,
+            message = s.confirmMetadataCacheMessage(Translator.messages.formatter.size(bytes)),
+            confirmLabel = s.commonClear,
+            onDismiss = { clearingCache = false },
+            onConfirm = {
+                clearingCache = false
+                scope.launch {
+                    withContext(Dispatchers.IO) { online.purge() }
+                    bytes = 0
+                    toast(s.metadataCacheCleared)
+                }
+            },
+        )
     }
 
     if (editingKey) MetadataKeyDialog(onClose = { editingKey = false })

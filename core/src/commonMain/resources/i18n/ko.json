@@ -270,6 +270,20 @@
     "watched": "시청함",
     "with_detail": "{label} ({detail})"
   },
+  "confirm": {
+    "forget_resume_message": "\"{title}\"의 재생 위치를 잊어요. 다시 재생하면 처음부터 시작해요.",
+    "forget_resume_title": "이어보기에서 삭제할까요?",
+    "metadata_cache_message": "이 기기에 저장된 포스터와 상세 정보 {size}를 삭제해요. 다음에 표시할 때 다시 가져와요.",
+    "metadata_cache_title": "포스터와 상세 정보를 지울까요?",
+    "online_cache_message": "이 기기에 저장된 자막과 검색 결과 {size}를 삭제해요. 자막을 다시 받으면 새로 다운로드되고, OpenSubtitles는 다운로드마다 하루 한도에 포함해요.",
+    "online_cache_title": "온라인 자막을 지울까요?",
+    "remove_after_watching_detail": "Telegram에서는 아무것도 삭제되지 않으니 다시 다운로드할 수 있어요. 다운로드에서 끌 수 있어요.",
+    "remove_after_watching_message": "이제부터 다운로드가 시청함으로 표시되면, 직접 표시하든 재생이 끝나든, 바로 이 기기에서 삭제돼요. 이미 표시된 동영상은 남아 있어요.",
+    "remove_after_watching_title": "시청 후 다운로드를 삭제할까요?",
+    "turn_on": "켜기",
+    "unlisted_message": "\"{name}\"이(가) 다운로드 폴더에서 삭제돼요. TMPlayer 목록에 없는 파일이라 직접 넣은 파일일 수도 있어요.",
+    "unlisted_title": "이 파일을 삭제할까요?"
+  },
   "connection": {
     "back_online": "다시 온라인이에요. 라이브러리를 업데이트했어요.",
     "offline": "오프라인이에요. 저장한 영상은 그대로 볼 수 있어요.",

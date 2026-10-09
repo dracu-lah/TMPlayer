@@ -710,6 +710,41 @@ states point there instead of at "All".
 **Done when:** unit tests for the section filtering and the unreachable favourites calculation, emulator
 screenshots on phone and TV of the toggle, the prompt with a favourites count and the shortened sidebar,
 the desktop render test, and the sweep list with each added prompt shown once.
+**Prompt sweep (2026-10-09, done ahead of the toggle):** one confirm per platform, each with focus on Cancel
+where focus exists: `TvConfirm` (`app/.../ui/components/TvConfirm.kt`, Material's `TmAlertDialog` on touch, its
+own panel on TV, `extra` slot for a tick box) and the desktop `ConfirmDialog` (`desktop/.../ui/Common.kt`, now
+with the same `extra` slot and a `cancelLabel`). The toggle reuses these: the favourites count goes in `detail`
+or `message`, Confirm is destructive by default. New strings sit in the `confirm.*` group, in all 21 catalogs.
+Phone and TV share one list because they share the screens.
+- Phone and TV, already had a prompt: sign out of Telegram (with the delete downloads tick box); clear cache;
+  clear pictures and previews; clear everything except downloads; clear Continue watching, clear the watched
+  list and clear favourites (from Settings and from the browse headers and overflow); delete one download,
+  delete selected, delete all; delete a cached video; Remove from Downloads in the detail sheet; sign out of
+  OpenSubtitles.
+- Phone and TV, added: Remove from Continue watching on one video (its saved place cannot be got back); Clear
+  online subtitles (a subtitle fetched again counts against the OpenSubtitles daily quota); Clear posters and
+  details; turning on Remove after watching (off needs none). Both caches skip the prompt when they are empty.
+- Phone and TV, left without a prompt on purpose: turning off crash reports (nothing is deleted, one press
+  turns it back on); language change (switches live, no restart, picked back the same way); Forget the last
+  chat (only the remembered chat id, refilled by opening a chat); clear recent searches (a few typed words);
+  cancel or remove a running, paused or failed download (it starts again from the same menu); mark watched
+  and unwatched, add and remove one favourite, unarchive (each undone by the same entry); Android has no
+  storage location setting.
+- TV, CP44 finding 6: a held Down on the Settings list now stops on About, so the remote no longer lands on
+  "Sign out of Telegram" by reaching the end of the list; one fresh press still reaches it, and its prompt
+  opens with Cancel focused.
+- Desktop, already had a prompt: clear cache; clear everything except downloads; clear Continue watching;
+  clear favourites; clear the watched list (page and Settings); delete selected and delete all on Downloads
+  (and the Delete button on one row); change storage location (with the move plan).
+  Sign out of Telegram had its own dialog without Cancel focus: moved onto `ConfirmDialog`.
+- Desktop, added: sign out of OpenSubtitles, as phone and TV ask; Remove from Downloads in the detail pane
+  and in a tile's right click menu; delete a file found in the downloads folder that is not on TMPlayer's
+  list; delete a cached video on the Downloads page; Remove from Continue watching on one card; Clear online
+  subtitles; Clear posters and details; turning on Remove after watching.
+- Desktop, left on purpose: language (live), Forget the last chat, recent searches, cancel a running
+  download, the watched marks; there is no crash report switch on the desktop.
+- Pending for CP44: the new prompts on the POCO and on the Mi TV stick (the stick was unreachable during the
+  sweep), and the held Down on the stick's real remote.
 **STOP**
 
 ### CP42 Minimal onboarding

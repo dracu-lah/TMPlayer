@@ -111,6 +111,11 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
 
     var picked by remember { mutableStateOf<Set<String>>(emptySet()) }
     var confirm by remember { mutableStateOf<List<ResumeRecord>?>(null) }
+    // The other prompts on this page: a stray file to delete, a cached video to delete, and
+    // "Remove after watching" being switched on.
+    var confirmUnlisted by remember { mutableStateOf<File?>(null) }
+    var confirmCached by remember { mutableStateOf<ResumeRecord?>(null) }
+    var confirmRemoveAfterWatching by remember { mutableStateOf(false) }
     BackHandler(enabled = picked.isNotEmpty()) { picked = emptySet() }
 
     Column(Modifier.fillMaxSize()) {
@@ -155,7 +160,15 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                     Setting(REMOVE_AFTER_WATCHING, REMOVE_AFTER_WATCHING_DETAIL) {
                         Switch(
                             checked = removeAfterWatching,
-                            onCheckedChange = { on -> scope.launch { state.settings.setRemoveAfterWatching(on) } },
+                            // On is asked first, since from then on files go without a press; off
+                            // deletes nothing.
+                            onCheckedChange = { on ->
+                                if (on) {
+                                    confirmRemoveAfterWatching = true
+                                } else {
+                                    scope.launch { state.settings.setRemoveAfterWatching(false) }
+                                }
+                            },
                         )
                     }
                 }
@@ -202,11 +215,7 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                         UnlistedRow(
                             file = file,
                             onKeep = { scope.launch { DownloadIndex.keep(state.settings, file) } },
-                            onDelete = {
-                                scope.launch {
-                                    if (!DownloadIndex.discard(file)) toast(s.downloadsDeleteFailed(file.name))
-                                }
-                            },
+                            onDelete = { confirmUnlisted = file },
                         )
                     }
                 }
@@ -248,18 +257,62 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                             }
                         },
                         onDelete = {
-                            scope.launch {
-                                val id = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }
-                                    .getOrDefault(record.fileId)
-                                runCatching { Td.deleteFile(id) }
-                                state.settings.forgetCachedVideo(record.chatId, record.messageId)
-                            }
+                            confirmCached = record
                         },
                     )
                 }
             }
             VerticalScrollbar(rememberScrollbarAdapter(list), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
         }
+    }
+
+    confirmUnlisted?.let { file ->
+        ConfirmDialog(
+            title = s.confirmUnlistedTitle,
+            message = s.confirmUnlistedMessage(file.name),
+            detail = MediaMapper.formatSize(file.length()),
+            confirmLabel = s.commonDelete,
+            onDismiss = { confirmUnlisted = null },
+            onConfirm = {
+                confirmUnlisted = null
+                scope.launch {
+                    if (!DownloadIndex.discard(file)) toast(s.downloadsDeleteFailed(file.name))
+                }
+            },
+        )
+    }
+
+    confirmCached?.let { record ->
+        val bytes = cachedBytes[record.key]?.takeIf { it > 0 } ?: record.sizeBytes
+        ConfirmDialog(
+            title = s.downloadsDeleteCachedTitle,
+            message = s.downloadsDeleteCachedBody(record.title, MediaMapper.formatSize(bytes)),
+            confirmLabel = s.commonDelete,
+            onDismiss = { confirmCached = null },
+            onConfirm = {
+                confirmCached = null
+                scope.launch {
+                    val id = runCatching { Td.currentFileId(record.chatId, record.messageId, record.fileId) }
+                        .getOrDefault(record.fileId)
+                    runCatching { Td.deleteFile(id) }
+                    state.settings.forgetCachedVideo(record.chatId, record.messageId)
+                }
+            },
+        )
+    }
+
+    if (confirmRemoveAfterWatching) {
+        ConfirmDialog(
+            title = s.confirmRemoveAfterWatchingTitle,
+            message = s.confirmRemoveAfterWatchingMessage,
+            detail = s.confirmRemoveAfterWatchingDetail,
+            confirmLabel = s.confirmTurnOn,
+            onDismiss = { confirmRemoveAfterWatching = false },
+            onConfirm = {
+                confirmRemoveAfterWatching = false
+                scope.launch { state.settings.setRemoveAfterWatching(true) }
+            },
+        )
     }
 
     confirm?.let { doomed ->

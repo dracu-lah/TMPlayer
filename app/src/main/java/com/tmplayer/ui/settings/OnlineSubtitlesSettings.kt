@@ -131,18 +131,33 @@ private fun CacheRow() {
     val toast = rememberToast()
     var bytes by remember { mutableLongStateOf(0L) }
     LaunchedEffect(Unit) { bytes = withContext(Dispatchers.IO) { online.cacheBytes() } }
+    var asking by remember { mutableStateOf(false) }
+    val clear: () -> Unit = {
+        scope.launch {
+            withContext(Dispatchers.IO) { online.purge() }
+            bytes = 0
+            toast(s.onlineCacheCleared)
+        }
+    }
     ActionRow(
         title = s.onlineClearCache,
         subtitle = if (bytes > 0) s.onlineCacheDetail(Translator.messages.formatter.size(bytes)) else s.onlineCacheEmpty,
         icon = Icons.Filled.Delete,
-        onClick = {
-            scope.launch {
-                withContext(Dispatchers.IO) { online.purge() }
-                bytes = 0
-                toast(s.onlineCacheCleared)
-            }
-        },
+        // Asked first: a subtitle fetched again is another download against the daily quota.
+        onClick = { if (bytes > 0) asking = true else clear() },
     )
+    if (asking) {
+        TvConfirm(
+            title = s.confirmOnlineCacheTitle,
+            message = s.confirmOnlineCacheMessage(Translator.messages.formatter.size(bytes)),
+            confirmLabel = s.commonClear,
+            onConfirm = {
+                asking = false
+                clear()
+            },
+            onDismiss = { asking = false },
+        )
+    }
 }
 
 /** The prompt [dialog] names, over Settings. */

@@ -270,6 +270,20 @@
     "watched": "視聴済み",
     "with_detail": "{label}({detail})"
   },
+  "confirm": {
+    "forget_resume_message": "「{title}」の再生位置が消去されます。次に再生すると最初から始まります。",
+    "forget_resume_title": "視聴中から削除しますか？",
+    "metadata_cache_message": "この端末に保存されたポスターと詳細 {size} を削除します。次に表示するときに改めて取得されます。",
+    "metadata_cache_title": "ポスターと詳細を消去しますか？",
+    "online_cache_message": "この端末に保存された字幕と検索結果 {size} を削除します。字幕を再び使うと改めてダウンロードされ、OpenSubtitles では各ダウンロードが1日の上限に数えられます。",
+    "online_cache_title": "オンライン字幕を消去しますか？",
+    "remove_after_watching_detail": "Telegramからは何も削除されないので、また保存できます。ダウンロード画面でオフにできます。",
+    "remove_after_watching_message": "今後は、ダウンロードが視聴済みになった時点で、手動でも再生終了時でも、この端末から削除されます。すでに視聴済みの動画は残ります。",
+    "remove_after_watching_title": "視聴後にダウンロードを削除しますか？",
+    "turn_on": "オンにする",
+    "unlisted_message": "「{name}」をダウンロードフォルダから削除します。TMPlayerのリストにないファイルなので、ご自身で置いたものかもしれません。",
+    "unlisted_title": "このファイルを削除しますか？"
+  },
   "connection": {
     "back_online": "オンラインに戻りました。ライブラリを更新しました。",
     "offline": "オフラインです。保存済みの動画は再生できます。",

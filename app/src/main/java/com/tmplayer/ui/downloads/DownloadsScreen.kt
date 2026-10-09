@@ -202,6 +202,7 @@ fun DownloadsScreen(
     // disk they are both looking at.
     var split by remember { mutableStateOf(StorageSplit.EMPTY) }
     var confirmingClearAll by remember { mutableStateOf(false) }
+    var confirmingRemoveAfterWatching by remember { mutableStateOf(false) }
     // Which row the viewer pressed Delete on, and therefore what the dialog is about to remove.
     // The row rather than a bare boolean, because the dialog has to name the video: nothing here
     // may be deleted without being named first.
@@ -675,7 +676,13 @@ fun DownloadsScreen(
                 }
                 item {
                     RemoveAfterWatchingRow(removeAfterWatching) { on ->
-                        scope.launch { settings.setRemoveAfterWatching(on) }
+                        // Turning it on is asked first: from then on files go without a press.
+                        // Turning it off deletes nothing, so it just happens.
+                        if (on) {
+                            confirmingRemoveAfterWatching = true
+                        } else {
+                            scope.launch { settings.setRemoveAfterWatching(false) }
+                        }
                     }
                 }
                 items(shown, key = { it.key }) { row ->
@@ -745,6 +752,20 @@ fun DownloadsScreen(
                 deleteMany(chosen)
             },
             onDismiss = { confirmingDeleteMany = false },
+        )
+    }
+
+    if (confirmingRemoveAfterWatching) {
+        TvConfirm(
+            title = L.confirmRemoveAfterWatchingTitle,
+            message = L.confirmRemoveAfterWatchingMessage,
+            detail = L.confirmRemoveAfterWatchingDetail,
+            confirmLabel = L.confirmTurnOn,
+            onConfirm = {
+                confirmingRemoveAfterWatching = false
+                scope.launch { settings.setRemoveAfterWatching(true) }
+            },
+            onDismiss = { confirmingRemoveAfterWatching = false },
         )
     }
 

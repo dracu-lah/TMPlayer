@@ -361,6 +361,21 @@ fun ContinuePage(state: ShellState) {
     val records by state.settings.continueWatching.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
+    // The card waiting on "Remove from Continue watching?": its saved place cannot be got back.
+    var forgetting by remember { mutableStateOf<ResumeRecord?>(null) }
+    forgetting?.let { record ->
+        ConfirmDialog(
+            title = s.confirmForgetResumeTitle,
+            message = s.confirmForgetResumeMessage(record.title),
+            detail = s.browseForgetResumeDetail,
+            confirmLabel = s.commonRemove,
+            onDismiss = { forgetting = null },
+            onConfirm = {
+                forgetting = null
+                scope.launch { state.settings.clearResumePosition(record.chatId, record.messageId) }
+            },
+        )
+    }
     Column(Modifier.fillMaxSize()) {
         PageHeader(s.navContinue, s.continueSubtitle, actions = { PosterSizeStep(state) })
         val list = records
@@ -393,7 +408,7 @@ fun ContinuePage(state: ShellState) {
                                     }
                                 },
                             ) {
-                                scope.launch { state.settings.clearResumePosition(record.chatId, record.messageId) }
+                                forgetting = record
                             }
                         }
                     }
@@ -723,6 +738,27 @@ internal fun TileMenu(
         if (expanded) value = withContext(Dispatchers.IO) { DiskInfo.of(DesktopPaths.downloadsDir).freeBytes }
     }
 
+    // Held here rather than in the menu, which is gone by the time the prompt is answered.
+    var confirmingRemove by remember { mutableStateOf<ResumeRecord?>(null) }
+    confirmingRemove?.let { doomed ->
+        ConfirmDialog(
+            title = s.gridRemoveDownloadTitle,
+            message = s.gridRemoveDownloadMessage(item.title),
+            confirmLabel = s.commonRemove,
+            onDismiss = { confirmingRemove = null },
+            onConfirm = {
+                confirmingRemove = null
+                scope.launch {
+                    if (DownloadIndex.delete(state.settings, doomed)) {
+                        toast(s.downloadsRemoved(item.title))
+                    } else {
+                        toast(s.downloadsInUse)
+                    }
+                }
+            },
+        )
+    }
+
     TmDropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
       if (!fileMenu) {
         extra?.invoke(onDismiss)
@@ -746,13 +782,7 @@ internal fun TileMenu(
                 DropdownMenuItem(text = { Text(s.downloadsInDownloads) }, onClick = { onDismiss(); state.go(Destination.Downloads) })
                 DropdownMenuItem(text = { Text(s.downloadsRemove) }, onClick = {
                     onDismiss()
-                    scope.launch {
-                        if (DownloadIndex.delete(state.settings, record)) {
-                            toast(s.downloadsRemoved(item.title))
-                        } else {
-                            toast(s.downloadsInUse)
-                        }
-                    }
+                    confirmingRemove = record
                 })
             }
             row != null && row.busy -> {

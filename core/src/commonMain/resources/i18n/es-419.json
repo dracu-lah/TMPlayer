@@ -270,6 +270,20 @@
     "watched": "Visto",
     "with_detail": "{label} ({detail})"
   },
+  "confirm": {
+    "forget_resume_message": "\"{title}\" olvida dónde te quedaste. Al reproducirlo otra vez empieza desde el principio.",
+    "forget_resume_title": "¿Quitar de Seguir viendo?",
+    "metadata_cache_message": "Esto borra {size} de pósteres y detalles guardados en este dispositivo. Se vuelven a buscar la próxima vez que se muestren.",
+    "metadata_cache_title": "¿Borrar pósteres y detalles?",
+    "online_cache_message": "Esto borra {size} de subtítulos y búsquedas guardados en este dispositivo. Obtener un subtítulo otra vez lo descarga de nuevo, y OpenSubtitles cuenta cada descarga en tu límite diario.",
+    "online_cache_title": "¿Borrar subtítulos en línea?",
+    "remove_after_watching_detail": "No se borra nada de Telegram, así que puedes volver a descargarlo. Desactívalo en Descargas.",
+    "remove_after_watching_message": "A partir de ahora, una descarga se borra de este dispositivo en cuanto se marca como vista, por ti o al terminar la reproducción. Los videos ya marcados se conservan.",
+    "remove_after_watching_title": "¿Quitar descargas después de verlas?",
+    "turn_on": "Activar",
+    "unlisted_message": "\"{name}\" se elimina de la carpeta de descargas. TMPlayer no lo tiene en su lista, así que puede ser un archivo que agregaste tú.",
+    "unlisted_title": "¿Eliminar este archivo?"
+  },
   "connection": {
     "back_online": "Conexión restablecida. Biblioteca actualizada.",
     "offline": "Sin conexión. Los videos guardados siguen funcionando.",

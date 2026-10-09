@@ -270,6 +270,20 @@
     "watched": "Assistido",
     "with_detail": "{label} ({detail})"
   },
+  "confirm": {
+    "forget_resume_message": "\"{title}\" esquece onde você parou. Ao reproduzir de novo, começa do início.",
+    "forget_resume_title": "Remover de Continuar assistindo?",
+    "metadata_cache_message": "Isso apaga {size} de pôsteres e detalhes guardados neste dispositivo. Eles são buscados de novo na próxima vez que aparecerem.",
+    "metadata_cache_title": "Limpar pôsteres e detalhes?",
+    "online_cache_message": "Isso apaga {size} de legendas e buscas guardadas neste dispositivo. Pegar uma legenda de novo a baixa outra vez, e o OpenSubtitles conta cada download no seu limite diário.",
+    "online_cache_title": "Limpar legendas online?",
+    "remove_after_watching_detail": "Nada é removido do Telegram, então você pode baixá-lo de novo. Desative isso em Downloads.",
+    "remove_after_watching_message": "A partir de agora, um download é apagado deste dispositivo assim que é marcado como assistido, por você ou no fim da reprodução. Vídeos já marcados continuam.",
+    "remove_after_watching_title": "Remover downloads após assistir?",
+    "turn_on": "Ativar",
+    "unlisted_message": "\"{name}\" é apagado da pasta de downloads. O TMPlayer não o tem na lista, então pode ser um arquivo que você mesmo colocou lá.",
+    "unlisted_title": "Apagar este arquivo?"
+  },
   "connection": {
     "back_online": "De volta online. Biblioteca atualizada.",
     "offline": "Offline. Os vídeos salvos continuam funcionando.",

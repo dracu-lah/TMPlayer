@@ -270,6 +270,20 @@
     "watched": "已觀看",
     "with_detail": "{label}（{detail}）"
   },
+  "confirm": {
+    "forget_resume_message": "「{title}」將不再記得你停在哪裡。再次播放會從頭開始。",
+    "forget_resume_title": "從「繼續觀看」移除？",
+    "metadata_cache_message": "這會刪除此裝置上保存的 {size} 海報與詳細資料。下次顯示時會重新取得。",
+    "metadata_cache_title": "清除海報與詳細資料？",
+    "online_cache_message": "這會刪除此裝置上保存的 {size} 字幕與搜尋紀錄。再次取得字幕需要重新下載，而 OpenSubtitles 會把每次下載計入你的每日上限。",
+    "online_cache_title": "清除線上字幕？",
+    "remove_after_watching_detail": "不會移除 Telegram 上的任何內容，所以你可以再次下載。可在「下載」中關閉此選項。",
+    "remove_after_watching_message": "從現在起，下載內容一旦標示為已觀看（由你標示或播放結束時），就會從此裝置刪除。已經標示的影片會保留。",
+    "remove_after_watching_title": "看完後移除下載？",
+    "turn_on": "開啟",
+    "unlisted_message": "「{name}」將從下載資料夾刪除。TMPlayer 的清單裡沒有它，可能是你自己放進去的檔案。",
+    "unlisted_title": "刪除此檔案？"
+  },
   "connection": {
     "back_online": "已恢復連線。媒體庫已更新。",
     "offline": "離線。已儲存的影片仍可播放。",

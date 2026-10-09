@@ -270,6 +270,20 @@
     "watched": "Đã xem",
     "with_detail": "{label} ({detail})"
   },
+  "confirm": {
+    "forget_resume_message": "\"{title}\" sẽ quên chỗ bạn đã dừng. Phát lại sẽ bắt đầu từ đầu.",
+    "forget_resume_title": "Xóa khỏi Xem tiếp?",
+    "metadata_cache_message": "Thao tác này xóa {size} poster và chi tiết lưu trên thiết bị này. Chúng sẽ được tra cứu lại vào lần hiển thị sau.",
+    "metadata_cache_title": "Xóa poster và chi tiết?",
+    "online_cache_message": "Thao tác này xóa {size} phụ đề và lượt tìm kiếm lưu trên thiết bị này. Lấy lại phụ đề sẽ tải lại, và OpenSubtitles tính mỗi lần tải vào giới hạn hằng ngày của bạn.",
+    "online_cache_title": "Xóa phụ đề trực tuyến?",
+    "remove_after_watching_detail": "Không có gì bị xóa khỏi Telegram, nên bạn có thể tải lại. Tắt tùy chọn này trong Tải xuống.",
+    "remove_after_watching_message": "Từ giờ, một bản tải xuống sẽ bị xóa khỏi thiết bị này ngay khi được đánh dấu đã xem, bởi bạn hoặc khi phát xong. Các video đã đánh dấu trước đó vẫn được giữ.",
+    "remove_after_watching_title": "Xóa bản tải xuống sau khi xem?",
+    "turn_on": "Bật",
+    "unlisted_message": "\"{name}\" sẽ bị xóa khỏi thư mục tải xuống. TMPlayer không có tệp này trong danh sách, nên có thể đó là tệp bạn tự thêm vào.",
+    "unlisted_title": "Xóa tệp này?"
+  },
   "connection": {
     "back_online": "Đã có mạng trở lại. Thư viện đã được cập nhật.",
     "offline": "Ngoại tuyến. Video đã lưu vẫn xem được.",
