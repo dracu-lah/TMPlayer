@@ -131,7 +131,8 @@ class PromoCaptureActivity : ComponentActivity() {
         // `--ez meta true` turns posters and overviews on over a canned TMDB and AniList, and
         // `--es metakey none|refused|own` sets the TMDB key's state. See [PromoMeta].
         PromoMeta.install(applicationContext, intent.getBooleanExtra("meta", false), intent.getStringExtra("metakey"))
-        requestedOrientation = if (tv) {
+        // `--es orient land` turns a phone sideways, for the landscape check every phone screen gets.
+        requestedOrientation = if (tv || intent.getStringExtra("orient") == "land") {
             ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         } else {
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT

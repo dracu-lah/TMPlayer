@@ -743,8 +743,14 @@ Phone and TV share one list because they share the screens.
   subtitles; Clear posters and details; turning on Remove after watching.
 - Desktop, left on purpose: language (live), Forget the last chat, recent searches, cancel a running
   download, the watched marks; there is no crash report switch on the desktop.
-- Pending for CP44: the new prompts on the POCO and on the Mi TV stick (the stick was unreachable during the
-  sweep), and the held Down on the stick's real remote.
+- Checked: phone emulator, promo build, portrait and landscape, English and Arabic (right to left): the
+  Remove after watching prompt from the real Downloads row, and the Remove from Continue watching and Clear
+  online subtitles prompts through the fixture's new `--es overlay forget|online-cache` (a phone fixture can
+  now turn sideways with `--es orient land`). Desktop: the sign out and Remove after watching prompts in the
+  render test, light and dark. `:core:jvmTest`, `:ui:jvmTest` and `:desktop:test` green.
+- Pending for CP44: every TV side of this sweep. The Mi TV stick answered "no route to host" and both TV
+  emulators crashed on start (exit 139) on this host, so the TV prompts (same `TvConfirm`, Cancel focused) and
+  the held Down stopping on About are not yet seen on a screen. Also the new prompts on the POCO.
 **STOP**
 
 ### CP42 Minimal onboarding
