@@ -205,6 +205,30 @@ fun LanguageNoticeCard(language: String, onKeep: () -> Unit, onChange: () -> Uni
 }
 
 /**
+ * The one card after the first sign in (CP42, see `FirstSignIn`): "Show everything" keeps the side
+ * bar as it is, "Only my folders" goes on to the same confirm prompt as the Settings switch. Drawn
+ * where the language card is, and like it.
+ */
+@Composable
+fun FirstSignInCard(onEverything: () -> Unit, onOnlyFolders: () -> Unit, modifier: Modifier = Modifier) {
+    val s = LocalStrings.current
+    Column(
+        modifier.width(440.dp).floatingSurface().padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(com.tmplayer.ui.components.TmIcons.Folder, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(22.dp))
+            Text(s.groupsCardTitle, style = MaterialTheme.typography.titleMedium)
+        }
+        Text(s.groupsCardBody, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)) {
+            TextButton(onClick = onOnlyFolders) { Text(s.groupsCardFolders) }
+            Button(onClick = onEverything) { Text(s.groupsCardEverything) }
+        }
+    }
+}
+
+/**
  * The language card and "What's new", over the signed in window and never over the player. The
  * card waits for the update popup; "What's new" waits for it too, and shows once per version.
  */

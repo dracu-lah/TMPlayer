@@ -114,6 +114,14 @@ object NavGroupState {
         held.update { toggled(it, group) }
     }
 
+    /**
+     * Unfolds [group] without folding anything. With Telegram's default groups hidden the folders
+     * are the only way into the chats, so the shells open them rather than leaving them folded.
+     */
+    fun unfold(group: NavGroup) {
+        held.update { it + group }
+    }
+
     /** Back to the defaults, as on a fresh launch. */
     fun reset() {
         held.value = DEFAULT_OPEN

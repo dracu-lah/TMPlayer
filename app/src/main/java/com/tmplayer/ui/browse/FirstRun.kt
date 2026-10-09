@@ -56,12 +56,12 @@ import kotlinx.coroutines.launch
 
 /**
  * Home on a first run, before anything has been played or starred: how to get a first video in
- * (forward it to Saved Messages), with the button that opens Saved Messages, and the line on
- * starring chats under it. It used to be one muted sentence; the forwarding advice lived only in
+ * (forward it to Saved Messages, or with the default groups hidden to a chat in a folder), with
+ * the button that opens it ([DefaultGroups.firstStep]), and the line on starring chats under it. It used to be one muted sentence; the forwarding advice lived only in
  * Saved Messages' own empty state, where nobody new would look.
  */
 @Composable
-internal fun FirstVideoEmpty(onOpenSaved: () -> Unit) {
+internal fun FirstVideoEmpty(step: DefaultGroups.FirstStep, onOpen: (BrowseSection) -> Unit) {
     val s = LocalStrings.current
     val touch = isTouch()
     val focus = remember { FocusRequester() }
@@ -93,15 +93,23 @@ internal fun FirstVideoEmpty(onOpenSaved: () -> Unit) {
                 modifier = measure,
             )
             Text(
-                s.homeFirstBody,
+                step.body,
                 style = if (touch) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
                 color = Tone.muted,
                 textAlign = TextAlign.Center,
                 modifier = measure,
             )
-            Spacer(Modifier.size(4.dp))
-            TmButton(onClick = onOpenSaved, modifier = Modifier.focusRequester(focus)) { Text(s.homeFirstOpenSaved) }
-            Spacer(Modifier.size(4.dp))
+            // With Telegram's default groups hidden and no folders there is nowhere to send the
+            // viewer, so the words say what to do and there is no button.
+            val target = step.target
+            val button = step.button
+            if (button != null && target != null) {
+                Spacer(Modifier.size(4.dp))
+                TmButton(onClick = { onOpen(target) }, modifier = Modifier.focusRequester(focus)) { Text(button) }
+                Spacer(Modifier.size(4.dp))
+            } else {
+                Spacer(Modifier.size(4.dp))
+            }
             Text(
                 s.homeFirstMore,
                 style = if (touch) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
@@ -111,7 +119,7 @@ internal fun FirstVideoEmpty(onOpenSaved: () -> Unit) {
             )
         }
     }
-    if (!touch) LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    if (!touch && step.target != null) LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
 }
 
 /** The promo build's say over the tip: null follows the stored state, true or false forces it. */
@@ -126,7 +134,7 @@ object FirstVideoTipOverride {
  * television it is a line of text the D-pad passes over, and playing a first video retires it.
  */
 @Composable
-internal fun FirstVideoTip(nothingPlayed: Boolean, start: Dp, end: Dp) {
+internal fun FirstVideoTip(nothingPlayed: Boolean, start: Dp, end: Dp, defaultsHidden: Boolean = false) {
     if (!nothingPlayed) return
     val context = LocalContext.current
     val settings = remember { SettingsStore(context.applicationContext) }
@@ -153,7 +161,7 @@ internal fun FirstVideoTip(nothingPlayed: Boolean, start: Dp, end: Dp) {
         )
         Spacer(Modifier.size(12.dp))
         Text(
-            s.browseFirstVideoTip,
+            DefaultGroups.firstVideoTip(defaultsHidden),
             style = if (touch) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
             color = Tone.text,
             modifier = Modifier.weight(1f),

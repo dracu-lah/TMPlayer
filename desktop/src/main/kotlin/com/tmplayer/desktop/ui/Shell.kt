@@ -46,6 +46,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -79,6 +81,8 @@ import com.tmplayer.ui.browse.NavGroupBody
 import com.tmplayer.ui.browse.NavGroupHeading
 import com.tmplayer.ui.browse.browseSections
 import com.tmplayer.ui.browse.navGroups
+import com.tmplayer.ui.browse.DefaultGroups
+import com.tmplayer.ui.onboarding.FirstSignIn
 import com.tmplayer.ui.browse.rememberNavGroups
 import com.tmplayer.ui.components.AppLogo
 import com.tmplayer.ui.components.LocalToastHost
@@ -133,6 +137,10 @@ fun DesktopShell(
                 val seen = overviewSeen
                 if (seen != null) {
                     val signedIn = auth == AuthState.Ready
+                    // A sign in screen arms the one card after the first sign in (FirstSignIn).
+                    LaunchedEffect(auth) {
+                        if (FirstSignIn.isSignInStep(auth)) runCatching { state.settings.armFirstSignInCard() }
+                    }
                     val done: () -> Unit = { scope.launch { state.settings.markOverviewSeen() } }
                     // Signed in, Browse stays composed under a tour Settings asked for, so the
                     // chat list is where it was when the tour ends.
@@ -159,6 +167,27 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     val chats = rememberViewModel(Unit) { ChatListViewModel(state.settings) }
     DisposableEffect(chats) { onDispose { chats.reset() } }
     LaunchedEffect(Unit) { chats.refreshIfStale() }
+    // "Only my folders", mirrored into the shell for every page to read.
+    LaunchedEffect(state) {
+        state.settings.hideDefaultGroups.collect {
+            state.hideDefaultGroups = it
+            // The folders are then the only way into the chats, so they are not left folded.
+            if (it) com.tmplayer.ui.browse.NavGroupState.unfold(com.tmplayer.ui.browse.NavGroup.Folders)
+        }
+    }
+    // A section the option has hidden is not left on screen: the Chats page moves to the first
+    // folder, or with none, the window goes Home. The chip over Chats is kept as it was.
+    val shellFolders by Td.folders.collectAsState()
+    LaunchedEffect(state.hideDefaultGroups, shellFolders, state.chatSection) {
+        if (!state.hideDefaultGroups || !DefaultGroups.isDefault(state.chatSection)) return@LaunchedEffect
+        val first = shellFolders.firstOrNull()
+        val onChats = state.destination == Destination.Chats
+        if (first != null) {
+            state.pickChatSection(BrowseSection.Folder(first.id, first.title))
+        } else if (onChats) {
+            state.go(Destination.Home)
+        }
+    }
     // The chips over Chats and History: the saved choice first, then every change written back.
     LaunchedEffect(state) {
         runCatching {
@@ -191,8 +220,22 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     }
     val update = rememberNavUpdate(state)
     UpdatePopupTrigger(state, update)
-    // CP41 hook (not built yet): the one card after the first sign in, "Show everything" or "Only
-    // my folders", goes here once CP41's setting exists. See FirstSignIn.shouldAsk for the rule.
+    // The one card after the first sign in, "Show everything" or "Only my folders" (FirstSignIn).
+    val signInCardPending by state.settings.firstSignInCardPending.collectAsState(initial = false)
+    var signInCard by remember { mutableStateOf(false) }
+    var hideGroupsPrompt by remember { mutableStateOf(false) }
+    val chatsUi by chats.state.collectAsState()
+    LaunchedEffect(signInCardPending, chatsUi is UiState.Content, shellFolders.size) {
+        when (FirstSignIn.decide(signInCardPending, chatsUi is UiState.Content, shellFolders.size)) {
+            FirstSignIn.Decision.Wait -> Unit
+            FirstSignIn.Decision.Ask -> signInCard = true
+            // A folder that turns up late restarts this effect, which cancels the skip.
+            FirstSignIn.Decision.Skip -> {
+                delay(FOLDERS_SETTLE_MS)
+                runCatching { state.settings.markFirstSignInCardDone() }
+            }
+        }
+    }
     DownloadToasts(state)
     // Half watched entries that can no longer become a card are swept once per sign in, as on the
     // phone. Left alone they are invisible: the page skips them, so nothing can ever clear them.
@@ -239,7 +282,11 @@ private fun Browse(state: ShellState, player: PlayerContent) {
                             Destination.Favourites -> ChatsPage(state, chats, favouritesOnly = true)
                             Destination.History -> HistoryPage(state)
                             Destination.Downloads -> DownloadsPage(state)
-                            Destination.Settings -> SettingsPage(state, BuildInfo.VERSION)
+                            Destination.Settings -> SettingsPage(
+                                state,
+                                BuildInfo.VERSION,
+                                chatList = (chatsUi as? UiState.Content)?.value?.chats.orEmpty(),
+                            )
                         }
                     }
                     // Over the page only, so the side bar stays reachable while a pane is open.
@@ -250,6 +297,40 @@ private fun Browse(state: ShellState, player: PlayerContent) {
 
         UpdatePopupHost(state)
         ShellNotices(state, Modifier.align(Alignment.BottomEnd).padding(24.dp))
+        if (signInCard && state.nowPlaying == null && !state.updatePopup) {
+            FirstSignInCard(
+                onEverything = {
+                    signInCard = false
+                    browseScope.launch { runCatching { state.settings.markFirstSignInCardDone() } }
+                },
+                onOnlyFolders = {
+                    signInCard = false
+                    hideGroupsPrompt = true
+                    browseScope.launch { runCatching { state.settings.markFirstSignInCardDone() } }
+                },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
+            )
+        }
+        if (hideGroupsPrompt) {
+            val favourites by state.settings.favorites.collectAsState(initial = emptySet())
+            val loaded = (chatsUi as? UiState.Content)?.value?.chats.orEmpty()
+            val unreachable = remember(favourites, loaded) { DefaultGroups.unreachableFavorites(favourites, loaded) }
+            val words = DefaultGroups.prompt(unreachable.size, shellFolders.size)
+            ConfirmDialog(
+                title = words.title,
+                message = words.message,
+                detail = words.detail,
+                confirmLabel = words.confirm,
+                onConfirm = {
+                    hideGroupsPrompt = false
+                    browseScope.launch {
+                        state.settings.setHideDefaultGroups(true, unstar = unreachable)
+                        toast(s.groupsHiddenToast)
+                    }
+                },
+                onDismiss = { hideGroupsPrompt = false },
+            )
+        }
         if (SupportReminder.enabled) {
             SupportCardHost(state, Modifier.align(Alignment.BottomEnd).padding(24.dp))
         }
@@ -271,6 +352,9 @@ private fun Browse(state: ShellState, player: PlayerContent) {
 
 private val SIDEBAR_FROM = 1000.dp
 private const val HOUSEKEEPING_DELAY_MS = 20_000L
+
+/** How long an account that seems to have no folders is given before the first sign in card is skipped. */
+private const val FOLDERS_SETTLE_MS = 3_000L
 
 private fun Destination.icon(): ImageVector = when (this) {
     Destination.Home -> Icons.Filled.Home
@@ -294,7 +378,7 @@ internal fun Sidebar(
 ) {
     val s = LocalStrings.current
     val groups = rememberNavGroups(state.currentGroup)
-    val sections = remember(folders) { browseSections(folders) }
+    val sections = remember(folders, state.hideDefaultGroups) { browseSections(folders, state.hideDefaultGroups) }
     val inFlight = rememberDownloadsInFlight()
     Column(Modifier.width(240.dp).fillMaxHeight().padding(12.dp)) {
         NavBrand(BuildInfo.VERSION, Modifier.padding(horizontal = 12.dp, vertical = 10.dp))
@@ -399,7 +483,13 @@ private fun Rail(state: ShellState, update: NavUpdate?) {
             modifier = Modifier.padding(vertical = 12.dp).size(28.dp),
         )
         val inFlight = rememberDownloadsInFlight()
+        val folders by Td.folders.collectAsState()
+        val hidden = state.hideDefaultGroups
         Destination.entries.forEach { destination ->
+            // With the default groups hidden the Chats page lists only the folders, so it is named
+            // for them, and with no folders there is nothing for it to show.
+            if (destination == Destination.Chats && hidden && folders.isEmpty()) return@forEach
+            val label = if (destination == Destination.Chats && hidden) s.navFolders else destination.label
             NavigationRailItem(
                 selected = state.destination == destination,
                 onClick = { state.go(destination) },
@@ -409,10 +499,11 @@ private fun Rail(state: ShellState, update: NavUpdate?) {
                             Icon(destination.icon(), contentDescription = s.navInProgress(destination.label, inFlight))
                         }
                     } else {
-                        Icon(destination.icon(), contentDescription = destination.label)
+                        val icon = if (destination == Destination.Chats && hidden) TmIcons.Folder else destination.icon()
+                        Icon(icon, contentDescription = label)
                     }
                 },
-                label = { Text(destination.label.substringBefore(' ')) },
+                label = { Text(label.substringBefore(' ')) },
             )
         }
         // The rail cuts labels at the first space, so the version rides in a badge on the icon.

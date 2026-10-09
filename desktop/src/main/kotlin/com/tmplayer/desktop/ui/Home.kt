@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -119,7 +120,12 @@ internal fun HomeRowsView(
             },
         )
         if (rows.isEmpty()) {
-            // Nothing played and nothing starred: a first run, so say how to get a first video in.
+            // Nothing played and nothing starred: a first run, so say how to get a first video in:
+            // through Saved Messages, or with the default groups hidden, through a folder.
+            val folders by com.tmplayer.data.Td.folders.collectAsState()
+            val step = remember(state.hideDefaultGroups, folders) {
+                com.tmplayer.ui.browse.DefaultGroups.firstStep(state.hideDefaultGroups, folders)
+            }
             Centred {
                 Column(
                     Modifier,
@@ -128,8 +134,18 @@ internal fun HomeRowsView(
                 ) {
                     Icon(TmIcons.Bookmark, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(48.dp))
                     Text(s.homeFirstTitle, style = MaterialTheme.typography.titleLarge, color = Tone.text, textAlign = TextAlign.Center)
-                    Text(s.homeFirstBody, style = MaterialTheme.typography.bodyLarge, color = Tone.muted, textAlign = TextAlign.Center)
-                    Button(onClick = { state.showChats(BrowseSection.of(BrowseTab.Saved)) }) { Text(s.homeFirstOpenSaved) }
+                    Text(
+                        step.body,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Tone.muted,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.widthIn(max = 560.dp),
+                    )
+                    val target = step.target
+                    val button = step.button
+                    if (button != null && target != null) {
+                        Button(onClick = { state.showChats(target) }) { Text(button) }
+                    }
                     Text(s.homeFirstMore, style = MaterialTheme.typography.bodyMedium, color = Tone.muted, textAlign = TextAlign.Center)
                 }
             }

@@ -129,6 +129,61 @@ class BrowseRenderTest {
         shell.chatFilter = com.tmplayer.ui.browse.ChatFilter.All
     }
 
+    /**
+     * "Only my folders" (CP41) and the first sign in card (CP42): the side bar without the
+     * Telegram group, on a folder, with the card over the page, then the prompt the card and the
+     * Settings switch lead to, counting two favourites, in dark and light.
+     */
+    @Test
+    fun onlyMyFolders() {
+        val folders = listOf(
+            com.tmplayer.data.ChatFolderSummary(3, "Films"),
+            com.tmplayer.data.ChatFolderSummary(7, "Family"),
+        )
+        val chats = listOf(
+            chat(2, "Film Club", ChatKind.Channel, 12, 0xFFE5484D.toInt()),
+            chat(3, "Documentaries in 4K", ChatKind.Channel, 0, 0xFF46A758.toInt()),
+        )
+        val films = com.tmplayer.ui.browse.BrowseSection.Folder(3, "Films")
+        shell.hideDefaultGroups = true
+        shell.showChats(films)
+        try {
+            for (dark in listOf(true, false)) {
+                val theme = if (dark) "dark" else "light"
+                save("only-folders-card-$theme.png", render(dark = dark, folders = folders) {
+                    Box(Modifier.fillMaxSize()) {
+                        Column(Modifier.fillMaxSize()) {
+                            PageHeader(films.heading, films.blurb)
+                            chats.forEach { ChatRow(it, favourite = false, onOpen = {}, onStar = {}) }
+                        }
+                        FirstSignInCard(
+                            onEverything = {},
+                            onOnlyFolders = {},
+                            modifier = Modifier.align(androidx.compose.ui.Alignment.BottomEnd).padding(24.dp),
+                        )
+                    }
+                })
+                val words = com.tmplayer.ui.browse.DefaultGroups.prompt(unreachable = 2, folderCount = folders.size)
+                save("only-folders-prompt-$theme.png", render(dark = dark, folders = folders) {
+                    Box(Modifier.fillMaxSize()) {
+                        SettingsPage(shell, "2.0.0")
+                        ConfirmDialog(
+                            title = words.title,
+                            message = words.message,
+                            detail = words.detail,
+                            confirmLabel = words.confirm,
+                            onConfirm = {},
+                            onDismiss = {},
+                        )
+                    }
+                })
+            }
+        } finally {
+            shell.hideDefaultGroups = false
+            shell.showChats(com.tmplayer.ui.browse.BrowseSection.of(com.tmplayer.ui.browse.BrowseTab.Chats))
+        }
+    }
+
     @Test
     fun mediaGrid() {
         val titles = listOf(

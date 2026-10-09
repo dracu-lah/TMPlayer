@@ -124,6 +124,13 @@ class ShellState(
      * The chips over the Chats list and the open tab of History. The shell reads them back from
      * [SettingsStore] at start and writes each change there, as the phone and the TV do.
      */
+    /**
+     * "Only my folders" (Settings): Telegram's default groups, Chats and Saved Messages, are off
+     * the side bar and the narrow window's section chips. Mirrored from [SettingsStore] by the
+     * shell, as the chips are, so every page reads one value.
+     */
+    var hideDefaultGroups by mutableStateOf(false)
+
     var chatFilter by mutableStateOf(ChatFilter.All)
     var chatSort by mutableStateOf(ChatSort.Recent)
     var historyTab by mutableStateOf(HistoryTab.Continue)
@@ -141,6 +148,11 @@ class ShellState(
             Destination.Settings -> null
             else -> NavGroup.Watch
         }
+
+    /** Which slice the Chats page shows, without going there: for a section the side bar no longer offers. */
+    fun pickChatSection(section: BrowseSection) {
+        chatSection = section
+    }
 
     /** The chat list, showing [section]. */
     fun showChats(section: BrowseSection) {

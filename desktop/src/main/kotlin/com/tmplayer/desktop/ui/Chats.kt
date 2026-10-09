@@ -123,8 +123,9 @@ fun ChatsPage(
     val nav = rememberKeyboardNav(remember(listState) { ListSurface(listState) })
 
     // Home, History and Favourites have pages of their own.
-    val sections = remember(folders) {
-        browseSections(folders).filterNot { it.isHome || it.listsVideos || it == BrowseSection.of(BrowseTab.Favorites) }
+    val sections = remember(folders, state.hideDefaultGroups) {
+        browseSections(folders, state.hideDefaultGroups)
+            .filterNot { it.isHome || it.listsVideos || it == BrowseSection.of(BrowseTab.Favorites) }
     }
     val section = if (favouritesOnly) {
         BrowseSection.of(BrowseTab.Favorites)

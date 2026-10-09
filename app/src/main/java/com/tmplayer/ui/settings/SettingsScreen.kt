@@ -136,6 +136,7 @@ import com.tmplayer.data.SizeFilter
 import com.tmplayer.data.StorageSplit
 import com.tmplayer.data.SupportReminder
 import com.tmplayer.data.Td
+import com.tmplayer.ui.browse.DefaultGroups
 import com.tmplayer.data.ThemeChoice
 import com.tmplayer.data.UpdateWords
 import com.tmplayer.data.Updates
@@ -208,6 +209,9 @@ private sealed interface Prompt {
     data object ClearWatched : Prompt
     data object ClearFavorites : Prompt
     data object SignOut : Prompt
+
+    /** "Only my folders" going on, with the favourites it strands counted. Off needs no prompt. */
+    data object HideDefaultGroups : Prompt
 }
 
 /**
@@ -241,6 +245,8 @@ fun SettingsScreen(
     initialPage: SettingsPage? = null,
     /** Told every time a page opens or closes, so the caller can hand it back as [initialPage]. */
     onPageChange: (SettingsPage?) -> Unit = {},
+    /** The account's Telegram folders; null reads them from TDLib. The promo fixture passes its own. */
+    accountFolders: List<com.tmplayer.data.ChatFolderSummary>? = null,
 ) {
     val s = LocalStrings.current
     val context = LocalContext.current
@@ -268,6 +274,9 @@ fun SettingsScreen(
     val watchedStore = remember { WatchedStore(context) }
     val watchedList by watchedStore.history.collectAsStateWithLifecycle(initialValue = emptyList())
     val favorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
+    val defaultsHidden by settings.hideDefaultGroups.collectAsStateWithLifecycle(initialValue = false)
+    val liveFolders by Td.folders.collectAsStateWithLifecycle()
+    val folders = accountFolders ?: liveFolders
     val lastChatId by settings.lastChatId.collectAsStateWithLifecycle(initialValue = 0L)
     val minSize by settings.minSizeBytes.collectAsStateWithLifecycle(
         initialValue = SizeFilter.DEFAULT_MIN,
@@ -784,6 +793,27 @@ fun SettingsScreen(
                         subtitle = s.formatter.sizeRange(minSize, maxSize),
                         icon = Icons.AutoMirrored.Filled.List,
                         onClick = { editingSizes = true },
+                    )
+                }
+
+                // Telegram's default groups, Chats and Saved Messages, off the sidebar. On asks first
+                // (the favourites it strands are counted); off is one press back and asks nothing.
+                item {
+                    ToggleRow(
+                        title = s.groupsSetting,
+                        subtitle = DefaultGroups.settingDetail(defaultsHidden, folders.size),
+                        icon = TmIcons.Folder,
+                        checked = defaultsHidden,
+                        onToggle = {
+                            if (defaultsHidden) {
+                                scope.launch {
+                                    settings.setHideDefaultGroups(false)
+                                    toast(s.groupsShownToast)
+                                }
+                            } else {
+                                prompt = Prompt.HideDefaultGroups
+                            }
+                        },
                     )
                 }
 
@@ -1428,10 +1458,29 @@ fun SettingsScreen(
             onDismiss = { prompt = null },
         )
 
+        Prompt.HideDefaultGroups -> {
+            val unreachable = remember(favorites, chats) { DefaultGroups.unreachableFavorites(favorites, chats) }
+            val words = DefaultGroups.prompt(unreachable.size, folders.size)
+            TvConfirm(
+                title = words.title,
+                message = words.message,
+                detail = words.detail,
+                confirmLabel = words.confirm,
+                onConfirm = {
+                    prompt = null
+                    scope.launch {
+                        settings.setHideDefaultGroups(true, unstar = unreachable)
+                        toast(s.groupsHiddenToast)
+                    }
+                },
+                onDismiss = { prompt = null },
+            )
+        }
+
         Prompt.ClearFavorites -> TvConfirm(
             title = s.settingsClearFavouritesTitle,
             message = s.settingsClearFavouritesMessage(favorites.size),
-            detail = s.settingsClearFavouritesUntouched,
+            detail = DefaultGroups.favouritesUntouched(defaultsHidden),
             confirmLabel = s.commonClear,
             onConfirm = {
                 prompt = null

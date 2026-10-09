@@ -95,6 +95,9 @@ import com.tmplayer.ui.components.ConnectionNotice
 import com.tmplayer.ui.components.ConnectionStatus
 import com.tmplayer.ui.components.rememberToast
 import com.tmplayer.ui.onboarding.OnboardingScreen
+import com.tmplayer.ui.onboarding.FirstSignIn
+import com.tmplayer.ui.onboarding.FirstSignInCard
+import com.tmplayer.ui.browse.DefaultGroups
 import com.tmplayer.ui.update.UpdateDialog
 import com.tmplayer.ui.update.LinkQrDialog
 import com.tmplayer.ui.update.openLink
@@ -485,6 +488,17 @@ private fun Root() {
     }
     val accountHeader by chatsViewModel.accountHeader.collectAsStateWithLifecycle()
     val chats = (chatsState as? UiState.Content)?.value?.chats.orEmpty()
+
+    // The one card after the first sign in (CP42): "Show everything" or "Only my folders". A sign
+    // in screen arms it; it is asked once the chat list (and with it the folder list) is in, only
+    // when the account has folders, and never again on this install. See FirstSignIn.
+    LaunchedEffect(auth) {
+        if (FirstSignIn.isSignInStep(auth)) runCatching { settings.armFirstSignInCard() }
+    }
+    val signInCardPending by settings.firstSignInCardPending.collectAsStateWithLifecycle(initialValue = false)
+    var signInCard by remember { mutableStateOf(false) }
+    // "Only my folders", from that card: the Settings switch's own prompt, favourites count and all.
+    var hideGroupsPrompt by remember { mutableStateOf(false) }
 
     LaunchedEffect(auth) {
         when (auth) {
@@ -1225,12 +1239,65 @@ private fun Root() {
             )
         }
         if (pickingLanguage) LanguageDialog(settings, onClose = { pickingLanguage = false })
-        // CP41 hook (not built yet): the one contextual card after the first sign in goes here,
-        // beside the language card and under the same "in the shell, on the chat list, no update
-        // dialog up" rule. When the account has Telegram folders it asks "Show everything" or
-        // "Only my folders" (CP41's hide default groups setting, with CP41's confirm prompt);
-        // with no folders it is skipped. Decide with FirstSignIn.shouldAsk.
-        if (FormFactor.isTv(context) && inShell && screen is Screen.Chats) {
+        // The first sign in card, beside the language card and under the same rule: in the shell,
+        // on the chat list, no update dialog up, and after the language card if both are due.
+        val chatsLoaded = chatsState is UiState.Content
+        LaunchedEffect(signInCardPending, chatsLoaded, folders.size, inShell) {
+            if (!inShell) return@LaunchedEffect
+            when (FirstSignIn.decide(signInCardPending, chatsLoaded, folders.size)) {
+                FirstSignIn.Decision.Wait -> Unit
+                // After the list has settled, as the support card waits, so it is not the first
+                // thing to move under the viewer's eyes.
+                FirstSignIn.Decision.Ask -> {
+                    delay(SIGN_IN_CARD_DELAY_MS)
+                    signInCard = true
+                }
+                // TDLib sends the folders before the chat list, but give a late one a moment:
+                // a folder arriving restarts this effect, which cancels the skip.
+                FirstSignIn.Decision.Skip -> {
+                    delay(FOLDERS_SETTLE_MS)
+                    runCatching { settings.markFirstSignInCardDone() }
+                }
+            }
+        }
+        if (signInCard && noticeLanguage == null && inShell && screen is Screen.Chats && !showUpdate) {
+            fun answered() {
+                signInCard = false
+                scope.launch { runCatching { settings.markFirstSignInCardDone() } }
+            }
+            FirstSignInCard(
+                onEverything = { answered() },
+                onOnlyFolders = {
+                    answered()
+                    hideGroupsPrompt = true
+                },
+                modifier = Modifier
+                    .align(if (FormFactor.isTv(context)) Alignment.BottomEnd else Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(if (FormFactor.isTv(context)) 40.dp else 16.dp),
+            )
+        }
+        if (hideGroupsPrompt) {
+            val unreachable = remember(favorites, chats) { DefaultGroups.unreachableFavorites(favorites, chats) }
+            val words = DefaultGroups.prompt(unreachable.size, folders.size)
+            TvConfirm(
+                title = words.title,
+                message = words.message,
+                detail = words.detail,
+                confirmLabel = words.confirm,
+                onConfirm = {
+                    hideGroupsPrompt = false
+                    scope.launch {
+                        settings.setHideDefaultGroups(true, unstar = unreachable)
+                        toast(L.groupsHiddenToast)
+                    }
+                },
+                onDismiss = { hideGroupsPrompt = false },
+            )
+        }
+        // After the first sign in card rather than under it: both sit at the foot of the screen,
+        // and the card asks for an answer while the hint goes at the next key press.
+        if (FormFactor.isTv(context) && inShell && screen is Screen.Chats && !signInCardPending && !signInCard) {
             TvBrowseHint(
                 keys = remoteKeys,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp),
@@ -1247,7 +1314,7 @@ private fun Root() {
         }
         if (changelogQr) LinkQrDialog(WhatsNew.CHANGELOG, s.settingsQrChangelogPage, onClose = { changelogQr = false })
 
-        if (supportRung > 0 && noticeLanguage == null && (screen is Screen.Chats || screen is Screen.Downloads) && !showUpdate) {
+        if (supportRung > 0 && noticeLanguage == null && !signInCard && (screen is Screen.Chats || screen is Screen.Downloads) && !showUpdate) {
             val rung = supportRung
             SupportCard(
                 rung = rung,
@@ -1281,6 +1348,12 @@ private fun Root() {
 }
 
 private const val OFFLINE_SETTLE_MS = 750L
+
+/** How long an account that seems to have no folders is given before the first sign in card is skipped. */
+private const val FOLDERS_SETTLE_MS = 3_000L
+
+/** How long the chat list is up before the first sign in card slides in. */
+private const val SIGN_IN_CARD_DELAY_MS = 1_500L
 
 /** How long the chat list is up before the support card may slide in. */
 private const val SUPPORT_CARD_DELAY_MS = 4_000L

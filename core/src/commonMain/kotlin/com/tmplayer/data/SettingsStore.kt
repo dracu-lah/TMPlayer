@@ -46,6 +46,8 @@ private val MAX_SIZE = longPreferencesKey("max_size_bytes")
 private val CHAT_LAYOUT = stringPreferencesKey("chat_layout")
 private val CHAT_FILTER = stringPreferencesKey("chat_filter")
 private val CHAT_SORT = stringPreferencesKey("chat_sort")
+private val HIDE_DEFAULT_GROUPS = booleanPreferencesKey("hide_default_groups")
+private val FIRST_SIGN_IN_CARD = stringPreferencesKey("first_sign_in_card")
 private val HISTORY_TAB = stringPreferencesKey("history_tab")
 private val MEDIA_LAYOUT = stringPreferencesKey("media_layout")
 private val SERIES_VIEW = booleanPreferencesKey("series_view")
@@ -170,6 +172,8 @@ private fun downloadKey(chatId: Long, messageId: Long) =
 
 /** The same line again for a video nobody asked to keep, which playing one leaves behind. */
 private const val CACHED_PREFIX = "wc_"
+private const val CARD_PENDING = "pending"
+private const val CARD_DONE = "done"
 
 private fun cachedKey(chatId: Long, messageId: Long) =
     stringPreferencesKey("$CACHED_PREFIX${chatId}_$messageId")
@@ -235,6 +239,8 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
             val supportNever = prefs[SUPPORT_NEVER]
             val supporter = prefs[SUPPORT_SUPPORTER]
             val recent = prefs[SUPPORT_RECENT]
+            // The first sign in card is asked once per install, not once per account.
+            val card = prefs[FIRST_SIGN_IN_CARD]?.takeIf { it == CARD_DONE }
             val kept = if (keepDownloads) {
                 prefs.asMap().mapNotNull { (key, value) ->
                     val ids = key.name.removePrefixOrNull("dl_") ?: return@mapNotNull null
@@ -251,6 +257,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
             supportNever?.let { prefs[SUPPORT_NEVER] = it }
             supporter?.let { prefs[SUPPORT_SUPPORTER] = it }
             recent?.let { prefs[SUPPORT_RECENT] = it }
+            card?.let { prefs[FIRST_SIGN_IN_CARD] = it }
             if (keepDownloads) {
                 for ((key, value) in kept) prefs[key] = value
                 migrated?.let { prefs[DOWNLOADS_MIGRATED] = it }
@@ -947,6 +954,52 @@ class SettingsStore(private val prefs: DataStore<Preferences>) {
 
     suspend fun setChatSort(name: String) {
         prefs.edit { it[CHAT_SORT] = name }
+    }
+
+    // ---- Telegram's default groups ------------------------------------------------------------
+
+    /**
+     * Whether the sidebar leaves out Telegram's default groups (Chats and Saved Messages) and lists
+     * only the account's own folders beside Home, History, Favourites and Downloads. Off by default.
+     * The chip over Chats ([chatFilter], [chatSort]) is left as it was while this is on, so turning
+     * it off again comes back to the same chip.
+     */
+    val hideDefaultGroups: Flow<Boolean> = read { it[HIDE_DEFAULT_GROUPS] ?: false }
+
+    suspend fun hideDefaultGroupsNow(): Boolean = prefs.data.first()[HIDE_DEFAULT_GROUPS] ?: false
+
+    /**
+     * Turns the option on or off. Turning it on also unstars [unstar] in the same write, the
+     * favourites hiding the groups would leave out of reach (`DefaultGroups.unreachableFavorites`
+     * in :ui), so the setting and the favourites can never be seen half changed. Turning it off
+     * brings nothing back.
+     */
+    suspend fun setHideDefaultGroups(hide: Boolean, unstar: Set<Long> = emptySet()) {
+        prefs.edit { prefs ->
+            prefs[HIDE_DEFAULT_GROUPS] = hide
+            if (hide && unstar.isNotEmpty()) {
+                val keep = prefs[FAVORITES].orEmpty() - unstar.map(Long::toString).toSet()
+                prefs[FAVORITES] = keep
+            }
+        }
+    }
+
+    /**
+     * The one card after the first sign in (CP42), which asks "Show everything" or "Only my
+     * folders". Armed when a sign in screen is shown and the card has never been dealt with, so a
+     * viewer who was signed in before this existed is never asked; true while it waits for the
+     * shell and the account's folders.
+     */
+    val firstSignInCardPending: Flow<Boolean> = read { it[FIRST_SIGN_IN_CARD] == CARD_PENDING }
+
+    /** A sign in screen is up: arm the card, unless it has been armed or answered before. */
+    suspend fun armFirstSignInCard() {
+        prefs.edit { if (it[FIRST_SIGN_IN_CARD] == null) it[FIRST_SIGN_IN_CARD] = CARD_PENDING }
+    }
+
+    /** Answered, or skipped for an account with no folders: never asked again on this install. */
+    suspend fun markFirstSignInCardDone() {
+        prefs.edit { it[FIRST_SIGN_IN_CARD] = CARD_DONE }
     }
 
     /** Which tab of History was last open, `HistoryTab` by name. */

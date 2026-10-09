@@ -176,6 +176,20 @@ class PromoCaptureActivity : ComponentActivity() {
         // Messages); without it the tip stays away, so the usual chat list shots are unchanged.
         com.tmplayer.ui.browse.FirstVideoTipOverride.show = intent.getBooleanExtra("firsttip", false)
 
+        // `--ez hide_groups true|false` sets "Only my folders" (Telegram's default groups off the
+        // sidebar), and `--ez groups_demo true` puts four of the demo chats in the two demo folders
+        // and stars two that are in none, so the switch's prompt has favourites to count.
+        val groupsDemo = intent.getBooleanExtra("groups_demo", false)
+        runBlocking {
+            val store = SettingsStore(applicationContext)
+            if (intent.hasExtra("hide_groups")) store.setHideDefaultGroups(intent.getBooleanExtra("hide_groups", false))
+            if (groupsDemo) {
+                store.clearFavorites()
+                listOf(102L, 104L, 105L).forEach { store.toggleFavorite(it) }
+            }
+        }
+        PromoGroups.demo = groupsDemo
+
         val start = intent.getStringExtra("screen") ?: "chats"
         if (start == "signin") {
             // The number field takes focus the moment it appears, which is right in the app and
@@ -254,6 +268,7 @@ class PromoCaptureActivity : ComponentActivity() {
                             initialPage = SettingsPage.entries.firstOrNull {
                                 it.name.equals(intent.getStringExtra("page"), ignoreCase = true)
                             },
+                            accountFolders = if (intent.getBooleanExtra("folders", false) || groupsDemo) PROMO_FOLDERS else emptyList(),
                         )
                         "about" -> AboutScreen(onBack = { screen = "settings" })
                         // The Downloads screen as it is, over this build's own empty index: the
@@ -267,6 +282,7 @@ class PromoCaptureActivity : ComponentActivity() {
                             onOpenChat = { screen = "media" },
                             onOpenSettings = { screen = "settings" },
                             onOpenDownloads = { screen = "downloads" },
+                            folders = if (intent.getBooleanExtra("folders", false) || groupsDemo) PROMO_FOLDERS else emptyList(),
                             home = intent.getStringExtra("variant") ?: "rows",
                             section = intent.getStringExtra("section"),
                         )
@@ -276,7 +292,7 @@ class PromoCaptureActivity : ComponentActivity() {
                             onOpenDownloads = { screen = "downloads" },
                             // `--ez folders true` adds two Telegram folders, so the sidebar shows
                             // its Folders group; `--es update 9.9.9` adds the amber Update row.
-                            folders = if (intent.getBooleanExtra("folders", false)) PROMO_FOLDERS else emptyList(),
+                            folders = if (intent.getBooleanExtra("folders", false) || groupsDemo) PROMO_FOLDERS else emptyList(),
                             updateVersion = intent.getStringExtra("update"),
                             // `--es layout grid` for the chat tiles rather than the list.
                             layout = if (intent.getStringExtra("layout") == "grid") CardLayout.Grid else CardLayout.List,
@@ -335,6 +351,29 @@ class PromoCaptureActivity : ComponentActivity() {
                             onConfirm = { overlay = null },
                             onDismiss = { overlay = null },
                         )
+                        // The first sign in card over the chat list (CP42), and the "Only my folders"
+                        // prompt it leads to, counting the demo favourites in no folder.
+                        "signincard" -> com.tmplayer.ui.onboarding.FirstSignInCard(
+                            onEverything = { overlay = null },
+                            onOnlyFolders = { overlay = "hidegroups" },
+                            modifier = Modifier
+                                .align(if (tv) Alignment.BottomEnd else Alignment.BottomCenter)
+                                .windowInsetsPadding(WindowInsets.safeDrawing)
+                                .padding(if (tv) 40.dp else 16.dp),
+                        )
+                        "hidegroups" -> {
+                            val chats = promoChats()
+                            val unreachable = com.tmplayer.ui.browse.DefaultGroups.unreachableFavorites(setOf(102L, 104L, 105L), chats)
+                            val words = com.tmplayer.ui.browse.DefaultGroups.prompt(unreachable.size, PROMO_FOLDERS.size)
+                            TvConfirm(
+                                title = words.title,
+                                message = words.message,
+                                detail = words.detail,
+                                confirmLabel = words.confirm,
+                                onConfirm = { overlay = null },
+                                onDismiss = { overlay = null },
+                            )
+                        }
                         // The television's one-time browse hint, as it sits over the first chat list.
                         "tvhint" -> com.tmplayer.ui.browse.TvBrowseHintCard(
                             Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp),
@@ -364,15 +403,26 @@ private fun imageBytes(@DrawableRes drawable: Int): ByteArray {
 
 private val PROMO_FOLDERS = listOf(ChatFolderSummary(1, "Films"), ChatFolderSummary(2, "Family"))
 
+/** `--ez groups_demo true`: the demo chats placed in the demo folders (see [promoChats]). */
+private object PromoGroups {
+    @Volatile
+    var demo = false
+}
+
 @Composable
-private fun promoChats(): List<ChatSummary> = listOf(
-    ChatSummary(101, "Weekend Clips", imageBytes(R.drawable.demo_coast), 0, ChatKind.Group),
-    ChatSummary(102, "Home Projects", imageBytes(R.drawable.demo_workshop), 0, ChatKind.Channel),
-    ChatSummary(103, "Recipe Notes", imageBytes(R.drawable.demo_kitchen), 0, ChatKind.Group),
-    ChatSummary(104, "Travel Diary", imageBytes(R.drawable.demo_forest), 0, ChatKind.Channel),
-    ChatSummary(105, "Design Study", imageBytes(R.drawable.demo_tutorial), 0, ChatKind.Direct),
-    ChatSummary(106, "Family Archive", imageBytes(R.drawable.demo_birthday), 0, ChatKind.Group),
-)
+private fun promoChats(): List<ChatSummary> {
+    // With the groups demo, Films holds 101 and 102 and Family 103 and 106; 104 and 105 are in
+    // no folder, so starring them gives the "Only my folders" prompt two favourites to count.
+    val inFolder: (Int) -> List<Int> = { folder -> if (PromoGroups.demo) listOf(folder) else emptyList() }
+    return listOf(
+        ChatSummary(101, "Weekend Clips", imageBytes(R.drawable.demo_coast), 0, ChatKind.Group, folderIds = inFolder(1)),
+        ChatSummary(102, "Home Projects", imageBytes(R.drawable.demo_workshop), 0, ChatKind.Channel, folderIds = inFolder(1)),
+        ChatSummary(103, "Recipe Notes", imageBytes(R.drawable.demo_kitchen), 0, ChatKind.Group, folderIds = inFolder(2)),
+        ChatSummary(104, "Travel Diary", imageBytes(R.drawable.demo_forest), 0, ChatKind.Channel),
+        ChatSummary(105, "Design Study", imageBytes(R.drawable.demo_tutorial), 0, ChatKind.Direct),
+        ChatSummary(106, "Family Archive", imageBytes(R.drawable.demo_birthday), 0, ChatKind.Group, folderIds = inFolder(2)),
+    )
+}
 
 @Composable
 private fun PromoChatsScreen(

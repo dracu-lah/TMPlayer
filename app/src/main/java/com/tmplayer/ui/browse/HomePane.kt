@@ -107,13 +107,15 @@ internal fun HomePane(
      * Not needed when [rows] is empty: the empty state already says the same.
      */
     noFavourites: Boolean = false,
-    /** Opens Saved Messages, from the first-run state's button. */
-    onOpenSaved: () -> Unit = {},
+    /** What the first-run state says and where its button goes: Saved Messages, or a folder. */
+    firstStep: DefaultGroups.FirstStep = DefaultGroups.firstStep(hidden = false, folders = emptyList()),
+    /** Opens the first-run state's target. */
+    onOpenSection: (BrowseSection) -> Unit = {},
 ) {
     val s = LocalStrings.current
     if (rows.isEmpty()) {
         // Nothing played and nothing starred: a first run, so say how to get a first video in.
-        FirstVideoEmpty(onOpenSaved)
+        FirstVideoEmpty(firstStep, onOpenSection)
         return
     }
     val touch = isTouch()

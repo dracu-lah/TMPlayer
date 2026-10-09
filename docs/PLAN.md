@@ -752,6 +752,35 @@ Phone and TV share one list because they share the screens.
 - Pending for CP44: every TV side of this sweep. The Mi TV stick answered "no route to host" and both TV
   emulators crashed on start (exit 139) on this host, so the TV prompts (same `TvConfirm`, Cancel focused) and
   the held Down stopping on About are not yet seen on a screen. Also the new prompts on the POCO.
+**The toggle (2026-10-09):** named "Only my folders" (Settings, Library on phone and TV; the Library group
+on desktop), `SettingsStore.hideDefaultGroups`, off by default. The rules live once in
+`ui/src/shared/.../browse/DefaultGroups.kt`, beside `browseSections(folders, hideDefaultGroups)`:
+- Hidden: Chats and Saved go together from the phone drawer, the TV rail and the desktop side bar, so the
+  "Telegram" heading goes too; the Folders group is unfolded (`NavGroupState.unfold`), being the way in.
+  The desktop's narrow rail names its Chats entry Folders (folder icon) and drops it when there are no
+  folders; the narrow window's section chips list only the folders. A saved or requested section that
+  names Chats or Saved lands on Home (`DefaultGroups.reachable`); the desktop Chats page moves to the
+  first folder.
+- Kept on purpose: the search. "Videos in all chats" and a chat name search still reach any chat, which
+  is the one place a chat outside every folder still shows, as the main goal says. The scope chips name
+  no section, so nothing there changed. Favourites keeps listing whatever is starred.
+- Unreachable favourites: starred chats in no folder, and archived ones (a folder's list leaves them out);
+  a starred chat the list does not hold is not counted. The prompt counts them and the confirm unstars
+  them in the same DataStore write as the switch (`setHideDefaultGroups(true, unstar)`). Off brings
+  nothing back, and the prompt says so.
+- Prompt: `TvConfirm` on phone and TV (Cancel focused), `ConfirmDialog` on desktop; title "Show only your
+  folders?", what leaves the sidebar, the favourites count when there are any, the no folders line
+  (make folders in Telegram first) when there are none, how to undo it, destructive "Hide them". Off asks
+  nothing and says "Chats and Saved Messages are back".
+- Wording when hidden: first-run Home sends the viewer to the first folder ("Open Films") instead of Saved
+  Messages, or with no folders says to make one or turn the option off, with no button; the chat list's
+  first-run tip says forward to a chat in a folder; the clear favourites prompts say the chats stay in
+  the folders. The other empty states name no hidden section and are unchanged.
+- The chip over Chats (filter and order) is left in `SettingsStore` while hidden, so turning the option
+  off comes back to the same chip.
+- Tests: `DefaultGroupsTest` (sections and groups when hidden, fallback to Home, unreachable favourites,
+  prompt words, first-run target, the one write, the kept chip, the first sign in card's rule and once
+  per install). Strings in a new `groups.*` group, in all 21 catalogs.
 **STOP**
 
 ### CP42 Minimal onboarding
@@ -777,6 +806,11 @@ seeing the explanation.
 - One contextual card after the first sign in, not a tour page, because it needs the account: when the account
   has Telegram folders, ask "Show everything" or "Only my folders" (the CP41 setting), with the CP41 prompt
   rules. No folders: skip it. Depends on CP41.
+  Built 2026-10-09 (`FirstSignIn` in :ui, `FirstSignInCard` on Android and desktop): a sign in screen arms
+  it (`armFirstSignInCard`), so somebody signed in before it existed is never asked; it waits for the
+  shell and the chat list, asks when the account has folders, and is skipped for good after a 3 s grace
+  when there are none. "Show everything" (focused on TV, also Back) changes nothing; "Only my folders"
+  opens the CP41 prompt with its favourites count. Asked once per install: the answer survives sign out.
 - First-run empty state on the chat list and Home: say how to get a first video (forward to Saved Messages),
   with the existing strings made visible instead of buried in an empty state.
 - Hints deferred to first use, shown once and dismissible: double tap to jump and the swipe gestures on the

@@ -84,7 +84,12 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun SettingsPage(state: ShellState, version: String = "") {
+fun SettingsPage(
+    state: ShellState,
+    version: String = "",
+    /** The chat list as loaded, for the favourites "Only my folders" would strand. */
+    chatList: List<com.tmplayer.data.ChatSummary> = emptyList(),
+) {
     val s = LocalStrings.current
     var showAbout by remember { mutableStateOf(false) }
     val supportCounters by state.settings.supportCounters.collectAsState(initial = SupportReminder.Counters())
@@ -114,6 +119,8 @@ fun SettingsPage(state: ShellState, version: String = "") {
     val favourites by settings.favorites.collectAsState(initial = emptySet())
     val watchedList by state.watched.history.collectAsState(initial = emptyList())
     var confirmClearWatched by remember { mutableStateOf(false) }
+    val folders by com.tmplayer.data.Td.folders.collectAsState()
+    var confirmHideGroups by remember { mutableStateOf(false) }
     val language by settings.language.collectAsState(initial = "")
     var pickingLanguage by remember { mutableStateOf(false) }
     var stylingSubtitles by remember { mutableStateOf(false) }
@@ -285,6 +292,22 @@ fun SettingsPage(state: ShellState, version: String = "") {
                         if (watchedList.isEmpty()) toast(s.settingsWatchedEmpty) else confirmClearWatched = true
                     }) { Text(s.commonClear) }
                 }
+                // Telegram's default groups, Chats and Saved Messages, off the side bar. On asks
+                // first, with the favourites it strands counted; off asks nothing.
+                Toggle(
+                    s.groupsSetting,
+                    com.tmplayer.ui.browse.DefaultGroups.settingDetail(state.hideDefaultGroups, folders.size),
+                    state.hideDefaultGroups,
+                ) { on ->
+                    if (on) {
+                        confirmHideGroups = true
+                    } else {
+                        scope.launch {
+                            settings.setHideDefaultGroups(false)
+                            toast(s.groupsShownToast)
+                        }
+                    }
+                }
                 Setting(s.navFavourites, s.settingsFavouritesDetail) {
                     OutlinedButton(onClick = {
                         if (favourites.isEmpty()) {
@@ -294,7 +317,11 @@ fun SettingsPage(state: ShellState, version: String = "") {
                         confirm = Confirm(
                             title = s.settingsFavouritesClearTitle,
                             message = s.settingsFavouritesClearMessage(favourites.size),
-                            detail = s.settingsFavouritesClearDetail,
+                            detail = if (state.hideDefaultGroups) {
+                                com.tmplayer.ui.browse.DefaultGroups.favouritesUntouched(hidden = true)
+                            } else {
+                                s.settingsFavouritesClearDetail
+                            },
                         ) {
                             scope.launch {
                                 val count = favourites.size
@@ -391,6 +418,27 @@ fun SettingsPage(state: ShellState, version: String = "") {
     if (reporting) FeedbackPopup(onClose = { reporting = false })
     if (confirmClearWatched) {
         ClearWatchedDialog(state, watchedList.size, scope, onDismiss = { confirmClearWatched = false })
+    }
+
+    if (confirmHideGroups) {
+        val unreachable = remember(favourites, chatList) {
+            com.tmplayer.ui.browse.DefaultGroups.unreachableFavorites(favourites, chatList)
+        }
+        val words = com.tmplayer.ui.browse.DefaultGroups.prompt(unreachable.size, folders.size)
+        ConfirmDialog(
+            title = words.title,
+            message = words.message,
+            detail = words.detail,
+            confirmLabel = words.confirm,
+            onConfirm = {
+                confirmHideGroups = false
+                scope.launch {
+                    settings.setHideDefaultGroups(true, unstar = unreachable)
+                    toast(s.groupsHiddenToast)
+                }
+            },
+            onDismiss = { confirmHideGroups = false },
+        )
     }
 
     confirm?.let { asked ->

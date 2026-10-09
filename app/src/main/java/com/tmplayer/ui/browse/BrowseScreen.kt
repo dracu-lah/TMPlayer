@@ -274,7 +274,14 @@ fun BrowseScreen(
     // empty. Those are read from disk after the first frame, so the tab settles once they arrive;
     // an explicit pick always wins. [picked] is hoisted rather than remembered here because
     // opening a chat swaps this screen out of the composition.
-    val sections = remember(folders) { browseSections(folders) }
+    // "Only my folders" (Settings): Telegram's default groups, Chats and Saved Messages, are left
+    // off the drawer and the rail, and a section that names them lands on Home instead.
+    val groupsContext = LocalContext.current
+    val groupsSettings = remember(groupsContext) { SettingsStore(groupsContext) }
+    val defaultsHidden by remember(groupsSettings) { groupsSettings.hideDefaultGroups }.collectAsState(initial = false)
+    val sections = remember(folders, defaultsHidden) { browseSections(folders, defaultsHidden) }
+    // The folders are then the only way into the chats, so they are not left folded.
+    LaunchedEffect(defaultsHidden) { if (defaultsHidden) NavGroupState.unfold(NavGroup.Folders) }
     // How many chats have something unread in them, not how many messages are unread across them:
     // the badge sits beside "Chats", whose Unread chip lists those chats.
     val allChats = (state as? UiState.Content)?.value?.chats
@@ -285,7 +292,7 @@ fun BrowseScreen(
     // a folder deleted elsewhere and the heading never keeps a stale name.
     val tab = picked?.let { chosen ->
         when (chosen) {
-            is BrowseSection.Tab -> chosen
+            is BrowseSection.Tab -> DefaultGroups.reachable(chosen, defaultsHidden)
             is BrowseSection.Folder -> sections.filterIsInstance<BrowseSection.Folder>()
                 .firstOrNull { it.id == chosen.id }
                 ?: chosen.takeIf { folders.isEmpty() }
@@ -427,7 +434,8 @@ fun BrowseScreen(
                             },
                             onOpenChat = { id -> data.chats.firstOrNull { it.id == id }?.let(onOpenChat) },
                             noFavourites = favorites.isEmpty(),
-                            onOpenSaved = { onPickTab(BrowseSection.of(BrowseTab.Saved)); query = "" },
+                            firstStep = remember(defaultsHidden, folders) { DefaultGroups.firstStep(defaultsHidden, folders) },
+                            onOpenSection = { onPickTab(it); query = "" },
                         )
                     } else if (tab.listsVideos) {
                         // One branch for both tabs, so the chip row stays the same composition when
@@ -553,6 +561,7 @@ fun BrowseScreen(
                                     nothingPlayed = continueWatching.isEmpty() && watchedHistory.isEmpty(),
                                     start = insets.start,
                                     end = insets.end,
+                                    defaultsHidden = defaultsHidden,
                                 )
                             }
                             ChatSection(
@@ -828,7 +837,7 @@ fun BrowseScreen(
         TvConfirm(
             title = s.browseClearFavouritesTitle,
             message = s.browseClearFavouritesMessage(favorites.size),
-            detail = s.browseClearFavouritesDetail,
+            detail = if (defaultsHidden) DefaultGroups.favouritesUntouched(hidden = true) else s.browseClearFavouritesDetail,
             confirmLabel = s.commonClear,
             onConfirm = {
                 confirmClearFavorites = false

@@ -235,16 +235,25 @@ sealed interface BrowseSection {
 /**
  * Every place the sidebar offers, Home first, with the viewer's folders after the chat entries.
  *
+ * With [hideDefaultGroups] the Chats group (Chats and Saved Messages) is left out, so the folders
+ * follow Favourites directly.
+ *
  * Folders come last because they are the only part of this list that differs per account. Keeping
  * the fixed, learnable entries first also stops the sidebar changing shape halfway down when a
  * folder is added or renamed.
  */
-fun browseSections(folders: List<ChatFolderSummary>): List<BrowseSection> = buildList {
+fun browseSections(
+    folders: List<ChatFolderSummary>,
+    /** "Only my folders" in Settings: Telegram's default groups ([DefaultGroups.TABS]) are left out. */
+    hideDefaultGroups: Boolean = false,
+): List<BrowseSection> = buildList {
     add(BrowseSection.of(BrowseTab.Home))
     add(BrowseSection.of(BrowseTab.History))
     add(BrowseSection.of(BrowseTab.Favorites))
-    add(BrowseSection.of(BrowseTab.Chats))
-    add(BrowseSection.of(BrowseTab.Saved))
+    if (!hideDefaultGroups) {
+        add(BrowseSection.of(BrowseTab.Chats))
+        add(BrowseSection.of(BrowseTab.Saved))
+    }
     folders.forEach { add(BrowseSection.Folder(it.id, it.title)) }
 }
 
