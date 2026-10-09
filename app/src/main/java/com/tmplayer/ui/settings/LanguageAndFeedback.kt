@@ -10,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -133,6 +135,7 @@ fun LanguageNoticeCard(language: String, onKeep: () -> Unit, onChange: () -> Uni
  * "What's new": the bundled highlights of [WhatsNew.VERSION], on the first run of that version and
  * from Settings. "Full changelog" opens the site's changelog, or its QR code on a TV.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun WhatsNewDialog(onClose: () -> Unit, onChangelog: () -> Unit) {
     val s = LocalStrings.current
@@ -158,9 +161,12 @@ fun WhatsNewDialog(onClose: () -> Unit, onChangelog: () -> Unit) {
                 }
             }
             CompositionLocalProvider(LocalOnFloating provides true) {
-                Row(
+                // Wraps rather than squeezes: "Vollständiges Änderungsprotokoll" left "Schließen"
+                // a column of single letters on a phone.
+                FlowRow(
                     Modifier.fillMaxWidth().padding(top = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     TmSecondaryButton(onClick = onChangelog) { Label(s.whatsnewFullChangelog) }
                     TmButton(onClick = onClose, modifier = Modifier.focusRequester(close)) { Label(s.commonClose) }

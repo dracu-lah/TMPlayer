@@ -380,7 +380,7 @@
     "finished_file_missing": "Готовый файл не найден. Повторите.",
     "finishes_after_playback": "Завершится, когда воспроизведение остановится",
     "finishes_when_stopped": "Завершится, когда воспроизведение остановится",
-    "folder": "Папка загрузок TMPlayer",
+    "folder": "«Загрузки» TMPlayer",
     "heading_queued": "В очереди",
     "heading_running": "Скачивается сейчас",
     "heading_running_waiting": "Скачивается сейчас, ждут: {count}",

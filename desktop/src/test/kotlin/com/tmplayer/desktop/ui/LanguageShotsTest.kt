@@ -132,12 +132,30 @@ class LanguageShotsTest {
         }
     }
 
+    /**
+     * The catalogs whose words run longest: German and Russian, and Malayalam, whose labels are
+     * often two or three times the English, so the sidebar and the buttons are checked in them.
+     */
+    @Test
+    fun longestWords() {
+        for (tag in listOf("de", "ru", "ml")) {
+            Translator.use(tag)
+            try {
+                shots(tag)
+            } finally {
+                Translator.use(Languages.ENGLISH)
+            }
+        }
+    }
+
     private fun shots(tag: String) {
         fun shot(name: String, sidebar: Boolean = true, page: @Composable () -> Unit) =
             save("lang-$tag-$name.png", render(sidebar, page))
 
         shot("browse") { Grid() }
         shot("settings") { SettingsPage(shell, "2.0.0") }
+        shot("about") { AboutPage("2.0.0", onBack = {}) }
+        shot("downloads") { DownloadsPage(shell, dir.resolve("Downloads").apply { mkdirs() }) }
         shot("playermenu", sidebar = false) {
             PlayerTheme {
                 Box(Modifier.fillMaxSize().background(Color(0xFF203040))) {
