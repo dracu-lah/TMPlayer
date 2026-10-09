@@ -337,7 +337,8 @@
     "one_file_for_every_phone": "Un solo archivo para todos los teléfonos, de 32 y 64 bits. Ábrelo y permite la instalación.",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "Cómo instalarlo en un teléfono",
-    "add_to_obtainium": "Agregar a Obtainium",
+    "kao_note": "Desde 2027, Google planea que Android instale solo apps cuyos desarrolladores se hayan registrado con Google, pagado una tarifa y mostrado una identificación oficial. Eso incluye las apps instaladas desde fuera de Play Store, como este APK y F-Droid. {a1} explica qué significa y cómo hacer oír tu voz.",
+    "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0 o superior: sticks, cajas y televisiones",
     "the_same_file_as_the": "El mismo archivo que el del teléfono. Envíalo a la TV con Downloader, Send files to TV o {code1}.",
     "how_to_install_on_a_2": "Cómo instalarlo en una televisión",
@@ -379,7 +380,8 @@
     "no_store_updates_tmplayer_looks": "No se actualiza desde una tienda. TMPlayer busca solo una nueva versión y te la ofrece en la barra lateral; el instalador de Windows y el AppImage se actualizan desde ahí sin reinstalar.",
     "an_app_from_outside_the": "Una app de fuera de la tienda que inicia sesión en Telegram pide mucha confianza. Una estrella ayuda a que la próxima persona se decida.",
     "download_tmplayer_free_the_apk": "Descarga TMPlayer gratis: el APK para Android TV y teléfonos, un instalador para Windows y un AppImage para Linux.",
-    "platforms": "Plataformas"
+    "platforms": "Plataformas",
+    "add_to_obtainium": "Agregar a Obtainium"
   },
   "install": {
     "how_to_install_tmplayer_on": "Cómo instalar TMPlayer en Android TV, Windows y Linux",
@@ -965,6 +967,13 @@
     "languages_count": "{count} idiomas",
     "suggest": "Esta página también está en {language}.",
     "suggest_go": "Leer en {language}",
-    "suggest_dismiss": "Seguir en este idioma"
+    "suggest_dismiss": "Seguir en este idioma",
+    "kao_bar": "Desde 2027, Android planea instalar solo apps de desarrolladores registrados con Google.",
+    "kao_sheet": "Desde 2027, Android planea instalar solo apps cuyos desarrolladores se hayan registrado con Google y mostrado su identificación. Eso incluye apps de fuera de Play Store, como TMPlayer.",
+    "kao_learn": "Más información",
+    "kao_share": "Compartir",
+    "kao_share_text": "Desde 2027, Android planea instalar solo apps de desarrolladores registrados con Google. #KeepAndroidOpen",
+    "kao_copied": "Enlace copiado",
+    "kao_close": "Cerrar este aviso"
   }
 }

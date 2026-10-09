@@ -93,6 +93,8 @@
   try {
     var t = localStorage.getItem('tm-theme');
     if (t === 'light' || t === 'dark') { document.documentElement.setAttribute('data-theme', t); }
+    // The Keep Android Open notice, once closed, stays closed without a flash on the next page.
+    if (localStorage.getItem('tm-kao-closed')) { document.documentElement.className += ' kao-off'; }
   } catch (e) {}
 })();
 </script>
@@ -121,6 +123,12 @@
 <body>
 
 <a class="skip" href="#main" data-i18n="common.skip_to_content">Przejdź do treści</a>
+<!-- i18n:notice -->
+<aside class="kao" id="kao" aria-label="Keep Android Open">
+  <div class="kao-bar"><p><span>Od 2027 roku Android ma instalować tylko aplikacje deweloperów zarejestrowanych w Google.</span> <a href="https://keepandroidopen.org/" target="_blank" rel="noopener">Dowiedz się więcej</a></p><button type="button" class="kao-close" data-kao-close aria-label="Zamknij to powiadomienie" title="Zamknij to powiadomienie"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="currentColor" d="M18.3 7.1 13.4 12l4.9 4.9a1 1 0 0 1-1.4 1.4L12 13.4l-4.9 4.9a1 1 0 0 1-1.4-1.4l4.9-4.9-4.9-4.9a1 1 0 0 1 1.4-1.4l4.9 4.9 4.9-4.9a1 1 0 0 1 1.4 1.4Z"/></svg></button></div>
+  <div class="kao-sheet"><p class="kao-tag" lang="en" dir="ltr">#KeepAndroidOpen</p><p class="kao-text">Od 2027 roku Android ma instalować tylko aplikacje, których deweloperzy zarejestrowali się w Google i okazali dokument tożsamości. Dotyczy to także aplikacji spoza Sklepu Play, takich jak TMPlayer.</p><div class="kao-actions"><a class="kao-learn" href="https://keepandroidopen.org/" target="_blank" rel="noopener">Dowiedz się więcej</a><button type="button" class="kao-share" data-kao-share data-url="https://keepandroidopen.org/" data-text="Od 2027 roku Android ma instalować tylko aplikacje deweloperów zarejestrowanych w Google. #KeepAndroidOpen" data-copied="Skopiowano link"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="M18 16a3 3 0 0 0-2.4 1.2l-6.7-3.4a3 3 0 0 0 0-1.6l6.7-3.4A3 3 0 1 0 15 7l-6.7 3.4a3 3 0 1 0 0 3.2L15 17a3 3 0 1 0 3-1Z"/></svg><span>Udostępnij</span></button><span class="kao-copied" role="status" aria-live="polite"></span></div><button type="button" class="kao-close" data-kao-close aria-label="Zamknij to powiadomienie" title="Zamknij to powiadomienie"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="currentColor" d="M18.3 7.1 13.4 12l4.9 4.9a1 1 0 0 1-1.4 1.4L12 13.4l-4.9 4.9a1 1 0 0 1-1.4-1.4l4.9-4.9-4.9-4.9a1 1 0 0 1 1.4-1.4l4.9 4.9 4.9-4.9a1 1 0 0 1 1.4 1.4Z"/></svg></button></div>
+</aside>
+<!-- /i18n:notice -->
 
 <!-- Decorative background art, hidden from assistive technology and still under reduced motion. -->
 <div class="bg-art" aria-hidden="true">

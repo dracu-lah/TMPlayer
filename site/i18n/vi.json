@@ -337,7 +337,8 @@
     "one_file_for_every_phone": "Một tệp cho mọi điện thoại, cả 32 bit và 64 bit. Mở tệp và cho phép cài đặt.",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "Cách cài trên điện thoại",
-    "add_to_obtainium": "Thêm vào Obtainium",
+    "kao_note": "Từ năm 2027, Google dự kiến để Android chỉ cài ứng dụng có nhà phát triển đã đăng ký với Google, trả phí và xuất trình giấy tờ tùy thân chính thức. Điều này áp dụng cả với ứng dụng cài từ ngoài Play Store, như tệp APK này và F-Droid. {a1} giải thích điều đó có nghĩa là gì và cách bạn lên tiếng.",
+    "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0 trở lên: TV stick, TV box và TV",
     "the_same_file_as_the": "Cùng tệp với điện thoại. Gửi sang TV bằng Downloader, Send files to TV hoặc {code1}.",
     "how_to_install_on_a_2": "Cách cài trên TV",
@@ -379,7 +380,8 @@
     "no_store_updates_tmplayer_looks": "Không cập nhật qua cửa hàng. TMPlayer tự tìm phiên bản mới và đề xuất ngay trên thanh bên; trình cài đặt Windows và AppImage cập nhật tại chỗ từ đó.",
     "an_app_from_outside_the": "Một ứng dụng ngoài cửa hàng mà lại đăng nhập vào Telegram đòi hỏi rất nhiều sự tin tưởng. Một ngôi sao giúp người sau quyết định.",
     "download_tmplayer_free_the_apk": "Tải TMPlayer miễn phí: APK cho Android TV và điện thoại, trình cài đặt Windows và AppImage cho Linux.",
-    "platforms": "Nền tảng"
+    "platforms": "Nền tảng",
+    "add_to_obtainium": "Thêm vào Obtainium"
   },
   "install": {
     "how_to_install_tmplayer_on": "Cách cài TMPlayer trên Android TV, Windows và Linux",
@@ -965,6 +967,13 @@
     "languages_count": "{count} ngôn ngữ",
     "suggest": "Trang này cũng có bằng {language}.",
     "suggest_go": "Đọc bằng {language}",
-    "suggest_dismiss": "Giữ nguyên ngôn ngữ này"
+    "suggest_dismiss": "Giữ nguyên ngôn ngữ này",
+    "kao_bar": "Từ năm 2027, Android dự kiến chỉ cài ứng dụng của nhà phát triển đã đăng ký với Google.",
+    "kao_sheet": "Từ năm 2027, Android dự kiến chỉ cài ứng dụng có nhà phát triển đã đăng ký với Google và xuất trình giấy tờ tùy thân. Điều này áp dụng cả với ứng dụng ngoài Play Store, như TMPlayer.",
+    "kao_learn": "Tìm hiểu thêm",
+    "kao_share": "Chia sẻ",
+    "kao_share_text": "Từ năm 2027, Android dự kiến chỉ cài ứng dụng của nhà phát triển đã đăng ký với Google. #KeepAndroidOpen",
+    "kao_copied": "Đã sao chép liên kết",
+    "kao_close": "Đóng thông báo này"
   }
 }

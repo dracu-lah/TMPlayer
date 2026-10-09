@@ -1002,3 +1002,85 @@ var tmT = (function () {
   var skip = document.querySelector('.skip');
   document.body.insertBefore(bar, skip ? skip.nextSibling : document.body.firstChild);
 })();
+
+/* Keep Android Open: the close and share buttons of the notice that
+   scripts/build-site-i18n.py writes into every page. Closing it is remembered
+   under one key for every page and language; the head script reads that key
+   before the first paint. On a phone the card is fixed to the bottom, so the
+   page is padded by its height for as long as it shows. */
+(function () {
+  'use strict';
+
+  var notice = document.getElementById('kao');
+  if (!notice) { return; }
+  var root = document.documentElement;
+  var KEY = 'tm-kao-closed';
+  var sheet = notice.querySelector('.kao-sheet');
+
+  function measure() {
+    if (sheet && sheet.offsetHeight) {
+      root.style.setProperty('--kao-h', sheet.offsetHeight + 'px');
+    }
+  }
+  measure();
+  if (sheet && window.ResizeObserver) {
+    new ResizeObserver(measure).observe(sheet);
+  } else {
+    window.addEventListener('resize', measure);
+  }
+
+  Array.prototype.forEach.call(notice.querySelectorAll('[data-kao-close]'), function (button) {
+    button.addEventListener('click', function () {
+      try { localStorage.setItem(KEY, '1'); } catch (e) {}
+      root.className += ' kao-off';
+      root.style.removeProperty('--kao-h');
+      var main = document.getElementById('main');
+      if (main && document.activeElement === button) {
+        main.setAttribute('tabindex', '-1');
+        main.focus({ preventScroll: true });
+      }
+    });
+  });
+
+  var share = notice.querySelector('[data-kao-share]');
+  if (!share) { return; }
+  var status = notice.querySelector('.kao-copied');
+  var url = share.getAttribute('data-url');
+  var text = share.getAttribute('data-text');
+  var timer = null;
+
+  function copied() {
+    if (!status) { return; }
+    status.textContent = share.getAttribute('data-copied');
+    clearTimeout(timer);
+    timer = setTimeout(function () { status.textContent = ''; }, 2500);
+  }
+  function fallback() {
+    var field = document.createElement('textarea');
+    field.value = url;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.opacity = '0';
+    document.body.appendChild(field);
+    field.select();
+    try { if (document.execCommand('copy')) { copied(); } } catch (e) {}
+    document.body.removeChild(field);
+  }
+  function copy() {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(copied, fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  share.addEventListener('click', function () {
+    if (navigator.share) {
+      navigator.share({ title: 'Keep Android Open', text: text, url: url }).catch(function (e) {
+        if (!e || e.name !== 'AbortError') { copy(); }
+      });
+    } else {
+      copy();
+    }
+  });
+})();

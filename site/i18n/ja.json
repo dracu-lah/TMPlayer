@@ -337,7 +337,8 @@
     "one_file_for_every_phone": "32ビットと64ビットのどちらのスマートフォンでも使える、1つのファイル。開いて、インストールを許可してください。",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "スマートフォンへのインストール方法",
-    "add_to_obtainium": "Obtainiumに追加",
+    "kao_note": "Google は 2027 年から、開発者が Google に登録し、手数料を支払い、公的な身分証明書を提示したアプリだけを Android がインストールするようにする予定です。この APK や F-Droid のように Play ストア以外からインストールするアプリも対象です。{a1} では、その意味と意見を届ける方法を説明しています。",
+    "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0以降: スティック、ボックス、テレビ",
     "the_same_file_as_the": "スマートフォンと同じファイルです。Downloader、Send files to TV、または{code1}でテレビに送ってください。",
     "how_to_install_on_a_2": "テレビへのインストール方法",
@@ -379,7 +380,8 @@
     "no_store_updates_tmplayer_looks": "ストア経由の更新はありません。TMPlayerが自分で新しいバージョンを探し、サイドバーで案内します。WindowsのインストーラーとAppImageは、そこからその場で更新されます。",
     "an_app_from_outside_the": "Telegramにサインインするストア外のアプリには、大きな信頼が求められます。スターは、次の人が判断する助けになります。",
     "download_tmplayer_free_the_apk": "TMPlayerを無料でダウンロード: Android TVとスマートフォン向けのAPK、Windowsのインストーラー、Linux向けのAppImage。",
-    "platforms": "対応環境"
+    "platforms": "対応環境",
+    "add_to_obtainium": "Obtainiumに追加"
   },
   "install": {
     "how_to_install_tmplayer_on": "Android TV、Windows、LinuxにTMPlayerをインストールする方法",
@@ -965,6 +967,13 @@
     "languages_count": "{count}言語",
     "suggest": "このページは{language}でも読めます。",
     "suggest_go": "{language}で読む",
-    "suggest_dismiss": "この言語のまま"
+    "suggest_dismiss": "この言語のまま",
+    "kao_bar": "2027 年から、Android は Google に登録した開発者のアプリだけをインストールする予定です。",
+    "kao_sheet": "2027 年から、Android は開発者が Google に登録して身分証明書を提示したアプリだけをインストールする予定です。TMPlayer のような Play ストア以外のアプリも対象です。",
+    "kao_learn": "詳しく見る",
+    "kao_share": "共有",
+    "kao_share_text": "2027 年から、Android は Google に登録した開発者のアプリだけをインストールする予定です。#KeepAndroidOpen",
+    "kao_copied": "リンクをコピーしました",
+    "kao_close": "このお知らせを閉じる"
   }
 }

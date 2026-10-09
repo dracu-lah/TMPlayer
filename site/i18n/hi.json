@@ -337,7 +337,8 @@
     "one_file_for_every_phone": "हर फ़ोन के लिए एक फ़ाइल, 32-बिट और 64-बिट। इसे खोलें और इंस्टॉल की अनुमति दें।",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "फ़ोन पर इंस्टॉल कैसे करें",
-    "add_to_obtainium": "Obtainium में जोड़ें",
+    "kao_note": "2027 से Google की योजना है कि Android सिर्फ़ वही ऐप इंस्टॉल करे जिनके डेवलपर ने Google के पास रजिस्टर किया हो, फ़ीस दी हो और सरकारी पहचान पत्र दिखाया हो। यह Play Store के बाहर से इंस्टॉल होने वाले ऐप पर भी लागू होता है, जैसे यह APK और F-Droid। {a1} बताता है कि इसका क्या मतलब है और आप अपनी बात कैसे रख सकते हैं।",
+    "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0 और उससे ऊपर: स्टिक, बॉक्स और टेलीविज़न",
     "the_same_file_as_the": "फ़ोन वाली ही फ़ाइल। इसे Downloader, Send files to TV या {code1} से टीवी पर भेजें।",
     "how_to_install_on_a_2": "टीवी पर इंस्टॉल कैसे करें",
@@ -379,7 +380,8 @@
     "no_store_updates_tmplayer_looks": "स्टोर से अपडेट नहीं। TMPlayer नया वर्शन खुद ढूँढता है और साइडबार में उसका सुझाव देता है; Windows इंस्टॉलर और AppImage वहीं से अपने आप अपडेट हो जाते हैं।",
     "an_app_from_outside_the": "स्टोर के बाहर का ऐप, जो Telegram में साइन इन करता है, बहुत भरोसा माँगता है। स्टार अगले व्यक्ति को फ़ैसला करने में मदद करता है।",
     "download_tmplayer_free_the_apk": "TMPlayer मुफ़्त डाउनलोड करें: Android TV और फ़ोन के लिए APK, Windows इंस्टॉलर, और Linux के लिए AppImage।",
-    "platforms": "प्लेटफ़ॉर्म"
+    "platforms": "प्लेटफ़ॉर्म",
+    "add_to_obtainium": "Obtainium में जोड़ें"
   },
   "install": {
     "how_to_install_tmplayer_on": "Android TV, Windows और Linux पर TMPlayer कैसे इंस्टॉल करें",
@@ -965,6 +967,13 @@
     "languages_count": "{count} भाषाएँ",
     "suggest": "यह पेज {language} में भी उपलब्ध है।",
     "suggest_go": "{language} में पढ़ें",
-    "suggest_dismiss": "इसी भाषा में रहें"
+    "suggest_dismiss": "इसी भाषा में रहें",
+    "kao_bar": "2027 से Android सिर्फ़ उन्हीं डेवलपर के ऐप इंस्टॉल करने की योजना बना रहा है जो Google के पास रजिस्टर्ड हों।",
+    "kao_sheet": "2027 से Android सिर्फ़ वही ऐप इंस्टॉल करने की योजना बना रहा है जिनके डेवलपर ने Google के पास रजिस्टर करके पहचान पत्र दिखाया हो। इसमें Play Store के बाहर के ऐप भी शामिल हैं, जैसे TMPlayer।",
+    "kao_learn": "और जानें",
+    "kao_share": "शेयर करें",
+    "kao_share_text": "2027 से Android सिर्फ़ उन्हीं डेवलपर के ऐप इंस्टॉल करने की योजना बना रहा है जो Google के पास रजिस्टर्ड हों। #KeepAndroidOpen",
+    "kao_copied": "लिंक कॉपी हो गया",
+    "kao_close": "यह सूचना बंद करें"
   }
 }

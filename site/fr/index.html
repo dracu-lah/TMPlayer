@@ -99,6 +99,8 @@
   try {
     var t = localStorage.getItem('tm-theme');
     if (t === 'light' || t === 'dark') { document.documentElement.setAttribute('data-theme', t); }
+    // The Keep Android Open notice, once closed, stays closed without a flash on the next page.
+    if (localStorage.getItem('tm-kao-closed')) { document.documentElement.className += ' kao-off'; }
   } catch (e) {}
 })();
 </script>
@@ -204,6 +206,12 @@
 <body>
 
 <a class="skip" href="#main" data-i18n="common.skip_to_content">Aller au contenu</a>
+<!-- i18n:notice -->
+<aside class="kao" id="kao" aria-label="Keep Android Open">
+  <div class="kao-bar"><p><span>À partir de 2027, Android prévoit de n&#x27;installer que les applis de développeurs enregistrés auprès de Google.</span> <a href="https://keepandroidopen.org/" target="_blank" rel="noopener">En savoir plus</a></p><button type="button" class="kao-close" data-kao-close aria-label="Fermer cet avis" title="Fermer cet avis"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="currentColor" d="M18.3 7.1 13.4 12l4.9 4.9a1 1 0 0 1-1.4 1.4L12 13.4l-4.9 4.9a1 1 0 0 1-1.4-1.4l4.9-4.9-4.9-4.9a1 1 0 0 1 1.4-1.4l4.9 4.9 4.9-4.9a1 1 0 0 1 1.4 1.4Z"/></svg></button></div>
+  <div class="kao-sheet"><p class="kao-tag" lang="en" dir="ltr">#KeepAndroidOpen</p><p class="kao-text">À partir de 2027, Android prévoit de n&#x27;installer que les applis dont les développeurs se sont enregistrés auprès de Google et ont fourni une pièce d&#x27;identité. Cela concerne aussi les applis hors Play Store, comme TMPlayer.</p><div class="kao-actions"><a class="kao-learn" href="https://keepandroidopen.org/" target="_blank" rel="noopener">En savoir plus</a><button type="button" class="kao-share" data-kao-share data-url="https://keepandroidopen.org/" data-text="À partir de 2027, Android prévoit de n&#x27;installer que les applis de développeurs enregistrés auprès de Google. #KeepAndroidOpen" data-copied="Lien copié"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" d="M18 16a3 3 0 0 0-2.4 1.2l-6.7-3.4a3 3 0 0 0 0-1.6l6.7-3.4A3 3 0 1 0 15 7l-6.7 3.4a3 3 0 1 0 0 3.2L15 17a3 3 0 1 0 3-1Z"/></svg><span>Partager</span></button><span class="kao-copied" role="status" aria-live="polite"></span></div><button type="button" class="kao-close" data-kao-close aria-label="Fermer cet avis" title="Fermer cet avis"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path fill="currentColor" d="M18.3 7.1 13.4 12l4.9 4.9a1 1 0 0 1-1.4 1.4L12 13.4l-4.9 4.9a1 1 0 0 1-1.4-1.4l4.9-4.9-4.9-4.9a1 1 0 0 1 1.4-1.4l4.9 4.9 4.9-4.9a1 1 0 0 1 1.4 1.4Z"/></svg></button></div>
+</aside>
+<!-- /i18n:notice -->
 
 <!--
   Background art, hand drawn here rather than borrowed: four soft shapes, one per accent, anchored

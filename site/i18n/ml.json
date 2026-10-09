@@ -337,7 +337,8 @@
     "one_file_for_every_phone": "എല്ലാ ഫോണിനും ഒരു ഫയൽ, 32-ബിറ്റും 64-ബിറ്റും. തുറന്ന് ഇൻസ്റ്റാൾ അനുവദിക്കുക.",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "ഫോണിൽ ഇൻസ്റ്റാൾ ചെയ്യുന്ന വിധം",
-    "add_to_obtainium": "Obtainium-ലേക്ക് ചേർക്കുക",
+    "kao_note": "2027 മുതൽ, ഡെവലപ്പർ Google-ൽ രജിസ്റ്റർ ചെയ്ത്, ഫീസ് അടച്ച്, ഔദ്യോഗിക തിരിച്ചറിയൽ രേഖ കാണിച്ച ആപ്പുകൾ മാത്രം Android ഇൻസ്റ്റാൾ ചെയ്യുന്ന രീതിയാണ് Google ആസൂത്രണം ചെയ്യുന്നത്. ഈ APK, F-Droid പോലെ Play Store-ന് പുറത്തുനിന്ന് ഇൻസ്റ്റാൾ ചെയ്യുന്ന ആപ്പുകൾക്കും ഇത് ബാധകമാണ്. ഇതിന്റെ അർഥവും നിങ്ങളുടെ അഭിപ്രായം എങ്ങനെ അറിയിക്കാമെന്നും {a1} വിശദീകരിക്കുന്നു.",
+    "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0-ഉം അതിനു മുകളിലും: സ്റ്റിക്കുകൾ, ബോക്സുകൾ, ടെലിവിഷനുകൾ",
     "the_same_file_as_the": "ഫോണിലേതിന്റെ അതേ ഫയൽ തന്നെ. Downloader, Send files to TV അല്ലെങ്കിൽ {code1} ഉപയോഗിച്ച് ടിവിയിലേക്ക് അയയ്ക്കുക.",
     "how_to_install_on_a_2": "ടെലിവിഷനിൽ ഇൻസ്റ്റാൾ ചെയ്യുന്ന വിധം",
@@ -379,7 +380,8 @@
     "no_store_updates_tmplayer_looks": "സ്റ്റോർ അപ്ഡേറ്റുകളില്ല. TMPlayer പുതിയ പതിപ്പ് സ്വയം തിരഞ്ഞ് സൈഡ് ബാറിൽ നിർദ്ദേശിക്കും; Windows ഇൻസ്റ്റാളറും AppImage-ഉം അവിടെ നിന്ന് തന്നെ അപ്ഡേറ്റ് ആകും.",
     "an_app_from_outside_the": "Telegram-ൽ സൈൻ ഇൻ ചെയ്യുന്ന, സ്റ്റോറിനു പുറത്തുള്ള ഒരു ആപ്പ് ഏറെ വിശ്വാസം ആവശ്യപ്പെടുന്നു. ഒരു സ്റ്റാർ അടുത്തയാൾക്ക് തീരുമാനിക്കാൻ സഹായിക്കും.",
     "download_tmplayer_free_the_apk": "TMPlayer സൗജന്യമായി ഡൗൺലോഡ് ചെയ്യുക: Android TV, ഫോൺ എന്നിവയ്ക്കുള്ള APK, Windows ഇൻസ്റ്റാളർ, Linux-നുള്ള AppImage.",
-    "platforms": "പ്ലാറ്റ്ഫോമുകൾ"
+    "platforms": "പ്ലാറ്റ്ഫോമുകൾ",
+    "add_to_obtainium": "Obtainium-ലേക്ക് ചേർക്കുക"
   },
   "install": {
     "how_to_install_tmplayer_on": "Android TV, Windows, Linux എന്നിവയിൽ TMPlayer ഇൻസ്റ്റാൾ ചെയ്യുന്ന വിധം",
@@ -965,6 +967,13 @@
     "languages_count": "{count} ഭാഷകൾ",
     "suggest": "ഈ പേജ് {language}-ലും ലഭ്യമാണ്.",
     "suggest_go": "{language}-ൽ വായിക്കുക",
-    "suggest_dismiss": "ഈ ഭാഷയിൽ തുടരുക"
+    "suggest_dismiss": "ഈ ഭാഷയിൽ തുടരുക",
+    "kao_bar": "2027 മുതൽ Google-ൽ രജിസ്റ്റർ ചെയ്ത ഡെവലപ്പർമാരുടെ ആപ്പുകൾ മാത്രം ഇൻസ്റ്റാൾ ചെയ്യാനാണ് Android-ന്റെ പദ്ധതി.",
+    "kao_sheet": "2027 മുതൽ, ഡെവലപ്പർ Google-ൽ രജിസ്റ്റർ ചെയ്ത് തിരിച്ചറിയൽ രേഖ കാണിച്ച ആപ്പുകൾ മാത്രം ഇൻസ്റ്റാൾ ചെയ്യാനാണ് Android-ന്റെ പദ്ധതി. TMPlayer പോലെ Play Store-ന് പുറത്തുള്ള ആപ്പുകൾക്കും ഇത് ബാധകമാണ്.",
+    "kao_learn": "കൂടുതൽ അറിയുക",
+    "kao_share": "പങ്കിടുക",
+    "kao_share_text": "2027 മുതൽ Google-ൽ രജിസ്റ്റർ ചെയ്ത ഡെവലപ്പർമാരുടെ ആപ്പുകൾ മാത്രം ഇൻസ്റ്റാൾ ചെയ്യാനാണ് Android-ന്റെ പദ്ധതി. #KeepAndroidOpen",
+    "kao_copied": "ലിങ്ക് പകർത്തി",
+    "kao_close": "ഈ അറിയിപ്പ് അടയ്ക്കുക"
   }
 }

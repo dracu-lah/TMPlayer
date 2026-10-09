@@ -337,7 +337,8 @@
     "one_file_for_every_phone": "প্রতিটি ফোনের জন্য একটি ফাইল, 32-বিট ও 64-বিট। খুলে ইনস্টলের অনুমতি দিন।",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "ফোনে ইনস্টল করার নিয়ম",
-    "add_to_obtainium": "Obtainium-এ যোগ করুন",
+    "kao_note": "2027 থেকে Google চায় Android শুধু সেই অ্যাপগুলো ইনস্টল করুক যেগুলোর ডেভেলপার Google-এ নিবন্ধন করেছেন, ফি দিয়েছেন এবং সরকারি পরিচয়পত্র দেখিয়েছেন। Play Store-এর বাইরে থেকে ইনস্টল করা অ্যাপও এর মধ্যে পড়ে, যেমন এই APK এবং F-Droid। {a1} ব্যাখ্যা করে এর মানে কী এবং কীভাবে আপনার মত জানাতে পারেন।",
+    "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0 ও তার ওপরে: স্টিক, বক্স ও টেলিভিশন",
     "the_same_file_as_the": "ফোনের মতো একই ফাইল। Downloader, Send files to TV বা {code1} দিয়ে টিভিতে পাঠান।",
     "how_to_install_on_a_2": "টিভিতে ইনস্টল করার নিয়ম",
@@ -379,7 +380,8 @@
     "no_store_updates_tmplayer_looks": "স্টোর আপডেট নেই। TMPlayer নিজেই নতুন সংস্করণ খোঁজে এবং সাইডবারে তার প্রস্তাব দেয়; Windows ইনস্টলার ও AppImage সেখান থেকেই জায়গায় আপডেট হয়।",
     "an_app_from_outside_the": "স্টোরের বাইরের যে অ্যাপ Telegram-এ সাইন ইন করে, তার ওপর অনেক ভরসা করতে হয়। একটি স্টার পরের জনকে সিদ্ধান্ত নিতে সাহায্য করে।",
     "download_tmplayer_free_the_apk": "TMPlayer বিনামূল্যে ডাউনলোড করুন: Android TV ও ফোনের জন্য APK, একটি Windows ইনস্টলার, আর Linux-এর জন্য একটি AppImage।",
-    "platforms": "প্ল্যাটফর্ম"
+    "platforms": "প্ল্যাটফর্ম",
+    "add_to_obtainium": "Obtainium-এ যোগ করুন"
   },
   "install": {
     "how_to_install_tmplayer_on": "Android TV, Windows ও Linux-এ TMPlayer ইনস্টল করার নিয়ম",
@@ -965,6 +967,13 @@
     "languages_count": "{count}টি ভাষা",
     "suggest": "এই পেজটি {language} ভাষাতেও আছে।",
     "suggest_go": "{language}-এ পড়ুন",
-    "suggest_dismiss": "এই ভাষাতেই থাকুন"
+    "suggest_dismiss": "এই ভাষাতেই থাকুন",
+    "kao_bar": "2027 থেকে Android শুধু Google-এ নিবন্ধিত ডেভেলপারদের অ্যাপ ইনস্টল করার পরিকল্পনা করছে।",
+    "kao_sheet": "2027 থেকে Android শুধু সেই অ্যাপগুলো ইনস্টল করার পরিকল্পনা করছে যেগুলোর ডেভেলপার Google-এ নিবন্ধন করে পরিচয়পত্র দেখিয়েছেন। Play Store-এর বাইরের অ্যাপও এর মধ্যে পড়ে, যেমন TMPlayer।",
+    "kao_learn": "আরও জানুন",
+    "kao_share": "শেয়ার করুন",
+    "kao_share_text": "2027 থেকে Android শুধু Google-এ নিবন্ধিত ডেভেলপারদের অ্যাপ ইনস্টল করার পরিকল্পনা করছে। #KeepAndroidOpen",
+    "kao_copied": "লিংক কপি হয়েছে",
+    "kao_close": "এই বিজ্ঞপ্তি বন্ধ করুন"
   }
 }

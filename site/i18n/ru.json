@@ -337,7 +337,8 @@
     "one_file_for_every_phone": "Один файл для любого телефона, 32-битного и 64-битного. Откройте его и разрешите установку.",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "Как установить на телефон",
-    "add_to_obtainium": "Добавить в Obtainium",
+    "kao_note": "С 2027 года Google планирует, что Android будет устанавливать только приложения, разработчики которых зарегистрировались в Google, заплатили взнос и предъявили документ, удостоверяющий личность. Это касается и приложений, установленных не из Play Маркета, таких как этот APK и F-Droid. {a1} объясняет, что это значит и как высказать своё мнение.",
+    "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0 и новее: приставки, боксы и телевизоры",
     "the_same_file_as_the": "Тот же файл, что и для телефона. Отправьте его на телевизор через Downloader, Send files to TV или {code1}.",
     "how_to_install_on_a_2": "Как установить на телевизор",
@@ -379,7 +380,8 @@
     "no_store_updates_tmplayer_looks": "Обновлений через магазин нет. TMPlayer сам ищет новую версию и предлагает её на боковой панели; установщик для Windows и AppImage обновляются оттуда же на месте.",
     "an_app_from_outside_the": "Приложение не из магазина, которое входит в Telegram, требует большого доверия. Звезда поможет следующему человеку принять решение.",
     "download_tmplayer_free_the_apk": "Скачайте TMPlayer бесплатно: APK для Android TV и телефонов, установщик для Windows и AppImage для Linux.",
-    "platforms": "Платформы"
+    "platforms": "Платформы",
+    "add_to_obtainium": "Добавить в Obtainium"
   },
   "install": {
     "how_to_install_tmplayer_on": "Как установить TMPlayer на Android TV, в Windows и Linux",
@@ -965,6 +967,13 @@
     "languages_count": "Языков: {count}",
     "suggest": "Эта страница есть и на языке: {language}.",
     "suggest_go": "Читать на языке: {language}",
-    "suggest_dismiss": "Остаться на этом языке"
+    "suggest_dismiss": "Остаться на этом языке",
+    "kao_bar": "С 2027 года Android планирует устанавливать только приложения разработчиков, зарегистрированных в Google.",
+    "kao_sheet": "С 2027 года Android планирует устанавливать только приложения, разработчики которых зарегистрировались в Google и подтвердили личность. Это касается и приложений не из Play Маркета, таких как TMPlayer.",
+    "kao_learn": "Подробнее",
+    "kao_share": "Поделиться",
+    "kao_share_text": "С 2027 года Android планирует устанавливать только приложения разработчиков, зарегистрированных в Google. #KeepAndroidOpen",
+    "kao_copied": "Ссылка скопирована",
+    "kao_close": "Закрыть это уведомление"
   }
 }

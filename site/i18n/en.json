@@ -332,6 +332,8 @@
     "one_file_for_every_phone": "One file for every phone, 32-bit and 64-bit. Open it and allow the install.",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "How to install on a phone",
+    "kao_note": "From 2027, Google plans to let Android install only apps whose developers have registered with it, paid a fee and shown government ID. That covers apps installed from outside the Play Store too, like this APK and F-Droid. {a1} explains what it means and how to have a say.",
+    "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0 and above: sticks, boxes and televisions",
     "the_same_file_as_the": "The same file as the phone's. Send it to the TV with Downloader, Send files to TV or {code1}.",
     "how_to_install_on_a_2": "How to install on a television",
@@ -960,6 +962,13 @@
     "languages_count": "{count} languages",
     "suggest": "This page is also in {language}.",
     "suggest_go": "Read it in {language}",
-    "suggest_dismiss": "Stay in this language"
+    "suggest_dismiss": "Stay in this language",
+    "kao_bar": "From 2027, Android plans to install only apps from developers registered with Google.",
+    "kao_sheet": "From 2027, Android plans to install only apps whose developers have registered with Google and shown ID. That includes apps from outside the Play Store, like TMPlayer.",
+    "kao_learn": "Learn more",
+    "kao_share": "Share",
+    "kao_share_text": "From 2027, Android plans to install only apps from developers registered with Google. #KeepAndroidOpen",
+    "kao_copied": "Link copied",
+    "kao_close": "Close this notice"
   }
 }

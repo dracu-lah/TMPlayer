@@ -110,7 +110,23 @@ BUILD_STRINGS = {
     "build.suggest": "This page is also in {language}.",
     "build.suggest_go": "Read it in {language}",
     "build.suggest_dismiss": "Stay in this language",
+    # The Keep Android Open notice at the top of every page (a bar on wide screens, a card pinned
+    # to the bottom on a phone). The facts follow keepandroidopen.org; the detail stays there.
+    "build.kao_bar": "From 2027, Android plans to install only apps from developers registered with Google.",
+    "build.kao_sheet": "From 2027, Android plans to install only apps whose developers have registered with "
+                       "Google and shown ID. That includes apps from outside the Play Store, like TMPlayer.",
+    "build.kao_learn": "Learn more",
+    "build.kao_share": "Share",
+    "build.kao_share_text": "From 2027, Android plans to install only apps from developers registered "
+                            "with Google. #KeepAndroidOpen",
+    "build.kao_copied": "Link copied",
+    "build.kao_close": "Close this notice",
 }
+
+# Pages that stay in English but carry the same notice as every other page. The changelog's copy
+# is lifted from the download page by scripts/build-changelog.py and filled here as well.
+ENGLISH_ONLY = ["changelog/", "legal/", "privacy/", "security/", "signing/", "support/"]
+KAO_URL = "https://keepandroidopen.org/"
 
 VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source",
         "track", "wbr"}
@@ -134,7 +150,7 @@ LD_TEXT_KEYS = {"name", "alternateName", "description", "text", "headline", "fea
 LD_URL_KEYS = {"url", "item", "@id", "mainEntityOfPage"}
 
 REGION_RE = r"<!-- i18n:{0} -->.*?<!-- /i18n:{0} -->"
-REGIONS = ["head", "picker", "footer", "langcount"]
+REGIONS = ["head", "picker", "footer", "langcount", "notice"]
 
 
 class BuildError(Exception):
@@ -407,9 +423,19 @@ def ensure_markers(src):
     if "<!-- i18n:footer -->" not in src:
         src = re.sub(r'(<nav class="footer-links footer-community".*?</nav>\n)',
                      r"\1    <!-- i18n:footer --><!-- /i18n:footer -->\n", src, count=1, flags=re.S)
+    src = ensure_notice_marker(src)
     for name in ("head", "picker", "footer"):
         if f"<!-- i18n:{name} -->" not in src:
             raise BuildError(f"could not place the i18n:{name} region")
+    return src
+
+
+def ensure_notice_marker(src):
+    if "<!-- i18n:notice -->" not in src:
+        src = re.sub(r'(<a class="skip"[^>]*>.*?</a>\n)', r"\1<!-- i18n:notice --><!-- /i18n:notice -->\n",
+                     src, count=1)
+    if "<!-- i18n:notice -->" not in src:
+        raise BuildError("could not place the i18n:notice region")
     return src
 
 
@@ -771,6 +797,7 @@ GLOBE = ('<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" foc
 def regions(lang, page_id, langs, strings):
     """The generated parts of a page: alternates, the picker, the footer list and the home lines."""
     out = {name: "" for name in REGIONS}
+    out["notice"] = notice(lang, strings)
     if len(langs) < 2:
         return out
     t = strings
@@ -827,6 +854,37 @@ def regions(lang, page_id, langs, strings):
         "{count}", f"<b>{len(langs)}</b>")
     out["langcount"] = f"<span>{count}</span>"
     return out
+
+
+CLOSE_X = ('<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">'
+           '<path fill="currentColor" d="M18.3 7.1 13.4 12l4.9 4.9a1 1 0 0 1-1.4 1.4L12 13.4l-4.9 4.9a1 1 0 '
+           '0 1-1.4-1.4l4.9-4.9-4.9-4.9a1 1 0 0 1 1.4-1.4l4.9 4.9 4.9-4.9a1 1 0 0 1 1.4 1.4Z"/></svg>')
+SHARE_ICON = ('<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">'
+              '<path fill="currentColor" d="M18 16a3 3 0 0 0-2.4 1.2l-6.7-3.4a3 3 0 0 0 0-1.6l6.7-3.4A3 3 0 1 0 '
+              '15 7l-6.7 3.4a3 3 0 1 0 0 3.2L15 17a3 3 0 1 0 3-1Z"/></svg>')
+
+
+def notice(lang, t):
+    """The Keep Android Open notice. Its markup is in the page, so nothing shifts once it loads;
+    the theme script in every page's head hides it before the first paint once the reader closed it,
+    and app.js wires the close and share buttons. Nothing is loaded from the campaign's site."""
+    def e(k):
+        return html.escape(t[k], quote=True)
+    link = f'<a href="{KAO_URL}" target="_blank" rel="noopener">{e("build.kao_learn")}</a>'
+    learn = f'<a class="kao-learn" href="{KAO_URL}" target="_blank" rel="noopener">{e("build.kao_learn")}</a>'
+    close = (f'<button type="button" class="kao-close" data-kao-close aria-label="{e("build.kao_close")}" '
+             f'title="{e("build.kao_close")}">{CLOSE_X}</button>')
+    return (
+        '\n<aside class="kao" id="kao" aria-label="Keep Android Open">'
+        f'\n  <div class="kao-bar"><p><span>{e("build.kao_bar")}</span> {link}</p>{close}</div>'
+        '\n  <div class="kao-sheet"><p class="kao-tag" lang="en" dir="ltr">#KeepAndroidOpen</p>'
+        f'<p class="kao-text">{e("build.kao_sheet")}</p>'
+        f'<div class="kao-actions">{learn}'
+        f'<button type="button" class="kao-share" data-kao-share data-url="{KAO_URL}" '
+        f'data-text="{e("build.kao_share_text")}" data-copied="{e("build.kao_copied")}">'
+        f'{SHARE_ICON}<span>{e("build.kao_share")}</span></button>'
+        f'<span class="kao-copied" role="status" aria-live="polite"></span></div>{close}</div>'
+        "\n</aside>\n")
 
 
 def fill_regions(src, filled):
@@ -1015,6 +1073,10 @@ def build(check=False, status=False, tag=False):
             files[SITE / lang["path"] / PAGES[page_id] / "index.html"] = out
             if fallbacks:
                 print(f"{lang['tag']} {page_id}: {fallbacks} strings fall back to English")
+    for rel in ENGLISH_ONLY:
+        path = SITE / rel / "index.html"
+        src = ensure_notice_marker(path.read_text(encoding="utf-8"))
+        files[path] = fill_regions(src, {"notice": notice(ENGLISH, ENGLISH["strings"])})
     sm = SITE / "sitemap.xml"
     files[sm] = sitemap(sm.read_text(encoding="utf-8"), published)
 

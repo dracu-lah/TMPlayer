@@ -337,7 +337,8 @@
     "one_file_for_every_phone": "Her telefon için tek dosya, 32 bit ve 64 bit. Aç ve kuruluma izin ver.",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "Telefona nasıl kurulur",
-    "add_to_obtainium": "Obtainium'a ekle",
+    "kao_note": "Google, 2027'den itibaren Android'in yalnızca geliştiricisi Google'a kaydolmuş, ücret ödemiş ve resmi kimlik göstermiş uygulamaları yüklemesini planlıyor. Bu, bu APK ve F-Droid gibi Play Store dışından yüklenen uygulamaları da kapsıyor. {a1} bunun ne anlama geldiğini ve sesinizi nasıl duyurabileceğinizi anlatıyor.",
+    "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0 ve üzeri: çubuklar, kutular ve televizyonlar",
     "the_same_file_as_the": "Telefondakiyle aynı dosya. TV'ye Downloader, Send files to TV ya da {code1} ile gönder.",
     "how_to_install_on_a_2": "Televizyona nasıl kurulur",
@@ -379,7 +380,8 @@
     "no_store_updates_tmplayer_looks": "Mağaza güncellemesi yok. TMPlayer yeni sürümü kendisi arar ve kenar çubuğunda sunar; Windows yükleyicisi ve AppImage oradan yerinde güncellenir.",
     "an_app_from_outside_the": "Telegram'a giriş yapan, mağaza dışı bir uygulama çok güven ister. Yıldız, bir sonraki kişinin karar vermesine yardım eder.",
     "download_tmplayer_free_the_apk": "TMPlayer'ı ücretsiz indir: Android TV ve telefonlar için APK, bir Windows yükleyicisi ve Linux için bir AppImage.",
-    "platforms": "Platformlar"
+    "platforms": "Platformlar",
+    "add_to_obtainium": "Obtainium'a ekle"
   },
   "install": {
     "how_to_install_tmplayer_on": "TMPlayer Android TV, Windows ve Linux'a nasıl kurulur",
@@ -965,6 +967,13 @@
     "languages_count": "{count} dil",
     "suggest": "Bu sayfa {language} dilinde de var.",
     "suggest_go": "{language} dilinde oku",
-    "suggest_dismiss": "Bu dilde kal"
+    "suggest_dismiss": "Bu dilde kal",
+    "kao_bar": "Android, 2027'den itibaren yalnızca Google'a kayıtlı geliştiricilerin uygulamalarını yüklemeyi planlıyor.",
+    "kao_sheet": "Android, 2027'den itibaren yalnızca geliştiricisi Google'a kaydolmuş ve kimlik göstermiş uygulamaları yüklemeyi planlıyor. Buna TMPlayer gibi Play Store dışından gelen uygulamalar da dahil.",
+    "kao_learn": "Daha fazla bilgi",
+    "kao_share": "Paylaş",
+    "kao_share_text": "Android, 2027'den itibaren yalnızca Google'a kayıtlı geliştiricilerin uygulamalarını yüklemeyi planlıyor. #KeepAndroidOpen",
+    "kao_copied": "Bağlantı kopyalandı",
+    "kao_close": "Bu bildirimi kapat"
   }
 }

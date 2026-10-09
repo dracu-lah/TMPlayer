@@ -337,7 +337,8 @@
     "one_file_for_every_phone": "Satu file untuk semua HP, 32-bit dan 64-bit. Buka dan izinkan pemasangan.",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "Cara memasang di HP",
-    "add_to_obtainium": "Tambahkan ke Obtainium",
+    "kao_note": "Mulai 2027, Google berencana agar Android hanya memasang aplikasi yang developernya sudah mendaftar ke Google, membayar biaya, dan menunjukkan identitas resmi. Ini juga berlaku untuk aplikasi yang dipasang dari luar Play Store, seperti APK ini dan F-Droid. {a1} menjelaskan apa artinya dan cara menyuarakan pendapat Anda.",
+    "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0 ke atas: stick, box, dan televisi",
     "the_same_file_as_the": "File yang sama dengan untuk HP. Kirim ke TV dengan Downloader, Send files to TV, atau {code1}.",
     "how_to_install_on_a_2": "Cara memasang di televisi",
@@ -379,7 +380,8 @@
     "no_store_updates_tmplayer_looks": "Tanpa pembaruan dari toko. TMPlayer mencari versi baru sendiri dan menawarkannya di sidebar; installer Windows dan AppImage diperbarui di tempat dari sana.",
     "an_app_from_outside_the": "Aplikasi dari luar toko yang masuk ke Telegram butuh banyak kepercayaan. Bintang membantu orang berikutnya memutuskan.",
     "download_tmplayer_free_the_apk": "Unduh TMPlayer gratis: APK untuk Android TV dan HP, installer Windows, dan AppImage untuk Linux.",
-    "platforms": "Platform"
+    "platforms": "Platform",
+    "add_to_obtainium": "Tambahkan ke Obtainium"
   },
   "install": {
     "how_to_install_tmplayer_on": "Cara memasang TMPlayer di Android TV, Windows, dan Linux",
@@ -965,6 +967,13 @@
     "languages_count": "{count} bahasa",
     "suggest": "Halaman ini juga tersedia dalam bahasa {language}.",
     "suggest_go": "Baca dalam bahasa {language}",
-    "suggest_dismiss": "Tetap di bahasa ini"
+    "suggest_dismiss": "Tetap di bahasa ini",
+    "kao_bar": "Mulai 2027, Android berencana hanya memasang aplikasi dari developer yang terdaftar di Google.",
+    "kao_sheet": "Mulai 2027, Android berencana hanya memasang aplikasi yang developernya sudah mendaftar ke Google dan menunjukkan identitas. Termasuk aplikasi dari luar Play Store, seperti TMPlayer.",
+    "kao_learn": "Pelajari lebih lanjut",
+    "kao_share": "Bagikan",
+    "kao_share_text": "Mulai 2027, Android berencana hanya memasang aplikasi dari developer yang terdaftar di Google. #KeepAndroidOpen",
+    "kao_copied": "Tautan disalin",
+    "kao_close": "Tutup pemberitahuan ini"
   }
 }

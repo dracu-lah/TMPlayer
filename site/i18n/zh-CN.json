@@ -337,7 +337,8 @@
     "one_file_for_every_phone": "一个文件适用于所有手机，32 位和 64 位均可。打开并允许安装即可。",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "如何在手机上安装",
-    "add_to_obtainium": "添加到 Obtainium",
+    "kao_note": "从 2027 年起，Google 计划让 Android 只安装开发者已在 Google 登记、缴纳费用并出示官方身份证件的应用。从 Play 商店以外安装的应用也包括在内，例如这个 APK 和 F-Droid。{a1} 介绍了这意味着什么，以及如何表达你的意见。",
+    "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0 及以上：电视棒、机顶盒和电视",
     "the_same_file_as_the": "与手机相同的文件。用 Downloader、Send files to TV 或 {code1} 发送到电视。",
     "how_to_install_on_a_2": "如何在电视上安装",
@@ -379,7 +380,8 @@
     "no_store_updates_tmplayer_looks": "没有商店更新。TMPlayer 会自己检查新版本，并在侧边栏中提示；Windows 安装程序和 AppImage 会从那里原地更新。",
     "an_app_from_outside_the": "一个来自商店之外、还要登录 Telegram 的应用，需要你给予很多信任。点个星能帮助下一个人做决定。",
     "download_tmplayer_free_the_apk": "免费下载 TMPlayer：适用于 Android TV 和手机的 APK、Windows 安装程序，以及 Linux 的 AppImage。",
-    "platforms": "平台"
+    "platforms": "平台",
+    "add_to_obtainium": "添加到 Obtainium"
   },
   "install": {
     "how_to_install_tmplayer_on": "如何在 Android TV、Windows 和 Linux 上安装 TMPlayer",
@@ -965,6 +967,13 @@
     "languages_count": "{count} 种语言",
     "suggest": "本页也有{language}版本。",
     "suggest_go": "阅读{language}版",
-    "suggest_dismiss": "保持当前语言"
+    "suggest_dismiss": "保持当前语言",
+    "kao_bar": "从 2027 年起，Android 计划只安装已在 Google 登记的开发者的应用。",
+    "kao_sheet": "从 2027 年起，Android 计划只安装开发者已在 Google 登记并出示身份证件的应用。Play 商店以外的应用也包括在内，例如 TMPlayer。",
+    "kao_learn": "了解更多",
+    "kao_share": "分享",
+    "kao_share_text": "从 2027 年起，Android 计划只安装已在 Google 登记的开发者的应用。#KeepAndroidOpen",
+    "kao_copied": "链接已复制",
+    "kao_close": "关闭此通知"
   }
 }

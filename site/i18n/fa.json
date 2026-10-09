@@ -337,7 +337,8 @@
     "one_file_for_every_phone": "یک فایل برای همهٔ گوشی‌ها، 32 بیتی و 64 بیتی. بازش کنید و اجازهٔ نصب بدهید.",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "نحوهٔ نصب روی گوشی",
-    "add_to_obtainium": "افزودن به Obtainium",
+    "kao_note": "از سال ۲۰۲۷، Google قصد دارد Android فقط برنامه‌هایی را نصب کند که توسعه‌دهنده‌شان نزد Google ثبت‌نام کرده، هزینه‌ای پرداخته و مدرک هویتی رسمی ارائه داده باشد. این شامل برنامه‌هایی هم می‌شود که از خارج Play Store نصب می‌شوند، مثل همین APK و F-Droid. {a1} توضیح می‌دهد این یعنی چه و چطور می‌توانید صدایتان را برسانید.",
+    "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0 و بالاتر: Stick، باکس و تلویزیون",
     "the_same_file_as_the": "همان فایل گوشی. با Downloader، Send files to TV یا {code1} به تلویزیون بفرستید.",
     "how_to_install_on_a_2": "نحوهٔ نصب روی تلویزیون",
@@ -379,7 +380,8 @@
     "no_store_updates_tmplayer_looks": "به‌روزرسانی از فروشگاه ندارد. TMPlayer خودش نسخهٔ جدید را پیدا می‌کند و در نوار کناری پیشنهاد می‌دهد؛ نصب‌کنندهٔ Windows و AppImage از همان‌جا درجا به‌روز می‌شوند.",
     "an_app_from_outside_the": "برنامه‌ای از خارج از فروشگاه که وارد Telegram می‌شود اعتماد زیادی می‌خواهد. یک ستاره به نفر بعدی در تصمیم‌گیری کمک می‌کند.",
     "download_tmplayer_free_the_apk": "TMPlayer را رایگان دانلود کنید: APK برای Android TV و گوشی، نصب‌کنندهٔ Windows، و AppImage برای Linux.",
-    "platforms": "پلتفرم‌ها"
+    "platforms": "پلتفرم‌ها",
+    "add_to_obtainium": "افزودن به Obtainium"
   },
   "install": {
     "how_to_install_tmplayer_on": "نحوهٔ نصب TMPlayer روی Android TV، Windows و Linux",
@@ -965,6 +967,13 @@
     "languages_count": "{count} زبان",
     "suggest": "این صفحه به {language} هم هست.",
     "suggest_go": "خواندن به {language}",
-    "suggest_dismiss": "ماندن در این زبان"
+    "suggest_dismiss": "ماندن در این زبان",
+    "kao_bar": "از سال ۲۰۲۷، Android قصد دارد فقط برنامه‌های توسعه‌دهندگان ثبت‌نام‌شده نزد Google را نصب کند.",
+    "kao_sheet": "از سال ۲۰۲۷، Android قصد دارد فقط برنامه‌هایی را نصب کند که توسعه‌دهنده‌شان نزد Google ثبت‌نام کرده و مدرک هویتی ارائه داده باشد. این شامل برنامه‌های خارج از Play Store مثل TMPlayer هم می‌شود.",
+    "kao_learn": "بیشتر بدانید",
+    "kao_share": "اشتراک‌گذاری",
+    "kao_share_text": "از سال ۲۰۲۷، Android قصد دارد فقط برنامه‌های توسعه‌دهندگان ثبت‌نام‌شده نزد Google را نصب کند. #KeepAndroidOpen",
+    "kao_copied": "پیوند کپی شد",
+    "kao_close": "بستن این اطلاعیه"
   }
 }

@@ -337,7 +337,8 @@
     "one_file_for_every_phone": "ملف واحد لكل الهواتف، بمعماريتي 32 بت و64 بت. افتحه واسمح بالتثبيت.",
     "tmplayer_version_universal_apk": "TMPlayer-<version>-universal.apk",
     "how_to_install_on_a": "طريقة التثبيت على الهاتف",
-    "add_to_obtainium": "أضفه إلى Obtainium",
+    "kao_note": "بدءًا من 2027، تعتزم Google ألا يثبّت Android إلا التطبيقات التي سجّل مطوّروها لديها ودفعوا رسومًا وقدّموا هوية رسمية. ويشمل ذلك التطبيقات المثبّتة من خارج متجر Play، مثل ملف APK هذا وF-Droid. يشرح موقع {a1} ما يعنيه ذلك وكيف تُسمع صوتك.",
+    "kao_note__a1": "Keep Android Open",
     "android_tv_8_0_and": "Android TV 8.0 فما فوق: العصي والصناديق وأجهزة التلفاز",
     "the_same_file_as_the": "الملف نفسه المخصص للهاتف. أرسله إلى التلفاز عبر Downloader أو Send files to TV أو {code1}.",
     "how_to_install_on_a_2": "طريقة التثبيت على التلفاز",
@@ -379,7 +380,8 @@
     "no_store_updates_tmplayer_looks": "لا تحديثات عبر المتجر. يبحث TMPlayer عن الإصدار الجديد بنفسه ويعرضه في الشريط الجانبي؛ ومن هناك يُحدَّث مثبّت Windows وملف AppImage في مكانهما.",
     "an_app_from_outside_the": "تطبيق من خارج المتجر يسجّل الدخول إلى Telegram يتطلب ثقة كبيرة. والنجمة تساعد الشخص التالي على اتخاذ قراره.",
     "download_tmplayer_free_the_apk": "نزّل TMPlayer مجانًا: ملف APK لأجهزة Android TV والهواتف، ومثبّت لنظام Windows، وملف AppImage لنظام Linux.",
-    "platforms": "المنصات"
+    "platforms": "المنصات",
+    "add_to_obtainium": "أضفه إلى Obtainium"
   },
   "install": {
     "how_to_install_tmplayer_on": "كيفية تثبيت TMPlayer على Android TV وWindows وLinux",
@@ -965,6 +967,13 @@
     "languages_count": "عدد اللغات: {count}",
     "suggest": "هذه الصفحة متوفرة أيضًا بـ {language}.",
     "suggest_go": "اقرأها بـ {language}",
-    "suggest_dismiss": "البقاء على هذه اللغة"
+    "suggest_dismiss": "البقاء على هذه اللغة",
+    "kao_bar": "بدءًا من 2027، يعتزم Android ألا يثبّت إلا تطبيقات المطوّرين المسجّلين لدى Google.",
+    "kao_sheet": "بدءًا من 2027، يعتزم Android ألا يثبّت إلا التطبيقات التي سجّل مطوّروها لدى Google وقدّموا إثبات هوية. ويشمل ذلك التطبيقات من خارج متجر Play، مثل TMPlayer.",
+    "kao_learn": "اعرف المزيد",
+    "kao_share": "مشاركة",
+    "kao_share_text": "بدءًا من 2027، يعتزم Android ألا يثبّت إلا تطبيقات المطوّرين المسجّلين لدى Google. #KeepAndroidOpen",
+    "kao_copied": "تم نسخ الرابط",
+    "kao_close": "إغلاق هذا التنبيه"
   }
 }

@@ -233,6 +233,7 @@ def shared_parts(template: str) -> dict:
         "bg": lift(template, r'<!-- Decorative background art.*?<div class="bg-art".*?</div>',
                    "background art"),
         "header": header,
+        "notice": lift(template, r"<!-- i18n:notice -->.*?<!-- /i18n:notice -->", "Keep Android Open notice"),
         "to_top": lift(template, r'<button class="to-top".*?</button>', "back to top button"),
         "footer": lift(template, r'<footer class="site-footer">.*?</footer>', "site footer"),
         "tail": lift(template, r'<script src="/app\.js"></script>.*?(?=</body>)', "closing scripts"),
@@ -313,6 +314,8 @@ def page(releases: list, parts: dict) -> str:
   try {{
     var t = localStorage.getItem('tm-theme');
     if (t === 'light' || t === 'dark') {{ document.documentElement.setAttribute('data-theme', t); }}
+    // The Keep Android Open notice, once closed, stays closed without a flash on the next page.
+    if (localStorage.getItem('tm-kao-closed')) {{ document.documentElement.className += ' kao-off'; }}
   }} catch (e) {{}}
 }})();
 </script>
@@ -346,6 +349,7 @@ def page(releases: list, parts: dict) -> str:
 -->
 
 <a class="skip" href="#main">Skip to content</a>
+{parts["notice"]}
 
 {parts["bg"]}
 
