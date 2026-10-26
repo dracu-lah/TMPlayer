@@ -1089,7 +1089,9 @@ internal fun Poster(
                         color = Tone.accent,
                         modifier = Modifier.size(36.dp).clickable { state.openPlayer(item, startFromBeginning = false) },
                     ) {
-                        Icon(TmIcons.PlaySolid, contentDescription = s.playerPlay, tint = Tone.onAccent, modifier = Modifier.padding(8.dp))
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Icon(TmIcons.PlaySolid, contentDescription = s.playerPlay, tint = Tone.onAccent, modifier = Modifier.size(20.dp))
+                        }
                     }
                 }
             }
@@ -1161,14 +1163,19 @@ internal fun Poster(
             }
             if (showing) {
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)))
-                Surface(
-                    shape = CircleShape,
-                    color = Tone.accent,
-                    modifier = Modifier.align(Alignment.Center).size(48.dp)
-                        .clickable { state.openPlayer(item, startFromBeginning = false) },
-                ) {
+                // The tooltip wraps the whole disc: inside it the glyph sat in a top-left Box and the
+                // Play drew 2 dp up and left of the circle's middle.
+                Box(Modifier.align(Alignment.Center)) {
                     BarTooltip(s.playerPlay, null) {
-                        Icon(TmIcons.PlaySolid, contentDescription = s.playerPlay, tint = Tone.onAccent, modifier = Modifier.padding(10.dp))
+                        Surface(
+                            shape = CircleShape,
+                            color = Tone.accent,
+                            modifier = Modifier.size(48.dp).clickable { state.openPlayer(item, startFromBeginning = false) },
+                        ) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Icon(TmIcons.PlaySolid, contentDescription = s.playerPlay, tint = Tone.onAccent, modifier = Modifier.size(24.dp))
+                            }
+                        }
                     }
                 }
                 Box(Modifier.align(Alignment.TopEnd)) {
