@@ -83,6 +83,12 @@ private val HIDE_DEFAULT_GROUPS = booleanPreferencesKey("hide_default_groups")
 /** The qualities played, counted: see [QualityHabit]. */
 private val QUALITY_HABIT = stringPreferencesKey("quality_habit")
 
+/** What this device remembers of pictures it decoded in software: see [DecodeMemory]. */
+private val DECODE_MEMORY = stringPreferencesKey("decode_memory")
+
+/** The kinds of picture ([DecodeMemory.keyOf]) whose "may stutter" question the viewer turned off. */
+private val HEAVY_ASK_SKIP = stringPreferencesKey("heavy_ask_skip")
+
 /**
  * The copy the viewer chose for one video, by [MediaItem.id], keyed on the video
  * ([VideoCopies.keyOf]) so it holds whichever copy the video is opened from.
@@ -2208,8 +2214,46 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
             started = { progressKey(it.chatId, it.messageId) in started },
             habit = qualityHabitNow(),
             language = com.tmplayer.player.TrackLanguages.normalise(trackPreferencesNow().audioLanguage),
+            tooSlow = VideoCopies.tooSlowHere,
         ) ?: return item
         return picked.asVersion(item)
+    }
+
+    /**
+     * The copy [copyToPlay] passed over because this device would decode it too slowly, when it
+     * did: what the player names in its "Playing the 720p copy" line. Null otherwise.
+     */
+    suspend fun copyPassedOver(item: MediaItem): MediaItem? {
+        val copies = VideoCopies.visible(item.versions).takeIf { it.size > 1 } ?: return null
+        val started = continueWatching.first().mapTo(HashSet()) { progressKey(it.chatId, it.messageId) }
+        return VideoCopies.passedOver(
+            copies,
+            chosen = copyPickFor(item),
+            started = { progressKey(it.chatId, it.messageId) in started },
+            habit = qualityHabitNow(),
+            language = com.tmplayer.player.TrackLanguages.normalise(trackPreferencesNow().audioLanguage),
+            tooSlow = VideoCopies.tooSlowHere,
+        )
+    }
+
+    /** What this device remembers of the pictures it played in software ([DecodeMemory]). */
+    suspend fun decodeMemoryNow(): Map<String, Boolean> = DecodeMemory.decode(prefs.data.first()[DECODE_MEMORY])
+
+    /** The kinds of picture the "may stutter" question is no longer asked for. */
+    suspend fun heavyAskSkipsNow(): Set<String> =
+        prefs.data.first()[HEAVY_ASK_SKIP]?.split(';')?.filter { it.isNotBlank() }?.toSet().orEmpty()
+
+    /** "Don't ask again for this kind of video": [kind] is a [DecodeMemory.keyOf]. */
+    suspend fun skipHeavyAsk(kind: String) {
+        prefs.edit {
+            val now = it[HEAVY_ASK_SKIP]?.split(';')?.filter { k -> k.isNotBlank() }.orEmpty()
+            it[HEAVY_ASK_SKIP] = (now - kind + kind).takeLast(DecodeMemory.MAX).joinToString(";")
+        }
+    }
+
+    /** Notes whether a picture of [picture]'s kind kept up here. */
+    suspend fun noteDecode(picture: DecodeJudge.Picture, keptUp: Boolean) {
+        prefs.edit { it[DECODE_MEMORY] = DecodeMemory.encode(DecodeMemory.noted(DecodeMemory.decode(it[DECODE_MEMORY]), picture, keptUp)) }
     }
 
     /**

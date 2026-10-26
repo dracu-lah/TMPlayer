@@ -174,8 +174,17 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
      * undo something the player did on its own, such as resuming where the viewer left off, with
      * "Start over" one tap away instead of a menu line.
      */
-    fun offer(text: String, action: String, holdMs: Long = OFFER_MS, tick: Boolean = false, onAction: () -> Unit) =
-        offer.show(text, action, holdMs, tick, onAction)
+    fun offer(text: String, action: String, holdMs: Long = OFFER_MS, tick: Boolean = false, focus: Boolean = false, onAction: () -> Unit) =
+        offer.show(text, action, holdMs, tick, focus, onAction)
+
+    /** Whether an offer is on screen now: on a television OK is then its button ([takeOffer]). */
+    val offerUp: Boolean get() = offer.visibility == View.VISIBLE && offer.pending != null
+
+    /** Presses the offer's button, as OK on a remote does while it is up; false when none is. */
+    fun takeOffer(): Boolean = offer.press()
+
+    /** Puts the offer away without its action: Back on a remote. */
+    fun dismissOffer() = offer.dismiss()
 
     // ---- double tap --------------------------------------------------------------------------
 
@@ -549,6 +558,20 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
         }
         private val hide = Runnable { dismiss() }
 
+        /** The action of the offer up now, null once it went. */
+        var pending: (() -> Unit)? = null
+            private set
+
+        /** What held the focus before a focused offer took it, given back when the offer goes. */
+        private var focusBefore: View? = null
+
+        fun press(): Boolean {
+            val action = pending ?: return false
+            dismiss()
+            action()
+            return true
+        }
+
         init {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -563,7 +586,7 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
             isClickable = true
         }
 
-        fun show(text: String, action: String, holdMs: Long, tick: Boolean, onAction: () -> Unit) {
+        fun show(text: String, action: String, holdMs: Long, tick: Boolean, focus: Boolean, onAction: () -> Unit) {
             label.text = text
             tickView.visibility = if (tick) VISIBLE else GONE
             tickView.animate().cancel()
@@ -581,19 +604,44 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
             // A few lines of hint must wrap beside the button rather than push it off a narrow screen.
             label.maxWidth = (resources.displayMetrics.widthPixels - dp(OFFER_SIDE_ROOM_DP)).coerceAtLeast(dp(160f))
             button.text = action
-            button.setOnClickListener {
-                dismiss()
-                onAction()
-            }
+            pending = onAction
+            button.setOnClickListener { press() }
             removeCallbacks(hide)
             animate().cancel()
             alpha = 1f
             visibility = VISIBLE
             postDelayed(hide, holdMs)
+            // A remote reaches the button at once: it takes the focus, drawn as a ring, and gives
+            // it back to whatever had it when the offer goes.
+            if (focus) {
+                focusBefore = root.findFocus()
+                // The television's focused look: the white pill with near-black text, as the time readout has it.
+                button.background = ContextCompat.getDrawable(context, R.drawable.bg_tv_focus_pill)
+                button.setTextColor(
+                    android.content.res.ColorStateList(
+                        arrayOf(intArrayOf(android.R.attr.state_focused), intArrayOf()),
+                        intArrayOf(
+                            // The glyphs' own focused dark, from their colour list.
+                            ContextCompat.getColorStateList(context, R.color.player_control_icon)
+                                ?.getColorForState(intArrayOf(android.R.attr.state_focused), FOCUSED_TEXT)
+                                ?: FOCUSED_TEXT,
+                            ContextCompat.getColor(context, R.color.accent),
+                        ),
+                    ),
+                )
+                button.setPadding(dp(16f), 0, dp(16f), 0)
+                button.requestFocus()
+            }
         }
 
         fun dismiss() {
             removeCallbacks(hide)
+            pending = null
+            if (button.hasFocus()) {
+                val before = focusBefore
+                focusBefore = null
+                if (before?.isAttachedToWindow == true) before.requestFocus() else button.clearFocus()
+            }
             if (visibility != VISIBLE) return
             animate().alpha(0f).setDuration(FADE_MS).withEndAction { visibility = GONE }.start()
         }
@@ -603,6 +651,7 @@ class PlayerFeedback(private val root: FrameLayout, insertBelow: View?) {
         const val FADE_MS = 300L
         const val NOTE_MS = 900L
         const val OFFER_MS = 7_000L
+        const val FOCUSED_TEXT = 0xFF111111.toInt()
         const val TICK_MS = 260L
         const val OFFER_BOTTOM_DP = 148f
 

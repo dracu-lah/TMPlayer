@@ -477,6 +477,33 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** Whether this player already went for a lighter copy over software decoding: never twice. */
     private var softwareSwapTried = false
 
+    // ---- the watchdog over the first seconds of play (HX2, [PlaybackWatch]) --------------------
+
+    private val watch = PlaybackWatch()
+
+    /** Frames dropped and audio underruns since this player started, as Media3 reports them. */
+    private var watchDropped = 0
+    private var watchUnderruns = 0
+
+    /** The picture watched, and whether the app's software decoder has it, read as the watch starts. */
+    private var watchPicture: com.tmplayer.data.DecodeJudge.Picture? = null
+    private var watchSoftware = false
+
+    /** Whether this video got its "Stuttering?" offer or line: once per video. */
+    private var stutterOffered = false
+
+    /** One sample a second while the video plays, and none while it does not; done after the answer. */
+    private val watchTick = Runnable { sampleWatch() }
+
+    /** Whether the copy playing is the one the viewer picked for this video, which is never swapped by itself. */
+    private var copyHandPicked = false
+
+    /** The copy passed over as too heavy here, named as the picture lands ([SmootherPick]). */
+    private var passedOver: String? = null
+
+    /** What the picture is, for the lines that name it ("AV1 10-bit"), once judged. */
+    private var heavyLabel: String? = null
+
     /** The once-per-video line that the picture decodes in software, waiting for the first frame. */
     private var softwareNote: String? = null
 
@@ -598,21 +625,35 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * the one there is), or while casting, where the TV decodes the picture.
      */
     private fun checkSoftwareDecode(tracks: Tracks): Boolean {
-        if (softwareChecked || isAudio || !weakDevice) return false
+        if (softwareChecked || isAudio) return false
         val group = tracks.groups.firstOrNull { it.type == C.TRACK_TYPE_VIDEO && it.isSelected } ?: return false
         val format = (0 until group.length).firstOrNull { group.isTrackSelected(it) }?.let { group.getTrackFormat(it) } ?: return false
         if (format.sampleMimeType?.startsWith("image/") == true) return false
         softwareChecked = true
         if (castUp()) return false
-        val heavy = com.tmplayer.data.SoftwareDecode.heavy(
-            format.sampleMimeType,
-            format.width,
-            format.height,
-            hardware = HardwareDecoders.has(this, format),
-            weak = true,
+        // One judgement for every file on every device ([DecodeJudge]): the codec list for the
+        // hardware answer, the CPU and what this device remembered for the software one.
+        val verdict = DeviceDecode.verdictOf(format)
+        val picture = DeviceDecode.pictureOf(format)
+        Log.i(
+            "TMPlayer",
+            "Picture judged ${verdict.name.lowercase()} here: ${format.sampleMimeType} ${format.codecs.orEmpty()} " +
+                "${format.width}x${format.height} ${format.frameRate} fps, load " +
+                "${picture?.let { com.tmplayer.data.DecodeJudge.load(it, DeviceDecode.cpu) } ?: "?"}% of ${DeviceDecode.cpu}",
         )
-        if (!heavy) return false
-        Log.i("TMPlayer", "Picture decodes in software here: ${format.sampleMimeType} ${format.codecs.orEmpty()} ${format.width}x${format.height}")
+        if (verdict != com.tmplayer.data.DecodeJudge.Verdict.SOFTWARE_TOO_SLOW) return false
+        heavyLabel = picture?.label
+        heavyKind = picture?.let { com.tmplayer.data.DecodeMemory.keyOf(it) }
+        com.tmplayer.data.SoftwareDecode.rememberHeavy(chatId, messageId)
+        // A copy of the same video posted on its own that plays smoothly here: taken at the start,
+        // before the viewer has seen anything, unless the viewer picked this copy themselves.
+        if (!copyHandPicked && !qualityHandPicked && joinedSource == null && !castUp()) {
+            smootherCopy()?.let { copy ->
+                SmootherPick.offer(copy, currentItem().copyQuality())
+                switchCopy(copy, remember = false)
+                return true
+            }
+        }
         // 4K in software on this device plays at a few frames a second: with no lighter copy to
         // hand over to, the sheet says it is too large rather than starting a slide show. Only
         // when the FFmpeg decoder really took the picture: a device decoder that undersells
@@ -622,9 +663,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             format.width,
             format.height,
             hardware = false,
-            weak = true,
+            weak = weakDevice,
         ) && DecoderSwitch.softwareVideoChosen(player)
-        val swappable = playingQuality == 0 && !qualityHandPicked && !softwareSwapTried &&
+        // The copy the viewer picked plays as picked, with the one line that names its codec.
+        val swappable = playingQuality == 0 && !qualityHandPicked && !softwareSwapTried && !copyHandPicked &&
             downloadedFile == null && joinedSource == null && hasMessage()
         if (!swappable) {
             if (unwatchable) return tooLargeForSoftware(format)
@@ -633,8 +675,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
         val copies = postItem?.qualities?.takeIf { it.isNotEmpty() } ?: carriedQualities
         if (copies.isNotEmpty()) {
-            if (swapForSoftware(copies)) return true
+            when (swapForSoftware(copies)) {
+                Swap.HANDED_OVER -> return true
+                Swap.ASKED -> return false
+                Swap.NONE -> Unit
+            }
             if (unwatchable) return tooLargeForSoftware(format)
+            if (askHeavy(null, copies)) return false
             noteSoftwareDecode(playing = false)
             return false
         }
@@ -645,8 +692,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (unwatchable) player?.pause()
         itemScope.launch {
             val later = kotlinx.coroutines.withTimeoutOrNull(POST_READ_MS) { readPost() }?.qualities.orEmpty()
-            if (later.isEmpty() || !swapForSoftware(later)) {
-                if (unwatchable) tooLargeForSoftware(format) else noteSoftwareDecode(playing = true)
+            val swap = if (later.isEmpty()) Swap.NONE else swapForSoftware(later)
+            if (swap == Swap.NONE) {
+                when {
+                    unwatchable -> tooLargeForSoftware(format)
+                    askHeavy(null, later) -> Unit
+                    else -> noteSoftwareDecode(playing = true)
+                }
             }
         }
         return false
@@ -682,11 +734,59 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * open go straight to the copy ([pickTelegramQuality]), which also says why. The place carries
      * over the way a switch of quality carries it, and the quality list still offers the upload.
      */
-    private fun swapForSoftware(copies: List<com.tmplayer.data.TelegramQuality>): Boolean {
+    private fun swapForSoftware(copies: List<com.tmplayer.data.TelegramQuality>): Swap {
         softwareSwapTried = true
-        if (handingOver || isFinishing || castUp()) return false
+        if (handingOver || isFinishing || castUp()) return Swap.NONE
         val pick = com.tmplayer.data.TelegramQualities.forSoftwareDecode(copies, saveDataAtOpen) { HardwareDecoders.has(this, it) }
-            ?: return false
+            ?: return Swap.NONE
+        // Asked first (HX2): Telegram's lighter copy, or this one anyway.
+        if (askHeavy(pick, copies)) return Swap.ASKED
+        handOverTo(pick, copies)
+        return Swap.HANDED_OVER
+    }
+
+    /** What [swapForSoftware] did: handed over to a lighter copy, asked the viewer, or neither. */
+    private enum class Swap { HANDED_OVER, ASKED, NONE }
+
+    /** The kinds of picture whose "may stutter" question the viewer turned off, read as the video opens. */
+    private var heavyAskSkips: Set<String> = emptySet()
+
+    /** The kind of the picture judged too heavy here ([com.tmplayer.data.DecodeMemory.keyOf]). */
+    private var heavyKind: String? = null
+
+    /**
+     * "This video may stutter on this TV. It uses AV1, which this TV can only decode slowly." over
+     * the opening video, held paused, when this kind of picture has not had the question turned
+     * off: Telegram's [lighter] copy (when there is one) or Play anyway, Back leaving a video with
+     * no lighter copy. False when not asked.
+     */
+    private fun askHeavy(lighter: com.tmplayer.data.TelegramQuality?, copies: List<com.tmplayer.data.TelegramQuality>): Boolean {
+        val kind = heavyKind
+        val codec = heavyLabel ?: return false
+        if (kind != null && kind in heavyAskSkips) return false
+        if (sheets == null || isFinishing) return false
+        player?.pause()
+        // The question is the line about it: the watchdog will not say it again.
+        stutterOffered = true
+        showSheet { host ->
+            host.showHeavyAsk(codec, deviceWord(), lighter?.let { com.tmplayer.data.TelegramQualities.label(it.height) }) { useLighter, dontAsk ->
+                if (dontAsk && kind != null) {
+                    heavyAskSkips = heavyAskSkips + kind
+                    App.backgroundScope.launch { runCatching { settings.skipHeavyAsk(kind) } }
+                }
+                when (useLighter) {
+                    true -> lighter?.let { handOverTo(it, copies) }
+                    false -> player?.play()
+                    null -> finish()
+                }
+            }
+        }
+        return true
+    }
+
+    /** Plays Telegram's [pick] in place of the upload, from the same moment. */
+    private fun handOverTo(pick: com.tmplayer.data.TelegramQuality, copies: List<com.tmplayer.data.TelegramQuality>) {
+        if (handingOver || isFinishing) return
         Log.i("TMPlayer", "Playing Telegram's ${pick.height}p ${pick.codec} copy instead, which decodes in hardware")
         com.tmplayer.data.SoftwareDecode.rememberHeavy(chatId, messageId)
         player?.pause()
@@ -695,19 +795,137 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (at > 0) BookmarkJump.request(chatId, messageId, at)
         // The copies go along, so the new player need not read the message again to find them.
         playEpisode(currentItem().copy(qualities = copies))
-        return true
     }
 
     /** Readies the line that the picture decodes in software, on a television, once per video; [playing] says it now. */
     private fun noteSoftwareDecode(playing: Boolean) {
-        if (!FormFactor.isTv(this)) return
         if (!com.tmplayer.data.SoftwareDecode.noteOnce(chatId, messageId)) return
+        // Said for the copy the viewer picked or the only one there is; the watchdog will not say
+        // it again ([stutterOffered]).
+        stutterOffered = true
+        val codec = heavyLabel
+        val note = when {
+            codec == null -> L.playerSoftwareDecodeNote
+            smootherCopy() != null -> L.playerHeavyCopyNoteOthers(codec = codec, device = deviceWord())
+            else -> L.playerHeavyCopyNote(codec = codec, device = deviceWord())
+        }
         if (playing && firstFrameReady) {
             softwareNoteUp = true
-            feedback?.message(L.playerSoftwareDecodeNote, holdMs = SOFTWARE_NOTE_MS)
+            feedback?.message(note, holdMs = SOFTWARE_NOTE_MS)
         } else {
-            softwareNote = L.playerSoftwareDecodeNote
+            softwareNote = note
         }
+    }
+
+    /** The device word the lines use: TV or phone. */
+    private fun deviceWord(): String = if (FormFactor.isTv(this)) "tv" else "phone"
+
+    /**
+     * Another copy of this video, posted on its own, that this device plays smoothly: a hardware
+     * one first, then one that fits in software, then (when this one is too slow) one smaller
+     * whose codec its name does not say. Nearest this copy's quality among them. Null when none.
+     */
+    private fun smootherCopy(): MediaItem? {
+        val here = currentItem()
+        val heightHere = VideoCopies.heightOf(here) ?: VideoCopies.heightOf(postItem ?: here) ?: 1080
+        return copies
+            .asSequence()
+            .filter { it.id != here.id && !VideoCopies.sameFile(it, here) && it.chatId != 0L }
+            .mapNotNull { copy ->
+                val rank = when (DeviceDecode.verdictOf(copy)) {
+                    com.tmplayer.data.DecodeJudge.Verdict.HARDWARE -> 0
+                    com.tmplayer.data.DecodeJudge.Verdict.SOFTWARE_FITS -> 1
+                    com.tmplayer.data.DecodeJudge.Verdict.UNKNOWN ->
+                        if ((VideoCopies.heightOf(copy) ?: Int.MAX_VALUE) < heightHere) 2 else return@mapNotNull null
+                    com.tmplayer.data.DecodeJudge.Verdict.SOFTWARE_TOO_SLOW -> return@mapNotNull null
+                }
+                Triple(copy, rank, kotlin.math.abs((VideoCopies.heightOf(copy) ?: 0) - heightHere))
+            }
+            .sortedWith(compareBy<Triple<MediaItem, Int, Int>> { it.second }.thenBy { it.third })
+            .firstOrNull()?.first
+    }
+
+    /** "Playing the 720p copy. The 1080p copy is too heavy for this TV.", with Change to the copies. */
+    private fun sayPassedOver(heavy: String) {
+        val here = copies.firstOrNull { it.id == currentItem().id } ?: currentItem()
+        feedback?.offer(
+            L.playerSmootherCopyPlaying(quality = here.copyQuality(), heavy = heavy, device = deviceWord()),
+            L.commonChange,
+            holdMs = PASSED_OVER_MS,
+            focus = FormFactor.isTv(this),
+        ) { openCopies() }
+    }
+
+    /** Samples the watch once a second while the video plays ([PlaybackWatch]). */
+    private fun startWatch() {
+        if (watch.done || isAudio || !firstFrameReady) return
+        loopHandler.removeCallbacks(watchTick)
+        loopHandler.postDelayed(watchTick, WATCH_TICK_MS)
+    }
+
+    private fun sampleWatch() {
+        val exo = player ?: return
+        if (watch.done) return
+        if (watchPicture == null) {
+            exo.videoFormat?.let { format ->
+                watchPicture = DeviceDecode.pictureOf(format)
+                watchSoftware = DecoderSwitch.softwareVideoChosen(exo)
+            }
+        }
+        val playing = exo.isPlaying && !castUp()
+        val answer = watch.sample(
+            SystemClock.elapsedRealtime(),
+            exo.currentPosition,
+            playing,
+            exo.videoDecoderCounters?.renderedOutputBufferCount ?: 0,
+            watchDropped,
+            watchUnderruns,
+        )
+        when {
+            answer != null -> onWatchAnswer(answer)
+            // Paused or waiting: no ticks until it plays again ([startWatch] from onIsPlayingChanged).
+            playing -> loopHandler.postDelayed(watchTick, WATCH_TICK_MS)
+        }
+    }
+
+    private fun onWatchAnswer(answer: PlaybackWatch.Answer) {
+        val picture = watchPicture
+        Log.i(
+            "TMPlayer",
+            "Watch: ${answer.name.lowercase()}, ${watch.summary()}, ${picture?.label ?: "?"} " +
+                "${picture?.width}x${picture?.height} in ${if (watchSoftware) "software" else "hardware"}",
+        )
+        // Remembered for the next picture of this kind, when the app's own decoder had it: what a
+        // hardware decoder does is the device's to say, and its list already says it.
+        if (picture != null && watchSoftware) DeviceDecode.note(picture, answer == PlaybackWatch.Answer.KEPT_UP)
+        if (answer == PlaybackWatch.Answer.KEPT_UP || stutterOffered || castUp()) return
+        stutterOffered = true
+        if (watchSoftware) com.tmplayer.data.SoftwareDecode.rememberHeavy(chatId, messageId)
+        val tv = FormFactor.isTv(this)
+        smootherCopy()?.let { copy ->
+            feedback?.offer(
+                L.playerStutterOffer(quality = copy.copyQuality(), device = deviceWord()),
+                L.playerStutterSwitch,
+                holdMs = STUTTER_OFFER_MS,
+                focus = tv,
+            ) { switchCopy(copy) }
+            return
+        }
+        val lighter = if (playingQuality == 0) {
+            com.tmplayer.data.TelegramQualities.forSoftwareDecode(telegramQualities(), saveDataAtOpen) { HardwareDecoders.has(this, it) }
+        } else {
+            null
+        }
+        if (lighter != null) {
+            feedback?.offer(
+                L.playerStutterOfferLighter(quality = com.tmplayer.data.TelegramQualities.label(lighter.height), device = deviceWord()),
+                L.playerStutterSwitch,
+                holdMs = STUTTER_OFFER_MS,
+                focus = tv,
+            ) { switchQuality(lighter.height) }
+            return
+        }
+        if (watchSoftware) feedback?.message(L.playerStutterNone(device = deviceWord()), holdMs = SOFTWARE_NOTE_MS)
     }
 
     /** Whether a cast is connected or playing: the TV at the other end decodes the picture then. */
@@ -1429,6 +1647,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         softwareChecked = false
         softwareNote = null
         softwareNoteUp = false
+        watch.restart()
+        loopHandler.removeCallbacks(watchTick)
+        watchPicture = null
+        watchSoftware = false
+        stutterOffered = false
+        copyHandPicked = false
+        heavyLabel = null
+        heavyKind = null
+        passedOver = SmootherPick.take(from.getLongExtra(EXTRA_CHAT_ID, 0), from.getLongExtra(EXTRA_MESSAGE_ID, 0))
         storyboardFrames?.let { board ->
             board.release()
             storyboardFrames = null
@@ -2091,6 +2318,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // The quality played counts towards the one chosen for the viewer next time.
         val played = copies.firstOrNull { it.id == here.id } ?: here
         App.backgroundScope.launch { runCatching { settings.notePlayedQuality(played) } }
+        lifecycleScope.launch {
+            copyHandPicked = runCatching { settings.copyPickFor(here) == here.id }.getOrDefault(false)
+            heavyAskSkips = runCatching { settings.heavyAskSkipsNow() }.getOrDefault(emptySet())
+        }
         if (VideoCopies.keyOf(here) == null) return
         itemScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -2156,14 +2387,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * and the quality for the next episode. The place is per copy: this one keeps its own line,
      * and the new copy's is read as the newest from then on.
      */
-    private fun switchCopy(copy: MediaItem) {
+    private fun switchCopy(copy: MediaItem, remember: Boolean = true) {
         if (copy.id == currentItem().id) return
         val at = player?.currentPosition ?: 0L
         val from = player?.duration?.takeIf { it > 0 } ?: durationSec * 1000L
         VideoCopies.carryOver(at, from, copy.durationSec * 1000L)?.takeIf { it > 0 }?.let {
             BookmarkJump.request(copy.chatId, copy.messageId, it)
         }
-        App.backgroundScope.launch { runCatching { settings.setCopyPick(copy) } }
+        // A copy the player took by itself for smoothness is not the viewer's pick.
+        if (remember) App.backgroundScope.launch { runCatching { settings.setCopyPick(copy) } }
         // The new player finds the same list, chats and all.
         CopyHandoff.offer(copies, copies.associate { it.chatId to copyChatTitle(it) }.filterValues { it.isNotBlank() })
         playEpisode(copy, copyChatTitle(copy).ifBlank { chatTitle })
@@ -3031,6 +3263,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                             "Audio underrun: buffer ${bufferSizeMs}ms, " +
                                 "last fed ${elapsedSinceLastFeedMs}ms ago",
                         )
+                        watchUnderruns++
+                    }
+
+                    override fun onVideoFrameProcessingOffset(
+                        eventTime: AnalyticsListener.EventTime,
+                        totalProcessingOffsetUs: Long,
+                        frameCount: Int,
+                    ) {
+                        watch.frameOffsets(totalProcessingOffsetUs, frameCount)
                     }
 
                     // Media3 reports dropped frames fifty at a time: the decoder falling behind
@@ -3041,6 +3282,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                         droppedFrames: Int,
                         elapsedMs: Long,
                     ) {
+                        watchDropped += droppedFrames
                         if (droppedFrames >= STUTTER_FRAMES) com.tmplayer.data.DeviceFitHint.raise()
                     }
                 })
@@ -3450,6 +3692,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             wakeEndWatch()
+            if (isPlaying) startWatch()
             loopHandler.removeCallbacks(loopWatch)
             if (isPlaying && abLoop?.complete == true) loopHandler.post(loopWatch)
             // Started again from outside the card (a headset, the notification): the question
@@ -3516,6 +3759,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                             feedback?.message(note, holdMs = SOFTWARE_NOTE_MS)
                         }
                     }
+                    passedOver?.let { heavy ->
+                        passedOver = null
+                        sayPassedOver(heavy)
+                    }
+                    startWatch()
                 }
                 // Already moved on from the credits; the file running out behind it changes nothing.
                 Player.STATE_ENDED -> {
@@ -3537,6 +3785,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             // next-up card's last half minute, or come into them.
             wakeEndWatch()
             if (reason != Player.DISCONTINUITY_REASON_SEEK) return
+            if (!watch.done) watch.reset()
             seekStartedAt = SystemClock.elapsedRealtime()
             noteSeek(oldPosition.positionMs, newPosition.positionMs)
         }
@@ -4802,6 +5051,21 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // pause, the way the pill's second line says. With the row up OK keeps its meaning on
         // whatever is focused, and the pill never takes focus itself. A held OK is swallowed whole
         // so its repeats do not pause the video the skip just moved.
+        // An offer up over the bare picture on a television ("Stuttering? Switch", "Change"): it
+        // holds the focus, so OK is its button and Back puts it away.
+        if (FormFactor.isTv(this) && feedback?.offerUp == true && !controlsUp && statusOverlay.visibility != View.VISIBLE) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                    if (event.repeatCount == 0) feedback?.takeOffer()
+                    return true
+                }
+                KeyEvent.KEYCODE_BACK -> {
+                    feedback?.dismissOffer()
+                    return true
+                }
+            }
+        }
+
         if (skipHasTheRemote() &&
             (event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER || event.keyCode == KeyEvent.KEYCODE_ENTER)
         ) {
@@ -7693,6 +7957,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     override fun onDestroy() {
+        loopHandler.removeCallbacks(watchTick)
         // Every runnable on this handler, the undo chip's expiry among them: a delayed one holds
         // the whole activity until it fires.
         loopHandler.removeCallbacksAndMessages(null)
@@ -7982,6 +8247,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
         /** How long the lines about software decoding stay, a sentence longer than a usual flash. */
         private const val SOFTWARE_NOTE_MS = 7_000L
+
+        /** The watchdog's sample: once a second while playing ([PlaybackWatch]). */
+        private const val WATCH_TICK_MS = 1_000L
+
+        /** How long "Stuttering? Switch" and the passed-over line stay up. */
+        private const val STUTTER_OFFER_MS = 12_000L
+        private const val PASSED_OVER_MS = 6_000L
 
         /** How long the word that a file cannot be sought in stays up. */
         private const val SEEK_NOTICE_MS = 6_000L

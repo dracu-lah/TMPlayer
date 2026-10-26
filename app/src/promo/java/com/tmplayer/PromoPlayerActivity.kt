@@ -45,7 +45,7 @@ import androidx.media3.common.C
  * so the transport can be captured and checked without a Telegram account or a video file.
  *
  *     adb shell am start -n com.tmplayer.promo/com.tmplayer.PromoPlayerActivity \
- *         [--ez tv true] [--ez playing true] [--es feedback ripple|level|scrub|hold|jump|offer|hint]
+ *         [--ez tv true] [--ez playing true] [--es feedback ripple|level|scrub|hold|jump|offer|hint|stutter|passed|ask] [--es lighter 480p]
  *         [--ez nextup true] [--ez menu true] [--ez overflow true] [--ez trickplay true] [--el scrub_at 1265000]
  *         [--es picker subtitles|online] [--ez subtitles true]
  *         [--es online signed_out|signed_in|quota|expired|unavailable|empty|offline|subdl|none|live]
@@ -177,6 +177,34 @@ class PromoPlayerActivity : FragmentActivity(), TrackPickerHost {
                 "offer" -> {
                     controls.hideNow()
                     feedback.offer(L.playerResumingFrom("13:54"), L.playerStartOver) {}
+                }
+                // HX2's lines: the watchdog's offer, the smoother copy played instead, and the
+                // question before a copy too heavy for this device.
+                "stutter" -> {
+                    controls.hideNow()
+                    feedback.offer(
+                        L.playerStutterOffer(quality = "720p", device = if (tv) "tv" else "phone"),
+                        L.playerStutterSwitch,
+                        holdMs = 60_000L,
+                        focus = tv,
+                    ) {}
+                }
+                "passed" -> {
+                    controls.hideNow()
+                    feedback.offer(
+                        L.playerSmootherCopyPlaying(quality = "720p", heavy = "1080p", device = if (tv) "tv" else "phone"),
+                        L.commonChange,
+                        holdMs = 60_000L,
+                        focus = tv,
+                    ) {}
+                }
+                "ask" -> {
+                    controls.hideNow()
+                    com.tmplayer.player.PlayerSheets(this, findViewById(R.id.player_root)) {}.showHeavyAsk(
+                        "AV1 10-bit",
+                        if (tv) "tv" else "phone",
+                        intent.getStringExtra("lighter"),
+                    ) { _, _ -> }
                 }
                 "hint" -> {
                     controls.hideNow()

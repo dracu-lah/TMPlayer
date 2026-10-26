@@ -1078,7 +1078,13 @@ private fun Root() {
     suspend fun playNow(requested: MediaItem, confirmed: Boolean, requestedChat: String) {
         // A film posted more than once plays the copy chosen for the viewer (VideoCopies.pick):
         // the one they picked, one on the device, the one they started, their usual quality.
-        val chosen = runCatching { settings.copyToPlay(requested) }.getOrDefault(requested)
+        // Off the main thread: judging a copy asks the codec list (HX2), slow the first time on a stick.
+        val chosen = withContext(Dispatchers.Default) { runCatching { settings.copyToPlay(requested) }.getOrDefault(requested) }
+        // A smoother copy played in place of one too heavy for this device: the player says so,
+        // with Change one press away ([com.tmplayer.player.SmootherPick]).
+        withContext(Dispatchers.Default) { runCatching { settings.copyPassedOver(requested) }.getOrNull() }
+            ?.takeIf { it.id != chosen.id }
+            ?.let { heavy -> com.tmplayer.player.SmootherPick.offer(chosen, com.tmplayer.data.VideoCopies.qualityLabel(heavy) ?: heavy.title) }
         // A stored row's file id may name another file in this session ([Td.fileIdFits]): the
         // message is asked for again, which gives the current id. A video in the Downloads
         // folder plays from its own file and never needs the id.

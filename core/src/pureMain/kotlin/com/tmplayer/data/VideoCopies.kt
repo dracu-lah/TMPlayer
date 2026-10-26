@@ -207,6 +207,11 @@ object VideoCopies {
      * 5. the one nearest the quality the viewer usually plays ([habit]), lower before higher on a
      *    tie, so someone who watches 1080p is not handed a 4K file;
      * 6. the newest.
+     *
+     * Steps 2 to 6 leave out the copies [tooSlow] says this device would decode too slowly to
+     * watch ([DecodeJudge]: AV1 on a TV stick with no AV1 silicon), as long as one copy is left:
+     * a smooth copy is the one played without asking. The viewer's own pick (1) is kept whatever
+     * it is.
      */
     fun pick(
         copies: List<MediaItem>,
@@ -214,9 +219,59 @@ object VideoCopies {
         started: (MediaItem) -> Boolean = { false },
         habit: QualityHabit = QualityHabit(),
         language: String? = null,
+        tooSlow: (MediaItem) -> Boolean = { false },
     ): MediaItem? {
         if (copies.size <= 1) return copies.firstOrNull()
         chosen?.let { id -> copies.firstOrNull { it.id == id } }?.let { return it }
+        val smooth = copies.filterNot(tooSlow).ifEmpty { copies }
+        return pickAmong(smooth, started, habit, language)
+    }
+
+    /**
+     * The copy [pick] would have played if no copy were too slow here, when that is not the one it
+     * plays: what the player names when it says it played a smoother copy instead. Null otherwise.
+     */
+    fun passedOver(
+        copies: List<MediaItem>,
+        chosen: String? = null,
+        started: (MediaItem) -> Boolean = { false },
+        habit: QualityHabit = QualityHabit(),
+        language: String? = null,
+        tooSlow: (MediaItem) -> Boolean = { false },
+    ): MediaItem? {
+        if (copies.size <= 1) return null
+        if (chosen != null && copies.any { it.id == chosen }) return null
+        val plain = pickAmong(copies, started, habit, language) ?: return null
+        val picked = pick(copies, chosen, started, habit, language, tooSlow) ?: return null
+        return plain.takeIf { it.id != picked.id && tooSlow(it) }
+    }
+
+    /**
+     * The test the app sets for [pick]: whether this device would decode a copy too slowly to
+     * watch, as far as its name and size say ([DecodeJudge.pictureOfName]). False until set.
+     */
+    @Volatile
+    var tooSlowHere: (MediaItem) -> Boolean = { false }
+
+    /**
+     * Whether this device plays a copy smoothly as far as its name says: true, false (it may
+     * stutter), or null when not known, for the copies lists' "Smooth on this TV" line. Null for
+     * every copy until the app sets it.
+     */
+    @Volatile
+    var playsSmoothlyHere: (MediaItem) -> Boolean? = { null }
+
+    /** The device word those lines use: `tv`, `phone` or `computer`. */
+    @Volatile
+    var deviceWord: String = "phone"
+
+    private fun pickAmong(
+        copies: List<MediaItem>,
+        started: (MediaItem) -> Boolean,
+        habit: QualityHabit,
+        language: String?,
+    ): MediaItem? {
+        if (copies.size <= 1) return copies.firstOrNull()
         copies.firstOrNull { it.locality == MediaItem.Locality.Downloaded }?.let { return it }
         copies.firstOrNull { it.onDevice }?.let { return it }
         copies.firstOrNull(started)?.let { return it }

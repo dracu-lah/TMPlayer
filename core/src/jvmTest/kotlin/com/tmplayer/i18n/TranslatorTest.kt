@@ -249,6 +249,35 @@ class TranslatorTest {
     }
 
     @Test
+    fun `reused number formats carry nothing from one call to the next`() {
+        // The formats are kept per thread and locale (HX2), so each call's digits must be its own.
+        val en = Translator.english().formatter
+        assertEquals("1.500", en.decimal(1.5, 3))
+        assertEquals("2", en.decimal(1.5, 0))
+        assertEquals("1.50", en.decimal(1.5, 2))
+        assertEquals("1.25", en.number(1.25))
+        assertEquals("1:02:03", en.clock(3_723_000))
+        assertEquals("12,345", en.number(12_345))
+        assertEquals("0:05", en.clock(5_000))
+        assertEquals("62%", en.percent(0.629))
+        assertEquals("1,000,000", en.number(1_000_000))
+        val de = Translator.build("de", null, emptyMap()).formatter
+        assertEquals("1,5", de.decimal(1.5, 1))
+        assertEquals("1.5", en.decimal(1.5, 1))
+        // Warming up formats and leaves nothing behind either.
+        en.warmUp()
+        de.warmUp()
+        assertEquals("1,234,567", en.number(1_234_567))
+        assertEquals("1.234.567", de.number(1_234_567))
+        // Another thread has formats of its own and reads the same.
+        var other = ""
+        val thread = Thread { other = en.clock(3_723_000) + " " + de.decimal(2.25, 2) }
+        thread.start()
+        thread.join()
+        assertEquals("1:02:03 2,25", other)
+    }
+
+    @Test
     fun `a size range whose ends read the same is one size`() {
         val gb = 1024L * 1024 * 1024
         val en = Translator.english().formatter

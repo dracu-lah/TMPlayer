@@ -68,6 +68,24 @@ class App : Application() {
             store.language.collect { saved ->
                 Translator.select(saved, AppLocales.system(this@App))
                 AppLocales.apply(this@App, saved)
+                // The chosen language's locale data, loaded here rather than in a frame.
+                runCatching { Translator.messages.formatter.warmUp() }
+            }
+        }
+        // The system's first load of a locale's data (numbers, dates) is heavy, and on a 1 GB
+        // television a frame that did it on the main thread was caught waiting on a garbage
+        // collection long enough for an ANR (Sentry 156073936, HX2). The device's own locale (what
+        // String.format and the platform's views use) and the UI language are loaded here, off
+        // the main thread, once; the first frames then find them in the platform's cache.
+        backgroundScope.launch {
+            runCatching {
+                val began = System.nanoTime()
+                String.format(java.util.Locale.getDefault(), "%d %.1f", 1, 1.5)
+                java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date())
+                Translator.messages.formatter.warmUp()
+                // Next to Home's first paint in the same log (adb logcat -s tm-perf).
+                com.tmplayer.data.PerfLog.mark("locale data warmed", began)
+                com.tmplayer.data.PerfLog.sinceStart("locale data warmed")
             }
         }
         // A card in focus or under the finger warms its stream, unless the file is whole here
@@ -176,6 +194,8 @@ class App : Application() {
         // TDLib takes a moment to open its database; starting here means the login screen is
         // already showing a QR code by the time the user has finished reading the first line.
         Td.start(this)
+        // Which pictures this device plays smoothly (HX2): the copy chooser and the player ask it.
+        com.tmplayer.player.DeviceDecode.start(this)
         // Which way up the player opens, fetched now so it is in hand before anybody reaches a
         // video. The player has to set its orientation before it lays anything out, which leaves
         // no room for a disk read there. Anyone quick enough to beat this gets the default.

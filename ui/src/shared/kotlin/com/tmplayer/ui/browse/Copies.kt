@@ -92,7 +92,15 @@ fun copySound(copy: MediaItem, locale: java.util.Locale = java.util.Locale.getDe
  * did not already give it), the length, when it was posted, the chat where the copies span more
  * than one, whether it is on this device and whether its chat allows saving.
  */
-fun copyDetail(copy: MediaItem, s: Messages, chatTitle: String?, started: Boolean = false): String = listOfNotNull(
+fun copyDetail(
+    copy: MediaItem,
+    s: Messages,
+    chatTitle: String?,
+    started: Boolean = false,
+    /** The copies listed with it, for [copyFit]. */
+    among: List<MediaItem> = emptyList(),
+): String = listOfNotNull(
+    copyFit(copy, s, among),
     copy.sizeBytes.takeIf { it > 0 && VideoCopies.heightOf(copy) != null }?.let { s.formatter.size(it) },
     copy.durationSec.takeIf { it > 0 }?.let { s.formatter.duration(it.toLong()) },
     copy.date.takeIf { it > 0 }?.let { s.detailCopyPosted(s.formatter.date(it * 1000L)) },
@@ -105,6 +113,18 @@ fun copyDetail(copy: MediaItem, s: Messages, chatTitle: String?, started: Boolea
     s.detailCopyStarted.takeIf { started },
     s.detailCopyNoSaving.takeIf { !copy.canBeSaved },
 ).joinToString("  ·  ")
+
+/**
+ * Whether this device plays [copy] smoothly, as far as its name says (HX2,
+ * [VideoCopies.playsSmoothlyHere]): "May stutter on this TV" for a copy it can only decode slowly,
+ * and "Smooth on this TV" for the others, but only where [among] holds one that may stutter, so a
+ * list where every copy plays well says nothing about it. Null where nothing is known.
+ */
+fun copyFit(copy: MediaItem, s: Messages, among: List<MediaItem>): String? {
+    val smooth = VideoCopies.playsSmoothlyHere(copy) ?: return null
+    if (!smooth) return s.detailCopyMayStutter(VideoCopies.deviceWord)
+    return if (among.any { VideoCopies.playsSmoothlyHere(it) == false }) s.detailCopySmooth(VideoCopies.deviceWord) else null
+}
 
 /**
  * The chat each copy of [item] is in, by name: [chatTitle] for the
@@ -414,6 +434,7 @@ private fun CopyChooser(
                         copySound(copy),
                     ).joinToString("  ·  "),
                     facts = listOfNotNull(
+                        copyFit(copy, s, rows.map { it.first }),
                         copy.durationSec.takeIf { it > 0 }?.let { s.formatter.duration(it.toLong()) },
                         copy.date.takeIf { datesDiffer && it > 0 }?.let { s.detailCopyPosted(s.formatter.date(it * 1000L)) },
                         chatOf(copy)?.takeIf { chats.size > 1 }?.let { s.detailCopyFrom(it) },
