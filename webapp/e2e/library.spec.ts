@@ -1,6 +1,6 @@
 // The video's page, the "You" menu and its lists (session 19), and the player's own controls.
 import { expect, test } from '@playwright/test'
-import { noSizeFloor, openCard, openClips, openDetail, playsPast } from './helpers'
+import { choice, isPhoneProject, noSizeFloor, openCard, openClips, openDetail, playsPast } from './helpers'
 
 test.beforeEach(async ({ page }) => {
     await noSizeFloor(page)
@@ -49,13 +49,26 @@ test('the player answers its keys: Space pauses, the arrows jump, M mutes, Escap
     await expect(page).toHaveURL(/\/video\//)
 })
 
-test('the speed menu changes the speed and the button says it', async ({ page }) => {
+test('the speed menu changes the speed and the button says it', async ({ page }, info) => {
     await openCard(page, 'Native Clip')
     await playsPast(page, 0.3)
     await page.mouse.move(100, 100)
     await page.mouse.move(120, 120)
     await page.locator('[data-shot=speed]').click()
-    await page.getByRole('menuitemradio', { name: '1.5x' }).click()
+    await choice(page, '1.5x').click()
     await expect.poll(() => page.locator('video').evaluate((v: HTMLVideoElement) => v.playbackRate)).toBe(1.5)
-    await expect(page.locator('[data-shot=speed]')).toHaveText('1.5x')
+    // The phone's button is an icon; the desktop's says the speed.
+    if (!isPhoneProject(info.project.name)) await expect(page.locator('[data-shot=speed]')).toHaveText('1.5x')
+})
+
+test('the phone player\'s progress on the bar is the brand blue', async ({ page }, info) => {
+    test.skip(!isPhoneProject(info.project.name), 'the desktop bar takes the theme accent')
+    await openCard(page, 'Native Clip')
+    await playsPast(page, 0.5)
+    await page.mouse.move(100, 100)
+    await page.mouse.move(120, 120)
+    await expect(page.locator('.pc')).toHaveClass(/shown/)
+    await expect.poll(() => page.locator('.pc-played').first().evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgb(42, 171, 238)')
+    // For the eye: SHOTS=/some/dir writes the player as this project draws it.
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/bar-${info.project.name}.png` })
 })

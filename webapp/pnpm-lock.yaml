@@ -54,6 +54,9 @@ importers:
         specifier: 7.4.1
         version: 7.4.1
     devDependencies:
+      '@axe-core/playwright':
+        specifier: 4.10.2
+        version: 4.10.2(playwright-core@1.64.1)
       '@playwright/test':
         specifier: 1.64.1
         version: 1.64.1
@@ -74,6 +77,11 @@ importers:
         version: 2.11.14(solid-js@1.9.17)(vite@8.3.5(@types/node@24.19.0))
 
 packages:
+
+  '@axe-core/playwright@4.10.2':
+    resolution: {integrity: sha512-6/b5BJjG6hDaRNtgzLIfKr5DfwyiLHO4+ByTLB0cJgWSM8Ll7KqtdblIS6bEkwSF642/Ex91vNqIl3GLXGlceg==}
+    peerDependencies:
+      playwright-core: '>= 1.0.0'
 
   '@babel/code-frame@7.29.7':
     resolution: {integrity: sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw==}
@@ -609,6 +617,10 @@ packages:
   ass-compiler@0.1.16:
     resolution: {integrity: sha512-t6RvH8ebL47t5a62XcrxMwxh1JQoOykydpT5bSVqqf9HA9/rbFl+9JgckBVTA5QdvfwuhYD5yrSc2n3u1tsjhA==}
 
+  axe-core@4.10.3:
+    resolution: {integrity: sha512-Xm7bpRXnDSX2YE2YFfBk2FnF0ep6tmG7xPh8iHee8MIcrgq762Nkce856dYtJYLkuIoYZvGfTs/PbZhideTcEg==}
+    engines: {node: '>=4'}
+
   babel-plugin-jsx-dom-expressions@0.40.11:
     resolution: {integrity: sha512-k7TkOv7uVYnrq/bYyVvG5cWOC9IObAGfmyW3aMkG8l2sq2qt/5THkUBja69PMLEGGi8G+fXB2Fh7eS4OwZRBoQ==}
     peerDependencies:
@@ -1016,6 +1028,11 @@ packages:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
 
 snapshots:
+
+  '@axe-core/playwright@4.10.2(playwright-core@1.64.1)':
+    dependencies:
+      axe-core: 4.10.3
+      playwright-core: 1.64.1
 
   '@babel/code-frame@7.29.7':
     dependencies:
@@ -1450,6 +1467,8 @@ snapshots:
   array-find-index@1.0.2: {}
 
   ass-compiler@0.1.16: {}
+
+  axe-core@4.10.3: {}
 
   babel-plugin-jsx-dom-expressions@0.40.11(@babel/core@7.29.7):
     dependencies:

@@ -5,6 +5,22 @@ import { defineConfig, devices } from '@playwright/test'
 // E2E_PORT runs a second checkout's tests beside another's (8097 by default).
 const PORT = Number(process.env.E2E_PORT) || 8097
 
+/** A Chromium run that sets the layout (`tmplayer-layout`) before the page starts, as Settings would. */
+function form(layout: 'phone' | 'desktop', width: number, height: number) {
+    return {
+        ...devices['Desktop Chrome'],
+        viewport: { width, height },
+        hasTouch: layout === 'phone',
+        launchOptions: { executablePath: process.env.CHROMIUM_PATH || undefined },
+        storageState: {
+            cookies: [],
+            origins: [{ origin: `http://127.0.0.1:${PORT}`, localStorage: [{ name: 'tmplayer-layout', value: layout }] }],
+        },
+    }
+}
+// The flows that must hold in every form (session 22).
+const FORM_SPECS = /(library|extras|pages|detail|a11y)\.spec\.ts/
+
 export default defineConfig({
     testDir: 'e2e',
     timeout: 30_000,
@@ -19,7 +35,13 @@ export default defineConfig({
             name: 'chromium',
             use: { ...devices['Desktop Chrome'], launchOptions: { executablePath: process.env.CHROMIUM_PATH || undefined } },
         },
-        { name: 'webkit', use: { ...devices['iPhone 13'] } },
+        // Safari on a Mac (a desktop), and an iPhone: the whole suite in the first, the flows that must hold on a phone in the second.
+        // WebKit's page.route misses what the page's service worker answers, so a mocked TMDB would never be seen: the worker is blocked there.
+        { name: 'webkit', use: { ...devices['Desktop Safari'], serviceWorkers: 'block' } },
+        { name: 'webkit-iphone', testMatch: /(player|autoplay|posters|app|library|pages|extras)\.spec\.ts/, use: { ...devices['iPhone 13'], serviceWorkers: 'block' } },
+        { name: 'phone-390', testMatch: FORM_SPECS, use: form('phone', 390, 844) },
+        { name: 'phone-412', testMatch: FORM_SPECS, use: form('phone', 412, 915) },
+        { name: 'desktop-1280', testMatch: FORM_SPECS, use: form('desktop', 1280, 800) },
     ],
     webServer: {
         command: 'pnpm exec vite --config e2e/vite.e2e.ts',

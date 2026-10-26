@@ -52,12 +52,14 @@ test('the Settings choice wins, survives a reload and is set before the page run
     const html = page.locator('html')
     await expect(page.getByRole('radio', { name: 'Auto' })).toBeChecked()
     // Each form draws Settings in its own way (the TV's one long page, a list of pages elsewhere), so the choice is pressed, not checked: the radio is a new one by the time the form has changed.
-    for (const name of ['TV', 'Phone', 'Desktop']) {
-        await page.getByRole('radio', { name }).click({ force: true })
-        await expect(html).toHaveAttribute('data-form', name.toLowerCase())
-    }
-    await page.getByRole('radio', { name: 'TV' }).click({ force: true })
-    await expect(html).toHaveAttribute('data-form', 'tv')
+    // A press can land on the old radio while the page redraws for the last choice, so a press is tried again until the form follows.
+    const choose = (name: string) =>
+        expect(async () => {
+            await page.getByRole('radio', { name }).click({ force: true })
+            await expect(html).toHaveAttribute('data-form', name.toLowerCase(), { timeout: 2000 })
+        }).toPass({ timeout: 15_000 })
+    for (const name of ['TV', 'Phone', 'Desktop']) await choose(name)
+    await choose('TV')
     await page.reload()
     await expect(page.getByRole('radio', { name: 'TV' })).toBeChecked()
     await expect(html).toHaveAttribute('data-form', 'tv')
@@ -68,8 +70,10 @@ test('the Settings choice wins, survives a reload and is set before the page run
         return p.evaluate(() => (window as any).early)
     })
     expect(seen).toBe('tv')
-    await page.getByRole('radio', { name: 'Auto' }).click({ force: true })
-    await expect(html).toHaveAttribute('data-form', 'desktop')
+    await expect(async () => {
+        await page.getByRole('radio', { name: 'Auto' }).click({ force: true })
+        await expect(html).toHaveAttribute('data-form', 'desktop', { timeout: 2000 })
+    }).toPass({ timeout: 15_000 })
 })
 
 test('Auto follows a resize live; the route stays', async ({ page, browserName }) => {

@@ -2,7 +2,7 @@
 // bookmarks, the sleep timer and "Still watching?", autoplay's countdown, subtitle timing, the key
 // sheet and Watched in the menu. The 20 s chaptered show ("Lighthouse") is e2e/media/chapters.mkv.
 import { expect, test, type Page } from '@playwright/test'
-import { noSizeFloor, openCard, playsPast } from './helpers'
+import { choice, noSizeFloor, openCard, playsPast } from './helpers'
 
 test.skip(({ browserName }) => browserName !== 'chromium', 'the extras run in Chromium')
 
@@ -52,7 +52,7 @@ test('A-B repeat plays the stretch again and a third press ends it', async ({ pa
     await lighthouse(page)
     await seek(page, 6)
     await page.keyboard.press('r')
-    await expect(page.locator('.pc-chipline.loop')).toContainText('Loop from')
+    await expect(page.locator('.pc-chipline.loop')).toContainText(/Loop from|From 0:06/)
     await page.waitForTimeout(1200)
     await page.keyboard.press('r')
     await expect(page.locator('.pc-chipline.loop')).toContainText('Repeating')
@@ -92,7 +92,7 @@ test('the sleep timer set for the end of the video stops there and asks', async 
     await openMore(page)
     await page.getByRole('menuitem', { name: 'Playback options' }).click()
     await page.getByRole('menuitem', { name: /^Sleep timer/ }).click()
-    await page.getByRole('menuitemradio', { name: 'Stops at the end of this video' }).click()
+    await choice(page, 'Stops at the end of this video').click()
     await seek(page, 19)
     const card = page.getByRole('alertdialog', { name: 'Still watching?' })
     await expect(card).toBeVisible({ timeout: 10_000 })
@@ -109,7 +109,7 @@ test('a sleep timer in minutes pauses the video when it runs out', async ({ page
     await openMore(page)
     await page.getByRole('menuitem', { name: 'Playback options' }).click()
     await page.getByRole('menuitem', { name: /^Sleep timer/ }).click()
-    await page.getByRole('menuitemradio', { name: '15 minutes' }).click()
+    await choice(page, '15 minutes').click()
     await expect(page.locator('.pc-note')).toHaveText('Stops in 15 minutes')
     await page.clock.fastForward('15:05')
     await expect(page.getByRole('alertdialog', { name: 'Still watching?' })).toContainText('The sleep timer paused the video.')

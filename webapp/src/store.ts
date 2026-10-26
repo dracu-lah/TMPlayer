@@ -61,7 +61,51 @@ export { storageWorks }
  * Runs a storage call so that any failure arrives as a rejection: idb-keyval opens the database
  * on first use, and a browser that refuses it (Firefox's private windows) throws right there.
  */
-const stored = <T>(op: (db: UseStore) => Promise<T>): Promise<T> => (db ? Promise.resolve(db).then(op) : Promise.reject(new Error('no storage')))
+const raw = <T>(op: (db: UseStore) => Promise<T>): Promise<T> => (db ? Promise.resolve(db).then(op) : Promise.reject(new Error('no storage')))
+const stored = <T>(op: (db: UseStore) => Promise<T>): Promise<T> => replayed.then(() => raw(op))
+
+// A write to IndexedDB finishes some milliseconds later, and a reload or a closing tab in that time
+// loses it. So each write is also noted at once in localStorage (which is synchronous), struck off
+// when IndexedDB has it, and anything still noted at the next start is written first.
+const JOURNAL = 'tmplayer-pending'
+type Note = { v: unknown } | { d: 1 }
+const seqs = new Map<string, number>()
+let seq = 0
+function noted(change: (notes: Record<string, Note>) => void) {
+    try {
+        const notes: Record<string, Note> = JSON.parse(localStorage.getItem(JOURNAL) || '{}')
+        change(notes)
+        if (Object.keys(notes).length) localStorage.setItem(JOURNAL, JSON.stringify(notes))
+        else localStorage.removeItem(JOURNAL)
+    } catch {}
+}
+function note(key: string, n: Note) {
+    const mine = ++seq
+    seqs.set(key, mine)
+    noted((notes) => (notes[key] = n))
+    return () => {
+        if (seqs.get(key) !== mine) return
+        seqs.delete(key)
+        noted((notes) => delete notes[key])
+    }
+}
+/** Writes what an earlier page left noted; every storage call waits for it. */
+const replayed: Promise<void> = (async () => {
+    let left: Record<string, Note> = {}
+    try {
+        left = JSON.parse(localStorage.getItem(JOURNAL) || '{}')
+    } catch {}
+    const keys = Object.keys(left)
+    if (!keys.length || !db) return
+    try {
+        for (const key of keys) {
+            const n = left[key]
+            await raw((s) => ('d' in n ? del(key, s) : set(key, n.v, s)))
+        }
+        // Only what was replayed is struck off: a write made meanwhile is noted afresh.
+        noted((notes) => keys.forEach((k) => !seqs.has(k) && delete notes[k]))
+    } catch {}
+})()
 
 async function read<T>(key: string): Promise<T | undefined> {
     if (memory.has(key)) return memory.get(key) as T
@@ -78,8 +122,9 @@ async function read<T>(key: string): Promise<T | undefined> {
 
 function write(key: string, value: unknown) {
     memory.set(key, value)
+    const done = db ? note(key, { v: value }) : () => {}
     if (db)
-        stored((s) => set(key, value, s)).catch((e) => {
+        stored((s) => set(key, value, s)).then(done, (e) => {
             console.warn('[store] not saved', key, e)
             setStorageWorks(false)
         })
@@ -87,7 +132,8 @@ function write(key: string, value: unknown) {
 
 function remove(key: string) {
     memory.delete(key)
-    if (db) stored((s) => del(key, s)).catch(() => {})
+    const done = db ? note(key, { d: 1 }) : () => {}
+    if (db) stored((s) => del(key, s)).then(done, () => {})
 }
 
 /** The player's own notes (bookmarks, its switches) go through the same storage, so signing out clears them too. */
@@ -316,7 +362,9 @@ export async function cachedThumb(key: string, fetch: () => Promise<ArrayBuffer>
 /** Sign out: settings, positions, watched, stars, thumbnails and posters go; the theme falls back to the system's. */
 export async function clearAll() {
     memory.clear()
+    seqs.clear()
     try {
+        localStorage.removeItem(JOURNAL)
         localStorage.removeItem(LAST_KEY)
     } catch {}
     if (db) await stored(clear).catch(() => {})

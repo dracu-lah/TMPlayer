@@ -55,3 +55,10 @@ export async function openCard(page: Page, name: string) {
     await page.locator('.detail-play').click()
     await expect(page).toHaveURL(/\/watch\//)
 }
+
+/** A choice in the player's menu: a menu item on a desktop and the TV, a radio in the phone's sheet. */
+export const choice = (page: Page, name: string) =>
+    page.getByRole('menuitemradio', { name }).or(page.getByRole('radio', { name, exact: true })).first()
+
+/** The form this project runs in: its name says (`phone-390`, `desktop-1280`, `webkit-iphone`); the rest are auto-detected desktops. */
+export const isPhoneProject = (name: string) => name.startsWith('phone') || name.includes('iphone')

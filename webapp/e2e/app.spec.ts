@@ -59,11 +59,13 @@ test('Back walks back through the pages', async ({ page }) => {
 })
 
 test('settings survive a reload, and sign out clears them', async ({ page }) => {
-    await page.goto('/settings')
+    // A phone draws Settings as a list of pages: the theme is on the Appearance page, Sign out on the list.
+    await page.goto('/settings/appearance')
     await page.locator('label').filter({ hasText: /^Light$/ }).click()
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
     await page.reload()
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+    await page.goto('/settings')
     await page.getByRole('button', { name: 'Sign out of Telegram' }).click()
     await page.getByRole('button', { name: 'Sign out', exact: true }).click()
     await expect(page).toHaveURL(/\/signin/)
