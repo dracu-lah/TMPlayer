@@ -46,6 +46,24 @@ Then test on the real devices (phone, TV) with small videos before calling it do
 New user-visible text goes into `core/src/commonMain/resources/i18n/en.json` (keys sorted; the
 catalog test fails otherwise) and is translated into the other 20 catalogs before a release.
 
+## Error handling
+
+Nothing the app reads from outside is trusted, and nothing that fails takes the app down (user,
+2026-10-26, HX10):
+
+- **Outside data.** Telegram's answers, files on disk (settings, caches, backups, subtitles,
+  storyboard maps) and the network (TMDB, the update feed) can be missing, cut short, the wrong
+  type or absurdly large. No `!!`, `.first()`, `[0]`, `toInt()`, `require` or `error()` on them:
+  use the `OrNull` forms, skip the bad entry and keep the rest.
+- **Every async job has a handler.** App-wide scopes and view models go through `JobFailures`
+  (core), activities through `guardedLifecycleScope`. A screen's `LaunchedEffect` or
+  `scope.launch` that calls TDLib, the disk or the network catches its own failure and shows it.
+- **A failure shows a way out.** A screen that fails says what happened with Try again and Send
+  logs (the desktop window's `WindowRecovery` card is the last stop, the player ends in its status
+  sheet, the web page in its Reload card), and never restarts itself into a loop.
+- **Parsers have garbage tests.** A new parser of outside data gets its line in
+  `GarbageInputTest` (core), which feeds every parser truncated, wrong-typed, huge and random input.
+
 ## Writing
 
 No em dashes or en dashes, anywhere: comments, KDoc, commit messages, UI strings, site copy. Write
