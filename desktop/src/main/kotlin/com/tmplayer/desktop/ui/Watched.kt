@@ -110,7 +110,6 @@ fun WatchedPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
                 if (!records.isNullOrEmpty()) {
                     OutlinedButton(onClick = { confirmClear = true }) { Text(s.watchedClear) }
                 }
-                PosterSizeStep(state)
             },
         )
         tabs()
@@ -216,8 +215,30 @@ fun WatchLaterPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
     val progress by state.settings.watchProgress.collectAsState(initial = emptyMap())
     // The page's, not a tile's: removing takes the tile away, and with it any scope of its own.
     val scope = rememberCoroutineScope()
+    var confirmClear by remember { mutableStateOf(false) }
+    if (confirmClear) {
+        ConfirmDialog(
+            title = s.browseClearWatchLaterTitle,
+            message = s.browseClearWatchLaterMessage(records?.size ?: 0),
+            detail = s.browseClearWatchLaterDetail,
+            confirmLabel = s.commonClear,
+            onDismiss = { confirmClear = false },
+            onConfirm = {
+                confirmClear = false
+                scope.launch { runCatching { state.watched.watchLater.clear() } }
+            },
+        )
+    }
     Column(Modifier.fillMaxSize()) {
-        PageHeader(BrowseTab.History.heading, HistoryTab.WatchLater.blurb, actions = { PosterSizeStep(state) })
+        PageHeader(
+            BrowseTab.History.heading,
+            HistoryTab.WatchLater.blurb,
+            actions = {
+                if (!records.isNullOrEmpty()) {
+                    OutlinedButton(onClick = { confirmClear = true }) { Text(s.browseClearWatchLater) }
+                }
+            },
+        )
         tabs()
         val list = records
         when {

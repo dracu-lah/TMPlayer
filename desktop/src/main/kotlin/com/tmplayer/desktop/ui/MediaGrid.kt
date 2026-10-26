@@ -663,8 +663,36 @@ fun ContinuePage(state: ShellState, tabs: @Composable () -> Unit = {}) {
             },
         )
     }
+    // "Clear Continue watching?": every saved place goes, so it is asked first.
+    var confirmClear by remember { mutableStateOf(false) }
+    val toast = rememberToast()
+    if (confirmClear) {
+        ConfirmDialog(
+            title = s.browseClearContinueTitle,
+            message = s.browseClearContinueMessage(records?.size ?: 0),
+            detail = s.browseClearContinueDetail,
+            confirmLabel = s.commonClear,
+            onDismiss = { confirmClear = false },
+            onConfirm = {
+                confirmClear = false
+                val count = records?.size ?: 0
+                scope.launch {
+                    runCatching { state.settings.clearWatchHistory() }
+                    toast(s.settingsHistoryCleared(count))
+                }
+            },
+        )
+    }
     Column(Modifier.fillMaxSize()) {
-        PageHeader(BrowseTab.History.heading, HistoryTab.Continue.blurb, actions = { PosterSizeStep(state) })
+        PageHeader(
+            BrowseTab.History.heading,
+            HistoryTab.Continue.blurb,
+            actions = {
+                if (!records.isNullOrEmpty()) {
+                    OutlinedButton(onClick = { confirmClear = true }) { Text(s.browseClearContinue) }
+                }
+            },
+        )
         tabs()
         val list = records
         when {
