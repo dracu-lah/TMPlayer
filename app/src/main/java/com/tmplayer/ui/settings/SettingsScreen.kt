@@ -118,6 +118,7 @@ import com.tmplayer.data.BackupWords
 import com.tmplayer.data.AppLockSession
 import com.tmplayer.data.AppLockSettings
 import com.tmplayer.data.CacheShelf
+import com.tmplayer.data.hasPictureInPicture
 import com.tmplayer.ui.icons.TmIcons
 import com.tmplayer.ui.lock.AppLockWords
 import com.tmplayer.ui.lock.PinPad
@@ -322,6 +323,8 @@ fun SettingsScreen(
     val downmixChoice by settings.downmixChoice.collectAsStateWithLifecycle(initialValue = null)
     val evenVolume by settings.evenVolume.collectAsStateWithLifecycle(initialValue = true)
     val backgroundAudio by settings.backgroundAudio.collectAsStateWithLifecycle(initialValue = false)
+    val pipOnLeave by settings.pictureInPictureOnLeave.collectAsStateWithLifecycle(initialValue = true)
+    val pipAvailable = LocalContext.current.hasPictureInPicture()
     val subtitleStyle by settings.subtitleStyle.collectAsStateWithLifecycle(initialValue = SubtitleStyle())
     val trackPrefs by settings.trackPreferences.collectAsStateWithLifecycle(initialValue = TrackPreferences())
     val learntLanguages by settings.learntLanguages.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -952,6 +955,19 @@ fun SettingsScreen(
                             icon = TmIcons.Audio,
                             checked = backgroundAudio,
                             onToggle = { scope.launch { settings.setBackgroundAudio(!backgroundAudio) } },
+                        )
+                    }
+                }
+                // Phone only (a television never enters by itself), and only where Android has the
+                // feature. Followed by the player, so it applies to the video open now (HX9).
+                if (touch && pipAvailable) {
+                    item {
+                        ToggleRow(
+                            title = s.settingsPictureInPictureLeave,
+                            subtitle = if (pipOnLeave) s.settingsPictureInPictureLeaveOn else s.settingsPictureInPictureLeaveOff,
+                            icon = ImageVector.vectorResource(R.drawable.ic_pip),
+                            checked = pipOnLeave,
+                            onToggle = { scope.launch { settings.setPictureInPictureOnLeave(!pipOnLeave) } },
                         )
                     }
                 }
