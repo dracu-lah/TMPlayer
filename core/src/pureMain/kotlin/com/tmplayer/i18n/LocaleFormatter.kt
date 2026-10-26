@@ -162,6 +162,22 @@ class LocaleFormatter internal constructor(private val messages: Messages) {
         return listOfNotNull(script, region).filter { it.isNotBlank() }.joinToString(", ").ifBlank { null }
     }
 
+    /**
+     * Formats one of each kind once and throws the text away, so the platform's locale data for
+     * this language (ICU's numbers, calendar and month names) is loaded by whoever calls this, off
+     * the main thread, rather than by the first frame that shows a size, a length or a date. On a
+     * 1 GB television that first load allocates enough to land in a garbage collection, and a
+     * frame stuck there was reported as an ANR (Sentry 156073936, HX2).
+     */
+    fun warmUp() {
+        number(WARM_NUMBER)
+        decimal(WARM_DECIMAL, 1)
+        percent(WARM_FRACTION)
+        clock(WARM_CLOCK_MS)
+        date(WARM_EPOCH_MS)
+        dayMonth(WARM_EPOCH_MS, withYear = true)
+    }
+
     private fun twoDigits(value: Long): String = PlatformText.integer(locale, value, grouping = false, minDigits = 2)
 
     private companion object {
@@ -169,6 +185,11 @@ class LocaleFormatter internal constructor(private val messages: Messages) {
         const val MB = KB * 1024
         const val GB = MB * 1024
         val UNDETERMINED = setOf("und", "mis", "mul", "zxx", "qaa")
+        const val WARM_NUMBER = 1234
+        const val WARM_DECIMAL = 1.5
+        const val WARM_FRACTION = 0.5
+        const val WARM_CLOCK_MS = 3_723_000L
+        const val WARM_EPOCH_MS = 1_760_000_000_000L
     }
 }
 

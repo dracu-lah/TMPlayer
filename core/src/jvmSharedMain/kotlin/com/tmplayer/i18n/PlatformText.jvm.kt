@@ -14,21 +14,39 @@ actual fun localeOf(tag: String): TmLocale = Locale.forLanguageTag(tag)
 actual fun languageOf(locale: TmLocale): String = locale.language
 
 internal actual object PlatformText {
-    // NumberFormat is not thread safe, so each call makes its own; they are cheap next to a frame.
+    // NumberFormat is not thread safe, so each thread keeps its own, one set per locale. Making one
+    // is not cheap on Android: each builds an ICU DecimalFormat and parses its pattern, and the
+    // player's clock asked for three or four of them per readout. Kept per thread rather than
+    // shared under a lock, so the main thread never waits on a background one.
     actual fun decimal(locale: TmLocale, value: Double, minFraction: Int, maxFraction: Int): String =
-        NumberFormat.getInstance(locale).apply {
-            minimumFractionDigits = minFraction
+        formats(locale).decimal.apply {
+            // The maximum first: a minimum above the old maximum would raise it, and the other
+            // way round a maximum under the old minimum would lower that.
             maximumFractionDigits = maxFraction
+            minimumFractionDigits = minFraction
         }.format(value)
 
     actual fun integer(locale: TmLocale, value: Long, grouping: Boolean, minDigits: Int): String =
-        NumberFormat.getIntegerInstance(locale).apply {
+        formats(locale).integer.apply {
             minimumIntegerDigits = minDigits
             isGroupingUsed = grouping
         }.format(value)
 
-    actual fun percent(locale: TmLocale, fraction: Double): String =
-        NumberFormat.getPercentInstance(locale).format(fraction)
+    actual fun percent(locale: TmLocale, fraction: Double): String = formats(locale).percent.format(fraction)
+
+    /** The number formats of one locale, for one thread. */
+    private class Formats(locale: Locale) {
+        val integer: NumberFormat = NumberFormat.getIntegerInstance(locale)
+        val decimal: NumberFormat = NumberFormat.getInstance(locale)
+        val percent: NumberFormat = NumberFormat.getPercentInstance(locale)
+    }
+
+    // ThreadLocal.withInitial is Android 8; the subclass works on 6.0, the app's floor.
+    private val perThread = object : ThreadLocal<HashMap<Locale, Formats>>() {
+        override fun initialValue(): HashMap<Locale, Formats> = HashMap(4)
+    }
+
+    private fun formats(locale: Locale): Formats = perThread.get()!!.getOrPut(locale) { Formats(locale) }
 
     actual fun date(locale: TmLocale, epochMillis: Long): String =
         DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)
