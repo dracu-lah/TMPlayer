@@ -80,6 +80,8 @@ const SIDE = 0.35
 /** PlayerControls.WIDE_ROW_DP: from this width the phone's row adds picture shape and the lock. */
 const WIDE_ROW = 540
 const NOTE_MS = 900
+/** An iPhone or iPad: a page cannot set the volume there (the side buttons do), so the right side's drag does nothing. */
+const FIXED_VOLUME = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 const UNLOCK_PILL_MS = 2500
 
 export type Shape = 'fit' | 'crop' | 'stretch'
@@ -497,7 +499,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                 const b = Math.max(0.15, Math.min(1, down.bright + change))
                 setBrightness(b)
                 setLevel({ side: 'left', value: (b - 0.15) / 0.85, brightness: true })
-            } else {
+            } else if (!FIXED_VOLUME) {
                 setVol(down.vol + change)
                 setLevel({ side: 'right', value: v.volume, brightness: false })
             }
