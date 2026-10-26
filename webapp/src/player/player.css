@@ -1,0 +1,399 @@
+/*
+ * The player's controls in the apps' own look: the phone's player_controls.xml and PlayerFeedback,
+ * the desktop's PlayerOverlay and StoryboardPreview. Sizes are the apps' dp as px. The player is
+ * dark in every theme, as the desktop's is: its menus and sheets take the dark tokens.
+ */
+.player {
+  --menu: #1a1d20;
+  --dialog: #23272a;
+  --surface-high: #23272a;
+  --fg: #f2f4f5;
+  --muted: #aeb5bb;
+  --accent: #79d0f5;
+  --on-accent: #003546;
+  --accent-container: #004d64;
+  --on-accent-container: #bee9ff;
+  --line: #2e3337;
+  /* player_tonal, player_tonal_button, bg_player_chip, the scrub bar's colours */
+  --tonal: rgba(16, 16, 20, .70);
+  --tonal-button: rgba(16, 16, 20, .55);
+  --chip: rgba(16, 16, 20, .80);
+  --on-art-muted: rgba(255, 255, 255, .72);
+  --bar-played: var(--accent);
+  --bar-rest: rgba(255, 255, 255, .30);
+  color-scheme: dark;
+  color: #fff;
+  font-family: var(--font);
+}
+/* The phone's bar is the brand blue (R.color.accent); the desktop's is the theme's primary. */
+.player[data-variant="phone"] { --bar-played: #2aabee; }
+.player:fullscreen { width: 100vw; height: 100vh; max-height: none; border-radius: 0; aspect-ratio: auto; }
+.player video { width: 100%; height: 100%; display: block; object-fit: contain; transition: filter 120ms linear; }
+.player video::cue { font-family: var(--font); font-size: clamp(16px, 4.2cqw, 40px); background: rgba(0,0,0,.6); }
+
+.pc { position: absolute; inset: 0; z-index: 1; user-select: none; -webkit-user-select: none; }
+.pc-picture { position: absolute; inset: 0; touch-action: none; }
+.pc:not(.shown) .pc-picture { cursor: none; }
+.pc[data-variant="phone"] .pc-picture { cursor: default; }
+
+/* The furniture: fades in over 250 ms, out over 200 ms; the edges slide 10 px on a phone. */
+.pc-layer { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 200ms cubic-bezier(.2, 0, 0, 1); }
+.pc.shown .pc-layer { opacity: 1; transition-duration: 250ms; }
+.pc.shown .pc-top, .pc.shown .pc-center, .pc.shown .pc-bottom { pointer-events: auto; }
+.pc-top, .pc-center, .pc-bottom { pointer-events: none; }
+.pc[data-variant="phone"] .pc-top { transform: translateY(-10px); transition: transform 200ms cubic-bezier(.2, 0, 0, 1); }
+.pc[data-variant="phone"] .pc-bottom > * { transform: translateY(10px); transition: transform 200ms cubic-bezier(.2, 0, 0, 1); }
+.pc[data-variant="phone"].shown .pc-top, .pc[data-variant="phone"].shown .pc-bottom > * { transform: none; transition-duration: 250ms; }
+.pc-tint { position: absolute; inset: 0; background: rgba(0, 0, 0, .25); }
+.pc[data-variant="desktop"] .pc-tint { background: rgba(0, 0, 0, .30); }
+/* ControlsScrim: five stops on an eased curve, 160 px from the top and 260 px from the foot. */
+.pc-scrim { position: absolute; left: 0; right: 0; }
+.pc-scrim.top { top: 0; height: 160px; background: linear-gradient(rgba(0,0,0,.70), rgba(0,0,0,.64) 25%, rgba(0,0,0,.45) 50%, rgba(0,0,0,.18) 75%, transparent); }
+.pc-scrim.bottom { bottom: 0; height: 260px; background: linear-gradient(transparent, rgba(0,0,0,.28) 25%, rgba(0,0,0,.60) 50%, rgba(0,0,0,.74) 75%, rgba(0,0,0,.80)); }
+
+/* Buttons: a 48 px round target on a phone, 40 on the desktop; white glyphs, a white wash on hover. */
+.pc-btn {
+  width: 48px; height: 48px; flex: none; display: grid; place-items: center; padding: 0; margin: 0;
+  border: 0; border-radius: 50%; background: transparent; color: #fff; cursor: pointer; position: relative;
+  transition: background-color 150ms, transform 150ms; -webkit-tap-highlight-color: transparent;
+}
+.pc[data-variant="desktop"] .pc-btn { width: 40px; height: 40px; }
+.pc-btn:hover { background-color: rgba(255, 255, 255, .20); }
+.pc[data-variant="phone"] .pc-btn:hover { background-color: transparent; }
+.pc-btn:active { transform: scale(.92); background-color: rgba(255, 255, 255, .20); }
+.pc-btn:focus-visible, .pc-chip-button:focus-visible, .pc-total:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+.pc-btn.tonal { background-color: var(--tonal-button); }
+.pc-btn.tonal:hover { background-color: rgba(60, 60, 66, .75); }
+.pc[data-variant="desktop"] .pc-btn.step { width: 56px; height: 56px; }
+
+/* Tooltips under a pointer, after half a second (OverlayButton's Tip). */
+.pc [data-tip]::after {
+  content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%);
+  white-space: nowrap; padding: 4px 8px; border-radius: 6px; background: rgba(32, 32, 34, .90); color: #fff;
+  font-size: 12px; line-height: 16px; font-weight: 400; pointer-events: none; opacity: 0; transition: opacity 120ms; z-index: 3;
+}
+.pc [data-tip][data-tip-below]::after { bottom: auto; top: calc(100% + 8px); }
+@media (hover: hover) and (pointer: fine) {
+  .pc [data-tip]:hover::after { opacity: 1; transition-delay: 500ms; }
+}
+.pc-top .pc-btn:first-child[data-tip]::after { left: 0; transform: none; }
+.pc-top .pc-btn:last-child[data-tip]::after { left: auto; right: 0; transform: none; }
+
+/* The top bar: back, the name and its second line, More. */
+.pc-top {
+  position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; min-height: 56px;
+  padding: max(0px, env(safe-area-inset-top)) max(4px, env(safe-area-inset-right)) 0 max(4px, env(safe-area-inset-left));
+}
+.pc-titles { flex: 1; min-width: 0; margin-left: 8px; }
+.pc-title, .pc-subtitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-title { font-size: 18px; line-height: 24px; font-weight: 500; }
+.pc-subtitle { font-size: 14px; line-height: 20px; color: var(--on-art-muted); }
+.pc[data-variant="desktop"] .pc-top { padding: 10px 12px; }
+.pc[data-variant="desktop"] .pc-title { font-size: 24px; line-height: 30px; font-weight: 600; }
+
+/* The centre: previous, play or pause, next, on tonal discs; a phone names the episode under each step. */
+.pc-center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; direction: ltr; }
+.pc[data-variant="desktop"] .pc-center { gap: 24px; }
+.pc-step { display: flex; flex-direction: column; align-items: center; width: 64px; }
+.pc[data-variant="desktop"] .pc-step { width: auto; }
+.pc-step.gone { visibility: hidden; }
+.pc[data-variant="desktop"] .pc-step.gone { display: none; }
+.pc-btn.step { width: 56px; height: 56px; }
+.pc-caption-space { height: 26px; }
+.pc-caption {
+  margin-top: 4px; height: 22px; max-width: 64px; padding: 0 8px; border-radius: 999px; background: var(--tonal);
+  color: rgba(255, 255, 255, .95); font-size: 12px; line-height: 22px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pc-caption:empty { visibility: hidden; }
+.pc-play { width: 72px !important; height: 72px !important; margin: 0 16px; }
+.pc[data-variant="desktop"] .pc-play { margin: 0; }
+.pc-play-glyph { display: grid; animation: glyph-in 180ms cubic-bezier(.2, 0, 0, 1); }
+@keyframes glyph-in { from { transform: scale(.6); opacity: 0; } }
+.pc-spinner { width: 40px; height: 40px; border-radius: 50%; border: 3px solid rgba(255,255,255,.25); border-top-color: #fff; animation: spin 800ms linear infinite; }
+.pc[data-variant="phone"] .pc-spinner { width: 60px; height: 60px; border-width: 4px; }
+
+/* The foot: the times, the bar and the row, 24 px in from the sides. */
+.pc-bottom {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 0 max(24px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+}
+.pc[data-variant="desktop"] .pc-bottom { padding: 32px 24px 16px; }
+.pc-times { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 13px; line-height: 18px; color: var(--on-art-muted); font-variant-numeric: tabular-nums; direction: ltr; }
+.pc-total { background: none; border: 0; padding: 0 0 0 8px; min-width: 48px; text-align: end; color: inherit; font: inherit; cursor: pointer; border-radius: 4px; }
+.pc[data-variant="desktop"] .pc-total { padding: 2px 4px; min-width: 0; }
+.pc[data-variant="desktop"] .pc-total:hover { background: rgba(255,255,255,.12); }
+
+/* The bar: 4 px, the played run and the thumb in the accent; 48 px to touch on a phone, 28 on the desktop. */
+.pc-bar { position: relative; height: 48px; display: flex; align-items: center; cursor: pointer; touch-action: none; outline: none; direction: ltr; }
+.pc[data-variant="desktop"] .pc-bar { height: 28px; }
+.pc-track { position: absolute; left: 0; right: 0; height: 4px; border-radius: 999px; background: var(--bar-rest); overflow: hidden; transition: height 150ms cubic-bezier(.2, 0, 0, 1); }
+.pc[data-variant="desktop"] .pc-bar.thick .pc-track { height: 8px; }
+.pc-buffered, .pc-played { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; }
+.pc-buffered { background: color-mix(in srgb, var(--bar-played) 35%, transparent); }
+.pc-played { background: var(--bar-played); }
+.pc-thumb { position: absolute; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--bar-played); transition: width 120ms, height 120ms, margin 120ms; pointer-events: none; }
+.pc[data-variant="phone"] .pc-bar.thick .pc-thumb { width: 18px; height: 18px; margin-left: -9px; }
+.pc[data-variant="desktop"] .pc-bar.thick .pc-thumb { width: 16px; height: 16px; margin-left: -8px; }
+.pc-bar:focus-visible .pc-track { outline: 2px solid #fff; outline-offset: 4px; overflow: visible; }
+
+/* The preview card: the storyboard's frame and the time in a chip, 34 px over the bar (12 on a phone, over the times). */
+.pc-preview { position: absolute; bottom: calc(100% + 34px); display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+.pc[data-variant="phone"] .pc-preview { bottom: calc(100% + 30px); }
+.pc-frame { flex: none; background-color: #000; background-repeat: no-repeat; border-radius: 6px; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .85); }
+.pc[data-variant="phone"] .pc-frame { border-radius: 10px; box-shadow: 0 0 0 2px #fff; }
+.pc-chip { padding: 6px 12px; border-radius: 999px; background: var(--tonal); color: rgba(255,255,255,.95); font-size: 12px; line-height: 16px; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pc[data-variant="phone"] .pc-chip { padding: 4px 12px; background: var(--chip); font-size: 14px; line-height: 20px; font-weight: 400; }
+
+/* The row: one pill of round buttons in half black with a faint edge; Copies and Episodes as pills of their own. */
+.pc-row { display: flex; align-items: center; margin-top: 2px; min-width: 0; direction: ltr; }
+.pc[data-variant="desktop"] .pc-row { margin-top: 4px; }
+.pc-pill {
+  display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 4px; border-radius: 999px; flex: none;
+  background: rgba(0, 0, 0, .50); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16);
+}
+.pc[data-variant="desktop"] .pc-pill { height: 44px; gap: 0; padding: 0 2px; }
+.pc-spacer { flex: 1; }
+.pc-chip-button {
+  height: 48px; margin-left: 8px; display: inline-flex; align-items: center; gap: 8px; padding: 0 16px 0 12px; flex: none;
+  border: 0; border-radius: 999px; background: rgba(0, 0, 0, .50); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16);
+  color: #fff; font: inherit; font-size: 15px; line-height: 20px; font-weight: 500; cursor: pointer; white-space: nowrap;
+}
+.pc-chip-button:active { transform: scale(.96); }
+.pc[data-variant="desktop"] .pc-chip-button { height: 44px; font-size: 14px; }
+.pc[data-variant="desktop"] .pc-chip-button:hover { background: rgba(40, 40, 44, .70); }
+.pc-btn.bare { margin-left: 8px; }
+.pc-speed-text { width: auto !important; min-width: 48px; height: 40px; padding: 0 10px; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 500; }
+.pc-btn.shape .icon { transition: transform 220ms cubic-bezier(.2, 0, 0, 1); }
+
+/* The desktop's volume: the slider slides out beside the speaker on hover. */
+.pc-volume { display: flex; align-items: center; }
+.pc-volume input {
+  width: 0; opacity: 0; margin: 0; transition: width 150ms cubic-bezier(.2, 0, 0, 1), opacity 150ms, margin 150ms;
+  -webkit-appearance: none; appearance: none; background: transparent; height: 40px; cursor: pointer;
+}
+.pc-volume:hover input, .pc-volume:focus-within input { width: 110px; opacity: 1; margin: 0 4px 0 12px; }
+.pc-volume input::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, #fff var(--v), rgba(255,255,255,.33) var(--v)); }
+.pc-volume input::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(255,255,255,.33); }
+.pc-volume input::-moz-range-progress { height: 4px; border-radius: 2px; background: #fff; }
+.pc-volume input::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: #fff; border: 0; }
+.pc-volume input::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 0; }
+
+/* PlayerFeedback: the text pill, the double tap's half-moon, the held speed, the level gauges and the scrub card. */
+.pc-note {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2; pointer-events: none;
+  padding: 10px 20px; border-radius: 22px; background: var(--chip); color: #fff; font-size: 15px; line-height: 20px; font-weight: 700;
+  white-space: nowrap; animation: note-in 120ms ease-out;
+}
+.pc-note.left { left: 40px; transform: translateY(-50%); }
+.pc-note.right { left: auto; right: 40px; transform: translateY(-50%); }
+.pc-note.hold { top: 84px; transform: translateX(-50%); }
+@keyframes note-in { from { opacity: 0; } }
+.pc-ripple { position: absolute; top: 0; bottom: 0; width: 35%; overflow: hidden; pointer-events: none; z-index: 2; }
+.pc-ripple.left { left: 0; }
+.pc-ripple.right { right: 0; }
+.pc-moon { position: absolute; top: -30%; height: 160%; width: 170%; border-radius: 50%; background: rgba(255, 255, 255, .10); }
+.pc-ripple.left .pc-moon { right: 0; }
+.pc-ripple.right .pc-moon { left: 0; }
+.pc-wave { position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; background: rgba(255, 255, 255, .20); animation: wave 650ms ease-out forwards; }
+@keyframes wave { to { transform: scale(18); opacity: 0; } }
+.pc-plate {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 14px 16px 10px; border-radius: 24px; background: rgba(0, 0, 0, .40); font-size: 14px; line-height: 18px; white-space: nowrap;
+}
+.pc-chevrons { display: flex; gap: 5px; }
+.pc-chevrons i { width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 9px solid #fff; opacity: .33; animation: chevron 750ms linear infinite; }
+.pc-ripple.left .pc-chevrons { flex-direction: row-reverse; }
+.pc-ripple.left .pc-chevrons i { border-left: 0; border-right: 9px solid #fff; }
+.pc-chevrons i:nth-child(2) { animation-delay: 250ms; }
+.pc-chevrons i:nth-child(3) { animation-delay: 500ms; }
+@keyframes chevron { 0%, 100% { opacity: .33; } 20% { opacity: 1; } 55% { opacity: .33; } }
+.pc-level {
+  position: absolute; top: 50%; transform: translateY(-50%); width: 36px; height: 196px; z-index: 2; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 0; border-radius: 18px; background: var(--chip); font-size: 12px; font-variant-numeric: tabular-nums;
+}
+.pc-level.left { left: 40px; }
+.pc-level.right { right: 40px; }
+.pc-level-bar { flex: 1; width: 6px; border-radius: 3px; background: rgba(255,255,255,.25); position: relative; overflow: hidden; }
+.pc-level-bar span { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 3px; }
+.pc-scrub {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; padding: 14px 24px 16px; border-radius: 22px; background: var(--chip); font-variant-numeric: tabular-nums;
+}
+.pc-scrub-delta { font-size: 24px; line-height: 30px; }
+.pc-scrub-target { font-size: 14px; line-height: 20px; color: rgba(255,255,255,.9); }
+.pc-scrub-bar { width: 180px; height: 8px; margin-top: 10px; border-radius: 4px; background: rgba(255,255,255,.25); overflow: hidden; }
+.pc-scrub-bar span { display: block; height: 100%; background: #2aabee; }
+
+/* The offer (Start over) and the next episode's card, in the chip's tone. */
+.pc-offer {
+  position: absolute; left: 50%; bottom: calc(148px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 2;
+  display: flex; align-items: center; gap: 8px; padding: 2px 4px 2px 20px; min-height: 48px; border-radius: 22px; background: var(--chip);
+  font-size: 15px; line-height: 20px; white-space: nowrap; max-width: calc(100% - 32px);
+}
+.pc-offer > span { overflow: hidden; text-overflow: ellipsis; }
+.pc-offer button, .pc-next button {
+  min-height: 44px; padding: 0 12px; border: 0; border-radius: 12px; background: none; color: #2aabee; font: inherit; font-size: 15px; font-weight: 500; cursor: pointer;
+}
+.pc-offer button:hover, .pc-next button:hover { background: rgba(255,255,255,.08); }
+.pc-next {
+  position: absolute; right: max(24px, env(safe-area-inset-right)); bottom: calc(110px + env(safe-area-inset-bottom)); z-index: 2;
+  padding: 14px 12px 12px 18px; border-radius: 22px; background: var(--chip); max-width: 300px;
+}
+.pc-next p { margin: 0 6px 4px 0; font-size: 14px; line-height: 20px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.pc-next div { display: flex; justify-content: flex-end; }
+.pc-notice {
+  position: absolute; left: 50%; top: 72px; transform: translateX(-50%); z-index: 2; width: min(560px, calc(100% - 32px));
+  display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 20px; border-radius: 22px; background: var(--chip);
+}
+.pc-notice p { flex: 1; margin: 0; font-size: 14px; line-height: 20px; }
+.pc-notice button { width: 40px; height: 40px; border: 0; border-radius: 50%; background: none; color: #fff; display: grid; place-items: center; cursor: pointer; flex: none; }
+
+/* The menus: Floating.MenuShape (4 px), the menu tone with its hairline, 48 px lines. */
+.pc-dismiss { position: absolute; inset: 0; z-index: 3; }
+.pc-menu {
+  position: absolute; z-index: 4; min-width: 240px; max-width: min(420px, calc(100% - 16px)); max-height: calc(100% - 24px); overflow-y: auto;
+  padding: 8px 0; border-radius: 4px; background: var(--menu); border: 1px solid var(--line); box-shadow: 0 6px 20px rgba(0,0,0,.45);
+  animation: menu-in 150ms cubic-bezier(.2, 0, 0, 1);
+}
+@keyframes menu-in { from { opacity: 0; transform: scale(.96); } }
+.pc-menu hr { border: 0; border-top: 1px solid var(--line); margin: 8px 0; }
+.pc-entry {
+  width: 100%; min-height: 48px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border: 0; background: none;
+  color: var(--fg); font: inherit; font-size: 14px; line-height: 20px; font-weight: 500; text-align: start; cursor: pointer;
+}
+.pc-entry:hover, .pc-entry:focus-visible { background: rgba(255,255,255,.08); outline: none; }
+.pc-entry:disabled { opacity: .38; cursor: default; }
+.pc-entry-lead { width: 18px; height: 18px; flex: none; display: grid; place-items: center; }
+.pc-entry-text { flex: 1; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.pc-entry-trail { color: rgba(255,255,255,.6); font-size: 13px; font-weight: 400; white-space: nowrap; }
+.pc-menu-note { margin: 4px 12px 4px 42px; font-size: 12px; line-height: 16px; color: rgba(255,255,255,.6); }
+
+/* The phone's pickers (ChoiceSheet): the whole screen under 600 px, a 28 px dialog in the middle above it. */
+.pc-sheet-scrim { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; background: rgba(0,0,0,.6); animation: note-in 150ms ease-out; }
+.pc-sheet {
+  display: flex; flex-direction: column; width: min(560px, calc(100% - 32px)); max-height: calc(100% - 48px);
+  background: var(--dialog); color: var(--fg); border-radius: 28px; overflow: hidden;
+}
+@media (max-width: 599px), (max-height: 599px) {
+  .pc-sheet-scrim { place-items: stretch; background: var(--dialog); }
+  .pc-sheet { width: 100%; max-height: none; height: 100%; border-radius: 0; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+}
+.pc-sheet-head { display: flex; align-items: center; gap: 8px; min-height: 64px; padding: 0 8px 0 24px; border-bottom: 1px solid var(--line); flex: none; }
+.pc-sheet-head > div { flex: 1; min-width: 0; padding: 8px 0; }
+.pc-sheet-head h2 { margin: 0; font-size: 24px; line-height: 32px; font-weight: 400; }
+.pc-sheet-head p { margin: 0; font-size: 14px; line-height: 20px; color: var(--muted); }
+.pc-sheet-close { width: 48px; height: 48px; border: 0; border-radius: 50%; background: none; color: var(--fg); display: grid; place-items: center; cursor: pointer; flex: none; }
+.pc-sheet-close:hover { background: rgba(255,255,255,.08); }
+.pc-sheet-body { flex: 1; overflow-y: auto; padding: 8px 0 16px; overscroll-behavior: contain; }
+.pc-choice {
+  width: 100%; min-height: 56px; display: flex; align-items: center; gap: 16px; padding: 2px 24px; border: 0; background: none;
+  color: var(--fg); font: inherit; font-size: 16px; line-height: 24px; text-align: start; cursor: pointer; border-radius: 12px;
+}
+.pc-choice:hover, .pc-choice:focus-visible { background: rgba(255,255,255,.06); outline: none; }
+.pc-choice:disabled { opacity: .5; cursor: default; }
+.pc-radio { width: 20px; height: 20px; margin: 2px; flex: none; border-radius: 50%; border: 2px solid var(--muted); display: grid; place-items: center; }
+.pc-choice[aria-checked="true"] .pc-radio { border-color: var(--accent); }
+.pc-choice[aria-checked="true"] .pc-radio::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.pc-choice-icon { width: 24px; height: 24px; display: grid; place-items: center; color: var(--muted); flex: none; }
+
+/* The speed sheet's tiles and the fine control. */
+.pc-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 24px; }
+.pc-tiles.wide { grid-template-columns: repeat(7, 1fr); }
+.pc-tile {
+  min-height: 110px; border: 0; border-radius: 12px; background: #2e3235; color: var(--fg); font: inherit; font-size: 22px; line-height: 28px; cursor: pointer;
+  transition: background-color 150ms, transform 150ms;
+}
+.pc-tiles.wide .pc-tile { min-height: 72px; }
+.pc-tile:active { transform: scale(.96); }
+.pc-tile[aria-checked="true"] { background: var(--accent-container); color: var(--on-accent-container); }
+.pc-fine { padding: 0 24px 8px; display: flex; flex-direction: column; align-items: center; }
+.pc-fine-head { align-self: stretch; color: var(--accent); font-size: 14px; line-height: 20px; font-weight: 500; padding: 0 24px; }
+.pc-fine-detail { align-self: stretch; color: var(--muted); font-size: 12px; line-height: 16px; padding: 0 24px; }
+.pc-fine-row { display: flex; align-items: center; gap: 24px; margin-top: 16px; }
+.pc-fine-value { min-width: 96px; text-align: center; font-size: 22px; line-height: 28px; font-variant-numeric: tabular-nums; }
+.pc-round { width: 56px; height: 56px; border: 0; border-radius: 50%; background: #3a4a52; color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+.pc-round:disabled { opacity: .38; cursor: default; }
+.pc-round:active:not(:disabled) { transform: scale(.92); }
+
+/* The episode list (EpisodesPanel). */
+.pc-sheet.pc-episodes { width: min(960px, calc(100% - 48px)); height: min(640px, calc(100% - 48px)); }
+.pc-episodes-body { flex: 1; min-height: 0; display: flex; gap: 16px; padding: 16px 24px 24px; }
+.pc-episodes-side { width: 260px; flex: none; display: flex; flex-direction: column; gap: 8px; }
+.pc-episodes-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+@media (max-width: 719px) {
+  .pc-episodes-body { flex-direction: column; padding: 12px 16px 16px; }
+  .pc-episodes-side { width: auto; flex-direction: row; flex-wrap: wrap; }
+}
+.pc-step-line {
+  display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 14px; border: 1px solid var(--line); border-radius: 12px;
+  background: rgba(255,255,255,.03); color: var(--fg); font: inherit; font-size: 14px; font-weight: 500; text-align: start; cursor: pointer;
+}
+.pc-step-line:hover { background: rgba(255,255,255,.08); }
+.pc-seasons { display: flex; gap: 8px; overflow-x: auto; flex: none; scrollbar-width: none; }
+.pc-season {
+  display: flex; flex-direction: column; align-items: flex-start; padding: 8px 14px; border: 1px solid transparent; border-radius: 12px;
+  background: none; color: var(--fg); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; flex: none;
+}
+.pc-season small { font-size: 11px; color: var(--muted); font-weight: 400; }
+.pc-season[aria-selected="true"] { background: var(--accent-container); border-color: var(--accent); color: var(--on-accent-container); }
+.pc-season[aria-selected="true"] small { color: var(--on-accent-container); }
+.pc-episode-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; overscroll-behavior: contain; }
+.pc-episode {
+  width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 14px; border: 2px solid transparent;
+  border-radius: 12px; background: rgba(255,255,255,.05); color: var(--fg); font: inherit; text-align: start; cursor: pointer;
+}
+.pc-episode:hover { background: rgba(255,255,255,.09); }
+.pc-episode.playing { border-color: var(--accent); cursor: default; }
+.pc-episode-code { display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 16px; color: var(--muted); }
+.pc-badge { padding: 0 8px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 11px; line-height: 16px; font-weight: 500; }
+.pc-episode-name { font-size: 15px; line-height: 20px; font-weight: 500; }
+.pc-episode-facts { font-size: 12px; line-height: 16px; color: var(--accent); }
+
+/* Playback details: a panel in the top start corner, as the desktop's stats. */
+.pc-details {
+  position: absolute; left: max(16px, env(safe-area-inset-left)); top: 72px; z-index: 4; width: min(420px, calc(100% - 32px));
+  padding: 8px 8px 12px 16px; border-radius: 16px; background: var(--chip); font-size: 13px; line-height: 18px; font-variant-numeric: tabular-nums;
+}
+.pc-details-head { display: flex; align-items: center; justify-content: space-between; }
+.pc-details p { margin: 4px 8px 0 0; color: rgba(255,255,255,.85); overflow-wrap: anywhere; }
+
+/* The lock: everything ignored but the pill, which a tap brings up at the foot. */
+.pc-shield { position: absolute; inset: 0; z-index: 5; }
+.pc-unlock {
+  position: absolute; left: 50%; bottom: calc(72px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 8px; padding: 16px 24px; border: 0; border-radius: 22px; background: var(--chip);
+  color: #fff; font: inherit; font-size: 15px; line-height: 20px; cursor: pointer; opacity: 0; transition: opacity 300ms; white-space: nowrap;
+}
+.pc-unlock.shown { opacity: 1; transition-duration: 120ms; }
+
+/* The status sheet: what went wrong, on black, with the ways on. */
+.pc-status { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; background: #0c0e10; overflow-y: auto; padding: 24px max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left)); }
+.pc-status-inner { display: flex; flex-direction: column; align-items: center; gap: 16px; max-width: 560px; text-align: center; }
+.pc-status-art { width: min(176px, 50vw); aspect-ratio: 16 / 9; object-fit: cover; border-radius: 4px; }
+.pc-status-text { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.pc-status-name { margin: 0; font-size: 15px; line-height: 20px; color: rgba(255,255,255,.9); overflow-wrap: anywhere; }
+.pc-status-warning { color: #ff5449; display: grid; margin: 8px 0 4px; }
+.pc-status h2 { margin: 8px 0 0; font-size: 20px; line-height: 26px; font-weight: 700; }
+.pc-status-body { margin: 0; font-size: 15px; line-height: 20px; color: rgba(255,255,255,.62); }
+.pc-status-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 24px; }
+.pc-sheet-button {
+  min-height: 48px; padding: 0 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,.24); background: #000; color: #fff; font: inherit; font-size: 16px; line-height: 20px; font-weight: 500; text-decoration: none;
+}
+.pc-sheet-button.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.pc-sheet-button:active { transform: scale(.96); }
+@media (max-height: 499px) and (orientation: landscape) {
+  .pc-status-inner.pictured { flex-direction: row; text-align: start; align-items: center; max-width: 760px; gap: 24px; }
+  .pc-status-inner.pictured .pc-status-text { align-items: flex-start; }
+  .pc-status-inner.pictured .pc-status-actions { justify-content: flex-start; }
+}
+
+/* The speed sheet: the tiles in the middle of the room, the fine control at the foot (PlayerSheets). */
+.pc-sheet.speed .pc-sheet-body { display: flex; flex-direction: column; }
+.pc-sheet.speed .pc-tiles { margin: auto 0; }
+.pc-sheet.speed .pc-fine { margin-top: 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-layer, .pc-top, .pc-bottom > *, .pc-play-glyph, .pc-menu, .pc-note, .pc-wave, .pc-chevrons i, .pc-sheet-scrim { animation: none !important; transition: none !important; }
+  .pc[data-variant="phone"] .pc-top, .pc[data-variant="phone"] .pc-bottom > * { transform: none; }
+}

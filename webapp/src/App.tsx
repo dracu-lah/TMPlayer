@@ -16,15 +16,20 @@ const SignIn = lazy(() => import('./screens/SignIn').then((m) => ({ default: m.S
 // The watch page brings the player's code with it, so the first Play waits for neither.
 const loadWatch = () => import('./screens/Watch').then((m) => (m.loadPlayer().catch(() => {}), { default: m.Watch }))
 const Watch = lazy(loadWatch)
+const loadDetail = () => import('./screens/Detail').then((m) => ({ default: m.Detail }))
 const loadChats = () => import('./screens/Chats').then((m) => ({ default: m.Chats }))
 const loadChat = () => import('./screens/Chat').then((m) => ({ default: m.Chat }))
 const loadSearch = () => import('./screens/Search').then((m) => ({ default: m.Search }))
 const loadSettingsPage = () => import('./screens/Settings').then((m) => ({ default: m.Settings }))
+const loadLibrary = () => import('./screens/Library')
 const Chats = lazy(loadChats)
 const Chat = lazy(loadChat)
 const Search = lazy(loadSearch)
 const Settings = lazy(loadSettingsPage)
-const later = [loadChats, loadChat, loadSearch, loadSettingsPage, loadWatch]
+const Detail = lazy(loadDetail)
+const Favourites = lazy(() => loadLibrary().then((m) => ({ default: m.Favourites })))
+const HistoryPage = lazy(() => loadLibrary().then((m) => ({ default: m.HistoryPage })))
+const later = [loadChats, loadChat, loadSearch, loadSettingsPage, loadDetail, loadWatch]
 // The TV layout's remote, bar and carousel (plan 8.5): only fetched in the TV form.
 const loadTv = () => import('./tv')
 const TvKeys = lazy(() => loadTv().then((m) => ({ default: m.TvKeys })))
@@ -67,6 +72,8 @@ function Shell(props: ParentProps) {
 
     const signedIn = () => me() && location.pathname !== '/signin'
     const playing = () => location.pathname.startsWith('/watch/')
+    // A video's page is a page of its own over everything, as the apps' detail is: no bar under it.
+    const detail = () => location.pathname.startsWith('/video/')
     // A resize in Auto layout waits while a video plays.
     createEffect(() => holdForm(playing()))
 
@@ -81,7 +88,7 @@ function Shell(props: ParentProps) {
                 </Match>
                 <Match when={me() === null && location.pathname === '/signin'}>{props.children}</Match>
                 <Match when={signedIn()}>
-                    <main class="page" classList={{ playing: playing() }}>
+                    <main class="page" classList={{ playing: playing(), bleed: detail() }}>
                         <ErrorBoundary
                             fallback={(e, reset) => (
                                 <div class="boot">
@@ -93,8 +100,9 @@ function Shell(props: ParentProps) {
                             {props.children}
                         </ErrorBoundary>
                     </main>
-                    <Show when={!playing()}>
-                        <Show when={form() === 'tv'} fallback={<Nav />}>
+                    <Show when={!playing() && !detail()}>
+                        {/* A chat has its own bar at the foot on a phone and a desktop (Chat.tsx). */}
+                        <Show when={form() === 'tv'} fallback={<Show when={!location.pathname.startsWith('/chat/')}><Nav /></Show>}>
                             <TvBar />
                         </Show>
                     </Show>
@@ -124,8 +132,11 @@ export function App() {
             <Route path="/chats" component={Chats} />
             <Route path="/chat/:chatId" component={Chat} />
             <Route path="/search" component={Search} />
+            <Route path="/video/:chatId/:messageId" component={Detail} />
             <Route path="/watch/:chatId/:messageId" component={Watch} />
             <Route path="/settings" component={Settings} />
+            <Route path="/favourites" component={Favourites} />
+            <Route path="/history/:tab?" component={HistoryPage} />
             <Route path="*" component={NotFound} />
         </Router>
     )

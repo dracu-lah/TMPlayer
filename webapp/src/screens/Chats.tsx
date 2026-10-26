@@ -92,7 +92,7 @@ export function Chats() {
     )
 }
 
-function ChatRow(props: { chat: ChatItem }) {
+export function ChatRow(props: { chat: ChatItem }) {
     return (
         <div class="chat-row">
             <A class="chat-link" href={`/chat/${props.chat.id}`}>

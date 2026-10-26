@@ -29,19 +29,21 @@ test('a damaged AVI says it needs the app', async ({ page }) => {
     await expect(page.getByText('This video needs the TMPlayer app')).toBeVisible()
 })
 
-test('Back closes the player and returns to the chat', async ({ page }) => {
+test('Back closes the player, then the detail page, back to the chat', async ({ page }) => {
     await openCard(page, 'Native Clip')
     await playsPast(page, 0.5)
     await page.goBack()
-    await expect(page).toHaveURL(/\/chat\/-1001/)
+    await expect(page).toHaveURL(/\/video\/-1001\//)
     await expect(page.locator('video')).toHaveCount(0)
+    await page.goBack()
+    await expect(page).toHaveURL(/\/chat\/-1001/)
 })
 
 test('a watch page opened by its address plays', async ({ page }) => {
     const card = page.locator('.card').filter({ hasText: 'Matroska Clip' })
     for (let i = 0; i < 30 && (await card.count()) === 0; i++) await page.evaluate(() => window.scrollBy(0, 300))
     const href = await card.getAttribute('href')
-    await page.goto(href!)
+    await page.goto(href!.replace('/video/', '/watch/'))
     await playsPast(page, 1)
 })
 

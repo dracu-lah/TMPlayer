@@ -399,156 +399,92 @@ input:not([type=range]):not([type=radio]):focus { border-color: var(--accent); }
   .countries { width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0; border: 0; border-radius: 0; padding-top: env(safe-area-inset-top); }
 }
 
-/* Watch page: the player on top (16:9, kept in view while the details scroll), details under it;
-   from 840 px the player on the left and the details in a column beside it. */
-.watch { display: flex; flex-direction: column; min-height: 100dvh; }
-.watch-player { position: sticky; top: 0; z-index: 5; background: #000; padding-top: env(safe-area-inset-top); }
-.watch-player .player { aspect-ratio: 16 / 9; max-height: 70dvh; width: 100%; }
-.watch-details { padding: 16px max(16px, env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-@media (min-width: 840px) {
-  .watch { flex-direction: row; align-items: flex-start; }
-  .watch-player { flex: 1; min-width: 0; padding: 24px 0 24px 32px; background: none; }
-  .watch-player .player { border-radius: var(--r-l); max-height: calc(100dvh - 48px); }
-  .watch-details { width: 380px; flex: none; padding: 24px 32px 32px 24px; max-height: 100dvh; overflow-y: auto; position: sticky; top: 0; }
+/* Watch page: the apps' player screen, the picture across the whole window. */
+.watch { position: fixed; inset: 0; background: #000; z-index: 5; }
+.watch > .player-root > .player, .watch > .player { width: 100%; height: 100%; }
+
+/*
+ * A video's page (MediaDetailScreen, WideDetail): the picture across the top fading into the page,
+ * the name large on its foot, the facts, Play as the one bright pill with the round actions, then
+ * the episodes, About and more from the chat.
+ */
+.page.bleed { padding: 0; }
+.detail { min-height: 100dvh; padding-bottom: calc(32px + env(safe-area-inset-bottom)); }
+.detail-hero { position: relative; height: min(58dvh, 520px); overflow: hidden; background: var(--surface); }
+.detail-hero.blank { background: var(--bg); }
+.detail-art { position: absolute; inset: -10%; width: 120%; height: 120%; object-fit: cover; filter: blur(22px) brightness(.72); transform: translateZ(0); }
+.detail-frame { position: absolute; left: 50%; top: 44%; width: min(100%, 760px); aspect-ratio: 16 / 9; transform: translate(-50%, -50%); object-fit: cover; }
+.detail-poster { position: absolute; left: 50%; top: max(56px, env(safe-area-inset-top)); height: calc(100% - 150px); aspect-ratio: 2 / 3; transform: translateX(-50%); object-fit: cover; border-radius: var(--r-m); box-shadow: 0 12px 32px rgba(0,0,0,.45); }
+.detail-fade { position: absolute; inset: 0; background: linear-gradient(transparent 35%, color-mix(in srgb, var(--bg) 70%, transparent) 72%, var(--bg)); }
+.detail-close {
+  position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); width: 48px; height: 48px;
+  display: grid; place-items: center; border: 0; border-radius: 50%; background: rgba(0, 0, 0, .55); color: #fff; z-index: 1;
 }
-/* A phone held sideways: the picture takes the screen, the details sit below it. */
-@media (max-height: 499px) and (orientation: landscape) {
-  .watch { flex-direction: column; align-items: stretch; }
-  .watch-player { position: relative; flex: none; padding: 0; background: #000; }
-  .watch-player .player { aspect-ratio: auto; height: 100dvh; max-height: none; border-radius: 0; }
-  .watch-details { width: auto; max-height: none; position: static; overflow: visible; padding: 16px max(16px, env(safe-area-inset-right)) 32px max(16px, env(safe-area-inset-left)); }
+.detail-close:hover { background: rgba(0, 0, 0, .7); }
+.detail-close:active { transform: scale(.92); }
+.detail-body { position: relative; margin-top: -88px; padding: 0 max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); display: flex; flex-direction: column; gap: 16px; }
+.detail-head { display: flex; flex-direction: column; gap: 8px; }
+.detail-code { margin: 0; color: var(--accent); font-size: 16px; line-height: 22px; font-weight: 600; }
+.detail-title { margin: 0; font-size: 32px; line-height: 38px; font-weight: 700; overflow-wrap: anywhere; }
+.detail-facts { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; font-size: 16px; line-height: 22px; font-weight: 600; }
+.detail-sep { margin: 0 8px; font-weight: 400; color: var(--muted); }
+.detail-badge { padding: 0 5px; border: 1.5px solid currentColor; border-radius: 5px; line-height: 20px; }
+.detail-chat { color: inherit; text-decoration: none; }
+.detail-chat:hover { text-decoration: underline; }
+.detail-watched { margin: 0; color: var(--accent); font-size: 14px; line-height: 20px; font-weight: 500; }
+.detail-progress { display: flex; align-items: center; gap: 16px; color: var(--muted); font-size: 16px; }
+.detail-progress-bar { width: 160px; height: 4px; border-radius: 2px; background: var(--surface-high); overflow: hidden; }
+.detail-progress-bar span { display: block; height: 100%; background: var(--accent); }
+.detail-actions { display: flex; flex-direction: column; gap: 16px; }
+.detail-play {
+  display: flex; align-items: center; justify-content: center; gap: 10px; height: 52px; padding: 0 28px; border: 0; border-radius: 999px;
+  background: var(--fg); color: var(--bg); font-size: 16px; line-height: 20px; font-weight: 600; cursor: pointer;
 }
-.watch-title { font-size: 22px; line-height: 28px; font-weight: 400; margin: 0; }
-.watch-episode { margin: 0; font-size: 16px; color: var(--fg); }
-.watch-chat { display: flex; align-items: center; gap: 4px; min-height: 40px; }
-.watch-details .file-name { overflow-wrap: anywhere; }
-.section-title { font-size: 16px; line-height: 24px; font-weight: 500; margin: 16px 0 8px; }
+.detail-play:active { transform: scale(.97); }
+.detail-rounds { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+.detail-round { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 72px; padding: 0; border: 0; background: none; color: var(--fg); cursor: pointer; }
+.detail-round-disc { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 50%; background: var(--surface-high); transition: background-color var(--fast), transform var(--fast); }
+.detail-round:hover .detail-round-disc { background: color-mix(in srgb, var(--fg) 16%, var(--surface-high)); }
+.detail-round:active .detail-round-disc { transform: scale(.92); }
+.detail-round[aria-pressed="true"] .detail-round-disc { background: var(--accent-container); color: var(--on-accent-container); }
+.detail-round-label { font-size: 12px; line-height: 16px; font-weight: 500; text-align: center; }
+.detail-section { margin: 8px 0 8px; font-size: 18px; line-height: 24px; font-weight: 600; }
+.detail-section.with-icon { display: flex; align-items: center; gap: 8px; }
+.detail-about dl { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 6px 16px; margin: 0; font-size: 14px; line-height: 20px; }
+.detail-about dt { color: var(--muted); }
+.detail-about dd { margin: 0; overflow-wrap: anywhere; }
+.detail-chat-line { display: flex; align-items: center; gap: 4px; margin-top: -10px !important; margin-bottom: -10px !important; }
+:root[data-form="desktop"] .detail-hero { height: min(62dvh, 560px); }
+:root[data-form="desktop"] .detail-body { margin-top: -140px; padding: 0 48px; max-width: 1040px; }
+:root[data-form="desktop"] .detail-title { font-size: 40px; line-height: 48px; }
+:root[data-form="desktop"] .detail-actions { flex-direction: row; align-items: flex-start; gap: 16px; }
+:root[data-form="desktop"] .detail-play { min-width: 176px; height: 56px; }
+:root[data-form="desktop"] .detail-rounds { justify-content: flex-start; gap: 8px; }
+:root[data-form="desktop"] .detail-round { width: 72px; }
+:root[data-form="desktop"] .detail-round-disc { width: 56px; height: 56px; }
 .season-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
-.season-chip { flex: none; background: none; border: 1px solid var(--line); border-radius: var(--r-s); padding: 6px 14px; font-size: 14px; color: var(--muted); }
-.season-chip.on { background: var(--accent-container); border-color: transparent; color: var(--on-accent-container); }
+.season-chip { flex: none; display: flex; flex-direction: column; align-items: flex-start; background: var(--surface-high); border: 1px solid transparent; border-radius: var(--r-s); padding: 6px 14px; font-size: 14px; line-height: 20px; color: var(--fg); }
+.season-chip small { font-size: 11px; line-height: 14px; color: var(--muted); }
+.season-chip.on { background: var(--accent-container); border-color: var(--accent); color: var(--on-accent-container); }
+.season-chip.on small { color: var(--on-accent-container); }
 .episode-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.episode { position: relative; width: 100%; display: flex; align-items: center; gap: 12px; text-align: start; background: var(--surface); border: 0; border-radius: var(--r-m); padding: 12px 14px; min-height: 48px; overflow: hidden; }
+.episode { position: relative; width: 100%; display: flex; align-items: center; gap: 12px; text-align: start; background: var(--surface); border: 0; border-radius: var(--r-m); padding: 12px 14px; min-height: 48px; overflow: hidden; color: inherit; text-decoration: none; }
 .episode:hover { background: var(--surface-high); }
 .episode:active { transform: scale(.98); }
-.episode.playing { background: var(--accent-container); color: var(--on-accent-container); cursor: default; transform: none; }
+.episode.playing { box-shadow: inset 0 0 0 2px var(--accent); }
 .episode-code { font-variant-numeric: tabular-nums; font-weight: 500; flex: none; }
 .episode-name { flex: 1; min-width: 0; color: inherit; opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .episode-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(127,127,127,.3); }
 .episode-progress span { display: block; height: 100%; background: var(--accent); }
 .more-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-@media (min-width: 600px) and (max-width: 839px) { .more-cards { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } }
+@media (min-width: 600px) { .more-cards { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } }
 
-/* Player: Video.js 10's elements, unstyled by it, in the app's player look. */
+/* Player: the box the video plays in; its controls' look is player/player.css, loaded with it. */
 .player-root { display: contents; }
 .player { position: relative; display: block; container-type: inline-size; background: #000; color: #fff; outline: none; overflow: hidden; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-.player:fullscreen { width: 100vw; height: 100vh; max-height: none; border-radius: 0; aspect-ratio: auto; }
-.player video { width: 100%; height: 100%; display: block; object-fit: contain; }
-.player video::cue { font-family: var(--font); font-size: clamp(16px, 4.2cqw, 40px); background: rgba(0,0,0,.6); }
-.player .muted { color: rgba(255,255,255,.72); }
-.controls-layer { position: absolute; inset: 0; pointer-events: none; }
-.controls-content { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; transition: opacity 200ms var(--ease); }
-.controls-content:not([data-visible]) { opacity: 0; }
-.controls-content:not([data-visible]) * { pointer-events: none !important; }
-.player:has(.controls-content:not([data-visible])) { cursor: none; }
-.top-bar, .bottom-bar { pointer-events: none; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
-/* The shade behind the bars is the backdrop, which takes no presses: a tap or double tap anywhere off the buttons reaches the picture. */
-.controls-backdrop { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(rgba(0,0,0,.6), transparent 72px, transparent calc(100% - 120px), rgba(0,0,0,.78)); transition: opacity 200ms var(--ease); }
-.controls-backdrop:not([data-visible]) { opacity: 0; }
-.top-bar { display: flex; align-items: center; gap: 4px; padding-top: 8px; padding-bottom: 4px; }
-.player:fullscreen .top-bar { padding-top: max(8px, env(safe-area-inset-top)); }
-.bottom-bar { padding-top: 0; padding-bottom: 6px; }
-.player:fullscreen .bottom-bar { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
-.top-bar > *, .bottom-bar > * { pointer-events: auto; }
-.bottom-bar .row { pointer-events: none; }
-.bottom-bar .row > :not(.spacer) { pointer-events: auto; }
-.title { min-width: 0; flex: 1; pointer-events: none !important; }
-.title > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.title-name { font-size: 16px; line-height: 22px; }
-.row { display: flex; align-items: center; gap: 2px; }
-.spacer { flex: 1; }
-.time { font-variant-numeric: tabular-nums; margin-left: 8px; font-size: 14px; white-space: nowrap; }
-.time media-time-separator { margin: 0 4px; opacity: .7; }
-.player .icon { background: none; border: 0; width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; padding: 0; flex: none; color: #fff; cursor: pointer; transition: background var(--fast), transform var(--fast); }
-.player .icon:hover { background: rgba(255,255,255,.12); }
-.player .icon:active { background: rgba(255,255,255,.22); transform: scale(.92); }
-.player .icon:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.player .icon[hidden] { display: none; }
-.player .icon.play { width: 52px; height: 52px; }
-media-play-button .when-playing, media-play-button:not([data-paused]) .when-paused { display: none; }
-media-play-button:not([data-paused]) .when-playing { display: contents; }
-media-play-button .when-paused, media-play-button .when-playing { line-height: 0; }
-media-mute-button .when-muted, media-mute-button[data-muted] .when-sound { display: none; }
-media-mute-button[data-muted] .when-muted { display: contents; }
-/* Phones: the time and the second row of buttons are tight, so the volume goes (the side keys do it). */
-@media (max-width: 420px) { .player media-mute-button.icon { display: none; } .time { margin-left: 2px; font-size: 13px; } }
-
-/* Seek bar: 4 px, 6 px while pointed at, the accent for what has played, Telegram's storyboard over it. */
-.time-slider { position: relative; display: flex; align-items: center; height: 28px; cursor: pointer; touch-action: none; outline: none; margin: 0 6px; }
-.slider-track { position: absolute; left: 0; right: 0; height: 4px; border-radius: 999px; background: rgba(255,255,255,.25); transition: height var(--fast); }
-.time-slider[data-interactive] .slider-track { height: 6px; }
-.slider-buffer, .slider-fill { position: absolute; top: 0; left: 0; height: 100%; border-radius: inherit; }
-.slider-buffer { width: var(--media-slider-buffer); background: rgba(255,255,255,.4); }
-.slider-fill { width: var(--media-slider-fill); background: var(--accent); }
-.time-slider[data-dragging] .slider-fill { width: var(--media-slider-pointer); }
-.slider-thumb { position: absolute; left: var(--media-slider-fill); width: 14px; height: 14px; border-radius: 50%; background: var(--accent); transform: translateX(-50%) scale(0); transition: transform var(--fast); }
-.time-slider[data-interactive] .slider-thumb, .time-slider:focus-visible .slider-thumb { transform: translateX(-50%) scale(1); }
-.time-slider[data-dragging] .slider-thumb { left: var(--media-slider-pointer); transform: translateX(-50%) scale(1.15); }
-.time-slider:focus-visible .slider-track { outline: 2px solid var(--accent); outline-offset: 4px; }
-.slider-preview { position: absolute; bottom: 26px; left: var(--media-slider-pointer); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; opacity: 0; pointer-events: none; transition: opacity var(--fast); }
-.time-slider[data-pointing] .slider-preview, .time-slider[data-dragging] .slider-preview { opacity: 1; }
-.slider-thumbnail { display: block; max-width: 160px; min-width: 96px; border-radius: var(--r-s); overflow: hidden; border: 1px solid rgba(255,255,255,.3); background: #000; }
-.slider-thumbnail[data-hidden] { display: none; }
-.slider-value { background: rgba(0,0,0,.82); padding: 2px 8px; border-radius: 6px; font-size: 13px; font-variant-numeric: tabular-nums; }
-
-media-buffering-indicator { position: absolute; inset: 0; display: none; pointer-events: none; }
-media-buffering-indicator[data-visible] { display: block; }
 .spinner { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; border-radius: 50%; border: 4px solid rgba(255,255,255,.2); border-top-color: #fff; animation: spin 800ms linear infinite; pointer-events: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
-media-seek-indicator { position: absolute; top: 50%; transform: translateY(-50%); padding: 10px 18px; border-radius: 999px; background: rgba(0,0,0,.6); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; pointer-events: none; transition: opacity var(--fast); }
-media-seek-indicator[data-direction="backward"] { left: 12%; }
-media-seek-indicator[data-direction="forward"] { right: 12%; }
-media-seek-indicator[data-direction="backward"]::before { content: "\2212 "; }
-media-seek-indicator[data-direction="forward"]::before { content: "+"; }
-media-seek-indicator[data-starting-style], media-seek-indicator[data-ending-style] { opacity: 0; }
-.hold-badge { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 999px; background: rgba(0,0,0,.65); font-size: 14px; font-weight: 500; pointer-events: none; }
-
-.player-error { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 12px; padding: 24px; text-align: center; background: rgba(0,0,0,.72); z-index: 2; }
-.player-error p { max-width: 520px; margin: 0; }
-.player-error h2 { font-size: 20px; line-height: 26px; font-weight: 400; margin: 0; }
-.needs-app { background: rgba(0,0,0,.88); }
-/* Nothing to play: the controls go, the overlay's own buttons stay. */
-.player.blocked .controls-layer { display: none; }
-.player-error .actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
-.player-error .actions button:not(.primary) { background: none; border: 1px solid rgba(255,255,255,.4); border-radius: 999px; min-height: 44px; padding: 10px 24px; font-size: 14px; font-weight: 500; }
-.player-notice { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); width: min(560px, calc(100% - 32px)); display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 16px; border-radius: var(--r-m); background: rgba(0,0,0,.78); border: 1px solid rgba(255,255,255,.2); z-index: 1; }
-.player-notice p { flex: 1; margin: 0; font-size: 14px; line-height: 20px; }
-.float-chip { position: absolute; left: max(16px, env(safe-area-inset-left)); bottom: 108px; display: inline-flex; align-items: center; gap: 6px; background: rgba(0,0,0,.65); color: #fff; border: 1px solid rgba(255,255,255,.3); border-radius: 999px; padding: 8px 14px; font-size: 14px; z-index: 1; }
-.float-chip:active { transform: scale(.96); }
-.next-card { position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: 108px; display: flex; align-items: center; gap: 12px; padding: 10px 8px 10px 16px; border-radius: var(--r-l); background: rgba(16,18,20,.9); border: 1px solid rgba(255,255,255,.2); z-index: 1; max-width: calc(100% - 32px); }
-.next-card .next-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
-.next-card button.primary { display: inline-flex; align-items: center; gap: 6px; }
-@media (max-width: 599px) { .float-chip, .next-card { bottom: 96px; } .next-card .next-text { display: none; } }
-
-/* The playback options menu: Video.js positions it; pages slide in from the side. */
-.player-menu { --media-menu-side-offset: 8px; position: relative; box-sizing: border-box; width: var(--media-menu-width); min-width: 260px; max-width: var(--media-menu-available-width, none); height: var(--media-menu-height); max-height: min(var(--media-menu-available-height, 70vh), 420px); overflow: hidden; color: #fff; background: rgba(26,29,32,.97); border: 1px solid rgba(255,255,255,.14); border-radius: var(--r-l); transition: width 200ms var(--ease), height 200ms var(--ease), opacity 150ms; opacity: 0; font-size: 15px; }
-.player-menu[data-open] { opacity: 1; }
-.player-menu:not([data-open]):not([data-ending-style]) { pointer-events: none; }
-.menu-page { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 6px; overflow-y: auto; outline: none; translate: 0 0; transition: translate 200ms var(--ease), opacity 200ms; }
-.menu-page[hidden] { display: none; }
-.menu-page[data-child-open] { translate: -100% 0; opacity: 0; }
-.menu-page[data-submenu] { z-index: 1; }
-.menu-page[data-submenu][data-starting-style], .menu-page[data-submenu][data-ending-style] { translate: 100% 0; opacity: 0; pointer-events: none; }
-.menu-row, .menu-back { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: var(--r-s); cursor: pointer; outline: none; flex: none; }
-.menu-back { justify-content: flex-start; gap: 8px; color: rgba(255,255,255,.72); border-bottom: 1px solid rgba(255,255,255,.1); border-radius: var(--r-s) var(--r-s) 0 0; margin-bottom: 4px; }
-.menu-row[data-highlighted], .menu-back[data-highlighted] { background: rgba(255,255,255,.1); }
-.menu-row[hidden] { display: none; }
-.menu-value { display: inline-flex; align-items: center; gap: 4px; color: rgba(255,255,255,.72); font-size: 14px; }
-.menu-check { width: 18px; height: 18px; flex: none; position: relative; }
-[aria-checked="false"] > .menu-check::after { display: none; }
-.menu-check::after { content: ""; position: absolute; left: 6px; top: 2px; width: 5px; height: 10px; border: solid var(--accent); border-width: 0 2px 2px 0; transform: rotate(45deg); }
-[aria-checked="true"].menu-row { color: var(--accent); }
-.menu-readout { padding: 8px 12px 6px; display: flex; flex-direction: column; gap: 2px; font-variant-numeric: tabular-nums; border-top: 1px solid rgba(255,255,255,.1); margin-top: 4px; }
-@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } .menu-page, .player-menu { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
 
 /* Long lists: only the rows near the screen are drawn, each placed where it would be. */
 .vgrid { position: relative; width: 100%; }
@@ -711,3 +647,110 @@ button.tonal:active { transform: scale(.96); }
 .report-options { display: flex; flex-direction: column; }
 .report-options button { text-align: start; background: none; border: 0; border-top: 1px solid var(--line); color: var(--fg); padding: 14px 4px; font-size: 16px; line-height: 24px; }
 .report-options button:hover { background: var(--surface-high); }
+
+/* The "You" menu (ProfilePopover): a 232 px card over the bar, 20 px corners, 40 px lines. */
+.you-menu {
+  position: fixed; z-index: 7; width: 232px; padding: 6px 0; border-radius: 20px; background: var(--dialog);
+  border: 1px solid var(--line); box-shadow: var(--shadow); transform-origin: 50% 100%; animation: you-in 200ms var(--ease);
+}
+@keyframes you-in { from { opacity: 0; transform: scale(.85); } }
+.you-menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 14px; }
+.you-summary { padding: 6px 14px; }
+.you-heading { font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
+.you-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 4px; }
+.you-count { display: flex; flex-direction: column; align-items: center; padding: 6px 0; border: 0; border-radius: 12px; background: none; color: var(--fg); cursor: pointer; transition: background var(--fast); }
+.you-count:hover, .you-count:focus-visible { background: var(--surface-high); outline: none; }
+.you-count strong { font-size: 16px; line-height: 24px; font-weight: 600; }
+.you-count span { font-size: 11px; line-height: 16px; color: var(--muted); }
+.you-row {
+  display: flex; align-items: center; gap: 12px; width: calc(100% - 12px); height: 40px; margin: 0 6px; padding: 0 12px;
+  border: 0; border-radius: 14px; background: none; color: var(--fg); font-size: 14px; line-height: 20px; text-align: start; cursor: pointer;
+}
+.you-row:hover, .you-row:focus-visible { background: var(--surface-high); outline: none; }
+.you-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.you-shortcut { font-size: 11px; line-height: 16px; color: var(--muted); }
+.you-badge { padding: 2px 8px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 12px; line-height: 16px; font-weight: 500; }
+button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .you-menu { animation: none; } }
+
+/* Favourites and History: the heading and its line, History's tabs as chips, each day under its date. */
+.library-head { margin: 0 0 12px; }
+.library-head .page-title { margin-bottom: 0; }
+.history-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 20px; }
+.history-tab {
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r-s);
+  color: var(--fg); text-decoration: none; font-size: 13px; line-height: 18px; font-weight: 500;
+}
+.history-tab .icon { color: var(--accent); }
+.history-tab:hover { background: var(--surface); }
+.history-tab[aria-current="page"] { background: var(--accent-container); border-color: transparent; color: var(--on-accent-container); }
+.history-tab[aria-current="page"] .icon { color: inherit; }
+.history-day { margin: 0 0 24px; }
+.history-day-title { margin: 0 0 12px; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--muted); }
+.history-day-title:empty { display: none; }
+.favourites-list { list-style: none; padding: 0; }
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 64px 16px; text-align: center; color: var(--muted); }
+.empty-state p { max-width: 420px; font-size: 14px; line-height: 20px; }
+.empty-disc { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-high); color: var(--accent); }
+.outline-button { display: inline-flex; align-items: center; height: 36px; padding: 0 16px; border: 1px solid var(--line); border-radius: 999px; color: var(--fg); text-decoration: none; font-size: 13px; font-weight: 500; }
+.outline-button:hover { background: var(--surface); }
+
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Home opens on the app's mark and name (the TV keeps its bar's), over the carousel's picture. */
+.home-title { position: relative; z-index: 2; display: flex; align-items: center; gap: 10px; min-height: 40px; margin: 0 0 12px; font-size: 18px; line-height: 24px; font-weight: 600; }
+.home-mark { width: 28px; height: 28px; border-radius: 7px; flex: none; }
+.page:has(> .hero) > .home-title { color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .4); }
+/* The row headings: the app's title medium, semibold. */
+.row-title { font-size: 20px; line-height: 28px; font-weight: 600; }
+
+/*
+ * Home's carousel (FeaturedCarousel): the picture across the page and up behind the mark, its name,
+ * facts, Play as the bright pill with Details beside it, and the dots. Its height is held from the
+ * first frame.
+ */
+.hero {
+  position: relative; height: min(66dvh, 560px); overflow: hidden; touch-action: pan-y;
+  margin: calc(-1 * (12px + 40px + max(8px, env(safe-area-inset-top)))) calc(-1 * (var(--gutter) + env(safe-area-inset-right))) 16px calc(-1 * (var(--gutter) + env(safe-area-inset-left)));
+}
+@media (min-width: 840px) { .hero { margin-top: calc(-1 * (12px + 40px + 16px)); height: min(60dvh, 520px); } }
+.hero-wait { position: absolute; inset: 0; background: var(--surface); animation: waiting 1.2s ease-in-out infinite alternate; }
+.hero-art { position: absolute; inset: 0; background: var(--surface); }
+.hero-fill { position: absolute; inset: -10%; width: 120%; height: 120%; object-fit: cover; filter: blur(24px) brightness(.7); transform: translateZ(0); animation: fade 300ms ease-out; }
+.hero-frame { position: absolute; left: 50%; top: 40%; width: min(100%, 860px); aspect-ratio: 16 / 9; transform: translate(-50%, -50%); object-fit: cover; animation: fade 300ms ease-out; }
+.hero-fade { position: absolute; inset: 0; background: linear-gradient(rgba(0,0,0,.45), transparent 22%, transparent 45%, color-mix(in srgb, var(--bg) 75%, transparent) 78%, var(--bg)); }
+.hero-text {
+  position: absolute; left: calc(var(--gutter) + env(safe-area-inset-left)); right: calc(var(--gutter) + env(safe-area-inset-right)); bottom: 28px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center;
+}
+.hero-title { margin: 0; font-size: 28px; line-height: 34px; font-weight: 700; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.hero-facts { margin: 0; font-size: 14px; line-height: 20px; color: var(--fg); opacity: .85; }
+.hero-actions { display: flex; align-items: center; gap: 12px; width: 100%; }
+.hero-play {
+  flex: 1; height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border-radius: 999px;
+  background: var(--fg); color: var(--bg); text-decoration: none; font-size: 16px; line-height: 20px; font-weight: 600;
+}
+.hero-play:active { transform: scale(.97); }
+.hero-info {
+  width: 48px; height: 48px; flex: none; display: grid; place-items: center; border-radius: 50%; color: var(--fg); text-decoration: none;
+  background: color-mix(in srgb, var(--surface-high) 80%, transparent); border: 1px solid var(--line);
+}
+.hero-info:hover { background: var(--surface-high); }
+.hero-dots { position: absolute; left: 0; right: 0; bottom: 8px; display: flex; justify-content: center; gap: 6px; }
+.hero-dots button { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 3px; background: color-mix(in srgb, var(--fg) 40%, transparent); cursor: pointer; transition: width 200ms var(--ease), background var(--fast); }
+.hero-dots button.on { width: 22px; background: var(--fg); }
+:root[data-form="desktop"] .hero-text { right: auto; width: min(560px, 50%); align-items: flex-start; text-align: start; bottom: 40px; }
+:root[data-form="desktop"] .hero-title { font-size: 36px; line-height: 44px; }
+:root[data-form="desktop"] .hero-actions { width: auto; }
+:root[data-form="desktop"] .hero-play { flex: none; padding: 0 28px; }
+:root[data-form="desktop"] .hero-dots { left: auto; right: calc(var(--gutter) + 8px); bottom: 56px; }
+:root[data-form="desktop"] .hero-frame { left: auto; right: 0; transform: translateY(-50%); width: min(70%, 900px); -webkit-mask-image: linear-gradient(to right, transparent, #000 30%); mask-image: linear-gradient(to right, transparent, #000 30%); }
+@media (prefers-reduced-motion: reduce) { .hero-wait, .hero-fill, .hero-frame { animation: none; } }
+
+/* A chat's own bar at the foot (ChatBar): Search, Favourite, Sort and Refresh in the main bar's pill. */
+.chat-bar .nav-cell[aria-pressed="true"] { color: var(--accent); }
+.chat-bar .nav-cell.star.on { color: var(--accent); }
+.chat-bar .nav-cell:disabled { opacity: .5; cursor: default; }
+.chat-bar .nav-cell.spinning .icon { animation: spin 800ms linear infinite; }
+.chat-bar .menu-box { position: relative; display: flex; }
+.chat-bar .pop-menu { top: auto; bottom: calc(100% + 14px); right: 50%; transform: translateX(50%); animation: none; }
