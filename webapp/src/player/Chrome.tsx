@@ -834,10 +834,12 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         const shift = e.shiftKey
         const command = e.ctrlKey || e.metaKey
         const plain = !shift && !e.ctrlKey && !e.altKey && !e.metaKey
-        const onButton = target instanceof HTMLButtonElement || target?.getAttribute('role') === 'slider'
+        // Not every target is an element: a key sent to the document itself has none.
+        const onSlider = target instanceof Element && target.getAttribute('role') === 'slider'
+        const onButton = target instanceof HTMLButtonElement || onSlider
         let done = true
         if (k === 'ArrowLeft' || k === 'ArrowRight') {
-            if (target?.getAttribute('role') === 'slider') return
+            if (onSlider) return
             const sign = k === 'ArrowRight' ? 1 : -1
             // The command key alone steps through chapters, where the file has them (else it is a minute).
             if (command && !shift && !e.altKey && chapters().length) stepChapter(sign > 0)

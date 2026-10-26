@@ -57,6 +57,11 @@ export class Unplayable extends Error {
 const debug = location.hostname === 'localhost'
 const mark = (label: string, since: number) => debug && console.debug('[remux]', label, Math.round(performance.now() - since), 'ms')
 
+/** How long a seek waits for the one before it to wind down, how long a drag must rest, and how long a seek may stall. */
+const PREVIOUS_RUN_WAIT_MS = 1500
+const SEEK_SETTLE_MS = 120
+const STALL_MS = 12_000
+
 const MS: typeof MediaSource | undefined = window.ManagedMediaSource ?? window.MediaSource
 const phone = matchMedia('(pointer: coarse)').matches
 
@@ -286,7 +291,15 @@ export abstract class FeedEngine implements Engine {
     protected destroyed = false
     protected t0 = 0
     private wake: (() => void) | null = null
-    private readonly onSeeking = () => this.seekTo(this.video.currentTime)
+    private seekTimer: ReturnType<typeof setTimeout> | undefined
+    private watchdog: ReturnType<typeof setTimeout> | undefined
+    private retries = 0
+    // A drag over the seek bar fires `seeking` dozens of times a second: only where it settles is
+    // fed, not every place it passed.
+    private readonly onSeeking = () => {
+        clearTimeout(this.seekTimer)
+        this.seekTimer = setTimeout(() => this.seekTo(this.video.currentTime), SEEK_SETTLE_MS)
+    }
     private readonly onTick = () => this.wake?.()
 
     constructor(
@@ -367,6 +380,8 @@ export abstract class FeedEngine implements Engine {
         this.gen++
         this.wake?.()
         this.stop().catch(() => {})
+        clearTimeout(this.seekTimer)
+        clearTimeout(this.watchdog)
         this.video.removeEventListener('seeking', this.onSeeking)
         this.video.removeEventListener('timeupdate', this.onTick)
         this.video.removeEventListener('play', this.onTick)
@@ -391,13 +406,18 @@ export abstract class FeedEngine implements Engine {
     private restart(t: number) {
         const gen = ++this.gen
         this.wake?.()
+        this.watch(gen)
         const stopped = this.stop()
         const before = this.running
         const t0 = performance.now()
         this.running = (async () => {
             await stopped.catch(() => {})
             mark(`seek ${t.toFixed(1)}: cancelled`, t0)
-            await before.catch(() => {})
+            // The run before is told to stop, but its conversion may sit in a read or a write for a
+            // while (a seek storm piled up behind one that never came back, and the video stayed
+            // "seeking" for good). Its output is dropped by the generation check, so waiting for it
+            // is only a courtesy, and a short one.
+            await Promise.race([before.catch(() => {}), new Promise((resolve) => setTimeout(resolve, PREVIOUS_RUN_WAIT_MS))])
             if (gen !== this.gen || this.destroyed) return
             await this.clearBuffer()
             if (gen !== this.gen) return
@@ -410,6 +430,26 @@ export abstract class FeedEngine implements Engine {
         })().catch((e) => {
             if (gen === this.gen && !this.destroyed) this.ev.onError?.(e)
         })
+    }
+
+    /**
+     * A run that has put nothing in the buffer for a while while the element waits for it is
+     * started again from where the element is, twice at most, rather than left spinning.
+     */
+    private watch(gen: number) {
+        clearTimeout(this.watchdog)
+        this.watchdog = setTimeout(() => {
+            if (gen !== this.gen || this.destroyed) return
+            const v = this.video
+            if (v.readyState >= 3 || (!v.seeking && !v.paused)) {
+                this.retries = 0
+                return
+            }
+            if (this.retries >= 2) return
+            this.retries++
+            mark(`stalled, run again ${this.retries}`, this.t0 || performance.now())
+            this.restart(v.currentTime)
+        }, STALL_MS)
     }
 
     private async clearBuffer() {
@@ -442,6 +482,7 @@ export abstract class FeedEngine implements Engine {
                     await this.roomAhead(gen)
                     if (gen !== this.gen) return
                     await this.append(sb, chunk.data)
+                    this.retries = 0
                     if (this.t0) {
                         mark(`first append ${chunk.data.length} B`, this.t0)
                         this.t0 = 0
