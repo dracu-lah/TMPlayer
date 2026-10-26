@@ -629,7 +629,7 @@ internal fun OverlayButton(icon: ImageVector, label: String, onClick: () -> Unit
 }
 
 @Composable
-private fun Chip(text: String, modifier: Modifier = Modifier) {
+internal fun Chip(text: String, modifier: Modifier = Modifier) {
     Box(modifier.clip(CircleShape).background(PlayerTonal).padding(horizontal = 12.dp, vertical = 6.dp)) {
         Text(text, color = OnPlayerTonal, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
@@ -801,31 +801,9 @@ private fun TimeBar(
         val labelX = dragX ?: hoverX
         if (labelX != null && duration > 0) {
             val at = SeekMath.timeAt(labelX, width, duration)
-            // Telegram's storyboard tile for the moment under the pointer (CP80), over the time.
-            val board = LocalStoryboard.current
-            // Without a storyboard, the video's own frames, where that part is on the disk.
-            val frames = LocalFrameSource.current
-            if (board != null || frames != null) {
-                val half = TIP_WIDTH / 2
-                Box(
-                    Modifier.align(Alignment.CenterStart)
-                        .offset {
-                            // Kept inside the bar's ends, so the picture is never cut off by the window.
-                            val x = (labelX.roundToInt() - half.roundToPx()).coerceIn(0, (width.roundToInt() - TIP_WIDTH.roundToPx()).coerceAtLeast(0))
-                            IntOffset(x, -(48.dp.roundToPx() + (TIP_WIDTH * 9 / 16).roundToPx()))
-                        },
-                ) {
-                    if (board != null) StoryboardTip(board, at) else if (frames != null) FrameTip(frames, at)
-                }
-            }
-            Box(
-                Modifier.align(Alignment.CenterStart)
-                    .offset { IntOffset(labelX.roundToInt() - 40.dp.roundToPx(), -30.dp.roundToPx()) }
-                    .width(80.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Chip(SeekMath.clock(at))
-            }
+            // The picture for the moment under the pointer, where there is one (Telegram's
+            // storyboard, CP80, else the video's own frame), over its time in a chip.
+            SeekPreview(SeekMath.clock(at), at, labelX, width, Modifier.align(Alignment.TopStart))
         }
     }
 }

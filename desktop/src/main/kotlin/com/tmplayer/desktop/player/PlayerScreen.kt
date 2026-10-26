@@ -313,7 +313,7 @@ fun PlayerScreen(
     val scrubPictures by remember(settings) { settings.trickplay }.collectAsState(initial = true)
     val boardFiles = (post ?: current.item).storyboard
     val storyboard = remember(boardFiles, scrubPictures) {
-        boardFiles?.takeIf { scrubPictures }?.let { files -> DesktopStoryboard(files) { engine.state.value.durationMs.takeIf { it > 0 } ?: current.item.durationSec * 1000L } }
+        boardFiles?.takeIf { scrubPictures }?.let { files -> DesktopStoryboard(files, durationMs = { engine.state.value.durationMs.takeIf { it > 0 } ?: current.item.durationSec * 1000L }) }
     }
     // The video's own frames for the hover where there is no storyboard: a second decoder over
     // what is on the disk (see [PlaybackEngine.previewFrame]).
