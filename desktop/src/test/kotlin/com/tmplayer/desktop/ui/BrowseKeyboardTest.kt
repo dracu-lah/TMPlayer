@@ -294,7 +294,8 @@ class BrowseKeyboardTest {
         var starred by mutableStateOf(emptySet<Long>())
         setContent {
             TmMaterialTheme(dark = true) {
-                Box(Modifier.size(900.dp, 500.dp)) {
+                // Narrow enough for the one column list: wider windows draw the grid of chats.
+                Box(Modifier.size(600.dp, 500.dp)) {
                     val list = remember { LazyListState() }
                     val nav = rememberKeyboardNav(remember(list) { ListSurface(list) })
                     ChatList(chats, starred, list, nav, onOpen = { opened = it }, onStar = { starred = starred + it.id })

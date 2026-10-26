@@ -1,5 +1,10 @@
 package com.tmplayer.desktop.ui
 
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.size
@@ -116,7 +121,9 @@ fun ChatsPage(
     val undoToast = com.tmplayer.ui.components.rememberActionToast()
     val scope = rememberCoroutineScope()
     val listState = if (favouritesOnly) androidx.compose.foundation.lazy.rememberLazyListState() else state.chatListState
-    val nav = rememberKeyboardNav(remember(listState) { ListSurface(listState) })
+    val gridState = if (favouritesOnly) androidx.compose.foundation.lazy.grid.rememberLazyGridState() else state.chatGridState
+    val surface = remember(listState, gridState) { SwitchingSurface(ListSurface(listState), GridSurface(gridState, { 0 }, { Int.MAX_VALUE })) }
+    val nav = rememberKeyboardNav(surface)
     // Back from a chat, the keyboard carries on from that chat's row rather than from nowhere.
     var refocus by remember { mutableStateOf(state.takeChatToRefocus()) }
 
@@ -238,6 +245,8 @@ fun ChatsPage(
                     chats = visible,
                     favourites = favourites,
                     listState = listState,
+                    gridState = gridState,
+                    surface = surface,
                     byName = sort == com.tmplayer.ui.browse.ChatSort.Name,
                     paging = model.paging.collectAsState().value,
                     onMoreChats = model::loadMoreChats,
@@ -373,54 +382,97 @@ internal fun ChatList(
     paging: com.tmplayer.ui.browse.ChatPaging = com.tmplayer.ui.browse.ChatPaging(),
     /** Reads the next chats, as the list's end comes near. */
     onMoreChats: () -> Unit = {},
+    /** The wide window's grid, and the surface the keyboard follows between it and the list. */
+    gridState: androidx.compose.foundation.lazy.grid.LazyGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState(),
+    surface: SwitchingSurface = remember(listState, gridState) { SwitchingSurface(ListSurface(listState), GridSurface(gridState, { 0 }, { Int.MAX_VALUE })) },
 ) {
-    // Telegram's older chats read as the end of the list comes near, a screen ahead.
-    com.tmplayer.ui.components.LoadMoreAhead(listState, paging.more && !paging.loading && paging.failure == null, onLoadMore = onMoreChats)
-    Box(Modifier.fillMaxSize()) {
-        val count by rememberUpdatedState(chats.size)
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize().padding(end = 12.dp).navKeys(nav) { count }.remembersRemoteItem(),
-            // The row's own 12 dp inset plus this is the page margin, so the avatars line up with
-            // the heading and the chips above them. The rows sit 2 dp apart, so a hovered row and
-            // the focused one beside it never run into one block.
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                start = pageMargin() - ChatRowInset,
-                end = pageMargin() - ChatRowInset,
-                top = 8.dp,
-                // Clear of the floating bar, so the last chat can be scrolled out from under it.
-                bottom = 8.dp + com.tmplayer.ui.components.LocalBottomChrome.current,
-            ),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            itemsIndexed(chats, key = { _, it -> it.id }) { index, chat ->
-                ChatRow(
-                    chat = chat,
-                    favourite = chat.id in favourites,
-                    // A chat that moves (pinned, a new post) slides to its place rather than jumping.
-                    modifier = Modifier.animateItem().navCell(nav, index),
-                    onOpen = { onOpen(chat) },
-                    onStar = { onStar(chat) },
-                    actions = actions,
-                )
-            }
-            if (paging.loading || paging.failure != null) {
-                item(key = "more-chats", contentType = "more-chats") {
-                    com.tmplayer.ui.components.PageFoot(paging.loading, paging.failure, onMoreChats, Modifier.padding(horizontal = ChatRowInset)) {
-                        MoreChatsSkeleton()
-                    }
-                }
+    val more = paging.more && !paging.loading && paging.failure == null
+    // A narrow window keeps the rows. A wide one has room for two or more columns of cards, so the
+    // page fills its width instead of leaving the right of every row empty (user, 2026-10-27).
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val wide = maxWidth - pageMargin() * 2 >= ChatCardMin * 2 + ChatCardGap
+        SideEffect { surface.wide = wide }
+        val footer: @Composable () -> Unit = {
+            com.tmplayer.ui.components.PageFoot(paging.loading, paging.failure, onMoreChats, Modifier.padding(horizontal = ChatRowInset)) {
+                MoreChatsSkeleton()
             }
         }
-        ScrollToTop(listState)
-        // The hold to scroll handle on a long list (the letter in its bubble when listed by name),
-        // the scrollbar on a short one.
+        val count by rememberUpdatedState(chats.size)
         val byId = remember(chats) { chats.associateBy { it.id } }
-        FastScroller(listState, label = if (byName) ({ key -> byId[key]?.let { com.tmplayer.ui.browse.ScrollLabels.letter(it.title) } }) else null) {
-            VerticalScrollbar(
-                rememberScrollbarAdapter(listState),
-                Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-            )
+        val label: ((Any) -> String?)? = if (byName) ({ key -> byId[key]?.let { com.tmplayer.ui.browse.ScrollLabels.letter(it.title) } }) else null
+        if (wide) {
+            com.tmplayer.ui.components.LoadMoreAhead(gridState, more, onLoadMore = onMoreChats)
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(ChatCardMin),
+                state = gridState,
+                modifier = Modifier.fillMaxSize().padding(end = 12.dp).navKeys(nav) { count }.remembersRemoteItem(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    start = pageMargin(),
+                    end = pageMargin(),
+                    top = 8.dp,
+                    bottom = 8.dp + com.tmplayer.ui.components.LocalBottomChrome.current,
+                ),
+                horizontalArrangement = Arrangement.spacedBy(ChatCardGap),
+                verticalArrangement = Arrangement.spacedBy(ChatCardGap),
+            ) {
+                itemsIndexed(chats, key = { _, it -> it.id }) { index, chat ->
+                    ChatRow(
+                        chat = chat,
+                        favourite = chat.id in favourites,
+                        modifier = Modifier.animateItem().navCell(nav, index),
+                        onOpen = { onOpen(chat) },
+                        onStar = { onStar(chat) },
+                        actions = actions,
+                        card = true,
+                    )
+                }
+                if (paging.loading || paging.failure != null) {
+                    item(key = "more-chats", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }, contentType = "more-chats") { footer() }
+                }
+            }
+            ScrollToTop(gridState)
+            FastScroller(gridState, label = label) {
+                VerticalScrollbar(rememberScrollbarAdapter(gridState), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
+            }
+        } else {
+            // Telegram's older chats read as the end of the list comes near, a screen ahead.
+            com.tmplayer.ui.components.LoadMoreAhead(listState, more, onLoadMore = onMoreChats)
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize().padding(end = 12.dp).navKeys(nav) { count }.remembersRemoteItem(),
+                // The row's own 12 dp inset plus this is the page margin, so the avatars line up with
+                // the heading and the chips above them. The rows sit 2 dp apart, so a hovered row and
+                // the focused one beside it never run into one block.
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    start = pageMargin() - ChatRowInset,
+                    end = pageMargin() - ChatRowInset,
+                    top = 8.dp,
+                    // Clear of the floating bar, so the last chat can be scrolled out from under it.
+                    bottom = 8.dp + com.tmplayer.ui.components.LocalBottomChrome.current,
+                ),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                itemsIndexed(chats, key = { _, it -> it.id }) { index, chat ->
+                    ChatRow(
+                        chat = chat,
+                        favourite = chat.id in favourites,
+                        // A chat that moves (pinned, a new post) slides to its place rather than jumping.
+                        modifier = Modifier.animateItem().navCell(nav, index),
+                        onOpen = { onOpen(chat) },
+                        onStar = { onStar(chat) },
+                        actions = actions,
+                    )
+                }
+                if (paging.loading || paging.failure != null) {
+                    item(key = "more-chats", contentType = "more-chats") { footer() }
+                }
+            }
+            ScrollToTop(listState)
+            // The hold to scroll handle on a long list (the letter in its bubble when listed by name),
+            // the scrollbar on a short one.
+            FastScroller(listState, label = label) {
+                VerticalScrollbar(rememberScrollbarAdapter(listState), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
+            }
         }
     }
 }
@@ -434,6 +486,8 @@ internal fun ChatRow(
     onStar: () -> Unit,
     modifier: Modifier = Modifier,
     actions: ChatRowActions = ChatRowActions(),
+    /** A cell of a wide window's grid: the same row, as wide as its column rather than capped. */
+    card: Boolean = false,
 ) {
     val s = LocalStrings.current
     var hasFocus by remember { mutableStateOf(false) }
@@ -460,7 +514,7 @@ internal fun ChatRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .widthIn(max = 960.dp)
+            .then(if (card) Modifier else Modifier.widthIn(max = 960.dp))
             .clip(MaterialTheme.shapes.medium)
             .background(fill)
             .hoverable(hover)
@@ -596,5 +650,9 @@ private fun ChatRowMenu(
 
 /** How far a chat row's avatar sits in from the row's own edge. */
 private val ChatRowInset = 12.dp
+
+/** The narrowest a chat card gets in the wide layout, and the gap between cards. */
+private val ChatCardMin = 340.dp
+private val ChatCardGap = 12.dp
 
 private val CHATS_ON_MAC: Boolean get() = OsInfo.isMac

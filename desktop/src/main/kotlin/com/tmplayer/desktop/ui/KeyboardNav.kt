@@ -251,3 +251,16 @@ fun Modifier.navCell(nav: KeyboardNav, index: Int, requester: FocusRequester = r
             if (state.hasFocus) nav.current = index else if (nav.current == index) nav.current = -1
         }
 }
+
+/**
+ * The Chats page as the window draws it: a list of rows when narrow, a grid of cards when wide.
+ * One keyboard model across both, so a resize does not lose the focused chat.
+ */
+class SwitchingSurface(private val list: NavSurface, private val grid: NavSurface) : NavSurface {
+    var wide: Boolean = false
+    private val now get() = if (wide) grid else list
+    override fun columns(): Int = now.columns()
+    override fun visibleRows(): Int = now.visibleRows()
+    override fun isVisible(index: Int): Boolean = now.isVisible(index)
+    override suspend fun scrollTo(index: Int) = now.scrollTo(index)
+}

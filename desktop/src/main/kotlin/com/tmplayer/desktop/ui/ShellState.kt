@@ -267,6 +267,9 @@ class ShellState(
     /** Kept here so leaving a chat comes back to the same place in the list. */
     val chatListState = LazyListState()
 
+    /** The Chats page's scroll in a wide window, where its rows are a grid of cards. */
+    val chatGridState = androidx.compose.foundation.lazy.grid.LazyGridState()
+
     /** Chat titles by id, so a video opened from anywhere can say where it came from. */
     private val chatTitles = mutableMapOf<Long, String>()
 
