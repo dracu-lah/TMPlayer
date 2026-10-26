@@ -33,6 +33,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
@@ -375,6 +376,10 @@ fun PlayerScreen(
     var reopenAt by remember { mutableStateOf<Long?>(null) }
 
     val focus = remember { FocusRequester() }
+    // Whether the keys are on the player itself rather than on one of its controls: in the
+    // big-screen mode a remote walks into the controls with Up and Down (plan 8.7).
+    var keysOnPlayer by remember { mutableStateOf(true) }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val item = current.item
     val seriesKey = remember(item) { seriesKeyOf(item) }
     // Where a speed picked for this video is remembered, and read back from. See [SpeedMemory].
@@ -1066,6 +1071,12 @@ fun PlayerScreen(
     }
     val showControls = phase == Phase.Playing && !screenLocked && (controlsUp || !status.playing || menusOpen)
 
+    // The controls going away under a remote that was on one of them: the keys go back to the
+    // picture, or they would reach nothing until a click.
+    LaunchedEffect(showControls) {
+        if (!showControls && !keysOnPlayer && com.tmplayer.desktop.ui.BigScreen.on) refocus()
+    }
+
     fun poke() {
         if (screenLocked) {
             unlockWanted = System.nanoTime()
@@ -1548,6 +1559,43 @@ fun PlayerScreen(
                         refocus()
                         return@onPreviewKeyEvent true
                     }
+                    val tv = com.tmplayer.desktop.ui.BigScreen.on
+                    val remote = com.tmplayer.desktop.ui.remoteKeyOf(event)
+                    val plain = !event.isShiftPressed && !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed
+                    if (tv && !keysOnPlayer && menu == null && !showShortcuts && !showDetails && !showOnline) {
+                        // A remote on the controls: the arrows walk them, OK presses the one it is
+                        // on, and Back leaves them for the picture, the controls staying up meanwhile.
+                        poke()
+                        val direction = PlayerRemote.direction(event.key)
+                        when {
+                            com.tmplayer.ui.nav.isBackKey(event) || remote == com.tmplayer.desktop.ui.RemoteKey.Back -> {
+                                refocus()
+                                return@onPreviewKeyEvent true
+                            }
+                            plain && direction != null -> {
+                                focusManager.moveFocus(direction)
+                                return@onPreviewKeyEvent true
+                            }
+                            plain && event.key in PlayerRemote.OK -> return@onPreviewKeyEvent false
+                        }
+                    } else if (tv && plain && phase == Phase.Playing && (event.key == Key.DirectionUp || event.key == Key.DirectionDown)) {
+                        // Up and Down on the picture bring the controls up and the remote into them;
+                        // the sound is the television's own volume keys.
+                        poke()
+                        scope.launch {
+                            androidx.compose.runtime.withFrameNanos { }
+                            focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Enter)
+                        }
+                        return@onPreviewKeyEvent true
+                    }
+                    // A remote's key the JDK has no name for (Back, the media keys), from its raw code.
+                    PlayerRemote.actionFor(remote)?.let { action ->
+                        if (phase != Phase.Playing && action !in OUTSIDE_PLAYBACK) return@onPreviewKeyEvent false
+                        val playKey = action == PlayerAction.TogglePlay || action == PlayerAction.Play || action == PlayerAction.Pause
+                        if (playKey && !MediaKeyEcho.claim(MediaKeyEcho.Source.Keyboard)) return@onPreviewKeyEvent true
+                        dispatchNow(action)
+                        return@onPreviewKeyEvent true
+                    }
                     val press = KeyPress(
                         key = event.key,
                         shift = event.isShiftPressed,
@@ -1555,7 +1603,7 @@ fun PlayerScreen(
                         alt = event.isAltPressed,
                         meta = event.isMetaPressed,
                     )
-                    val context = KeyContext(fullscreen = fullscreen, speedIsNormal = status.speed == 1f, mac = mac)
+                    val context = KeyContext(fullscreen = fullscreen, speedIsNormal = status.speed == 1f, mac = mac, tv = tv)
                     val action = PlayerKeys.actionFor(press, context) ?: return@onPreviewKeyEvent false
                     // Over the loading and error sheets only the way out works.
                     if (phase != Phase.Playing && action !in OUTSIDE_PLAYBACK) return@onPreviewKeyEvent false
@@ -1565,6 +1613,7 @@ fun PlayerScreen(
                     dispatchNow(action)
                     true
                 }
+                .onFocusChanged { keysOnPlayer = it.isFocused || !it.hasFocus }
                 .focusRequester(focus)
                 .focusable()
                 .onPointerEvent(PointerEventType.Move, PointerEventPass.Initial) { poke() }

@@ -119,11 +119,16 @@ fun DesktopShell(
     player: PlayerContent,
 ) {
     val toasts = remember { SnackbarHostState() }
+    // The arrows nothing on the page took move focus from here in the big-screen mode (ShellState.onKey).
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    androidx.compose.runtime.SideEffect { state.focusManager = focusManager }
     CompositionLocalProvider(
         LocalBackStack provides state.backStack,
         LocalToastHost provides toasts,
         // A video's copies open as a centred card over the window, the phone's sheet on a desktop.
         com.tmplayer.ui.components.LocalSheetHost provides DesktopSheetHost,
+        // The big-screen mode's dialogs take the remote as they open and walk with the arrows.
+        com.tmplayer.ui.components.LocalRemoteArrows provides BigScreen.on,
     ) {
         Surface(
             Modifier
@@ -326,9 +331,21 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     }
 
     BackHandler(enabled = state.openChat != null) { state.closeChat() }
-    // Back from any page lands on Home, the first destination, as on the phone and the TV.
+    // Back from any page lands on Home, the first destination, as on the phone and the TV; in the
+    // big-screen mode by way of the page's place on the bar (ShellState.backFromPage).
     BackHandler(enabled = state.openChat == null && state.destination != Destination.Home) {
-        state.go(Destination.Home)
+        state.backFromPage()
+    }
+    // The end of a video puts the remote back on the item it was started from, unless a detail
+    // pane came back with it, which takes the keys itself.
+    var wasPlaying by remember { mutableStateOf(false) }
+    LaunchedEffect(state.nowPlaying == null) {
+        val playing = state.nowPlaying != null
+        if (wasPlaying && !playing && BigScreen.on && state.detail == null) {
+            androidx.compose.runtime.withFrameNanos { }
+            state.focusPage()
+        }
+        wasPlaying = playing
     }
 
     // A chat opened from a page takes that page's place, so the page is kept here while the chat

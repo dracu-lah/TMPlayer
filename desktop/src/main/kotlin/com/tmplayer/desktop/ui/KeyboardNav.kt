@@ -97,6 +97,8 @@ object GridNav {
     }
 }
 
+private val ARROWS = setOf(NavKey.Left, NavKey.Right, NavKey.Up, NavKey.Down)
+
 /** What [KeyboardNav] needs to know about the lazy layout it drives. */
 interface NavSurface {
     /** Cells per row; 1 for a list. */
@@ -141,6 +143,9 @@ class KeyboardNav(private val surface: NavSurface, private val scope: CoroutineS
         if (current < 0) return false
         val rows = (surface.visibleRows() - 1).coerceAtLeast(1)
         val target = GridNav.move(current, key, surface.columns(), count, rows)
+        // On a television an arrow at the grid's edge goes on out of it, to the toolbar or the
+        // bar above, as a remote expects (ShellState.onKey); on a desktop the grid keeps it.
+        if (target == current && BigScreen.on && key in ARROWS) return false
         if (target != current) focus(target)
         return true
     }

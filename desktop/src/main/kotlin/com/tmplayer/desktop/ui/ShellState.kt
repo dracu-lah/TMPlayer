@@ -8,8 +8,10 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
@@ -217,7 +219,10 @@ class ShellState(
     var nowPlaying by mutableStateOf<PlayRequest?>(null)
         private set
 
-    /** Whether the window is fullscreen: the first rung of the Esc ladder. The player sets it. */
+    /**
+     * Whether the window is fullscreen: the first rung of the Esc ladder, and the last in the
+     * big-screen mode, where the whole app is full screen. The player and F11 set it.
+     */
     var fullscreen by mutableStateOf(false)
 
     /** Whether the update popup is open: the side bar item, Settings or the once per version rule. */
@@ -415,8 +420,75 @@ class ShellState(
 
     fun closePlayer() {
         nowPlaying = null
-        fullscreen = false
+        // The big-screen mode is full screen for the whole app, not for the video alone.
+        if (!BigScreen.on) fullscreen = false
         detailUnderPlayer = false
+    }
+
+    // ---- the big-screen mode (plan 8.7) --------------------------------------------------------
+
+    /** The TV bar's items, while the big-screen mode draws it. */
+    val tvBar = TvBarFocus()
+
+    /**
+     * The page under the bar, as one focus group that remembers the item the remote was last on
+     * there ([NavFrame]): Down from the bar and the end of a video go back to it.
+     */
+    val pageFocus = FocusRequester()
+
+    /** The window's focus, for the arrows nothing on the page took; set by [DesktopShell]. */
+    var focusManager: androidx.compose.ui.focus.FocusManager? = null
+
+    /** The remote onto the bar's item for the page on screen (the picture for the pages behind it). */
+    fun focusBar(): Boolean {
+        if (!tvBar.shown) return false
+        return runCatching { tvBar.requesterFor(navPlaceOf(this)).requestFocus(FocusDirection.Enter) }.getOrDefault(false)
+    }
+
+    /** The remote back onto the page, on the item it was last on there, else the page's first. */
+    fun focusPage(): Boolean = runCatching { pageFocus.requestFocus(FocusDirection.Enter) }.getOrDefault(false)
+
+    /**
+     * Back from a page other than Home, the TV's order (focus.ts): from the Chats page's items up
+     * to its place on the bar first, then Home, with the remote on Home's place. A page behind
+     * the picture goes straight to Home. On the desktop, Home at once.
+     */
+    fun backFromPage() {
+        if (BigScreen.on && destination == Destination.Chats && tvBar.shown && !tvBar.focused) {
+            focusBar()
+            return
+        }
+        go(Destination.Home)
+        if (BigScreen.on) runCatching { tvBar.home.requestFocus() }
+    }
+
+    /**
+     * The end of the big-screen mode's Back: with nothing left to close and Home on screen, the
+     * remote goes up to the bar, then the window leaves full screen, which is the remote's only
+     * way out of it (F11 is the keyboard's).
+     */
+    private fun lastBack(): Boolean {
+        if (tvBar.shown && !tvBar.focused && focusBar()) return true
+        if (fullscreen) {
+            fullscreen = false
+            return true
+        }
+        return false
+    }
+
+    /**
+     * An arrow nothing on the page took: Compose's own search for the nearest item that way, so
+     * the remote reaches every control, a toolbar's and a dialog's included. Nothing that way:
+     * Up goes to the bar, and with nothing focused at all, the page's first item.
+     */
+    private fun arrow(direction: FocusDirection, key: Key): Boolean {
+        // The picture's menu keeps the remote: Up and Down walk it, Left and Right go nowhere.
+        if (profileOpen && (key == Key.DirectionLeft || key == Key.DirectionRight)) return true
+        val moved = focusManager?.moveFocus(direction) ?: false
+        if (moved) return true
+        if (direction == FocusDirection.Up && !tvBar.focused && focusBar()) return true
+        if (!tvBar.focused) focusPage()
+        return true
     }
 
     /** Puts the cursor in the page's search field. Quietly nothing when the page has none. */
@@ -503,6 +575,13 @@ class ShellState(
                 }
                 true
             }
+            // Full screen from any page, as the player has it: F11, and Ctrl+Cmd+F on a Mac. The
+            // big-screen mode's way back into it after Back has left it.
+            (event.key == Key.F11 && !event.isAltPressed && !event.isCtrlPressed && !event.isMetaPressed) ||
+                (OsInfo.isMac && event.isCtrlPressed && event.isMetaPressed && event.key == Key.F) -> {
+                fullscreen = !fullscreen
+                true
+            }
             (command && event.key == Key.R) || (event.key == Key.F5 && !event.isAltPressed) -> {
                 refreshAction?.invoke()
                 refreshAction != null
@@ -516,12 +595,32 @@ class ShellState(
      * keys, which unwind the [backStack] one rung at a time.
      */
     fun onKey(event: KeyEvent): Boolean {
-        if (isBackKey(event)) {
+        val remote = remoteKeyOf(event)
+        if (isBackKey(event) || remote == RemoteKey.Back) {
+            // On a television full screen is the last rung rather than the first: Back unwinds
+            // the pages, and only then leaves it.
+            if (BigScreen.on) return backStack.handleBack() || lastBack()
             if (fullscreen) {
                 fullscreen = false
                 return true
             }
             return backStack.handleBack()
+        }
+        if (BigScreen.on && nowPlaying == null && event.type == KeyEventType.KeyDown) {
+            val plain = !event.isCtrlPressed && !event.isMetaPressed && !event.isAltPressed && !event.isShiftPressed
+            val direction = when (event.key) {
+                Key.DirectionUp -> FocusDirection.Up
+                Key.DirectionDown -> FocusDirection.Down
+                Key.DirectionLeft -> FocusDirection.Left
+                Key.DirectionRight -> FocusDirection.Right
+                else -> null
+            }
+            if (direction != null && plain) return arrow(direction, event.key)
+            if (remote == RemoteKey.Home) {
+                go(Destination.Home)
+                runCatching { tvBar.home.requestFocus() }
+                return true
+            }
         }
         if (event.type == KeyEventType.KeyDown && event.key == Key.Slash && nowPlaying == null &&
             !event.isCtrlPressed && !event.isMetaPressed && !event.isAltPressed

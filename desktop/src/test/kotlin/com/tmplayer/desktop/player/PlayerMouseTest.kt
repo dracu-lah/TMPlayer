@@ -57,6 +57,7 @@ class PlayerMouseTest {
     private val engine = FakeEngine()
     private val media = FakeMedia()
     private var fullscreenToggles = 0
+    private var backs = 0
 
     private val shots = dir.resolve("shots")
     private val watched = com.tmplayer.data.WatchedStore(
@@ -77,7 +78,7 @@ class PlayerMouseTest {
                     startFromBeginning = fromStart,
                     screenshotDir = { shots },
                     watched = watched,
-                    onBack = {},
+                    onBack = { backs++ },
                     fullscreen = false,
                     onToggleFullscreen = { fullscreenToggles++ },
                     settings = settings,
@@ -543,6 +544,40 @@ class PlayerMouseTest {
         onNodeWithTag("video").performMouseInput { moveTo(onPicture); scroll(-1f) }
         waitForIdle()
         assertEquals(55, engine.state.value.volume)
+    }
+
+    @Test
+    fun `a remote walks into the controls with Down, Back leaves them, and Esc and Backspace leave the video`() = runComposeUiTest {
+        com.tmplayer.desktop.ui.BigScreen.override = com.tmplayer.desktop.DesktopLayout.Tv
+        try {
+            open()
+            onNode(isFocused()).assert(SemanticsMatcher.keyNotDefined(androidx.compose.ui.semantics.SemanticsActions.OnClick))
+            // Down on the picture: the controls come up and the remote is on one of them.
+            onNode(isFocused()).performKeyInput { pressKey(Key.DirectionDown) }
+            waitForIdle()
+            onNode(hasContentDescription("More")).assertExists()
+            onNode(isFocused()).assert(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsActions.OnClick))
+            val first = onNode(isFocused()).fetchSemanticsNode().id
+            // The arrows walk the controls rather than seek.
+            onNode(isFocused()).performKeyInput { pressKey(Key.DirectionRight) }
+            waitForIdle()
+            assertTrue("Right moved to another control", onNode(isFocused()).fetchSemanticsNode().id != first)
+            assertTrue(engine.calls.none { it.startsWith("seek") })
+            // Back from the controls: the remote is on the picture again, the video still open.
+            onNode(isFocused()).performKeyInput { pressKey(Key.Escape) }
+            waitForIdle()
+            onNode(isFocused()).assert(SemanticsMatcher.keyNotDefined(androidx.compose.ui.semantics.SemanticsActions.OnClick))
+            assertEquals(0, backs)
+            // On the picture Esc and Backspace are the remote's Back: they leave the video.
+            onNode(isFocused()).performKeyInput { pressKey(Key.Escape) }
+            waitForIdle()
+            assertEquals(1, backs)
+            onNode(isFocused()).performKeyInput { pressKey(Key.Backspace) }
+            waitForIdle()
+            assertEquals(2, backs)
+        } finally {
+            com.tmplayer.desktop.ui.BigScreen.override = null
+        }
     }
 
     private fun track(id: Int, type: TrackType, lang: String, selected: Boolean) = MediaTrack(

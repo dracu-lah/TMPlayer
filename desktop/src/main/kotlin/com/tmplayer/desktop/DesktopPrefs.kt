@@ -39,6 +39,10 @@ data class DesktopSettings(
      * (Windows, tiling Linux window managers). Read once at launch: a window cannot change it.
      */
     val systemTitleBar: Boolean = false,
+    /** Settings' Layout: the desktop's, or the big-screen mode for a television (plan 8.7). */
+    val layout: DesktopLayout = DesktopLayout.Auto,
+    /** Open filling the screen, for a media PC that starts TMPlayer with the television. */
+    val startFullscreen: Boolean = false,
 ) {
     companion object {
         /**
@@ -136,6 +140,8 @@ class DesktopPrefs(private val file: File) {
             setProperty("cache_limit_bytes", s.cacheLimitBytes.toString())
             setProperty("storage_root_pending", s.storageRootPending)
             setProperty("system_title_bar", s.systemTitleBar.toString())
+            setProperty("layout", s.layout.name)
+            setProperty("start_fullscreen", s.startFullscreen.toString())
         }
         runCatching {
             file.parentFile?.mkdirs()
@@ -174,8 +180,28 @@ class DesktopPrefs(private val file: File) {
                     ?: d.cacheLimitBytes,
                 storageRootPending = p.getProperty("storage_root_pending")?.trim() ?: d.storageRootPending,
                 systemTitleBar = bool("system_title_bar", d.systemTitleBar),
+                layout = DesktopLayout.from(p.getProperty("layout")),
+                startFullscreen = bool("start_fullscreen", d.startFullscreen),
             )
         }
+    }
+}
+
+/**
+ * The Layout setting on a computer (plan 8.7, route B): [Auto] stays the desktop's, [Tv] is the
+ * big-screen mode for a media PC on a television, driven by a remote. Stored by name.
+ */
+enum class DesktopLayout(private val labelText: () -> String) {
+    Auto({ com.tmplayer.i18n.L.settingsLayoutAuto }),
+    Desktop({ com.tmplayer.i18n.L.settingsLayoutDesktop }),
+    Tv({ com.tmplayer.i18n.L.settingsLayoutTv }),
+    ;
+
+    /** The word on the segment, in the UI language. */
+    val label: String get() = labelText()
+
+    companion object {
+        fun from(stored: String?): DesktopLayout = entries.firstOrNull { it.name.equals(stored?.trim(), ignoreCase = true) } ?: Auto
     }
 }
 

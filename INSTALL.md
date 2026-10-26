@@ -513,6 +513,25 @@ through MPRIS; on Windows the video's title shows in the media flyout by the vol
 the lock screen), whose play, pause and stop buttons, like the media keys, reach the player even
 when another window has focus.
 
+## A computer on a television
+
+For a media PC driven by a remote (a Flirc, an MCE or CEC receiver, LIRC, a phone remote app, an
+air mouse), choose **Settings > Appearance and language > Layout > TV**, or start TMPlayer with
+`--tv`. The TV layout has the Android TV app's bar across the top, draws everything larger (the
+**Interface size** row still makes it larger or smaller), and hides the pointer while it rests.
+
+- **Arrows** move between everything on the screen, **Enter** is OK, and **Esc** or **Backspace**
+  (outside a text field) is Back: it closes what is open, goes up to the bar, then to Home, and
+  last of all leaves full screen. **F11** goes back into full screen.
+- In the player, **Up** or **Down** bring the controls up with the remote on them; **Back** leaves
+  them, and Back again leaves the video. The media keys play, pause, stop and skip.
+- `--tv` also starts in full screen (add `--windowed` to keep a window); **Start in full screen**
+  under Layout does the same for any layout, for a computer that starts TMPlayer with the TV.
+  `--desktop` keeps the desktop layout for one run. Put the flag on the launcher or autostart entry:
+  `TMPlayer.exe --tv` on Windows, `TMPlayer.AppImage --tv` (or `bin/TMPlayer --tv`) on Linux,
+  `open -a TMPlayer --args --tv` on a Mac. Started again while it is open, TMPlayer switches the
+  open window to the layout the flag names.
+
 ## Troubleshooting on a computer
 
 **Windows shows no Run anyway button.** Click **More info** first; the button only appears after

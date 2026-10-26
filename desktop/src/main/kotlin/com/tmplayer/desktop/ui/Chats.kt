@@ -380,7 +380,7 @@ internal fun ChatList(
         val count by rememberUpdatedState(chats.size)
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().padding(end = 12.dp).navKeys(nav) { count },
+            modifier = Modifier.fillMaxSize().padding(end = 12.dp).navKeys(nav) { count }.remembersRemoteItem(),
             // The row's own 12 dp inset plus this is the page margin, so the avatars line up with
             // the heading and the chips above them. The rows sit 2 dp apart, so a hovered row and
             // the focused one beside it never run into one block.

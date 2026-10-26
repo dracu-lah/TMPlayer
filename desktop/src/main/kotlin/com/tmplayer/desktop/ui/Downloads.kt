@@ -438,7 +438,8 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                         .padding(end = (margin - ROW_INSET).coerceAtLeast(0.dp))
                         .widthIn(max = LIST_MAX + ROW_INSET * 2)
                         .fillMaxHeight()
-                        .homeEndScrolls(list),
+                        .homeEndScrolls(list)
+                        .remembersRemoteItem(),
                 ) {
                     var at = 0
                     // What TMPlayer uses, what is free, and the one Free up space: first, so the

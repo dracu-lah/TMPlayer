@@ -572,7 +572,7 @@ internal fun VideoGrid(
             ),
             horizontalArrangement = Arrangement.spacedBy(if (rows) 12.dp else 16.dp),
             verticalArrangement = Arrangement.spacedBy(if (rows) 2.dp else 20.dp),
-            modifier = Modifier.fillMaxSize().navKeys(nav) { cells.size },
+            modifier = Modifier.fillMaxSize().navKeys(nav) { cells.size }.remembersRemoteItem(),
         ) {
             if (header != null) {
                 item(key = "sponsored", span = { GridItemSpan(maxLineSpan) }) { header() }
@@ -685,7 +685,7 @@ fun ContinuePage(state: ShellState, tabs: @Composable () -> Unit = {}) {
                         contentPadding = PaddingValues(start = pageMargin(), end = pageMargin() + 8.dp, top = 8.dp, bottom = 24.dp + com.tmplayer.ui.components.LocalBottomChrome.current),
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalArrangement = Arrangement.spacedBy(20.dp),
-                        modifier = Modifier.fillMaxSize().navKeys(nav) { records.size },
+                        modifier = Modifier.fillMaxSize().navKeys(nav) { records.size }.remembersRemoteItem(),
                     ) {
                         daySectionItems(days, key = { "${it.chatId}:${it.messageId}" }) { index, record, _ ->
                             LaunchedEffect(record) { state.noteChatTitle(record.chatId, record.chatTitle) }

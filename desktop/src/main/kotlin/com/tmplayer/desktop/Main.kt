@@ -57,8 +57,8 @@ import com.tmplayer.platform.Background
 import com.tmplayer.ui.components.AppLogo
 import com.tmplayer.ui.theme.TmMaterialTheme
 import com.tmplayer.desktop.ui.ProvideFocusVisibility
+import com.tmplayer.desktop.ui.idleCursor
 import com.tmplayer.desktop.ui.trackFocusVisibility
-import com.tmplayer.ui.theme.UiScaled
 import com.tmplayer.ui.theme.rememberUiScale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -84,9 +84,13 @@ fun main(args: Array<String>) {
     // A second launch hands its arguments (a pressed Windows toast's tmplayer: link, later tg:
     // links) to the first and leaves.
     var raise: () -> Unit = {}
+    // `--tv`, `--desktop`, `--fullscreen` (plan 8.7): the layout and full screen for this run.
+    val launch = com.tmplayer.desktop.ui.LaunchOptions.parse(args.toList())
     val handedOver: (List<String>) -> Unit = { forwarded ->
         java.awt.EventQueue.invokeLater {
             raise()
+            // A media PC's autostart that finds TMPlayer already open: its layout, in this window.
+            com.tmplayer.desktop.ui.LaunchOptions.parse(forwarded).layout?.let { com.tmplayer.desktop.ui.BigScreen.override = it }
             com.tmplayer.desktop.os.ToastPresses.handle(forwarded)
         }
     }
@@ -183,6 +187,15 @@ fun main(args: Array<String>) {
         // Who draws minimize, maximize and close: Windows gets an undecorated window with the app's
         // own buttons, a tiling Linux window manager gets the app's close and fullscreen buttons
         // over its plain window, everything else keeps the system's title bar (WindowChromeMode).
+        // The Layout setting before the first frame, so a television never sees the desktop's
+        // layout drawn first, then followed as Settings changes it.
+        com.tmplayer.desktop.ui.BigScreen.layout = DesktopServices.prefs.now.layout
+        com.tmplayer.desktop.ui.BigScreen.override = launch.layout
+        Background.scope.launch {
+            DesktopServices.prefs.state.collect { com.tmplayer.desktop.ui.BigScreen.layout = it.layout }
+        }
+        val startFullscreen = launch.fullscreen ?: DesktopServices.prefs.now.startFullscreen
+        com.tmplayer.platform.Logger.i("Main", "layout: ${com.tmplayer.desktop.ui.BigScreen.effective}, full screen at start: $startFullscreen")
         val chromeMode = WindowChromeMode.current(DesktopServices.prefs.now.systemTitleBar)
         com.tmplayer.platform.Logger.i("Main", "window buttons: $chromeMode")
         val undecorated = chromeMode == WindowChromeMode.Custom
@@ -222,7 +235,9 @@ fun main(args: Array<String>) {
                 // The layouts are made for 960 by 600 at the Default size, so the least the window
                 // can be grows with the interface size, as far as the screen allows.
                 val uiScale by rememberUiScale(settings)
-                LaunchedEffect(uiScale) { window.minimumSize = minimumWindow(window, uiScale.factor) }
+                // The big-screen mode scales to the window it is given, so it asks for no more room.
+                val bigScreen = com.tmplayer.desktop.ui.BigScreen.on
+                LaunchedEffect(uiScale, bigScreen) { window.minimumSize = minimumWindow(window, if (bigScreen) 1f else uiScale.factor) }
                 // Before the window is first shown, so one that opens maximized stops at the taskbar.
                 if (undecorated) UndecoratedFrame.holdToWorkArea(window)
                 DisposableEffect(window) {
@@ -317,6 +332,14 @@ fun main(args: Array<String>) {
                     window.toFront()
                     window.requestFocus()
                 }
+                // "Start in full screen", `--fullscreen` and `--tv`: once the window is shown, so the
+                // window system is asked directly (NativeFullscreen) and leaving it later undoes
+                // what was done rather than a placement nobody set.
+                LaunchedEffect(Unit) {
+                    if (!startFullscreen) return@LaunchedEffect
+                    repeat(100) { if (!window.isDisplayable) delay(50) }
+                    shell.fullscreen = true
+                }
                 raise = {
                     window.isVisible = true
                     if (window.extendedState and java.awt.Frame.ICONIFIED != 0) {
@@ -346,13 +369,17 @@ fun main(args: Array<String>) {
                             text = colors.onBackground.toArgb() and 0xFFFFFF,
                         )
                     }
-                    CompositionLocalProvider(LocalWindowChrome provides chrome) {
-                        Box(Modifier.fillMaxSize().trackFocusVisibility()) {
+                    // A television in full screen has no window buttons: nothing to drag, nothing to
+                    // minimise, and the remote leaves full screen with Back.
+                    CompositionLocalProvider(LocalWindowChrome provides if (bigScreen && shell.fullscreen) null else chrome) {
+                        // The pointer hides while it rests in the big-screen mode (IdleCursor).
+                        Box(Modifier.fillMaxSize().trackFocusVisibility().idleCursor(bigScreen)) {
                             DesktopShell(shell) { request, close ->
                                 PlayerHost(
                                     request = request,
                                     onClose = {
-                                        shell.fullscreen = false
+                                        // A television stays full screen between videos.
+                                        if (!com.tmplayer.desktop.ui.BigScreen.on) shell.fullscreen = false
                                         close()
                                     },
                                     settings = settings,
@@ -362,7 +389,7 @@ fun main(args: Array<String>) {
                                     onQuit = quit,
                                     onRaise = raise,
                                     onFreeUpSpace = {
-                                        shell.fullscreen = false
+                                        if (!com.tmplayer.desktop.ui.BigScreen.on) shell.fullscreen = false
                                         shell.freeUpSpace()
                                     },
                                 )
@@ -438,7 +465,8 @@ fun DesktopTheme(settings: SettingsStore, content: @Composable () -> Unit) {
     val highContrast by settings.highContrast.collectAsState(initial = false)
     val typeface by settings.typeface.collectAsState(initial = com.tmplayer.data.AppTypeface.Default)
     TmMaterialTheme(dark = dark, black = black, accent = accent, customAccent = customAccent, highContrast = highContrast, typeface = typeface) {
-        ProvideFocusVisibility { UiScaled(scale, content) }
+        // The big-screen mode (plan 8.7) sizes the whole window for a sofa's distance (TvScale).
+        ProvideFocusVisibility { com.tmplayer.desktop.ui.ProvideInterfaceScale(scale, com.tmplayer.desktop.ui.BigScreen.on, content) }
     }
 }
 
