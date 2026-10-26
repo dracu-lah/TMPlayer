@@ -40,6 +40,13 @@ the happy path alone. The kinds of cases that keep coming up:
   on its own. A row that kept paging while nobody touched it held a 1 GB TV stick at 150% CPU and
   slowed every video start (2026-10-22), so measure idle CPU on the TV (`/proc/<pid>/stat`) after
   touching Home, lists or background work.
+- **Scale.** Every list or feed is checked against a large account: 3,000 chats with folders and
+  an archive, 100,000 videos, 20,000 in one chat. Its first content shows within 3 s (from the
+  disk or the first answers), never after a whole chat list; its TDLib calls have a budget (chats
+  read per refresh, a few at a time, pages limited to what is shown); its memory and disk caches
+  are bounded. A FLOOD_WAIT is waited out by the call that got it while the rest go on, and
+  retries stop by themselves. Reuse `SyntheticAccount` (`ui/src/jvmTest`, see `HomeScaleTest`):
+  Home on a large account took hours on Windows (HX8, 2026-10-26).
 
 Then test on the real devices (phone, TV) with small videos before calling it done.
 

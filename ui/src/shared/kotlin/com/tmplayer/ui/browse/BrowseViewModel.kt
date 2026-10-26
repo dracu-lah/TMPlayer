@@ -334,7 +334,7 @@ class ChatListViewModel(
                 Td.noteFailure(sync.failure)
                 if (sync.chats.size >= current.size) {
                     limit = wanted
-                    chats = sync.chats
+                    chats = foldered(sync.chats)
                     publish()
                     if (sync.complete) rememberSnapshot(sync.chats)
                 }
@@ -386,6 +386,49 @@ class ChatListViewModel(
         return 0
     }
 
+    /**
+     * Retry on a list that is taking long: the load already running goes on (TDLib keeps what it
+     * has read, and a new load would only ask again from the top), a stopped one starts again.
+     */
+    fun retry() {
+        if (loadJob?.isActive == true) return
+        load()
+    }
+
+    /** Which chats are in which folder, as last read ([fillFolders]); null until read once. */
+    private var membership: Map<Long, List<Int>>? = null
+    private var foldersJob: Job? = null
+
+    /**
+     * Reads which chats are in which folder, behind the list rather than ahead of it: on a
+     * database TDLib has not filled yet that reads every chat of the account, and the list waited
+     * for it before showing anything (HX8). The rows keep their folders meanwhile.
+     */
+    private fun fillFolders(repository: ChatRepository, session: com.tmplayer.data.TdSession) {
+        if (foldersJob?.isActive == true || Td.folders.value.isEmpty()) return
+        foldersJob = viewModelScope.launch {
+            val found = runCatching { repository.folderMembership() }.getOrNull() ?: return@launch
+            if (!session.isCurrent()) return@launch
+            membership = found
+            val current = chats ?: return@launch
+            val next = com.tmplayer.data.ChatListLoad.withFolders(current, found)
+            if (next != current) {
+                chats = next
+                publish()
+            }
+        }
+    }
+
+    /**
+     * [list] with the folders last read, for rows read since; before they are read, each row keeps
+     * the folders the rows on screen (yesterday's snapshot) had, so the folder chips do not empty.
+     */
+    private fun foldered(list: List<ChatSummary>): List<ChatSummary> {
+        membership?.let { return com.tmplayer.data.ChatListLoad.withFolders(list, it) }
+        val before = chats?.associate { it.id to it.folderIds } ?: return list
+        return list.map { chat -> before[chat.id]?.takeIf { it != chat.folderIds }?.let { chat.copy(folderIds = it) } ?: chat }
+    }
+
     private fun rememberSnapshot(chats: List<ChatSummary>) {
         val store = settings ?: return
         // On the background scope rather than this one: it outlives the screen on purpose, since
@@ -408,7 +451,7 @@ class ChatListViewModel(
                     // An empty answer here is TDLib's database still waking, not an empty
                     // account; the connected sync below is the one allowed to say "no chats".
                     // Either way the cold-start snapshot is kept until something real beats it.
-                    repository.cachedChats(limit).takeIf { it.isNotEmpty() } ?: chats
+                    repository.cachedChats(limit).takeIf { it.isNotEmpty() }?.let(::foldered) ?: chats
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (_: Throwable) {
@@ -451,11 +494,14 @@ class ChatListViewModel(
                 // worth showing, and the flood wait inside the message is what stops Refresh
                 // from making the next attempt worse.
                 Td.noteFailure(sync.failure)
-                if (sync.complete || sync.chats.isNotEmpty()) chats = sync.chats
+                if (sync.complete || sync.chats.isNotEmpty()) chats = foldered(sync.chats)
                 if (sync.complete) syncedAt = System.currentTimeMillis()
                 if (session.isCurrent()) publish()
-                if (sync.complete) rememberSnapshot(sync.chats)
+                // A first launch keeps what it got even when the sync fell short (a flood wait on
+                // a large account): without it every start waited on TDLib again (HX8).
+                if (sync.complete || (firstLoad && sync.chats.isNotEmpty())) chats?.let(::rememberSnapshot)
                 if (sync.complete) _paging.value = ChatPaging(more = mayHoldMore(sync.chats))
+                if (session.isCurrent()) fillFolders(repository, session)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Throwable) {
@@ -539,6 +585,8 @@ class ChatListViewModel(
     fun reset() {
         loadJob?.cancel()
         moreJob?.cancel()
+        foldersJob?.cancel()
+        membership = null
         account = null
         chats = null
         syncedAt = 0L

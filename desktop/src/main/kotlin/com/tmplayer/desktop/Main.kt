@@ -96,6 +96,23 @@ fun main(args: Array<String>) {
     // An uncaught exception is written down while crash reports are off, to be offered on the next
     // start; before StartupFailure, whose handler runs this one first (DesktopCrashReports).
     DesktopCrashReports.watch(java.io.File(DesktopPaths.dataDir, "crash"))
+    // Two runs in a row that crashed soon after opening: this one opens on Chats, not Home (HX8).
+    val crashLoop = com.tmplayer.data.CrashLoop(java.io.File(DesktopPaths.dataDir, "crash/early.txt"))
+    val openOnChats = crashLoop.looping()
+    if (openOnChats) System.err.println("W/Crash: crashed soon after opening twice in a row; opening on Chats rather than Home")
+    run {
+        val startedAt = System.nanoTime()
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            crashLoop.note((System.nanoTime() - startedAt) / 1_000_000)
+            previous?.uncaughtException(thread, error)
+        }
+        // Up long enough: the crashes before this run are forgotten.
+        Thread({
+            runCatching { Thread.sleep(com.tmplayer.data.CrashLoop.EARLY_MS) }
+            crashLoop.clean()
+        }, "crash-loop-clean").apply { isDaemon = true }.start()
+    }
     // Until the window is up, an error ends the launch out loud instead of leaving a process with
     // no window that holds the single instance lock (see StartupFailure).
     StartupFailure.install()
@@ -191,7 +208,11 @@ fun main(args: Array<String>) {
         application(exitProcessOnExit = false) {
             val windowState = remember { WindowMemory.load() }
             LaunchedEffect(windowState) { WindowMemory.follow(windowState) }
-            val shell = remember { ShellState(settings, DesktopServices.downloads, DesktopServices.watched, bookmarks = DesktopServices.bookmarks) }
+            val shell = remember {
+                ShellState(settings, DesktopServices.downloads, DesktopServices.watched, bookmarks = DesktopServices.bookmarks).also {
+                    if (openOnChats) it.go(com.tmplayer.desktop.ui.Destination.Chats)
+                }
+            }
             // A card under the pointer or a key on it warms its stream (PlaybackWarmup, StreamWarmup).
             androidx.compose.runtime.DisposableEffect(shell) {
                 com.tmplayer.data.PlaybackWarmup.warmer = com.tmplayer.data.PlaybackWarmup.Warmer { shell.warmStream(it) }

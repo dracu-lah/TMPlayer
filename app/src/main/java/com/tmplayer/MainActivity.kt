@@ -844,7 +844,7 @@ private fun Root() {
             // hours, rebuilding every row each time. Untouched, Home waits for the next press or
             // for coming back to the front ([refreshIfStale]).
             val idle = android.os.SystemClock.elapsedRealtime() - MainActivity.lastInputAt
-            if (idle < HomeViewModel.AUTO_REFRESH_MS) homeViewModel.refreshInPlace()
+            if (idle < HomeViewModel.AUTO_REFRESH_MS) homeViewModel.refreshInPlace(background = true)
         }
     }
     val accountHeader by chatsViewModel.accountHeader.collectAsStateWithLifecycle()
@@ -922,7 +922,8 @@ private fun Root() {
                 wasDisconnected = false
                 if (auth is AuthState.Ready) {
                     chatsViewModel.load()
-                    homeViewModel.refresh()
+                    // In place: a refresh() wiped Home and its cached copy each time the line came back.
+                    homeViewModel.refreshInPlace()
                 }
             }
             else -> connectionNotice = ConnectionNotice.Hidden
@@ -1047,6 +1048,10 @@ private fun Root() {
     // The Chats page's chip (a folder or one of Telegram's filters) last open, for the bar's Chats.
     var lastChatsKey by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(pickedTab) { if (pickedTab?.onChatsPage == true) lastChatsKey = pickedTabKey }
+    // Home's own background work (a post in one of its chats, a retry, the posters looked up
+    // ahead) waits while Home is not on screen (HX8).
+    val homeOnScreen = shellInFront && screen is Screen.Chats && (pickedTab == null || pickedTab.isHome)
+    androidx.compose.runtime.SideEffect { homeViewModel.shown = homeOnScreen }
     // The phone's one floating bar, shared by every page it is on.
     val touchChrome = remember { TouchChrome() }
 
@@ -1755,7 +1760,7 @@ private fun Root() {
                     account = accountHeader,
                     favorites = favorites,
                     continueWatching = continueWatching,
-                    onRetry = chatsViewModel::load,
+                    onRetry = chatsViewModel::retry,
                     onRefresh = {
                         // Telegram answers a request made during a flood wait by extending it, so
                         // the button holds off and says how long rather than digging deeper.

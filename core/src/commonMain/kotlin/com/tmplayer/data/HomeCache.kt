@@ -39,6 +39,11 @@ object HomeCache {
         val art: Map<String, MediaItem>,
         /** When it was written, in milliseconds since the epoch. */
         val savedAt: Long,
+        /**
+         * Home's chats as they were picked, so Home draws its rows before the chat list has come
+         * (HX8): an account with thousands of chats waited for its whole list first.
+         */
+        val chats: List<ChatSummary> = emptyList(),
     ) {
         val isEmpty: Boolean get() = loaded.isEmpty() && recent == null && art.isEmpty()
     }
@@ -73,7 +78,7 @@ object HomeCache {
         val target = file ?: return
         val before = memory
         if (before != null && before.loaded == snapshot.loaded && before.recent == snapshot.recent &&
-            before.partial == snapshot.partial && before.art == snapshot.art
+            before.partial == snapshot.partial && before.art == snapshot.art && before.chats == snapshot.chats
         ) {
             return
         }
@@ -112,6 +117,7 @@ object HomeCache {
         .put("recent", snapshot.recent?.toJson() ?: JSONObject.NULL)
         .put("partial", JSONArray(snapshot.partial.toList()))
         .put("art", JSONArray(snapshot.art.map { (key, item) -> JSONObject().put("key", key).put("item", item.toJson()) }))
+        .put("homeChats", JSONArray(snapshot.chats.map { it.toJson() }))
         .toString()
 
     /** Anything unreadable is dropped: it is a cache, and Home builds itself from Telegram anyway. */
@@ -129,7 +135,27 @@ object HomeCache {
             val item = entry.optJSONObject("item")?.let(::item) ?: return@forEach
             art[entry.optString("key")] = item
         }
-        return Snapshot(loaded, recent, partial, art, json.optLong("saved"))
+        val chats = objects(json.optJSONArray("homeChats")).mapNotNull(::chat)
+        return Snapshot(loaded, recent, partial, art, json.optLong("saved"), chats)
+    }
+
+    /** A chat as Home's rows need it: no picture, which the chat list brings once it is in. */
+    private fun ChatSummary.toJson(): JSONObject = JSONObject()
+        .put("id", id)
+        .put("t", title)
+        .put("k", kind.name)
+        .put("pin", isPinned)
+
+    private fun chat(json: JSONObject): ChatSummary? {
+        val kind = ChatKind.entries.firstOrNull { it.name == json.optString("k") } ?: return null
+        return ChatSummary(
+            id = json.optLong("id"),
+            title = json.optString("t"),
+            miniThumbnail = null,
+            photoFileId = 0,
+            kind = kind,
+            isPinned = json.optBoolean("pin"),
+        )
     }
 
     /** One video in this file's spelling, for the other caches on the disk ([ChatGridDisk]). */

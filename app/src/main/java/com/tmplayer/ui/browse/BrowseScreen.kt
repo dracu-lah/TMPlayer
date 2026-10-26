@@ -532,9 +532,12 @@ internal fun BrowseScreen(
         // error or an empty list has nothing more on its way, so it goes at once.
         val homeComing = tab.isHome && (state is UiState.Loading || state is UiState.Content)
         LaunchedEffect(homeComing) { if (!homeComing) HomeFirstPaint.markReady() }
+        // Home does not wait for the chat list (HX8): with rows of its own (its cached copy, its
+        // starred and found chats) it is drawn while the list is still on its way.
+        val paneState = if (tab.isHome && state is UiState.Loading && homeRows.isNotEmpty()) UiState.Content(BrowseData(emptyList(), account)) else state
         androidx.compose.runtime.CompositionLocalProvider(LocalJustStarred provides justStarred) {
         StateScaffold(
-            state,
+            paneState,
             onRetry = onRetry,
             loading = { ChatListSkeleton(layout = chatLayout(tab)) },
             // "No chats yet" offers Refresh: the list may still be on its way after a sign in.

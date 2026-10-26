@@ -14,6 +14,12 @@ const PARALLEL = 3
 const SETTLE_MS = 300
 /** Videos part way read again: Continue shows ten once copies fold. */
 const RESUMES_READ = 20
+/**
+ * Home picks its own chats once this much of the chat list has come (the app reads 300 at
+ * first), or the list is whole: an account with thousands of chats waited for every page of its
+ * list, through Telegram's flood waits, before Home settled (HX8).
+ */
+const LIST_ENOUGH = 300
 
 /** Telegram's answer for a chat this account can no longer read: its videos are gone for it. */
 const chatGone = (e: unknown) => /^(CHANNEL_PRIVATE|CHAT_FORBIDDEN|USER_BANNED_IN_CHANNEL|PEER_ID_INVALID|CHANNEL_INVALID|CHAT_ID_INVALID)/.test(String((e as { text?: string })?.text ?? ''))
@@ -32,6 +38,10 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
     const early = new Map<number, ChatItem>()
     let selfId: number | null = null
     let chatsDone = false
+    // Enough of the list to pick Home's chats from: the whole list, or its first LIST_ENOUGH.
+    const listEnough = () => chatsDone || knownChats().chats.length >= LIST_ENOUGH
+    let enough: () => void = () => {}
+    const enoughCame = new Promise<void>((resolve) => (enough = resolve))
 
     // Home's chats, read a few at a time.
     const asked = new Set<number>()
@@ -71,14 +81,14 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
         const chats = chatsNow()
         const byId = new Map(chats.map((c) => [c.id, c]))
         // The chats Home picks for itself from the search across chats are only known once the whole list is.
-        const picked = r.homeChats(chats, view.starred, chatsDone ? recent : null)
+        const picked = r.homeChats(chats, view.starred, listEnough() ? recent : null)
         for (const id of picked) {
             if (asked.has(id)) continue
             asked.add(id)
             queue.push(id)
         }
         pump()
-        const built = r.home(resumes ?? [], picked.map((id) => byId.get(id)!), view.starred, [...loaded.values()], recent, !chatsDone)
+        const built = r.home(resumes ?? [], picked.map((id) => byId.get(id)!), view.starred, [...loaded.values()], recent, !listEnough())
         const rows: HomeRow[] = built.map((row) => ({
             key: row.key,
             kind: row.kind as HomeRow['kind'],
@@ -96,14 +106,16 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
                       })
                     : tilesOf(row, items, view),
         }))
-        const settled = resumes !== null && recent !== null && chatsDone && picked.every((id) => loaded.has(id))
+        const settled = resumes !== null && recent !== null && listEnough() && picked.every((id) => loaded.has(id))
         return { rows, gone, selfId, settled }
     }
 
     let timer: ReturnType<typeof setTimeout> | undefined
     // Nothing is sent before Continue watching is read, so it never lands above rows already drawn.
+    let finished = false
     const schedule = () => {
-        if (resumes === null || signal.aborted) return
+        // The list's later pages still arrive once Home is built: they change nothing here.
+        if (resumes === null || signal.aborted || finished) return
         clearTimeout(timer)
         timer = setTimeout(() => !signal.aborted && emit(build()), SETTLE_MS)
     }
@@ -161,13 +173,20 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
     }
 
     const readChats = async () => {
-        await chatList(tg, false, () => schedule()).catch(() => {})
+        await chatList(tg, false, () => {
+            if (listEnough()) enough()
+            schedule()
+        }).catch(() => {})
         chatsDone = true
+        enough()
     }
 
     try {
         const first = Promise.all([readResumes(), readEarly()]).then(schedule)
-        await Promise.all([first, readRecent().then(schedule), readChats().then(schedule)])
+        // The rest of the list goes on loading behind Home, for the Chats page; Home waits for
+        // the first LIST_ENOUGH of it only.
+        void readChats()
+        await Promise.all([first, readRecent().then(schedule), enoughCame.then(schedule)])
         // Home's chats come out of each build; wait for them until a build asks for none new.
         for (;;) {
             if (signal.aborted) throw new DOMException('aborted', 'AbortError')
@@ -178,6 +197,7 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
         }
         return build()
     } finally {
+        finished = true
         clearTimeout(timer)
     }
 }

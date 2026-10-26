@@ -28,8 +28,8 @@ class ChatRepository(private val td: TdlClient) {
 
     /**
      * TDLib serves chats out of its local database, so the list has to be pulled from the
-     * server first. [loadChats] returns 404 once everything is already local, which is the
-     * documented "no more" answer, not a failure.
+     * server first. `loadChats` returns 404 once everything is already local, which is the
+     * documented "no more" answer, not a failure (see [ChatListLoad.sync]).
      *
      * @param known rows the caller already has, so this does not fetch them a second time. A cold
      *   start reads the local list and then syncs, and re-fetching what it was just handed costs
@@ -40,129 +40,45 @@ class ChatRepository(private val td: TdlClient) {
     suspend fun syncChats(
         limit: Int = CHAT_LIMIT,
         known: List<ChatSummary> = emptyList(),
-    ): ChatSync = withContext(Dispatchers.IO) {
-        var loaded = 0
-        var failure: String? = null
-        while (loaded < limit) {
-            val result = td.loadChats(ChatListMain(), CHAT_PAGE)
-            if (result is TdlResult.Failure) {
-                // 404 is TDLib's documented "everything is already local". Everything else is a
-                // real failure and must be reported, or a dropped connection produces a short list
-                // that the screen presents as the whole library. The 404 is in the code: the
-                // message is "Not Found", so matching the text took every sync for a failed one,
-                // and the list was never written down for the next launch.
-                if (!isAllLoaded(result.code, result.message)) failure = result.message
-                break
-            }
-            loaded += CHAT_PAGE
-        }
-
-        // The archive is pulled too, and its failures are ignored on purpose. It is a secondary
-        // tab, most accounts keep very little in it, and an archive that would not load is not a
-        // reason to tell somebody their chat list is broken.
-        var archived = 0
-        while (archived < ARCHIVE_LIMIT) {
-            if (td.loadChats(ChatListArchive(), CHAT_PAGE) is TdlResult.Failure) break
-            archived += CHAT_PAGE
-        }
-
-        // Every folder at once rather than one after another. These are server round trips, not
-        // database reads, so sequentially they put one latency per folder between the viewer and a
-        // refreshed list, and this runs again every couple of minutes.
-        coroutineScope {
-            Td.folders.value
-                .map { folder -> async { td.loadChats(ChatListFolder(folder.id), CHAT_PAGE) } }
-                .awaitAll()
-        }
-
-        ChatSync(cachedChats(limit, known), failure)
-    }
+    ): ChatSync = withContext(Dispatchers.IO) { ChatListLoad.sync(listCalls, limit, known, ARCHIVE_LIMIT) }
 
     /**
-     * Reads the chat list already in TDLib's database without requiring a network connection.
-     *
-     * The `getChat` calls run together rather than one after another: sequentially they are three
-     * hundred round trips on the first-frame path, which on a stick is most of the wait before
-     * anything appears. TDLib answers them out of its own database and is happy to be asked in
-     * parallel.
+     * Reads the chat list already in TDLib's database without requiring a network connection
+     * (see [ChatListLoad.cached]).
      */
     suspend fun cachedChats(
         limit: Int = CHAT_LIMIT,
         known: List<ChatSummary> = emptyList(),
-    ): List<ChatSummary> = withContext(Dispatchers.IO) {
-        val main = td.getChats(ChatListMain(), limit).value().chatIds.toList()
-        // A failure here is not allowed to take the main list down with it: an account with nothing
-        // archived, or a TDLib that has not got round to the archive yet, should still see every
-        // chat it has.
-        val archived = td.getChats(ChatListArchive(), ARCHIVE_LIMIT).valueOrNull?.chatIds?.toList()
-            .orEmpty()
-        // Main first, so the archive can only ever add to the end. A chat cannot be in both lists,
-        // but distinct() costs nothing and makes that TDLib's problem rather than a duplicate row.
-        val ids = (main + archived).distinct()
-        // The chat with yourself has no flag of its own: Telegram gives it the id of the account,
-        // so the only way to recognise it is to know who is signed in. Cached by Td, since the
-        // answer cannot change while the client is alive and this path runs several times a launch.
-        val myId = Td.myId()
+    ): List<ChatSummary> = withContext(Dispatchers.IO) { ChatListLoad.cached(listCalls, limit, known, ARCHIVE_LIMIT) }
 
-        val summaries = coroutineScope {
-            val membership = async { folderMembership() }
-            val byId = known.associateBy { it.id }
-            val fresh = ids.filterNot { it in byId }
+    /** Which chats are in which folder ([ChatListLoad.membership]): read behind the list, never ahead of it. */
+    suspend fun folderMembership(): Map<Long, List<Int>> =
+        withContext(Dispatchers.IO) { ChatListLoad.membership(listCalls, CHAT_LIMIT) }
 
-            // Bounded, and reduced to a summary inside each chunk. All of them in flight at once
-            // holds hundreds of whole TDLib chat objects live until the last lands, each carrying
-            // a last message with its own text and thumbnails, on a stick with a 96 MB heap. In
-            // chunks the peak is [CHAT_CHUNK] of them and the rest is the small row this screen
-            // draws. It is no slower: the limit is the stick, not TDLib, which answers all of
-            // these out of its own database.
-            val fetched = fresh.chunked(CHAT_CHUNK).flatMap { chunk ->
-                chunk.map { id -> async { td.getChat(id).valueOrNull } }
-                    .awaitAll()
-                    .filterNotNull()
-                    .map { chat -> summarise(chat, myId) }
-            }
-
-            val folders = membership.await()
-            // Reused rows still have their folders reapplied. Membership is read per folder rather
-            // than off each chat, so a row fetched before the folder lists were loaded is not left
-            // permanently outside every folder it belongs to.
-            val wanted = ids.toHashSet()
-            val all = (known.filter { it.id in wanted } + fetched).map { chat ->
-                val belongs = folders[chat.id].orEmpty()
-                if (belongs == chat.folderIds) chat else chat.copy(folderIds = belongs)
-            }
-            // Back into the order TDLib gave, which the reuse above does not preserve on its own.
-            val order = ids.withIndex().associate { (at, id) -> id to at }
-            all.sortedBy { order[it.id] ?: Int.MAX_VALUE }
+    /** The TDLib calls [ChatListLoad] reads the list with. */
+    private val listCalls = object : ChatListCalls {
+        private fun ChatListRef.td(): dev.g000sha256.tdl.dto.ChatList = when (this) {
+            ChatListRef.Main -> ChatListMain()
+            ChatListRef.Archive -> ChatListArchive()
+            is ChatListRef.Folder -> ChatListFolder(id)
         }
-        arrangeChats(summaries)
-    }
 
-    /**
-     * Which chats are in which folder, asked of Telegram one folder at a time and in parallel.
-     *
-     * Read this way rather than off each chat's own list of the lists it belongs to. That field is
-     * only filled in once TDLib has been asked to load the folder in question, so on a cold start,
-     * where the chats are read before the folders have arrived, every folder would come out empty
-     * and stay empty until something else triggered a sync. These are local database reads and
-     * there are as many of them as the viewer has folders, which is single figures.
-     */
-    private suspend fun folderMembership(): Map<Long, List<Int>> = coroutineScope {
-        val folders = Td.folders.value
-        if (folders.isEmpty()) return@coroutineScope emptyMap()
-        val byChat = mutableMapOf<Long, MutableList<Int>>()
-        folders
-            .map { folder ->
-                async {
-                    folder.id to td.getChats(ChatListFolder(folder.id), CHAT_LIMIT)
-                        .valueOrNull?.chatIds?.toList().orEmpty()
-                }
-            }
-            .awaitAll()
-            .forEach { (folderId, chatIds) ->
-                chatIds.forEach { byChat.getOrPut(it) { mutableListOf() }.add(folderId) }
-            }
-        byChat
+        override suspend fun loadChats(list: ChatListRef, limit: Int): ChatLoad {
+            val result = td.loadChats(list.td(), limit)
+            if (result !is TdlResult.Failure) return ChatLoad.Loaded
+            // The 404 is in the code: the message is "Not Found".
+            return if (isAllLoaded(result.code, result.message)) ChatLoad.AllLoaded else ChatLoad.Failed(result.message)
+        }
+
+        override suspend fun chatIds(list: ChatListRef, limit: Int): List<Long> =
+            td.getChats(list.td(), limit).value().chatIds.toList()
+
+        override suspend fun summary(chatId: Long, myId: Long): ChatSummary? =
+            td.getChat(chatId).valueOrNull?.let { summarise(it, myId) }
+
+        override suspend fun myId(): Long = Td.myId()
+
+        override fun folders(): List<Int> = Td.folders.value.map { it.id }
     }
 
     private fun summarise(chat: Chat, myId: Long): ChatSummary {
@@ -692,7 +608,6 @@ class ChatRepository(private val td: TdlClient) {
          * `getChat` on the cold-start path that the main list is already paying for.
          */
         const val ARCHIVE_LIMIT = 100
-        private const val CHAT_PAGE = 100
 
         /** Topics read per `getForumTopics` call; Telegram's own cap is 100. */
         private const val TOPIC_PAGE = 100
@@ -711,15 +626,6 @@ class ChatRepository(private val td: TdlClient) {
         private val countedTopics = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Boolean>>()
         private const val COUNT_TTL_MS = 10 * 60 * 1000L
         private fun now() = System.currentTimeMillis()
-
-        /**
-         * How many chats are read from TDLib at once.
-         *
-         * Wide enough that the round trips overlap and the fan-out is still most of a second
-         * faster than doing them one by one, narrow enough that the whole chat list is never live
-         * in memory at the same moment.
-         */
-        private const val CHAT_CHUNK = 32
     }
 }
 

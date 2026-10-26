@@ -124,7 +124,7 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
         model.refreshIfStale()
         while (true) {
             kotlinx.coroutines.delay(HomeViewModel.AUTO_REFRESH_MS)
-            model.refreshInPlace()
+            model.refreshInPlace(background = true)
         }
     }
     val chatState by chats.state.collectAsState()
@@ -142,18 +142,26 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
     // Home fills itself from the search across chats, so it is asked for whether or not any are starred.
     LaunchedEffect(Unit) { model.requestRecent() }
     // With nothing of its own to show yet, Home waits on the chat list, or says why it failed,
-    // rather than greet somebody with starred chats as a first run. With starred chats it waits
-    // for the list anyway: drawn from Continue watching alone, the carousel counted as empty.
-    val waitForChats = rows.isEmpty() || (favourites.isNotEmpty() && chatState is UiState.Loading)
+    // rather than greet somebody with starred chats as a first run. With starred chats it waits a
+    // moment for them, so the carousel does not land over Continue watching, but never for the
+    // whole list: an account with thousands of chats sat on "Loading your chats" for hours (HX8).
+    // Home's own chats (the last ones, or the starred ones read one by one) stand in meanwhile.
+    val ownChats by model.ownChats.collectAsState()
+    val starredUnknown = favourites.isNotEmpty() && list.isEmpty() && ownChats.none { it.id in favourites }
+    val listBriefly = rememberBriefWait(chatState is UiState.Loading)
+    val waitForChats = rows.isEmpty() || (starredUnknown && listBriefly)
     if (waitForChats && (chatState is UiState.Loading || chatState is UiState.Error)) {
-        StateBox(chatState, onRetry = { chats.load() }) {}
+        // Retry goes on with the load that is running rather than asking again from the top.
+        StateBox(chatState, onRetry = chats::retry) {}
         return
     }
+    val stalled by model.stalled.collectAsState()
     HomeRowsView(
         rowsReady = model.rowsSettled,
         state = state,
         rows = rows,
-        chats = list,
+        chats = list.ifEmpty { ownChats },
+        stalled = stalled,
         art = art,
         onRowShown = { row ->
             when (row) {
@@ -197,6 +205,8 @@ internal fun HomeRowsView(
     seeAll: (HomeRow) -> com.tmplayer.ui.browse.RowFeed? = { null },
     /** False while the rows have not been built from an answer yet ([HomeViewModel.rowsSettled]). */
     rowsReady: Boolean = true,
+    /** Telegram has been slow for a few seconds ([HomeViewModel.stalled]): a line says so, with Refresh. */
+    stalled: Boolean = false,
 ) {
     val s = LocalStrings.current
     var openSeries by remember { mutableStateOf<Series?>(null) }
@@ -239,7 +249,7 @@ internal fun HomeRowsView(
     LaunchedEffect(recentRow?.loaded) {
         if (recentRow == null || recentRow.loaded) return@LaunchedEffect
         onRowShown(recentRow)
-        rows.filterIsInstance<HomeRow.Chat>().filterNot { it.loaded }.forEach(onRowShown)
+        rows.filterIsInstance<HomeRow.Chat>().filterNot { it.loaded }.take(HomeViewModel.EAGER_CHATS).forEach(onRowShown)
     }
     LaunchedEffect(continueRow?.records) { continueRow?.records?.forEach(onArtWanted) }
     // Settings can turn the carousel off: then nothing is picked or turned over for it either.
@@ -329,9 +339,11 @@ internal fun HomeRowsView(
                             }
                         }
                     }
+                    if (stalled) item(key = "stalled", contentType = "stalled") { HomeStalledLine(side, onRefresh) }
                     items(shownRows, key = { it.key }, contentType = { it::class }) { row ->
                         val loaded = row.isLoaded()
-                        LaunchedEffect(row.key, loaded) { if (!loaded) onRowShown(row) }
+                        // Every time it comes on screen: a row a refresh passed by is asked again then.
+                        LaunchedEffect(row.key) { onRowShown(row) }
                         Column {
                             RowHeading(
                                 title = row.title(s, titles),
@@ -885,3 +897,35 @@ private fun SeeAllLink(label: String, onClick: () -> Unit) {
         Icon(TmIcons.ChevronRight, contentDescription = null, tint = ink, modifier = Modifier.size(18.dp))
     }
 }
+
+/**
+ * Telegram has been slow for a few seconds ([HomeViewModel.stalled]): Home shows what it has, and
+ * this line says why the rest is missing, with Refresh (user, 2026-10-26: "if it is stuck, after
+ * few seconds show what is there and refresh").
+ */
+@Composable
+private fun HomeStalledLine(side: androidx.compose.ui.unit.Dp, onRefresh: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = side),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(com.tmplayer.ui.components.SlowAnswer.MESSAGE, color = Tone.muted, style = MaterialTheme.typography.bodyMedium)
+        TextButton(onClick = onRefresh) { Text(com.tmplayer.ui.components.SlowAnswer.RETRY) }
+    }
+}
+
+/** True while [waiting], for [HOME_LIST_WAIT_MS] at most: a wait Home allows itself, not one it sits in. */
+@Composable
+private fun rememberBriefWait(waiting: Boolean): Boolean {
+    var over by remember { mutableStateOf(false) }
+    LaunchedEffect(waiting) {
+        if (!waiting) return@LaunchedEffect
+        kotlinx.coroutines.delay(HOME_LIST_WAIT_MS)
+        over = true
+    }
+    return waiting && !over
+}
+
+/** How long Home waits for the chat list to name its starred chats before drawing without them. */
+private const val HOME_LIST_WAIT_MS = 3_000L
