@@ -199,4 +199,21 @@ class DecodeJudgeTest {
         late.frameOffsets(totalOffsetUs = -60_000L * 300, frames = 300)
         assertEquals(PlaybackWatch.Answer.CANNOT_KEEP_UP, run(late, 20, speed = 1.0))
     }
+
+    @Test
+    fun `the light decode is for software too slow here, and stays on once it kept up`() {
+        val webDl = av1(10, 1920, 1080)
+        // HX2c: the Mi TV's Web-DL gets it, and keeps it after a play in it kept up.
+        assertTrue(DecodeJudge.wantsLightDecode(webDl, hardware = false, cpu = miTv, remembered = null))
+        assertTrue(DecodeJudge.wantsLightDecode(webDl, hardware = false, cpu = miTv, remembered = true))
+        // A phone that keeps up decodes as before, unless it did not keep up here.
+        assertFalse(DecodeJudge.wantsLightDecode(webDl, hardware = false, cpu = phone, remembered = null))
+        assertFalse(DecodeJudge.wantsLightDecode(webDl, hardware = false, cpu = phone, remembered = true))
+        assertTrue(DecodeJudge.wantsLightDecode(webDl, hardware = false, cpu = phone, remembered = false))
+        // Never with a hardware decoder for it, whatever was remembered.
+        assertFalse(DecodeJudge.wantsLightDecode(webDl, hardware = true, cpu = miTv, remembered = false))
+        // Not without a size or a budget to judge by.
+        assertFalse(DecodeJudge.wantsLightDecode(DecodeJudge.Picture(DecodeJudge.MIME_AV1, 10), hardware = false, cpu = miTv, remembered = null))
+        assertFalse(DecodeJudge.wantsLightDecode(DecodeJudge.Picture("video/mp4v-es", 8, 1920, 1080), hardware = false, cpu = miTv, remembered = null))
+    }
 }

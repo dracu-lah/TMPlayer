@@ -55,6 +55,7 @@ object DeviceDecode {
             }
         }
         VideoCopies.deviceWord = if (com.tmplayer.data.FormFactor.isTv(appContext)) "tv" else "phone"
+        installLightVideoPolicy()
         // The codec list read once off the main thread, so the first copies list or Play press
         // does not pay for it on a stick.
         Background.scope.launch {
@@ -100,6 +101,31 @@ object DeviceDecode {
         return DecodeJudge.judge(picture, runCatching { HardwareDecoders.has(appContext, formatOf(picture)) }.getOrDefault(false), cpu, remembered(picture))
     }
 
+    /**
+     * Whether the FFmpeg video decoder takes [format] in its light mode
+     * ([DecodeJudge.wantsLightDecode]): asked by the decoder each time it is created.
+     */
+    fun wantsLightDecode(format: Format): Boolean {
+        if (!::appContext.isInitialized) return false
+        val picture = pictureOf(format) ?: return false
+        val hardware = runCatching { HardwareDecoders.has(appContext, format) }.getOrDefault(false)
+        return DecodeJudge.wantsLightDecode(picture, hardware, cpu, remembered(picture))
+    }
+
+    /**
+     * Hands [wantsLightDecode] to NextLib's FFmpeg video decoder (HX2c). By reflection, because
+     * `setLightVideoPolicy` comes from TMPlayer's patch (scripts/build-media3ext.sh): a debug build
+     * without that AAR takes nextlib from Maven Central, which lacks it, and then nothing changes.
+     */
+    private fun installLightVideoPolicy() {
+        val policy = com.google.common.base.Predicate<Format> { format -> format != null && wantsLightDecode(format) }
+        runCatching {
+            io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegLibrary::class.java
+                .getMethod("setLightVideoPolicy", com.google.common.base.Predicate::class.java)
+                .invoke(null, policy)
+        }.onFailure { android.util.Log.i(TAG, "FFmpeg light video mode not in this build: $it") }
+    }
+
     /** What this device saw before with a picture of [picture]'s kind, or null. */
     fun remembered(picture: DecodeJudge.Picture): Boolean? = memory[DecodeMemory.keyOf(picture)]
 
@@ -132,4 +158,6 @@ object DeviceDecode {
 
     /** A clock no CPU file gave: an old small core's, so the guess errs towards caution. */
     private const val UNKNOWN_GHZ = 1.2f
+
+    private const val TAG = "DeviceDecode"
 }

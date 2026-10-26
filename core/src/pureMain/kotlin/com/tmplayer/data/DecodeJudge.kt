@@ -189,6 +189,22 @@ object DecodeJudge {
         return Picture(mime, if (deep) 10 else 8, w, h)
     }
 
+    /**
+     * Whether the app's FFmpeg decoder takes [picture] in its light mode (HX2c): for AV1 dav1d's
+     * frame threads instead of low delay and no film grain, and for every codec a YV12 window
+     * instead of the RGBA conversion. Yes for a picture this device decodes in software and either
+     * the table says it cannot keep up with or that did not keep up here before; never for one a
+     * hardware decoder takes, nor one the table says fits and nothing says otherwise, so a phone
+     * that keeps up decodes as it always did. The table is asked without [remembered] on purpose:
+     * a play in the light mode that kept up is remembered as kept up, and that must not turn the
+     * light mode off for the next play of its kind.
+     */
+    fun wantsLightDecode(picture: Picture, hardware: Boolean, cpu: Cpu, remembered: Boolean?): Boolean {
+        if (hardware) return false
+        if (remembered == false) return true
+        return judge(picture, hardware = false, cpu = cpu) == Verdict.SOFTWARE_TOO_SLOW
+    }
+
     /** "1.0x" style for logs: how much of the CPU a picture asks against what it has. */
     fun load(picture: Picture, cpu: Cpu): Int? {
         val perScore = budget(picture.mime, picture.bitDepth) ?: return null
