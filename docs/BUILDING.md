@@ -158,9 +158,9 @@ toolchain was moved forward on 2026-10-18 (Gradle 9.8.1, AGP 9.4.1, Kotlin 2.4.2
   ships `org.json` at runtime, and the Android side of `:core` compiles against that copy. Adding
   it to `commonMain` or to `:app` would ship a second copy of a library the platform already
   provides.
-- **`:core` is Kotlin Multiplatform with three targets: android, jvm and wasmJs.** Its
+- **`:core` is Kotlin Multiplatform with three targets: android, jvm and js.** Its
   `commonMain` is read from `src/pureMain/kotlin` and must stay pure Kotlin, with no JDK and no
-  TDLib, because the browser build compiles it too. What needs TDLib or the JDK goes in
+  TDLib, because the js target (the web player's rules, `:core:webRules`) compiles it too. What needs TDLib or the JDK goes in
   `jvmSharedMain` (`src/commonMain/kotlin`), shared by android and jvm only. It applies the Compose
   compiler plugin without drawing anything: that is what records its models as stable for the
   app's screens, as they were before they moved.

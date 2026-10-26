@@ -6,7 +6,7 @@ import com.tmplayer.i18n.L
  * What a file name, a MIME type and a caption say about a video, with no TDLib in it: which files
  * are videos, how sharp a name says one is, which names a camera made up, and the caption with a
  * channel's boilerplate taken off. [MediaMapper] reads TDLib's messages with these on Android and
- * the desktop; the browser build reads tdweb's JSON with the same rules.
+ * the desktop; the web player runs the same rules as a compiled module.
  */
 object MediaText {
 

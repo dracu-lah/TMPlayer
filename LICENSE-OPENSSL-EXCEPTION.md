@@ -9,8 +9,7 @@ the original SSLeay License, the licensors of this Program grant you additional 
 convey the resulting work. Corresponding Source for a non-source form of such a combination shall
 include the source code for the parts of OpenSSL used as well as that of the covered work.
 
-Why: the Android app reaches Telegram through TDLib, which links OpenSSL 1.1.1w, and the web app
-through tdweb, whose TDLib build carries OpenSSL 1.1.0l. OpenSSL releases before 3.0 are under the
+Why: the Android and desktop apps reach Telegram through TDLib, which links OpenSSL 1.1.1w. OpenSSL releases before 3.0 are under the
 OpenSSL and SSLeay licences, which the Free Software Foundation considers incompatible with the
 GPL. OpenSSL 3 is under Apache-2.0 and needs no exception; this permission covers the older
 versions.
