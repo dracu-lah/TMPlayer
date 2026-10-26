@@ -26,7 +26,8 @@ IzzyOnDroid was decided against (see PLAN); Obtainium installs straight from the
   every description, sponsored messages shown, no updater in a store build) are in `AGENTS.md`,
   "Telegram's terms and the stores".
 - **Store builds.** A store file is built on the `-PtmFdroid=true` switch (PLAN CP34), which drops
-  the updater, `REQUEST_INSTALL_PACKAGES` and Cast, as the F-Droid build does.
+  the updater, `REQUEST_INSTALL_PACKAGES`, `UPDATE_PACKAGES_WITHOUT_USER_ACTION` and Cast, as the
+  F-Droid build does.
 - **Release cadence.** Uptodown and Amazon add a manual step per release. winget is automatic once
   the first submission is merged: the release job's `winget` step skips itself until the
   `WINGET_TOKEN` secret is set.

@@ -158,6 +158,13 @@ private val UPDATE_SKIPPED = stringPreferencesKey("update_skipped_version")
 private val UPDATE_SNOOZED_UNTIL = longPreferencesKey("update_snoozed_until")
 private val UPDATE_POPUP_SHOWN = stringPreferencesKey("update_popup_shown")
 private val UPDATE_TEST_VERSIONS = booleanPreferencesKey("update_test_versions")
+// Android's own install of an update (HX5): "Install updates by itself", the version it last tried
+// and when, the Android release that refused to update without asking, and the install under way
+// for the notice after the restart. See [AutoInstall] and [UpdateRestart].
+private val UPDATE_AUTO_INSTALL = booleanPreferencesKey("update_auto_install")
+private val UPDATE_AUTO_TRIED = stringPreferencesKey("update_auto_tried")
+private val UPDATE_SILENT_REFUSED = longPreferencesKey("update_silent_refused")
+private val UPDATE_INSTALLING = stringPreferencesKey("update_installing")
 
 // The support card's memory. See [SupportReminder]. About this device's viewer rather than the
 // Telegram account, so signing out keeps them: "I already support" must not come undone.
@@ -1283,6 +1290,43 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     suspend fun setUpdateTestVersions(value: Boolean) {
         prefs.edit { it[UPDATE_TEST_VERSIONS] = value }
+    }
+
+    /**
+     * "Install updates by itself" (HX5, Android 12 and later): a new version is fetched and
+     * installed while TMPlayer is closed and idle, without Android's question. Off by default, and
+     * about this device, so a restore never brings it along.
+     */
+    val updateAutoInstall: Flow<Boolean> = read { it[UPDATE_AUTO_INSTALL] ?: false }
+
+    suspend fun updateAutoInstallNow(): Boolean = prefs.data.first()[UPDATE_AUTO_INSTALL] ?: false
+
+    suspend fun setUpdateAutoInstall(value: Boolean) {
+        prefs.edit { it[UPDATE_AUTO_INSTALL] = value }
+    }
+
+    /** The automatic install's last try, as [AutoInstall.Tried.encode] writes it; blank for none. */
+    suspend fun updateAutoTriedNow(): String = prefs.data.first()[UPDATE_AUTO_TRIED].orEmpty()
+
+    suspend fun setUpdateAutoTried(value: String) {
+        prefs.edit { it[UPDATE_AUTO_TRIED] = value }
+    }
+
+    /**
+     * The Android release (its API level) on which this device refused to update the app without
+     * asking, so later updates ask straight away; 0 for never. A new Android release tries again.
+     */
+    suspend fun updateSilentRefusedNow(): Long = prefs.data.first()[UPDATE_SILENT_REFUSED] ?: 0L
+
+    suspend fun setUpdateSilentRefused(apiLevel: Long) {
+        prefs.edit { it[UPDATE_SILENT_REFUSED] = apiLevel }
+    }
+
+    /** The install handed to Android, as [UpdateRestart.Pending.encode] writes it; blank for none. */
+    suspend fun updateInstallingNow(): String = prefs.data.first()[UPDATE_INSTALLING].orEmpty()
+
+    suspend fun setUpdateInstalling(value: String) {
+        prefs.edit { if (value.isEmpty()) it.remove(UPDATE_INSTALLING) else it[UPDATE_INSTALLING] = value }
     }
 
     /** The update check's own memory, read and written by [UpdateScheduler] alone. */

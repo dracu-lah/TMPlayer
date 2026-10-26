@@ -31,6 +31,9 @@ class BackupCoverageTest {
         "crash_reports",
         // Test versions are asked for on each device, never brought along by a restore.
         "update_test_versions",
+        // Installing updates by itself is a choice about this device and its Android release, and
+        // the rest is that install's own bookkeeping (HX5).
+        "update_auto_install", "update_auto_tried", "update_silent_refused", "update_installing",
         // Hints, walkthroughs and notices already seen.
         "device_card_dismissed", "device_hint_shown", "first_video_tip_dismissed", "online_meta_invite_seen",
         "online_meta_notice_dismissed", "player_hint_seen", "tv_browse_hint_seen", "setup", "tour",

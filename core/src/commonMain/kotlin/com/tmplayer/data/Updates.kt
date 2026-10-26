@@ -30,6 +30,12 @@ sealed interface UpdateState {
     /** Downloaded and handed to the platform's installer, which is now in front of the app. */
     data class Ready(val release: Release, val file: File) : UpdateState
 
+    /**
+     * Downloaded, checked and being installed by Android's package installer in a session TMPlayer
+     * holds (Android 12 and later): the app is about to close, or Android is asking first.
+     */
+    data class Installing(val release: Release) : UpdateState
+
     /** What went wrong, in words, and the release it went wrong for when there was one. */
     data class Failed(val message: String, val release: Release? = null) : UpdateState
 }
@@ -40,6 +46,7 @@ val UpdateState.release: Release?
         is UpdateState.Available -> release
         is UpdateState.Downloading -> release
         is UpdateState.Ready -> release
+        is UpdateState.Installing -> release
         is UpdateState.Failed -> release
         else -> null
     }
@@ -52,9 +59,11 @@ val UpdateState.release: Release?
  * and only when this app asks. When it asks is [UpdateScheduler]'s business.
  *
  * Downloading is one thing and installing is another. This object does the first for the APK;
- * installing is the platform's, and on Android it means handing the file to the system, which
- * shows its own confirmation, so TMPlayer is never able to install anything silently. The desktop
- * reads the same state and installs through its own `SelfUpdate`.
+ * installing is the platform's. On Android 6 to 11 that means handing the file to the system, which
+ * shows its own confirmation; on Android 12 and later TMPlayer commits a package installer session
+ * that Android may let update the app without asking, only ever for TMPlayer's own APK signed with
+ * the same key (`SelfInstaller` in :app). The desktop reads the same state and installs through
+ * its own `SelfUpdate`.
  *
  * Each app calls [configure] once at startup, before anything reads [installedVersion].
  */
@@ -165,7 +174,7 @@ object Updates {
         if (!enabled) return false
         val before = _state.value
         // A download or a finished one is further along than anything a check could say.
-        if (before is UpdateState.Downloading || before is UpdateState.Ready) return false
+        if (before.isInHand()) return false
 
         if (!canTryInternet()) {
             if (!quiet) _state.value = UpdateState.Failed(L.updateOffline)
@@ -182,7 +191,7 @@ object Updates {
 
         // Another check or a download may have moved on while this one waited on the network.
         val current = _state.value
-        if (current is UpdateState.Downloading || current is UpdateState.Ready) return release != null
+        if (current.isInHand()) return release != null
 
         _state.value = when {
             release == null && quiet -> before.takeIf { it is UpdateState.Available } ?: UpdateState.Idle
@@ -201,13 +210,14 @@ object Updates {
 
     /**
      * Fetches the APK into [dir], checks it against the hash the feed gave, and once it is whole
-     * moves the state to [UpdateState.Ready] and returns it for the platform to install. Null when
-     * it did not arrive, with the state already saying why.
+     * moves the state to [UpdateState.Ready] (or, with [installing], to [UpdateState.Installing],
+     * for Android's installer session) and returns it for the platform to install. Null when it did
+     * not arrive, with the state already saying why.
      *
      * Android passes its cache directory: once the system has installed the APK there is no reason
      * to keep a second copy of the app around on a stick with eight gigabytes on it.
      */
-    suspend fun download(release: Release, dir: File): File? {
+    suspend fun download(release: Release, dir: File, installing: Boolean = false): File? {
         if (!enabled) return null
         val asset = apkFor(release)
         if (asset == null) {
@@ -276,13 +286,27 @@ object Updates {
             return null
         }
 
-        _state.value = UpdateState.Ready(release, file)
+        _state.value = if (installing) UpdateState.Installing(release) else UpdateState.Ready(release, file)
         return file
     }
 
     /** For the platform's installer to report that it could not take the file. */
     fun installFailed(message: String) {
         _state.value = UpdateState.Failed(message, _state.value.release)
+    }
+
+    /** The downloaded [file] went to the system installer's own screen after all. */
+    fun handedOver(release: Release, file: File) {
+        _state.value = UpdateState.Ready(release, file)
+    }
+
+    /**
+     * Back to offering what was being fetched or installed: the viewer said no to Android's
+     * question, or an install that nobody started (the automatic one) stopped short. Nothing to
+     * read, so no message.
+     */
+    fun backToOffer() {
+        _state.value = _state.value.release?.let { UpdateState.Available(it) } ?: UpdateState.Idle
     }
 
     /** For a platform that refuses the download before it starts, Wi-Fi only being the one. */
@@ -307,8 +331,12 @@ object Updates {
 
     /** "Skip this version": the item and the popup go, for this version only. */
     fun skip() {
-        if (_state.value !is UpdateState.Downloading) _state.value = UpdateState.Idle
+        if (_state.value !is UpdateState.Downloading && _state.value !is UpdateState.Installing) _state.value = UpdateState.Idle
     }
+
+    /** A download, an APK handed over or an install under way: further along than a check. */
+    private fun UpdateState.isInHand(): Boolean =
+        this is UpdateState.Downloading || this is UpdateState.Ready || this is UpdateState.Installing
 
     private const val TAG = "Updates"
 }

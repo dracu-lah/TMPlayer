@@ -113,6 +113,9 @@ object Cast {
     @Volatile
     private var support: CastSupport? = null
 
+    /** The one already made, or null: for a question that must not create it off the main thread. */
+    fun existing(): CastSupport? = support
+
     fun support(context: Context): CastSupport {
         support?.let { return it }
         synchronized(this) {

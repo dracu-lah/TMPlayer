@@ -147,6 +147,7 @@ import com.tmplayer.data.WatchNextPublisher
 import com.tmplayer.data.TvChannelsPublisher
 import com.tmplayer.data.WatchedStore
 import com.tmplayer.data.WhatsNew
+import com.tmplayer.data.canInstall
 import com.tmplayer.data.release
 import com.tmplayer.data.updateScheduler
 import com.tmplayer.online.OnlineSubtitles
@@ -375,6 +376,7 @@ fun SettingsScreen(
     val updateState by Updates.state.collectAsStateWithLifecycle()
     val updateNotify by settings.updateNotify.collectAsStateWithLifecycle(initialValue = true)
     val updateTestVersions by settings.updateTestVersions.collectAsStateWithLifecycle(initialValue = false)
+    val updateAutoInstall by settings.updateAutoInstall.collectAsStateWithLifecycle(initialValue = false)
     var showUpdate by remember { mutableStateOf(false) }
     // A link a TV cannot open, shown as a QR code instead: the address and what it is.
     var qrLink by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -1631,6 +1633,30 @@ fun SettingsScreen(
                                 }
                             },
                         )
+                    }
+                    // "Install updates by itself" (HX5): Android 12 and later only, where Android can
+                    // install an update without asking. Off by default; nothing more to answer.
+                    if (com.tmplayer.data.AutoUpdater.supported) {
+                        item {
+                            // Read on each pass: the install permission may have changed meanwhile.
+                            val mayInstall = Updates.canInstall(context)
+                            ToggleRow(
+                                title = s.settingsAutoInstall,
+                                subtitle = when {
+                                    !updateAutoInstall -> s.settingsAutoInstallOff
+                                    !mayInstall -> s.settingsAutoInstallBlocked
+                                    else -> s.settingsAutoInstallOn
+                                },
+                                icon = TmIcons.Refresh,
+                                checked = updateAutoInstall,
+                                onToggle = {
+                                    scope.launch {
+                                        settings.setUpdateAutoInstall(!updateAutoInstall)
+                                        runCatching { com.tmplayer.data.BackgroundChecks.schedule(context) }
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
 

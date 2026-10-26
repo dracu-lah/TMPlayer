@@ -696,6 +696,13 @@ private fun Root() {
     val languageNotice = rememberLanguageNotice(settings)
     var pickingLanguage by remember { mutableStateOf(false) }
     val whatsNew = rememberWhatsNew(settings, BuildConfig.VERSION_NAME, hold = !inShell)
+    // "Updated to 1.29.0", once, on the first launch after TMPlayer updated itself (HX5). A pill
+    // at the top that takes no focus, so a remote starts where it always does.
+    LaunchedEffect(inShell) {
+        if (!inShell) return@LaunchedEffect
+        val updated = runCatching { com.tmplayer.data.AfterUpdate.onLaunch(context) }.getOrNull() ?: return@LaunchedEffect
+        toast(com.tmplayer.i18n.L.updateUpdatedTo(version = updated))
+    }
     var changelogQr by remember { mutableStateOf(false) }
 
     // The Buy Me a Coffee window: after real use, at most every two weeks, and only at a good

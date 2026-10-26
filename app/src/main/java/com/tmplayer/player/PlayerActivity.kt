@@ -1335,6 +1335,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // fragment manager means the fragment below is always built against a live player, and
         // nothing here is worth restoring: the resume position lives on disk.
         super.onCreate(null)
+        // An update that installs while this is open (picture in picture, the sound playing on)
+        // ends the process: the place is written first (HX5).
+        com.tmplayer.data.SelfInstaller.addBeforeInstall(saveBeforeInstall)
         // Before the first layout pass, on purpose: a window that turns after it has drawn is a
         // lurch the viewer sees. Almost every video is landscape, so landscape is what the loader
         // opens in, and a portrait clip turns once, later.
@@ -8011,6 +8014,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     override fun onDestroy() {
+        com.tmplayer.data.SelfInstaller.removeBeforeInstall(saveBeforeInstall)
         loopHandler.removeCallbacks(watchTick)
         // Every runnable on this handler, the undo chip's expiry among them: a delayed one holds
         // the whole activity until it fires.
@@ -8108,9 +8112,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * only when [leaving]: a mark is what "Remove after watching" deletes a download on, and the
      * last tenth of a film is still being watched.
      */
-    private fun saveResumePosition(leaving: Boolean = false) {
-        if (savedForHandOver) return
-        val exo = player ?: return
+    /** [saveResumePosition] before an update ends the process, waited for until it is written. */
+    private val saveBeforeInstall: suspend () -> Unit = {
+        withContext(Dispatchers.Main) { saveResumePosition() }?.join()
+    }
+
+    /** Writes the place; returns the write, for a caller that must wait for it ([saveBeforeInstall]). */
+    private fun saveResumePosition(leaving: Boolean = false): Job? {
+        if (savedForHandOver) return null
+        val exo = player ?: return null
         // While the video is on a TV, the TV's place is the one to keep.
         val castAt = cast?.positionMs
         val position = castAt ?: exo.currentPosition
@@ -8143,13 +8153,14 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             recordFinished()
         }
         val forget = watched || markedWatchedHere
-        App.backgroundScope.launch {
+        val write = App.backgroundScope.launch {
             runCatching {
                 if (forget) store.clearResumePosition(chat, message, here)
                 else store.saveResumePosition(chat, message, position, duration, description)
             }
         }
         if (leaving) publishWatchNext(if (markedWatchedHere && duration > 0) duration else position, duration)
+        return write
     }
 
     /**

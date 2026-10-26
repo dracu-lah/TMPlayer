@@ -35,7 +35,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * - [JOB_SPONSOR], once a day: the support ask ([SupportReminder.nudgeDue]) and low storage
  *   ([StorageAlerts]), neither of which needs a connection.
  * - [JOB_UPDATES], twice a day while online: a new version, said while the app is closed
- *   ([UpdateAlerts]).
+ *   ([UpdateAlerts]), or installed by itself with "Install updates by itself" on ([AutoUpdater]).
  *
  * A TV schedules none: its notifications are mostly out of sight, and Home's rows already show
  * what is new. None asks for the notification permission: each switch asks when it is turned on,
@@ -116,7 +116,8 @@ class BackgroundChecks : JobService() {
             val sponsor = SupportReminder.enabled && settings.sponsorRemindersNow() &&
                 !settings.supportCountersNow().finished
             val daily = !tv && (sponsor || settings.noticeOnNow(Notice.LowStorage))
-            val updates = !tv && Updates.enabled && settings.noticeOnNow(Notice.UpdateReady)
+            val updates = !tv && Updates.enabled &&
+                (settings.noticeOnNow(Notice.UpdateReady) || (AutoUpdater.supported && settings.updateAutoInstallNow()))
             // Waiting for the battery is Android 8's; on 6 and 7 the checks run on schedule, which
             // a television plugged into the wall does not notice.
             ensure(context, scheduler, JOB_NEW_VIDEOS, chats) { component ->
@@ -215,9 +216,14 @@ class BackgroundChecks : JobService() {
             AppNotices.postLowStorage(context, words.first, words.second)
         }
 
-        /** A new version, said once, while the app is closed. */
+        /**
+         * A new version: installed by itself where the viewer asked for that (HX5), which ends the
+         * process when it does; else said once, while the app is closed.
+         */
         suspend fun checkUpdate(context: Context) {
-            if (App.inFront || !AppNotices.allowed(context, Notice.UpdateReady)) return
+            if (App.inFront) return
+            if (runCatching { AutoUpdater.runIfDue(context) }.getOrDefault(false)) return
+            if (!AppNotices.allowed(context, Notice.UpdateReady)) return
             val release = UpdateAlerts.check(SettingsStore(context)) { App.inFront } ?: return
             AppNotices.postUpdate(context, release)
         }

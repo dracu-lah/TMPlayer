@@ -2,13 +2,16 @@
 <!--
   Merged over main's manifest in the F-Droid build only (-PtmFdroid=true, see app/build.gradle.kts).
   F-Droid installs and updates that build itself, and the app never fetches an APK there, so it has
-  no use for the permission that hands one to Android's installer. It has no Cast framework either.
+  no use for the permissions that hand one to Android's installer. It has no Cast framework either.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission
         android:name="android.permission.REQUEST_INSTALL_PACKAGES"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION"
         tools:node="remove" />
 
     <!-- No Cast button in this build, so no Cast framework to point at its options (CP73). -->

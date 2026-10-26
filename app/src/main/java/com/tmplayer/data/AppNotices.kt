@@ -35,6 +35,7 @@ object AppNotices {
     private const val ID_LOW_STORAGE = 0x200004
     private const val ID_PIECES = 0x200005
     private const val ID_UPDATE = 0x200006
+    private const val ID_UPDATED = 0x200007
 
     /** Whether a notification of [notice] may go out at all on this device. */
     suspend fun allowed(context: Context, notice: Notice): Boolean =
@@ -185,6 +186,28 @@ object AppNotices {
             .setAutoCancel(true)
             .build()
         runCatching { manager(context).notify(ID_UPDATE, notification) }
+    }
+
+    /**
+     * "TMPlayer updated to 1.29.0, tap to open it" (HX5): after an update Android installed in a
+     * session, which closed the app and has no Open button of its own. Posted on a TV too, where
+     * the launcher may show it; quiet, on the updates channel.
+     */
+    fun postUpdated(context: Context, version: String) {
+        ensureChannels(context)
+        val notification = notificationBuilder(context, CHANNEL_UPDATES, OldAndroid.IMPORTANCE_LOW)
+            .setSmallIcon(R.drawable.ic_stat_download)
+            .setContentTitle(L.notifyUpdatedTitle(version = version))
+            .setContentText(L.notifyUpdatedBody)
+            .setContentIntent(open(context, ID_UPDATED) {})
+            .setAutoCancel(true)
+            .build()
+        runCatching { manager(context).notify(ID_UPDATED, notification) }
+    }
+
+    /** Takes [postUpdated]'s notification down once the app is open again. */
+    fun cancelUpdated(context: Context) {
+        runCatching { manager(context).cancel(ID_UPDATED) }
     }
 
     // ---- shared --------------------------------------------------------------------------------

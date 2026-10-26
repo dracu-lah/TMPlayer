@@ -3,7 +3,6 @@ package com.tmplayer.data
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import androidx.core.content.FileProvider
 import com.tmplayer.BuildConfig
 import com.tmplayer.i18n.L
 import java.io.File
@@ -32,23 +31,44 @@ fun updateScheduler(context: Context): UpdateScheduler = UpdateScheduler(Setting
 val UPDATE_WAITS_FOR_WIFI: String get() = L.updateWaitsForWifi
 
 /**
- * Fetches the APK for this device and hands it to the system installer.
+ * Fetches the APK for this device and installs it ([SelfInstaller]): on Android 12 and later
+ * without Android's question where it allows that, else with it. Started by Update now.
  *
  * Honours "Wi-Fi only" the way a video does: on a metered connection with it on, nothing is
- * fetched. The warning about mobile data without it is the popup's, on the button itself.
+ * fetched. The warning about mobile data without it is the popup's, on the button itself. Nothing
+ * is fetched either without room for the APK and Android's copy of it ([AutoInstall.spaceNeeded]),
+ * and the popup says how much is needed and how much is free.
  *
- * The file lands in the cache directory: once Android has installed it there is no reason to
- * keep a second copy of the app around on a stick with eight gigabytes on it.
+ * The file lands in the cache directory and is deleted once installed or refused: there is no
+ * reason to keep a second copy of the app around on a stick with eight gigabytes on it.
  */
 suspend fun Updates.downloadAndInstall(context: Context, release: Release) {
     if (onMeteredNetwork() && MeteredPolicy.wifiOnlyInForce(SettingsStore(context).wifiOnlyDownloadsNow(), FormFactor.isTv(context))) {
         refuse(UPDATE_WAITS_FOR_WIFI)
         return
     }
-    val file = download(release, File(context.cacheDir, "updates")) ?: return
-    runCatching { context.startActivity(installIntent(context, file)) }
-        .onFailure { installFailed(UpdateWords.NO_INSTALLER) }
+    val size = apkFor(release)?.size ?: 0L
+    if (DiskSpace.read(context, context.cacheDir).freeBytes < AutoInstall.spaceNeeded(size)) {
+        refuse(SelfInstaller.spaceWords(context, size))
+        return
+    }
+    // Android 12's session keeps the popup up, saying it is installing; before that the system
+    // installer's screen takes over and the popup closes on Ready.
+    val session = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val file = download(release, File(context.cacheDir, "updates"), installing = session) ?: return
+    when (val result = SelfInstaller.install(context, file, release, foreground = true)) {
+        // The process usually ends before this; if not, the restart notice still follows.
+        SelfInstaller.Result.Installed -> Unit
+        SelfInstaller.Result.HandedOver -> handedOver(release, file)
+        SelfInstaller.Result.Cancelled, SelfInstaller.Result.NeedsViewer -> backToOffer()
+        is SelfInstaller.Result.Failed -> installFailed(result.message)
+    }
 }
+
+/** The work that pauses while TMPlayer updates: downloads running or queued, a save to a folder. */
+@Suppress("UnusedReceiverParameter")
+fun Updates.workPausedByInstall(): Boolean =
+    OfflineDownloads.active.value.values.any { it.busy } || FolderExport.busy
 
 /** Whether the device will let TMPlayer hand an APK to the installer at all. */
 @Suppress("UnusedReceiverParameter")
@@ -74,10 +94,3 @@ fun Updates.unknownSourcesIntent(context: Context): Intent =
         // Android 7 and older keep the one global switch on the security page.
         Intent(android.provider.Settings.ACTION_SECURITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
-
-private fun installIntent(context: Context, file: File): Intent {
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.updates", file)
-    return Intent(Intent.ACTION_VIEW)
-        .setDataAndType(uri, "application/vnd.android.package-archive")
-        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-}
