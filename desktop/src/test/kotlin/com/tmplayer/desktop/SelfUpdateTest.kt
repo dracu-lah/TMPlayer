@@ -2,6 +2,7 @@ package com.tmplayer.desktop
 
 import com.tmplayer.data.Release
 import com.tmplayer.data.ReleaseAsset
+import com.tmplayer.data.ReleaseVersion
 import com.tmplayer.data.UpdateFeed
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -185,11 +186,36 @@ class SelfUpdateTest {
         assertFalse(Regex("@@[A-Z_]+@@").containsMatchIn(script))
         assertTrue(script.contains("\$AppPid = 4242\r\n"))
         assertTrue(script.contains("\$Version = '1.27.0'\r\n"))
+        // The MSI's own version under the release numbering (RL1): the stage sits in the third field.
+        assertTrue(script.contains("\$ProductVersion = '1.27.99'\r\n"))
         assertTrue(script.contains("O''Brien"))
         assertTrue(script.contains("'{6F1D3C0E-2B8A-4B7E-9D2C-7A1E5F4C3B21}'"))
-        assertTrue(script.contains("'HKCU:\\Software\\TMPlayer\\TMPlayer\\1.27.0'"))
+        assertTrue(script.contains("'HKCU:\\Software\\TMPlayer\\TMPlayer\\1.27.99'"))
         assertTrue(script.contains("/l*v"))
         assertFalse(script.replace("\r\n", "").contains("\n"))
+    }
+
+    @Test
+    fun `a test version keeps its name for the log and the marker, and its own msi version`() {
+        val root = File("/tmp/TMPlayer App-update")
+        val script = SelfUpdate.msiScript(
+            pid = 1,
+            msi = File(root, "download/TMPlayer-1.28.2-beta.3-windows-x64.msi"),
+            exe = File("/tmp/TMPlayer App/TMPlayer.exe"),
+            installDir = File("/tmp/TMPlayer App"),
+            root = root,
+            version = "1.28.2-beta.3",
+        )
+        assertTrue(script.contains("\$Version = '1.28.2-beta.3'\r\n"))
+        assertTrue(script.contains("\$ProductVersion = '1.28.203'\r\n"))
+        assertTrue(script.contains("'HKCU:\\Software\\TMPlayer\\TMPlayer\\1.28.203'"))
+    }
+
+    @Test
+    fun `this build's installer version is the release numbering's`() {
+        // desktop/build.gradle.kts writes the MSI and macOS version itself; it must agree with
+        // ReleaseVersion, which the msi update script and the tests rely on.
+        assertEquals(ReleaseVersion.installerVersion(BuildInfo.VERSION), BuildInfo.INSTALLER_VERSION)
     }
 
     @Test

@@ -618,7 +618,9 @@ var tmT = (function () {
 
       var stable = published.filter(function (r) { return !r.prerelease; });
       var latest = stable.length ? stable[0] : published[0];
-      var rest = published.filter(function (r) { return r !== latest; }).slice(0, 6);
+      /* Test versions (GitHub pre-releases, vX.Y.Z-beta.N) stay off the page while any release is
+         listed: they are for people who opted in from the app, not for a first download. */
+      var rest = (stable.length ? stable : published).filter(function (r) { return r !== latest; }).slice(0, 6);
 
       renderLatest(latest);
       renderPrevious(rest);

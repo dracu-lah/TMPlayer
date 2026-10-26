@@ -96,6 +96,7 @@ def main():
     version = args.version.removeprefix("v")
     match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", version)
     if not match:
+        # A test version (x.y.z-beta.N) never reaches the feed: the stable feed names releases only.
         sys.exit(f"{version} is not MAJOR.MINOR.PATCH")
     major, minor, patch = (int(x) for x in match.groups())
     tag = f"v{version}"
@@ -134,7 +135,9 @@ def main():
     feed = {
         "schema": 1,
         "version": version,
-        "versionCode": major * 10000 + minor * 100 + patch,
+        # The release numbering (scripts/release-version.py): a release is stage 99. No client
+        # reads this field; it is there for people and tools reading the feed.
+        "versionCode": major * 1_000_000 + minor * 10_000 + patch * 100 + 99,
         "published": published,
         "releaseUrl": f"https://github.com/{REPO}/releases/tag/{tag}",
         "notes": popup_notes(args.notes) or DEFAULT_NOTES,

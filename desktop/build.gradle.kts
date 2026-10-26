@@ -29,6 +29,26 @@ kotlin { jvmToolchain(21) }
 // The release passes the tag's x.y.z (-PdesktopVersion=1.18.0). Anything else is a development
 // build, numbered below every release so that its MSI never blocks the upgrade to a real one.
 val desktopVersion: String = providers.gradleProperty("desktopVersion").getOrElse("1.0.0-dev")
+
+// The version the installers carry, under the release numbering (docs/RELEASING.md, and
+// ReleaseVersion.installerVersion in :core, which a desktop test holds this to): major.minor and
+// patch*100 + stage, where a test version vX.Y.Z-beta.N is stage N, the release 99 and anything
+// else (-dev, -ci.N, -test.N) 0. 1.28.2-beta.1 is 1.28.201 and 1.28.2 is 1.28.299, so Windows
+// Installer, which compares only three fields, the third up to 65535, orders a test version
+// between the release before it and its own release. jpackage wants a plain x.y.z.
+val installerVersion: String = run {
+    val name = desktopVersion.trim().removePrefix("v").substringBefore('+')
+    val fields = name.substringBefore('-').split('.').map { it.toIntOrNull() }
+    require(fields.size == 3 && fields.all { it != null }) { "desktopVersion $desktopVersion is not x.y.z or x.y.z-suffix" }
+    val (major, minor, patch) = fields.map { it!! }
+    val suffix = name.substringAfter('-', "")
+    val stage = when {
+        suffix.isEmpty() -> 99
+        else -> Regex("""beta\.(\d+)""").matchEntire(suffix)?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it in 1..98 } ?: 0
+    }
+    require(major <= 255 && minor <= 255 && patch * 100 + stage <= 65535) { "desktopVersion $desktopVersion does not fit an MSI version" }
+    "$major.$minor.${patch * 100 + stage}"
+}
 val packagingDir = layout.projectDirectory.dir("packaging")
 
 // The same local.properties the Android build reads, for the same Telegram API credentials.
@@ -62,6 +82,7 @@ val generateBuildInfo = tasks.register("generateBuildInfo") {
         .orEmpty()
     inputs.property("sentryDsn", sentryDsn)
     inputs.property("version", desktopVersion)
+    inputs.property("installerVersion", installerVersion)
     outputs.dir(out)
     doLast {
         val dir = out.get().asFile.resolve("com/tmplayer/desktop").apply { mkdirs() }
@@ -71,6 +92,7 @@ val generateBuildInfo = tasks.register("generateBuildInfo") {
             |
             |internal object BuildInfo {
             |    const val VERSION = "$desktopVersion"
+            |    const val INSTALLER_VERSION = "$installerVersion"
             |    const val TG_API_ID = $apiId
             |    const val TG_API_HASH = "$apiHash"
             |    const val OPENSUBTITLES_API_KEY = "$openSubtitlesKey"
@@ -441,8 +463,9 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.Msi, TargetFormat.Exe)
             packageName = "TMPlayer"
-            // jpackage wants a plain x.y.z.
-            packageVersion = desktopVersion.substringBefore('-')
+            // jpackage wants a plain x.y.z. The deb and rpm (not published) take the release's own;
+            // the MSI and macOS's CFBundleVersion take the installer version, below.
+            packageVersion = desktopVersion.removePrefix("v").substringBefore('-').substringBefore('+')
             vendor = "TMPlayer"
             description = "Unofficial Telegram media player"
             copyright = "GPL-3.0-or-later"
@@ -474,6 +497,9 @@ compose.desktop {
                 appCategory = "public.app-category.video"
                 minimumSystemVersion = "26.0"
                 dockName = "TMPlayer"
+                // CFBundleShortVersionString stays the release's x.y.z (1.28.2 for its test
+                // versions too); CFBundleVersion, the build number, orders them (1.28.201, 1.28.299).
+                packageBuildVersion = installerVersion
             }
             windows {
                 iconFile.set(packagingDir.file("icons/tmplayer.ico"))
@@ -491,6 +517,11 @@ compose.desktop {
                 installationPath = "TMPlayer App"
                 dirChooser = false
                 upgradeUuid = "6f1d3c0e-2b8a-4b7e-9d2c-7a1e5f4c3b21"
+                // The ProductVersion that orders a test version between the release before it and
+                // its own release, so every step (stable to test, test to test, test to stable) is
+                // an upgrade. msi-update.ps1 and the CI self-test check for this number.
+                msiPackageVersion = installerVersion
+                exePackageVersion = installerVersion
             }
         }
     }

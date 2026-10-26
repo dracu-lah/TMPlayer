@@ -157,6 +157,7 @@ private val UPDATE_LAST_CHECK = longPreferencesKey("update_last_check")
 private val UPDATE_SKIPPED = stringPreferencesKey("update_skipped_version")
 private val UPDATE_SNOOZED_UNTIL = longPreferencesKey("update_snoozed_until")
 private val UPDATE_POPUP_SHOWN = stringPreferencesKey("update_popup_shown")
+private val UPDATE_TEST_VERSIONS = booleanPreferencesKey("update_test_versions")
 
 // The support card's memory. See [SupportReminder]. About this device's viewer rather than the
 // Telegram account, so signing out keeps them: "I already support" must not come undone.
@@ -1273,6 +1274,17 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         prefs.edit { it[UPDATE_NOTIFY] = value }
     }
 
+    /**
+     * "Get test versions": the update check also offers GitHub pre-releases (vX.Y.Z-beta.N), the
+     * builds that go out before each release for testing. Off by default; switched on only after
+     * its warning.
+     */
+    val updateTestVersions: Flow<Boolean> = read { it[UPDATE_TEST_VERSIONS] ?: false }
+
+    suspend fun setUpdateTestVersions(value: Boolean) {
+        prefs.edit { it[UPDATE_TEST_VERSIONS] = value }
+    }
+
     /** The update check's own memory, read and written by [UpdateScheduler] alone. */
     val updatePrefs: UpdatePrefs = object : UpdatePrefs {
         override suspend fun notify() = prefs.data.first()[UPDATE_NOTIFY] ?: true
@@ -1292,6 +1304,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         override suspend fun setPopupShownFor(version: String) {
             prefs.edit { it[UPDATE_POPUP_SHOWN] = version }
         }
+        override suspend fun testVersions() = prefs.data.first()[UPDATE_TEST_VERSIONS] ?: false
     }
 
     /**

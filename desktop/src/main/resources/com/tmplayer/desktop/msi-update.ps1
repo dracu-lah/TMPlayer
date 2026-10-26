@@ -23,6 +23,8 @@ $Exe = '@@EXE@@'
 $InstallDir = '@@INSTALL_DIR@@'
 $Root = '@@ROOT@@'
 $Version = '@@VERSION@@'
+# What Windows Installer calls it: 1.28.299 for 1.28.2, 1.28.201 for 1.28.2-beta.1 (RELEASING.md).
+$ProductVersion = '@@PRODUCT_VERSION@@'
 $UpgradeCode = '@@UPGRADE_CODE@@'
 $RegistryKey = '@@REGISTRY_KEY@@'
 $Marker = Join-Path $Root '@@MARKER@@'
@@ -143,7 +145,7 @@ function Test-NewVersion {
     if (Test-Path -LiteralPath $RegistryKey) { return $true }
     $found = Get-InstalledVersion
     Say "Windows Installer reports version '$found'"
-    return $found -eq $Version
+    return $found -eq $ProductVersion
 }
 
 # One msiexec run with a verbose log of its own. The exit code, or a negative number when

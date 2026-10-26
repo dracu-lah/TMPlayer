@@ -1,14 +1,21 @@
 # Releasing TMPlayer
 
-Releases are cut by pushing a tag. Nothing else produces a signed APK or a desktop installer:
+Releases are cut by pushing a tag. Nothing else produces a signed APK or a desktop installer.
+Every release goes out first as a test version, a GitHub pre-release tagged `vX.Y.Z-beta.N` from
+`main`; it is installed and tried on the real devices, and the release `vX.Y.Z` follows from the
+same commit or one with the fixes (see [Test versions](#test-versions-pre-releases) below):
 
 ```bash
-git tag -a v1.28.1 -F notes.txt
-git push origin v1.28.1
+git tag -a v1.28.2-beta.1 -F notes.txt   # first: a pre-release, offered only to opted-in installs
+git push origin v1.28.2-beta.1
+# ...tried on the phone, the TV and the desktops; fixes go to main and out as beta.2, beta.3...
+git tag -a v1.28.2 -F notes.txt           # then the release everyone gets
+git push origin v1.28.2
 ```
 
-The tag is annotated, and its message is the release notes: a `release: 1.28.1` subject, a blank
-line, then one `- ` line per change, short and in plain words, no em or en dashes:
+The tag is annotated, and its message is the release notes: a `release: 1.28.1` subject (or
+`release: 1.28.2-beta.1`), a blank line, then one `- ` line per change, short and in plain words,
+no em or en dashes:
 
 ```
 release: 1.28.1
@@ -22,12 +29,91 @@ That list heads the GitHub release page, the Telegram post and the site's change
 is. The update popup in installed apps shows one short paragraph, so the feed
 (`scripts/write-latest-json.py`) turns each item into a sentence there. The store changelog,
 `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`, takes the same list, kept under
-500 characters.
+500 characters; it is named by the new numbering from 1.28.2 on (`1280299.txt`), and a test
+version has none.
 
 `.github/workflows/release.yml` then derives `versionName` from the tag and `versionCode`
-arithmetically (`major*10000 + minor*100 + patch`), so the code can only ever increase.
+arithmetically (`scripts/release-version.py`, below), so the code can only ever increase.
 Android refuses to install an APK whose `versionCode` is lower than the one already on the
 device, and a hand-rolled number is easy to get wrong.
+
+## Version numbers
+
+Every build has a stage: test version N (`-beta.N`, N from 1 to 98) is stage N, the release is 99,
+and any other suffix (a local `-dev`, CI's `-ci.N`, the Mac test build's `-test.N`) is 0. So every
+test version of X.Y.Z sorts after X.Y.(Z-1) and before X.Y.Z, on every platform:
+
+| | Rule | 1.28.2-beta.1 | 1.28.2-beta.10 | 1.28.2 |
+| --- | --- | --- | --- | --- |
+| Android `versionCode` | major\*1000000 + minor\*10000 + patch\*100 + stage | 1280201 | 1280210 | 1280299 |
+| MSI ProductVersion, macOS `CFBundleVersion` | major.minor.(patch\*100 + stage) | 1.28.201 | 1.28.210 | 1.28.299 |
+| macOS `CFBundleShortVersionString` | the release's x.y.z | 1.28.2 | 1.28.2 | 1.28.2 |
+| The app's version name, the updaters' order | the tag | 1.28.2-beta.1 | 1.28.2-beta.10 | 1.28.2 |
+
+- **Android.** Until 1.28.1 the code was `major*10000 + minor*100 + patch` (12801). Every new code
+  is above a million, so the first one is an ordinary upgrade. Minor and patch go up to 99, and the
+  highest code, 2099.99.99, stays under Google Play's ceiling of 2100000000 and so under an int's.
+  A local build gets the code of its name (`-PtmVersionName=1.28.2-dev` is 1280200, below the
+  first test version, so it never blocks one); `-PtmVersionCode` still overrides it.
+- **Windows.** Windows Installer compares only the first three fields of a ProductVersion, the
+  third up to 65535, so the stage lives inside the third. Test to test, stable to test and test to
+  stable are all upgrades under the one upgrade code; nothing relies on a downgrade. The MSI shows
+  1.28.299 under Installed apps. `msi-update.ps1` and the CI self-test check for that number. When
+  winget is live, its manifest maps it: `AppsAndFeaturesEntries` `DisplayVersion: 1.28.299` for
+  `PackageVersion: 1.28.2` (check the PR the winget job opens says so).
+- **macOS.** Finder shows the release's x.y.z with the build number beside it.
+- **AppImage.** A release embeds the update channel `latest` (GitHub's latest release, never a
+  pre-release); a test version embeds `latest-all`, so AppImageUpdate moves it to whatever is newest
+  instead of back to the release before it (`desktop/packaging/linux/package.sh`).
+- **One rule, four copies, held together.** `ReleaseVersion` in `:core` is the reference;
+  `scripts/release-version.py` (the workflow), `app/build.gradle.kts` and
+  `desktop/build.gradle.kts` repeat it. `core/src/jvmTest/resources/release-versions.txt` lists the
+  cases: `ReleaseVersionTest` and `release-version.py --check` (run by the workflow before it
+  derives anything) both read it, and `VersionCodeTest` (app) and `SelfUpdateTest` (desktop) hold
+  each build's own number to `ReleaseVersion`.
+
+One leftover of the switch: an installed 1.28.1 or older on Windows that updates itself to 1.28.2
+looks for ProductVersion 1.28.2, finds 1.28.299, and so runs msiexec a second time (about 15
+seconds more) and leaves a "failed" marker that 1.28.2 clears on its first start, without a
+message. From 1.28.2 on the script knows the numbering.
+
+## Test versions (pre-releases)
+
+A tag `vX.Y.Z-beta.N` goes through the same workflow and carries the same files as a release:
+the APK, the MSI, the DMG, the AppImage with its `.zsync` and the tarball, signed and attested the
+same way. Then it stops at the release page:
+
+| Step of `release.yml` | `vX.Y.Z` | `vX.Y.Z-beta.N` |
+| --- | --- | --- |
+| version | name, versionCode, `prerelease=false` | name, versionCode, `prerelease=true` |
+| android, desktop-linux, desktop-windows, desktop-macos | build, test, package | the same |
+| publish: check, attest, source links | yes | yes |
+| publish: the release page | latest | pre-release, never latest, with a line saying what it is |
+| publish: `latest.json`, `releases.json`, `tmplayer.org/apk`, PKGBUILD (the commit to main) | yes | skipped |
+| publish: AUR | yes, with the key | skipped |
+| publish: IndexNow | yes | skipped |
+| publish: Telegram channel post | yes | skipped |
+| winget | yes, with the token | skipped |
+
+The site never lists one: the download page takes the newest release that is not a pre-release,
+and `scripts/release-data.py` (the changelog, its RSS and the home page's pill) leaves them out.
+A test version never gets a store changelog file.
+
+Installed copies on the phone, the TV and the desktop offer a test version only with Settings,
+About, **Get test versions** on (off by default, and switched on only after a warning). With it on,
+each check also reads GitHub's release list, pre-releases included, and offers whichever is newer:
+the newest test version or the release. Turning it off keeps the test version installed until the
+next release passes it. An installed test version is offered its release whatever the setting
+says, since 1.28.2 is newer than 1.28.2-beta.N. Store builds (F-Droid, Play, Amazon) have no
+updater at all.
+
+**The cadence guard** (no release less than 7 days after the last, nor a third in 7 days) counts
+releases only. A pre-release prompts nobody who has not opted in, so test versions neither count
+nor wait: `gh release list` marks them `Pre-release`; count the other rows.
+
+**F-Droid**, if its recipe comes back (on hold, `docs/distribution/telegram-apps.md`): F-Droid
+builds from tags, so the recipe must skip test versions: `UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$`
+and `AutoUpdateMode: Version`, with `CurrentVersionCode` in the new numbering (1280299 for 1.28.2).
 
 ## What a release carries
 
@@ -110,7 +196,10 @@ own tests, because they also check the installers.
 
 ## After the release job
 
-`<v>` is the new version, `v<v>` its tag.
+`<v>` is the new version, `v<v>` its tag. For a test version only steps 1 and 2 apply, and
+`gh release view v<v> --json isPrerelease` says `true`; then install it on the devices (the APK
+over the installed release, the MSI, the DMG, the AppImage) and turn on Get test versions on one
+of them to see the in-app offer.
 
 1. **The run and the release.** `gh run list --workflow release.yml --limit 1`, then
    `gh run watch <run-id>` and `gh release view v<v>`: every file is attached and the notes link

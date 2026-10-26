@@ -12,12 +12,14 @@ import java.io.File
 // `:core`'s [Updates], and when to check is [UpdateScheduler]'s.
 
 /** Tells [Updates] what this build is: called once from `App.onCreate`. */
-fun Updates.configureForAndroid() {
+fun Updates.configureForAndroid(context: Context) {
     val abis = Build.SUPPORTED_ABIS.orEmpty().toList()
+    val app = context.applicationContext
     configure(
         installedVersion = BuildConfig.VERSION_NAME,
         abis = abis,
         connectivity = NetworkMonitor,
+        testVersions = { SettingsStore(app).updatePrefs.testVersions() },
         // A release with no APK this device can run is no news here.
         offers = { UpdateFeed.androidAsset(it, abis) != null },
     )

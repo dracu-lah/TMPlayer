@@ -47,6 +47,28 @@ val releaseAbis: List<String> = (findProperty("tmAbis") as String?)
 // Off, which is every other build, nothing changes.
 val fdroidBuild: Boolean = (findProperty("tmFdroid") as String?)?.trim()?.toBoolean() ?: false
 
+// versionCode from the version name, under the release numbering (docs/RELEASING.md, and
+// ReleaseVersion.androidCode in :core, which an app test holds this to): major*1000000 +
+// minor*10000 + patch*100 + stage, where a test version x.y.z-beta.N is stage N, the release 99
+// and any other suffix (-dev, -hx2) 0. 1.28.2-beta.1 is 1280201 and 1.28.2 is 1280299, above
+// every code of the old scheme (12801 for 1.28.1). The release workflow passes the same number
+// from scripts/release-version.py.
+fun releaseVersionCode(name: String): Int {
+    val clean = name.trim().removePrefix("v").substringBefore('+')
+    val fields = clean.substringBefore('-').split('.').map { it.toIntOrNull() }
+    if (fields.size != 3 || fields.any { it == null }) throw GradleException("tmVersionName $name is not x.y.z or x.y.z-suffix")
+    val (major, minor, patch) = fields.map { it!! }
+    val suffix = clean.substringAfter('-', "")
+    val stage = when {
+        suffix.isEmpty() -> 99
+        else -> Regex("""beta\.(\d+)""").matchEntire(suffix)?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it in 1..98 } ?: 0
+    }
+    if (major < 1 || minor > 99 || patch > 99) throw GradleException("tmVersionName $name does not fit the versionCode scheme")
+    val code = major.toLong() * 1_000_000 + minor * 10_000L + patch * 100L + stage
+    if (code > 2_100_000_000L) throw GradleException("tmVersionName $name passes Google Play's versionCode ceiling")
+    return code.toInt()
+}
+
 // The FFmpeg extension. scripts/build-media3ext.sh builds nextlib-media3ext from its pinned
 // source with TMPlayer's extra video decoders (MPEG-4 Part 2, DivX 3, VC-1, Motion JPEG) into
 // this AAR; without it the build takes the same nextlib from Maven Central, which lacks them and
@@ -82,16 +104,17 @@ android {
         minSdk = 23
         targetSdk = 35
         // A release is cut by pushing a git tag, and the workflow passes the version through as
-        // Gradle properties. The literals below are what a local build gets, and they track the
-        // most recent tag: leaving them behind means a local build cannot be installed over the
-        // release it is meant to be debugging, since Android refuses the downgrade.
+        // Gradle properties. The name below is what a local build gets, and it tracks the most
+        // recent tag: leaving it behind means a local build cannot be installed over the release
+        // it is meant to be debugging, since Android refuses the downgrade.
         // Every APK in a release carries this same code, the universal one and the per-ABI ones
         // alike. A store would want them to differ, so that it can offer the right file as an
         // upgrade of the wrong one; nothing here goes to a store. For sideloading, equal codes are
         // what lets somebody who took the universal file swap to the arm64 one without Android
         // refusing it as a downgrade, which an offset scheme would cause in one direction.
-        versionCode = (findProperty("tmVersionCode") as String?)?.toInt() ?: 12400
-        versionName = (findProperty("tmVersionName") as String?) ?: "1.24.0"
+        val tmVersionName = (findProperty("tmVersionName") as String?) ?: "1.28.1"
+        versionCode = (findProperty("tmVersionCode") as String?)?.toInt() ?: releaseVersionCode(tmVersionName)
+        versionName = tmVersionName
 
         // Telegram API credentials. Bring your own via local.properties (see README)
         buildConfigField("int", "TG_API_ID", localProps.getProperty("TG_API_ID") ?: "0")
