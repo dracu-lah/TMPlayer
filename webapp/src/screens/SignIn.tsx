@@ -8,7 +8,6 @@ import { form } from '../form'
 import { clock, t } from '../i18n'
 import { failure } from '../errors'
 import { Icon } from '../ui/Icon'
-import { form } from '../form'
 import * as phoneRules from './phone'
 import type { Country, Me, QrEvent, SentCode } from '../tg/types'
 
