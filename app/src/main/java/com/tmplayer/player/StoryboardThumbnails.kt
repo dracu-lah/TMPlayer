@@ -87,7 +87,9 @@ class StoryboardThumbnails(
         }
         val size = runCatching { JpegSize.read(File(image).readBytes()) }.getOrNull() ?: (opened.width to opened.height)
         val text = mapPath?.let { runCatching { File(it).readText() }.getOrNull() }.orEmpty()
-        val parsed = StoryboardMaps.parse(text, files.tileWidth, files.tileHeight, size.first, size.second, totalMs)
+        // Telegram's map is an undocumented sidecar: one it cannot read means no frames (HX10).
+        val parsed = runCatching { StoryboardMaps.parse(text, files.tileWidth, files.tileHeight, size.first, size.second, totalMs) }
+            .getOrElse { StoryboardMap(emptyList()) }
         if (parsed.isEmpty) {
             opened.recycle()
             failed = true

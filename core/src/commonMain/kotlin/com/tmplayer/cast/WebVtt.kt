@@ -18,6 +18,9 @@ object WebVtt {
     /** An HLS subtitle segment's tie to the media clock: cue time zero is media time zero. */
     const val TIMESTAMP_MAP = "X-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:00.000"
 
+    /** The most hours a cue's time is read with; a longer number is a broken file. */
+    private const val MAX_HOURS = 99_999L
+
     data class Cue(val startMs: Long, val endMs: Long, val text: String)
 
     /** [bytes] in the format [extension] names (srt, ass, ssa, vtt) as one WebVTT text. */
@@ -88,7 +91,8 @@ object WebVtt {
 
     private fun ms(h: String, m: String, s: String, frac: String): Long {
         val f = frac.padEnd(3, '0').take(3).toLong()
-        return h.toLong() * 3_600_000 + m.toLong() * 60_000 + s.toLong() * 1000 + f
+        // The hours are as many digits as the file has: too many is a nonsense cue, read as 0 (HX10).
+        return (h.toLongOrNull()?.coerceAtMost(MAX_HOURS) ?: 0L) * 3_600_000 + m.toLong() * 60_000 + s.toLong() * 1000 + f
     }
 
     /** SubRip's tags WebVTT also has stay; font colours and the ASS-style braces in some files go. */
@@ -226,7 +230,7 @@ object WebVtt {
         val m = parts[1].toLongOrNull() ?: return null
         val sec = parts[2].split('.')
         val s = sec[0].toLongOrNull() ?: return null
-        val cs = sec.getOrNull(1)?.padEnd(2, '0')?.take(3)?.let { if (it.length == 2) it.toLong() * 10 else it.toLong() } ?: 0
+        val cs = sec.getOrNull(1)?.padEnd(2, '0')?.take(3)?.let { if (it.length == 2) it.toLongOrNull()?.times(10) else it.toLongOrNull() } ?: 0
         return h * 3_600_000 + m * 60_000 + s * 1000 + cs
     }
 }

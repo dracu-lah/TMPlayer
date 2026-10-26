@@ -117,7 +117,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 
 /** Outlives the screen, so the resume write on the way out survives the Back that caused it. */
-private val playerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+private val playerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("PlayerScreen"))
 
 /** What fills the screen besides the video. */
 internal sealed interface Phase {
@@ -276,6 +276,14 @@ fun PlayerScreen(
     var ignoreSavedPosition by remember(media) { mutableStateOf(startFromBeginning) }
     var attempt by remember { mutableIntStateOf(0) }
     var phase by remember { mutableStateOf<Phase>(Phase.Loading(s.playerOpeningVideo)) }
+    // A failure once the video is playing (mpv lost the stream, a decoder gave up) ends in the error
+    // sheet too, with Try again, instead of a still picture and nothing said (HX10). The open's own
+    // failure is read where it opens.
+    LaunchedEffect(engine) {
+        engine.state.map { it.error }.collect { error ->
+            if (error != null && phase == Phase.Playing && engine.cast == null) phase = Phase.Failed(error)
+        }
+    }
     // The opening's start point and [StreamReads] when it began, for the loader's staged line.
     var openingStartMs by remember { mutableStateOf(0L) }
     val openingBytesAt = remember { longArrayOf(0L) }
