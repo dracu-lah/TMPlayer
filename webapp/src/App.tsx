@@ -4,7 +4,7 @@ import { api, errorText, sessionHere, useHere } from './tg/rpc'
 import { online } from './net'
 import { entryState, me, setMe, signOut } from './session'
 import { loadSettings } from './store'
-import { holdForm } from './form'
+import { form, holdForm } from './form'
 import { Home } from './screens/Home'
 import { Nav } from './ui/Nav'
 import { applyUpdate, updateReady } from './install'
@@ -25,6 +25,10 @@ const Chat = lazy(loadChat)
 const Search = lazy(loadSearch)
 const Settings = lazy(loadSettingsPage)
 const later = [loadChats, loadChat, loadSearch, loadSettingsPage, loadWatch]
+// The TV layout's remote, bar and carousel (plan 8.5): only fetched in the TV form.
+const loadTv = () => import('./tv')
+const TvKeys = lazy(() => loadTv().then((m) => ({ default: m.TvKeys })))
+const TvBar = lazy(() => loadTv().then((m) => ({ default: m.TvBar })))
 
 // Safari has no requestIdleCallback.
 const idle = (fn: () => void) => ('requestIdleCallback' in window ? requestIdleCallback(fn) : setTimeout(fn, 1500))
@@ -90,7 +94,9 @@ function Shell(props: ParentProps) {
                         </ErrorBoundary>
                     </main>
                     <Show when={!playing()}>
-                        <Nav />
+                        <Show when={form() === 'tv'} fallback={<Nav />}>
+                            <TvBar />
+                        </Show>
                     </Show>
                 </Match>
             </Switch>
@@ -102,6 +108,9 @@ function Shell(props: ParentProps) {
             </Show>
             <Show when={sessionHere() === 'elsewhere'}>
                 <OtherTab />
+            </Show>
+            <Show when={form() === 'tv'}>
+                <TvKeys />
             </Show>
         </>
     )

@@ -34,8 +34,9 @@
   --fast: 150ms;
   --ease: cubic-bezier(.2, 0, 0, 1);
 }
+/* A TV is dark by default (plan 8.5): System there means Dark, as the TV app has it. */
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]):not([data-theme="black"]) {
+  :root:not([data-theme="dark"]):not([data-theme="black"]):not([data-form="tv"]) {
     --bg: #f6fafd;
     --surface: #f0f4f8;
     --surface-high: #e4e9ec;

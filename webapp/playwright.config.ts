@@ -2,6 +2,9 @@
 // and WebKit. `pnpm e2e`; CHROMIUM_PATH runs a system Chromium in place of Playwright's own.
 import { defineConfig, devices } from '@playwright/test'
 
+// E2E_PORT runs a second checkout's tests beside another's (8097 by default).
+const PORT = Number(process.env.E2E_PORT) || 8097
+
 export default defineConfig({
     testDir: 'e2e',
     timeout: 30_000,
@@ -10,7 +13,7 @@ export default defineConfig({
     workers: 2,
     retries: process.env.CI ? 1 : 0,
     reporter: process.env.CI ? 'github' : 'list',
-    use: { baseURL: 'http://127.0.0.1:8097', trace: 'retain-on-failure' },
+    use: { baseURL: `http://127.0.0.1:${PORT}`, trace: 'retain-on-failure' },
     projects: [
         {
             name: 'chromium',
@@ -20,7 +23,7 @@ export default defineConfig({
     ],
     webServer: {
         command: 'pnpm exec vite --config e2e/vite.e2e.ts',
-        url: 'http://127.0.0.1:8097/__e2e/sizes',
+        url: `http://127.0.0.1:${PORT}/__e2e/sizes`,
         reuseExistingServer: !process.env.CI,
     },
 })
