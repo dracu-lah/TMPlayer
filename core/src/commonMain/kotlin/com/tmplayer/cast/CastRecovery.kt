@@ -55,7 +55,7 @@ class CastRecovery(
         private const val NEVER = Long.MIN_VALUE
         private const val TAG = "CastRecovery"
 
-        private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler(TAG))
 
         /** The same reopening of Telegram's connections the player's Try again does. */
         fun reconnectTelegram() {

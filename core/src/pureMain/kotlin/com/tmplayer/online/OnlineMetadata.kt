@@ -629,7 +629,7 @@ class OnlineMetadata(
     private val scoreJobsLock = PlainLock()
 
     /** Outlives a caller that stopped waiting, so a slow answer is still kept for next time. */
-    private val scoreScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scoreScope = CoroutineScope(SupervisorJob() + Dispatchers.Default + com.tmplayer.platform.JobFailures.handler("OnlineMetadata"))
 
     /** Until when OMDb is left alone: the build's key was refused or the day's requests are spent. */
     @Volatile

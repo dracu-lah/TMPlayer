@@ -15,7 +15,6 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import com.tmplayer.data.RemoveAfterWatching
@@ -112,6 +111,8 @@ fun main(args: Array<String>) {
         // The crash reports switch next, so whatever fails from here on can be reported, and a
         // crash left from the last run is sent or asked about before anything else is built.
         DesktopCrashReports.launch(DesktopServices.settings)
+        // A background job that throws is logged and reported (switch on), never left to the thread (HX10).
+        com.tmplayer.platform.JobFailures.report = DesktopCrashReports::handled
         // `-Dtmplayer.crashAtStart=true`: a launch that fails before the window, for testing that.
         DesktopCrashReports.crashAtStartIfAsked()
         // For the log only, and about 60 ms of resource lookups and JNA's loading on a cold start:
@@ -223,7 +224,10 @@ fun main(args: Array<String>) {
             }
             // Focus drawn for the keyboard only: a click hides it, Tab and the arrows show it.
             com.tmplayer.desktop.ui.FocusVisible.install()
-            Window(
+            // A screen that throws is put away behind an error card, not the end of the app (HX10).
+            val recovery = remember { com.tmplayer.desktop.ui.WindowRecovery() }
+            com.tmplayer.desktop.ui.RecoveringWindow(
+                recovery = recovery,
                 onCloseRequest = quit,
                 state = windowState,
                 title = "TMPlayer",
@@ -374,29 +378,38 @@ fun main(args: Array<String>) {
                     CompositionLocalProvider(LocalWindowChrome provides if (bigScreen && shell.fullscreen) null else chrome) {
                         // The pointer hides while it rests in the big-screen mode (IdleCursor).
                         Box(Modifier.fillMaxSize().trackFocusVisibility().idleCursor(bigScreen)) {
-                            DesktopShell(shell) { request, close ->
-                                PlayerHost(
-                                    request = request,
-                                    onClose = {
-                                        // A television stays full screen between videos.
-                                        if (!com.tmplayer.desktop.ui.BigScreen.on) shell.fullscreen = false
-                                        close()
-                                    },
-                                    settings = settings,
-                                    fullscreen = shell.fullscreen,
-                                    onToggleFullscreen = { shell.fullscreen = !shell.fullscreen },
-                                    onToggleAlwaysOnTop = { window.isAlwaysOnTop = !window.isAlwaysOnTop },
-                                    onQuit = quit,
-                                    onRaise = raise,
-                                    onFreeUpSpace = {
-                                        if (!com.tmplayer.desktop.ui.BigScreen.on) shell.fullscreen = false
-                                        shell.freeUpSpace()
-                                    },
-                                )
+                            com.tmplayer.desktop.ui.ShellOrFailure(
+                                recovery,
+                                onTryAgain = { shell.closePlayer() },
+                                onSettings = {
+                                    shell.closePlayer()
+                                    shell.go(com.tmplayer.desktop.ui.Destination.Settings)
+                                },
+                            ) {
+                                DesktopShell(shell) { request, close ->
+                                    PlayerHost(
+                                        request = request,
+                                        onClose = {
+                                            // A television stays full screen between videos.
+                                            if (!com.tmplayer.desktop.ui.BigScreen.on) shell.fullscreen = false
+                                            close()
+                                        },
+                                        settings = settings,
+                                        fullscreen = shell.fullscreen,
+                                        onToggleFullscreen = { shell.fullscreen = !shell.fullscreen },
+                                        onToggleAlwaysOnTop = { window.isAlwaysOnTop = !window.isAlwaysOnTop },
+                                        onQuit = quit,
+                                        onRaise = raise,
+                                        onFreeUpSpace = {
+                                            if (!com.tmplayer.desktop.ui.BigScreen.on) shell.fullscreen = false
+                                            shell.freeUpSpace()
+                                        },
+                                    )
+                                }
                             }
                             // Nothing on screen with a page header (sign in, the PIN pad): the
                             // buttons on their own, top right. The player has its own in its bar.
-                            if (shell.nowPlaying == null) WindowControlsFallback(Modifier.align(Alignment.TopEnd))
+                            if (shell.nowPlaying == null || recovery.failure != null) WindowControlsFallback(Modifier.align(Alignment.TopEnd))
                             // A crash from the last run, signed in or not (DesktopCrashReports).
                             com.tmplayer.desktop.ui.CrashQuestionHost(settings)
                             // Undecorated and floating: a hairline for the edge the system no

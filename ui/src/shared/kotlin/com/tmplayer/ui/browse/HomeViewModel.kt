@@ -201,7 +201,7 @@ class HomeViewModel(
     private val busy: () -> Boolean = { false },
     /** Where the Cached badges are read off the disk again ([refreshLocalAvailability]): off the main thread. */
     private val disk: kotlin.coroutines.CoroutineContext = Dispatchers.IO,
-) : ViewModel() {
+) : ViewModel(com.tmplayer.platform.JobFailures.viewModelScope("Home")) {
 
     /** The rows [rememberHomeRows] built last, drawn again at once when Home comes back. */
     var lastRows: List<HomeRow> = emptyList()

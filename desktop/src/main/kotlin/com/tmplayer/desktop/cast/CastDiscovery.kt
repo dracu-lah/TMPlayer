@@ -56,7 +56,7 @@ class CastDiscovery {
 
     private val seen = HashMap<String, Pair<CastDevice, Long>>()
     private var job: Job? = null
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("CastDiscovery"))
 
     /** Starts asking; [stop] ends it. Calling it again while running does nothing. */
     @Synchronized

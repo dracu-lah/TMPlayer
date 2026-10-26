@@ -68,7 +68,7 @@ class ChatListViewModel(
      * again draws it in its first frame. Null (the tests) keeps nothing between view models.
      */
     private val memory: com.tmplayer.data.QueryCache? = null,
-) : ViewModel() {
+) : ViewModel(com.tmplayer.platform.JobFailures.viewModelScope("ChatList")) {
 
     private val _state = MutableStateFlow<UiState<BrowseData>>(UiState.Loading(LOADING_CHATS))
     val state: StateFlow<UiState<BrowseData>> = _state.asStateFlow()
@@ -671,7 +671,7 @@ class MediaListViewModel(
      * viewer was in rather than back on all of them. Null where nothing is remembered.
      */
     private val topicMemory: TopicMemory? = null,
-) : ViewModel() {
+) : ViewModel(com.tmplayer.platform.JobFailures.viewModelScope("MediaList")) {
 
     /** Where [MediaListViewModel] keeps the topic picked in each group. */
     interface TopicMemory {

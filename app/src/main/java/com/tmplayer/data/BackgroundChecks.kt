@@ -49,7 +49,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 class BackgroundChecks : JobService() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("BackgroundChecks"))
     private var running: Job? = null
 
     override fun onStartJob(params: JobParameters): Boolean {

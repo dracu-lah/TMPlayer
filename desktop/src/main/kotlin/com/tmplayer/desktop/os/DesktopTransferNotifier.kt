@@ -40,7 +40,7 @@ object DesktopTransferNotifier {
         return notifier
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + com.tmplayer.platform.JobFailures.handler("DesktopTransferNotifier"))
 
     /** The same surface's one-off notices, once [create] has run; null where there is none. */
     @Volatile

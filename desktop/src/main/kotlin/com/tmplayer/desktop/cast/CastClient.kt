@@ -90,7 +90,7 @@ data class RemoteVolume(val level: Double = 1.0, val muted: Boolean = false, val
  */
 class CastClient(val device: CastDevice) {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("CastClient"))
     private val requestIds = AtomicInteger(1)
     private val pending = ConcurrentHashMap<Int, CompletableDeferred<JSONObject>>()
     private val senderId = "sender-" + Integer.toHexString(SecureRandom().nextInt() and 0x7FFFFFFF)

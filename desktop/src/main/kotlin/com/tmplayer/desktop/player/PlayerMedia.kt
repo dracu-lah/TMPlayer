@@ -146,7 +146,7 @@ internal object ActiveStreams {
     fun openIds(): Set<Int> = open.keys.toSet()
 }
 
-private val background = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+private val background = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("PlayerMedia"))
 
 /**
  * A video in a Telegram chat, streamed through TDLib, or fetched whole first when [downloadFirst]

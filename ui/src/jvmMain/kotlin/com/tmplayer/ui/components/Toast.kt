@@ -62,4 +62,4 @@ fun rememberActionToast(): (message: String, action: String, onAction: () -> Uni
     }
 }
 
-private val noticeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+private val noticeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main + com.tmplayer.platform.JobFailures.handler("Toast"))

@@ -8,7 +8,7 @@ import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
-import androidx.lifecycle.lifecycleScope
+import com.tmplayer.data.guardedLifecycleScope as lifecycleScope
 import androidx.media3.common.C
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi

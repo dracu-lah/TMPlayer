@@ -4,6 +4,7 @@ import { createSignal } from 'solid-js'
 import type { Api, Ctx } from './worker'
 import type { RpcError } from './types'
 import { failure } from '../errors'
+import { showCrashCard } from '../crash'
 
 type Out =
     | { id: number; value: unknown }
@@ -40,9 +41,30 @@ function start() {
             call.reject(Object.assign(new Error(msg.error.message), msg.error))
         } else call.resolve(msg.value)
     }
+    // The worker failed to load or died of an error it did not catch (HX10): the calls in flight
+    // fail with "no answer" (their screens offer Try again) and a new worker takes over, from the
+    // session it saved. Three times in five minutes is past helping: the page's error card says so.
+    w.onerror = (ev) => {
+        ev.preventDefault()
+        console.error('[rpc] the Telegram worker failed', ev.message)
+        if (worker !== w) return
+        w.terminate()
+        worker = null
+        for (const [, p] of pending) p.reject(Object.assign(new Error('Telegram worker restarted'), { code: -1 }))
+        pending.clear()
+        const now = Date.now()
+        restarts = restarts.filter((at) => now - at < RESTART_WINDOW_MS)
+        if (restarts.length >= MAX_RESTARTS) return void showCrashCard()
+        restarts.push(now)
+        start()
+    }
     worker = w
     started(w)
 }
+
+let restarts: number[] = []
+const MAX_RESTARTS = 3
+const RESTART_WINDOW_MS = 5 * 60_000
 
 /**
  * Whether this tab uses the Telegram session: 'waiting' while it asks, 'elsewhere' while another
@@ -131,7 +153,8 @@ export function call<M extends keyof Api>(method: M, args: Args<Api[M]>, opts: C
             },
             { once: true },
         )
-        ready.then((w) => pending.has(id) && w.postMessage({ id, method, args }))
+        // The worker running now, which after a restart is not the one `ready` first gave.
+        ready.then((first) => pending.has(id) && (worker ?? first).postMessage({ id, method, args }))
     })
 }
 

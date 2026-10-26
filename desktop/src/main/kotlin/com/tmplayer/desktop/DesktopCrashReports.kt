@@ -319,6 +319,40 @@ object DesktopCrashReports {
     }
 
     /**
+     * A failure the app caught and carried on from (HX10): a background job that threw
+     * ([com.tmplayer.platform.JobFailures]). Sent as an error only with the switch on; with it
+     * off nothing is written, since nothing stopped. The same gate and limits as a crash.
+     */
+    fun handled(error: Throwable) {
+        if (!available || !enabledNow || !started) return
+        runCatching { Sentry.captureException(error) { scope -> scope.level = SentryLevel.ERROR } }
+    }
+
+    /**
+     * A screen that failed while it was drawn or used, which the window put away behind its error
+     * card instead of closing (HX10, [com.tmplayer.desktop.ui.WindowRecovery]). It is a crash in
+     * all but name, so it goes where an uncaught one would: sent with the switch on, and with it
+     * off written down and asked about at once, since the window is still there to ask.
+     */
+    fun contained(error: Throwable) {
+        if (!available) return
+        runCatching {
+            if (enabledNow && started) {
+                val mechanism = Mechanism().apply {
+                    type = "WindowException"
+                    isHandled = false
+                }
+                Sentry.captureException(ExceptionMechanismException(mechanism, error, Thread.currentThread())) { scope ->
+                    scope.level = SentryLevel.FATAL
+                }
+            } else {
+                record(error)
+                _pending.value = true
+            }
+        }
+    }
+
+    /**
      * Turns reporting off and closes the SDK. The flag is cleared first, so a crash during the
      * close is dropped by the gate rather than sent by a half shut client.
      */
