@@ -101,7 +101,9 @@ test('the Settings switch turns lookups off at once, and stays off after a reloa
     const seen = await mockTmdb(page, FOUND)
     await openShows(page)
     await expect(page.locator('.card-poster')).toHaveCount(1)
-    await page.locator('nav a[href="/settings"]').first().click()
+    // Settings is in the "You" menu, behind the viewer's picture.
+    await page.locator('[data-you]').click()
+    await page.getByRole('menuitem', { name: 'Settings' }).click()
     await expect(page.getByText('This product uses the TMDB API but is not endorsed or certified by TMDB.')).toBeVisible()
     await expect(page.getByLabel('TMDB').first()).toBeVisible()
     const group = page.getByRole('radiogroup', { name: 'Posters' })

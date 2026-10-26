@@ -12,6 +12,8 @@ import type { HomePage, HomeRow } from '../tg/types'
 
 /** The TV layout's carousel, in the TV chunk (plan 8.5). */
 const TvHero = lazy(() => import('../tv').then((m) => ({ default: m.TvHero })))
+/** The phone's and the desktop's carousel (FeaturedCarousel), fetched with Home's first rows. */
+const Hero = lazy(() => import('./Hero').then((m) => ({ default: m.Hero })))
 
 /** Home as last drawn, so coming back to it paints at once while it is asked for again. */
 const [last, setLast] = createSignal<HomePage | null>(null)
@@ -62,9 +64,16 @@ export function Home() {
     const firstRun = () => page()?.settled && !page()!.rows.length
     return (
         <>
-            <h1 class="page-title home-title">{t('browse.tab_home')}</h1>
-            <Show when={form() === 'tv' && settings().carousel}>
-                <TvHero rows={page()?.rows} />
+            {/* The app's Home opens on its mark and name, not on a heading (the page is still called Home). */}
+            <h1 class="page-title home-title">
+                <img class="home-mark" src="/icon.svg" alt="" width="28" height="28" />
+                <span class="home-brand" aria-hidden="true">TMPlayer</span>
+                <span class="visually-hidden">{t('browse.tab_home')}</span>
+            </h1>
+            <Show when={settings().carousel}>
+                <Show when={form() === 'tv'} fallback={<Hero rows={page()?.rows} />}>
+                    <TvHero rows={page()?.rows} />
+                </Show>
             </Show>
             <Show when={error() && !page()?.rows.length}>
                 <div class="notice error-notice">

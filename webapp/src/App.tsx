@@ -21,11 +21,14 @@ const loadChats = () => import('./screens/Chats').then((m) => ({ default: m.Chat
 const loadChat = () => import('./screens/Chat').then((m) => ({ default: m.Chat }))
 const loadSearch = () => import('./screens/Search').then((m) => ({ default: m.Search }))
 const loadSettingsPage = () => import('./screens/Settings').then((m) => ({ default: m.Settings }))
+const loadLibrary = () => import('./screens/Library')
 const Chats = lazy(loadChats)
 const Chat = lazy(loadChat)
 const Search = lazy(loadSearch)
 const Settings = lazy(loadSettingsPage)
 const Detail = lazy(loadDetail)
+const Favourites = lazy(() => loadLibrary().then((m) => ({ default: m.Favourites })))
+const HistoryPage = lazy(() => loadLibrary().then((m) => ({ default: m.HistoryPage })))
 const later = [loadChats, loadChat, loadSearch, loadSettingsPage, loadDetail, loadWatch]
 // The TV layout's remote, bar and carousel (plan 8.5): only fetched in the TV form.
 const loadTv = () => import('./tv')
@@ -131,6 +134,8 @@ export function App() {
             <Route path="/video/:chatId/:messageId" component={Detail} />
             <Route path="/watch/:chatId/:messageId" component={Watch} />
             <Route path="/settings" component={Settings} />
+            <Route path="/favourites" component={Favourites} />
+            <Route path="/history/:tab?" component={HistoryPage} />
             <Route path="*" component={NotFound} />
         </Router>
     )

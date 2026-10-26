@@ -38,9 +38,7 @@ export function Settings() {
                 />
                 <p class="muted small">{t('settings.layout_detail')}</p>
             </div>
-            <Show when={form() === 'tv'}>
-                <Carousel />
-            </Show>
+            <Carousel />
             <SizeLimits />
             <Rewind />
             <Posters />
@@ -178,7 +176,7 @@ function Rewind() {
     )
 }
 
-/** The TV layout's carousel at the top of Home, on by default as in the apps. */
+/** The carousel at the top of Home, on by default as in the apps. */
 function Carousel() {
     return (
         <div class="panel">

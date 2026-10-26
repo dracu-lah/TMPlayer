@@ -146,7 +146,12 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; onClose: () => v
                     <h1 class="detail-title">{title()}</h1>
                     <p class="detail-facts">
                         <For each={[shortLength(item.duration), resolution(), size(item.size)].filter(Boolean)}>
-                            {(f) => (f === resolution() ? <span class="detail-badge">{f}</span> : <span>{f}</span>)}
+                            {(f) => (
+                                <>
+                                    {f === resolution() ? <span class="detail-badge">{f}</span> : <span>{f}</span>}
+                                    <span class="detail-sep" aria-hidden="true">•</span>
+                                </>
+                            )}
                         </For>
                         <A class="detail-chat" href={`/chat/${item.chatId}`}>{props.info?.chatTitle ?? item.chat}</A>
                     </p>

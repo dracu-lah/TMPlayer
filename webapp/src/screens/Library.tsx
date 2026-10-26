@@ -1,0 +1,161 @@
+// The viewer's own lists behind the "You" menu: Favourites (the starred chats) and History, with
+// the app's tabs (Recent, Continue, Watch later, Watched), each day under its own heading.
+import { createResource, For, Match, Show, Switch, type JSX } from 'solid-js'
+import { A, useParams } from '@solidjs/router'
+import { CheckmarkCircle02Icon, Clock01Icon, History, PlayIcon, StarIcon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { api, call } from '../tg/rpc'
+import { t } from '../i18n'
+import { laterIds, laterList, resumes, starredIds, watchedList, watchedTick } from '../store'
+import { Icon, type IconData } from '../ui/Icon'
+import { Card, useProgress, videoCard } from './VideoList'
+import { ChatRow } from './Chats'
+import type { VideoItem } from '../tg/types'
+
+/** How many videos a tab asks Telegram about at most: the ones further back wait for their own page. */
+const ASK_AT_MOST = 60
+
+/** Favourites: the starred chats, in the order they were starred. */
+export function Favourites() {
+    const [chats] = createResource(() => call('chats', [false]))
+    const starred = () => (chats() ?? []).filter((c) => starredIds().has(c.id))
+    return (
+        <>
+            <PageHead title={t('browse.tab_favourites_heading')} blurb={t('browse.tab_favourites_blurb')} />
+            <Switch>
+                <Match when={chats.loading && !starredIds().size}>
+                    <p class="muted">{t('browse.loading_chats')}</p>
+                </Match>
+                <Match when={!starredIds().size || (chats() && !starred().length)}>
+                    <Empty icon={StarIcon} text={t('browse.empty_favourites_touch')} />
+                </Match>
+                <Match when={chats()}>
+                    <ul class="chats favourites-list">
+                        <For each={starred()}>
+                            {(c) => (
+                                <li>
+                                    <ChatRow chat={c} />
+                                </li>
+                            )}
+                        </For>
+                    </ul>
+                </Match>
+            </Switch>
+        </>
+    )
+}
+
+type Tab = 'recent' | 'continue' | 'later' | 'watched'
+const TABS: { tab: Tab; href: string; icon: IconData; label: () => string; blurb: () => string; empty: () => string }[] = [
+    { tab: 'recent', href: '/history', icon: History, label: () => t('browse.tab_history'), blurb: () => t('browse.tab_history_blurb'), empty: () => t('browse.empty_continue') },
+    { tab: 'continue', href: '/history/continue', icon: PlayIcon, label: () => t('browse.tab_continue'), blurb: () => t('browse.tab_continue_blurb'), empty: () => t('browse.empty_continue') },
+    { tab: 'later', href: '/history/later', icon: Clock01Icon, label: () => t('browse.tab_watch_later'), blurb: () => t('browse.tab_watch_later_blurb'), empty: () => t('browse.empty_watch_later') },
+    { tab: 'watched', href: '/history/watched', icon: Tick02Icon, label: () => t('browse.tab_watched'), blurb: () => t('browse.tab_watched_blurb'), empty: () => t('browse.empty_watched') },
+]
+
+interface Entry {
+    item: VideoItem
+    time: number
+}
+
+/** Telegram's answer for each id, the ones gone from their chat left out. */
+async function lookUp(list: { chatId: number; messageId: number; time: number }[]): Promise<Entry[]> {
+    const found = await Promise.all(list.slice(0, ASK_AT_MOST).map(async (r) => ({ item: await api.video(r.chatId, r.messageId).catch(() => null), time: r.time })))
+    return found.filter((e): e is Entry => !!e.item)
+}
+
+/** History, at `/history[/continue|/later|/watched]`. */
+export function HistoryPage() {
+    const params = useParams<{ tab?: string }>()
+    const tab = (): Tab => (['continue', 'later', 'watched'].includes(params.tab ?? '') ? (params.tab as Tab) : 'recent')
+    const meta = () => TABS.find((x) => x.tab === tab())!
+    const [entries] = createResource(
+        () => ({ tab: tab(), later: laterIds().size, watched: watchedTick() }),
+        async ({ tab }): Promise<Entry[]> => {
+            const left = async () => lookUp((await resumes()).map((r) => ({ chatId: r.chatId, messageId: r.messageId, time: r.time })))
+            const done = async () => lookUp(await watchedList())
+            if (tab === 'continue') return left()
+            if (tab === 'watched') return done()
+            if (tab === 'later') return (await laterList()).map((l) => ({ item: l.item, time: l.time }))
+            const both = [...(await left()), ...(await done())]
+            return both.sort((a, b) => b.time - a.time)
+        },
+    )
+    const progress = useProgress()
+    const days = () => byDay(entries.latest ?? [])
+    return (
+        <>
+            <PageHead title={t('browse.tab_history_heading')} blurb={meta().blurb()} />
+            <nav class="history-tabs" aria-label={t('browse.tab_history')}>
+                <For each={TABS}>
+                    {(x) => (
+                        <A class="history-tab" href={x.href} end aria-current={tab() === x.tab ? 'page' : undefined}>
+                            <Icon icon={x.tab === 'watched' && tab() === 'watched' ? CheckmarkCircle02Icon : x.icon} size={16} />
+                            {x.tab === 'recent' ? t('browse.sort_recent') : x.label()}
+                        </A>
+                    )}
+                </For>
+            </nav>
+            <Switch>
+                <Match when={entries.loading && !entries.latest}>
+                    <p class="muted">{t('common.loading')}</p>
+                </Match>
+                <Match when={!days().length}>
+                    <Empty icon={meta().icon} text={meta().empty()}>
+                        <A class="outline-button" href="/chats">{t('browse.go_to_chats')}</A>
+                    </Empty>
+                </Match>
+                <Match when={days().length}>
+                    <For each={days()}>
+                        {(d) => (
+                            <section class="history-day">
+                                <h2 class="history-day-title">{d.label}</h2>
+                                <div class="cards">
+                                    <For each={d.entries}>{(e) => <Card card={videoCard(e.item)} progress={progress(e.item)} direct={tab() === 'continue'} />}</For>
+                                </div>
+                            </section>
+                        )}
+                    </For>
+                </Match>
+            </Switch>
+        </>
+    )
+}
+
+/** The entries under Today, Yesterday and then their dates, as the app groups History. */
+function byDay(entries: Entry[]): { label: string; entries: Entry[] }[] {
+    const out: { label: string; entries: Entry[] }[] = []
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    for (const e of entries) {
+        const day = new Date(e.time)
+        day.setHours(0, 0, 0, 0)
+        const ago = Math.round((today.getTime() - day.getTime()) / 86_400_000)
+        const label = !e.time ? '' : ago <= 0 ? t('watched.today') : ago === 1 ? t('watched.yesterday') : day.toLocaleDateString('en', { day: 'numeric', month: 'long' })
+        const last = out[out.length - 1]
+        if (last && last.label === label) last.entries.push(e)
+        else out.push({ label, entries: [e] })
+    }
+    return out
+}
+
+function PageHead(props: { title: string; blurb: string }) {
+    return (
+        <header class="library-head">
+            <h1 class="page-title">{props.title}</h1>
+            <p class="muted">{props.blurb}</p>
+        </header>
+    )
+}
+
+/** A list with nothing in it: its icon on a disc, a line, and the way on. */
+function Empty(props: { icon: IconData; text: string; children?: JSX.Element }) {
+    return (
+        <div class="empty-state">
+            <span class="empty-disc">
+                <Icon icon={props.icon} size={28} />
+            </span>
+            <p>{props.text}</p>
+            <Show when={props.children}>{props.children}</Show>
+        </div>
+    )
+}
