@@ -39,6 +39,8 @@ export class TgFile {
     wantAhead = true
     /** Bytes received, for the details panel. */
     received = 0
+    /** Chunks fetched since this file opened, kept when the memory budget evicts them: the Loading figure. */
+    private fetched = new Set<number>()
     /** The chunk after the last read: a read that starts there (or in the last chunk read) is playback going on. */
     private nextExpected = 0
     /**
@@ -57,6 +59,11 @@ export class TgFile {
         const bitrate = durationSec > 0 ? size / durationSec : 1 * MiB
         this.readAheadBytes = Math.min(16 * MiB, Math.max(6 * MiB, bitrate * 30))
         files.add(this)
+    }
+
+    /** How much of the file has arrived so far, 0 to 1. */
+    get loaded(): number {
+        return this.chunks ? this.fetched.size / this.chunks : 1
     }
 
     /** Fetches the first chunks and the last one together: the MP4 index or the MKV Cues often sit at the end. */
@@ -201,6 +208,7 @@ export class TgFile {
 
     private store(index: number, bytes: Uint8Array) {
         this.cache.set(index, bytes)
+        this.fetched.add(index)
         evict()
     }
 

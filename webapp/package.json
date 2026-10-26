@@ -13,6 +13,7 @@
     "preview": "vite preview --port 8091",
     "check": "tsc --noEmit",
     "test:tmdb": "node --test \"tmdb/*.test.ts\"",
+    "test:player": "node --test \"src/player/*.test.ts\"",
     "e2e": "playwright test"
   },
   "dependencies": {

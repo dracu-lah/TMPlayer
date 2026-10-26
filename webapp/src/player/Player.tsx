@@ -7,13 +7,16 @@ import { codecName, nativeEngine, playableSound, probe, RemuxEngine, route, Unpl
 import { LIBAV_FORMATS, LibavEngine } from './libav'
 import { storyboardFrames, type Frames } from './storyboard'
 import { Chrome, variant } from './Chrome'
+import { readChapters, type Chapter } from './chapters'
+import { applyDelay, look, placeCues, lookVars, setLook, setSubDelay } from './cues'
+import { readLook } from './keep'
 import { loadThumb } from '../screens/thumbs'
 import { readSubtitle, SUBTITLE_EXTENSIONS, SubtitleError } from './subtitles'
 import { api } from '../tg/rpc'
 import { t } from '../i18n'
 import { form } from '../form'
 import { Icon } from '../ui/Icon'
-import { dropResume, getResume, saveResume as storeResume, settings } from '../store'
+import { dropResume, getResume, isWatched, saveResume as storeResume, setWatched, settings } from '../store'
 import type { VideoCopy, VideoItem, WatchInfo } from '../tg/types'
 
 /** What plays: the posted file, or one of Telegram's lighter copies of it. */
@@ -102,6 +105,12 @@ export function Player(props: {
     const [resumedAt, setResumedAt] = createSignal<number | null>(null)
     const [frames, setFrames] = createSignal<Frames | null>(null)
     const subtitleUrls: string[] = []
+    const [chapters, setChapters] = createSignal<Chapter[]>([])
+    /** How much of the file has arrived (0 to 1); null once all of it has. */
+    const [loaded, setLoaded] = createSignal<number | null>(null)
+    const [watched, setWatchedNow] = createSignal(false)
+    /** Marked watched from the menu: the place is not saved again on leaving, or the video would be back in Continue. */
+    let markedWatched = false
 
     // Resume: where the video was left (seconds), the app's rewind taken off on opening.
     let savedMs: number | null = null
@@ -115,7 +124,7 @@ export function Player(props: {
         api.resumeKept(savedMs, at * 1000, rewindMs()).then((ms) => (kept = { at, value: ms / 1000 }), () => {})
     }
     const savePosition = (position: number) => {
-        if (!(position > 0)) return
+        if (!(position > 0) || markedWatched) return
         const length = video.duration && isFinite(video.duration) ? video.duration : source().duration
         const value = kept && Math.abs(kept.at - position) < 1.5 ? kept.value : position
         storeResume({ chatId: item.chatId, messageId: item.messageId, position: value, length })
@@ -199,6 +208,7 @@ export function Player(props: {
             setSwitchable(!!engine.setAudio)
             setDetails(`${p.container}, ${p.mime.replace(/^[^;]*;\s*/, '')}. ${engine.detail}`)
             if (play) video.play().catch(() => {})
+            void findChapters(f, gen)
         } catch (e) {
             if (gen === generation) fail(e)
         }
@@ -241,6 +251,13 @@ export function Player(props: {
         if (play) video.play().catch(() => {})
     }
 
+    /** The file's chapter marks, read from its head or tail, which the opening has fetched already. */
+    const findChapters = async (f: TgFile, gen: number) => {
+        setChapters([])
+        const list = await readChapters(f, navigator.language)
+        if (gen === generation && list.length) setChapters(list)
+    }
+
     /** The same source again at the same second: Retry after a stall, a lost connection or a quality pick. */
     const reload = (src = source()) => load(src, engine ? video.currentTime || 0 : openingAt, !video.paused || stall() !== null)
 
@@ -276,7 +293,7 @@ export function Player(props: {
             track.label = sub.label
             if (sub.language) track.srclang = sub.language
             track.src = sub.url
-            track.addEventListener('load', () => placeCues(controlsUp))
+            track.addEventListener('load', () => (placeCues(video, controlsUp), applyDelay(video)))
             video.append(track)
             // Shown at once: the one just loaded is the one wanted.
             for (const tt of Array.from(video.textTracks)) if (tt.kind === 'subtitles' || tt.kind === 'captions') tt.mode = tt === track.track ? 'showing' : 'disabled'
@@ -286,15 +303,27 @@ export function Player(props: {
         }
     }
 
-    // Subtitles move up while the controls are showing, so the seek bar never covers them.
+    // Subtitles move up while the controls are showing, so the seek bar never covers them; the look's position holds otherwise.
     let controlsUp = true
-    const placeCues = (up: boolean) => {
+    const onControls = (up: boolean) => {
         controlsUp = up
-        for (const tt of Array.from(video.textTracks)) {
-            if (tt.kind !== 'subtitles' && tt.kind !== 'captions') continue
-            for (const cue of Array.from(tt.cues ?? [])) if (cue instanceof VTTCue) cue.line = up ? -4 : 'auto'
-        }
+        placeCues(video, up)
     }
+    // The look: size, colour, edge and box as custom properties on the video, which its cues read.
+    let pictureHeight = 0
+    const paintLook = () => {
+        for (const [name, value] of Object.entries(lookVars(look(), pictureHeight || container.clientHeight || 720))) video.style.setProperty(name, value)
+        placeCues(video, controlsUp)
+    }
+    createEffect(() => (look(), ready() && paintLook()))
+    onMount(() => {
+        const watch = new ResizeObserver(() => {
+            const h = container.clientHeight
+            if (Math.abs(h - pictureHeight) > 8) (pictureHeight = h, paintLook())
+        })
+        watch.observe(container)
+        onCleanup(() => watch.disconnect())
+    })
 
     const pickAudio = async (index: number) => {
         const track = audios()[index]
@@ -336,6 +365,7 @@ export function Player(props: {
         if (document.hidden) return
         if (!video.paused) refreshKept()
         const f = file
+        setLoaded(f && f.loaded < 0.999 ? f.loaded : null)
         const received = f?.received ?? 0
         const rate = received - lastReceived
         lastReceived = received
@@ -389,6 +419,9 @@ export function Player(props: {
     /** Closed while the saved place was still being read: nothing may start after that. */
     let closed = false
     onMount(async () => {
+        setSubDelay(0)
+        readLook().then(setLook, () => {})
+        isWatched(item.chatId, item.messageId).then(setWatchedNow, () => {})
         const left = (await getResume(item.chatId, item.messageId))?.position ?? 0
         savedMs = left > 0 ? left * 1000 : null
         const at = left > 0 ? (await api.resumeStart(left * 1000, rewindMs()).catch(() => left * 1000)) / 1000 : 0
@@ -540,7 +573,15 @@ export function Player(props: {
                                 video.currentTime = 0
                                 setResumedAt(null)
                             },
-                            onControls: placeCues,
+                            onControls,
+                            chapters,
+                            loaded,
+                            watched,
+                            markWatched: (on) => {
+                                markedWatched = on
+                                setWatched(item.chatId, item.messageId, on)
+                                setWatchedNow(on)
+                            },
                         }}
                     >
                         <Show when={notice() && !blocked()}>

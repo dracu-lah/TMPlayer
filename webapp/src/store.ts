@@ -90,6 +90,9 @@ function remove(key: string) {
     if (db) stored((s) => del(key, s)).catch(() => {})
 }
 
+/** The player's own notes (bookmarks, its switches) go through the same storage, so signing out clears them too. */
+export { read as kvRead, write as kvWrite, remove as kvRemove }
+
 async function all<T>(prefix: string): Promise<T[]> {
     return [...(await allEntries<T>(prefix)).values()]
 }

@@ -94,6 +94,13 @@
 .pc[data-variant="tv"] .pc-offer button, .pc[data-variant="tv"] .pc-next button { min-height: calc(var(--u) * 44); padding: 0 calc(var(--u) * 16); border-radius: 999px; font-size: calc(var(--u) * 16); }
 .pc[data-variant="tv"] .pc-offer button { background: #fff; color: var(--on-focus); }
 .pc[data-variant="tv"] .pc-next { right: calc(var(--u) * 24); bottom: calc(var(--u) * 12 + var(--u) * 150); max-width: calc(var(--u) * 340); padding: calc(var(--u) * 16) calc(var(--u) * 14) calc(var(--u) * 14) calc(var(--u) * 20); }
+/* The way back and the skip offer sit above the bar's row (never focused: Up and OK are theirs), the chips under the clock. */
+.pc[data-variant="tv"] .pc-corner { bottom: calc(var(--u) * 12 + var(--u) * 150); min-height: calc(var(--u) * 48); padding: calc(var(--u) * 10) calc(var(--u) * 22); font-size: calc(var(--u) * 18); line-height: calc(var(--u) * 24); }
+.pc[data-variant="tv"] .pc-corner small { font-size: calc(var(--u) * 14); line-height: calc(var(--u) * 18); }
+.pc[data-variant="tv"] .pc-corner.back { left: calc(var(--u) * 24); }
+.pc[data-variant="tv"] .pc-corner.skip { right: calc(var(--u) * 24); }
+.pc[data-variant="tv"] .pc-chipline { top: calc(var(--u) * 64); min-height: calc(var(--u) * 34); font-size: calc(var(--u) * 15); }
+.pc[data-variant="tv"] .pc-count { font-size: calc(var(--u) * 15); line-height: calc(var(--u) * 20); }
 .pc[data-variant="tv"] .pc-next p { font-size: calc(var(--u) * 15); line-height: calc(var(--u) * 22); }
 .pc[data-variant="tv"] .pc-next button:hover { background: none; }
 .pc[data-variant="tv"] .pc-next button:focus, .pc[data-variant="tv"] .pc-offer button:focus { background: #fff; color: var(--on-focus); outline: none; }
