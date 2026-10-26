@@ -3,11 +3,12 @@
 // PlayerOverlay.kt with StoryboardPreview.kt and PlayerKeys.kt. Video.js is not drawn at all: the
 // `<video>` underneath is fed by engines.ts, and everything on top of it is here.
 //
-// One overlay, two shapes chosen by the layout (form.ts): `phone` (top bar, the centre cluster,
-// the times over the bar and the round-button pill with Copies and Episodes) and `desktop` (the
+// One overlay, three shapes chosen by the layout (form.ts): `phone` (top bar, the centre cluster,
+// the times over the bar and the round-button pill with Copies and Episodes), `desktop` (the
 // same three groups at the desktop's sizes, the hover preview, the volume slider and the menus
-// that open from their buttons). The TV keeps the desktop's for now; session 21 gives it the TV
-// app's own (see `variant`).
+// that open from their buttons) and `tv` (the Android TV player: no top bar, the title over the
+// bar, one play disc, a row of round buttons with More at its end, the time as a button, every
+// control reached with the remote's arrows and OK, see `tvKey`).
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
 import {
     Add01Icon,
@@ -40,6 +41,7 @@ import './player.css'
 import { Icon, type IconData } from '../ui/Icon'
 import { t } from '../i18n'
 import { form } from '../form'
+import { remoteKey } from '../tv/remote'
 import { frameAt, type Frames } from './storyboard'
 import type { SoundTrack } from './engines'
 import type { VideoCopy, VideoItem, WatchInfo } from '../tg/types'
@@ -134,13 +136,18 @@ export interface Ctl {
 
 type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | null
 
-/** The skin in use: the phone's or the desktop's. A TV draws the desktop's until session 21 adds its own. */
-export const variant = () => (form() === 'phone' ? 'phone' : 'desktop')
+/** The skin in use: the phone's, the desktop's or the TV's. */
+export const variant = () => (form() === 'phone' ? 'phone' : form() === 'tv' ? 'tv' : 'desktop')
 
 export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     const c = props.ctl
     const v = c.video
     const phone = () => variant() === 'phone'
+    const tv = () => variant() === 'tv'
+    /** Plain labels (no key hints): the phone's and the TV's remote have no letters to press. */
+    const plain = () => phone() || tv()
+    // The TV's skin is fetched with the TV layout only (the controls start hidden, so nothing shows bare).
+    createEffect(() => tv() && void import('./player-tv.css'))
 
     // ---- the video's state ----------------------------------------------------------------
     const [paused, setPaused] = createSignal(true)
@@ -172,13 +179,16 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         onCleanup(() => v.removeEventListener(name, fn))
     }
     listen('play', () => (setPaused(false), resumed()))
-    listen('pause', () => (setPaused(true), show()))
+    listen('pause', () => (setPaused(true), show(), tv() && !sheet() && queueMicrotask(() => focusIt(discEl()))))
     listen('playing', () => setWaiting(false))
     listen('waiting', () => setWaiting(true))
     listen('canplay', () => setWaiting(false))
-    listen('timeupdate', () => (dragTime() === null && setTime(v.currentTime), readBuffered()))
+    // The TV's hidden controls do not redraw with the picture (nothing is drawn, so nothing is read);
+    // they catch up the moment they come up.
+    const drawn = () => variant() !== 'tv' || visible()
+    listen('timeupdate', () => drawn() && (dragTime() === null && setTime(v.currentTime), readBuffered()))
     listen('seeked', () => setTime(v.currentTime))
-    listen('progress', readBuffered)
+    listen('progress', () => drawn() && readBuffered())
     listen('durationchange', () => isFinite(v.duration) && v.duration > 0 && setDuration(v.duration))
     listen('volumechange', () => (setVolume(v.volume), setMuted(v.muted)))
     listen('ratechange', () => setRate(v.playbackRate))
@@ -196,7 +206,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     })
 
     // ---- showing and hiding ------------------------------------------------------------------
-    const [visible, setVisible] = createSignal(true)
+    const [visible, setVisible] = createSignal(variant() !== 'tv')
     const [sheet, setSheet] = createSignal<Sheet>(null)
     /** The pointer rests on the controls (desktop): they stay. */
     const [held, setHeld] = createSignal(false)
@@ -223,6 +233,62 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     createEffect(() => c.onControls?.(visible() && !locked() && !c.blocked()))
     createEffect(on([sheet, held], () => (visible() ? poke() : undefined), { defer: true }))
     onCleanup(() => clearTimeout(hideTimer))
+
+    createEffect(on(visible, (up) => up && tv() && (setTime(v.currentTime), readBuffered()), { defer: true }))
+
+    // ---- the TV: the clock, and where the remote is --------------------------------------
+    // The wall clock in the corner (renderWallClock): read when the controls come up and then
+    // every 20 s while they are up, so nothing ticks with the picture bare or paused and hidden.
+    const timeOfDay = () => new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    const [wall, setWall] = createSignal(timeOfDay())
+    createEffect(() => {
+        if (!tv() || !visible()) return
+        setWall(timeOfDay())
+        const id = window.setInterval(() => setWall(timeOfDay()), 20_000)
+        onCleanup(() => clearInterval(id))
+    })
+    const barEl = () => c.root.querySelector<HTMLElement>('.pc-bar')
+    const discEl = () => c.root.querySelector<HTMLElement>('.pc-play')
+    const rowItems = () => Array.from(c.root.querySelectorAll<HTMLElement>('.pc-row button'))
+    const inLayer = (el: Element | null) => !!el && !!c.root.querySelector('.pc-layer')?.contains(el)
+    const focusIt = (el: HTMLElement | null | undefined) => el?.focus({ preventScroll: true })
+    // The row comes up with the remote on the bar (arrows seek at once), or on the disc while
+    // paused (OK resumes); it goes with the remote back on the picture.
+    createEffect(
+        on(
+            () => visible() && !locked(),
+            (up) => {
+                if (!tv()) return
+                queueMicrotask(() => {
+                    if (up) {
+                        if (!sheet() && !inLayer(document.activeElement)) focusIt(v.paused ? discEl() : barEl())
+                    } else if (inLayer(document.activeElement)) {
+                        ;(document.activeElement as HTMLElement).blur()
+                        focusIt(c.root)
+                    }
+                })
+            },
+            { defer: true },
+        ),
+    )
+    // A menu or list closing hands the remote back to the button that opened it.
+    let opener: HTMLElement | null = null
+    createEffect(
+        on(
+            sheet,
+            (now, before) => {
+                if (!tv() || now !== null || !before) return
+                queueMicrotask(() => visible() && focusIt(opener?.isConnected ? opener : barEl()))
+            },
+            { defer: true },
+        ),
+    )
+    // A status sheet (stall, failure, needs the app) takes the remote on its first button.
+    createEffect(
+        on(c.blocked, (b) => {
+            if (b && tv()) window.setTimeout(() => focusIt(c.root.querySelector<HTMLElement>('.pc-status button, .pc-status a')), 0)
+        }),
+    )
 
     // ---- actions -------------------------------------------------------------------------------
     const [note, setNote] = createSignal<{ text: string; side: 'left' | 'right' | 'centre' } | null>(null)
@@ -346,11 +412,111 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     const shownTime = () => dragTime() ?? time()
     const endText = () => (remaining() && duration() ? `-${clock(duration() - shownTime())}` : clock(duration()))
 
+    // ---- the TV's remote (PlayerActivity.dispatchKeyEvent and PlayerControls' D-pad rules) --
+    // Over the bare picture: Left and Right jump ten seconds at once (held, they repeat), OK plays
+    // or pauses (a pause raises the row with the remote on the disc), Up and Down raise the row,
+    // Back leaves. With the row up: the remote is on the bar (Left and Right seek, OK plays or
+    // pauses), Down walks to the buttons, Up back to the bar and the disc, Back puts the row away.
+    // A list or menu keeps the remote inside it; Back closes it. The media keys work throughout.
+    const jumpRemote = (forward: boolean) => {
+        const w = c.root.clientWidth
+        jump(forward ? 'right' : 'left', w * (forward ? 0.85 : 0.15), c.root.clientHeight / 2)
+    }
+    const tvKey = (e: KeyboardEvent): boolean | 'native' => {
+        const key = remoteKey(e)
+        if (!key) return false
+        const active = document.activeElement as HTMLElement | null
+        switch (key) {
+            case 'play':
+                if (v.paused) (togglePlay(), flash(t('player.play')))
+                return true
+            case 'pause':
+            case 'stop':
+                if (!v.paused) v.pause()
+                return true
+            case 'playpause':
+                if (!e.repeat) togglePlay()
+                return true
+            case 'forward':
+            case 'rewind':
+                jumpRemote(key === 'forward')
+                return true
+            case 'next':
+            case 'previous': {
+                const to = key === 'next' ? info()?.next : info()?.previous
+                if (!to) return false
+                c.play(to)
+                return true
+            }
+        }
+        const arrow = key === 'up' || key === 'down' || key === 'left' || key === 'right'
+        if (c.blocked()) {
+            if (key === 'back') c.close()
+            else if (arrow) walk(c.root.querySelector('.pc-status'), key, active)
+            else return 'native'
+            return true
+        }
+        if (sheet()) {
+            if (key === 'back' || (sheet() === 'details' && key === 'ok')) setSheet(null)
+            else if (key === 'ok') return 'native'
+            else if (arrow && sheet() === 'episodes') walk(c.root.querySelector('.pc-sheet'), key, active)
+            return true
+        }
+        // The next episode's card holds Left, Right and OK once it has the remote; Back puts it away.
+        const card = c.root.querySelector<HTMLElement>('.pc-next')
+        if (card && active && card.contains(active)) {
+            if (key === 'back') (setNextHidden(true), focusIt(c.root))
+            else if (key === 'left' || key === 'right') walk(card, key, active)
+            else if (key === 'ok') return 'native'
+            if (key === 'back' || key === 'left' || key === 'right') return true
+        }
+        if (!(visible() && !locked())) {
+            const playNow = card?.querySelector<HTMLElement>('button:last-child')
+            if (key === 'left' || key === 'right') playNow ? focusIt(playNow) : jumpRemote(key === 'right')
+            else if (key === 'ok') playNow ? focusIt(playNow) : togglePlay()
+            else if (key === 'up' && offer() && c.resumedAt() !== null) (c.startOver(), setOffer(false))
+            else if (key === 'up' || key === 'down') show()
+            else if (key === 'back') c.close()
+            return true
+        }
+        poke()
+        const items = rowItems()
+        const at = active ? items.indexOf(active) : -1
+        const bar = barEl()
+        const disc = discEl()
+        if (key === 'back') hide()
+        else if (key === 'ok') {
+            if (inLayer(active) && active !== bar) return 'native'
+            togglePlay()
+        } else if (key === 'left' || key === 'right') {
+            if (at >= 0) focusIt(items[at + (key === 'right' ? 1 : -1)])
+            else if (active === bar) seekBy(key === 'right' ? 10 : -10)
+            else if (active !== disc) jumpRemote(key === 'right')
+        } else if (key === 'up') {
+            if (at >= 0) focusIt(bar)
+            else if (active === bar) focusIt(disc)
+            else if (active !== disc) focusIt(bar)
+        } else if (key === 'down') {
+            if (at >= 0) return true
+            if (active === disc) focusIt(bar)
+            else if (active === bar) focusIt(items[0])
+            else focusIt(bar)
+        }
+        return true
+    }
+
     // ---- keys (PlayerKeys.actionFor, the parts a browser can do) --------------------------
     const onKey = (e: KeyboardEvent) => {
         if (e.defaultPrevented) return
         const target = e.target as HTMLElement | null
         if (target && (target.isContentEditable || (target instanceof HTMLInputElement && target.type !== 'range') || target instanceof HTMLTextAreaElement)) return
+        if (tv()) {
+            const handled = tvKey(e)
+            if (handled) {
+                if (handled === true) e.preventDefault()
+                return
+            }
+        }
         if (c.blocked()) return
         if (locked()) {
             if (e.key === 'Enter') unlock()
@@ -471,7 +637,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         }
     }
     const onMove = (e: PointerEvent) => {
-        if (variant() === 'desktop' && e.pointerType === 'mouse') {
+        if (variant() !== 'phone' && e.pointerType === 'mouse') {
             show()
             return
         }
@@ -537,7 +703,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                 return
             }
             lastTap = { at: now, zone, x: start.x }
-            tapTimer = window.setTimeout(() => (phone() ? toggle() : togglePlay()), DOUBLE_MS)
+            tapTimer = window.setTimeout(() => (plain() ? toggle() : togglePlay()), DOUBLE_MS)
             return
         }
         // Touch: a side tap during a run adds a jump; a double tap on a side jumps, in the middle plays or pauses.
@@ -596,6 +762,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
 
     const menuAt = (name: Exclude<Sheet, null>) => (e: MouseEvent) => {
         e.stopPropagation()
+        opener = e.currentTarget as HTMLElement
         setAnchor((e.currentTarget as HTMLElement).getBoundingClientRect())
         setSheet(sheet() === name ? null : name)
     }
@@ -621,7 +788,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             class="pc"
             data-variant={variant()}
             classList={{ shown: visible() && !locked() && !c.blocked(), locked: locked(), sheeted: !!sheet() }}
-            onPointerMove={(e) => e.pointerType === 'mouse' && !locked() && variant() === 'desktop' && show()}
+            onPointerMove={(e) => e.pointerType === 'mouse' && !locked() && variant() !== 'phone' && show()}
         >
             <div
                 class="pc-picture"
@@ -638,7 +805,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                 <div class="pc-scrim bottom" />
 
                 <div class="pc-top" onPointerEnter={() => setHeld(true)} onPointerLeave={() => setHeld(false)}>
-                    <Btn icon={ArrowLeft02Icon} label={phone() ? t('common.back') : t('player.back_hint')} onClick={() => c.close()} tipBelow />
+                    <Btn icon={ArrowLeft02Icon} label={plain() ? t('common.back') : t('player.back_hint')} onClick={() => c.close()} tipBelow />
                     <div class="pc-titles">
                         <div class="pc-title">{info()?.title ?? c.item.title}</div>
                         <Show when={subtitleLine(info(), c.item)}>{(line) => <div class="pc-subtitle">{line()}</div>}</Show>
@@ -663,7 +830,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         class="pc-btn tonal pc-play"
                         aria-label={paused() ? t('player.play') : t('player.pause')}
                         aria-live="polite"
-                        data-tip={phone() ? undefined : `${paused() ? t('player.play') : t('player.pause')} (Space, K)`}
+                        data-tip={phone() ? undefined : tv() ? (paused() ? t('player.play') : t('player.pause')) : `${paused() ? t('player.play') : t('player.pause')} (Space, K)`}
                         onClick={() => (togglePlay(), poke())}
                     >
                         <Show when={!waiting() || paused()} fallback={<span class="pc-spinner" />}>
@@ -685,7 +852,15 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                     </div>
                 </div>
 
+                <Show when={tv()}>
+                    <div class="pc-clock" aria-hidden="true">{wall()}</div>
+                </Show>
+
                 <div class="pc-bottom" onPointerEnter={() => setHeld(true)} onPointerLeave={() => setHeld(false)}>
+                    <Show when={tv()}>
+                        <div class="pc-cluster-title">{info()?.title ?? c.item.title}</div>
+                        <Show when={subtitleLine(info(), c.item)}>{(line) => <div class="pc-cluster-sub">{line()}</div>}</Show>
+                    </Show>
                     <div class="pc-times">
                         <span>{clock(shownTime())}</span>
                         <button type="button" class="pc-total" onClick={flipRemaining} aria-label={remaining() ? t('player.show_total_length') : t('player.show_time_remaining')}>
@@ -708,10 +883,10 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                     />
                     <div class="pc-row">
                         <div class="pc-pill">
-                            <Btn icon={SubtitleIcon} label={phone() ? t('tracks.subtitles') : t('player.subtitles_hint')} onClick={menuAt('subtitles')} shot="subtitles" pressed={sheet() === 'subtitles'} />
-                            <Btn icon={HeadphonesIcon} label={phone() ? t('player.audio') : t('player.audio_hint')} onClick={menuAt('audio')} shot="audio" pressed={sheet() === 'audio'} />
+                            <Btn icon={SubtitleIcon} label={plain() ? t('tracks.subtitles') : t('player.subtitles_hint')} onClick={menuAt('subtitles')} shot="subtitles" pressed={sheet() === 'subtitles'} />
+                            <Btn icon={HeadphonesIcon} label={plain() ? t('player.audio') : t('player.audio_hint')} onClick={menuAt('audio')} shot="audio" pressed={sheet() === 'audio'} />
                             <Show
-                                when={phone()}
+                                when={plain()}
                                 fallback={
                                     <button type="button" class="pc-btn pc-speed-text" data-tip={t('player.speed_hint')} data-shot="speed" aria-label={t('player.playback_speed')} onClick={(e) => (menuAt('speed')(e), poke())}>
                                         {speedLabel(rate())}
@@ -721,7 +896,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                                 <Btn icon={DashboardSpeed02Icon} label={t('player.playback_speed')} onClick={menuAt('speed')} shot="speed" />
                             </Show>
                             <Show when={!phone() || wideRow()}>
-                                <Btn icon={SHAPE_ICON[shape()]} label={phone() ? t('player.picture_shape_now', { shape: shapeName(shape()) }) : t('player.picture_shape_hint', { shape: shapeName(shape()) })} onClick={cycleShape} class="shape" />
+                                <Btn icon={SHAPE_ICON[shape()]} label={plain() ? t('player.picture_shape_now', { shape: shapeName(shape()) }) : t('player.picture_shape_hint', { shape: shapeName(shape()) })} onClick={cycleShape} class="shape" />
                             </Show>
                             <Show when={canRotate()}>
                                 <Btn icon={ScreenRotationIcon} label={t('player.screen_orientation')} onClick={rotate} />
@@ -729,8 +904,11 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                             <Show when={phone() && wideRow()}>
                                 <Btn icon={SquareLock02Icon} label={t('player.lock_screen')} onClick={lock} shot="lock" />
                             </Show>
+                            <Show when={tv()}>
+                                <Btn icon={MoreVerticalIcon} label={t('common.more')} onClick={menuAt('more')} shot="more" pressed={sheet() === 'more'} />
+                            </Show>
                         </div>
-                        <Show when={!phone()}>
+                        <Show when={!phone() && !tv()}>
                             <span class="pc-spacer" />
                             <div class="pc-pill">
                                 <VolumeControl volume={volume} muted={muted} icon={volumeIcon} onVolume={setVol} onMute={() => (v.muted = !v.muted)} />
@@ -743,7 +921,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                                 </Show>
                             </div>
                         </Show>
-                        <Show when={phone() && copyLabel()}>
+                        <Show when={plain() && copyLabel()}>
                             <button type="button" class="pc-chip-button" data-shot="copies" onClick={menuAt('copies')} aria-label={t('player.copies')}>
                                 <Icon icon={CopiesIcon} size={24} />
                                 {copyLabel()}
@@ -753,6 +931,12 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                             <button type="button" class="pc-chip-button" data-shot="episodes" onClick={menuAt('episodes')}>
                                 <Icon icon={ListVideoIcon} size={24} />
                                 {t('episodes.title')}
+                            </button>
+                        </Show>
+                        <Show when={tv()}>
+                            <span class="pc-spacer" />
+                            <button type="button" class="pc-readout" onClick={flipRemaining} aria-label={remaining() ? t('player.show_total_length') : t('player.show_time_remaining')}>
+                                {`${clock(shownTime())} / ${endText()}`}
                             </button>
                         </Show>
                         <Show when={phone() && canFullscreen() && !canRotate()}>
@@ -820,13 +1004,20 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                 </div>
             </Show>
 
+            {/* The bare picture on a TV: a wait has no disc to show it on. */}
+            <Show when={tv() && waiting() && !visible() && !c.blocked()}>
+                <span class="pc-spinner pc-bare-spinner" role="status" aria-label={t('common.loading')} />
+            </Show>
+
             {props.children}
 
             <Switch>
                 <Match when={sheet() === 'more'}>
-                    <Menu anchor={anchor()} root={c.root} below onClose={() => setSheet(null)}>
-                        <Entry icon={SquareLock02Icon} text={t('player.lock_screen')} onClick={lock} />
-                        <hr />
+                    <Menu anchor={anchor()} root={c.root} below={!tv()} onClose={() => setSheet(null)}>
+                        <Show when={!tv()}>
+                            <Entry icon={SquareLock02Icon} text={t('player.lock_screen')} onClick={lock} />
+                            <hr />
+                        </Show>
                         <Show when={c.copies.length}>
                             <Entry text={t('player.copies')} trailing={copyLabel()} onClick={() => setSheet('copies')} />
                         </Show>
@@ -1091,7 +1282,7 @@ function Menu(props: { anchor: DOMRect | null; root: HTMLElement; below?: boolea
         const left = Math.max(8, Math.min(a.left - r.left, r.width - 248))
         return { bottom: `${r.bottom - a.top + 8}px`, left: `${left}px` }
     }
-    onMount(() => (el.querySelector<HTMLElement>('button:not(:disabled)')?.focus({ preventScroll: true })))
+    onMount(() => (el.querySelector<HTMLElement>(variant() === 'tv' ? '[aria-checked=true]:not(:disabled), button:not(:disabled)' : 'button:not(:disabled)')?.focus({ preventScroll: true })))
     return (
         <>
             <div class="pc-dismiss" onClick={props.onClose} />
@@ -1100,6 +1291,27 @@ function Menu(props: { anchor: DOMRect | null; root: HTMLElement; below?: boolea
             </div>
         </>
     )
+}
+
+/** The remote's arrow on a screen of buttons: to the nearest one that way (a list or the status sheet). */
+function walk(root: ParentNode | null, dir: 'up' | 'down' | 'left' | 'right', from: HTMLElement | null) {
+    const items = Array.from(root?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]') ?? []).filter((el) => el.getClientRects().length > 0)
+    if (!items.length) return
+    if (!from || !items.includes(from)) return void items[0].focus()
+    const a = from.getBoundingClientRect()
+    let best: HTMLElement | null = null
+    let bestScore = Infinity
+    for (const el of items) {
+        if (el === from) continue
+        const b = el.getBoundingClientRect()
+        const dx = b.left + b.width / 2 - (a.left + a.width / 2)
+        const dy = b.top + b.height / 2 - (a.top + a.height / 2)
+        const along = dir === 'left' ? -dx : dir === 'right' ? dx : dir === 'up' ? -dy : dy
+        if (along <= 1) continue
+        const score = along + Math.abs(dir === 'left' || dir === 'right' ? dy : dx) * 2.5
+        if (score < bestScore) (best = el, (bestScore = score))
+    }
+    best?.focus()
 }
 
 /** Up and Down walk a menu's lines. */

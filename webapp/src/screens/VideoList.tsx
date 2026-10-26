@@ -27,8 +27,8 @@ export const watchPath = (v: Pick<VideoItem, 'chatId' | 'messageId'>) => `/watch
 /** A video's page before it plays (the apps' detail), at `/video/<chat>/<message>`. */
 export const detailPath = (v: Pick<VideoItem, 'chatId' | 'messageId'>) => `/video/${v.chatId}/${v.messageId}`
 /**
- * Where a card goes: its detail page, as the apps open a card. The TV layout still plays at once
- * until its own detail pane is drawn (session 21); `direct` (Continue watching) plays at once too.
+ * Where a card goes: its detail page, as the apps open a card. The TV layout plays at once (the
+ * web has no TV detail pane yet, so a card keeps going straight to /watch/; session 21); `direct` (Continue watching) plays at once too.
  */
 const cardPath = (v: VideoItem, direct?: boolean) => (direct || form() === 'tv' ? watchPath(v) : detailPath(v))
 

@@ -1,9 +1,10 @@
-import { batch, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js'
+import { batch, createMemo, createSignal, For, lazy, Match, onCleanup, onMount, Show, Suspense, Switch } from 'solid-js'
 import { renderSVG } from 'uqr'
 import { ArrowDown01Icon, Cancel01Icon, ViewIcon, ViewOffSlashIcon } from '@hugeicons/core-free-icons'
 import { api, call } from '../tg/rpc'
 import { setMe } from '../session'
 import { iosBrowser } from '../install'
+import { form } from '../form'
 import { clock, t } from '../i18n'
 import { failure } from '../errors'
 import { Icon } from '../ui/Icon'
@@ -19,6 +20,9 @@ type Step =
     | { kind: 'email'; hash: string }
     | { kind: 'password'; hint: string | null }
 
+/** The TV's number pad (session 21): fetched with the TV layout only. */
+const Keypad = lazy(() => import('../tv/Keypad'))
+
 /** Codes typed as a row of digits; a word or a phrase sent by text is typed as it is. */
 const typedAsDigits = (type: string) => type !== 'sms_word' && type !== 'sms_phrase'
 
@@ -28,7 +32,9 @@ const typedAsDigits = (type: string) => type !== 'sms_word' && type !== 'sms_phr
  * an email address and code where Telegram asks for one, and the two-step password.
  */
 export function SignIn() {
-    const wide = matchMedia('(min-width: 600px)').matches
+    // A TV starts with the QR code and types with its pad: no field takes the remote's keyboard.
+    const tv = form() === 'tv'
+    const wide = tv || matchMedia('(min-width: 600px)').matches
     const first = (): Step => (wide ? { kind: 'qr' } : { kind: 'phone' })
     const [step, setStep] = createSignal<Step>(first())
     const [error, setError] = createSignal<string | null>(null)
@@ -305,6 +311,38 @@ export function SignIn() {
         if (asDigits && s.sent.length && v.length === s.sent.length) sendSignIn()
     }
 
+    // ---- The TV's pad: the national number and the code are typed a digit at a time. The country
+    // comes from Telegram's guess or the picker, never from the pad: "1" alone could be the start
+    // of a dozen codes. The remote's own number keys go through the same two functions.
+    const padDigit = (d: string) => {
+        const s = step()
+        if (s.kind === 'phone') {
+            touched = true
+            setError(null)
+            setNat(phoneRules.national(phoneRules.digits(nat() + d), dial()))
+        } else if (s.kind === 'code' && typedAsDigits(s.sent.type)) {
+            setError(null)
+            const v = (codeText() + d).slice(0, s.sent.length || 8)
+            setCodeText(v)
+            if (s.sent.length && v.length === s.sent.length) sendSignIn()
+        }
+    }
+    const padDelete = () => {
+        const s = step()
+        if (s.kind === 'phone') setNat(nat().slice(0, -1))
+        else if (s.kind === 'code') setCodeText(codeText().slice(0, -1))
+        setError(null)
+    }
+    const remoteDigit = (e: KeyboardEvent) => {
+        if (!tv || e.ctrlKey || e.altKey || e.metaKey || !/^[0-9]$/.test(e.key)) return
+        const target = e.target as HTMLElement | null
+        if (target instanceof HTMLInputElement && !target.readOnly) return
+        padDigit(e.key)
+        e.preventDefault()
+    }
+    onMount(() => tv && window.addEventListener('keydown', remoteDigit))
+    onCleanup(() => window.removeEventListener('keydown', remoteDigit))
+
     const resend = async () => {
         const s = step()
         if (s.kind !== 'code' || busy() || resendLeft() || waitLeft()) return
@@ -411,7 +449,7 @@ export function SignIn() {
     }
 
     return (
-        <main class="signin">
+        <main class="signin" classList={{ "is-qr": step().kind === 'qr' }}>
             <img class="signin-mark" src="/icon.svg" alt="TMPlayer" width="56" height="56" />
             <Switch>
                 <Match when={step().kind === 'qr'}>
@@ -457,9 +495,11 @@ export function SignIn() {
                                 <span aria-hidden="true">+</span>
                                 <input
                                     aria-label={t('login.code')}
-                                    inputmode="tel"
+                                    inputmode={tv ? 'none' : 'tel'}
                                     autocomplete="tel-country-code"
                                     value={dial()}
+                                    readOnly={tv}
+                                    tabIndex={tv ? -1 : undefined}
                                     onInput={(e) => onDial(e.currentTarget)}
                                 />
                             </label>
@@ -468,13 +508,18 @@ export function SignIn() {
                                 aria-label={t('login.phone_number')}
                                 placeholder={t('login.phone_number')}
                                 type="tel"
-                                inputmode="tel"
+                                inputmode={tv ? 'none' : 'tel'}
                                 autocomplete="tel-national"
                                 value={shownNat()}
+                                readOnly={tv}
+                                tabIndex={tv ? -1 : undefined}
                                 onInput={(e) => onNat(e.currentTarget)}
-                                autofocus
+                                autofocus={!tv}
                             />
                         </div>
+                        <Show when={tv}>
+                            <Suspense><Keypad label={t('login.phone_number')} onDigit={padDigit} onDelete={padDelete} /></Suspense>
+                        </Show>
                         <button class="primary" disabled={!ready() || busy() || !!waitLeft()}>{sendWords(t('login.send_code'), t('login.sending_code'))}</button>
                     </form>
                     <Problem />
@@ -492,14 +537,19 @@ export function SignIn() {
                                     class="code-input"
                                     classList={{ digits: typedAsDigits(sent().type) }}
                                     aria-label={sent().type.startsWith('email') ? t('login.email_code_label') : t('login.code')}
-                                    inputmode={typedAsDigits(sent().type) ? 'numeric' : 'text'}
+                                    inputmode={tv && typedAsDigits(sent().type) ? 'none' : typedAsDigits(sent().type) ? 'numeric' : 'text'}
+                                    readOnly={tv && typedAsDigits(sent().type)}
+                                    tabIndex={tv && typedAsDigits(sent().type) ? -1 : undefined}
                                     autocomplete="one-time-code"
                                     maxLength={typedAsDigits(sent().type) && sent().length ? sent().length : undefined}
                                     placeholder={sent().beginning ? `${sent().beginning}…` : undefined}
                                     value={codeText()}
                                     onInput={(e) => onCode(e.currentTarget)}
-                                    autofocus
+                                    autofocus={!tv || !typedAsDigits(sent().type)}
                                 />
+                                <Show when={tv && typedAsDigits(sent().type)}>
+                                    <Suspense><Keypad label={t('login.code')} onDigit={padDigit} onDelete={padDelete} /></Suspense>
+                                </Show>
                                 <button class="primary" disabled={busy() || !codeText().trim() || !!waitLeft()}>{sendWords(t('login.sign_in'), t('login.signing_in'))}</button>
                             </form>
                             <Problem />

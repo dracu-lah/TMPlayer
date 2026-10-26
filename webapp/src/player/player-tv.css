@@ -1,0 +1,139 @@
+/*
+ * The TV's player (plan 8.5, session 21), fetched only in the TV layout. PlayerControls.setUpTv and
+ * player_controls.xml, in the app's dp: --u is one dp at this window's size (tv.css's --dp, 2 px at
+ * 1920 x 1080). No top bar and no transport (the remote plays, jumps and steps), the name over the
+ * bar, the wall clock in the corner, one play disc, the round-button pill with More at its end, the
+ * Copies and Episodes pills and the time as a button. The focus is a solid white fill with the
+ * glyph turned dark (bg_control_button, bg_tv_focus_pill), and the focused icon names itself in a
+ * chip over it (focusTip). Nothing moves on hover.
+ */
+.player[data-variant="tv"] { --u: var(--dp, 1.33px); --bar-played: #2aabee; --on-focus: #0e0f13; }
+
+/* Idle: a hidden layer is not drawn and takes no focus. */
+.pc[data-variant="tv"]:not(.shown) .pc-layer { visibility: hidden; transition: opacity 200ms cubic-bezier(.2, 0, 0, 1), visibility 0s 200ms; }
+.pc[data-variant="tv"] .pc-top, .pc[data-variant="tv"] .pc-times, .pc[data-variant="tv"] .pc-step { display: none; }
+.pc[data-variant="tv"] .pc-picture { cursor: default; }
+.pc[data-variant="tv"]:not(.shown) .pc-picture { cursor: none; }
+.pc[data-variant="tv"] .pc-tint { background: transparent; }
+.pc[data-variant="tv"] .pc-scrim.top { height: calc(var(--u) * 120); }
+.pc[data-variant="tv"] .pc-scrim.bottom { height: calc(var(--u) * 300); }
+
+/* The wall clock, top left (controls_clock: 15 sp, 24 dp in, 16 dp down). */
+.pc-clock {
+  position: absolute; left: calc(var(--u) * 24); top: calc(var(--u) * 16); font-size: calc(var(--u) * 15); line-height: calc(var(--u) * 20);
+  color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 0 calc(var(--u) * 6) rgba(0, 0, 0, .6);
+}
+
+/* The one play disc in the middle: 72 dp, the tonal seat, white under the remote. */
+.pc[data-variant="tv"] .pc-center { gap: 0; }
+.pc[data-variant="tv"] .pc-btn { width: calc(var(--u) * 48); height: calc(var(--u) * 48); transition: background-color 120ms, color 120ms; }
+.pc[data-variant="tv"] .pc-btn svg { width: calc(var(--u) * 24); height: calc(var(--u) * 24); }
+.pc[data-variant="tv"] .pc-btn.pc-play { width: calc(var(--u) * 72) !important; height: calc(var(--u) * 72) !important; margin: 0; }
+.pc[data-variant="tv"] .pc-btn.pc-play svg { width: calc(var(--u) * 40); height: calc(var(--u) * 40); }
+.pc[data-variant="tv"] .pc-spinner { width: calc(var(--u) * 40); height: calc(var(--u) * 40); border-width: calc(var(--u) * 3); }
+.pc-bare-spinner {
+  position: absolute; left: 50%; top: 50%; z-index: 2; width: calc(var(--u) * 56) !important; height: calc(var(--u) * 56) !important; margin: calc(var(--u) * -28) 0 0 calc(var(--u) * -28);
+  border-width: calc(var(--u) * 4) !important; pointer-events: none;
+}
+.pc[data-variant="tv"] .pc-btn:hover, .pc[data-variant="tv"] .pc-btn:active { background-color: transparent; transform: none; }
+.pc[data-variant="tv"] .pc-btn.tonal { background-color: var(--tonal-button); }
+.pc[data-variant="tv"] .pc-btn:focus, .pc[data-variant="tv"] .pc-btn.tonal:focus,
+.pc[data-variant="tv"] .pc-chip-button:focus, .pc[data-variant="tv"] .pc-readout:focus {
+  background-color: #fff; color: var(--on-focus); outline: none; box-shadow: none;
+}
+
+/* The foot: 24 dp in from the sides, 12 dp up; the name, its second line, the bar, the row. */
+.pc[data-variant="tv"] .pc-bottom { padding: 0 calc(var(--u) * 24) calc(var(--u) * 12); }
+.pc-cluster-title { font-size: calc(var(--u) * 24); line-height: calc(var(--u) * 30); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-cluster-sub { margin-top: calc(var(--u) * 2); font-size: calc(var(--u) * 14); line-height: calc(var(--u) * 20); color: rgba(255, 255, 255, .72); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The bar: 26 dp to land on, 10 dp under the name; 4 dp track, 12 dp thumb, both a step bigger under the remote. */
+.pc[data-variant="tv"] .pc-bar { height: calc(var(--u) * 26); margin-top: calc(var(--u) * 10); }
+.pc[data-variant="tv"] .pc-track { height: calc(var(--u) * 4); transition: height 120ms; }
+.pc[data-variant="tv"] .pc-thumb { width: calc(var(--u) * 12); height: calc(var(--u) * 12); margin-left: calc(var(--u) * -6); transition: width 120ms, height 120ms, margin 120ms; }
+.pc[data-variant="tv"] .pc-bar:focus .pc-track { height: calc(var(--u) * 6); outline: none; }
+.pc[data-variant="tv"] .pc-bar:focus .pc-thumb { width: calc(var(--u) * 20); height: calc(var(--u) * 20); margin-left: calc(var(--u) * -10); box-shadow: 0 0 0 calc(var(--u) * 3) #fff; }
+.pc[data-variant="tv"] .pc-preview { bottom: calc(100% + var(--u) * 12); }
+.pc[data-variant="tv"] .pc-chip { padding: calc(var(--u) * 6) calc(var(--u) * 14); font-size: calc(var(--u) * 16); line-height: calc(var(--u) * 20); }
+
+/* The row: the pill (4 dp seat, 48 dp buttons 4 dp apart), the two worded pills, then the time. */
+.pc[data-variant="tv"] .pc-row { margin-top: calc(var(--u) * 2); }
+.pc[data-variant="tv"] .pc-pill { height: auto; gap: calc(var(--u) * 4); padding: calc(var(--u) * 4); box-shadow: inset 0 0 0 calc(var(--u) * 1) rgba(255, 255, 255, .16); }
+.pc[data-variant="tv"] .pc-chip-button {
+  height: calc(var(--u) * 48); margin-left: calc(var(--u) * 8); padding: 0 calc(var(--u) * 16) 0 calc(var(--u) * 12); gap: calc(var(--u) * 8);
+  font-size: calc(var(--u) * 15); line-height: calc(var(--u) * 20); box-shadow: inset 0 0 0 calc(var(--u) * 1) rgba(255, 255, 255, .16); transition: background-color 120ms, color 120ms;
+}
+.pc[data-variant="tv"] .pc-chip-button:hover { background: rgba(0, 0, 0, .50); }
+.pc[data-variant="tv"] .pc-chip-button:active { transform: none; }
+.pc[data-variant="tv"] .pc-chip-button svg { width: calc(var(--u) * 24); height: calc(var(--u) * 24); }
+.pc-readout {
+  margin-left: calc(var(--u) * 12); padding: calc(var(--u) * 6) calc(var(--u) * 10); border: 0; border-radius: 999px; background: transparent; cursor: pointer;
+  color: rgba(255, 255, 255, .72); font: inherit; font-size: calc(var(--u) * 14); line-height: calc(var(--u) * 20); font-variant-numeric: tabular-nums; direction: ltr; white-space: nowrap;
+}
+.pc-speed-text { font-size: calc(var(--u) * 14); }
+
+/* focusTip: the icon's name in the player's chip over it, only while the remote is on it. */
+.pc[data-variant="tv"] [data-tip]::after {
+  bottom: calc(100% + var(--u) * 10); padding: calc(var(--u) * 8) calc(var(--u) * 16); border-radius: 999px; background: var(--chip);
+  font-size: calc(var(--u) * 15); line-height: calc(var(--u) * 20); font-weight: 400; opacity: 0; transition: none;
+}
+.pc[data-variant="tv"] [data-tip]:focus::after { opacity: 1; }
+.pc[data-variant="tv"] [data-tip]:hover::after { opacity: 0; }
+.pc[data-variant="tv"] .pc-pill .pc-btn:first-child[data-tip]::after { left: 0; transform: none; }
+
+/* What the picture says while it jumps or changes: sized for a room. */
+.pc[data-variant="tv"] .pc-note { font-size: calc(var(--u) * 18); line-height: calc(var(--u) * 24); padding: calc(var(--u) * 10) calc(var(--u) * 22); }
+.pc[data-variant="tv"] .pc-note.left { left: calc(var(--u) * 48); }
+.pc[data-variant="tv"] .pc-note.right { right: calc(var(--u) * 48); }
+.pc[data-variant="tv"] .pc-plate { font-size: calc(var(--u) * 16); line-height: calc(var(--u) * 20); gap: calc(var(--u) * 10); padding: calc(var(--u) * 14) calc(var(--u) * 18) calc(var(--u) * 10); }
+.pc[data-variant="tv"] .pc-scrub-delta { font-size: calc(var(--u) * 28); line-height: calc(var(--u) * 34); }
+.pc[data-variant="tv"] .pc-scrub-target { font-size: calc(var(--u) * 16); line-height: calc(var(--u) * 22); }
+
+/* The offers over the bare picture: the resume offer and the next episode's card hold the remote as a white pill. */
+.pc[data-variant="tv"] .pc-offer { bottom: calc(var(--u) * 140); min-height: calc(var(--u) * 48); font-size: calc(var(--u) * 16); line-height: calc(var(--u) * 22); }
+.pc[data-variant="tv"] .pc-offer button, .pc[data-variant="tv"] .pc-next button { min-height: calc(var(--u) * 44); padding: 0 calc(var(--u) * 16); border-radius: 999px; font-size: calc(var(--u) * 16); }
+.pc[data-variant="tv"] .pc-offer button { background: #fff; color: var(--on-focus); }
+.pc[data-variant="tv"] .pc-next { right: calc(var(--u) * 24); bottom: calc(var(--u) * 12 + var(--u) * 150); max-width: calc(var(--u) * 340); padding: calc(var(--u) * 16) calc(var(--u) * 14) calc(var(--u) * 14) calc(var(--u) * 20); }
+.pc[data-variant="tv"] .pc-next p { font-size: calc(var(--u) * 15); line-height: calc(var(--u) * 22); }
+.pc[data-variant="tv"] .pc-next button:hover { background: none; }
+.pc[data-variant="tv"] .pc-next button:focus, .pc[data-variant="tv"] .pc-offer button:focus { background: #fff; color: var(--on-focus); outline: none; }
+.pc[data-variant="tv"] .pc-notice { top: calc(var(--u) * 48); font-size: calc(var(--u) * 15); }
+
+/* Menus and lists: a room's sizes, the line under the remote filled white. */
+.pc[data-variant="tv"] .pc-menu { min-width: calc(var(--u) * 280); max-width: calc(var(--u) * 460); padding: calc(var(--u) * 8) 0; border-radius: calc(var(--u) * 8); }
+.pc[data-variant="tv"] .pc-entry { min-height: calc(var(--u) * 52); padding: 0 calc(var(--u) * 16); gap: calc(var(--u) * 14); font-size: calc(var(--u) * 17); line-height: calc(var(--u) * 24); }
+.pc[data-variant="tv"] .pc-entry-lead { width: calc(var(--u) * 22); height: calc(var(--u) * 22); }
+.pc[data-variant="tv"] .pc-entry-lead svg { width: calc(var(--u) * 22); height: calc(var(--u) * 22); }
+.pc[data-variant="tv"] .pc-entry-trail { font-size: calc(var(--u) * 15); }
+.pc[data-variant="tv"] .pc-entry:hover { background: none; }
+.pc[data-variant="tv"] .pc-entry:focus, .pc[data-variant="tv"] .pc-entry:focus-visible { background: #fff; color: var(--on-focus); }
+.pc[data-variant="tv"] .pc-entry:focus .pc-entry-trail { color: rgba(14, 15, 19, .65); }
+.pc[data-variant="tv"] .pc-menu-note { font-size: calc(var(--u) * 14); line-height: calc(var(--u) * 20); }
+
+.pc[data-variant="tv"] .pc-sheet.pc-episodes { width: min(calc(var(--u) * 820), calc(100% - var(--u) * 96)); height: min(calc(var(--u) * 440), calc(100% - var(--u) * 54)); border-radius: calc(var(--u) * 24); }
+.pc[data-variant="tv"] .pc-sheet-head { min-height: calc(var(--u) * 64); padding: 0 calc(var(--u) * 8) 0 calc(var(--u) * 24); }
+.pc[data-variant="tv"] .pc-sheet-head h2 { font-size: calc(var(--u) * 24); line-height: calc(var(--u) * 32); }
+.pc[data-variant="tv"] .pc-sheet-head p { font-size: calc(var(--u) * 14); line-height: calc(var(--u) * 20); }
+.pc[data-variant="tv"] .pc-sheet-close { width: calc(var(--u) * 48); height: calc(var(--u) * 48); }
+.pc[data-variant="tv"] .pc-episodes-body { padding: calc(var(--u) * 16) calc(var(--u) * 24) calc(var(--u) * 24); gap: calc(var(--u) * 16); }
+.pc[data-variant="tv"] .pc-episodes-side { width: calc(var(--u) * 220); }
+.pc[data-variant="tv"] .pc-step-line { min-height: calc(var(--u) * 44); font-size: calc(var(--u) * 15); }
+.pc[data-variant="tv"] .pc-season { font-size: calc(var(--u) * 15); }
+.pc[data-variant="tv"] .pc-season small { font-size: calc(var(--u) * 12); }
+.pc[data-variant="tv"] .pc-episode-code { font-size: calc(var(--u) * 13); line-height: calc(var(--u) * 18); }
+.pc[data-variant="tv"] .pc-episode-name { font-size: calc(var(--u) * 17); line-height: calc(var(--u) * 24); }
+.pc[data-variant="tv"] .pc-episode-facts { font-size: calc(var(--u) * 13); line-height: calc(var(--u) * 18); }
+.pc[data-variant="tv"] .pc-sheet-close:hover, .pc[data-variant="tv"] .pc-step-line:hover, .pc[data-variant="tv"] .pc-episode:hover { background: none; }
+.pc[data-variant="tv"] .pc-sheet-close:focus, .pc[data-variant="tv"] .pc-step-line:focus, .pc[data-variant="tv"] .pc-season:focus, .pc[data-variant="tv"] .pc-episode:focus {
+  background: #fff; color: var(--on-focus); border-color: #fff; outline: none;
+}
+.pc[data-variant="tv"] .pc-episode:focus .pc-episode-code, .pc[data-variant="tv"] .pc-episode:focus .pc-episode-facts,
+.pc[data-variant="tv"] .pc-season:focus small { color: rgba(14, 15, 19, .7); }
+.pc[data-variant="tv"] .pc-details { font-size: calc(var(--u) * 15); }
+
+/* The status sheet (a stall, a failure): sized for a room, its buttons white under the remote. */
+.player[data-variant="tv"] .pc-status-inner { max-width: calc(var(--u) * 560); }
+.player[data-variant="tv"] .pc-status h2 { font-size: calc(var(--u) * 24); line-height: calc(var(--u) * 30); }
+.player[data-variant="tv"] .pc-status-name, .player[data-variant="tv"] .pc-status-body { font-size: calc(var(--u) * 16); line-height: calc(var(--u) * 22); }
+.player[data-variant="tv"] .pc-sheet-button { min-height: calc(var(--u) * 48); padding: 0 calc(var(--u) * 28); font-size: calc(var(--u) * 16); }
+.player[data-variant="tv"] .pc-sheet-button:focus { background: #fff; color: var(--on-focus); border-color: #fff; outline: none; }
