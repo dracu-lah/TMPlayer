@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Index, on, onCleanup, Show } from 'solid-js'
+import { createEffect, createSignal, For, Index, lazy, on, onCleanup, Show } from 'solid-js'
 import { A } from '@solidjs/router'
 import { ArrowLeft01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons'
 import { call, errorText } from '../tg/rpc'
@@ -7,7 +7,11 @@ import { t } from '../i18n'
 import { dropResume, progress, resumes, settings, starredIds } from '../store'
 import { Icon } from '../ui/Icon'
 import { Card, tileCard, useProgress, useWarmDataCentres, videoCard, type CardData } from './VideoList'
+import { form } from '../form'
 import type { HomePage, HomeRow } from '../tg/types'
+
+/** The TV layout's carousel, in the TV chunk (plan 8.5). */
+const TvHero = lazy(() => import('../tv').then((m) => ({ default: m.TvHero })))
 
 /** Home as last drawn, so coming back to it paints at once while it is asked for again. */
 const [last, setLast] = createSignal<HomePage | null>(null)
@@ -58,7 +62,10 @@ export function Home() {
     const firstRun = () => page()?.settled && !page()!.rows.length
     return (
         <>
-            <h1 class="page-title">{t('browse.tab_home')}</h1>
+            <h1 class="page-title home-title">{t('browse.tab_home')}</h1>
+            <Show when={form() === 'tv' && settings().carousel}>
+                <TvHero rows={page()?.rows} />
+            </Show>
             <Show when={error() && !page()?.rows.length}>
                 <div class="notice error-notice">
                     <p class="error">{errorText(error())}</p>

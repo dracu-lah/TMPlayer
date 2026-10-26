@@ -43,5 +43,5 @@ export default mergeConfig(base, {
     root: fileURLToPath(new URL('..', import.meta.url)),
     plugins: [testServer],
     resolve: { alias: { '@mtcute/web': fileURLToPath(new URL('./fake/mtcute.ts', import.meta.url)) } },
-    server: { port: 8097, strictPort: true, host: '127.0.0.1' },
+    server: { port: Number(process.env.E2E_PORT) || 8097, strictPort: true, host: '127.0.0.1' },
 })

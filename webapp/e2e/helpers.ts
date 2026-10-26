@@ -2,7 +2,7 @@ import { expect, type BrowserContext, type Page } from '@playwright/test'
 
 /** Picks the fake Telegram's case for this context (see fake/mtcute.ts), before the first page loads. */
 export async function fakeCase(context: BrowserContext, ...flags: string[]) {
-    await context.addCookies([{ name: 'e2e', value: flags.join(','), url: 'http://127.0.0.1:8097' }])
+    await context.addCookies([{ name: 'e2e', value: flags.join(','), url: `http://127.0.0.1:${process.env.E2E_PORT || 8097}` }])
 }
 
 /**

@@ -21,6 +21,8 @@ export interface Settings {
     posters: boolean
     /** Taken off a saved position when a video resumes, in milliseconds; null for the app's default. */
     rewindMs: number | null
+    /** The carousel at the top of Home in the TV layout (the apps' "Carousel on Home"), on by default. */
+    carousel: boolean
 }
 
 export interface Resume {
@@ -37,7 +39,7 @@ export interface Resume {
 const MB = 1024 * 1024
 /** SizeFilter.DEFAULT_MIN and DEFAULT_MAX: 50 MB up, no top. */
 export const SIZE_DEFAULTS = { sizeMin: 50 * MB, sizeMax: 8 * 1024 * MB }
-const DEFAULTS: Settings = { theme: 'system', ...SIZE_DEFAULTS, sort: 'Newest', posters: true, rewindMs: null }
+const DEFAULTS: Settings = { theme: 'system', ...SIZE_DEFAULTS, sort: 'Newest', posters: true, rewindMs: null, carousel: true }
 const THEME_KEY = 'tmplayer-theme'
 
 let db: UseStore | null = null

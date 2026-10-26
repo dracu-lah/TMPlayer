@@ -1,0 +1,255 @@
+/*
+ * The TV layout (plan 8.5), loaded only with the TV form (src/tv/index.tsx), every rule under
+ * html[data-form=tv] so a live switch back to the phone or the desktop leaves no trace. Sizes are
+ * the Android TV app's dp on its 960 x 540 screen: --dp is one of them at this window's size
+ * (2 px at 1920 x 1080, 1.33 px at 1280 x 720), so the page is the app's at any TV resolution.
+ * Tv.SafeH 48 and SafeV 27 keep everything inside the overscan; the focus is a fill or a ring
+ * in the accent, drawn whenever the remote was the last thing used ([data-tv-keys]); nothing moves
+ * on hover.
+ */
+html[data-form=tv] {
+  --dp: min(calc(100vw / 960), calc(100vh / 540));
+  --tv-safe-h: calc(var(--dp) * 48);
+  --tv-safe-v: calc(var(--dp) * 27);
+  /* The rows' end inset: the safe area and Tv.FocusClearance. */
+  --tv-end: calc(var(--dp) * 56);
+  /* TV_BAR_HEIGHT: the safe area, the 48 dp row and a 12 dp gap. */
+  --tv-bar-h: calc(var(--dp) * 87);
+  --tv-ring: calc(var(--dp) * 3);
+  /* Tone.focusFill: the accent on the dark themes, its container in daylight (with a ring). */
+  --focus-fill: var(--accent);
+  --on-focus-fill: var(--on-accent);
+  --focus-scale: 1.05;
+}
+html[data-form=tv][data-theme=light] {
+  --focus-fill: var(--accent-container);
+  --on-focus-fill: var(--on-accent-container);
+}
+html[data-form=tv] body { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }
+html[data-form=tv] .small { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); }
+
+/* The focus: off until a key (a mouse press takes it away), then a ring on anything without a look of its own. */
+html[data-form=tv] :focus, html[data-form=tv] :focus-visible { outline: none; }
+html[data-form=tv][data-tv-keys] :focus { outline: var(--tv-ring) solid var(--accent); outline-offset: calc(var(--dp) * 2); }
+@media (prefers-reduced-motion: reduce) { html[data-form=tv] { --focus-scale: 1; } }
+
+/* The page under the bar: Tv.SafeH at the start, the rows' inset at the end, no bar at the foot. */
+html[data-form=tv] .page {
+  --gutter: var(--tv-safe-h);
+  padding: var(--tv-bar-h) var(--tv-end) var(--tv-safe-v) var(--tv-safe-h);
+}
+html[data-form=tv] .page.playing { padding: 0; }
+html[data-form=tv] .update-notice,
+html[data-form=tv] .offline-line { bottom: var(--tv-safe-v); }
+
+/* ---- The bar (TvTopBar) ---- */
+.tv-bar {
+  position: fixed; z-index: 5; top: 0; left: 0; right: 0; height: var(--tv-bar-h);
+  padding: var(--tv-safe-v) var(--tv-end) 0 var(--tv-safe-h);
+  background: var(--bg); transition: background-color var(--fast);
+}
+.tv-bar.over-art { background: transparent; }
+.tv-bar-row { display: flex; align-items: center; gap: calc(var(--dp) * 18); height: calc(var(--dp) * 48); }
+.tv-tabs { flex: 1; display: flex; align-items: center; gap: calc(var(--dp) * 6); min-width: 0; }
+.tv-tab {
+  display: inline-flex; align-items: center; gap: calc(var(--dp) * 8); height: calc(var(--dp) * 40);
+  padding: 0 calc(var(--dp) * 14); border-radius: 999px; white-space: nowrap;
+  font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); font-weight: 500;
+  color: var(--muted); text-decoration: none;
+  transition: transform var(--fast) var(--ease), background-color var(--fast), color var(--fast);
+}
+.tv-tab .icon { width: calc(var(--dp) * 20); height: calc(var(--dp) * 20); }
+.tv-tab[aria-current] { color: var(--fg); font-weight: 600; }
+html[data-tv-keys] .tv-tab:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); font-weight: 600; transform: scale(var(--focus-scale)); }
+html[data-theme=light][data-tv-keys] .tv-tab:focus { box-shadow: 0 0 0 calc(var(--dp) * 2) var(--accent); }
+/* The account's picture: a thin ring in the accent while Settings is shown; under the remote a
+   wider ring a little way out, with a halo of the page's own ground so it reads over the carousel. */
+.tv-picture {
+  flex: none; width: calc(var(--dp) * 40); height: calc(var(--dp) * 40); border-radius: 50%;
+  display: grid; place-items: center; background: var(--surface-high); color: var(--fg); text-decoration: none;
+  font-size: calc(var(--dp) * 16); font-weight: 600; transition: transform var(--fast) var(--ease), box-shadow var(--fast);
+}
+.tv-picture[aria-current] { box-shadow: 0 0 0 calc(var(--dp) * 2) var(--accent); }
+html[data-tv-keys] .tv-picture:focus {
+  outline: none; transform: scale(var(--focus-scale));
+  box-shadow: 0 0 0 calc(var(--dp) * 3) var(--bg), 0 0 0 calc(var(--dp) * 6) var(--accent), 0 0 0 calc(var(--dp) * 8) color-mix(in srgb, var(--bg) 70%, transparent);
+}
+.tv-picture .nav-picture-blank { width: calc(var(--dp) * 14); height: calc(var(--dp) * 14); }
+.tv-brand { flex: none; display: flex; align-items: center; gap: calc(var(--dp) * 12); font-size: calc(var(--dp) * 22); line-height: 1; font-weight: 600; }
+.tv-brand img { width: calc(var(--dp) * 40); height: calc(var(--dp) * 40); border-radius: calc(var(--dp) * 10); }
+
+/* ---- Home's carousel (TvHomeCarousel): 284 dp under the bar, its picture up behind it ---- */
+/* Home has no heading on a TV: the carousel, or the rows, start under the bar. */
+html[data-form=tv] .page > .page-title.home-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.tv-hero {
+  position: relative; height: calc(var(--tv-bar-h) + var(--dp) * 284);
+  margin: calc(-1 * var(--tv-bar-h)) calc(-1 * var(--tv-end)) calc(var(--dp) * 16) calc(-1 * var(--tv-safe-h));
+  overflow: hidden;
+}
+/* The picture at the end, melting into the page at its start, its foot and under the bar. */
+.tv-hero-art {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 72%; background: var(--surface);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 45%), linear-gradient(to bottom, transparent, #000 30%, #000 62%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent, #000 45%), linear-gradient(to bottom, transparent, #000 30%, #000 62%, transparent);
+  mask-composite: intersect;
+}
+.tv-hero-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; animation: fade 200ms ease-out; }
+.tv-hero-text {
+  position: absolute; left: var(--tv-safe-h); bottom: calc(var(--dp) * (24 + 52 + 14)); width: 60%;
+  display: flex; flex-direction: column; gap: calc(var(--dp) * 8);
+}
+.tv-hero-title {
+  font-size: calc(var(--dp) * 28); line-height: calc(var(--dp) * 36); font-weight: 600;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.tv-hero-facts { color: var(--muted); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-hero-actions { position: absolute; left: var(--tv-safe-h); bottom: calc(var(--dp) * 24); display: flex; align-items: center; gap: calc(var(--dp) * 12); }
+/* Play (HeroPill): the text colour as its fill, the page's ground as its ink; the remote grows it. */
+.tv-hero-play, .tv-hero-pill {
+  display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; text-decoration: none; white-space: nowrap;
+  transition: transform var(--fast) var(--ease);
+}
+.tv-hero-play {
+  min-width: calc(var(--dp) * 160); height: calc(var(--dp) * 52); padding: 0 calc(var(--dp) * 28); gap: calc(var(--dp) * 8);
+  background: var(--fg); color: var(--bg); font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 24); font-weight: 600;
+}
+.tv-hero-play .icon { width: calc(var(--dp) * 26); height: calc(var(--dp) * 26); }
+.tv-hero-pill {
+  max-width: calc(var(--dp) * 320); height: calc(var(--dp) * 48); padding: 0 calc(var(--dp) * 20) 0 calc(var(--dp) * 16); gap: calc(var(--dp) * 8);
+  background: color-mix(in srgb, var(--surface-high) 80%, transparent); color: var(--fg); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); font-weight: 500;
+}
+.tv-hero-pill span { overflow: hidden; text-overflow: ellipsis; }
+.tv-hero-pill .icon { width: calc(var(--dp) * 22); height: calc(var(--dp) * 22); }
+html[data-tv-keys] .tv-hero-play:focus, html[data-tv-keys] .tv-hero-pill:focus { outline: none; transform: scale(var(--focus-scale)); }
+html[data-theme=light][data-tv-keys] .tv-hero-pill:focus, html[data-theme=light][data-tv-keys] .tv-hero-play:focus { box-shadow: 0 0 0 calc(var(--dp) * 2) var(--accent); }
+.tv-hero-dots { position: absolute; right: var(--tv-end); bottom: calc(var(--dp) * 24 + var(--dp) * 15); display: flex; gap: calc(var(--dp) * 6); }
+.tv-hero-dots span { width: calc(var(--dp) * 6); height: calc(var(--dp) * 6); border-radius: 999px; background: color-mix(in srgb, var(--fg) 35%, transparent); transition: width var(--fast); }
+.tv-hero-dots span.on { width: calc(var(--dp) * 18); background: var(--fg); }
+/* While Recently added is asked for: the same size, still (nothing animates while waiting on a TV). */
+.tv-hero-wait { position: absolute; left: var(--tv-safe-h); bottom: calc(var(--dp) * 24); display: flex; flex-direction: column; gap: calc(var(--dp) * 10); }
+.tv-hero-wait span { display: block; border-radius: calc(var(--dp) * 8); background: var(--surface-high); }
+.tv-hero-wait span:nth-child(1) { width: calc(var(--dp) * 280); height: calc(var(--dp) * 28); }
+.tv-hero-wait span:nth-child(2) { width: calc(var(--dp) * 180); height: calc(var(--dp) * 14); }
+.tv-hero-wait span:nth-child(3) { width: calc(var(--dp) * 160); height: calc(var(--dp) * 52); margin-top: calc(var(--dp) * 6); border-radius: 999px; }
+
+/* ---- Titles and rows ---- */
+html[data-form=tv] .page-title { font-size: calc(var(--dp) * 24); line-height: calc(var(--dp) * 32); font-weight: 600; margin: 0 0 calc(var(--dp) * 16); }
+html[data-form=tv] .row-title { font-size: calc(var(--dp) * 22); line-height: calc(var(--dp) * 28); font-weight: 600; }
+html[data-form=tv] .home-row { margin: 0 0 calc(var(--dp) * 12); }
+html[data-form=tv] .row-head { min-height: calc(var(--dp) * 40); margin: 0 0 calc(var(--dp) * 2); gap: calc(var(--dp) * 12); }
+/* The arrows are the mouse's; the remote scrolls the row itself. */
+html[data-form=tv] .row-arrows { display: none; }
+html[data-form=tv] .row-link, html[data-form=tv] .see-all { border-radius: 999px; padding: calc(var(--dp) * 4) calc(var(--dp) * 12); margin: 0 calc(var(--dp) * -12); }
+html[data-form=tv] .see-all { margin: 0; font-size: calc(var(--dp) * 14); }
+html[data-form=tv][data-tv-keys] .row-link:focus, html[data-form=tv][data-tv-keys] .see-all:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); text-decoration: none; }
+/* A row: 126 dp posters 12 dp apart, Tv.FocusClearance round them so a grown card is not cut. */
+html[data-form=tv] .strip {
+  grid-auto-columns: calc(var(--dp) * 126); gap: calc(var(--dp) * 12);
+  margin: calc(var(--dp) * -8) calc(-1 * var(--tv-end)) 0 calc(-1 * var(--tv-safe-h));
+  padding: calc(var(--dp) * 8) var(--tv-end) calc(var(--dp) * 8) var(--tv-safe-h);
+  scroll-snap-type: none; scroll-padding: 0;
+}
+
+/* ---- Cards: grown and ringed in the accent under the remote (Focus.Ring), never on hover ---- */
+html[data-form=tv] .cards { column-gap: calc(var(--dp) * 12); }
+html[data-form=tv] .vrow.cards { padding-bottom: calc(var(--dp) * 20); }
+html[data-form=tv] .card-art { border-radius: calc(var(--dp) * 12); }
+html[data-form=tv] .card-art-title { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); left: calc(var(--dp) * 10); right: calc(var(--dp) * 10); bottom: calc(var(--dp) * 12); }
+html[data-form=tv] .card-progress { height: calc(var(--dp) * 3); left: calc(var(--dp) * 8); right: calc(var(--dp) * 8); }
+html[data-form=tv] .card-facts { margin-top: calc(var(--dp) * 6); font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); }
+html[data-form=tv] .card:hover .card-art { transform: none; }
+html[data-form=tv] .card:hover .card-facts { color: var(--muted); }
+html[data-form=tv][data-tv-keys] .card:focus { outline: none; }
+html[data-form=tv][data-tv-keys] .card:focus .card-art { transform: scale(var(--focus-scale)); outline: calc(var(--dp) * 2) solid var(--accent); outline-offset: calc(var(--dp) * 2); }
+html[data-form=tv][data-tv-keys] .card:focus .card-facts { color: var(--fg); }
+
+/* ---- Chats: rows that fill under the remote, as the app's TV lists do ---- */
+html[data-form=tv] .vrow.chats { column-gap: calc(var(--dp) * 12); }
+html[data-form=tv] .chat-row { gap: calc(var(--dp) * 4); margin: 0; }
+html[data-form=tv] .chat-row:hover { background: none; }
+html[data-form=tv] .chat-link { gap: calc(var(--dp) * 14); padding: calc(var(--dp) * 6) calc(var(--dp) * 10); border-radius: calc(var(--dp) * 12); }
+html[data-form=tv] .chat-link .avatar { width: calc(var(--dp) * 44); height: calc(var(--dp) * 44); font-size: calc(var(--dp) * 18); }
+html[data-form=tv] .chat-name { font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 24); }
+html[data-form=tv][data-tv-keys] .chat-link:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); }
+html[data-form=tv][data-tv-keys] .chat-link:focus .chat-pin { color: inherit; }
+html[data-form=tv] .icon-button { width: calc(var(--dp) * 40); height: calc(var(--dp) * 40); }
+html[data-form=tv] .icon-button .icon, html[data-form=tv] .round-button .icon { width: calc(var(--dp) * 22); height: calc(var(--dp) * 22); }
+html[data-form=tv] .icon-button:hover { background: none; }
+html[data-form=tv][data-tv-keys] .icon-button:focus, html[data-form=tv][data-tv-keys] .round-button:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); transform: scale(var(--focus-scale)); }
+html[data-form=tv][data-tv-keys] .star.on:focus { color: var(--on-focus-fill); }
+
+/* ---- A page's own bar (a chat's): Back, the title and its buttons ---- */
+html[data-form=tv] .page-bar { gap: calc(var(--dp) * 12); margin: 0 0 calc(var(--dp) * 16); min-height: calc(var(--dp) * 48); }
+html[data-form=tv] .round-button { width: calc(var(--dp) * 44); height: calc(var(--dp) * 44); box-shadow: none; transition: transform var(--fast) var(--ease); }
+html[data-form=tv] .title-pill { height: calc(var(--dp) * 48); font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 24); padding: 0 calc(var(--dp) * 18) 0 calc(var(--dp) * 4); gap: calc(var(--dp) * 10); box-shadow: none; }
+html[data-form=tv] .avatar.compact { width: calc(var(--dp) * 38); height: calc(var(--dp) * 38); font-size: calc(var(--dp) * 16); }
+html[data-form=tv] .bar-actions { gap: calc(var(--dp) * 8); }
+html[data-form=tv] .pop-menu { min-width: calc(var(--dp) * 240); padding: calc(var(--dp) * 6); top: calc(100% + var(--dp) * 8); border-radius: calc(var(--dp) * 16); }
+html[data-form=tv] .pop-title { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); padding: calc(var(--dp) * 8) calc(var(--dp) * 12) calc(var(--dp) * 4); }
+html[data-form=tv] .pop-menu button { min-height: calc(var(--dp) * 40); padding: 0 calc(var(--dp) * 12); font-size: calc(var(--dp) * 14); border-radius: calc(var(--dp) * 8); }
+html[data-form=tv] .pop-menu button:hover { background: none; }
+html[data-form=tv][data-tv-keys] .pop-menu button:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); }
+
+/* ---- Search fields: the remote stops on them, OK opens them for typing ---- */
+html[data-form=tv] .search-field { height: calc(var(--dp) * 48); max-width: calc(var(--dp) * 560); padding: 0 calc(var(--dp) * 16); gap: calc(var(--dp) * 10); margin-bottom: calc(var(--dp) * 16); }
+html[data-form=tv] .search-field .icon { width: calc(var(--dp) * 20); height: calc(var(--dp) * 20); }
+html[data-form=tv] input:not([type=range]):not([type=radio]) { font-size: calc(var(--dp) * 16); }
+html[data-form=tv][data-tv-keys] .search-field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 calc(var(--dp) * 1) var(--accent); }
+html[data-form=tv][data-tv-keys] .search-field input:focus { outline: none; }
+/* Read only until OK: the field says it is waiting to be opened. */
+html[data-form=tv][data-tv-keys] .search-field:has(input[data-tv-locked]:focus) { background: var(--focus-fill); color: var(--on-focus-fill); border-color: transparent; }
+html[data-form=tv] .search-field:has(input[data-tv-locked]:focus) input::placeholder { color: inherit; }
+
+/* ---- Buttons and links ---- */
+html[data-form=tv] button.primary, html[data-form=tv] .danger-button, html[data-form=tv] a.primary-link, html[data-form=tv] button.tonal {
+  min-height: calc(var(--dp) * 40); padding: calc(var(--dp) * 8) calc(var(--dp) * 24); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20);
+}
+html[data-form=tv][data-tv-keys] button.primary:focus, html[data-form=tv][data-tv-keys] .danger-button:focus,
+html[data-form=tv][data-tv-keys] a.primary-link:focus, html[data-form=tv][data-tv-keys] button.tonal:focus { transform: scale(var(--focus-scale)); }
+html[data-form=tv] button.link, html[data-form=tv] a.link {
+  padding: calc(var(--dp) * 6) calc(var(--dp) * 12); margin-inline-start: calc(var(--dp) * -12); border-radius: 999px; align-self: start;
+  font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20);
+}
+html[data-form=tv][data-tv-keys] button.link:focus, html[data-form=tv][data-tv-keys] a.link:focus, html[data-form=tv][data-tv-keys] .inline-link:focus {
+  outline: none; background: var(--focus-fill); color: var(--on-focus-fill); text-decoration: none;
+}
+html[data-form=tv] .danger-button:hover { background: none; }
+
+/* ---- Settings: one column of panels, the choices filled under the remote ---- */
+html[data-form=tv] .settings { max-width: calc(var(--dp) * 600); gap: calc(var(--dp) * 12); }
+html[data-form=tv] .panel { padding: calc(var(--dp) * 16) calc(var(--dp) * 20); gap: calc(var(--dp) * 10); border-radius: calc(var(--dp) * 16); }
+html[data-form=tv] .panel-title { font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 24); }
+html[data-form=tv] .segmented { padding: calc(var(--dp) * 4); gap: calc(var(--dp) * 4); }
+html[data-form=tv] .segmented label { min-height: calc(var(--dp) * 40); font-size: calc(var(--dp) * 14); transition: background-color var(--fast), color var(--fast), transform var(--fast) var(--ease); }
+html[data-form=tv] .segmented label:has(input:focus-visible) { outline: none; }
+html[data-form=tv][data-tv-keys] .segmented label:has(input:focus) { background: var(--focus-fill); color: var(--on-focus-fill); transform: scale(var(--focus-scale)); }
+html[data-form=tv][data-tv-keys] .segmented input:focus { outline: none; }
+html[data-form=tv] .size-readout { font-size: calc(var(--dp) * 16); }
+html[data-form=tv] .dual-range { height: calc(var(--dp) * 32); }
+html[data-form=tv] .dual-range input::-webkit-slider-runnable-track { height: calc(var(--dp) * 32); }
+html[data-form=tv] .dual-range input::-webkit-slider-thumb { width: calc(var(--dp) * 20); height: calc(var(--dp) * 20); }
+html[data-form=tv][data-tv-keys] .dual-range input:focus { outline: none; }
+html[data-form=tv][data-tv-keys] .dual-range input:focus::-webkit-slider-thumb { transform: scale(1.3); box-shadow: 0 0 0 calc(var(--dp) * 3) var(--bg), 0 0 0 calc(var(--dp) * 6) var(--accent); }
+html[data-form=tv][data-tv-keys] .dual-range input:focus::-moz-range-thumb { box-shadow: 0 0 0 calc(var(--dp) * 3) var(--bg), 0 0 0 calc(var(--dp) * 6) var(--accent); }
+html[data-form=tv] .install-steps { padding-left: calc(var(--dp) * 20); }
+
+/* ---- Dialogs, notices, the first run ---- */
+html[data-form=tv] .confirm { width: min(calc(var(--dp) * 480), 90vw); padding: calc(var(--dp) * 24); border-radius: calc(var(--dp) * 28); gap: calc(var(--dp) * 16); }
+html[data-form=tv] .confirm h2 { font-size: calc(var(--dp) * 24); line-height: calc(var(--dp) * 32); }
+html[data-form=tv] .confirm-buttons { gap: calc(var(--dp) * 16); }
+html[data-form=tv] .notice { margin: 0 0 calc(var(--dp) * 12); }
+html[data-form=tv] .first-run { padding: calc(var(--dp) * 24); gap: calc(var(--dp) * 8); max-width: calc(var(--dp) * 560); border-radius: calc(var(--dp) * 16); }
+html[data-form=tv] .first-run h2 { font-size: calc(var(--dp) * 22); line-height: calc(var(--dp) * 28); }
+html[data-form=tv] .archives { padding: calc(var(--dp) * 12) calc(var(--dp) * 16); border-radius: calc(var(--dp) * 16); }
+html[data-form=tv] .list-foot { min-height: calc(var(--dp) * 40); }
+html[data-form=tv] .update-notice { width: min(calc(var(--dp) * 480), calc(100vw - 2 * var(--tv-safe-h))); padding: calc(var(--dp) * 8) calc(var(--dp) * 8) calc(var(--dp) * 8) calc(var(--dp) * 16); gap: calc(var(--dp) * 16); border-radius: calc(var(--dp) * 16); }
+html[data-form=tv] .update-notice p, html[data-form=tv] .offline-line { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }
+html[data-form=tv] .sponsored-title { font-size: calc(var(--dp) * 18); line-height: calc(var(--dp) * 24); }
+html[data-form=tv] .sponsored-body { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }
+html[data-form=tv] .sponsored-label { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); }
+html[data-form=tv] .report-options button { font-size: calc(var(--dp) * 14); padding: calc(var(--dp) * 12) calc(var(--dp) * 8); }
+html[data-form=tv][data-tv-keys] .report-options button:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); }
+html[data-form=tv] .other-tab h1 { font-size: calc(var(--dp) * 22); line-height: calc(var(--dp) * 28); }
+html[data-form=tv] .pop-menu .icon, html[data-form=tv] .chat-pin .icon { width: calc(var(--dp) * 18); height: calc(var(--dp) * 18); }
+html[data-form=tv] .chat-link .initial.saved .icon { width: calc(var(--dp) * 22); height: calc(var(--dp) * 22); }

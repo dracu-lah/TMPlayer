@@ -6,12 +6,18 @@ import { onBackOnline } from '../net'
 import { t } from '../i18n'
 import { setStarred, starredIds } from '../store'
 import { Icon } from '../ui/Icon'
-import { VirtualGrid, type GridLayout } from '../ui/VirtualGrid'
+import { tvDp, VirtualGrid, type GridLayout } from '../ui/VirtualGrid'
+import { form } from '../form'
 import { ChatPicture } from './ChatPicture'
 import type { ChatItem, ChatsEvent } from '../tg/types'
 
 /** The app's list rows: one column on a phone, as many 320 px columns as fit from 840. */
 function chatLayout(width: number): GridLayout {
+    // The TV layout: 280 dp columns 12 dp apart, rows of a 44 dp picture (tv.css).
+    if (form() === 'tv') {
+        const dp = tvDp()
+        return { cols: Math.max(1, Math.floor((width + 12 * dp) / (292 * dp))), estimate: Math.round(56 * dp) }
+    }
     const cols = window.innerWidth < 840 ? 1 : Math.max(1, Math.floor((width + 24) / (320 + 24)))
     return { cols, estimate: 72 }
 }

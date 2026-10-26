@@ -3,6 +3,10 @@
 // scrolls as lightly as a short one. Columns follow the width the way the CSS grids did.
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, type JSX } from 'solid-js'
 import { createWindowVirtualizer } from '@tanstack/solid-virtual'
+import { form } from '../form'
+
+/** One of the TV app's dp at this window's size, as tv.css's --dp: 960 x 540 dp fill the screen. */
+export const tvDp = () => Math.min(window.innerWidth / 960, window.innerHeight / 540)
 
 export interface GridLayout {
     cols: number
@@ -108,9 +112,11 @@ export function VirtualGrid<T>(props: {
 /** The portrait card grid's columns, as `.cards` laid them out: 3 on a phone, then 140 and 156 px wide. */
 export function cardLayout(width: number): GridLayout {
     const vw = window.innerWidth
-    const [min, gap, rowGap] = vw < 600 ? [0, 10, 16] : vw < 840 ? [140, 16, 20] : [156, 24, 24]
+    // The TV layout: the app's 126 dp posters, 12 dp apart, 20 dp between rows (tv.css).
+    const dp = form() === 'tv' ? tvDp() : 0
+    const [min, gap, rowGap] = dp ? [126 * dp, 12 * dp, 20 * dp] : vw < 600 ? [0, 10, 16] : vw < 840 ? [140, 16, 20] : [156, 24, 24]
     const cols = min ? Math.max(1, Math.floor((width + gap) / (min + gap))) : 3
     const card = (width - gap * (cols - 1)) / cols
     // The 2:3 art (the name sits on it) and the facts.
-    return { cols, estimate: Math.round(card * 1.5 + 4 + 16 + rowGap) }
+    return { cols, estimate: Math.round(card * 1.5 + (dp ? 22 * dp : 4 + 16) + rowGap) }
 }

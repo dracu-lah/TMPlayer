@@ -5,7 +5,7 @@ import { api } from '../tg/rpc'
 import { t } from '../i18n'
 import { sizeScale } from './sizes'
 import { size } from './VideoList'
-import { layout, setLayout, type Layout } from '../form'
+import { form, layout, setLayout, type Layout } from '../form'
 import { TmdbMark } from '../ui/TmdbMark'
 import { install, installed, installPrompt, iosBrowser, keepData, kept, refused } from '../install'
 
@@ -38,6 +38,9 @@ export function Settings() {
                 />
                 <p class="muted small">{t('settings.layout_detail')}</p>
             </div>
+            <Show when={form() === 'tv'}>
+                <Carousel />
+            </Show>
             <SizeLimits />
             <Rewind />
             <Posters />
@@ -171,6 +174,26 @@ function Rewind() {
                     onPick={(v) => setSetting('rewindMs', v)}
                 />
             </Show>
+        </div>
+    )
+}
+
+/** The TV layout's carousel at the top of Home, on by default as in the apps. */
+function Carousel() {
+    return (
+        <div class="panel">
+            <h2 class="panel-title" id="carousel-label">{t('settings.home_carousel')}</h2>
+            <p class="muted small">{settings().carousel ? t('settings.home_carousel_on') : t('settings.home_carousel_off')}</p>
+            <Choices
+                label="carousel-label"
+                name="carousel"
+                options={[
+                    { value: 'on', label: t('common.on') },
+                    { value: 'off', label: t('common.off') },
+                ]}
+                value={settings().carousel ? 'on' : 'off'}
+                onPick={(v) => setSetting('carousel', v === 'on')}
+            />
         </div>
     )
 }
