@@ -156,6 +156,8 @@ internal fun FeaturedCarousel(
     onPlay: (MediaItem) -> Unit,
     onDetails: (FeaturedPick) -> Unit,
     modifier: Modifier = Modifier,
+    /** How far down the picture fades into the page; null is the desktop's, [TOP_FADE]. Deeper under the big-screen bar. */
+    topFade: Dp? = null,
 ) {
     Box(modifier.fillMaxWidth().height(height)) {
         if (picks == null) {
@@ -328,7 +330,7 @@ internal fun FeaturedCarousel(
                 modifier = Modifier.fillMaxSize(),
                 label = "featuredBackdrop",
             ) { shown ->
-                if (shown != null) FeaturedBackdrop(shown, chatTitle)
+                if (shown != null) FeaturedBackdrop(shown, chatTitle, topFade ?: TOP_FADE)
             }
             HorizontalPager(
                 state = pager,
@@ -418,12 +420,12 @@ private fun playTarget(pick: FeaturedPick, watch: SeriesWatch): MediaItem {
  * top: the words at the start stand on the page, and the window's buttons over the top fade.
  */
 @Composable
-private fun FeaturedBackdrop(pick: FeaturedPick, chatTitle: (Long) -> String) {
+private fun FeaturedBackdrop(pick: FeaturedPick, chatTitle: (Long) -> String, topFade: Dp) {
     val item = pick.item
     val meta = rememberMeta(item, showOnly = pick.series != null)
     val cover = rememberCover(item, chatTitle(item.chatId))
     val source = remember(item, meta?.wideUrl, cover) { BackdropSource(item.miniThumbnail, item.thumbnailFileId, cover, meta?.wideUrl) }
-    EdgeBackdrop(source, Modifier.fillMaxSize(), topFade = TOP_FADE, onPictured = com.tmplayer.ui.browse.HomeFirstPaint::markReady)
+    EdgeBackdrop(source, Modifier.fillMaxSize(), topFade = topFade, onPictured = com.tmplayer.ui.browse.HomeFirstPaint::markReady)
 }
 
 /**

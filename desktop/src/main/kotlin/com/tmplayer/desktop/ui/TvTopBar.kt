@@ -111,11 +111,20 @@ internal fun TvTopBar(
         if (paletteWasOpen && !state.paletteOpen && state.nowPlaying == null) runCatching { bar.search.requestFocus() }
         paletteWasOpen = state.paletteOpen
     }
+    // Nothing is behind the bar but the page: Home's carousel picture runs up under it, and only
+    // once Home's rows have scrolled up there does the page's ground fill in behind it, as the
+    // Android TV app's bar does (its TvTopBar, `solid`).
+    val ground = Tone.background
+    val groundAlpha by animateFloatAsState(
+        if (bar.overArt && bar.scrolled) 1f else 0f,
+        Motion.standard(Motion.Fast),
+        label = "tvBarGround",
+    )
     Box(
         modifier
             .fillMaxWidth()
             .height(TV_BAR_HEIGHT)
-            .background(Tone.background),
+            .drawBehind { if (groundAlpha > 0f) drawRect(ground.copy(alpha = groundAlpha)) },
     ) {
         Row(
             Modifier

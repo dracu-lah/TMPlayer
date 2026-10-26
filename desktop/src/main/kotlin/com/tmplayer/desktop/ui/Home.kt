@@ -261,6 +261,24 @@ internal fun HomeRowsView(
     val watch = rememberSeriesWatch(state)
     // In line with the page header's title, whatever the window's width.
     val side = pageMargin()
+    // The big-screen mode's bar is drawn over Home while its carousel is up: the picture runs up
+    // under it and the bar takes the page's ground only once the rows have scrolled up there
+    // (the Android TV app's Home: `underBar` and `homeScrolled`).
+    val tvBar = state.tvBar
+    val carouselUnderBar = BigScreen.on && rows.isNotEmpty() && carouselOn &&
+        (recentRow != null || continueRow != null) && featured?.isEmpty() != true
+    androidx.compose.runtime.DisposableEffect(carouselUnderBar) {
+        tvBar.overArt = carouselUnderBar
+        onDispose {
+            tvBar.overArt = false
+            tvBar.scrolled = false
+        }
+    }
+    LaunchedEffect(list, carouselUnderBar) {
+        androidx.compose.runtime.snapshotFlow {
+            carouselUnderBar && (list.firstVisibleItemIndex > 0 || list.firstVisibleItemScrollOffset > 0)
+        }.collect { tvBar.scrolled = it }
+    }
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             if (rows.isEmpty()) {
@@ -317,11 +335,16 @@ internal fun HomeRowsView(
                             // The app's name over the carousel's empty top corner, as the side bar sets it
                             // (user, 2026-10-22), with the browser's Beta word beside it.
                             // Read here: the Box below hides the frame's own measures.
-                            val heroHeight = featuredHeight(maxWidth, maxHeight)
+                            // In the big-screen mode the picture also stands behind the bar: as much
+                            // taller as the bar is, fading in over the bar and a bit more (the
+                            // Android TV carousel's 1.7 times the bar's height).
+                            val underBar = if (BigScreen.on) TV_BAR_HEIGHT else 0.dp
+                            val heroHeight = featuredHeight(maxWidth, maxHeight) + underBar
                             Box {
                                 FeaturedCarousel(
                                     picks = featured,
                                     height = heroHeight,
+                                    topFade = if (underBar > 0.dp) underBar * 1.7f else null,
                                     side = side,
                                     watch = watch,
                                     chatTitle = { titles[it].orEmpty() },

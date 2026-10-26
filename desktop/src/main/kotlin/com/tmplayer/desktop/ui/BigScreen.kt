@@ -130,6 +130,15 @@ class TvBarFocus {
     var shown by mutableStateOf(false)
         internal set
 
+    /**
+     * Home's carousel runs up under the bar, its picture with it (the Android TV app's `underBar`):
+     * the page then starts at the window's top instead of below the bar, and the bar is drawn over it.
+     */
+    var overArt by mutableStateOf(false)
+
+    /** Home's rows have scrolled up under the bar, which then takes the page's ground behind it. */
+    var scrolled by mutableStateOf(false)
+
     internal fun requesterFor(place: NavPlace?): FocusRequester = when (place) {
         NavPlace.Home -> home
         NavPlace.Chats -> chats

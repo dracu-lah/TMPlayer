@@ -131,7 +131,10 @@ fun NavFrame(
     var pictureX by remember { mutableFloatStateOf(Float.NaN) }
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            if (tv && barShown) TvTopBar(state, update, account, onPicturePlaced = { pictureX = it })
+            // The TV's bar is drawn over the page (in the overlay below), as the Android TV app
+            // does: this only keeps the page clear of it, except where Home's carousel runs up
+            // under it.
+            if (tv && barShown && !state.tvBar.overArt) Spacer(Modifier.fillMaxWidth().height(TV_BAR_HEIGHT))
             // On a television, one focus group that remembers where the remote was: Down from the
             // bar and the end of a video put it back on that item (ShellState.focusPage).
             Box(Modifier.weight(1f).fillMaxWidth().focusRequester(state.pageFocus).then(if (tv) Modifier.focusRestorer().focusGroup() else Modifier)) {
@@ -143,6 +146,9 @@ fun NavFrame(
         if (barShown) {
             var frameX by remember { mutableFloatStateOf(0f) }
             Box(Modifier.fillMaxSize().onGloballyPositioned { frameX = it.boundsInRoot().left }) {
+                if (tv) {
+                    TvTopBar(state, update, account, onPicturePlaced = { pictureX = it }, modifier = Modifier.align(Alignment.TopStart))
+                }
                 if (!tv) {
                     NavBar(
                         state,
