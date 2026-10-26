@@ -31,6 +31,7 @@ import com.tmplayer.data.UpdateWords
 import com.tmplayer.data.Updates
 import com.tmplayer.data.WhatsNew
 import com.tmplayer.data.release
+import com.tmplayer.desktop.DesktopLayout
 import com.tmplayer.desktop.DesktopSettings
 import com.tmplayer.desktop.os.DesktopLog
 import com.tmplayer.desktop.os.FilePicker
@@ -119,9 +120,20 @@ internal fun AppearanceRows(state: ShellState) {
         scope.launch { settings.setHighContrast(on) }
     }
     Action(s.settingsLanguage, s.languageRowDetail(language), TmIcons.Language) { pickingLanguage = true }
+    // The big-screen mode for a computer on a television (plan 8.7). Auto stays the desktop's: a
+    // computer cannot tell a television from a monitor, so the viewer, or `--tv`, says so.
+    Setting(s.settingsLayout, s.settingsLayoutDetailDesktop, icon = TmIcons.Tv) {
+        Segments(DesktopLayout.entries, BigScreen.override ?: desktop.layout, { it.label }) { picked -> pickLayout(state, picked) }
+    }
     Setting(s.interfaceSize, s.interfaceSizeDetail, icon = TmIcons.TextSize) {
         Segments(UiScale.entries, uiScale, { it.label }) { scope.launch { settings.setUiScale(it) } }
     }
+    Toggle(
+        s.settingsStartFullscreen,
+        if (desktop.startFullscreen) s.settingsStartFullscreenOn else s.settingsStartFullscreenOff,
+        desktop.startFullscreen,
+        icon = TmIcons.Fullscreen,
+    ) { on -> state.extras.prefs.update { it.copy(startFullscreen = on) } }
     Toggle(
         s.settingsCompactNav,
         if (compactNav) s.settingsCompactNavOn("desktop") else s.settingsCompactNavOff("desktop"),
@@ -156,6 +168,21 @@ internal fun AppearanceRows(state: ShellState) {
     }
 
     if (pickingLanguage) LanguagePopup(settings, onClose = { pickingLanguage = false })
+}
+
+/**
+ * A layout picked in Settings: kept, in place of any `--tv` or `--desktop` this run started with,
+ * and applied at once. Into the TV layout the window goes full screen, as a television's app is;
+ * out of it, back to a window.
+ */
+internal fun pickLayout(state: ShellState, picked: DesktopLayout) {
+    val wasTv = BigScreen.on
+    state.extras.prefs.update { it.copy(layout = picked) }
+    BigScreen.override = null
+    BigScreen.layout = picked
+    val tv = BigScreen.on
+    if (tv && !wasTv) state.fullscreen = true
+    if (!tv && wasTv) state.fullscreen = false
 }
 
 /**

@@ -15,6 +15,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -54,6 +55,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -123,22 +125,39 @@ fun NavFrame(
     barShown: Boolean = true,
     content: @Composable () -> Unit,
 ) {
+    // The big-screen mode (plan 8.7) puts the TV's bar across the top and the page under it. The
+    // page stays at the same place in the tree either way, so a change of layout keeps its state.
+    val tv = BigScreen.on
+    var pictureX by remember { mutableFloatStateOf(Float.NaN) }
     Box(modifier.fillMaxSize()) {
-        CompositionLocalProvider(LocalBottomChrome provides if (barShown) NavBarClearance else 0.dp) {
-            content()
+        Column(Modifier.fillMaxSize()) {
+            if (tv && barShown) TvTopBar(state, update, account, onPicturePlaced = { pictureX = it })
+            // On a television, one focus group that remembers where the remote was: Down from the
+            // bar and the end of a video put it back on that item (ShellState.focusPage).
+            Box(Modifier.weight(1f).fillMaxWidth().focusRequester(state.pageFocus).then(if (tv) Modifier.focusRestorer().focusGroup() else Modifier)) {
+                CompositionLocalProvider(LocalBottomChrome provides if (barShown && !tv) NavBarClearance else 0.dp) {
+                    content()
+                }
+            }
         }
         if (barShown) {
-            var pictureX by remember { mutableFloatStateOf(Float.NaN) }
             var frameX by remember { mutableFloatStateOf(0f) }
             Box(Modifier.fillMaxSize().onGloballyPositioned { frameX = it.boundsInRoot().left }) {
-                NavBar(
+                if (!tv) {
+                    NavBar(
+                        state,
+                        update,
+                        account,
+                        Modifier.align(Alignment.BottomCenter),
+                        onPicturePlaced = { pictureX = it },
+                    )
+                }
+                ProfilePopover(
                     state,
                     update,
-                    account,
-                    Modifier.align(Alignment.BottomCenter),
-                    onPicturePlaced = { pictureX = it },
+                    anchorX = with(LocalDensity.current) { (pictureX - frameX).toDp() },
+                    below = if (tv) TV_BAR_HEIGHT else null,
                 )
-                ProfilePopover(state, update, anchorX = with(LocalDensity.current) { (pictureX - frameX).toDp() })
             }
         } else {
             LaunchedEffect(Unit) { state.profileOpen = false }
@@ -413,7 +432,7 @@ internal fun TipIconButton(
  * rows, and focus starts on the first.
  */
 @Composable
-private fun BoxScope.ProfilePopover(state: ShellState, update: NavUpdate?, anchorX: Dp) {
+private fun BoxScope.ProfilePopover(state: ShellState, update: NavUpdate?, anchorX: Dp, below: Dp? = null) {
     val s = LocalStrings.current
     val open = state.profileOpen
     val reduced = rememberReducedMotion() || Motion.reduced
@@ -431,18 +450,20 @@ private fun BoxScope.ProfilePopover(state: ShellState, update: NavUpdate?, ancho
     val watchedVideos by state.watched.watched.collectAsState(initial = emptyMap())
     val inFlight = rememberDownloadsInFlight()
     val half = POPOVER_WIDTH / 2
+    // Over the floating bar at the foot, or hanging under the TV's bar at the top (plan 8.7).
+    val origin = TransformOrigin(0.5f, if (below != null) 0f else 1f)
     Box(
         Modifier
-            .align(Alignment.BottomStart)
-            .padding(bottom = NAV_MARGIN + NAV_HEIGHT + 8.dp)
+            .align(if (below != null) Alignment.TopStart else Alignment.BottomStart)
+            .padding(top = below?.plus(4.dp) ?: 0.dp, bottom = if (below != null) 0.dp else NAV_MARGIN + NAV_HEIGHT + 8.dp)
             .offset(x = if (anchorX.value.isNaN()) 0.dp else (anchorX - half).coerceAtLeast(8.dp)),
     ) {
         AnimatedVisibility(
             visible = open,
             enter = if (reduced) fadeIn(Motion.standard(0)) else fadeIn(Motion.standard(Motion.Fast)) +
-                scaleIn(Motion.standard(Motion.Normal), initialScale = 0.85f, transformOrigin = TransformOrigin(0.5f, 1f)),
+                scaleIn(Motion.standard(Motion.Normal), initialScale = 0.85f, transformOrigin = origin),
             exit = if (reduced) fadeOut(Motion.standard(0)) else fadeOut(Motion.standard(Motion.Fast)) +
-                scaleOut(Motion.standard(Motion.Fast), targetScale = 0.9f, transformOrigin = TransformOrigin(0.5f, 1f)),
+                scaleOut(Motion.standard(Motion.Fast), targetScale = 0.9f, transformOrigin = origin),
         ) {
             val first = remember { FocusRequester() }
             val focus = LocalFocusManager.current

@@ -356,7 +356,8 @@ fun PageHeader(
             }
             val end: @Composable () -> Unit = {
                 actions()
-                if (chrome != null) {
+                // The big-screen mode keeps them on its bar at the top (TvTopBar).
+                if (chrome != null && !BigScreen.on) {
                     if (inSight) RegisterWindowControls()
                     WindowControls()
                 }

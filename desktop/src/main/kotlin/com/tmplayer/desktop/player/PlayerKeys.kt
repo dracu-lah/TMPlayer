@@ -82,6 +82,11 @@ data class KeyContext(
     val fullscreen: Boolean = false,
     val speedIsNormal: Boolean = true,
     val mac: Boolean = false,
+    /**
+     * The big-screen mode (plan 8.7): Esc and Backspace are a remote's Back, so they leave the
+     * video, never only full screen (the whole app is) and never the speed.
+     */
+    val tv: Boolean = false,
 )
 
 /**
@@ -144,11 +149,11 @@ object PlayerKeys {
             Key.PageDown -> return PlayerAction.NextEpisode
             Key.PageUp -> return PlayerAction.PreviousEpisode
             Key.F11 -> return PlayerAction.ToggleFullscreen
-            Key.Escape -> return if (context.fullscreen) PlayerAction.ExitFullscreen else PlayerAction.Back
+            Key.Escape -> return if (context.fullscreen && !context.tv) PlayerAction.ExitFullscreen else PlayerAction.Back
             // mpv's revert-seek. Shift alone: Backspace with nothing held keeps its two meanings.
             Key.Backspace -> return when {
                 shift && !ctrl && !alt && !meta -> PlayerAction.UndoSeek
-                context.speedIsNormal -> PlayerAction.Back
+                context.speedIsNormal || context.tv -> PlayerAction.Back
                 else -> PlayerAction.SpeedReset
             }
             Key.MoveHome -> return PlayerAction.JumpToTenth(0)
@@ -289,5 +294,35 @@ object PlayerKeys {
                 L.keysRowDetails to "I",
             ),
         )
+    }
+}
+
+/** A remote in the player (plan 8.7): the keys it sends that are not the keyboard's. */
+object PlayerRemote {
+    /** The keys that press the control the remote is on. */
+    val OK = setOf(Key.Enter, Key.NumPadEnter, Key.Spacebar, Key.DirectionCenter)
+
+    fun direction(key: Key): androidx.compose.ui.focus.FocusDirection? = when (key) {
+        Key.DirectionUp -> androidx.compose.ui.focus.FocusDirection.Up
+        Key.DirectionDown -> androidx.compose.ui.focus.FocusDirection.Down
+        Key.DirectionLeft -> androidx.compose.ui.focus.FocusDirection.Left
+        Key.DirectionRight -> androidx.compose.ui.focus.FocusDirection.Right
+        else -> null
+    }
+
+    /**
+     * What a key the JDK could not name does ([com.tmplayer.desktop.ui.remoteKeyOf]): Back and
+     * Stop leave the video, the media keys play, pause, skip and seek as their names say.
+     */
+    fun actionFor(key: com.tmplayer.desktop.ui.RemoteKey?): PlayerAction? = when (key) {
+        com.tmplayer.desktop.ui.RemoteKey.Back, com.tmplayer.desktop.ui.RemoteKey.Stop -> PlayerAction.Back
+        com.tmplayer.desktop.ui.RemoteKey.PlayPause -> PlayerAction.TogglePlay
+        com.tmplayer.desktop.ui.RemoteKey.Play -> PlayerAction.Play
+        com.tmplayer.desktop.ui.RemoteKey.Pause -> PlayerAction.Pause
+        com.tmplayer.desktop.ui.RemoteKey.Next -> PlayerAction.NextEpisode
+        com.tmplayer.desktop.ui.RemoteKey.Previous -> PlayerAction.PreviousEpisode
+        com.tmplayer.desktop.ui.RemoteKey.Rewind -> PlayerAction.SeekBy(-PlayerKeys.SEEK_MEDIUM_MS)
+        com.tmplayer.desktop.ui.RemoteKey.FastForward -> PlayerAction.SeekBy(PlayerKeys.SEEK_MEDIUM_MS)
+        com.tmplayer.desktop.ui.RemoteKey.Home, com.tmplayer.desktop.ui.RemoteKey.Menu, null -> null
     }
 }

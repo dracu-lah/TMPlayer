@@ -4,6 +4,7 @@
 # logs and checks) stays out; the browser has its own for the few the screens reach for
 # (web/src/wasmJsMain/kotlin/com/tmplayer/desktop).
 com/tmplayer/desktop/WatchedWords.kt
+com/tmplayer/desktop/ui/BigScreen.kt
 com/tmplayer/desktop/ui/ChatChrome.kt
 com/tmplayer/desktop/ui/ChatInfoPanel.kt
 com/tmplayer/desktop/ui/Chats.kt
@@ -27,6 +28,7 @@ com/tmplayer/desktop/ui/Shell.kt
 com/tmplayer/desktop/ui/ShellState.kt
 com/tmplayer/desktop/ui/SignIn.kt
 com/tmplayer/desktop/ui/TrackLanguageSettings.kt
+com/tmplayer/desktop/ui/TvTopBar.kt
 com/tmplayer/desktop/ui/Skeletons.kt
 com/tmplayer/desktop/ui/ViewModels.kt
 com/tmplayer/desktop/ui/Watched.kt

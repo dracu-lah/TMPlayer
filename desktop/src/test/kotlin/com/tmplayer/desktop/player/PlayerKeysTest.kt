@@ -162,4 +162,17 @@ class PlayerKeysTest {
         assertNull(action(Key.Q))
         assertNull(action(Key.Spacebar, shift = true))
     }
+
+    @Test
+    fun `on a television Esc and Backspace are the remote's Back`() {
+        val tv = KeyContext(fullscreen = true, speedIsNormal = false, tv = true)
+        // The whole app is full screen there, so Back leaves the video, not full screen.
+        assertEquals(PlayerAction.Back, action(Key.Escape, context = tv))
+        // And Backspace never resets the speed instead.
+        assertEquals(PlayerAction.Back, action(Key.Backspace, context = tv))
+        assertEquals(PlayerAction.UndoSeek, action(Key.Backspace, shift = true, context = tv))
+        // F and F11 still leave full screen, for the keyboard.
+        assertEquals(PlayerAction.ToggleFullscreen, action(Key.F11, context = tv))
+        assertEquals(PlayerAction.TogglePlay, action(Key.Enter, context = tv))
+    }
 }

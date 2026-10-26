@@ -286,7 +286,7 @@ internal fun HomeRowsView(
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 val sizes = CardSizes.of(state.posterWidth, maxWidth - side * 2)
                 LazyColumn(
-                    Modifier.fillMaxSize().homeEndScrolls(list),
+                    Modifier.fillMaxSize().homeEndScrolls(list).remembersRemoteItem(),
                     state = list,
                     contentPadding = PaddingValues(bottom = 24.dp + com.tmplayer.ui.components.LocalBottomChrome.current),
                     verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -451,7 +451,7 @@ private fun RowPage(
                 LoadMoreAhead(list, enabled = fed.wants(scrolling = list.isScrollInProgress), ahead = FEED_LINES_AHEAD) { feed.loadMore() }
             }
             LazyColumn(
-                Modifier.fillMaxSize().homeEndScrolls(list),
+                Modifier.fillMaxSize().homeEndScrolls(list).remembersRemoteItem(),
                 state = list,
                 contentPadding = PaddingValues(start = side, end = side, top = 8.dp, bottom = 24.dp + com.tmplayer.ui.components.LocalBottomChrome.current),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -717,7 +717,7 @@ private fun Strip(side: Dp, content: LazyListScope.() -> Unit) {
         // and a card the keyboard moves to stays inside them.
         WithinMargins(side, side + 8.dp) {
             LazyRow(
-                modifier = Modifier.edgeFade(strip, side, side + 8.dp),
+                modifier = Modifier.edgeFade(strip, side, side + 8.dp).remembersRemoteItem(),
                 state = strip,
                 contentPadding = PaddingValues(start = side, end = side + 8.dp, top = 8.dp, bottom = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(CARD_GAP),
@@ -818,6 +818,8 @@ private val BRAND_TOP = 14.dp
 /** The mark and "TMPlayer" over the carousel's picture or the top strip; the browser's Beta word is the nav bar's, on every page. */
 @Composable
 private fun HomeBrand(modifier: Modifier = Modifier) {
+    // The big-screen mode's bar signs the window at its end already.
+    if (BigScreen.on) return
     com.tmplayer.ui.components.BrandLockup(modifier, layout = com.tmplayer.ui.components.BrandLayout.Row, badge = false)
 }
 

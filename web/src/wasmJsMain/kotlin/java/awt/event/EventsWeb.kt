@@ -10,6 +10,9 @@ class MouseEvent(id: Int) : AWTEvent(id) {
 
 /** A key as AWT numbers it; Compose for Web never hands one out, so the checks on it stay false. */
 class KeyEvent(id: Int, val keyCode: Int) : AWTEvent(id) {
+    /** AWT's description of the event, where the desktop reads a remote's raw key code; none here. */
+    fun paramString(): String = ""
+
     companion object {
         const val KEY_PRESSED = 401
         const val VK_TAB = 9
