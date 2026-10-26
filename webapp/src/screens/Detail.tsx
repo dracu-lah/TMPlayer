@@ -105,8 +105,10 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
     const [meta] = createResource(
         () => (settings().posters && item.poster && props.infoSettled ? { ask: item.poster, code: props.info?.episode?.code ?? null } : null),
         async ({ ask, code }): Promise<Meta | null> => {
-            const found = await answer(ask)
-            if (!found.match) return null
+            // A failed lookup (no key, TMDB down) is "nothing known": thrown here it would reach the page's
+            // error boundary, which mounts the page again and asks again, over and over.
+            const found = await answer(ask).catch(() => null)
+            if (!found?.match) return null
             const m = code ? /^S(\d+)E(\d+)/i.exec(code) : null
             const extras = await loadExtras(found, m ? { season: Number(m[1]), episode: Number(m[2]) } : null).catch(() => null)
             return { found, extras: extras?.found ? extras : null }
