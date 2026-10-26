@@ -63,7 +63,8 @@
 .pc[data-variant="phone"] .pc-btn:hover { background-color: transparent; }
 .pc-btn:active { transform: scale(.92); background-color: rgba(255, 255, 255, .20); }
 .pc-btn:focus-visible, .pc-chip-button:focus-visible, .pc-total:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
-.pc-btn.tonal { background-color: var(--tonal-button); }
+/* button.tonal (styles.css) is a text pill with side padding: out of a round icon button it pushes the glyph off centre. */
+.pc-btn.tonal { background-color: var(--tonal-button); padding: 0; min-height: 0; }
 .pc-btn.tonal:hover { background-color: rgba(60, 60, 66, .75); }
 .pc[data-variant="desktop"] .pc-btn.step { width: 56px; height: 56px; }
 
