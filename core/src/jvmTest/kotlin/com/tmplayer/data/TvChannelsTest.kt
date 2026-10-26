@@ -189,6 +189,18 @@ class TvChannelsTest {
     }
 
     @Test
+    fun `a card whose picture copy is gone is written again`() {
+        val a = video(1)
+        val rows = HomeRows.build(emptyList(), listOf(chat(1)), emptyMap(), recent = listOf(a))
+        val programs = TvChannels.plan(rows, allowed = null, chatTitle = titles)!!
+        // The publisher reads a row whose copy has left the disk as one with no fingerprint.
+        val existing = programs.mapIndexed { i, p -> p.internalId to TvChannels.Existing(i.toLong(), null) }.toMap()
+        val diff = TvChannels.diff(existing, programs)
+        assertEquals(programs.map { it.internalId }, diff.update.map { it.second.internalId })
+        assertTrue(diff.insert.isEmpty() && diff.delete.isEmpty())
+    }
+
+    @Test
     fun `new, changed and gone cards are inserted, updated and deleted`() {
         val a = video(1)
         val b = video(2)

@@ -105,6 +105,16 @@ object Thumbnails {
         return (runCatching { MiniBlur.soften(raw) }.getOrNull() ?: raw).also { cache.put(key, it) }
     }
 
+    /**
+     * The thumbnail's own file, downloaded first when TDLib does not have it yet: for a caller that
+     * wants the picture itself rather than a decoded bitmap (the TV home screen's rows, which hand
+     * a copy to the launcher). Null when there is none, or it did not arrive in time.
+     */
+    suspend fun path(fileId: Int): String? {
+        if (fileId <= 0) return null
+        return withContext(Dispatchers.IO) { downloadThumbnail(fileId) }
+    }
+
     /** Downloads the real thumbnail if needed. Returns null when there isn't one. */
     suspend fun full(fileId: Int): ImageBitmap? {
         if (fileId <= 0) return null

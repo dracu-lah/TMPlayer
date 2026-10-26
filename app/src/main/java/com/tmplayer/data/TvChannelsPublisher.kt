@@ -15,16 +15,12 @@ import androidx.core.content.ContextCompat
 import com.tmplayer.MainActivity
 import com.tmplayer.R
 import com.tmplayer.data.TvChannels.Channel
-import com.tmplayer.online.MetaQuery
-import com.tmplayer.online.MetaResult
-import com.tmplayer.online.OnlineMetadata
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
-import java.security.MessageDigest
 
 /**
  * Writes [TvChannels]' cards into the TV provider, where the Android TV home screen reads an
@@ -42,12 +38,12 @@ import java.security.MessageDigest
  * while it runs (a new post in one of Home's chats, a video saved for later), and after playback, which
  * changes Continue watching and with it Recently added.
  *
- * **Pictures.** A card's picture must be a URI the launcher's process can read. With the online
- * lookups on, the film's or show's wide picture (its backdrop, an episode's still) in the
- * launcher's own 16:9 shape, else its upright poster, else the video's own thumbnail from
- * Telegram; each is copied into [TvArtProvider]'s directory and handed out from there. A card
- * whose picture could not be had yet wears the app's mark, as "Play next" does, and is tried again
- * on the next refresh.
+ * **Pictures.** A card's picture must be a URI the launcher's process can read: the film's or
+ * show's wide picture (its backdrop, an episode's still) in the launcher's own 16:9 shape, copied
+ * into [TvArtProvider]'s directory by [TvArt] and handed out from there. A card without one stays
+ * off the home screen until a later refresh finds it (user, 2026-10-23: a frame from the file
+ * beside real artwork looked unfinished). A card whose copy has gone from the disk is written
+ * again on the next refresh, so a row never keeps a picture the launcher cannot open.
  */
 object TvChannelsPublisher {
 
@@ -239,31 +235,27 @@ object TvChannelsPublisher {
                         val data = runCatching { cursor.getBlob(2) }.getOrNull()?.let { String(it, Charsets.UTF_8) }
                         put(
                             internal,
-                            ProgramRow(TvChannels.Existing(cursor.getLong(0), data, cursor.getInt(3) != 0), cursor.getString(4)),
+                            ProgramRow(
+                                TvChannels.Existing(
+                                    cursor.getLong(0),
+                                    // No fingerprint is never a match: a copy gone from the disk is written again.
+                                    data.takeUnless { TvArt.copyMissing(context, cursor.getString(4)) },
+                                    cursor.getInt(3) != 0,
+                                ),
+                                cursor.getString(4),
+                            ),
                         )
                     }
                 }
             }.orEmpty()
     }.getOrDefault(emptyMap())
 
-    /**
-     * What one publish may still ask of the network for pictures ([ONLINE_PER_RUN]). A card the
-     * run cannot afford is left out and asked for again on the next run.
-     */
-    private class OnlineBudget(var left: Int) {
-        fun take(): Boolean {
-            if (left <= 0) return false
-            left--
-            return true
-        }
-    }
-
     @androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.O)
     private suspend fun publishLocked(context: Context, programs: List<TvChannels.Program>, names: (Channel) -> String) {
         val channels = ownChannels(context)
         val quiet = runCatching { SystemClock.elapsedRealtime() - Process.getStartElapsedRealtime() < START_QUIET_MS }
             .getOrDefault(false)
-        val budget = OnlineBudget(if (quiet) 0 else ONLINE_PER_RUN)
+        val budget = TvArt.OnlineBudget(if (quiet) 0 else ONLINE_PER_RUN)
         val byChannel = programs.groupBy { it.channel }
         val keptArt = HashSet<String>()
         for (channel in Channel.entries) {
@@ -279,7 +271,7 @@ object TvChannelsPublisher {
                 runCatching { context.contentResolver.delete(TvContract.buildPreviewProgramUri(id), null, null) }
             }
             val deleted = diff.delete.toHashSet()
-            existing.values.filter { it.existing.rowId !in deleted }.mapNotNullTo(keptArt) { artName(context, it.art) }
+            existing.values.filter { it.existing.rowId !in deleted }.mapNotNullTo(keptArt) { TvArt.artName(context, it.art) }
             for (program in diff.insert) {
                 // A card without a real picture is left out, and asked for again on the next run.
                 val values = values(context, channelId, program, keptArt, budget) ?: continue
@@ -308,7 +300,7 @@ object TvChannelsPublisher {
         channelId: Long,
         program: TvChannels.Program,
         keptArt: MutableSet<String>,
-        budget: OnlineBudget,
+        budget: TvArt.OnlineBudget,
     ): ContentValues? {
         // Only cards with the film's or show's own artwork go on the home screen (user,
         // 2026-10-23): a frame from the file or the app's stand-in picture looked unfinished
@@ -356,70 +348,18 @@ object TvChannelsPublisher {
 
     /** The copy's name in [TvArtProvider.dir] and its aspect ratio, or null without the title's own artwork. */
     @androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.O)
-    private suspend fun resolveArt(context: Context, art: TvChannels.Art, budget: OnlineBudget): Pair<String, Int>? {
-        found(art, budget)?.let { info ->
-            // The wide picture (a film's or show's backdrop), a better card than a frame from the
-            // file. Only landscape pictures: a 2:3 poster beside them made the launcher's row
-            // uneven. A few downloads each run; one the run cannot afford is left for the next.
-            info.wideUrl?.let { url ->
-                if (budget.take()) fetched(context, url, "w")?.let { return it to TvContract.PreviewPrograms.ASPECT_RATIO_16_9 }
-            }
-        }
+    private suspend fun resolveArt(context: Context, art: TvChannels.Art, budget: TvArt.OnlineBudget): Pair<String, Int>? {
+        // The wide picture (a film's or show's backdrop), a better card than a frame from the
+        // file. Only landscape pictures: a 2:3 poster beside them made the launcher's row
+        // uneven. A few downloads each run; one the run cannot afford is left for the next.
+        TvArt.wide(context, art, budget, "w")?.let { return it to TvContract.PreviewPrograms.ASPECT_RATIO_16_9 }
         fixtureArt?.invoke(art)?.let { file ->
-            return copyIn(context, file, "f_${sha1(art.key)}.jpg")?.let { it to TvContract.PreviewPrograms.ASPECT_RATIO_16_9 }
+            return TvArt.copyIn(context, file, "f_${TvArt.sha1(art.key)}.jpg")?.let { it to TvContract.PreviewPrograms.ASPECT_RATIO_16_9 }
         }
         // No frame from the file: a card without the title's own artwork stays off the home screen.
         return null
     }
 
-    /** What the online lookups know of the film or show, when the viewer turned them on. */
-    private suspend fun found(art: TvChannels.Art, budget: OnlineBudget): com.tmplayer.online.MetaInfo? {
-        val online = OnlineMetadata.current ?: return null
-        if (!OnlineMetadata.enabled) return null
-        val query = MetaQuery.of(art.name, art.caption.ifBlank { null })?.showOnly() ?: return null
-        // What Home has already learnt costs nothing; only a title not yet looked up spends the run's budget.
-        online.peek(query)?.let { known -> return (known as? MetaResult.Found)?.info }
-        runCatching { online.cachedMatch(query) }.getOrNull()?.let { return it }
-        if (!budget.take()) return null
-        return (runCatching { online.lookup(query) }.getOrNull() as? MetaResult.Found)?.info
-    }
-
-    /** One of its pictures, fetched and copied in under [prefix]: "w" wide, "p" poster. */
-    private suspend fun fetched(context: Context, url: String, prefix: String): String? {
-        val online = OnlineMetadata.current ?: return null
-        val file = runCatching { online.image(url) }.getOrNull() ?: return null
-        return copyIn(context, file, "${prefix}_${sha1(url)}.jpg")
-    }
-
-    private fun copyIn(context: Context, source: File, name: String): String? = runCatching {
-        if (!TvArtProvider.isValidName(name) || !source.isFile) return null
-        val dir = TvArtProvider.dir(context).apply { mkdirs() }
-        val target = File(dir, name)
-        if (!target.isFile || target.length() != source.length()) {
-            val temp = File(dir, "$name.part")
-            source.copyTo(temp, overwrite = true)
-            if (!temp.renameTo(target)) {
-                temp.delete()
-                return null
-            }
-        }
-        name
-    }.getOrNull()
-
-    /** The copy a card's stored picture URI names, when it is one of this app's. */
-    private fun artName(context: Context, uri: String?): String? {
-        val prefix = "content://${TvArtProvider.authority(context)}/"
-        if (uri == null || !uri.startsWith(prefix)) return null
-        return uri.removePrefix(prefix).takeIf { TvArtProvider.isValidName(it) }
-    }
-
-    /** Deletes the copies no card names any more. */
-    private fun pruneArt(context: Context, kept: Set<String>) {
-        runCatching {
-            TvArtProvider.dir(context).listFiles()?.forEach { file -> if (file.name !in kept) file.delete() }
-        }
-    }
-
-    private fun sha1(text: String): String =
-        MessageDigest.getInstance("SHA-1").digest(text.toByteArray()).joinToString("") { "%02x".format(it) }
+    /** Deletes the channels' copies no card names any more; "Play next"'s own copies are left alone. */
+    private fun pruneArt(context: Context, kept: Set<String>) = TvArt.prune(context, TvArt.CHANNEL_KINDS, kept)
 }

@@ -1009,7 +1009,7 @@ private fun ComponentActivity.promoWatchNext() {
         val changes = com.tmplayer.data.WatchNext.changesFor(episode(2), 2_600_000, 2_634_000, now - 60_000, episode(3), enabled, supported) +
             com.tmplayer.data.WatchNext.changesFor(episode(4), 1_265_000, 2_634_000, now, episode(5), enabled, supported)
         android.util.Log.i("TMPlayerPromo", "Watch Next changes: $changes")
-        com.tmplayer.data.WatchNextPublisher.apply(context, changes)
+        runBlocking { com.tmplayer.data.WatchNextPublisher.apply(context, changes) }
     }.start()
 }
 
