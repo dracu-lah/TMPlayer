@@ -3,6 +3,7 @@
 import { api } from './tg/rpc'
 import { openFile } from './stream/reader'
 import { codecName, playableSound, probe, route } from './player/engines'
+import { LIBAV_FORMATS, LibavEngine } from './player/libav'
 import type { ChatView } from './tg/types'
 
 const VIEW: ChatView = { sort: 'Newest', minBytes: 0, maxBytes: Number.MAX_SAFE_INTEGER, watched: [], started: [], query: '' }
@@ -38,10 +39,25 @@ async function one(chat: string, t: { title: string; item: { key: string; size: 
         const why = (e as { why?: { kind: string; format?: string } }).why
         row.verdict = why ? `needs app ${JSON.stringify(why)}` : 'error ' + String(e)
         if (why?.kind === 'format') row.container = why.format ?? '?'
+        if (why?.kind === 'format' && LIBAV_FORMATS.has(why.format ?? '')) await libav(row, f, why.format!, t.item.duration)
     } finally {
         f.close()
     }
     return row
+}
+
+/** A file the libav.js engine opens: its header only, nothing played. */
+async function libav(row: Row, f: ReturnType<typeof openFile>, container: string, duration: number) {
+    try {
+        const e = await LibavEngine.open(f, document.createElement('video'), container, duration, null, {})
+        row.picture = e.videoCodec
+        row.sound = e.sounds.map((s) => codecName(s)).join('+') || 'none'
+        row.verdict = 'libav' + (e.sounds.length && !e.sounds.some((s) => s.decodable) ? ' / no playable sound' : '')
+        e.destroy()
+    } catch (e) {
+        const why = (e as { why?: unknown }).why
+        row.verdict = why ? `needs app ${JSON.stringify(why)}` : 'error ' + String(e)
+    }
 }
 
 export async function survey(perChat = 40, skip: string[] = [], onRow?: (r: Row) => void): Promise<Row[]> {

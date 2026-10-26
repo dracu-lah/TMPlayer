@@ -57,6 +57,13 @@ function ffmpeg(): string {
         "FFmpeg's source: https://ffmpeg.org/download.html, https://github.com/FFmpeg/FFmpeg",
         'How they are built, with the code that joins them to FFmpeg:',
         'https://github.com/Vanilagy/mediabunny/tree/main/packages (ac3, dts, aac-encoder)',
+        '',
+        "AVI files are read and their pictures and sound decoded by TMPlayer's own build of FFmpeg 9.0",
+        '(libavformat, libavcodec, libavutil) made with libav.js 6.10.9.0 (Yahweasel, 0BSD-style wrapper)',
+        'and emfiberthreads 1.3 (0BSD), no GPL parts: the separate files libav/libav-6.10.9.0-tmplayer.*,',
+        'loaded only when an AVI file plays, so they can be replaced with your own build of the same names.',
+        'The exact sources (FFmpeg, libav.js, emfiberthreads) and the build script are served beside them:',
+        '/libav/sources/ (README.txt there), and are in TMPlayer\'s repository under webapp/libav/.',
     ].join('\n')
 }
 

@@ -49,6 +49,8 @@ self.addEventListener('fetch', (event) => {
     if (url.origin !== self.location.origin || request.method !== 'GET') return
     if (url.pathname.startsWith('/stream/')) return event.respondWith(stream(event, url))
     if (VERSION === 'dev') return
+    // libav.js and its sources (/libav/sources/, linked from /licenses.txt) come from the network as they are.
+    if (url.pathname.startsWith('/libav/')) return
     // Every address is the same page, the router picks the screen; /licenses.txt is its own.
     if (request.mode === 'navigate' && !SHELL.includes(url.pathname)) return event.respondWith(fromCache('/', request))
     if (SHELL.includes(url.pathname) || url.pathname.startsWith('/assets/')) event.respondWith(fromCache(url.pathname, request))

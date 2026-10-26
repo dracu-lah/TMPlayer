@@ -23,6 +23,13 @@ frozen wasm build it replaces.
   later, inside Mediabunny's AC-3, DTS and AAC coders) and the Kotlin standard library, with the
   LGPL and Apache texts from `webapp/licenses/`. Settings links to it and the service worker keeps
   it for reading offline.
+- **libav.js (AVI)**: what Mediabunny cannot open (AVI) is read by TMPlayer's own libav.js build of
+  FFmpeg in a worker (`src/player/libav.ts`): an H.264 picture is copied (its showing order read
+  from the stream, `src/player/h264.ts`), MPEG-4 Part 2, DivX 3 and H.263 are decoded and encoded
+  again by the browser to H.264, the sound decoded and encoded as for MKV. The three built files are
+  committed in `webapp/public/libav/`; rebuild them with `webapp/libav/build.sh` (podman, about 3
+  minutes; `libav/fragments.json` lists what is in it). CI puts the exact sources in
+  `dist/libav/sources/` (`webapp/libav/sources.sh`), so every deploy serves them for the LGPL.
 - **CI**: `.github/workflows/webapp.yml` on every change under `webapp/` or `core/`: the rules, the
   type check, the build (not for pull requests, which get no secrets), and the end to end tests in
   Chromium and WebKit inside Playwright's image.

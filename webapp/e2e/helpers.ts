@@ -37,3 +37,13 @@ export async function openClips(page: Page) {
 export async function playsPast(page: Page, seconds: number) {
     await expect.poll(() => page.locator('video').first().evaluate((v: HTMLVideoElement) => v.currentTime), { timeout: 20_000 }).toBeGreaterThan(seconds)
 }
+
+/** Opens a card of the chat's grid, scrolling to it first: a virtual grid draws only the rows near the screen. */
+export async function openCard(page: Page, name: string) {
+    const card = page.locator('.card').filter({ hasText: name })
+    for (let i = 0; i < 30 && (await card.count()) === 0; i++) {
+        await page.evaluate(() => window.scrollBy(0, 300))
+        await page.waitForTimeout(100)
+    }
+    await card.click()
+}

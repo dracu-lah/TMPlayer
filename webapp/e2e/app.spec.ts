@@ -18,10 +18,12 @@ test('a session ended on another device goes back to sign in', async ({ page, co
 })
 
 test('a chat is arranged by the app rules, with what Telegram restricts left out', async ({ page }) => {
+    // Tall enough for the whole grid: a virtual grid draws only the rows near the screen.
+    await page.setViewportSize({ width: page.viewportSize()!.width, height: 2400 })
     await noSizeFloor(page)
     await openClips(page)
-    const names = page.locator('.card-name')
-    for (const name of ['Native Clip', 'Tail Index', 'Matroska Clip', 'Transport Clip', 'Surround Clip', 'Webm Clip', 'Old Clip'])
+    const names = page.locator('.card')
+    for (const name of ['Native Clip', 'Tail Index', 'Matroska Clip', 'Transport Clip', 'Surround Clip', 'Webm Clip', 'Old Clip', 'Xvid Clip', 'Divx Clip', 'Avc Avi Clip', 'Windows Clip', 'Broken Clip'])
         await expect(names.filter({ hasText: name })).toHaveCount(1)
     // Self-destructing and withheld videos are never listed; the first is counted.
     await expect(names.filter({ hasText: 'Burning Clip' })).toHaveCount(0)

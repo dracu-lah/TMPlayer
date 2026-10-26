@@ -87,6 +87,7 @@ jobs:
         run: |
           pnpm -C webapp exec vite build
           test -s webapp/dist/licenses.txt
+          webapp/libav/sources.sh webapp/dist/libav/sources
           echo "First load, gzip: $(cat webapp/dist/assets/index-*.js webapp/dist/assets/store-*.js webapp/dist/assets/rolldown-runtime-*.js | gzip -9 | wc -c) bytes of JS" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the rules

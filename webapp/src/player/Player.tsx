@@ -1,5 +1,4 @@
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
-import type { InputAudioTrack } from 'mediabunny'
 import '@videojs/html/video/player'
 import '@videojs/html/ui/container'
 import '@videojs/html/ui/controls'
@@ -52,7 +51,8 @@ import {
     VolumeMute02Icon,
 } from '@hugeicons/core-free-icons'
 import { openFile, streams, warmFile, type TgFile } from '../stream/reader'
-import { codecName, nativeEngine, playableSound, probe, RemuxEngine, route, Unplayable, type Engine, type Probe, type Why } from './engines'
+import { codecName, nativeEngine, playableSound, probe, RemuxEngine, route, Unplayable, type Engine, type Probe, type SoundTrack, type Why } from './engines'
+import { LIBAV_FORMATS, LibavEngine } from './libav'
 import { storyboardTrack } from './storyboard'
 import { readSubtitle, SUBTITLE_EXTENSIONS, SubtitleError } from './subtitles'
 import { api } from '../tg/rpc'
@@ -144,8 +144,8 @@ export function Player(props: {
     const [needsApp, setNeedsApp] = createSignal<Why | null>(null)
     /** A line over the picture: the sound, a subtitle file, a quality switch. */
     const [notice, setNotice] = createSignal('')
-    const [audios, setAudios] = createSignal<InputAudioTrack[]>([])
-    const [audio, setAudio] = createSignal<InputAudioTrack | null>(null)
+    const [audios, setAudios] = createSignal<SoundTrack[]>([])
+    const [audio, setAudio] = createSignal<SoundTrack | null>(null)
     const [switchable, setSwitchable] = createSignal(false)
     const [details, setDetails] = createSignal('')
     const [readout, setReadout] = createSignal('')
@@ -236,7 +236,11 @@ export function Player(props: {
         streams.set(src.key, f)
         f.warmUp()
         try {
-            const p = await probe(f, src.duration)
+            const p = await probe(f, src.duration).catch((e) => {
+                if (e instanceof Unplayable && e.why.kind === 'format' && LIBAV_FORMATS.has(e.why.format)) return e.why.format
+                throw e
+            })
+            if (typeof p === 'string') return await software(f, p, at, play, gen, rate)
             if (gen !== generation) return p.input.dispose()
             probed = p
             setAudios(p.audios)
@@ -271,6 +275,25 @@ export function Player(props: {
         } catch (e) {
             fail(e)
         }
+    }
+
+    /** A file only libav.js opens (AVI): its own engine, which reads the header itself. */
+    const software = async (f: TgFile, container: string, at: number, play: boolean, gen: number, rate: number) => {
+        const e = await LibavEngine.open(f, video, container, source().duration, at, {
+            onError: fail,
+            onDetail: (d) => setDetails(`${container}. ${d}`),
+        })
+        if (gen !== generation) return e.destroy()
+        engine = e
+        const sound = e.sounds.find((s) => s.decodable) ?? null
+        if (!sound && e.sounds.length) setNotice(t('web.no_sound', { codec: codecName(e.sounds[0]) }))
+        setAudios(e.sounds)
+        setAudio(sound)
+        if (at) video.currentTime = at
+        video.playbackRate = rate
+        setSwitchable(true)
+        setDetails(`${container}. ${e.detail}`)
+        if (play) video.play().catch(() => {})
     }
 
     /** The same source again at the same second: Retry after a stall, a lost connection or a quality pick. */
@@ -353,7 +376,7 @@ export function Player(props: {
     }
     const qualityLabel = (height: number) => (height ? t('detail.telegram_quality', { quality: `${height}p` }) : t('web.quality_original'))
 
-    const trackLabel = (tr: InputAudioTrack, i: number) => {
+    const trackLabel = (tr: SoundTrack, i: number) => {
         const lang = tr.languageCode && tr.languageCode !== 'und' ? tr.languageCode.toUpperCase() : ''
         const parts = [tr.name, lang, codecName(tr), tr.numberOfChannels ? t('player.channels_count', { count: tr.numberOfChannels }) : ''].filter(Boolean)
         return parts.length ? parts.join(', ') : t('player.track_number', { number: i + 1 })

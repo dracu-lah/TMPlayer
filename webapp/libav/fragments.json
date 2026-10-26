@@ -1,0 +1,8 @@
+["avformat","avcodec",
+ "demuxer-avi",
+ "parser-mpeg4video","decoder-mpeg4","decoder-msmpeg4v1","decoder-msmpeg4v2","decoder-msmpeg4v3","decoder-h263",
+ "parser-h264","parser-hevc",
+ "parser-mpegaudio","decoder-mp3","decoder-mp2",
+ "parser-ac3","decoder-ac3","decoder-eac3",
+ "parser-aac","decoder-aac",
+ "decoder-pcm_s16le","decoder-pcm_u8","decoder-adpcm_ms","decoder-adpcm_ima_wav"]

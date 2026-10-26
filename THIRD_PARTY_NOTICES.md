@@ -213,6 +213,11 @@ or MPL-2.0 (Mediabunny and its coders, whose source ships in each npm package), 
   AAC coders (configured with only those coders, no GPL parts). They are separate files loaded
   only when a video needs them. Source: <https://ffmpeg.org/download.html>; how they are built:
   <https://github.com/Vanilagy/mediabunny/tree/main/packages>.
+- FFmpeg 9.0 (libavformat, libavcodec, libavutil): LGPL-2.1-or-later, in TMPlayer's own libav.js
+  6.10.9.0 build (0BSD-style wrapper, with emfiberthreads 1.3, 0BSD) that reads AVI files:
+  `webapp/public/libav/`, loaded only when an AVI plays, no GPL parts. Built by
+  `webapp/libav/build.sh`; every deploy serves the exact sources at `/libav/sources/`
+  (`webapp/libav/sources.sh`).
 - Kotlin standard library: Apache-2.0, inside the app's rules compiled from `:core`.
 
 ## Web (web.tmplayer.org)

@@ -195,10 +195,10 @@ async function registerDecoders(codec: string | null) {
  * Opus where MP4 Opus plays and the browser encodes it (Chromium on Linux has no AAC encoder),
  * else mediabunny's AAC encoder in WebAssembly.
  */
-async function encoderFor(channels: number): Promise<{ to: 'aac' | 'opus'; channels: number } | null> {
+export async function encoderFor(channels: number, sampleRate = 48000): Promise<{ to: 'aac' | 'opus'; channels: number } | null> {
     const counts = channels > 2 ? [channels, 2] : [channels]
     for (const n of counts) {
-        const config = { numberOfChannels: n, sampleRate: 48000 }
+        const config = { numberOfChannels: n, sampleRate }
         if (await canEncodeAudio('aac', config)) return { to: 'aac', channels: n }
         if (MS!.isTypeSupported('audio/mp4; codecs="opus"') && (await canEncodeAudio('opus', config))) return { to: 'opus', channels: n }
         if (!aacRegistered) {
@@ -237,6 +237,9 @@ export async function playableSound(tracks: InputAudioTrack[]): Promise<InputAud
     return null
 }
 
+/** A sound track as the menu shows it: mediabunny's, or one libav.js reads (libav.ts). */
+export type SoundTrack = Pick<InputAudioTrack, 'codec' | 'internalCodecId' | 'languageCode' | 'name' | 'numberOfChannels'>
+
 export interface EngineEvents {
     onError?: (e: unknown) => void
     /** The engine's `detail` changed (another sound track, converted or copied). */
@@ -244,10 +247,10 @@ export interface EngineEvents {
 }
 
 export interface Engine {
-    readonly name: 'native' | 'remux'
+    readonly name: 'native' | 'remux' | 'libav'
     readonly detail: string
     /** Plays another sound track; false when this browser cannot play that one. */
-    setAudio?(track: InputAudioTrack): Promise<boolean>
+    setAudio?(track: SoundTrack): Promise<boolean>
     destroy(): void
 }
 
@@ -266,51 +269,49 @@ export function nativeEngine(video: HTMLVideoElement, url: string, start: number
 }
 
 /**
- * Remux to fragmented MP4 in the browser: the picture is copied untouched and decoded by the
- * device's hardware, sound the browser cannot play (AC-3, E-AC-3, DTS) is converted to AAC. Fed to
- * ManagedMediaSource on iPhone and Safari, MediaSource elsewhere.
- *
- * Times: the `<video>` element counts from 0 at the file's first timestamp (`Probe.base`); the
- * conversion is cut at a key frame (`trim.start`, its output starts at 0) and placed with
- * `timestampOffset`.
+ * Feeds fragmented MP4 to ManagedMediaSource (iPhone, Safari) or MediaSource (elsewhere), from a
+ * key frame at or before the second asked for; `produce` writes the MP4 from there, through `sink`.
+ * Keeps 30 s (phone) to 60 s ahead, starts again on a seek outside what is buffered.
  */
-export class RemuxEngine implements Engine {
-    readonly name = 'remux'
-    detail = 'Remuxed to MP4'
-    private ms: MediaSource
-    private managed: boolean
+export abstract class FeedEngine implements Engine {
+    abstract readonly name: 'remux' | 'libav'
+    abstract detail: string
+    private ms!: MediaSource
+    private managed = false
     private sb: SourceBuffer | null = null
     private mime = ''
-    private url: string
-    private gen = 0
-    private conversion: Conversion | null = null
+    private url = ''
+    protected gen = 0
     private running: Promise<void> = Promise.resolve()
-    private keySink: EncodedPacketSink
-    private destroyed = false
-    private t0 = 0
+    protected destroyed = false
+    protected t0 = 0
     private wake: (() => void) | null = null
     private readonly onSeeking = () => this.seekTo(this.video.currentTime)
     private readonly onTick = () => this.wake?.()
 
-    /** `audio` is a track `soundOf` said plays, or null to play without sound. */
     constructor(
-        private video: HTMLVideoElement,
-        private p: Probe,
-        private audio: InputAudioTrack | null,
-        start: number,
-        private ev: EngineEvents,
+        protected video: HTMLVideoElement,
+        private length: number,
+        protected ev: EngineEvents,
     ) {
         if (!MS) throw new Unplayable({ kind: 'no-mse' })
-        if (!p.video) throw new Unplayable({ kind: 'no-picture' })
-        this.keySink = new EncodedPacketSink(p.video)
-        video.addEventListener('seeking', this.onSeeking)
-        video.addEventListener('timeupdate', this.onTick)
-        video.addEventListener('play', this.onTick)
+    }
+
+    /** Starts feeding at `start` seconds; called once by the subclass when it is ready. */
+    protected begin(start: number) {
+        this.video.addEventListener('seeking', this.onSeeking)
+        this.video.addEventListener('timeupdate', this.onTick)
+        this.video.addEventListener('play', this.onTick)
         ;[this.ms, this.url] = this.open(start)
         this.managed = !!window.ManagedMediaSource && this.ms instanceof window.ManagedMediaSource
         // Safari offers ManagedMediaSource only with AirPlay off, or with an AirPlay source beside it.
-        if (this.managed) video.disableRemotePlayback = true
+        if (this.managed) this.video.disableRemotePlayback = true
     }
+
+    /** Writes the MP4 for run `gen` from `t` seconds (the element's), until the end or a newer run. */
+    protected abstract produce(gen: number, t: number): Promise<void>
+    /** Stops what `produce` is doing; the next run waits for it. */
+    protected abstract stop(): Promise<void>
 
     /** A new Media Source on the element, filled from `start` once it opens. */
     private open(start: number): [MediaSource, string] {
@@ -323,7 +324,7 @@ export class RemuxEngine implements Engine {
             'sourceopen',
             () => {
                 if (this.destroyed || ms !== this.ms) return
-                if (this.p.duration > 0) ms.duration = this.p.duration
+                if (this.length > 0) ms.duration = this.length
                 this.restart(start)
             },
             { once: true },
@@ -339,8 +340,7 @@ export class RemuxEngine implements Engine {
         const playing = !this.video.paused
         this.gen++
         this.wake?.()
-        this.conversion?.cancel().catch(() => {})
-        this.conversion = null
+        this.stop().catch(() => {})
         this.ms.removeEventListener('startstreaming', this.onTick)
         URL.revokeObjectURL(this.url)
         this.sb = null
@@ -356,25 +356,21 @@ export class RemuxEngine implements Engine {
         )
     }
 
-    async setAudio(track: InputAudioTrack): Promise<boolean> {
-        if (track === this.audio) return true
-        if ((await soundOf(track)).kind === 'none') return false
-        if (this.destroyed) return false
-        this.audio = track
+    /** Plays on from where the element is, with whatever changed (another sound track). */
+    protected again() {
         if (this.sb && !('changeType' in SourceBuffer.prototype)) this.reopen(this.video.currentTime)
         else this.restart(this.video.currentTime)
-        return true
     }
 
     destroy() {
         this.destroyed = true
         this.gen++
         this.wake?.()
-        this.conversion?.cancel().catch(() => {})
+        this.stop().catch(() => {})
         this.video.removeEventListener('seeking', this.onSeeking)
         this.video.removeEventListener('timeupdate', this.onTick)
         this.video.removeEventListener('play', this.onTick)
-        this.ms.removeEventListener('startstreaming', this.onTick)
+        this.ms?.removeEventListener('startstreaming', this.onTick)
         this.video.removeAttribute('src')
         this.video.load()
         URL.revokeObjectURL(this.url)
@@ -395,24 +391,22 @@ export class RemuxEngine implements Engine {
     private restart(t: number) {
         const gen = ++this.gen
         this.wake?.()
-        const previous = this.conversion
-        this.conversion = null
+        const stopped = this.stop()
         const before = this.running
         const t0 = performance.now()
         this.running = (async () => {
-            await previous?.cancel().catch(() => {})
+            await stopped.catch(() => {})
             mark(`seek ${t.toFixed(1)}: cancelled`, t0)
             await before.catch(() => {})
             if (gen !== this.gen || this.destroyed) return
             await this.clearBuffer()
             if (gen !== this.gen) return
-            const key = await this.keySink.getKeyPacket(t + this.p.base, { metadataOnly: true }).catch(() => null)
-            // Before the first key frame (or none found): from the start.
-            const from = Math.max(key?.timestamp ?? this.p.base, this.p.base)
-            mark(`key frame ${(from - this.p.base).toFixed(2)}`, t0)
-            if (gen !== this.gen) return
             this.t0 = t0
-            await this.run(gen, from)
+            await this.produce(gen, t)
+            if (gen === this.gen && this.ms.readyState === 'open' && this.sb) {
+                await this.idle(this.sb)
+                if (gen === this.gen && this.ms.readyState === 'open') this.ms.endOfStream()
+            }
         })().catch((e) => {
             if (gen === this.gen && !this.destroyed) this.ev.onError?.(e)
         })
@@ -429,88 +423,38 @@ export class RemuxEngine implements Engine {
         }
     }
 
-    private async run(gen: number, from: number) {
-        const audioOptions = await this.audioPlan()
+    /**
+     * Where run `gen` writes its MP4: into the SourceBuffer, its times placed `offset()` seconds on
+     * (the output starts at 0 from a key frame). A superseded run's chunks are dropped, not refused:
+     * an errored stream makes mediabunny's own cancel throw.
+     */
+    protected sink(gen: number, output: () => Output, offset: () => number, codec: string): StreamTarget {
         let written = 0
-        const output = new Output({
-            format: new Mp4OutputFormat({ fastStart: 'fragmented', minimumFragmentDuration: 1 }),
-            target: new StreamTarget(
-                new WritableStream<StreamTargetChunk>({
-                    // A superseded run's chunks are dropped, not refused: an errored stream makes mediabunny's own cancel throw.
-                    write: async (chunk) => {
-                        if (gen !== this.gen) return
-                        // Fragmented output is written in order; anything that rewrites earlier bytes is skipped.
-                        if (chunk.position < written) return
-                        written = chunk.position + chunk.data.length
-                        if (chunk.position === 0) relabelHevc(chunk.data)
-                        const sb = await this.sourceBuffer(output, from - this.p.base)
-                        await this.roomAhead(gen)
-                        if (gen !== this.gen) return
-                        await this.append(sb, chunk.data)
-                        if (this.t0) {
-                            mark(`first append ${chunk.data.length} B`, this.t0)
-                            this.t0 = 0
-                        }
-                    },
-                }),
-            ),
-        })
-        const conversion = await Conversion.init({
-            input: this.p.input,
-            output,
-            video: (track) => (track === this.p.video ? {} : { discard: true }),
-            audio: (track) => (track === this.audio && audioOptions ? audioOptions : { discard: true }),
-            trim: { start: from },
-            copy: { shiftTolerance: 0.25 },
-            tags: {},
-            showWarnings: false,
-        })
-        mark('conversion ready', this.t0)
-        if (gen !== this.gen) return
-        if (!conversion.isValid || !conversion.utilizedTracks.some((t) => t === this.p.video)) {
-            throw new Unplayable({ kind: 'picture', codec: this.p.videoCodec })
-        }
-        this.conversion = conversion
-        await conversion.execute()
-        if (gen === this.gen && this.ms.readyState === 'open' && this.sb) {
-            await this.idle(this.sb)
-            if (gen === this.gen && this.ms.readyState === 'open') this.ms.endOfStream()
-        }
+        return new StreamTarget(
+            new WritableStream<StreamTargetChunk>({
+                write: async (chunk) => {
+                    if (gen !== this.gen) return
+                    // Fragmented output is written in order; anything that rewrites earlier bytes is skipped.
+                    if (chunk.position < written) return
+                    written = chunk.position + chunk.data.length
+                    if (chunk.position === 0) relabelHevc(chunk.data)
+                    const sb = await this.sourceBuffer(output(), offset(), codec)
+                    await this.roomAhead(gen)
+                    if (gen !== this.gen) return
+                    await this.append(sb, chunk.data)
+                    if (this.t0) {
+                        mark(`first append ${chunk.data.length} B`, this.t0)
+                        this.t0 = 0
+                    }
+                },
+            }),
+        )
     }
 
-    /** The chosen track copied when the browser plays it in MP4, else converted; null for no sound. */
-    private async audioPlan() {
-        const plan = await this.soundPlan()
-        this.ev.onDetail?.(this.detail)
-        return plan
-    }
-
-    private async soundPlan() {
-        const track = this.audio
-        if (!track) {
-            this.detail = 'Remuxed to MP4, no sound'
-            return null
-        }
-        const sound = await soundOf(track)
-        if (sound.kind === 'none') return null
-        if (sound.kind === 'copy') {
-            this.detail = `Remuxed to MP4, sound copied (${codecName(track)})`
-            return {}
-        }
-        this.detail = `Remuxed to MP4, sound converted from ${codecName(track)} to ${sound.to.toUpperCase()}`
-        return {
-            codec: sound.to,
-            numberOfChannels: sound.channels,
-            sampleRate: 48000,
-            quality: QUALITY_HIGH,
-            forceTranscode: true,
-        } as const
-    }
-
-    private async sourceBuffer(output: Output, offset: number): Promise<SourceBuffer> {
+    private async sourceBuffer(output: Output, offset: number, codec: string): Promise<SourceBuffer> {
         const mime = (await output.getMimeType()).replace(/hev1\./g, 'hvc1.')
         if (!this.sb) {
-            if (!MS!.isTypeSupported(mime)) throw new Unplayable({ kind: 'picture', codec: this.p.videoCodec })
+            if (!MS!.isTypeSupported(mime)) throw new Unplayable({ kind: 'picture', codec })
             this.sb = this.ms.addSourceBuffer(mime)
             this.sb.mode = 'segments'
             this.mime = mime
@@ -584,6 +528,109 @@ export class RemuxEngine implements Engine {
             sb.addEventListener('updateend', done)
             sb.addEventListener('error', fail)
         })
+    }
+}
+
+/**
+ * Remux to fragmented MP4 in the browser: the picture is copied untouched and decoded by the
+ * device's hardware, sound the browser cannot play (AC-3, E-AC-3, DTS) is converted to AAC.
+ *
+ * Times: the `<video>` element counts from 0 at the file's first timestamp (`Probe.base`); the
+ * conversion is cut at a key frame (`trim.start`, its output starts at 0) and placed with
+ * `timestampOffset`.
+ */
+export class RemuxEngine extends FeedEngine {
+    readonly name = 'remux'
+    detail = 'Remuxed to MP4'
+    private conversion: Conversion | null = null
+    private keySink: EncodedPacketSink
+
+    /** `audio` is a track `soundOf` said plays, or null to play without sound. */
+    constructor(
+        video: HTMLVideoElement,
+        private p: Probe,
+        private audio: InputAudioTrack | null,
+        start: number,
+        ev: EngineEvents,
+    ) {
+        super(video, p.duration, ev)
+        if (!p.video) throw new Unplayable({ kind: 'no-picture' })
+        this.keySink = new EncodedPacketSink(p.video)
+        this.begin(start)
+    }
+
+    async setAudio(track: InputAudioTrack): Promise<boolean> {
+        if (track === this.audio) return true
+        if ((await soundOf(track)).kind === 'none') return false
+        if (this.destroyed) return false
+        this.audio = track
+        this.again()
+        return true
+    }
+
+    protected async stop() {
+        const previous = this.conversion
+        this.conversion = null
+        await previous?.cancel()
+    }
+
+    protected async produce(gen: number, t: number) {
+        const key = await this.keySink.getKeyPacket(t + this.p.base, { metadataOnly: true }).catch(() => null)
+        // Before the first key frame (or none found): from the start.
+        const from = Math.max(key?.timestamp ?? this.p.base, this.p.base)
+        mark(`key frame ${(from - this.p.base).toFixed(2)}`, this.t0)
+        if (gen !== this.gen) return
+        const audioOptions = await this.audioPlan()
+        const output: Output = new Output({
+            format: new Mp4OutputFormat({ fastStart: 'fragmented', minimumFragmentDuration: 1 }),
+            target: this.sink(gen, () => output, () => from - this.p.base, this.p.videoCodec),
+        })
+        const conversion = await Conversion.init({
+            input: this.p.input,
+            output,
+            video: (track) => (track === this.p.video ? {} : { discard: true }),
+            audio: (track) => (track === this.audio && audioOptions ? audioOptions : { discard: true }),
+            trim: { start: from },
+            copy: { shiftTolerance: 0.25 },
+            tags: {},
+            showWarnings: false,
+        })
+        mark('conversion ready', this.t0)
+        if (gen !== this.gen) return
+        if (!conversion.isValid || !conversion.utilizedTracks.some((t) => t === this.p.video)) {
+            throw new Unplayable({ kind: 'picture', codec: this.p.videoCodec })
+        }
+        this.conversion = conversion
+        await conversion.execute()
+    }
+
+    /** The chosen track copied when the browser plays it in MP4, else converted; null for no sound. */
+    private async audioPlan() {
+        const plan = await this.soundPlan()
+        this.ev.onDetail?.(this.detail)
+        return plan
+    }
+
+    private async soundPlan() {
+        const track = this.audio
+        if (!track) {
+            this.detail = 'Remuxed to MP4, no sound'
+            return null
+        }
+        const sound = await soundOf(track)
+        if (sound.kind === 'none') return null
+        if (sound.kind === 'copy') {
+            this.detail = `Remuxed to MP4, sound copied (${codecName(track)})`
+            return {}
+        }
+        this.detail = `Remuxed to MP4, sound converted from ${codecName(track)} to ${sound.to.toUpperCase()}`
+        return {
+            codec: sound.to,
+            numberOfChannels: sound.channels,
+            sampleRate: 48000,
+            quality: QUALITY_HIGH,
+            forceTranscode: true,
+        } as const
     }
 }
 
