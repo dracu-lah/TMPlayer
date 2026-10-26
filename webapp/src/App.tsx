@@ -170,7 +170,7 @@ function OtherTab() {
 function Boot() {
     return (
         <div class="boot">
-            <img class="boot-mark" src="/icon.svg" alt="TMPlayer" width="64" height="64" />
+            <div class="loader" role="progressbar" aria-label="TMPlayer" />
         </div>
     )
 }

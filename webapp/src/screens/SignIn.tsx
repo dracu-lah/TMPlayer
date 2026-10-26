@@ -1,6 +1,6 @@
 import { batch, createMemo, createSignal, For, lazy, Match, onCleanup, onMount, Show, Suspense, Switch } from 'solid-js'
 import { renderSVG } from 'uqr'
-import { ArrowDown01Icon, Cancel01Icon, ViewIcon, ViewOffSlashIcon } from '@hugeicons/core-free-icons'
+import { ArrowDown01Icon, Cancel01Icon, RefreshIcon, Tick02Icon, ViewIcon, ViewOffSlashIcon } from '@hugeicons/core-free-icons'
 import { api, call } from '../tg/rpc'
 import { setMe } from '../session'
 import { iosBrowser } from '../install'
@@ -70,12 +70,27 @@ export function SignIn() {
     const [qr, setQr] = createSignal<string | null>(null)
     const [qrExpires, setQrExpires] = createSignal(0)
     const [scanned, setScanned] = createSignal(false)
+    // When the code on screen arrived, so the bar under it drains over its own life (the apps' QrLifeCue).
+    const [qrArrived, setQrArrived] = createSignal(0)
+    // The refresh pill spins for a few seconds after a press, so it shows before Telegram answers.
+    const [refreshing, setRefreshing] = createSignal(false)
     let qrAbort: AbortController | null = null
     // The QR flow asks for the two-step password through this, resolved when the form is sent.
     let passwordWaiter: ((pw: string) => void) | null = null
     // mtcute fetches a new code by itself when one runs out; one still showing well after that
     // means the connection is not answering, and the viewer asks for a new one.
     const qrExpired = () => qrExpires() > 0 && now() > qrExpires() + 5000
+    const qrLeft = () => (qrExpires() > 0 ? qrExpires() - now() : 0)
+    const qrLife = () => Math.max(1, qrExpires() - qrArrived())
+    const qrFraction = () => (qr() ? Math.min(1, Math.max(0, qrLeft() / qrLife())) : 0)
+    // The last seconds of a code, and the moment between it and the next one: said, so a code that
+    // changes under the camera is expected.
+    const qrSoon = () => !!qr() && qrExpires() > 0 && qrLeft() <= 8000
+    const refreshQr = () => {
+        setRefreshing(true)
+        setTimeout(() => setRefreshing(false), 4000)
+        startQr()
+    }
 
     const startQr = () => {
         qrAbort?.abort()
@@ -96,6 +111,7 @@ export function SignIn() {
                     batch(() => {
                         setQr(renderSVG(e.url, { pixelSize: 6, border: 2, whiteColor: '#fff', blackColor: '#0e0f13' }))
                         setQrExpires(e.expires)
+                        setQrArrived(Date.now())
                         setScanned(false)
                     })
                 } else if (e.kind === 'scanned') setScanned(true)
@@ -460,31 +476,48 @@ export function SignIn() {
                 <Match when={step().kind === 'qr'}>
                     <h1>{t('login.qr_title')}</h1>
                     <p class="muted">{t('login.qr_blurb')}</p>
-                    <div class="qr" aria-live="polite">
-                        <Show when={qr()} fallback={<div class="qr-wait">{t('login.qr_renewing')}</div>}>
-                            <div class="qr-code" role="img" aria-label={t('login.qr_description')} innerHTML={qr()!} classList={{ faded: scanned() || qrExpired() }} />
-                        </Show>
-                        <Show when={scanned()}>
-                            <div class="qr-over">{t('login.qr_scanned')}. {t('login.signing_in')}</div>
-                        </Show>
-                        <Show when={qrExpired() && !scanned()}>
-                            <div class="qr-over">
-                                {t('login.qr_expired')}
-                                <button class="primary" onClick={startQr}>{t('login.qr_refresh')}</button>
+                    <div class="qr-layout">
+                        <div class="qr-side">
+                            <div class="qr" aria-live="polite">
+                                <Show when={qr()} fallback={<div class="loader on-white" role="progressbar" aria-label={t('login.qr_renewing')} />}>
+                                    <div class="qr-code" role="img" aria-label={t('login.qr_description')} innerHTML={qr()!} />
+                                </Show>
+                                <div class="qr-veil" classList={{ on: scanned() }} aria-hidden={!scanned()}>
+                                    <span class="qr-tick"><Icon icon={Tick02Icon} size={32} /></span>
+                                    <b>{t('login.qr_scanned')}</b>
+                                </div>
+                                <div class="qr-veil" classList={{ on: qrExpired() && !scanned() }} aria-hidden={!(qrExpired() && !scanned())}>
+                                    <b>{t('login.qr_expired')}</b>
+                                    <button type="button" class="qr-refresh on-white" onClick={refreshQr}>
+                                        <Icon icon={RefreshIcon} size={20} />
+                                        {t('login.qr_refresh')}
+                                    </button>
+                                </div>
                             </div>
-                        </Show>
+                            <div class="qr-life" classList={{ gone: scanned() }}>
+                                <div class="qr-bar"><i classList={{ soon: qrSoon() }} style={{ width: `${(qrSoon() && qrLeft() <= 0 ? 1 : qrFraction()) * 100}%` }} /></div>
+                                <p class="muted small" aria-live="polite">
+                                    {qrExpired() ? t('login.qr_renewing') : qrSoon() ? (qrLeft() <= 0 ? t('login.qr_renewing') : t('login.qr_expires_soon')) : '\u00a0'}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="qr-text">
+                            <ol class="steps numbered">
+                                <li>{t('login.qr_step_open')}</li>
+                                <li>{t('login.qr_step_devices')}</li>
+                                <li>{t('login.qr_step_link')}</li>
+                            </ol>
+                            <p class="muted small">{t('login.qr_note')}</p>
+                            <div class="qr-actions">
+                                <button type="button" class="link" onClick={() => (stopQr(), go({ kind: 'phone' }))}>{t('login.use_phone')}</button>
+                                <button type="button" class="qr-refresh" onClick={refreshQr} disabled={refreshing()}>
+                                    <Show when={refreshing()} fallback={<Icon icon={RefreshIcon} size={20} />}><span class="loader tiny" /></Show>
+                                    {t('login.qr_refresh')}
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                    <ol class="steps">
-                        <li>{t('login.qr_step_open')}</li>
-                        <li>{t('login.qr_step_devices')}</li>
-                        <li>{t('login.qr_step_link')}</li>
-                    </ol>
-                    <p class="muted small">{t('login.qr_note')}</p>
                     <Problem />
-                    <Show when={error()}>
-                        <button class="link" onClick={startQr}>{t('login.qr_refresh')}</button>
-                    </Show>
-                    <button class="link alt" onClick={() => (stopQr(), go({ kind: 'phone' }))}>{t('login.use_phone')}</button>
                 </Match>
 
                 <Match when={step().kind === 'phone'}>

@@ -102,6 +102,7 @@ h1, h2, h3, p { margin: 0; }
 .small { font-size: 12px; line-height: 16px; }
 .error { color: var(--error); }
 .boot { display: grid; place-items: center; align-content: center; gap: 16px; min-height: 100dvh; color: var(--muted); padding: 16px; text-align: center; }
+.boot .loader { color: var(--fg); }
 .boot-mark { width: 64px; height: 64px; border-radius: var(--r-l); }
 /* The last stop for an uncaught error (crash.ts): over everything, clear of the edges. */
 .crash-card {
@@ -500,16 +501,37 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
 .signin-links { display: flex; flex-wrap: wrap; gap: 0 24px; }
 .signin-foot { margin-top: auto; padding-top: 24px; display: flex; flex-direction: column; gap: 2px; }
 .signin-foot a.link { padding: 4px 0; align-self: start; }
-.qr { position: relative; align-self: center; width: 240px; height: 240px; border-radius: var(--r-l); background: #fff; display: grid; place-items: center; overflow: hidden; }
-.qr-code svg { display: block; width: 228px; height: 228px; }
-.qr-code.faded { opacity: .15; }
-.qr-wait { color: #5c5e6c; }
-.qr-over {
+.qr { position: relative; align-self: center; width: 280px; height: 280px; border-radius: var(--r-l); background: #fff; display: grid; place-items: center; overflow: hidden; }
+.qr-code svg { display: block; width: 248px; height: 248px; }
+/* The round loader the apps show: a ring with a gap, turning. */
+.loader { width: 40px; height: 40px; box-sizing: border-box; border-radius: 50%; border: 4px solid currentColor; border-top-color: transparent; animation: boot-spin .8s linear infinite; }
+.loader.tiny { width: 18px; height: 18px; border-width: 2px; }
+.loader.on-white { color: #111; }
+@keyframes boot-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .loader { animation-duration: 2s; } }
+.qr-layout { display: flex; flex-direction: column; gap: 16px; }
+.qr-side { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.qr-text { display: flex; flex-direction: column; gap: 14px; }
+.qr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.qr-life { width: 280px; display: flex; flex-direction: column; gap: 6px; align-items: center; transition: opacity .2s; }
+.qr-life.gone { opacity: 0; }
+.qr-life p { min-height: 20px; }
+.qr-bar { width: 100%; height: 4px; border-radius: 999px; background: var(--outline, rgba(128,128,128,.3)); overflow: hidden; }
+.qr-bar i { display: block; height: 100%; border-radius: 999px; background: var(--accent); transition: width 1s linear; }
+.qr-bar i.soon { background: var(--muted); }
+/* Over the plate once the code was scanned, or ran out: the apps' white veil, ink dark whatever the theme. */
+.qr-veil {
   position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center;
-  padding: 16px; text-align: center; color: #0e0f13; font-weight: 500;
+  padding: 16px; text-align: center; color: #111; background: rgba(255,255,255,.9); opacity: 0; pointer-events: none; transition: opacity .22s;
 }
-.qr-over button.primary { background: #00677f; color: #fff; }
+.qr-veil.on { opacity: 1; pointer-events: auto; }
+.qr-veil b { font-size: 20px; line-height: 28px; font-weight: 600; }
+.qr-tick { width: 56px; height: 56px; border-radius: 50%; background: #1e9e5a; color: #fff; display: grid; place-items: center; animation: you-in .22s ease-out; }
+.qr-refresh { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; border: 0; background: var(--surface-high); color: var(--fg); font: inherit; font-weight: 500; cursor: pointer; }
+.qr-refresh:disabled { cursor: default; }
+.qr-refresh.on-white { background: #111; color: #fff; }
 .steps { margin: 0; padding-left: 20px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.steps.numbered { color: var(--fg); gap: 8px; }
 
 /*
  * Sign in's look from the apps: the mark and the name beside it. A phone's (LoginScreen) is left aligned from
@@ -532,6 +554,13 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
 :root[data-form="desktop"] .signin button.link, :root[data-form="desktop"] .signin .signin-links { align-self: center; }
 :root[data-form="desktop"] .signin .signin-links { justify-content: center; }
 :root[data-form="desktop"] .signin .steps { align-self: center; text-align: start; }
+:root[data-form="desktop"] .signin.is-qr { max-width: 760px; }
+@media (min-width: 720px) {
+  :root[data-form="desktop"] .qr-layout { flex-direction: row; align-items: center; justify-content: center; gap: 40px; text-align: start; }
+  :root[data-form="desktop"] .qr-text { flex: 1; min-width: 0; }
+  :root[data-form="desktop"] .qr-actions { justify-content: flex-start; }
+  :root[data-form="desktop"] .signin.is-qr .steps { align-self: stretch; }
+}
 :root[data-form="desktop"] .signin-foot { margin-top: 8px; padding-top: 8px; align-items: center; text-align: center; }
 :root[data-form="desktop"] .signin-foot a.link { align-self: center; }
 :root[data-form="desktop"] .country-row { text-align: start; }
