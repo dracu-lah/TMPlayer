@@ -21,21 +21,19 @@ software decoders from NextLib, while video stays on the hardware decoder.
 
 ## Modules
 
-`settings.gradle.kts` includes five modules:
+`settings.gradle.kts` includes four modules:
 
-- **`:core`**, Kotlin Multiplatform with three targets: android, jvm and wasmJs. Its `commonMain`
+- **`:core`**, Kotlin Multiplatform with three targets: android, jvm and js (the js target only builds the rules the web player in `webapp/` runs). Its `commonMain`
   is read from `src/pureMain/kotlin` and is pure Kotlin, with no JDK and no TDLib: the models and
   their rules, the string catalogs, plural rules, formatting, the sign in flow, `DownloadWindow`.
   A second set, `jvmSharedMain` (from `src/commonMain/kotlin`), is shared by android and jvm only
   and holds what talks to TDLib or needs the JDK, such as `TdByteWindow`.
 - **`:ui`**, the shared Compose screens (`src/shared/kotlin`), built for android with Jetpack
-  Compose and for jvm with Compose Multiplatform, plus a wasmJs target for the web app.
+  Compose and for jvm with Compose Multiplatform.
 - **`:app`**, the Android app for phone and TV: activities, ExoPlayer, `TdDataSource`, services.
 - **`:desktop`**, the Compose Desktop app for Windows, Linux and macOS. It plays through libmpv by
   way of [mediamp](https://github.com/open-ani/mediamp); `TdMediaData` is its twin of
   `TdDataSource` over the same `TdByteWindow`.
-- **`:web`**, the browser app (Kotlin/Wasm over tdweb), frozen since 2026-10-22: see
-  [WEB.md](WEB.md).
 
 ## Streaming and seeking
 

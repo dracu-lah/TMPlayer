@@ -68,10 +68,8 @@ slf4j = "2.0.20"
 # Casting to a Chromecast or Google TV from the phone (CP73): Google's Cast framework and the
 # MediaRouter it finds receivers with. The regular APK only; an F-Droid build has neither
 # (app/build.gradle.kts, fdroidBuild).
-# The browser build (web/, CP92): JSON for the TDLib bridge and the shared core's documents, and
-# the typed DOM for Kotlin/Wasm. Both at the versions Kotlin 2.4 and Compose 1.12 resolve to.
+# JSON for the shared core's documents. At the version Kotlin 2.4 and Compose 1.12 resolve to.
 kotlinxSerialization = "1.11.0"
-kotlinxBrowser = "0.5.0"
 playServicesCast = "22.3.1"
 playServicesAuthApiPhone = "18.1.0"
 mediarouter = "1.8.1"
@@ -91,7 +89,7 @@ androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
 # :app's screens see them as stable exactly as they did when the classes lived in :app.
 androidx-compose-runtime = { group = "androidx.compose.runtime", name = "runtime" }
 # @Immutable and @Stable alone, multiplatform, for the pure half of `:core` that the browser build
-# compiles too (web/, CP92).
+# compiles too (the js target).
 androidx-compose-runtime-annotation = { group = "androidx.compose.runtime", name = "runtime-annotation" }
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
 # Icons only. The "extended" set is thousands of vectors; core carries the handful used here.
@@ -149,8 +147,6 @@ filekit-dialogs-compose = { group = "io.github.vinceglb", name = "filekit-dialog
 slf4j-nop = { group = "org.slf4j", name = "slf4j-nop", version.ref = "slf4j" }
 play-services-cast-framework = { group = "com.google.android.gms", name = "play-services-cast-framework", version.ref = "playServicesCast" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
-kotlinx-atomicfu = { group = "org.jetbrains.kotlinx", name = "atomicfu", version = "0.32.1" }
-kotlinx-browser = { group = "org.jetbrains.kotlinx", name = "kotlinx-browser", version.ref = "kotlinxBrowser" }
 play-services-auth-api-phone = { group = "com.google.android.gms", name = "play-services-auth-api-phone", version.ref = "playServicesAuthApiPhone" }
 androidx-mediarouter = { group = "androidx.mediarouter", name = "mediarouter", version.ref = "mediarouter" }
 

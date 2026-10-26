@@ -16,7 +16,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * The pure half of `:core`, run on the JVM and on Node (wasmJs): the same answers on both is the
+ * The pure half of `:core`, run on the JVM and on Node (js): the same answers on both is the
  * point, since the browser build reads names, plurals and pieces with this very code.
  */
 class PureCoreTest {

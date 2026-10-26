@@ -16,7 +16,6 @@ on:
       - "**/*.md"
       - "fastlane/**"
       - "desktop/packaging/aur/**"
-      - "web/**"
   pull_request:
     branches: [main]
     paths-ignore:
@@ -25,7 +24,6 @@ on:
       - "**/*.md"
       - "fastlane/**"
       - "desktop/packaging/aur/**"
-      - "web/**"
   workflow_dispatch:
 
 concurrency:

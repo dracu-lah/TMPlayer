@@ -102,7 +102,7 @@ typealias PlayerContent = @Composable (request: PlayRequest, onClose: () -> Unit
 
 /**
  * True where the player's picture is drawn under the window's content rather than in it: the
- * browser build, whose video element sits under the page's canvas (web/player/video-host.js).
+ * old browser build, whose video element sat under the page's canvas. Nothing sets it any more.
  * While a video plays, the shell then paints nothing of its own over it but the player's
  * controls. The desktop draws mpv's picture into the window, so it stays false there.
  */

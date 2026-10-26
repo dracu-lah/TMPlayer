@@ -13,7 +13,6 @@ Where the rest lives, read when the task touches it:
 | Cutting a release | [docs/RELEASING.md](docs/RELEASING.md) |
 | How the code is laid out | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Stores, package managers, Telegram's terms | [docs/distribution/README.md](docs/distribution/README.md) |
-| The web app (frozen since 2026-10-22) | [docs/WEB.md](docs/WEB.md) |
 | The site: how to run it, add a page, a string or a language | [site/README.md](site/README.md) |
 | Ground rules, style, translations | [CONTRIBUTING.md](CONTRIBUTING.md) |
 

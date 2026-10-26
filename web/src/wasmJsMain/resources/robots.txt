@@ -1,5 +1,0 @@
-# web.tmplayer.org: the TMPlayer web app. Its page and its privacy note are open to every crawler.
-User-agent: *
-Allow: /
-
-Sitemap: https://web.tmplayer.org/sitemap.xml

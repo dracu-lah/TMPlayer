@@ -180,7 +180,7 @@ data class AuthStep(val state: AuthState, val action: AuthAction)
 
 /**
  * TDLib's authorization state with nothing of TDLib's in it, so the sign in flow is the same code
- * whether TDLib arrives through tdl-coroutines (the apps) or as JSON from tdweb (the browser).
+ * whatever client TDLib arrives through.
  * Each platform's client maps its own form onto this; [AuthFlow] does the rest.
  */
 sealed interface TdAuthorization {
