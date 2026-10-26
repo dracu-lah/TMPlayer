@@ -139,7 +139,14 @@ object CrashReports {
      * The exceptions to the switch are the crash record and the exit the viewer has just agreed
      * to send. Last of all, after the scrubber, the day's limits (see [CrashLimits]).
      */
-    private fun gate(event: SentryEvent, hint: Hint?): SentryEvent? =
+    private fun gate(event: SentryEvent, hint: Hint?): SentryEvent? {
+        // The "could not keep up" report (HX2b): only with the switch on, scrubbed the same way,
+        // and under its own daily limit rather than the crash budget.
+        if (StutterReport.isStutter(event)) return if (enabledNow) StutterReport.scrub(event) else null
+        return gateCrash(event, hint)
+    }
+
+    private fun gateCrash(event: SentryEvent, hint: Hint?): SentryEvent? =
         pass(event, hint)?.takeIf { kept -> limits?.admit(kept) != false }
 
     private fun pass(event: SentryEvent, hint: Hint?): SentryEvent? {
@@ -180,6 +187,7 @@ object CrashReports {
         this.file = file
         answers = ExitAnswers(File(context.filesDir, "crash/exits.properties"))
         limits = CrashLimits(File(context.filesDir, "crash/limits.json"))
+        stutterReporter = StutterReporter({ enabledNow && started }, StutterLimits(File(context.filesDir, "crash/stutter.json")))
         if (file.isFile) {
             val waiting = CrashRecord.read(file)
             _holdShell.value = waiting?.startupLoop == true &&
@@ -208,6 +216,20 @@ object CrashReports {
     }
 
     private var file: File? = null
+
+    /** The daily limit of "could not keep up" reports. Set by [watch]. */
+    @Volatile
+    private var stutterReporter: StutterReporter? = null
+
+    /**
+     * Reports that a video could not keep up on this device (HX2b), only while the switch is on:
+     * with it off nothing is built, counted, written or queued. At most one a day for each kind
+     * of video. Cheap, but it counts a file, so call it off the main thread.
+     */
+    fun reportStutter(facts: StutterReport.Facts): Boolean {
+        if (!available) return false
+        return stutterReporter?.report(facts) == true
+    }
 
     /** What the viewer has said about ANRs and native crashes. Set by [watch]. */
     @Volatile
