@@ -29,6 +29,8 @@ class BackupCoverageTest {
         "kids_chats", "kids_lock",
         // Consent is given on the device that sends.
         "crash_reports",
+        // Test versions are asked for on each device, never brought along by a restore.
+        "update_test_versions",
         // Hints, walkthroughs and notices already seen.
         "device_card_dismissed", "device_hint_shown", "first_video_tip_dismissed", "online_meta_invite_seen",
         "online_meta_notice_dismissed", "player_hint_seen", "tv_browse_hint_seen", "setup", "tour",
