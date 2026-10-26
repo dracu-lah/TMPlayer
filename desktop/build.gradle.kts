@@ -343,6 +343,27 @@ tasks.matching { it.name == "proguardReleaseJars" }.configureEach {
     }
 }
 
+// Every class of the app's own code in ProGuard's jars must load and link with the verifier on
+// (ClassLinkCheck). ProGuard computes each method's stack map frames again, and in 1.28.1 it wrote
+// frames the JVM refused for SeriesKt (HX1): the desktop app crashed on the first show it drew.
+// Run on the jars alone, as the app's classpath, before any release image or installer is made;
+// the packaged app's --self-test checks the same again on its bundled runtime.
+val verifyReleaseClasses = tasks.register<JavaExec>("verifyReleaseClasses") {
+    group = "verification"
+    description = "Links every com.tmplayer class of the ProGuard output with the bytecode verifier on."
+    dependsOn("proguardReleaseJars")
+    mainClass.set("com.tmplayer.desktop.ClassLinkCheck")
+    classpath(provider { tasks.getByName("proguardReleaseJars").outputs.files.asFileTree.matching { include("**/*.jar") } })
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
+    jvmArgs("-Djava.awt.headless=true")
+    val marker = layout.buildDirectory.file("verify-release-classes/passed")
+    outputs.file(marker)
+    doLast { marker.get().asFile.writeText("passed\n") }
+}
+tasks.matching { it.name == "createReleaseDistributable" || it.name.startsWith("packageRelease") }.configureEach {
+    dependsOn(verifyReleaseClasses)
+}
+
 // LICENSE, the OpenSSL permission, the third-party notices and the fonts' OFL travel inside the
 // app image, so the MSI, the tarball, the AppImage and the AUR package all carry them without each
 // packaging step copying them again. Compose copies appResourcesRootDir/common into the image's app/resources

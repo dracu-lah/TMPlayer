@@ -83,6 +83,12 @@ are wrapped from the `createReleaseDistributable` folder by the release workflow
 `desktop/packaging/linux/package.sh`. The libmpv runtime pulled in is the one for
 the host only, since each is 30 to 75 MB and the other systems' would never load.
 
+Every release task first runs `./gradlew :desktop:verifyReleaseClasses`, which loads and links each
+`com.tmplayer` class of ProGuard's jars with the bytecode verifier on (a few seconds), and the
+packaged app's `--self-test` does the same on its bundled runtime. ProGuard writes each method's
+stack map frames again, and in 1.28.1 it wrote some the JVM refused, which crashed the app on the
+first show it drew (HX1). Should the check fail, split the method it names, as `SeriesPanel` was.
+
 Linux notes: on a tiling window manager set `_JAVA_AWT_WM_NONREPARENTING=1` or the window stays
 blank; hardware decoding may fail on Fedora, where the bundled libva looks in Debian's driver
 path, and software decoding takes over.
