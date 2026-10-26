@@ -70,6 +70,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.State
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.withFrameNanos
@@ -810,47 +812,8 @@ fun SeriesPanel(
     }
     // Download is for the season shown, so its buttons follow the season picked.
     val downloads = onDownload != null && SeasonDownload.anySavable(shown)
-    // What each button stands for now, from the download index and the queue, so a season kept
-    // already says Downloaded and does nothing, and one coming down says so with its ring.
-    // Derived rather than read here: the queue ticks every second for any download's progress,
-    // and the panel only has to compose again when what a button says changes.
-    val queue = com.tmplayer.ui.components.rememberDownloadQueue()
-    val seasonState by remember(downloads, watch, series, shown, downloadedIds, queue) {
-        derivedStateOf {
-            if (!downloads) SeasonDownload.State.Nothing else watch.downloadState(
-                series, shown, SeasonDownload.Which.Season, { it.id in downloadedIds }, { queue.value.containsKey(it.fileId) },
-            )
-        }
-    }
+    val buttons = rememberSeasonButtons(downloads, watch, series, shown, downloadedIds)
     val bothDownloads = downloads && SeasonDownload.unwatchedDiffers(shown, watch.finished)
-    // Nothing left in the season means nothing left in its unwatched part either. That button
-    // stays where it is, dimmed, rather than going (which would drop a remote's focus off the
-    // row); the season's button beside it is the one that says Downloaded or Downloading.
-    val unwatchedLeft by remember(downloads, watch, series, shown, downloadedIds, queue) {
-        derivedStateOf {
-            seasonState == SeasonDownload.State.Fetch && watch.downloadState(
-                series, shown, SeasonDownload.Which.Unwatched, { it.id in downloadedIds }, { queue.value.containsKey(it.fileId) },
-            ) == SeasonDownload.State.Fetch
-        }
-    }
-    // How far the season's downloads have come, for the ring while it is coming down.
-    val seasonProgress by remember(downloads, watch, series, shown, downloadedIds, queue) {
-        derivedStateOf {
-            if (seasonState != SeasonDownload.State.Coming) null else {
-                val entries = shown.episodes.flatMap { it.copies }.mapNotNull { queue.value[it.fileId] }
-                val total = entries.sumOf { it.totalBytes }
-                if (total > 0) (entries.sumOf { it.downloadedBytes }.toFloat() / total).coerceIn(0f, 1f) else 0f
-            }
-        }
-    }
-    // Pressed, and on its way to the queue: an empty ring at once, so the press shows before the
-    // queue does. Let go after a few seconds, in case nothing was queued (no room).
-    var asked by remember(series.key, shown.number) { mutableStateOf(false) }
-    LaunchedEffect(asked) {
-        if (!asked) return@LaunchedEffect
-        kotlinx.coroutines.delay(ASKED_RING_MS)
-        asked = false
-    }
 
     val metaState = com.tmplayer.ui.online.rememberMetaState(series.cover, showOnly = true)
     val meta = metaState.value
@@ -880,8 +843,7 @@ fun SeriesPanel(
     TrailerHost(trailers)
     val target = next ?: series.episodes.first()
     val art = next?.item ?: target.item
-    val cover = remember(art.chatId, art.messageId, series.title) { CoverArt.of(art).copy(title = series.title, number = null) }
-    val source = remember(art.id, cover, meta?.backdropUrl) { BackdropSource(art.miniThumbnail, art.thumbnailFileId, cover, meta?.backdropUrl) }
+    val (cover, source) = rememberSeriesArt(art, series.title, meta?.backdropUrl)
     val reduced = rememberReducedMotion()
     val pad = contentPadding.horizontalOnly()
 
@@ -1095,19 +1057,19 @@ fun SeriesPanel(
                 if (trailer != null || holdTrailer) add(PageAction(s.metadataTrailer, TrailerIcon, { trailer?.let(trailers::open); Unit }))
                 if (downloads) {
                     add(
-                        when (seasonState) {
+                        when (buttons.state) {
                             SeasonDownload.State.Fetch -> PageAction(
                                 s.seriesDownloadSeason,
                                 TmIcons.Download,
                                 {
-                                    asked = true
+                                    buttons.asked = true
                                     onDownload?.invoke(watch.download(series, shown, SeasonDownload.Which.Season))
                                     Unit
                                 },
-                                progress = if (asked) 0f else null,
+                                progress = if (buttons.asked) 0f else null,
                             )
                             SeasonDownload.State.Coming ->
-                                PageAction(s.downloadsDownloading, TmIcons.Download, {}, enabled = false, progress = seasonProgress)
+                                PageAction(s.downloadsDownloading, TmIcons.Download, {}, enabled = false, progress = buttons.progress)
                             SeasonDownload.State.Done ->
                                 PageAction(s.downloadsDownloaded, TmIcons.Download, {}, enabled = false)
                             SeasonDownload.State.Nothing ->
@@ -1121,11 +1083,11 @@ fun SeriesPanel(
                             s.seriesDownloadUnwatched,
                             TmIcons.Download,
                             {
-                                asked = true
+                                buttons.asked = true
                                 onDownload?.invoke(watch.download(series, shown, SeasonDownload.Which.Unwatched))
                                 Unit
                             },
-                            enabled = unwatchedLeft,
+                            enabled = buttons.unwatchedLeft,
                         ),
                     )
                 }
@@ -1327,6 +1289,97 @@ fun SeriesPanel(
             PageBackBand(list, meta?.title?.takeIf { it.isNotBlank() } ?: series.title, back, barInsets, Modifier.align(Alignment.TopStart))
         }
     }
+}
+
+/*
+ * SeriesPanel's parts below are kept out of it on purpose (HX1). The desktop's release build runs
+ * ProGuard, which computes every method's stack map frames again. Its liveness analysis covers only
+ * a method's first 64 local slots, and SeriesPanel has almost a hundred: the art's chat and message
+ * ids (longs, as remember keys) sat in slots 68 to 71, the compiler then reused slot 69 for a
+ * String, and ProGuard still wrote slot 68 as a long in the next frame. 1.28.1's SeriesKt failed the
+ * JVM's verifier and the desktop app crashed on the first show it drew. Keep longs and doubles out
+ * of SeriesPanel's own locals; the desktop's ClassLinkCheck (verifyReleaseClasses and the packaged
+ * app's --self-test) fails on any class the verifier refuses.
+ */
+
+/** The show's cover drawn from [art], under its own [title], and the page's backdrop over it. */
+@Composable
+private fun rememberSeriesArt(art: MediaItem, title: String, backdropUrl: String?): Pair<com.tmplayer.ui.components.Cover, BackdropSource> {
+    val cover = remember(art.chatId, art.messageId, title) { CoverArt.of(art).copy(title = title, number = null) }
+    val source = remember(art.id, cover, backdropUrl) { BackdropSource(art.miniThumbnail, art.thumbnailFileId, cover, backdropUrl) }
+    return cover to source
+}
+
+/**
+ * What the season's download buttons stand for now, from the download index and the queue, so a
+ * season kept already says Downloaded and does nothing, and one coming down says so with its ring.
+ * Derived rather than read in the page: the queue ticks every second for any download's progress,
+ * and the page only has to compose again when what a button says changes.
+ */
+private class SeasonButtons(
+    state: State<SeasonDownload.State>,
+    unwatchedLeft: State<Boolean>,
+    progress: State<Float?>,
+    asked: MutableState<Boolean>,
+) {
+    val state by state
+
+    /**
+     * Nothing left in the season means nothing left in its unwatched part either. That button
+     * stays where it is, dimmed, rather than going (which would drop a remote's focus off the
+     * row); the season's button beside it is the one that says Downloaded or Downloading.
+     */
+    val unwatchedLeft by unwatchedLeft
+
+    /** How far the season's downloads have come, for the ring while it is coming down. */
+    val progress by progress
+
+    /**
+     * Pressed, and on its way to the queue: an empty ring at once, so the press shows before the
+     * queue does. Let go after a few seconds, in case nothing was queued (no room).
+     */
+    var asked by asked
+}
+
+@Composable
+private fun rememberSeasonButtons(
+    downloads: Boolean,
+    watch: SeriesWatch,
+    series: Series,
+    shown: SeriesSeason,
+    downloadedIds: Set<String>,
+): SeasonButtons {
+    val queue = com.tmplayer.ui.components.rememberDownloadQueue()
+    val seasonState = remember(downloads, watch, series, shown, downloadedIds, queue) {
+        derivedStateOf {
+            if (!downloads) SeasonDownload.State.Nothing else watch.downloadState(
+                series, shown, SeasonDownload.Which.Season, { it.id in downloadedIds }, { queue.value.containsKey(it.fileId) },
+            )
+        }
+    }
+    val unwatchedLeft = remember(downloads, watch, series, shown, downloadedIds, queue) {
+        derivedStateOf {
+            seasonState.value == SeasonDownload.State.Fetch && watch.downloadState(
+                series, shown, SeasonDownload.Which.Unwatched, { it.id in downloadedIds }, { queue.value.containsKey(it.fileId) },
+            ) == SeasonDownload.State.Fetch
+        }
+    }
+    val seasonProgress = remember(downloads, watch, series, shown, downloadedIds, queue) {
+        derivedStateOf {
+            if (seasonState.value != SeasonDownload.State.Coming) null else {
+                val entries = shown.episodes.flatMap { it.copies }.mapNotNull { queue.value[it.fileId] }
+                val total = entries.sumOf { it.totalBytes }
+                if (total > 0) (entries.sumOf { it.downloadedBytes }.toFloat() / total).coerceIn(0f, 1f) else 0f
+            }
+        }
+    }
+    val asked = remember(series.key, shown.number) { mutableStateOf(false) }
+    LaunchedEffect(asked.value) {
+        if (!asked.value) return@LaunchedEffect
+        kotlinx.coroutines.delay(ASKED_RING_MS)
+        asked.value = false
+    }
+    return remember(seasonState, unwatchedLeft, seasonProgress, asked) { SeasonButtons(seasonState, unwatchedLeft, seasonProgress, asked) }
 }
 
 /**
