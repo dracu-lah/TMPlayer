@@ -109,6 +109,21 @@ class PlaybackWatch {
         return if (keptUp()) Answer.KEPT_UP else Answer.CANNOT_KEEP_UP
     }
 
+    /** The figures behind the answer, as numbers: for the opt-in "could not keep up" report. */
+    data class Figures(
+        /** Video seconds moved per second of playing, in per cent: 100 is real time. */
+        val speedPercent: Int,
+        val playedSeconds: Int,
+        val dropped: Int,
+        val frames: Int,
+        val underruns: Int,
+    )
+
+    fun figures(): Figures {
+        val speed = if (playedWallMs > 0) movedMs.toDouble() / playedWallMs else 0.0
+        return Figures((speed * 100).toInt(), (playedWallMs / 1000).toInt(), dropped, dropped + rendered, underruns)
+    }
+
     /** The figures behind the answer, for the log. */
     fun summary(): String {
         val speed = if (playedWallMs > 0) movedMs.toDouble() / playedWallMs else 0.0

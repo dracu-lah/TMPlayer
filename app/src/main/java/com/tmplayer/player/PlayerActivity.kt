@@ -477,6 +477,43 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** Whether this player already went for a lighter copy over software decoding: never twice. */
     private var softwareSwapTried = false
 
+    /**
+     * The opt-in "could not keep up" event (HX2b): the picture's format, the decoder, what the
+     * judge predicted and the watch measured, and the device; never the title, file, chat or
+     * message. [CrashReports.reportStutter] sends nothing with the switch off.
+     */
+    private fun reportCouldNotKeepUp(picture: com.tmplayer.data.DecodeJudge.Picture?) {
+        if (picture == null || !com.tmplayer.data.CrashReports.available) return
+        val format = watchFormat
+        val figures = watch.figures()
+        val prediction = format?.let { DeviceDecode.verdictOf(it) }?.name ?: "UNKNOWN"
+        val facts = com.tmplayer.data.StutterReport.Facts(
+            codec = picture.family,
+            profile = format?.codecs.orEmpty(),
+            bitDepth = picture.bitDepth,
+            width = picture.width,
+            height = picture.height,
+            fps = picture.fps,
+            bitrateKbps = (format?.let { maxOf(it.averageBitrate, it.bitrate) } ?: 0).coerceAtLeast(0) / 1000,
+            container = format?.containerMimeType.orEmpty(),
+            decoder = watchDecoder,
+            hardware = !watchSoftware,
+            prediction = prediction,
+            speedPercent = figures.speedPercent,
+            dropped = figures.dropped,
+            frames = figures.frames,
+            underruns = figures.underruns,
+            manufacturer = android.os.Build.MANUFACTURER.orEmpty(),
+            model = android.os.Build.MODEL.orEmpty(),
+            androidVersion = android.os.Build.VERSION.RELEASE.orEmpty(),
+            cores = Runtime.getRuntime().availableProcessors(),
+            abi = android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty(),
+            appVersion = com.tmplayer.BuildConfig.VERSION_NAME,
+            sizeBucket = picture.sizeBucket,
+        )
+        Thread { runCatching { com.tmplayer.data.CrashReports.reportStutter(facts) } }.start()
+    }
+
     // ---- the watchdog over the first seconds of play (HX2, [PlaybackWatch]) --------------------
 
     private val watch = PlaybackWatch()
@@ -488,6 +525,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** The picture watched, and whether the app's software decoder has it, read as the watch starts. */
     private var watchPicture: com.tmplayer.data.DecodeJudge.Picture? = null
     private var watchSoftware = false
+
+    /** The video decoder Media3 started, for the opt-in "could not keep up" report (HX2b). */
+    private var watchDecoder = ""
+
+    /** The video format watched, for the same report. */
+    private var watchFormat: androidx.media3.common.Format? = null
 
     /** Whether this video got its "Stuttering?" offer or line: once per video. */
     private var stutterOffered = false
@@ -869,6 +912,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (watchPicture == null) {
             exo.videoFormat?.let { format ->
                 watchPicture = DeviceDecode.pictureOf(format)
+                watchFormat = format
                 watchSoftware = DecoderSwitch.softwareVideoChosen(exo)
             }
         }
@@ -898,6 +942,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // Remembered for the next picture of this kind, when the app's own decoder had it: what a
         // hardware decoder does is the device's to say, and its list already says it.
         if (picture != null && watchSoftware) DeviceDecode.note(picture, answer == PlaybackWatch.Answer.KEPT_UP)
+        if (answer == PlaybackWatch.Answer.CANNOT_KEEP_UP && !castUp()) reportCouldNotKeepUp(picture)
         if (answer == PlaybackWatch.Answer.KEPT_UP || stutterOffered || castUp()) return
         stutterOffered = true
         if (watchSoftware) com.tmplayer.data.SoftwareDecode.rememberHeavy(chatId, messageId)
@@ -3264,6 +3309,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                                 "last fed ${elapsedSinceLastFeedMs}ms ago",
                         )
                         watchUnderruns++
+                    }
+
+                    override fun onVideoDecoderInitialized(
+                        eventTime: AnalyticsListener.EventTime,
+                        decoderName: String,
+                        initializedTimestampMs: Long,
+                        initializationDurationMs: Long,
+                    ) {
+                        watchDecoder = decoderName
                     }
 
                     override fun onVideoFrameProcessingOffset(

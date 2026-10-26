@@ -13,7 +13,7 @@ Astro.locals.lang = ENGLISH;
 <Base path="/privacy/" title="Privacy policy - TMPlayer" description="What TMPlayer keeps on your phone, TV or computer, which services it contacts, what an opt-in crash report contains, and how to delete your data.">
   <JsonLd slot="head" data={breadcrumb(['Privacy', '/privacy/'])} />
   <HeaderPlain />
-  <PolicyPage eyebrow="Effective 22 October 2026" title="Privacy">
+  <PolicyPage eyebrow="Effective 26 October 2026" title="Privacy">
     <p class="policy-lede">TMPlayer is an unofficial Telegram video player for Android phones, Android TV, Windows and Linux, with a macOS preview for Apple Silicon. It talks directly to Telegram from your device, using your own Telegram account. There is no TMPlayer account and no developer-operated backend.</p>
 
     <PolicySection title="Who runs TMPlayer">
@@ -63,6 +63,7 @@ Astro.locals.lang = ENGLISH;
         <li>on a phone or TV, the device manufacturer and model (for example Xiaomi 23021RAA2Y). On a computer, the operating system and its version stand in for a device model: no computer model and no computer name are sent.</li>
       </ul>
       <p>Everything else the Sentry library would normally attach is removed on the device before the report is sent: device name and identifier, computer name, installation identifier, timezone, language, battery, memory, storage, screen, network type, boot time, app permissions, tags and breadcrumbs. No chat names, search terms or viewing history are included, and the IP address is not stored as personal data.</p>
+      <p>With crash reporting on, the app also reports when a video could not play smoothly on your device: the video's format (codec, size, frame rate and bitrate), how the player coped, and the device model with its Android version and processor, never what the video is. At most one such report a day for each kind of video.</p>
       <p>A device sends the same crash at most once a day, and at most 10 reports a day in all. The count is kept in a private file on the device that holds only the day, the number sent and the class and method names of the crashes already sent.</p>
       <p><strong>Legal basis:</strong> your consent, given by switching it on or by choosing Send for one report. <strong>Withdrawing it:</strong> switch it off in Settings and reporting stops at once; a crash that happens after that is dropped even if it was already being prepared. <strong>Retention:</strong> Sentry deletes each report automatically after at most 90 days. To have reports you sent deleted sooner, email the address above with the approximate date and the device model, or the computer's operating system.</p>
     </PolicySection>
@@ -91,6 +92,7 @@ Astro.locals.lang = ENGLISH;
     <PolicySection title="Changes">
       <p>Material changes update the effective date above and are listed here.</p>
       <ul>
+        <li><strong>26 October 2026:</strong> with crash reporting on, the app also reports when a video could not play smoothly: its format and the device model, never what the video is.</li>
         <li><strong>22 October 2026:</strong> adds OMDb, asked by IMDb id for a title's IMDb, Rotten Tomatoes and Metacritic scores when its detail page opens, with TMPlayer's key or your own, and Wikidata, asked by the same IMDb id for Rotten Tomatoes and Metacritic scores when OMDb cannot answer.</li>
         <li><strong>19 October 2026:</strong> crash reporting on Windows, Linux and macOS too, without a device model or computer name; a crash from an older version is still offered and sent as that version, and one more than 30 days old is deleted; Android asks about not responding (ANR) and native crashes as well, and remembers a Don't send; lists the thread stacks and loaded libraries those reports add, the crashed build's mapping ID and the daily limit of 10 reports; says the question is asked once, in the setup after you first sign in.</li>
         <li><strong>15 October 2026:</strong> adds macOS, a preview from 1.26.0, and where it keeps its data.</li>
