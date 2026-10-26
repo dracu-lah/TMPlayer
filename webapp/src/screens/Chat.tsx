@@ -284,7 +284,7 @@ export function Chat() {
             <Show when={empty()}>
                 <p class="muted">{empty()}</p>
             </Show>
-            <VideoList cards={cards()} label={title()} onEnd={atEnd} sponsored={page()?.sponsored} sponsoredBetween={page()?.sponsoredBetween} rows={settings().rows} />
+            <VideoList cards={cards()} label={title()} onEnd={atEnd} sponsored={page()?.sponsored} sponsoredBetween={page()?.sponsoredBetween} rows={settings().rows && form() !== 'tv'} />
             <div class="list-foot">
                 <Show when={busy() === 'more'}>
                     <p class="muted">{t('grid.loading_more')}</p>

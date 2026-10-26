@@ -429,9 +429,17 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
             for (const season of t.seasons) for (const e of season.episodes) if (e.video.id === id || e.copies.includes(id)) e.copies.forEach((c) => copyIds.add(c))
         } else if (t.video?.id === id || t.copies.includes(id)) t.copies.forEach((c) => copyIds.add(c))
     }
+    // The same file posted twice (forwarded, or sent again: the same name and size) is one choice, the post this page is about standing for it.
+    const seenFile = new Map<string, string>()
+    for (const cid of copyIds) {
+        const v = s.videos.get(cid)
+        const key = v && v.fileName && v.size > 0 ? `${v.fileName}|${v.size}` : cid
+        if (!seenFile.has(key) || cid === id) seenFile.set(key, cid)
+    }
+    const distinct = new Set(seenFile.values())
     const copies: CopyRef[] =
-        copyIds.size > 1
-            ? [...copyIds]
+        distinct.size > 1
+            ? [...distinct]
                   .flatMap((cid) => {
                       const v = s.videos.get(cid)
                       const it = s.items.get(cid)

@@ -383,6 +383,14 @@ input:not([type=range]):not([type=radio]):focus { border-color: var(--accent); }
 .title-pill:not(:has(.chat-picture)) { padding-left: 18px; }
 .vrow.rowcards > li.wide { grid-column: 1 / -1; }
 
+/* On a picture (always dark under its fade) the accent is the dark theme's, as the apps' PillProgress takes inversePrimary in a light theme. */
+.pill-progress > div { background: #79d0f5; }
+
+/* The TV keeps its one page of panels (session 20): the blocks inside them take the panel's own padding and its title's size. */
+.panel .set-block { padding: 0; }
+.panel .set-block-title { font-size: 16px; line-height: 24px; font-weight: 500; }
+html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 24); }
+
 /* Settings: panels in Corner.Large, the theme as one segmented choice. */
 .settings { display: flex; flex-direction: column; gap: 16px; max-width: 640px; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); padding: 16px; display: flex; flex-direction: column; gap: 12px; }

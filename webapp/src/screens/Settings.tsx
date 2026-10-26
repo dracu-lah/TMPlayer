@@ -56,10 +56,19 @@ export function Settings() {
     const params = useParams<{ page?: string }>()
     const navigate = useNavigate()
     // The desktop shows a page beside the list: its address says which, so a change of layout keeps the viewer on it.
-    // The TV has one page and no sub pages.
+    // The TV has one page and no sub pages: it drops the address and remembers the page for the way back out of it.
     createEffect(() => {
-        if (form() === 'desktop' && !PAGES.some((p) => p.id === params.page)) navigate(`/settings/${PAGES[0].id}`, { replace: true })
-        else if (form() === 'tv' && params.page) navigate('/settings', { replace: true })
+        const f = form()
+        if (f === 'tv') {
+            if (params.page) {
+                leftFor = PAGES.find((p) => p.id === params.page)?.id ?? null
+                navigate('/settings', { replace: true })
+            }
+        } else if (!PAGES.some((p) => p.id === params.page)) {
+            const back = leftFor
+            leftFor = null
+            if (f === 'desktop' || back) navigate(`/settings/${back ?? PAGES[0].id}`, { replace: true })
+        }
     })
     return (
         <Show when={form() !== 'tv'} fallback={<TvSettings />}>
@@ -67,6 +76,9 @@ export function Settings() {
         </Show>
     )
 }
+
+/** The page the viewer was on when the TV layout took Settings over. */
+let leftFor: PageId | null = null
 
 function Pages() {
     const params = useParams<{ page?: string }>()
