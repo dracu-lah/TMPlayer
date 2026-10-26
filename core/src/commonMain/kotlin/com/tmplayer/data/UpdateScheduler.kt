@@ -59,9 +59,13 @@ class UpdateScheduler(
         }
     }
 
-    /** The scheduled check: only with the setting on, and only once the throttle has run out. */
-    suspend fun checkIfDue(): Boolean {
-        if (!prefs.notify()) return false
+    /**
+     * The scheduled check: only with the setting on, and only once the throttle has run out.
+     * [requireNotify] false is the automatic install (HX5), which asks under the same throttle
+     * with "Tell me when a new version is out" off as well, since it was turned on by itself.
+     */
+    suspend fun checkIfDue(requireNotify: Boolean = true): Boolean {
+        if (requireNotify && !prefs.notify()) return false
         val last = prefs.lastCheck()
         val at = now()
         // Never checked is due, and so is a clock set back past the last check, or it would never

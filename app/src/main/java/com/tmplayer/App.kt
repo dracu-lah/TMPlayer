@@ -239,6 +239,8 @@ class App : Application() {
         override fun onActivityStarted(activity: android.app.Activity) {
             started++
             inFront = true
+            // The automatic update's wait for an idle app is called off (HX5).
+            com.tmplayer.data.AutoUpdater.onForeground()
             // Back in view: TDLib reopens a line it lost in the background at once (Td).
             Td.onForegroundChanged(true)
         }
@@ -250,6 +252,8 @@ class App : Application() {
             if (started == 0 && !activity.isChangingConfigurations) {
                 AppLockSession.lock()
                 Td.onForegroundChanged(false)
+                // With "Install updates by itself" on, one look a few minutes from now (HX5).
+                com.tmplayer.data.AutoUpdater.onBackground(activity.applicationContext)
             }
         }
 

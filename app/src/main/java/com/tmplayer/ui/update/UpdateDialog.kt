@@ -37,7 +37,10 @@ import androidx.tv.material3.Text
 import com.tmplayer.data.FormFactor
 import com.tmplayer.data.MeteredPolicy
 import com.tmplayer.data.NetworkMonitor
+import com.tmplayer.data.OfflineDownloads
+import com.tmplayer.data.FolderExport
 import com.tmplayer.data.Release
+import com.tmplayer.data.SelfInstaller
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.data.UPDATE_WAITS_FOR_WIFI
 import com.tmplayer.data.UpdateState
@@ -48,6 +51,7 @@ import com.tmplayer.data.downloadAndInstall
 import com.tmplayer.data.points
 import com.tmplayer.data.release
 import com.tmplayer.data.unknownSourcesIntent
+import com.tmplayer.data.workPausedByInstall
 import com.tmplayer.data.updateScheduler
 import com.tmplayer.i18n.L
 import com.tmplayer.i18n.Translator
@@ -67,13 +71,16 @@ import kotlinx.coroutines.launch
 
 /**
  * The update popup: "TMPlayer 1.20.0 is out", what is new, how it installs, and *Update now*,
- * *Remind me later* and *Skip this version*. Then the download, and then Android takes over.
+ * *Remind me later* and *Skip this version*. Then the download, and then the install: on Android
+ * 12 and later in a session the popup stays up for, saying it is installing (and without Android's
+ * question where it allows that, SelfInstaller); before that the system installer's screen takes
+ * over.
  *
  * The side bar item, the popup that opens by itself once per version and Settings all show this
  * same dialog, because [Updates] holds the state and this is only a window onto it. It also answers
  * Settings' "Check for updates" while the check runs and when there turns out to be nothing new.
- * It closes itself once the installer is on screen, since what happens next is the system's
- * business.
+ * It closes itself once the system installer's screen is up, since what happens next is the
+ * system's business.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -99,6 +106,15 @@ fun UpdateDialog(onDismiss: () -> Unit) {
         allowed = Updates.canInstall(context)
         onPauseOrDispose { }
     }
+    // Whether Update now installs without Android's question here, as far as the installed app
+    // says; read again when the install permission may have changed.
+    var silent by remember { mutableStateOf(false) }
+    LaunchedEffect(allowed) { silent = runCatching { SelfInstaller.canUpdateSilently(context) }.getOrDefault(false) }
+    // Downloads and a save to a folder pause for the install, which ends the process: said before
+    // Update now is pressed. Collected so the line follows them.
+    val downloads by OfflineDownloads.active.collectAsStateWithLifecycle()
+    val export by FolderExport.state.collectAsStateWithLifecycle()
+    val pausesWork = remember(downloads, export) { Updates.workPausedByInstall() }
     val release = state.release
     val offer = release?.let {
         Offer(
@@ -108,16 +124,20 @@ fun UpdateDialog(onDismiss: () -> Unit) {
             allowed = allowed,
             waitsForWifi = metered && wifiOnly,
             onMobileData = metered && !wifiOnly,
+            silent = silent,
+            pausesWork = pausesWork,
         )
     }
 
     val primary: () -> Unit = {
         when {
+            // A second press while it runs does nothing: one download, one install.
+            state.busy() -> Unit
             offer != null && !allowed -> runCatching {
                 context.startActivity(Updates.unknownSourcesIntent(context))
             }
             // Outlives the dialog: Back on a remote closes it, and the download carries on, with
-            // the rail item there to reopen it.
+            // the rail item there to reopen it. The install after it too.
             offer != null -> Background.scope.launch { Updates.downloadAndInstall(context, offer.release) }
             else -> scope.launch { scheduler.checkNow() }
         }
@@ -167,14 +187,15 @@ fun UpdateDialog(onDismiss: () -> Unit) {
             tv = true,
             modifier = Modifier.width(panel).padding(vertical = 24.dp).floatingSurface(),
         ) {
-            // A remote steps along a row; nothing here while the download runs, so a stray
-            // press cannot abandon it. Four buttons are wider than the panel, so the row wraps.
+            // A remote steps along a row; nothing here while the download or the install runs, so
+            // a stray press cannot abandon it. Four buttons are wider than the panel, so the row
+            // wraps.
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 when {
-                    state is UpdateState.Downloading -> Unit
+                    state.busy() -> Unit
                     offer != null -> {
                         TmButton(
                             onClick = primary,
@@ -216,8 +237,13 @@ fun UpdateDialog(onDismiss: () -> Unit) {
         }
     }
 
-    // A remote needs a starting point, and Update now is the one the popup is for.
-    LaunchedEffect(offer != null) { runCatching { confirm.requestFocus() } }
+    // A remote needs a starting point, and Update now is the one the popup is for: again once a
+    // download or an install is over, since the buttons were not there while it ran (Android's
+    // question answered with no puts the button back under the remote).
+    val busy = state.busy()
+    LaunchedEffect(offer != null, busy) {
+        if (!busy) runCatching { confirm.requestFocus() }
+    }
 }
 
 /** A release on offer, with what this device makes of it. */
@@ -228,7 +254,14 @@ private class Offer(
     val allowed: Boolean,
     val waitsForWifi: Boolean,
     val onMobileData: Boolean,
+    /** Android 12 and later will install it without asking. */
+    val silent: Boolean,
+    /** Downloads or a save to a folder are running, which the install pauses. */
+    val pausesWork: Boolean,
 )
+
+/** A download or an install under way, when the popup offers no buttons. */
+private fun UpdateState.busy(): Boolean = this is UpdateState.Downloading || this is UpdateState.Installing
 
 /** The button that opens the release page, or on a TV shows it as a QR code. */
 private val RELEASE_PAGE: String get() = L.updateReleasePage
@@ -252,7 +285,7 @@ private fun TouchUpdateDialog(
     onReleasePage: (() -> Unit)?,
 ) {
     val s = LocalStrings.current
-    val downloading = state is UpdateState.Downloading
+    val downloading = state.busy()
     // A phone on its side has too little height to stack the list over the buttons.
     val short = LocalConfiguration.current.screenHeightDp < SHORT_SCREEN
     Dialog(
@@ -318,9 +351,11 @@ private fun TouchUpdateDialog(
 /** Below this height (dp) the phone's card goes side by side. */
 private const val SHORT_SCREEN = 520
 
-private fun cardProgress(state: UpdateState): UpdateCardProgress =
-    (state as? UpdateState.Downloading)?.let { it.fraction?.let(UpdateCardProgress::Part) ?: UpdateCardProgress.Unknown }
-        ?: UpdateCardProgress.None
+private fun cardProgress(state: UpdateState): UpdateCardProgress = when (state) {
+    is UpdateState.Downloading -> state.fraction?.let(UpdateCardProgress::Part) ?: UpdateCardProgress.Unknown
+    is UpdateState.Installing -> UpdateCardProgress.Unknown
+    else -> UpdateCardProgress.None
+}
 
 private fun title(state: UpdateState, offer: Offer?): String = when {
     offer != null -> UpdateWords.title(offer.release, offer.skipped)
@@ -352,11 +387,14 @@ private fun status(state: UpdateState, offer: Offer?, device: String): String {
         }
     }
     val size = Translator.messages.formatter.bytes(offer.sizeBytes)
-    return when {
+    val line = when {
         state is UpdateState.Downloading -> L.updateDownloading(size = size)
+        state is UpdateState.Installing -> return L.updateInstallingRestart
         !offer.allowed && device.equals("tv", ignoreCase = true) -> L.updateBlockedTv
         !offer.allowed -> L.updateBlockedPhone
         offer.waitsForWifi -> UPDATE_WAITS_FOR_WIFI
+        offer.silent -> L.updateSizeAndRestart(size = size)
         else -> L.updateSizeAndConfirm(size = size)
     }
+    return if (offer.pausesWork) "$line ${L.updatePausesDownloads}" else line
 }

@@ -20,10 +20,14 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!--
       Sideloaded rather than on a store, so updating means fetching an APK from the project's own
-      GitHub releases and handing it to Android's installer. The system still asks the viewer to
-      confirm, and the TV's "allow apps from this source" switch has to be on first.
+      GitHub releases and handing it to Android's installer, and the TV's "allow apps from this
+      source" switch has to be on first. Android 6 to 11 always ask the viewer to confirm. On
+      Android 12 and later, with the second permission declared, Android may install TMPlayer's
+      own update (same package, same key) without asking (SelfInstaller, HX5). Both are taken out
+      of the F-Droid build (src/fdroid).
     -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <!--
       A video kept for the train has to keep coming down with the app closed, which on Android
       means a foreground service and the notification that goes with it. Data sync is the type
@@ -227,6 +231,19 @@
         <receiver
             android:name=".data.NoticeDismissReceiver"
             android:exported="false" />
+
+        <!--
+          After TMPlayer has updated itself (HX5): deletes the downloaded APK and, after an install
+          that closed the app, posts "Updated, tap to open". Android sends MY_PACKAGE_REPLACED to
+          the app's own package only, so nothing else reaches it.
+        -->
+        <receiver
+            android:name=".data.UpdatedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
 </application>
 </manifest>
