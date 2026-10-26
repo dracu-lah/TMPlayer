@@ -241,7 +241,7 @@ private fun LockedSettings(state: ShellState, content: @Composable () -> Unit) {
             purpose = PinPurpose.Check,
             title = LocalStrings.current.lockEnterForSettings,
             onDone = { state.settingsUnlocked = true },
-            onCancel = { state.go(Destination.Home) },
+            onCancel = { if (state.modalOpen) state.closeModal() else state.go(Destination.Home) },
         )
     } else {
         content()
@@ -353,10 +353,27 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     // to another page from the floating bar forgets them, as before.
     val pages = rememberSaveableStateHolder()
     LaunchedEffect(state.destination) {
-        Destination.entries.filter { it != state.destination }.forEach { pages.removeState(it.name) }
+        Destination.entries.filter { it != state.destination && it != state.pageDestination }.forEach { pages.removeState(it.name) }
     }
 
     val account by chats.accountHeader.collectAsState()
+    val shownPage: @Composable (Destination) -> Unit = { destination ->
+        when (destination) {
+            Destination.Home -> HomePage(state, chats)
+            Destination.Chats -> ChatsPage(state, chats, favouritesOnly = false)
+            Destination.Favourites -> ChatsPage(state, chats, favouritesOnly = true)
+            Destination.History -> HistoryPage(state)
+            Destination.Downloads -> DownloadsPage(state)
+            Destination.Settings -> LockedSettings(state) {
+                SettingsPage(
+                    state,
+                    BuildInfo.VERSION,
+                    chatList = (chatsUi as? UiState.Content)?.value?.chats.orEmpty(),
+                    account = account,
+                )
+            }
+        }
+    }
     // With the picture under the window (LocalVideoBehindPage), the page is kept but not drawn
     // while a video plays, so the picture shows through around the player's controls.
     val seeThrough = LocalVideoBehindPage.current && state.nowPlaying != null
@@ -368,24 +385,16 @@ private fun Browse(state: ShellState, player: PlayerContent) {
                 val open = state.openChat
                 when {
                     open != null -> MediaGridPage(state, open)
-                    else -> pages.SaveableStateProvider(state.destination.name) {
-                        when (state.destination) {
-                            Destination.Home -> HomePage(state, chats)
-                            Destination.Chats -> ChatsPage(state, chats, favouritesOnly = false)
-                            Destination.Favourites -> ChatsPage(state, chats, favouritesOnly = true)
-                            Destination.History -> HistoryPage(state)
-                            Destination.Downloads -> DownloadsPage(state)
-                            Destination.Settings -> LockedSettings(state) {
-                                SettingsPage(
-                                    state,
-                                    BuildInfo.VERSION,
-                                    chatList = (chatsUi as? UiState.Content)?.value?.chats.orEmpty(),
-                                    account = account,
-                                )
-                            }
-                        }
+                    else -> pages.SaveableStateProvider(state.pageDestination.name) {
+                        shownPage(state.pageDestination)
                     }
                 }
+            }
+        }
+        // Settings and Downloads: a panel over the page above, not a page stretched across the window.
+        Box(Modifier.fillMaxSize().then(if (seeThrough) Modifier.drawWithContent { } else Modifier)) {
+            ModalPageHost(state) {
+                pages.SaveableStateProvider(state.destination.name) { shownPage(state.destination) }
             }
         }
 

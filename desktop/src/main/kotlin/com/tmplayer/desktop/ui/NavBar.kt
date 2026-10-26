@@ -134,7 +134,7 @@ fun NavFrame(
             if (tv && barShown) TvTopBar(state, update, account, onPicturePlaced = { pictureX = it })
             // On a television, one focus group that remembers where the remote was: Down from the
             // bar and the end of a video put it back on that item (ShellState.focusPage).
-            Box(Modifier.weight(1f).fillMaxWidth().focusRequester(state.pageFocus).then(if (tv) Modifier.focusRestorer().focusGroup() else Modifier)) {
+            Box(Modifier.weight(1f).fillMaxWidth().focusRequester(state.pageFocus).then(if (tv || state.destination.isModal) Modifier.focusRestorer().focusGroup() else Modifier)) {
                 CompositionLocalProvider(LocalBottomChrome provides if (barShown && !tv) NavBarClearance else 0.dp) {
                     content()
                 }
