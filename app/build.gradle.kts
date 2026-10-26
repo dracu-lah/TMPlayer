@@ -48,11 +48,11 @@ val releaseAbis: List<String> = (findProperty("tmAbis") as String?)
 val fdroidBuild: Boolean = (findProperty("tmFdroid") as String?)?.trim()?.toBoolean() ?: false
 
 // The FFmpeg extension. scripts/build-media3ext.sh builds nextlib-media3ext from its pinned
-// source with TMPlayer's extra video decoders (MPEG-4 Part 2, DivX 3, VC-1, Motion JPEG) into
-// this AAR; without it the build takes the same nextlib from Maven Central, which lacks them and
-// says so. A release (and F-Droid's recipe) passes -PtmRequireMedia3ext=true, which fails the
-// build instead of shipping without them.
-val media3extAar = rootProject.file("build/media3ext/nextlib-media3ext-${libs.versions.nextlib.get()}-tm1.aar")
+// source with TMPlayer's extra video decoders (MPEG-4 Part 2, DivX 3, VC-1, Motion JPEG) and the
+// light video mode for weak devices (HX2c) into this AAR; without it the build takes the same
+// nextlib from Maven Central, which lacks both and says so. A release (and F-Droid's recipe)
+// passes -PtmRequireMedia3ext=true, which fails the build instead of shipping without them.
+val media3extAar = rootProject.file("build/media3ext/nextlib-media3ext-${libs.versions.nextlib.get()}-tm2.aar")
 val requireMedia3ext: Boolean = (findProperty("tmRequireMedia3ext") as String?)?.trim()?.toBoolean() ?: false
 if (!media3extAar.isFile) {
     if (requireMedia3ext) {

@@ -21,7 +21,9 @@ so each has its own section. Libraries both use are listed once, under "Shared".
 The app's AAR is built from that source by `scripts/build-media3ext.sh`, with TMPlayer's patch
 `scripts/media3ext/tmplayer-decoders.patch` applied: it adds FFmpeg's mpeg4, msmpeg4v2,
 msmpeg4v3, vc1 and mjpeg video decoders to NextLib's `ffmpeg/setup.sh` and maps Media3's MPEG-4
-Part 2, DivX, Microsoft MPEG-4, VC-1 and Motion JPEG formats to them. The native codec libraries
+Part 2, DivX, Microsoft MPEG-4, VC-1 and Motion JPEG formats to them, and adds a light video mode
+to NextLib's JNI and Java glue (dav1d's frame threads, film grain left out and YV12 frames to the
+window, for the formats the app asks it for). The native codec libraries
 are built by that `ffmpeg/setup.sh` from these upstream sources:
 
 - FFmpeg 9.0.1 (libavcodec, libavutil, libswresample, libswscale): LGPL-3.0-or-later for the
@@ -36,9 +38,9 @@ are built by that `ffmpeg/setup.sh` from these upstream sources:
 
 The VP8 and VP9 decoders are FFmpeg's own; libvpx is no longer part of the build.
 
-The corresponding source is one archive, `nextlib-corresponding-source-1.11.1-0.16.0-tm1.tar.gz`,
-linked as "nextlib source" from the notes of every TMPlayer release that carries the patched
-build. It holds the exact NextLib 1.11.1-0.16.0 source and build scripts, TMPlayer's patch and
+The corresponding source is one archive, `nextlib-corresponding-source-1.11.1-0.16.0-tm2.tar.gz`,
+linked as "nextlib source" from the notes of every TMPlayer release that carries this revision of
+the patched build (1.28.x carried the first, `-tm1`, without the light mode). It holds the exact NextLib 1.11.1-0.16.0 source and build scripts, TMPlayer's patch and
 build script under `tmplayer/`, and the three upstream source archives above;
 `scripts/build-nextlib-source.sh` in this repository rebuilds it from permanent addresses and
 SHA-256 sums. Releases up to 1.27.x shipped NextLib's own AAR from Maven Central; their source is

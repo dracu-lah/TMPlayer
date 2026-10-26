@@ -11,9 +11,514 @@
  
  # Gradle supplies these; standalone callers use the same pinned versions.
  CATALOG="$BASE_DIR/../gradle/libs.versions.toml"
+--- a/media3ext/consumer-rules.pro
++++ b/media3ext/consumer-rules.pro
+@@ -4,4 +4,9 @@
+ }
+ -keep class androidx.media3.decoder.VideoDecoderOutputBuffer {
+     *;
+-}
+\ No newline at end of file
++}
++# TMPlayer (HX2c): called by reflection, so an app built against nextlib's Maven Central AAR,
++# which lacks it, still compiles.
++-keep class io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegLibrary {
++    public static void setLightVideoPolicy(com.google.common.base.Predicate);
++}
+--- /dev/null
++++ b/media3ext/src/main/cpp/fflight.h
+@@ -0,0 +1,70 @@
++// TMPlayer (HX2c): the frame step of the light video mode, kept apart so the host benchmark
++// (TMPlayer's scripts/media3ext/bench) times the very code the app runs.
++//
++// A 4:2:0 frame of 8 or 10 bits in limited range goes to three 8-bit planes by a plain copy or a
++// rounded shift, with no colour conversion: the window (YV12) or Media3's YUV renderer turns it
++// into RGB on the GPU. Everything else still goes through swscale.
++#ifndef TMPLAYER_FFLIGHT_H
++#define TMPLAYER_FFLIGHT_H
++
++#include <cstddef>
++#include <cstdint>
++#include <cstring>
++
++extern "C" {
++#include <libavutil/frame.h>
++#include <libavutil/pixfmt.h>
++}
++
++#if defined(__ARM_NEON) || defined(__ARM_NEON__)
++#include <arm_neon.h>
++#endif
++
++namespace fflight {
++
++// 10-bit samples to 8-bit, rounded to nearest and saturated (1023 gives 255).
++inline void Reduce10To8(const uint16_t *__restrict src, uint8_t *__restrict dst, int count) {
++    int i = 0;
++#if defined(__ARM_NEON) || defined(__ARM_NEON__)
++    for (; i + 16 <= count; i += 16) {
++        const uint16x8_t a = vld1q_u16(src + i);
++        const uint16x8_t b = vld1q_u16(src + i + 8);
++        vst1q_u8(dst + i, vcombine_u8(vqrshrn_n_u16(a, 2), vqrshrn_n_u16(b, 2)));
++    }
++#endif
++    for (; i < count; i++) {
++        const unsigned value = (src[i] + 2u) >> 2;
++        dst[i] = static_cast<uint8_t>(value > 255u ? 255u : value);
++    }
++}
++
++// Whether CopyTo420 takes this frame: planar 4:2:0, 8 or 10 bits, limited range.
++inline bool CanCopyTo420(const AVFrame *frame) {
++    if (frame->color_range == AVCOL_RANGE_JPEG) return false;
++    return frame->format == AV_PIX_FMT_YUV420P || frame->format == AV_PIX_FMT_YUV420P10LE;
++}
++
++// Writes the frame's Y, U and V planes as 8-bit samples to dest[0..2] with the given strides.
++// Returns false, writing nothing, for a frame CanCopyTo420 refuses.
++inline bool CopyTo420(const AVFrame *frame, uint8_t *const dest[3], const int strides[3]) {
++    if (!CanCopyTo420(frame)) return false;
++    const bool ten = frame->format == AV_PIX_FMT_YUV420P10LE;
++    for (int plane = 0; plane < 3; plane++) {
++        const int width = plane ? (frame->width + 1) / 2 : frame->width;
++        const int height = plane ? (frame->height + 1) / 2 : frame->height;
++        for (int y = 0; y < height; y++) {
++            const uint8_t *src = frame->data[plane] + static_cast<ptrdiff_t>(y) * frame->linesize[plane];
++            uint8_t *dst = dest[plane] + static_cast<ptrdiff_t>(y) * strides[plane];
++            if (ten) {
++                Reduce10To8(reinterpret_cast<const uint16_t *>(src), dst, width);
++            } else {
++                memcpy(dst, src, width);
++            }
++        }
++    }
++    return true;
++}
++
++}  // namespace fflight
++
++#endif  // TMPLAYER_FFLIGHT_H
+--- a/media3ext/src/main/cpp/ffvideo.cpp
++++ b/media3ext/src/main/cpp/ffvideo.cpp
+@@ -26,9 +26,69 @@
+ #include <libswresample/swresample.h>
+ #include <libswscale/swscale.h>
+ }
++#include <dlfcn.h>
++#include <sys/system_properties.h>
++#include "fflight.h"
+ 
+ #define ALIGN(x, a) (((x) + ((a) - 1)) & ~((a) - 1))
+ 
++// TMPlayer (HX2c): the light video mode, asked for per format by the app (FfmpegLibrary's
++// setLightVideoPolicy) for pictures the device cannot decode in software in real time.
++// kFlagLight: AV1 with dav1d's frame threads instead of LOW_DELAY, film grain exported rather
++// than applied (any codec), and 4:2:0 frames reduced to 8 bits without swscale. kFlagYv12: the
++// window takes YV12, so no RGBA conversion at all; off on emulators, whose graphics backend
++// shows YV12 CPU buffers wrongly. Without the flags everything runs as before.
++constexpr int kFlagLight = 1;
++constexpr int kFlagYv12 = 2;
++// dav1d's frame contexts in the light mode: 2 is what dav1d picks by itself for 4 threads
++// (ceil(sqrt(threads))), and the frames a seek or the end of a file waits for. On the host bench
++// (scripts/media3ext/bench in TMPlayer) 3 decoded about 30% faster again for about 23 MB more at
++// 1080p 10-bit, so a device can try it without a rebuild:
++// `adb shell setprop debug.tmplayer.av1_frame_delay 3` (1 to 8; read at each decoder's start).
++constexpr int kLightAv1FrameDelay = 2;
++
++static int LightAv1FrameDelay() {
++    char value[PROP_VALUE_MAX] = {};
++    if (__system_property_get("debug.tmplayer.av1_frame_delay", value) > 0) {
++        const int delay = atoi(value);
++        if (delay >= 1 && delay <= 8) return delay;
++    }
++    return kLightAv1FrameDelay;
++}
++
++// HAL_PIXEL_FORMAT_YV12: Y, then V, then U; the chroma stride is the luma stride halved and
++// aligned to 16. Media3's own libvpx and libgav1 renderers write it the same way.
++constexpr int kHalPixelFormatYv12 = 0x32315659;
++
++// ADataSpace bits (android/data_space.h, API 28): the standard, the transfer and the range.
++constexpr int32_t kDataSpaceBt709 = 1 << 16;
++constexpr int32_t kDataSpaceBt601_625 = 2 << 16;
++constexpr int32_t kDataSpaceBt601_525 = 4 << 16;
++constexpr int32_t kDataSpaceBt2020 = 6 << 16;
++constexpr int32_t kDataSpaceTransferSmpte170m = 3 << 22;
++constexpr int32_t kDataSpaceRangeLimited = 2 << 27;
++
++// The YV12 frame's matrix, for the compositor: the same choice as GetOutputColorspace and the
++// RGBA path (BT.709 when unknown), with the transfer left as the RGBA path leaves it.
++static int32_t DataSpaceOf(const AVFrame *frame) {
++    int32_t standard;
++    switch (frame->colorspace) {
++        case AVCOL_SPC_BT470BG: standard = kDataSpaceBt601_625; break;
++        case AVCOL_SPC_SMPTE170M: standard = kDataSpaceBt601_525; break;
++        case AVCOL_SPC_BT2020_NCL: standard = kDataSpaceBt2020; break;
++        default: standard = kDataSpaceBt709; break;
++    }
++    return standard | kDataSpaceTransferSmpte170m | kDataSpaceRangeLimited;
++}
++
++// ANativeWindow_setBuffersDataSpace, which libandroid has from API 28 on; null before.
++static int32_t SetBuffersDataSpace(ANativeWindow *window, int32_t dataSpace) {
++    using Setter = int32_t (*)(ANativeWindow *, int32_t);
++    static const Setter setter = reinterpret_cast<Setter>(
++            dlsym(RTLD_DEFAULT, "ANativeWindow_setBuffersDataSpace"));
++    return setter ? setter(window, dataSpace) : -1;
++}
++
+ // ANativeWindow_lock() implicitly connects the Surface's BufferQueue to the CPU
+ // producer API. Since this Surface is shared with ExoPlayer's
+ // MediaCodecVideoRenderer, that connection must be released once we are done, or
+@@ -176,6 +236,38 @@
+     std::array<int, 6> cached_configuration{};
+ };
+ 
++// TMPlayer (HX2c): a 10-bit 4:2:0 frame reduced to 8 bits by fflight, for the light mode's RGBA
++// path, where swscale's 8-bit 4:2:0 to RGBA (NEON on ARM) then does the rest. Returns the frame
++// itself when there is nothing to reduce, null on failure.
++struct ReducedFrame {
++    ~ReducedFrame() { av_frame_free(&frame); }
++
++    const AVFrame *Of(const AVFrame *source) {
++        if (source->format != AV_PIX_FMT_YUV420P10LE || !fflight::CanCopyTo420(source)) return source;
++        if (frame && (frame->width != source->width || frame->height != source->height)) {
++            av_frame_free(&frame);
++        }
++        if (!frame) {
++            frame = av_frame_alloc();
++            if (!frame) return nullptr;
++            frame->width = source->width;
++            frame->height = source->height;
++            frame->format = AV_PIX_FMT_YUV420P;
++            if (av_frame_get_buffer(frame, 32) < 0) {
++                av_frame_free(&frame);
++                return nullptr;
++            }
++        }
++        frame->colorspace = source->colorspace;
++        frame->color_range = source->color_range;
++        uint8_t *const dest[] = {frame->data[0], frame->data[1], frame->data[2]};
++        const int strides[] = {frame->linesize[0], frame->linesize[1], frame->linesize[2]};
++        return fflight::CopyTo420(source, dest, strides) ? frame : nullptr;
++    }
++
++    AVFrame *frame{};
++};
++
+ // Surface::disconnect clears its buffer slots. Unlocking afterwards releases the
+ // CPU mapping, but queueBuffer rejects the removed slot instead of displaying it.
+ // The public NDK has no unlock-without-post operation.
+@@ -251,6 +343,8 @@
+         connected_as_cpu = false;
+         native_window_width = 0;
+         native_window_height = 0;
++        native_window_format = 0;
++        native_window_dataspace = -1;
+     }
+ 
+     bool MaybeAcquireNativeWindow(JNIEnv *env, jobject new_surface) {
+@@ -277,19 +371,30 @@
+     // Decoding and rendering run on different threads.
+     ScaleContext renderContext;
+     ScaleContext yuvContext;
++    // TMPlayer (HX2c): the light mode (kFlagLight, kFlagYv12), set once at initialisation.
++    bool light = false;
++    bool yv12 = false;
++    // Render thread only: a window that refused YV12 is not asked again.
++    bool yv12_refused = false;
++    ReducedFrame renderReduced;
+ 
+     ANativeWindow *native_window = nullptr;
+     jobject surface = nullptr;
+     int native_window_width = 0;
+     int native_window_height = 0;
++    int native_window_format = 0;
++    int32_t native_window_dataspace = -1;
+     bool connected_as_cpu = false;
+ };
+ 
+ JniContext *createVideoContext(JNIEnv *env,
+                                AVCodec *codec,
+                                jbyteArray extraData,
+-                               jint threads) {
++                               jint threads,
++                               jint flags) {
+     auto jniContext = std::make_unique<JniContext>();
++    jniContext->light = (flags & kFlagLight) != 0;
++    jniContext->yv12 = jniContext->light && (flags & kFlagYv12) != 0;
+ 
+     AVCodecContext *codecContext = avcodec_alloc_context3(codec);
+     if (!codecContext) {
+@@ -311,11 +416,27 @@
+     }
+ 
+     codecContext->thread_count = threads;
+-    if (codec->id == AV_CODEC_ID_AV1) {
++    int frameDelay = 0;  // 0: the codec's own
++    if (codec->id == AV_CODEC_ID_AV1 && jniContext->light && threads > 1) {
++        // TMPlayer (HX2c): LOW_DELAY leaves dav1d one frame context, so four cores share one
++        // frame's tiles and rows and sit mostly idle. A frame delay of kLightAv1FrameDelay is
++        // what FFmpeg's own H.264 and HEVC frame threads already do here: a sample may come out
++        // a call later, and the last frames of a file are not drained.
++        frameDelay = std::min<int>(threads, LightAv1FrameDelay());
++        av_opt_set_int(codecContext, "max_frame_delay", frameDelay, AV_OPT_SEARCH_CHILDREN);
++    } else if (codec->id == AV_CODEC_ID_AV1) {
+         // SimpleDecoder expects a frame per sample and does not drain at EOS.
+         // Disable dav1d's frame delay so each sample yields its output promptly.
+         codecContext->flags |= AV_CODEC_FLAG_LOW_DELAY;
+     }
++    if (jniContext->light) {
++        // TMPlayer (HX2c): the film grain is handed back as side data and not drawn: dav1d's
++        // grain synthesis is a full extra pass over every frame.
++        codecContext->export_side_data |= AV_CODEC_EXPORT_DATA_FILM_GRAIN;
++        __android_log_print(ANDROID_LOG_INFO, LOG_TAG,
++                "%s: light mode (%d threads, AV1 frame delay %d, film grain off, %s)", codec->name,
++                threads, frameDelay, jniContext->yv12 ? "YV12 window" : "RGBA window");
++    }
+     codecContext->err_recognition = AV_EF_IGNORE_ERR;
+     int result = avcodec_open2(codecContext, codec, nullptr);
+     if (result < 0) {
+@@ -336,20 +457,115 @@
+ }
+ 
+ 
++// TMPlayer (HX2c): RenderFrame's answer when the window refused YV12 and the frame is to be
++// drawn again, in RGBA.
++constexpr int kRenderRetryRgba = 1;
++
++static int RefuseYv12(JNIEnv *env, JniContext *jniContext, bool locked) {
++    LOGE("The window refused YV12; the light mode draws RGBA instead.");
++    jniContext->yv12_refused = true;
++    jniContext->native_window_format = 0;
++    if (locked) {
++        jniContext->connected_as_cpu = DiscardLockedBuffer(jniContext->native_window) != 0;
++        jniContext->ReleaseSurface(env);
++    }
++    return kRenderRetryRgba;
++}
++
++static int RenderFrame(JNIEnv *env, JniContext *jniContext, jobject surface, const AVFrame *frame,
++                       int displayed_width, int displayed_height, int rotation_degrees) {
++    if (!jniContext->MaybeAcquireNativeWindow(env, surface)) return VIDEO_DECODER_ERROR_OTHER;
++
++    // TMPlayer (HX2c): the light mode hands the window YV12 where it takes it, for even sizes,
++    // so the GPU does the colour conversion; otherwise RGBA as before.
++    const bool yv12 = jniContext->yv12 && !jniContext->yv12_refused &&
++            !(displayed_width & 1) && !(displayed_height & 1);
++    const int format = yv12 ? kHalPixelFormatYv12 : WINDOW_FORMAT_RGBA_8888;
++    if (jniContext->native_window_width != displayed_width ||
++        jniContext->native_window_height != displayed_height ||
++        jniContext->native_window_format != format) {
++        // RGBA is a public NDK window format; YV12 CPU buffers are not portable
++        // across Surface producers (including the emulator's graphics backend).
++        if (ANativeWindow_setBuffersGeometry(jniContext->native_window,
++                displayed_width, displayed_height, format)) {
++            return yv12 ? RefuseYv12(env, jniContext, false) : VIDEO_DECODER_ERROR_OTHER;
++        }
++        jniContext->native_window_width = displayed_width;
++        jniContext->native_window_height = displayed_height;
++        jniContext->native_window_format = format;
++        jniContext->native_window_dataspace = -1;
++    }
++    if (yv12) {
++        const int32_t dataspace = DataSpaceOf(frame);
++        if (jniContext->native_window_dataspace != dataspace) {
++            // Before API 28 the compositor's own choice stands (BT.601 on most devices).
++            SetBuffersDataSpace(jniContext->native_window, dataspace);
++            jniContext->native_window_dataspace = dataspace;
++        }
++    }
++
++    ANativeWindow_Buffer buffer;
++    int result = ANativeWindow_lock(jniContext->native_window, &buffer, nullptr);
++    if (result == -19) {
++        jniContext->ReleaseSurface(env);
++        return VIDEO_DECODER_SUCCESS;
++    }
++    if (result) {
++        if (!yv12) return VIDEO_DECODER_ERROR_OTHER;
++        // The lock connected the window to the CPU before the YV12 buffer failed.
++        jniContext->connected_as_cpu = true;
++        return RefuseYv12(env, jniContext, false);
++    }
++    jniContext->connected_as_cpu = true;
++
++    bool converted = false;
++    if (buffer.bits && buffer.width >= displayed_width && buffer.height >= displayed_height &&
++        buffer.stride >= buffer.width) {
++        if (yv12) {
++            if (buffer.format != kHalPixelFormatYv12) return RefuseYv12(env, jniContext, true);
++            const int chroma_stride = ALIGN(buffer.stride / 2, 16);
++            auto *y_plane = static_cast<uint8_t *>(buffer.bits);
++            uint8_t *v_plane = y_plane + static_cast<size_t>(buffer.stride) * buffer.height;
++            uint8_t *u_plane = v_plane + static_cast<size_t>(chroma_stride) * ((buffer.height + 1) / 2);
++            uint8_t *dest[] = {y_plane, u_plane, v_plane, nullptr};
++            int strides[] = {buffer.stride, chroma_stride, chroma_stride, 0};
++            converted = (!rotation_degrees && fflight::CopyTo420(frame, dest, strides)) ||
++                    jniContext->renderContext.Convert(frame, AV_PIX_FMT_YUV420P,
++                            dest, strides, rotation_degrees);
++        } else if (buffer.format == WINDOW_FORMAT_RGBA_8888 && buffer.stride <= INT_MAX / 4) {
++            // The light mode takes 10 bits to 8 first: swscale has NEON code for 8-bit 4:2:0
++            // to RGBA, none for 10-bit.
++            const AVFrame *source = jniContext->light ? jniContext->renderReduced.Of(frame) : frame;
++            uint8_t *dest[] = {static_cast<uint8_t *>(buffer.bits), nullptr, nullptr, nullptr};
++            int strides[] = {buffer.stride * 4, 0, 0, 0};
++            converted = source && jniContext->renderContext.Convert(source, AV_PIX_FMT_RGBA,
++                    dest, strides, rotation_degrees);
++        }
++    }
++    if (!converted) {
++        jniContext->connected_as_cpu = DiscardLockedBuffer(jniContext->native_window) != 0;
++        jniContext->ReleaseSurface(env);
++        return VIDEO_DECODER_ERROR_OTHER;
++    }
++    result = ANativeWindow_unlockAndPost(jniContext->native_window);
++    return !result ? VIDEO_DECODER_SUCCESS : VIDEO_DECODER_ERROR_OTHER;
++}
++
+ extern "C"
+ JNIEXPORT jlong JNICALL
+ Java_io_github_anilbeesetti_nextlib_media3ext_ffdecoder_FfmpegVideoDecoder_ffmpegInitialize(JNIEnv *env,
+                                                                                  jobject thiz,
+                                                                                  jstring codec_name,
+                                                                                  jbyteArray extra_data,
+-                                                                                 jint threads) {
++                                                                                 jint threads,
++                                                                                 jint flags) {
+     AVCodec *codec = getCodecByName(env, codec_name);
+     if (!codec) {
+         LOGE("Codec not found.");
+         return 0L;
+     }
+ 
+-    return (jlong) createVideoContext(env, codec, extra_data, threads);
++    return (jlong) createVideoContext(env, codec, extra_data, threads, flags);
+ }
+ 
+ extern "C"
+@@ -400,47 +616,15 @@
+     auto *const jniContext = reinterpret_cast<JniContext *>(jContext);
+     auto *frame = reinterpret_cast<AVFrame *>(
+             env->GetLongField(output_buffer, jniContext->decoder_private_field));
+-    if (!frame || !jniContext->MaybeAcquireNativeWindow(env, surface)) {
+-        return VIDEO_DECODER_ERROR_OTHER;
++    if (!frame) return VIDEO_DECODER_ERROR_OTHER;
++    // TMPlayer (HX2c): a window that refuses YV12 is released and the frame drawn again in RGBA.
++    int result = RenderFrame(env, jniContext, surface, frame, displayed_width, displayed_height,
++                             rotation_degrees);
++    if (result == kRenderRetryRgba) {
++        result = RenderFrame(env, jniContext, surface, frame, displayed_width, displayed_height,
++                             rotation_degrees);
+     }
+-
+-    if (jniContext->native_window_width != displayed_width ||
+-        jniContext->native_window_height != displayed_height) {
+-        // RGBA is a public NDK window format; YV12 CPU buffers are not portable
+-        // across Surface producers (including the emulator's graphics backend).
+-        if (ANativeWindow_setBuffersGeometry(jniContext->native_window,
+-                displayed_width, displayed_height, WINDOW_FORMAT_RGBA_8888)) {
+-            return VIDEO_DECODER_ERROR_OTHER;
+-        }
+-        jniContext->native_window_width = displayed_width;
+-        jniContext->native_window_height = displayed_height;
+-    }
+-
+-    ANativeWindow_Buffer buffer;
+-    int result = ANativeWindow_lock(jniContext->native_window, &buffer, nullptr);
+-    if (result == -19) {
+-        jniContext->ReleaseSurface(env);
+-        return VIDEO_DECODER_SUCCESS;
+-    }
+-    if (result) return VIDEO_DECODER_ERROR_OTHER;
+-    jniContext->connected_as_cpu = true;
+-
+-    bool converted = false;
+-    if (buffer.bits && buffer.format == WINDOW_FORMAT_RGBA_8888 &&
+-        buffer.width >= displayed_width && buffer.height >= displayed_height &&
+-        buffer.stride >= buffer.width && buffer.stride <= INT_MAX / 4) {
+-        uint8_t *dest[] = {static_cast<uint8_t *>(buffer.bits), nullptr, nullptr, nullptr};
+-        int strides[] = {buffer.stride * 4, 0, 0, 0};
+-        converted = jniContext->renderContext.Convert(frame, AV_PIX_FMT_RGBA,
+-                dest, strides, rotation_degrees);
+-    }
+-    if (!converted) {
+-        jniContext->connected_as_cpu = DiscardLockedBuffer(jniContext->native_window) != 0;
+-        jniContext->ReleaseSurface(env);
+-        return VIDEO_DECODER_ERROR_OTHER;
+-    }
+-    result = ANativeWindow_unlockAndPost(jniContext->native_window);
+-    return !result ? VIDEO_DECODER_SUCCESS : VIDEO_DECODER_ERROR_OTHER;
++    return result == kRenderRetryRgba ? VIDEO_DECODER_ERROR_OTHER : result;
+ }
+ 
+ extern "C"
+@@ -538,7 +722,10 @@
+     const size_t uvLength = static_cast<size_t>(uvStride) * ((height + 1) / 2);
+     uint8_t *dest[] = {data, data + yLength, data + yLength + uvLength, nullptr};
+     int strides[] = {yStride, uvStride, uvStride, 0};
+-    const bool success = jniContext->yuvContext.Convert(frame, AV_PIX_FMT_YUV420P,
++    // TMPlayer (HX2c): the light mode copies or reduces a 4:2:0 frame without swscale.
++    const bool success = (jniContext->light && !rotation_degrees &&
++                          fflight::CopyTo420(frame, dest, strides)) ||
++            jniContext->yuvContext.Convert(frame, AV_PIX_FMT_YUV420P,
+             dest, strides, rotation_degrees);
+     av_frame_free(&frame);
+     return success ? VIDEO_DECODER_SUCCESS : VIDEO_DECODER_ERROR_OTHER;
 --- a/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegLibrary.java
 +++ b/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegLibrary.java
-@@ -123,6 +123,11 @@
+@@ -2,11 +2,13 @@
+ 
+ import androidx.annotation.Nullable;
+ import androidx.media3.common.C;
++import androidx.media3.common.Format;
+ import androidx.media3.common.MediaLibraryInfo;
+ import androidx.media3.common.MimeTypes;
+ import androidx.media3.common.util.LibraryLoader;
+ import androidx.media3.common.util.Log;
+ import androidx.media3.common.util.UnstableApi;
++import com.google.common.base.Predicate;
+ import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
+ 
+ /** Configures and queries the underlying native library. */
+@@ -30,9 +32,36 @@
+   private static @MonotonicNonNull String version;
+   private static int inputBufferPaddingSize = C.LENGTH_UNSET;
+ 
++  // TMPlayer (HX2c): which video formats get the light mode; null gives none of them.
++  @Nullable private static volatile Predicate<Format> lightVideoPolicy;
++
+   private FfmpegLibrary() {}
+ 
+   /**
++   * TMPlayer (HX2c): sets which video formats the FFmpeg video decoder decodes in its light mode,
++   * meant for pictures the device cannot decode in software in real time otherwise: AV1 with
++   * dav1d's frame threads (a frame delay of 2) instead of low delay, film grain left out, and the
++   * frame handed to the window as YV12 (RGBA after a fast 10 to 8 bit step where the window takes
++   * no YV12, and on emulators) instead of swscale's full RGBA conversion. Asked when a decoder is
++   * created, so a change applies from the next decoder. Null, the default, turns it off.
++   */
++  public static void setLightVideoPolicy(@Nullable Predicate<Format> policy) {
++    lightVideoPolicy = policy;
++  }
++
++  /** Whether {@code format} is to be decoded in the light mode. */
++  static boolean isLightVideo(Format format) {
++    Predicate<Format> policy = lightVideoPolicy;
++    if (policy == null) return false;
++    try {
++      return policy.apply(format);
++    } catch (RuntimeException e) {
++      Log.w(TAG, "Light video policy failed", e);
++      return false;
++    }
++  }
++
++  /**
+    * Override the names of the FFmpeg native libraries. If an application wishes to call this
+    * method, it must do so before calling any other method defined by this class, and before
+    * instantiating a {@link FfmpegAudioRenderer} instance.
+@@ -123,6 +152,11 @@
        case MimeTypes.VIDEO_AV1 -> "libdav1d";
        case MimeTypes.VIDEO_MPEG -> "mpegvideo";
        case MimeTypes.VIDEO_MPEG2 -> "mpeg2video";
@@ -27,7 +532,50 @@
        default -> null;
 --- a/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegVideoDecoder.java
 +++ b/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegVideoDecoder.java
-@@ -87,7 +87,8 @@
+@@ -1,5 +1,6 @@
+ package io.github.anilbeesetti.nextlib.media3ext.ffdecoder;
+ 
++import android.os.Build;
+ import android.view.Surface;
+ 
+ import androidx.annotation.Nullable;
+@@ -30,6 +31,10 @@
+     private static final int VIDEO_DECODER_ERROR_OTHER = -2;
+     // LINT.ThenChange(../../../../../../../jni/ffmpeg_jni.cc)
+ 
++    // TMPlayer (HX2c): ffvideo.cpp's kFlagLight and kFlagYv12.
++    private static final int FLAG_LIGHT = 1;
++    private static final int FLAG_YV12 = 2;
++
+     private final String codecName;
+     private long nativeContext;
+     // Initialized by createOutputBuffer() during the SimpleDecoder constructor.
+@@ -64,13 +69,23 @@
+         // Format uses clockwise degrees. Ignore unsupported non-right-angle rotations.
+         int rotation = format.rotationDegrees % 360;
+         rotationDegrees = rotation % 90 == 0 ? (rotation + 360) % 360 : 0;
+-        nativeContext = ffmpegInitialize(codecName, extraData, threads);
++        int flags = 0;
++        if (FfmpegLibrary.isLightVideo(format)) {
++            // An emulator's graphics backend shows YV12 CPU buffers wrongly: RGBA there.
++            flags = FLAG_LIGHT | (isEmulator() ? 0 : FLAG_YV12);
++        }
++        nativeContext = ffmpegInitialize(codecName, extraData, threads, flags);
+         if (nativeContext == 0) {
+             throw new FfmpegDecoderException("Failed to initialize decoder.");
+         }
+         setInitialInputBufferSize(initialInputBufferSize);
+     }
+ 
++    private static boolean isEmulator() {
++        return Build.HARDWARE.equals("ranchu") || Build.HARDWARE.equals("goldfish")
++                || Build.FINGERPRINT.startsWith("generic") || Build.PRODUCT.contains("sdk");
++    }
++
+     /**
+      * Returns FFmpeg-compatible codec-specific initialization data ("extra data"), or {@code null} if
+      * not required.
+@@ -87,7 +102,8 @@
                  System.arraycopy(pps, 0, extraData, sps.length, pps.length);
                  return extraData;
              }
@@ -37,3 +585,12 @@
                  return initializationData.get(0);
              }
              default -> {
+@@ -223,7 +239,7 @@
+         }
+     }
+ 
+-    private native long ffmpegInitialize(String codecName, @Nullable byte[] extraData, int threads);
++    private native long ffmpegInitialize(String codecName, @Nullable byte[] extraData, int threads, int flags);
+ 
+     private native long ffmpegReset(long context);
+ 
