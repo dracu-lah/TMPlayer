@@ -83,6 +83,16 @@ fun TvHomeChannels(
     // channels are emptied, so they are filled again after.
     val written = remember { arrayOfNulls<List<TvChannels.Program>>(1) }
 
+    // "Play next" entries written before their picture was on the device wear the app's mark; once
+    // Home has been up a while, and never under a playing video, they are given their own picture.
+    // Once per Home, a few entries at a time: it stops by itself.
+    LaunchedEffect(signedIn) {
+        if (!signedIn) return@LaunchedEffect
+        delay(SETTLE_MS)
+        while (com.tmplayer.data.WatchCache.anyPlaying()) delay(PLAYING_RECHECK_MS)
+        runCatching { com.tmplayer.data.WatchNextPublisher.fillMissingArt(context) }
+    }
+
     // Off empties the channels rather than deleting them. The launcher hides an empty channel, and
     // keeps the place the viewer gave it: Android lets an app's first channel onto the home screen
     // without asking, but a channel made again after a delete waits in the launcher's settings.
