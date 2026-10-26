@@ -138,6 +138,178 @@ for (const size of [
             expect(await page.evaluate(() => document.documentElement.dataset.tvKeys)).toBeUndefined()
         })
 
+        // ---- The player (session 21): everything with the remote's keys ----
+
+        /** Opens a chat's first card with the remote and waits for the picture to play. */
+        async function watch(page: Page, chat: string) {
+            await page.goto(`/chat/${chat}`)
+            await expect.poll(() => focused(page)).toContain('card|/watch/')
+            await press(page, 'Enter')
+            await expect(page).toHaveURL(/\/watch\//)
+            await expect(page.locator('.pc[data-variant=tv]')).toHaveCount(1)
+            await expect.poll(() => page.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime)).toBeGreaterThan(0.2)
+        }
+        const controlsUp = (page: Page) => page.evaluate(() => document.querySelector('.pc')?.classList.contains('shown') ?? false)
+        const paused = (page: Page) => page.locator('video').evaluate((v: HTMLVideoElement) => v.paused)
+        const onControl = (page: Page) =>
+            page.evaluate(() => {
+                const a = document.activeElement as HTMLElement | null
+                if (!a) return ''
+                if (a.getAttribute('role') === 'slider') return 'bar'
+                if (a.classList.contains('pc-play')) return 'disc'
+                return a.getAttribute('aria-label') ?? a.textContent?.trim() ?? a.tagName
+            })
+        /** A key the TV sends by code alone (webOS Back 461, Pause 19, Play 415). */
+        const code = (page: Page, keyCode: number, key = 'Unidentified') =>
+            page.evaluate(([c, k]) => (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: k as string, keyCode: c as number, bubbles: true, cancelable: true })), [keyCode, key])
+
+        test('Player: the picture starts bare, Left jumps, Up raises the row on the bar, Back peels the row and then the video', async ({ page }) => {
+            await page.goto('/chat/-1001')
+            await expect.poll(() => focused(page)).toContain('card|/watch/')
+            const card = await focused(page)
+            await press(page, 'Enter')
+            await expect(page).toHaveURL(/\/watch\//)
+            await expect(page.locator('.pc[data-variant=tv]')).toHaveCount(1)
+            expect(await controlsUp(page)).toBe(false)
+            // Left over the bare picture (the test clip is 4 s long): ten seconds at once, the figure on the left, no row.
+            await press(page, 'ArrowLeft')
+            await expect(page.locator('.pc-ripple.left')).toBeVisible()
+            expect(await controlsUp(page)).toBe(false)
+            await press(page, 'ArrowUp')
+            expect(await controlsUp(page)).toBe(true)
+            expect(await onControl(page)).toBe('bar')
+            // Back puts the row away, the next Back leaves the video, and the card has the remote again.
+            await press(page, 'Backspace')
+            expect(await controlsUp(page)).toBe(false)
+            await expect(page).toHaveURL(/\/watch\//)
+            await press(page, 'Backspace')
+            await expect(page).toHaveURL(/\/chat\/-1001/)
+            await expect.poll(() => focused(page)).toBe(card)
+        })
+
+        test('Player: OK pauses with the remote on the disc, arrows walk disc, bar and buttons, menus close back onto their button', async ({ page }) => {
+            await watch(page, '-1001')
+            await press(page, 'Enter')
+            await expect.poll(() => paused(page)).toBe(true)
+            expect(await controlsUp(page)).toBe(true)
+            expect(await onControl(page)).toBe('disc')
+            // OK on the disc plays again (the 4 s test clip loops so the walk below has time).
+            await press(page, 'Enter')
+            await expect.poll(() => paused(page)).toBe(false)
+            await page.locator('video').evaluate((v: HTMLVideoElement) => (v.loop = true))
+            await press(page, 'ArrowDown')
+            expect(await onControl(page)).toBe('bar')
+            // On the bar Left seeks at once.
+            await press(page, 'ArrowLeft')
+            await expect.poll(() => page.locator('video').evaluate((v: HTMLVideoElement) => v.currentTime)).toBeLessThan(1)
+            await press(page, 'ArrowDown')
+            expect(await onControl(page)).toBe('Subtitles')
+            await press(page, 'ArrowRight')
+            expect(await onControl(page)).toBe('Audio')
+            await press(page, 'Enter')
+            await expect(page.locator('.pc-menu')).toHaveCount(1)
+            expect(await page.evaluate(() => !!document.activeElement?.closest('.pc-menu'))).toBe(true)
+            await press(page, 'Backspace')
+            await expect(page.locator('.pc-menu')).toHaveCount(0)
+            expect(await onControl(page)).toBe('Audio')
+            await press(page, 'ArrowRight')
+            expect(await onControl(page)).toBe('Playback speed')
+            await press(page, 'Enter')
+            await press(page, 'ArrowDown', 4)
+            await press(page, 'Enter')
+            await expect(page.locator('.pc-menu')).toHaveCount(0)
+            expect(await page.locator('video').evaluate((v: HTMLVideoElement) => v.playbackRate)).toBe(1.5)
+            expect(await onControl(page)).toBe('Playback speed')
+            // Shape steps with a press and More opens its menu, both reached with the arrows.
+            await press(page, 'ArrowRight')
+            expect(await onControl(page)).toContain('Picture shape')
+            await press(page, 'Enter')
+            expect(await onControl(page)).toContain('Picture shape: Crop')
+            await press(page, 'ArrowRight')
+            expect(await onControl(page)).toBe('More')
+            await press(page, 'Enter')
+            await expect(page.locator('.pc-menu')).toHaveCount(1)
+            await press(page, 'Backspace')
+            expect(await onControl(page)).toBe('More')
+            // Up from the buttons is the bar, Up again the disc; Back puts the row away.
+            await press(page, 'ArrowUp')
+            expect(await onControl(page)).toBe('bar')
+            await press(page, 'ArrowUp')
+            expect(await onControl(page)).toBe('disc')
+            await press(page, 'Backspace')
+            expect(await controlsUp(page)).toBe(false)
+        })
+
+        test('Player: Episodes opens on the playing one, Down and OK start the next, Back closes it onto its pill', async ({ page }) => {
+            await watch(page, '-1002')
+            await press(page, 'ArrowUp')
+            await press(page, 'ArrowDown')
+            // Right along the row to the Episodes pill.
+            for (let i = 0; i < 8 && (await onControl(page)) !== 'Episodes'; i++) await press(page, 'ArrowRight')
+            expect(await onControl(page)).toBe('Episodes')
+            await press(page, 'Enter')
+            await expect(page.locator('.pc-episodes')).toBeVisible()
+            expect(await page.evaluate(() => document.activeElement?.classList.contains('playing'))).toBe(true)
+            await press(page, 'Backspace')
+            await expect(page.locator('.pc-episodes')).toHaveCount(0)
+            expect(await onControl(page)).toBe('Episodes')
+            await press(page, 'Enter')
+            const first = page.url()
+            await press(page, 'ArrowDown')
+            expect(await page.evaluate(() => document.activeElement?.classList.contains('pc-episode'))).toBe(true)
+            await press(page, 'Enter')
+            await expect(page.locator('.pc-episodes')).toHaveCount(0)
+            await expect.poll(() => page.url()).not.toBe(first)
+        })
+
+        test('Player: the media keys by code (Pause 19, Play 415, Rewind 412, Back 461) work without a name', async ({ page }) => {
+            await watch(page, '-1001')
+            await code(page, 19)
+            await expect.poll(() => paused(page)).toBe(true)
+            expect(await onControl(page)).toBe('disc')
+            await code(page, 415)
+            await expect.poll(() => paused(page)).toBe(false)
+            await page.locator('video').evaluate((v: HTMLVideoElement) => (v.loop = true))
+            await code(page, 412)
+            await expect(page.locator('.pc-ripple.left')).toBeVisible()
+            // Back peels the row first (it is up for a few seconds after a key), then leaves.
+            const rowUp = await controlsUp(page)
+            await code(page, 461, 'GoBack')
+            if (rowUp) await code(page, 461, 'GoBack')
+            await expect(page).toHaveURL(/\/chat\/-1001/)
+        })
+
+        test('Player: a file that needs the app puts the remote on its sheet, and Back leaves', async ({ page }) => {
+            await page.goto('/chat/-1001')
+            await expect.poll(() => focused(page)).toContain('card|/watch/')
+            for (let i = 0; i < 40 && !(await page.evaluate(() => document.activeElement?.textContent?.includes('Windows Clip'))); i++) await press(page, 'ArrowRight')
+            await press(page, 'Enter')
+            await expect(page.getByText('This video needs the TMPlayer app')).toBeVisible()
+            expect(await page.evaluate(() => !!document.activeElement?.closest('.pc-status'))).toBe(true)
+            await press(page, 'Backspace')
+            await expect(page).toHaveURL(/\/chat\/-1001/)
+        })
+
+        test('Player: a paused picture with the row away stops the page\'s own timers', async ({ page }) => {
+            await watch(page, '-1001')
+            await code(page, 19)
+            await press(page, 'Backspace')
+            expect(await controlsUp(page)).toBe(false)
+            // The container's own idle flag settles a few seconds after the last key; after that the save and
+            // stall timers are cleared by the pause and nothing the page owns wakes in the next 2.5 s.
+            await page.waitForTimeout(5000)
+            const woke = await page.evaluate(
+                () =>
+                    new Promise<string[]>((resolve) => {
+                        const seen: string[] = []
+                        const mo = new MutationObserver((list) => list.forEach((m) => seen.push(`${m.type}:${(m.target as HTMLElement).className ?? ''}:${m.attributeName ?? ''}`)))
+                        mo.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true })
+                        setTimeout(() => (mo.disconnect(), resolve(seen)), 2500)
+                    }),
+            )
+            expect(woke).toEqual([])
+        })
+
         test('Search: the field opens for typing on OK only, Down goes to the results, Up to the bar', async ({ page }) => {
             await page.goto('/search')
             await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe('INPUT')
@@ -155,3 +327,42 @@ for (const size of [
         })
     })
 }
+
+test.describe('TV sign in', () => {
+    test.skip(({ browserName }) => browserName !== 'chromium', 'the TV walk runs in Chromium')
+    test.use({ viewport: { width: 1920, height: 1080 } })
+    test.beforeEach(async ({ page, context }) => {
+        await fakeCase(context, 'signedout')
+        await tv(page)
+    })
+
+    test('the QR code first, the number by the pad and the remote\'s number keys, no field takes the keyboard', async ({ page }) => {
+        await page.goto('/')
+        await expect(page).toHaveURL(/\/signin/)
+        await expect(page.locator('.signin.is-qr .qr')).toBeVisible()
+        // Down to "Use my phone number", OK: the pad takes the remote on its first digit.
+        for (let i = 0; i < 6 && !(await page.evaluate(() => document.activeElement?.textContent === 'Use my phone number')); i++) await press(page, 'ArrowDown')
+        await press(page, 'Enter')
+        await expect(page.locator('.keypad')).toBeVisible()
+        expect(await focused(page)).toBe('key|')
+        const field = page.getByRole('textbox', { name: 'Phone number' })
+        expect(await field.evaluate((el: HTMLInputElement) => el.readOnly)).toBe(true)
+        // 5 then 7 by the pad (Right, OK); 3 by the remote's number key; Delete takes the last away.
+        await press(page, 'ArrowDown')
+        await press(page, 'ArrowRight')
+        expect(await page.evaluate(() => document.activeElement?.textContent)).toBe('5')
+        await press(page, 'Enter')
+        await press(page, 'ArrowDown')
+        await press(page, 'ArrowLeft')
+        expect(await page.evaluate(() => document.activeElement?.textContent)).toBe('7')
+        await press(page, 'Enter')
+        await page.keyboard.press('3')
+        await expect(field).toHaveValue(/573/)
+        await press(page, 'ArrowDown')
+        expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('Delete')
+        await press(page, 'Enter')
+        await expect(field).toHaveValue(/57$/)
+        // No editable field is ever the one the remote is on.
+        expect(await page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.readOnly ?? true)).toBe(true)
+    })
+})

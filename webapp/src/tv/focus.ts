@@ -498,8 +498,10 @@ export function createFocusMap(host: Host) {
         if (dir || isOk || isBack) keysOn()
         const active = document.activeElement as HTMLElement | null
 
-        // The player has its own keys (session 21); only the remote's Back keys are taken here.
+        // The player has its own keys (Chrome.tsx `tvKey`, session 21), Back included: the row first,
+        // then the video. Only before its controls are drawn is Back taken here.
         if (watching()) {
+            if (document.querySelector('.pc')) return
             if (isBack && e.key !== 'Backspace' && goBack(e)) e.preventDefault()
             else if (e.key === 'Backspace' && !isTextInput(active) && goBack(e)) e.preventDefault()
             return

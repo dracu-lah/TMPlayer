@@ -253,3 +253,32 @@ html[data-form=tv][data-tv-keys] .report-options button:focus { outline: none; b
 html[data-form=tv] .other-tab h1 { font-size: calc(var(--dp) * 22); line-height: calc(var(--dp) * 28); }
 html[data-form=tv] .pop-menu .icon, html[data-form=tv] .chat-pin .icon { width: calc(var(--dp) * 18); height: calc(var(--dp) * 18); }
 html[data-form=tv] .chat-link .initial.saved .icon { width: calc(var(--dp) * 22); height: calc(var(--dp) * 22); }
+
+/* ---- Sign in (LoginScreen's QrPane and number pane): the QR code beside its steps, the pad beside the number ---- */
+html[data-form=tv] .signin {
+  max-width: calc(var(--dp) * 640); min-height: 100vh; justify-content: center; gap: calc(var(--dp) * 10);
+  padding: var(--tv-safe-v) var(--tv-safe-h);
+}
+html[data-form=tv] .signin-mark { width: calc(var(--dp) * 48); height: calc(var(--dp) * 48); }
+html[data-form=tv] .signin h1 { font-size: calc(var(--dp) * 28); line-height: calc(var(--dp) * 36); }
+html[data-form=tv] .signin .steps { padding-left: calc(var(--dp) * 20); gap: calc(var(--dp) * 4); }
+html[data-form=tv] .signin-foot { padding-top: calc(var(--dp) * 8); }
+html[data-form=tv] .signin-install { display: none; }
+html[data-form=tv] .signin.is-qr {
+  max-width: calc(var(--dp) * 800); display: grid; grid-template-columns: 1fr calc(var(--dp) * 240); column-gap: calc(var(--dp) * 48);
+  align-content: center; align-items: start; justify-items: start;
+}
+html[data-form=tv] .signin.is-qr > * { grid-column: 1; }
+html[data-form=tv] .signin.is-qr > .qr { grid-column: 2; grid-row: 1 / span 9; align-self: center; justify-self: center; }
+html[data-form=tv] .qr { width: calc(var(--dp) * 240); height: calc(var(--dp) * 240); border-radius: calc(var(--dp) * 16); }
+html[data-form=tv] .qr-code svg { width: calc(var(--dp) * 224); height: calc(var(--dp) * 224); }
+html[data-form=tv] .signin form { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto auto 1fr; column-gap: calc(var(--dp) * 24); row-gap: calc(var(--dp) * 10); align-items: start; }
+html[data-form=tv] .signin form > * { grid-column: 1; }
+html[data-form=tv] .signin form > .keypad { grid-column: 2; grid-row: 1 / -1; }
+.keypad { display: grid; grid-template-columns: repeat(3, calc(var(--dp, 1px) * 56)); gap: calc(var(--dp, 1px) * 8); }
+.keypad .key {
+  height: calc(var(--dp, 1px) * 48); display: grid; place-items: center; border: 0; border-radius: calc(var(--dp, 1px) * 12);
+  background: var(--surface-high, #23272a); color: var(--fg, #f2f4f5); font: inherit; font-size: calc(var(--dp, 1px) * 20); font-weight: 500; cursor: pointer;
+}
+html[data-form=tv][data-tv-keys] .keypad .key:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); transform: scale(var(--focus-scale)); }
+html[data-form=tv] .keypad .key svg { width: calc(var(--dp) * 24); height: calc(var(--dp) * 24); }

@@ -11,6 +11,7 @@ import { loadThumb } from '../screens/thumbs'
 import { readSubtitle, SUBTITLE_EXTENSIONS, SubtitleError } from './subtitles'
 import { api } from '../tg/rpc'
 import { t } from '../i18n'
+import { form } from '../form'
 import { Icon } from '../ui/Icon'
 import { dropResume, getResume, saveResume as storeResume, settings } from '../store'
 import type { VideoCopy, VideoItem, WatchInfo } from '../tg/types'
@@ -373,6 +374,18 @@ export function Player(props: {
     }
 
     let saveTimer = 0
+    /** The saved place every 10 s and the stall check every second: running while the video plays. */
+    const startTicks = () => {
+        if (!saveTimer) saveTimer = window.setInterval(() => savePosition(video.currentTime), 10_000)
+        if (!tick) tick = window.setInterval(sample, 1000)
+    }
+    /** A TV that is paused does nothing by itself (AGENTS.md's low-end rule): the pause saved the place and read the buffer once. */
+    const stopTicks = () => {
+        clearInterval(saveTimer)
+        clearInterval(tick)
+        saveTimer = 0
+        tick = 0
+    }
     /** Closed while the saved place was still being read: nothing may start after that. */
     let closed = false
     onMount(async () => {
@@ -383,8 +396,7 @@ export function Player(props: {
         video.playbackRate = chosenRate
         if (at > 0) setResumedAt(at)
         load(source(), at, true)
-        saveTimer = window.setInterval(() => savePosition(video.currentTime), 10_000)
-        tick = window.setInterval(sample, 1000)
+        startTicks()
         window.addEventListener('offline', onOffline)
         window.addEventListener('online', onOnline)
         document.addEventListener('visibilitychange', onHidden)
@@ -456,7 +468,7 @@ export function Player(props: {
 
     return (
         <video-player class="player-root">
-            <media-container ref={container} class="player" classList={{ blocked: blocked() }} data-variant={variant()} tabIndex={-1}>
+            <media-container ref={container} class="player" classList={{ blocked: blocked() }} attr:data-variant={variant()} tabIndex={-1}>
                 <video
                     ref={video}
                     playsinline
@@ -474,11 +486,13 @@ export function Player(props: {
                         if (probed && engine) setDetails(`${probed.container}, ${probed.mime.replace(/^[^;]*;\s*/, '')}. ${engine.detail}`)
                     }}
                     onPlay={() => {
+                        if (form() === 'tv' && !closed) startTicks()
                         if (file) file.wantAhead = true
                         tabs?.postMessage({ playing: true })
                     }}
                     onPause={() => {
                         savePosition(video.currentTime)
+                        if (form() === 'tv' && everPlayed && !closed) (sample(), stopTicks())
                         // Paused for a minute: stop reading ahead.
                         const f = file
                         window.setTimeout(() => {
