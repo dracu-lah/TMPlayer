@@ -135,12 +135,27 @@ toolchain was moved forward on 2026-10-18 (Gradle 9.8.1, AGP 9.4.1, Kotlin 2.4.2
   `targetSdk` deliberately stays at 35.
 - **The FFmpeg extension is built from source** for releases: `scripts/build-media3ext.sh`
   builds nextlib-media3ext at its pinned commit with `scripts/media3ext/tmplayer-decoders.patch`
-  (FFmpeg's mpeg4, msmpeg4v2, msmpeg4v3, vc1 and mjpeg decoders) into
-  `build/media3ext/nextlib-media3ext-<version>-tm1.aar`, which `:app` uses when it is there. It
-  needs NDK 25.2.9519653, CMake 3.22.1, meson, ninja and nasm, and about an hour with `JOBS=2`.
-  Without the AAR a debug build takes nextlib from Maven Central (the same decoders minus those
-  five) and says so; the release job and F-Droid's recipe pass `-PtmRequireMedia3ext=true`, which
-  fails instead. A nextlib bump means checking that the patch still applies.
+  (FFmpeg's mpeg4, msmpeg4v2, msmpeg4v3, vc1 and mjpeg decoders, and the light video mode below)
+  into `build/media3ext/nextlib-media3ext-<version>-tm2.aar`, which `:app` uses when it is there.
+  It needs NDK 25.2.9519653, CMake 3.22.1, meson, ninja and nasm, and about an hour with
+  `JOBS=2` (`GRADLE_WORKERS` sets Gradle's workers apart from `JOBS`). Without the AAR a debug
+  build takes nextlib from Maven Central (the same decoders minus those five, no light mode) and
+  says so; the release job and F-Droid's recipe pass `-PtmRequireMedia3ext=true`, which fails
+  instead. A nextlib bump means checking that the patch still applies. Any change to the patch
+  bumps `TM_REVISION` (`tm2` now), which renames the AAR and the corresponding source archive
+  the release notes link (see RELEASING.md).
+- **The light video mode** (HX2c) is for pictures the device decodes in software and cannot keep
+  up with: `DeviceDecode` hands NextLib `DecodeJudge.wantsLightDecode` through
+  `FfmpegLibrary.setLightVideoPolicy` (by reflection, so the Maven Central fallback still
+  compiles), asked each time a video decoder is created. For those formats AV1 runs with dav1d's
+  frame threads (frame delay 2) instead of `AV_CODEC_FLAG_LOW_DELAY`, film grain is exported
+  instead of drawn, and frames go to the window as YV12 (a copy, or a rounded 10 to 8 bit shift
+  with NEON, in `fflight.h`) instead of swscale's single-threaded RGBA conversion; a window that
+  refuses YV12, and an emulator, gets RGBA after the same 8-bit step. A hardware decoder or a
+  phone the table says keeps up sees no change. `adb logcat -s ffmpeg_jni` shows "light mode"
+  when it is on; `adb shell setprop debug.tmplayer.av1_frame_delay 3` tries another frame delay
+  on a device without a rebuild. `scripts/media3ext/bench/` times all of it on the host
+  (`build-host-ffmpeg.sh`, then `run-bench.sh`), with no device or emulator.
 - **media3 and NextLib versions are coupled**: `nextlib-media3ext` is published as
   `<media3-version>-<nextlib-version>`, and its FFmpeg renderers are built against that exact
   media3, so bumping one means bumping both to a pair that exists. A nextlib bump also changes

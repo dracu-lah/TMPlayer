@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Builds nextlib-corresponding-source-1.11.1-0.16.0-tm1.tar.gz: the complete corresponding source
+# Builds nextlib-corresponding-source-1.11.1-0.16.0-tm2.tar.gz: the complete corresponding source
 # of the FFmpeg extension that the Android build bundles through nextlib-media3ext 1.11.1-0.16.0
 # (io.github.anilbeesetti, by Anil Beesetti, GPL-3.0), as scripts/build-media3ext.sh builds it:
 # nextlib's tree at its tag, plus tmplayer/ holding TMPlayer's patch (five more FFmpeg video
-# decoders and their mappings) and that build script. Up to 1.27.x the app shipped nextlib's own
-# AAR from Maven Central, whose source is the archive without the "-tm1" (attached to v1.27.0).
+# decoders and their mappings, and the light video mode for weak devices) and that build script.
+# The "-tm2" is TM_REVISION in scripts/build-media3ext.sh, read from there, so the archive always
+# names the patch revision it holds. Up to 1.27.x the app shipped nextlib's own AAR from Maven
+# Central, whose source is the archive without the suffix (attached to v1.27.0); 1.28.x shipped
+# tm1, the decoders alone, which this script at a commit before HX2c packs.
 #
 # The AAR carries, for each of arm64-v8a, armeabi-v7a, x86 and x86_64, libmedia3ext.so (nextlib's
 # own JNI glue, built from media3ext/src/main/cpp) and FFmpeg's libavcodec, libavutil,
@@ -41,7 +44,9 @@ set -euo pipefail
 
 VERSION="1.11.1-0.16.0"
 COMMIT="2dc77cd2d9352bc308aa26782f9c77a320df510b"
-NAME="nextlib-corresponding-source-$VERSION-tm1"
+REVISION="$(sed -n 's/^TM_REVISION="\(.*\)"$/\1/p' "$(dirname -- "$0")/build-media3ext.sh")"
+[ -n "$REVISION" ] || { echo "no TM_REVISION in scripts/build-media3ext.sh" >&2; exit 1; }
+NAME="nextlib-corresponding-source-$VERSION-$REVISION"
 TREE="nextlib-$VERSION"
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -117,8 +122,12 @@ from, as it downloads them; \`SHA256SUMS\` lists them.
 
 TMPlayer builds the tree with \`../tmplayer/tmplayer-decoders.patch\` applied, which adds FFmpeg's
 mpeg4, msmpeg4v2, msmpeg4v3, vc1 and mjpeg video decoders to setup.sh and maps Media3's formats
-to them in the Java glue; \`../tmplayer/build-media3ext.sh\` is the script that applies it and runs
-nextlib's own Gradle build (\`:media3ext:assembleRelease\`).
+to them in the Java glue, and adds a light video mode to the JNI glue (\`media3ext/src/main/cpp\`:
+\`ffvideo.cpp\` and the new \`fflight.h\`) and the Java glue (\`FfmpegLibrary\`,
+\`FfmpegVideoDecoder\`): dav1d's frame threads for AV1, film grain left out and YV12 frames to
+the window, for the formats the app asks it for. \`../tmplayer/build-media3ext.sh\` is the script
+that applies it and runs nextlib's own Gradle build (\`:media3ext:assembleRelease\`); this is
+revision $REVISION of the patch.
 
 | Component | Version | Licence | File |
 |---|---|---|---|

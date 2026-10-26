@@ -161,16 +161,17 @@ jobs:
         if: steps.tested.outputs.skip != 'true'
         run: ./gradlew :core:jvmTest :ui:jvmTest :app:testDebugUnitTest
 
-      # The FFmpeg extension with TMPlayer's extra video decoders, built from nextlib's pinned
-      # source (scripts/build-media3ext.sh). Cached by the script and the patch it was built
-      # from, so only a release that changes either pays the hour it takes.
+      # The FFmpeg extension with TMPlayer's extra video decoders and light video mode, built from
+      # nextlib's pinned source (scripts/build-media3ext.sh). Cached by the script and the patch it
+      # was built from (not the host bench beside the patch), so only a release that changes
+      # either pays the hour it takes.
       - name: Restore the FFmpeg extension
         uses: actions/cache@v4
         with:
           path: |
             build/media3ext/*.aar
             build/media3ext/stamp
-          key: media3ext-${{ hashFiles('scripts/build-media3ext.sh', 'scripts/media3ext/**', 'gradle/libs.versions.toml') }}
+          key: media3ext-${{ hashFiles('scripts/build-media3ext.sh', 'scripts/media3ext/*.patch', 'gradle/libs.versions.toml') }}
 
       - name: Build the FFmpeg extension
         run: |
@@ -521,10 +522,12 @@ jobs:
       - name: Check the nextlib source link still matches
         id: nextlib
         run: |
-          # "-tm1": nextlib built from source with TMPlayer's patch (scripts/build-media3ext.sh).
-          LINKED="1.11.1-0.16.0-tm1"
+          # "-tm2": nextlib built from source with TMPlayer's patch (scripts/build-media3ext.sh),
+          # its second revision (the light video mode, HX2c). The suffix is read from that script,
+          # so a new revision of the patch stops the release until its source archive is linked.
+          LINKED="1.11.1-0.16.0-tm2"
           TAG=""
-          USED="$(sed -n 's/^nextlib = "\(.*\)"$/\1/p' gradle/libs.versions.toml)-tm1"
+          USED="$(sed -n 's/^nextlib = "\(.*\)"$/\1/p' gradle/libs.versions.toml)-$(sed -n 's/^TM_REVISION="\(.*\)"$/\1/p' scripts/build-media3ext.sh)"
           if [ "$USED" != "$LINKED" ]; then
             echo "::error::nextlib is $USED but the release notes link the source of $LINKED. Update scripts/build-nextlib-source.sh for $USED, attach its archive, and update LINKED and TAG here."
             exit 1

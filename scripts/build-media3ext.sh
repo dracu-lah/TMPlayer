@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Builds the Android FFmpeg extension from source: nextlib-media3ext 1.11.1-0.16.0 (by Anil
 # Beesetti, GPL-3.0) at its release commit, with TMPlayer's patch, into
-# build/media3ext/nextlib-media3ext-1.11.1-0.16.0-tm1.aar. app/build.gradle.kts uses that AAR when
-# it is there, and the Maven Central one (without the decoders below) when it is not.
+# build/media3ext/nextlib-media3ext-1.11.1-0.16.0-tm2.aar. app/build.gradle.kts uses that AAR when
+# it is there, and the Maven Central one (without the decoders and the light mode below) when it
+# is not. "tm2" is the patch's revision: tm1 had the decoders alone, tm2 adds the light mode, and
+# the release notes link the corresponding source of the same revision.
 #
 # What the patch (scripts/media3ext/tmplayer-decoders.patch) changes, and nothing else:
 #   - FFmpeg is configured with five more video decoders, all for formats Media3's extractors
@@ -20,6 +22,15 @@
 #     and video/mjpeg to them, and FfmpegVideoDecoder hands MPEG-4 and VC-1 their codec private
 #     data (the VOL header, VC-1's sequence header).
 #   - setup.sh takes JOBS from the environment, so a small machine can build with JOBS=2.
+#   - A light video mode (HX2c) for pictures the device cannot decode in software in real time,
+#     chosen per format by the app through FfmpegLibrary.setLightVideoPolicy (TMPlayer passes
+#     DecodeJudge's verdict; without a policy nothing changes): AV1 runs with dav1d's frame
+#     threads (frame delay 2, `adb shell setprop debug.tmplayer.av1_frame_delay N` to try
+#     another) instead of AV_CODEC_FLAG_LOW_DELAY, film grain is exported instead of applied,
+#     and ffmpegRenderFrame hands the window YV12 (a copy, or a rounded 10 to 8 bit shift, in
+#     the new media3ext/src/main/cpp/fflight.h) instead of swscale's RGBA conversion, falling
+#     back to RGBA after the same fast 8-bit step where a window refuses YV12 and on emulators.
+#     scripts/media3ext/bench times it on the host.
 # Every other decoder, FFmpeg 9.0.1, dav1d 1.5.4, Mbed TLS 3.6.7 and the JNI glue are nextlib's own,
 # downloaded from the addresses nextlib's setup.sh uses. F-Droid builds the same way: this script
 # from the pinned, checksummed sources.
@@ -29,10 +40,11 @@
 # ninja, nasm and pkg-config on the PATH. Takes about an hour for the four ABIs with JOBS=2.
 #
 # Usage: JOBS=2 scripts/build-media3ext.sh      (nothing is rebuilt when the AAR is up to date)
+# JOBS is make's and ninja's -j and, unless GRADLE_WORKERS says otherwise, Gradle's --max-workers.
 set -euo pipefail
 
 VERSION="1.11.1-0.16.0"
-TM_REVISION="tm1"
+TM_REVISION="tm2"
 COMMIT="2dc77cd2d9352bc308aa26782f9c77a320df510b"
 SHA256="e80b3c90a3a72611f6ef62edc91255343da9eca0dbd7283049ebd751f88cc1b9"
 
@@ -90,11 +102,12 @@ else
   (cd "$tree" && GIT_CEILING_DIRECTORIES="$out" git apply -p1 "$patch_file")
 fi
 grep -q 'mpeg4 msmpeg4v2 msmpeg4v3 vc1 mjpeg' "$tree/ffmpeg/setup.sh" || { echo "the patch did not apply" >&2; exit 1; }
+[ -f "$tree/media3ext/src/main/cpp/fflight.h" ] || { echo "the patch did not apply" >&2; exit 1; }
 printf 'sdk.dir=%s\n' "$ANDROID_HOME" > "$tree/local.properties"
 
 # nextlib's own Gradle build: ffmpegSetup runs ffmpeg/setup.sh, then CMake builds the JNI glue.
 # Run with this repository's wrapper, so no second Gradle distribution is downloaded.
-"$root/gradlew" -p "$tree" --no-daemon --max-workers="${JOBS:-2}" :media3ext:assembleRelease
+"$root/gradlew" -p "$tree" --no-daemon --max-workers="${GRADLE_WORKERS:-${JOBS:-2}}" :media3ext:assembleRelease
 
 cp "$tree/media3ext/build/outputs/aar/media3ext-release.aar" "$aar"
 echo "$want" > "$stamp"
