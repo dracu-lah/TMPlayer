@@ -109,8 +109,14 @@ if has appimage; then
   # It writes the .zsync into the directory it runs in, not beside the AppImage, so it runs in $out.
   out_abs="$(cd "$out" && pwd)"
   appdir_abs="$(cd "$appdir" && pwd)"
+  # A release follows GitHub's "latest", which never names a pre-release. A test version
+  # (x.y.z-beta.N, or any other suffix) follows "latest-all", the newest release or pre-release:
+  # under "latest" AppImageUpdate would "update" it back to the older release before it, since
+  # zsync compares blocks, not versions.
+  channel="latest"
+  case "$version" in *-*) channel="latest-all" ;; esac
   (cd "$out_abs" && ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$tool" --no-appstream --comp zstd \
-    --updateinformation "gh-releases-zsync|dracu-lah|TMPlayer|latest|TMPlayer-*-x86_64.AppImage.zsync" \
+    --updateinformation "gh-releases-zsync|dracu-lah|TMPlayer|$channel|TMPlayer-*-x86_64.AppImage.zsync" \
     --mksquashfs-opt -Xcompression-level --mksquashfs-opt 22 --mksquashfs-opt -b --mksquashfs-opt 1M \
     "$appdir_abs" "$out_abs/TMPlayer-$version-x86_64.AppImage")
   echo "built $out/TMPlayer-$version-x86_64.AppImage"

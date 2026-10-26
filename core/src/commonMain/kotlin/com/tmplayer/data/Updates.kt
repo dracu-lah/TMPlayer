@@ -94,9 +94,16 @@ object Updates {
     @Volatile
     private var userAgent: String = "TMPlayer"
 
-    /** How the release is fetched; a test swaps it for an answer of its own. */
+    /** "Get test versions", read at each check so a switch in Settings counts from the next one. */
     @Volatile
-    internal var fetch: () -> Release = { UpdateFeed.latest(userAgent) }
+    private var testVersions: suspend () -> Boolean = { false }
+
+    /**
+     * How the release is fetched, given whether test versions are wanted; a test swaps it for an
+     * answer of its own.
+     */
+    @Volatile
+    internal var fetch: (testVersions: Boolean) -> Release = { tests -> UpdateFeed.newest(userAgent, tests) }
 
     /**
      * What this build is and runs on.
@@ -104,20 +111,37 @@ object Updates {
      * [abis] is Android's `Build.SUPPORTED_ABIS`; a platform without APKs passes an empty list.
      * [offers] says whether a release carries something this platform can install, so a release
      * made for one platform alone is no news on another. [connectivity] is null where the
-     * platform cannot tell.
+     * platform cannot tell. [testVersions] is the "Get test versions" setting
+     * ([UpdatePrefs.testVersions]).
      */
     fun configure(
         installedVersion: String,
         abis: List<String> = emptyList(),
         connectivity: Connectivity? = null,
         userAgent: String = "TMPlayer/$installedVersion",
+        testVersions: suspend () -> Boolean = { false },
         offers: (Release) -> Boolean = { true },
     ) {
         this.installedVersion = installedVersion
         this.abis = abis
         this.connectivity = connectivity
         this.userAgent = userAgent
+        this.testVersions = testVersions
         this.offers = offers
+    }
+
+    /**
+     * "Get test versions" was just switched, and saved. Off takes back a test version on offer
+     * (one already installed stays until the next release passes it). Either way the feed is
+     * asked again, quietly, so what is offered matches the switch now rather than hours later.
+     */
+    suspend fun testVersionsSwitched(on: Boolean, skipped: String) {
+        if (!enabled) return
+        val current = _state.value
+        if (!on && current is UpdateState.Available && ReleaseVersion.isTest(current.release.version)) {
+            _state.value = UpdateState.Idle
+        }
+        check(quiet = true, skipped = skipped)
     }
 
     private fun canTryInternet(): Boolean = connectivity?.canTryInternet() ?: true
@@ -149,7 +173,8 @@ object Updates {
         }
 
         if (!quiet) _state.value = UpdateState.Checking
-        val attempt = withContext(Dispatchers.IO) { runCatching { fetch() } }
+        val tests = runCatching { testVersions() }.getOrDefault(false)
+        val attempt = withContext(Dispatchers.IO) { runCatching { fetch(tests) } }
         val release = attempt.getOrNull()
         // A rate-limited API, a release with nothing for this device and a stick with no route out
         // all reach the viewer as much the same sentence, so the cause is logged as well.

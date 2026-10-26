@@ -566,6 +566,8 @@ internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Un
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
     val notifyUpdates by settings.updateNotify.collectAsState(initial = true)
+    val testVersions by settings.updateTestVersions.collectAsState(initial = false)
+    var askTestVersions by remember { mutableStateOf(false) }
     val updateState by Updates.state.collectAsState()
     val developerOptions by settings.developerOptions.collectAsState(initial = false)
     val supportCounters by settings.supportCounters.collectAsState(initial = SupportReminder.Counters())
@@ -612,6 +614,39 @@ internal fun AboutRows(state: ShellState, version: String, onShowAbout: () -> Un
         Toggle(s.settingsUpdateNotify, s.settingsUpdateNotifyDetail, notifyUpdates, icon = TmIcons.Bell) { on ->
             scope.launch { settings.setUpdateNotify(on) }
         }
+        // GitHub pre-releases (RL1). On asks first, with what it means; off is not asked.
+        Toggle(
+            s.settingsTestVersions,
+            if (testVersions) s.settingsTestVersionsOn else s.settingsTestVersionsOff,
+            testVersions,
+            icon = TmIcons.Warning,
+        ) { on ->
+            if (on) {
+                askTestVersions = true
+            } else {
+                scope.launch {
+                    settings.setUpdateTestVersions(false)
+                    Updates.testVersionsSwitched(on = false, skipped = settings.updatePrefs.skippedVersion())
+                }
+            }
+        }
+    }
+    if (askTestVersions) {
+        ConfirmDialog(
+            title = s.confirmTestVersionsTitle,
+            message = s.confirmTestVersionsMessage,
+            detail = s.confirmTestVersionsDetail,
+            confirmLabel = s.confirmTurnOn,
+            destructive = false,
+            onConfirm = {
+                askTestVersions = false
+                scope.launch {
+                    settings.setUpdateTestVersions(true)
+                    Updates.testVersionsSwitched(on = true, skipped = settings.updatePrefs.skippedVersion())
+                }
+            },
+            onDismiss = { askTestVersions = false },
+        )
     }
 
     Group(s.settingsHelp)

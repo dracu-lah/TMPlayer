@@ -212,6 +212,152 @@ class UpdateFeedTest {
         assertTrue(UpdateFeed.isNewer("1.0.1", "1.0"))
     }
 
+    @Test
+    fun `test versions order by number and below their release`() {
+        val order = listOf("1.28.1", "1.28.2-beta.1", "1.28.2-beta.2", "1.28.2-beta.9", "1.28.2-beta.10", "1.28.2", "1.28.3-beta.1")
+        for ((older, newer) in order.zipWithNext()) {
+            assertTrue("$newer after $older", UpdateFeed.compare(newer, older) > 0)
+            assertTrue("$older before $newer", UpdateFeed.compare(older, newer) < 0)
+        }
+        assertEquals(0, UpdateFeed.compare("v1.28.2-beta.3", "1.28.2-beta.3"))
+    }
+
+    // ---- test versions (GitHub pre-releases) -------------------------------------------------
+
+    private fun ghRelease(tag: String, prerelease: Boolean, draft: Boolean = false, state: String = "uploaded") = """
+        {"tag_name":"$tag","prerelease":$prerelease,"draft":$draft,
+         "html_url":"https://github.com/dracu-lah/TMPlayer/releases/tag/$tag",
+         "body":"- One change\n\n| Platform | File |",
+         "assets":[{"name":"TMPlayer-${tag.removePrefix("v")}-universal.apk","size":9,"state":"$state",
+           "digest":"sha256:${"e".repeat(64)}",
+           "browser_download_url":"https://github.com/dracu-lah/TMPlayer/releases/download/$tag/TMPlayer-${tag.removePrefix("v")}-universal.apk"}]}
+    """.trimIndent()
+
+    private val list = "[" + listOf(
+        ghRelease("v1.28.2-beta.10", prerelease = true),
+        ghRelease("v1.28.2-beta.11", prerelease = true, draft = true),
+        ghRelease("v1.28.2-beta.9", prerelease = true),
+        ghRelease("v1.28.1", prerelease = false),
+    ).joinToString(",") + "]"
+
+    @Test
+    fun `the release list gives its newest published test version`() {
+        val newest = UpdateFeed.parseGitHubList(list)!!
+        // beta.10 over beta.9, though text order says otherwise; the draft is passed over.
+        assertEquals("1.28.2-beta.10", newest.version)
+        assertEquals(listOf("One change"), newest.changes)
+        assertEquals("e".repeat(64), newest.assets["android-universal"]?.sha256)
+        assertNull(UpdateFeed.parseGitHubList("[]"))
+        assertNull(UpdateFeed.parseGitHubList("{}"))
+    }
+
+    @Test
+    fun `a release whose files are still uploading is not offered`() {
+        val uploading = "[" + ghRelease("v1.28.2-beta.12", prerelease = true, state = "starter") + "," +
+            ghRelease("v1.28.2-beta.10", prerelease = true) + "]"
+        assertEquals("1.28.2-beta.10", UpdateFeed.parseGitHubList(uploading)!!.version)
+    }
+
+    @Test
+    fun `the newer of the release and the test version is chosen, a tie going to the release`() {
+        val stable = Release("1.28.1", "s")
+        val beta = Release("1.28.2-beta.1", "b")
+        assertEquals(beta, UpdateFeed.choose(stable, beta))
+        assertEquals(stable, UpdateFeed.choose(stable, null))
+        assertEquals(beta, UpdateFeed.choose(null, beta))
+        assertNull(UpdateFeed.choose(null, null))
+        val final = Release("1.28.2", "f")
+        assertEquals(final, UpdateFeed.choose(final, beta))
+        assertEquals(final, UpdateFeed.choose(final, Release("1.28.2", "github")))
+    }
+
+    @Test
+    fun `without test versions only the stable sources are asked`() {
+        val asked = mutableListOf<String>()
+        val release = UpdateFeed.newest("t", testVersions = false) { url, _ ->
+            asked += url
+            UpdateFeed.Answer(200, feed)
+        }
+        assertEquals("1.20.0", release.version)
+        assertEquals(listOf(UpdateFeed.FEED_URL), asked)
+    }
+
+    @Test
+    fun `with test versions the release list is asked too and the newer wins`() {
+        val asked = mutableListOf<String>()
+        val release = UpdateFeed.newest("t", testVersions = true) { url, headers ->
+            asked += url
+            assertEquals("t", headers["User-Agent"])
+            if (url == UpdateFeed.FEED_URL) UpdateFeed.Answer(200, feed) else UpdateFeed.Answer(200, list)
+        }
+        assertEquals("1.28.2-beta.10", release.version)
+        assertEquals(listOf(UpdateFeed.FEED_URL, UpdateFeed.GITHUB_RELEASES), asked)
+
+        // Once the release is out, the feed's own copy of it is what is offered.
+        val final = feed.replace("1.20.0", "1.28.2")
+        assertEquals(
+            "1.28.2",
+            UpdateFeed.newest("t", testVersions = true) { url, _ ->
+                if (url == UpdateFeed.FEED_URL) UpdateFeed.Answer(200, final) else UpdateFeed.Answer(200, list)
+            }.version,
+        )
+    }
+
+    @Test
+    fun `a release list that cannot be read costs only the test versions`() {
+        val release = UpdateFeed.newest("t", testVersions = true) { url, _ ->
+            if (url == UpdateFeed.FEED_URL) UpdateFeed.Answer(200, feed) else UpdateFeed.Answer(403, "")
+        }
+        assertEquals("1.20.0", release.version)
+
+        // The site down too: the release list still answers.
+        val fromList = UpdateFeed.newest("t", testVersions = true) { url, _ ->
+            when (url) {
+                UpdateFeed.FEED_URL -> throw java.io.IOException("offline")
+                UpdateFeed.GITHUB_RELEASES -> UpdateFeed.Answer(200, list)
+                else -> UpdateFeed.Answer(500, "")
+            }
+        }
+        assertEquals("1.28.2-beta.10", fromList.version)
+    }
+
+    @Test
+    fun `the updater asks for test versions only when the setting is on`() = runBlocking {
+        val wanted = mutableListOf<Boolean>()
+        var on = false
+        Updates.configure(installedVersion = "1.28.1", testVersions = { on })
+        Updates.fetch = { tests ->
+            wanted += tests
+            if (tests) UpdateFeed.parseGitHubList(list)!! else Release("1.28.1", "s")
+        }
+        Updates.check(quiet = true)
+        assertEquals(UpdateState.Idle, Updates.state.value)
+
+        on = true
+        Updates.testVersionsSwitched(on = true, skipped = "")
+        assertEquals("1.28.2-beta.10", (Updates.state.value as UpdateState.Available).release.version)
+
+        // Off takes the test version back at once, and the stable answer has nothing newer.
+        on = false
+        Updates.testVersionsSwitched(on = false, skipped = "")
+        assertEquals(UpdateState.Idle, Updates.state.value)
+        assertEquals(listOf(false, true, false), wanted)
+    }
+
+    @Test
+    fun `a test version installed is updated by its release whatever the setting`() = runBlocking {
+        Updates.configure(installedVersion = "1.28.2-beta.10", testVersions = { false })
+        Updates.fetch = { Release("1.28.2", "f") }
+        Updates.check(quiet = true)
+        assertEquals("1.28.2", (Updates.state.value as UpdateState.Available).release.version)
+
+        // And an older release is no news to it.
+        Updates.skip()
+        Updates.fetch = { Release("1.28.1", "s") }
+        Updates.check(quiet = true)
+        assertEquals(UpdateState.Idle, Updates.state.value)
+    }
+
     // ---- the state the side bar reads ---------------------------------------------------------
 
     @Test

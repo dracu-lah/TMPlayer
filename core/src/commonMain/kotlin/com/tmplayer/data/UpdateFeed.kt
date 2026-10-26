@@ -2,6 +2,7 @@ package com.tmplayer.data
 
 import com.tmplayer.i18n.L
 import com.tmplayer.platform.Logger
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URI
@@ -51,12 +52,19 @@ data class Release(
  * anonymous caller sixty requests an hour per address, shared by everything behind the same router,
  * and a conditional request answered with 304 still counts, so it cannot be the first call of
  * every launch on every device.
+ *
+ * Neither ever names a pre-release: the site's feed is written by stable tags alone, and GitHub's
+ * `releases/latest` passes over pre-releases by definition. An install with "Get test versions"
+ * on also reads GitHub's release list, pre-releases included ([newest]).
  */
 object UpdateFeed {
 
     const val FEED_URL = "https://tmplayer.org/latest.json"
     private const val REPO = "dracu-lah/TMPlayer"
     private const val GITHUB_LATEST = "https://api.github.com/repos/$REPO/releases/latest"
+
+    /** The newest releases, pre-releases included (and drafts, which only the owner is shown). */
+    const val GITHUB_RELEASES = "https://api.github.com/repos/$REPO/releases?per_page=10"
     const val RELEASES_PAGE = "https://github.com/$REPO/releases"
 
     /** What an HTTP GET answered: the status and, for a 2xx, the body. */
@@ -76,9 +84,50 @@ object UpdateFeed {
         fromSite.getOrNull()?.let { return it }
         Logger.w(TAG, "Update feed unavailable, asking GitHub: ${fromSite.exceptionOrNull()?.message}")
 
+        return parseGitHub(askGitHub(GITHUB_LATEST, headers, get)) ?: throw UpdateFailure(L.updateNoVersion)
+    }
+
+    /**
+     * The release to offer: [latest], and with [testVersions] on also the newest of GitHub's
+     * release list, pre-releases included, whichever of the two is newer ([choose]). A list that
+     * cannot be read costs only the test versions: the stable answer still comes back, and only
+     * when neither answered is the stable source's failure thrown.
+     */
+    fun newest(
+        userAgent: String,
+        testVersions: Boolean,
+        get: (url: String, headers: Map<String, String>) -> Answer = ::httpGet,
+    ): Release {
+        if (!testVersions) return latest(userAgent, get)
+        val stable = runCatching { latest(userAgent, get) }
+        val test = runCatching {
+            parseGitHubList(askGitHub(GITHUB_RELEASES, mapOf("User-Agent" to userAgent), get))
+        }
+        test.exceptionOrNull()?.let { Logger.w(TAG, "Test versions unavailable: ${it.message}") }
+        return choose(stable.getOrNull(), test.getOrNull())
+            ?: throw (stable.exceptionOrNull() ?: UpdateFailure(L.updateNoVersion))
+    }
+
+    /**
+     * The newer of the stable answer and the newest test version. A tie goes to the stable one,
+     * which comes from the site's feed with its notes written for the popup.
+     */
+    fun choose(stable: Release?, test: Release?): Release? = when {
+        stable == null -> test
+        test == null -> stable
+        compare(test.version, stable.version) > 0 -> test
+        else -> stable
+    }
+
+    /** A GET to GitHub's API: its body, or [UpdateFailure] with the sentence for the viewer. */
+    private fun askGitHub(
+        url: String,
+        headers: Map<String, String>,
+        get: (url: String, headers: Map<String, String>) -> Answer,
+    ): String {
         // GitHub asks every caller to name itself and answers 403 to some that do not.
         val answer = runCatching {
-            get(GITHUB_LATEST, headers + ("Accept" to "application/vnd.github+json"))
+            get(url, headers + ("Accept" to "application/vnd.github+json"))
         }.getOrElse { throw UpdateFailure(L.updateUnreachable) }
         if (answer.code !in 200..299) {
             // An anonymous caller gets sixty requests an hour per address, and a household behind
@@ -92,7 +141,7 @@ object UpdateFeed {
                 },
             )
         }
-        return parseGitHub(answer.body) ?: throw UpdateFailure(L.updateNoVersion)
+        return answer.body
     }
 
     /** `latest.json`, schema 1. Null when it is not that. */
@@ -132,8 +181,27 @@ object UpdateFeed {
      * The API's `releases/latest` answer, reduced to the same shape. Its assets carry a `digest`
      * ("sha256:...") these days, which is used when present; the checksum file covers the rest.
      */
-    fun parseGitHub(json: String): Release? = runCatching {
-        val root = JSONObject(json)
+    fun parseGitHub(json: String): Release? = runCatching { parseGitHub(JSONObject(json)) }.getOrNull()
+
+    /**
+     * The API's release list, pre-releases included: the newest by version of those that are
+     * published and carry at least one package. Drafts are left out, and so is a file still being
+     * uploaded, so a release the workflow is publishing at this moment is not offered half there.
+     */
+    fun parseGitHubList(json: String): Release? = runCatching {
+        val list = JSONArray(json)
+        var best: Release? = null
+        for (i in 0 until list.length()) {
+            val item = list.optJSONObject(i) ?: continue
+            if (item.optBoolean("draft")) continue
+            val release = parseGitHub(item) ?: continue
+            if (release.assets.isEmpty()) continue
+            if (best == null || compare(release.version, best.version) > 0) best = release
+        }
+        best
+    }.getOrNull()
+
+    private fun parseGitHub(root: JSONObject): Release? = runCatching {
         val tag = root.optString("tag_name")
         val version = tag.removePrefix("v")
         if (version.isBlank()) return null
@@ -143,6 +211,8 @@ object UpdateFeed {
             for (i in 0 until list.length()) {
                 val asset = list.optJSONObject(i) ?: continue
                 val url = asset.optString("browser_download_url").takeIf { it.isNotBlank() } ?: continue
+                // "starter" while it is still being uploaded; older answers leave the field out.
+                if (asset.optString("state", "uploaded") != "uploaded") continue
                 val name = asset.optString("name").ifBlank { url.substringAfterLast('/') }
                 if (name.startsWith("SHA256SUMS") && name.endsWith(".txt")) checksums = url
                 val key = keyFor(name) ?: continue

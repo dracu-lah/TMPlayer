@@ -53,7 +53,7 @@ class App : Application() {
         Logger.sink = AndroidLogSink
         // The clock Home's first paint is timed against (adb logcat -s tm-perf).
         com.tmplayer.data.PerfLog.processStart
-        Updates.configureForAndroid()
+        Updates.configureForAndroid(this)
         Updates.enabled = BuildConfig.UPDATE_CHECK
         SupportReminder.enabled = BuildConfig.SUPPORT_LINKS
         // The UI language: the Settings choice, else the system's list, else English. Before the

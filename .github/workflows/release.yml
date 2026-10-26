@@ -14,6 +14,13 @@ name: Release
 # publishes. GitHub attaches the source archives to every release by itself and shows each file's
 # SHA-256 beside it, so the licence, the notices and the nextlib and mediamp sources are links in
 # the notes and there is no checksum file.
+#
+# A test version, tagged vX.Y.Z-beta.N from main before the release vX.Y.Z (RL1), goes through the
+# same jobs and carries the same files, but is published as a GitHub pre-release that is never
+# marked latest, and nothing after the release page hears of it: no update feed, no site or
+# changelog commit, no AUR, no IndexNow, no Telegram post, no winget. Installed copies offer it
+# only with "Get test versions" on. Each such step says so in its `if`, against
+# needs.version.outputs.prerelease. docs/RELEASING.md has the numbering and the steps.
 on:
   push:
     tags: ["v*"]
@@ -30,22 +37,24 @@ jobs:
     outputs:
       name: ${{ steps.version.outputs.name }}
       code: ${{ steps.version.outputs.code }}
+      # "true" for a test version (vX.Y.Z-beta.N), "false" for a release.
+      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
+      - uses: actions/checkout@v7
+
+      # Android will not install an APK whose versionCode is lower than the installed one, so it
+      # is derived arithmetically from the tag: major*1000000 + minor*10000 + patch*100 + stage,
+      # where test version N is stage N and the release 99, so a test version sits between the
+      # release before it and its own release (docs/RELEASING.md). The script refuses any other
+      # tag, and first checks itself against the cases the app's own tests use.
       - name: Derive version from the tag
         id: version
         run: |
-          NAME="${GITHUB_REF_NAME#v}"
-          if [[ ! "$NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Tag '$GITHUB_REF_NAME' is not vMAJOR.MINOR.PATCH"
-            exit 1
+          python3 scripts/release-version.py --check
+          python3 scripts/release-version.py --github-output "$GITHUB_REF_NAME"
+          if grep -qx 'prerelease=true' "$GITHUB_OUTPUT"; then
+            echo "::notice::$GITHUB_REF_NAME is a test version: a GitHub pre-release, never marked latest, with no feed, site, AUR, IndexNow, Telegram or winget step."
           fi
-          # Android will not install an APK whose versionCode is lower than the installed one,
-          # so it is derived arithmetically from the tag and can only ever increase.
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$NAME"
-          CODE=$(( MAJOR * 10000 + MINOR * 100 + PATCH ))
-          echo "name=$NAME" >> "$GITHUB_OUTPUT"
-          echo "code=$CODE" >> "$GITHUB_OUTPUT"
-          echo "Building $NAME (versionCode $CODE)"
 
   android:
     name: Android (signed APK)
@@ -568,6 +577,8 @@ jobs:
       # bytes'. It is only committed after the release exists, below, so the feed never points
       # at a download that is not there yet.
       - name: Write the update feed
+        # The stable feed never names a test version.
+        if: needs.version.outputs.prerelease != 'true'
         run: |
           VERSION="${{ needs.version.outputs.name }}"
           # An annotated tag's notes become the popup's notes, without its "release: X.Y.Z"
@@ -592,16 +603,31 @@ jobs:
             echo "TMPLAYER_NOTES_END"
           } >> "$GITHUB_OUTPUT"
 
+      # A test version is a pre-release and never "latest": GitHub's releases/latest, the
+      # AppImage's "latest" channel and the download page all keep naming the release before it.
+      - name: Say on a test version's page what it is
+        id: kind
+        run: |
+          if [ "${{ needs.version.outputs.prerelease }}" = "true" ]; then
+            {
+              echo "intro<<TMPLAYER_INTRO_END"
+              echo "**A test version of the next release.** It may have bugs. Installed copies offer it only with Settings, Get test versions on; everyone else stays on the latest release."
+              echo
+              echo "TMPLAYER_INTRO_END"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish the release
         uses: softprops/action-gh-release@v2
         with:
           name: TMPlayer ${{ needs.version.outputs.name }}
           files: |
             dist/*
-          make_latest: "true"
+          prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
+          make_latest: ${{ needs.version.outputs.prerelease == 'true' && 'false' || 'true' }}
           generate_release_notes: true
           body: |
-            ${{ steps.notes.outputs.body }}
+            ${{ steps.kind.outputs.intro }}${{ steps.notes.outputs.body }}
 
             | Platform | File |
             | --- | --- |
@@ -636,6 +662,8 @@ jobs:
       # a plain true or false, never the key).
       - name: Publish the update feed and the changelog on the site
         id: feed
+        # A test version leaves main, the site, the feed, tmplayer.org/apk and the PKGBUILD alone.
+        if: needs.version.outputs.prerelease != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           AUR_KEY_SET: ${{ secrets.AUR_SSH_PRIVATE_KEY != '' }}
@@ -686,7 +714,7 @@ jobs:
       # the one main's PKGBUILD names. Like the steps around it, a failure costs only the AUR
       # update. The one-time setup is in docs/distribution/aur.md.
       - name: Publish the AUR package
-        if: steps.feed.outputs.aur == 'true'
+        if: needs.version.outputs.prerelease != 'true' && steps.feed.outputs.aur == 'true'
         continue-on-error: true
         uses: KSXGitHub/github-actions-deploy-aur@v4.2.0
         with:
@@ -702,6 +730,8 @@ jobs:
       # The key is public by design: site/public/<key>.txt proves the site asked. A failure here costs
       # only the ping, never the release.
       - name: Ping IndexNow with the release's pages
+        # A test version has no changelog page and changes no page of the site.
+        if: needs.version.outputs.prerelease != 'true'
         continue-on-error: true
         run: |
           VERSION="${{ needs.version.outputs.name }}"
@@ -726,6 +756,8 @@ jobs:
       # To see the message before a release, run the script with --dry-run; it prints the post
       # and sends nothing.
       - name: Announce on Telegram
+        # A test version is not news on the channel.
+        if: needs.version.outputs.prerelease != 'true'
         continue-on-error: true
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -764,6 +796,8 @@ jobs:
   winget:
     name: Submit to winget
     needs: [version, publish]
+    # winget offers releases only; a test version never becomes "latest" anyway.
+    if: needs.version.outputs.prerelease != 'true'
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:

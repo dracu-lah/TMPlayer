@@ -1,6 +1,7 @@
 package com.tmplayer.desktop
 
 import com.tmplayer.data.Release
+import com.tmplayer.data.ReleaseVersion
 import com.tmplayer.data.UpdateFeed
 import com.tmplayer.data.UpdateWords
 import com.tmplayer.desktop.os.OsInfo
@@ -362,18 +363,23 @@ class SelfUpdate(
         /** `msi-update.ps1` with this update's values filled in. */
         internal fun msiScript(pid: Long, msi: File, exe: File, installDir: File, root: File, version: String): String {
             val template = SelfUpdate::class.java.getResource("msi-update.ps1")?.readText() ?: error("msi-update.ps1 is missing")
-            // jpackage's ProductVersion is the plain x.y.z, and the registry key it writes for the
-            // install folder's removal is HKCU\Software\<vendor>\<name>\<version>, both "TMPlayer".
-            val plain = version.removePrefix("v").substringBefore('-').substringBefore('+')
+            // The MSI's ProductVersion is the installer version (ReleaseVersion: 1.28.299 for
+            // 1.28.2), and the registry key jpackage writes for the install folder's removal is
+            // HKCU\Software\<vendor>\<name>\<that version>, both "TMPlayer". The version itself,
+            // test suffix and all, is what the log says and the failure marker keeps, because
+            // [failedUpdate] compares it with this build's own.
+            val name = version.trim().removePrefix("v").substringBefore('+')
+            val product = ReleaseVersion.installerVersion(name) ?: name.substringBefore('-')
             val values = mapOf(
                 "PID" to pid.toString(),
                 "MSI" to psQuote(msi.absolutePath),
                 "EXE" to psQuote(exe.absolutePath),
                 "INSTALL_DIR" to psQuote(installDir.absolutePath),
                 "ROOT" to psQuote(root.absolutePath),
-                "VERSION" to psQuote(plain),
+                "VERSION" to psQuote(name),
+                "PRODUCT_VERSION" to psQuote(product),
                 "UPGRADE_CODE" to "{" + UPGRADE_CODE.uppercase() + "}",
-                "REGISTRY_KEY" to psQuote("HKCU:\\Software\\TMPlayer\\TMPlayer\\$plain"),
+                "REGISTRY_KEY" to psQuote("HKCU:\\Software\\TMPlayer\\TMPlayer\\$product"),
                 "MARKER" to FAILED_MARKER,
             )
             val filled = values.entries.fold(template) { text, (name, value) -> text.replace("@@$name@@", value) }

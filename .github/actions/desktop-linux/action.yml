@@ -82,7 +82,10 @@ runs:
         # Read from the ELF section the runtime keeps it in: with APPIMAGE_EXTRACT_AND_RUN set, the
         # runtime hands --appimage-updateinformation to the app instead of answering it.
         info="$(objcopy -O binary --only-section=.upd_info "$image" /dev/stdout | tr -d '\0')"
-        [ "$info" = "gh-releases-zsync|dracu-lah|TMPlayer|latest|TMPlayer-*-x86_64.AppImage.zsync" ] \
+        # A release follows "latest"; a test version (any suffix) "latest-all" (package.sh).
+        channel="latest"
+        case "${{ inputs.version }}" in *-*) channel="latest-all" ;; esac
+        [ "$info" = "gh-releases-zsync|dracu-lah|TMPlayer|$channel|TMPlayer-*-x86_64.AppImage.zsync" ] \
           || { echo "::error::the AppImage carries update information '$info'"; exit 1; }
 
     - name: List the packages

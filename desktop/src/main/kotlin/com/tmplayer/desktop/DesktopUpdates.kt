@@ -17,6 +17,7 @@ object DesktopUpdates {
     fun configure(os: String = OsInfo.osTag) = Updates.configure(
         installedVersion = BuildInfo.VERSION,
         userAgent = "TMPlayer-desktop/${BuildInfo.VERSION}",
+        testVersions = { DesktopServices.settings.updatePrefs.testVersions() },
         // A release made for the phone alone is no news on a computer.
         offers = { UpdateFeed.hasDesktopPackage(it, os) },
     )

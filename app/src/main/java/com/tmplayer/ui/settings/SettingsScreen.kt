@@ -216,6 +216,9 @@ private sealed interface Prompt {
      * a press once it is watched, so it is asked first. Off deletes nothing and is not asked.
      */
     data object RemoveAfterWatching : Prompt
+
+    /** "Get test versions" being switched on: pre-releases may have bugs, so it is asked first. Off is not asked. */
+    data object TestVersions : Prompt
     data object ClearHistory : Prompt
     data object ClearWatched : Prompt
     data object ClearFavorites : Prompt
@@ -371,6 +374,7 @@ fun SettingsScreen(
     val toast = rememberToast()
     val updateState by Updates.state.collectAsStateWithLifecycle()
     val updateNotify by settings.updateNotify.collectAsStateWithLifecycle(initialValue = true)
+    val updateTestVersions by settings.updateTestVersions.collectAsStateWithLifecycle(initialValue = false)
     var showUpdate by remember { mutableStateOf(false) }
     // A link a TV cannot open, shown as a QR code instead: the address and what it is.
     var qrLink by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -1609,6 +1613,25 @@ fun SettingsScreen(
                             onToggle = { scope.launch { settings.setUpdateNotify(!updateNotify) } },
                         )
                     }
+                    // GitHub pre-releases (RL1). On asks first, with what it means; off is not asked.
+                    item {
+                        ToggleRow(
+                            title = s.settingsTestVersions,
+                            subtitle = if (updateTestVersions) s.settingsTestVersionsOn else s.settingsTestVersionsOff,
+                            icon = TmIcons.Warning,
+                            checked = updateTestVersions,
+                            onToggle = {
+                                if (updateTestVersions) {
+                                    scope.launch {
+                                        settings.setUpdateTestVersions(false)
+                                        Updates.testVersionsSwitched(on = false, skipped = settings.updatePrefs.skippedVersion())
+                                    }
+                                } else {
+                                    prompt = Prompt.TestVersions
+                                }
+                            },
+                        )
+                    }
                 }
 
                 // ---- help ----------------------------------------------------------------------------
@@ -2121,6 +2144,21 @@ fun SettingsScreen(
             onConfirm = {
                 prompt = null
                 scope.launch { settings.setRemoveAfterWatching(true) }
+            },
+            onDismiss = { prompt = null },
+        )
+
+        Prompt.TestVersions -> TvConfirm(
+            title = s.confirmTestVersionsTitle,
+            message = s.confirmTestVersionsMessage,
+            detail = s.confirmTestVersionsDetail,
+            confirmLabel = s.confirmTurnOn,
+            onConfirm = {
+                prompt = null
+                scope.launch {
+                    settings.setUpdateTestVersions(true)
+                    Updates.testVersionsSwitched(on = true, skipped = settings.updatePrefs.skippedVersion())
+                }
             },
             onDismiss = { prompt = null },
         )

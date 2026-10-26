@@ -22,6 +22,9 @@ interface UpdatePrefs {
     /** The version the popup was last shown for, so it shows once per version. */
     suspend fun popupShownFor(): String
     suspend fun setPopupShownFor(version: String)
+
+    /** "Get test versions": GitHub pre-releases are offered too. Off unless the viewer opts in. */
+    suspend fun testVersions(): Boolean = false
 }
 
 /**

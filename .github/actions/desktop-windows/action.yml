@@ -76,7 +76,11 @@ runs:
         foreach ($code in $installer.RelatedProducts('{6F1D3C0E-2B8A-4B7E-9D2C-7A1E5F4C3B21}')) { $products += [string]$code }
         $versions = @($products | ForEach-Object { [string]$installer.ProductInfo($_, 'VersionString') })
         Write-Host "Installed under the upgrade code: $($versions -join ', ')"
-        $want = "${{ inputs.version }}".Split('-')[0]
+        # The MSI's ProductVersion is the installer version (docs/RELEASING.md: 1.28.299 for
+        # 1.28.2, 1.28.201 for 1.28.2-beta.1), as the build wrote it into BuildInfo.
+        $info = Get-Content -Raw 'desktop/build/generated/buildinfo/com/tmplayer/desktop/BuildInfo.kt'
+        $want = [regex]::Match($info, 'INSTALLER_VERSION = "([^"]+)"').Groups[1].Value
+        if (-not $want) { Write-Error "BuildInfo.kt has no INSTALLER_VERSION" }
         if ($products.Count -ne 1 -or $versions[0] -ne $want) {
           Write-Error "Expected exactly version $want installed, found: $($versions -join ', ')"
         }
