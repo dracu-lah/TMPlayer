@@ -63,7 +63,7 @@ object MpvNatives {
  */
 class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + com.tmplayer.platform.JobFailures.handler("MpvPlaybackEngine"))
 
     val player: MpvMediampPlayer
 
@@ -172,8 +172,9 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
                 when (e) {
                     is PlaybackEvent.SeekCompleted -> landSeek(e.positionMillis)
                     is PlaybackEvent.MediaEnded -> _state.update { it.copy(ended = true, playing = false) }
-                    is PlaybackEvent.ErrorOccurred -> _state.update {
-                        it.copy(error = e.error.message ?: L.playerPlaybackFailed(e.error.code.toString()))
+                    is PlaybackEvent.ErrorOccurred -> {
+                        Logger.w(TAG, "Playback failed: ${e.error.code} ${e.error.message}")
+                        _state.update { it.copy(error = MpvErrors.describe(e.error.message, e.error.code.toString())) }
                     }
                     else -> Unit
                 }
@@ -337,7 +338,8 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             throw e
         } catch (e: Throwable) {
             Logger.w(TAG, "Open failed", e)
-            _state.update { it.copy(error = e.message ?: L.playerOpenFailed, buffering = false) }
+            val error = if (MpvErrors.codeIn(e.message) != null) MpvErrors.describe(e.message, null) else e.message ?: L.playerOpenFailed
+            _state.update { it.copy(error = error, buffering = false) }
         }
     }
 

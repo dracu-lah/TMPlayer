@@ -151,7 +151,7 @@ class GlobalSearchViewModel(
      * and on the main thread each letter typed on a phone waited for them (2026-10-23).
      */
     private val work: CoroutineDispatcher = Dispatchers.Default,
-) : ViewModel() {
+) : ViewModel(com.tmplayer.platform.JobFailures.viewModelScope("GlobalSearch")) {
 
     /** Telegram's pages for one query, as the [cache] keeps them: before the kids lock and hidden chats. */
     private data class Answer(val serverQuery: String, val pages: List<AllChatsPage>, val cursor: AllChatsCursor)

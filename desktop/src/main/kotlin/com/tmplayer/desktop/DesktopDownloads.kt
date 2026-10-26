@@ -99,7 +99,7 @@ class DesktopDownloadRunner(
     /** Every download as it lands in the Downloads folder. */
     val finished: SharedFlow<Finished> = _finished.asSharedFlow()
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("DesktopDownloads"))
     private val lock = Any()
     private val requests = mutableMapOf<Int, DownloadRequest>()
     private val waiting = ArrayDeque<Int>()

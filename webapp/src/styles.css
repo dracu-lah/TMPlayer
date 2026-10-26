@@ -103,6 +103,13 @@ h1, h2, h3, p { margin: 0; }
 .error { color: var(--error); }
 .boot { display: grid; place-items: center; align-content: center; gap: 16px; min-height: 100dvh; color: var(--muted); padding: 16px; text-align: center; }
 .boot-mark { width: 64px; height: 64px; border-radius: var(--r-l); }
+/* The last stop for an uncaught error (crash.ts): over everything, clear of the edges. */
+.crash-card {
+  position: fixed; z-index: 2147483647; left: 16px; right: 16px; bottom: max(16px, env(safe-area-inset-bottom));
+  margin: 0 auto; max-width: 420px; display: grid; gap: 12px; padding: 16px;
+  background: var(--dialog); color: var(--fg); border: 1px solid var(--line); border-radius: var(--r-l);
+}
+.crash-card > div { display: flex; gap: 16px; align-items: center; }
 
 /* Type: TmTouchTypography */
 .page-title { font-size: 28px; line-height: 36px; font-weight: 400; margin: 8px 0 16px; }

@@ -194,7 +194,8 @@ class MetadataCache(
     override fun putImage(url: String, bytes: ByteArray): File {
         images.mkdirs()
         val file = File(images, name(url))
-        write(file, bytes)
+        // The picture is read back from this file, so here a failed write is the caller's to know.
+        if (!write(file, bytes)) throw java.io.IOException("The picture could not be cached")
         file.setLastModified(now())
         trimImages(keep = file)
         return file
@@ -270,12 +271,23 @@ class MetadataCache(
         dir.deleteRecursively()
     }
 
-    private fun write(file: File, bytes: ByteArray) {
+    /**
+     * Writes through a temporary file. A full disk or a folder that went away means "not cached"
+     * (HX10), never an exception out of a lookup that a tile or a page is waiting on; false then.
+     */
+    private fun write(file: File, bytes: ByteArray): Boolean {
         val temp = File(file.parentFile, file.name + ".tmp")
-        temp.writeBytes(bytes)
-        if (!temp.renameTo(file)) {
-            file.delete()
-            temp.renameTo(file)
+        return runCatching {
+            temp.writeBytes(bytes)
+            if (!temp.renameTo(file)) {
+                file.delete()
+                temp.renameTo(file)
+            }
+            file.isFile
+        }.getOrElse {
+            com.tmplayer.platform.Logger.w("MetadataCache", "not cached: ${it.message}")
+            temp.delete()
+            false
         }
     }
 

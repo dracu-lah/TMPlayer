@@ -52,7 +52,7 @@ object DesktopFolderExport {
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("DesktopFolderExport"))
     private val cancel = AtomicBoolean(false)
     private val running = AtomicBoolean(false)
 

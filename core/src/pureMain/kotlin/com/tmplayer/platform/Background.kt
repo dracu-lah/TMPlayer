@@ -10,5 +10,5 @@ import kotlinx.coroutines.SupervisorJob
  * too early. One per process, on either platform; Android's `App.backgroundScope` is this one.
  */
 object Background {
-    val scope: CoroutineScope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    val scope: CoroutineScope = CoroutineScope(SupervisorJob() + ioDispatcher + JobFailures.handler("Background"))
 }

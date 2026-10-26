@@ -147,7 +147,6 @@ class WatchedStore(private val store: DataStore<Preferences>) {
             stringPreferencesKey(PREFIX + SettingsStore.progressKey(chatId, messageId))
 
         /** Opens the store at [file]. Call once per process and share the result. */
-        fun openDataStore(file: File): DataStore<Preferences> =
-            PreferenceDataStoreFactory.createWithPath(produceFile = { file.absolutePath.toPath() })
+        fun openDataStore(file: File): DataStore<Preferences> = openSafeDataStore(file)
     }
 }

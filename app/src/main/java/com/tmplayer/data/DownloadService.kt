@@ -50,7 +50,7 @@ import kotlinx.coroutines.withContext
  */
 class DownloadService : Service() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("DownloadService"))
 
     /**
      * Everything the service is looking after, and which of it is moving.

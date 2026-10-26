@@ -45,7 +45,9 @@ class SubtitleCache(
     fun putSearch(key: String, hits: List<SubtitleHit>) {
         searches.mkdirs()
         val json = JSONObject().put("key", key).put("saved", now()).put("hits", SubtitleHit.listToJson(hits))
-        write(File(searches, name(key) + ".json"), json.toString())
+        // A search not kept (a full disk) is only asked again next time (HX10).
+        runCatching { write(File(searches, name(key) + ".json"), json.toString()) }
+            .onFailure { com.tmplayer.platform.Logger.w("SubtitleCache", "search not cached: ${it.message}") }
     }
 
     /** A downloaded subtitle, if it was fetched within [fileTtlMs]. */

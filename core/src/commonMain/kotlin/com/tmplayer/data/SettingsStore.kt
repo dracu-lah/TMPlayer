@@ -2728,8 +2728,7 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         const val FILE_NAME = "tmplayer.preferences_pb"
 
         /** Opens the store at [file]. Call once per process and share the result. */
-        fun openDataStore(file: File): DataStore<Preferences> =
-            PreferenceDataStoreFactory.createWithPath(produceFile = { file.absolutePath.toPath() })
+        fun openDataStore(file: File): DataStore<Preferences> = openSafeDataStore(file)
 
         /** Whether launch should skip the chat list, given what is remembered and the setting. */
         fun autoOpenChatId(lastChatId: Long, enabled: Boolean): Long? =

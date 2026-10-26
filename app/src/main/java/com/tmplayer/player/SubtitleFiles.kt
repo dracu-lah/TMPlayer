@@ -5,7 +5,7 @@ import android.provider.OpenableColumns
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
 import androidx.fragment.app.FragmentActivity
-import androidx.lifecycle.lifecycleScope
+import com.tmplayer.data.guardedLifecycleScope as lifecycleScope
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem as Media3Item
 import androidx.media3.common.MediaMetadata

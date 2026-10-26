@@ -161,7 +161,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
-import androidx.lifecycle.lifecycleScope
+import com.tmplayer.data.guardedLifecycleScope as lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 

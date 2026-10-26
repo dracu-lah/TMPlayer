@@ -69,19 +69,18 @@ class ChatListFirstVisitTest {
         assertEquals(FIRST_LOAD_TIP, (shown as UiState.Loading).tip)
     }
 
+    /**
+     * A settings file that no longer parses starts again empty (HX10, SafeDataStore) rather than
+     * failing every read, so the list it held is gone and this is a first visit again: the screen
+     * waits with the tip, and nothing throws.
+     */
     @Test
-    fun `a snapshot that cannot be read is not taken for a first visit`() = runTest(dispatcher) {
+    fun `a settings file that cannot be read starts again as a first visit`() = runTest(dispatcher) {
         file.parentFile.mkdirs()
         file.writeBytes(byteArrayOf(0x7f, 0x01, 0x02, 0x03, 0x04))
         val model = ChatListViewModel(SettingsStore(SettingsStore.openDataStore(file)))
+        val shown = inRealTime { model.state.first { (it as? UiState.Loading)?.tip != null } }
 
-        // The read is attempted and fails; give it the time a real one would take to answer.
-        repeat(50) {
-            Thread.sleep(10)
-            testScheduler.advanceUntilIdle()
-        }
-        val state = model.state.value
-        assertTrue(state is UiState.Loading)
-        assertNull((state as UiState.Loading).tip)
+        assertEquals(FIRST_LOAD_TIP, (shown as UiState.Loading).tip)
     }
 }

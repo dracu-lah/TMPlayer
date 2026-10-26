@@ -4,7 +4,11 @@ import { serveStreams } from './stream/reader'
 import { markEntry } from './session'
 import { registerWorker } from './install'
 import { watchForm } from './form'
+import { watchCrashes } from './crash'
 import './styles.css'
+
+// Before anything else runs, so a failure in what follows still gets its card (HX10).
+watchCrashes()
 
 if (location.hostname === 'localhost') void import('./survey')
 

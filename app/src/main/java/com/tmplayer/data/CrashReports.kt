@@ -423,6 +423,18 @@ object CrashReports {
         Log.i(TAG, "Crash reporting is off.")
     }
 
+    /**
+     * A failure the app caught and carried on from (HX10): a background job that threw
+     * ([com.tmplayer.platform.JobFailures]) or a player error that ended in the status sheet.
+     * Sent as an error, not a crash, and only with the switch on; with it off nothing is written,
+     * since the app did not stop and there is nothing to ask about at the next start. The same
+     * scrubber and daily limits as a crash apply ([gate]).
+     */
+    fun handled(error: Throwable) {
+        if (!available || !enabledNow || !started) return
+        runCatching { Sentry.captureException(error) { scope -> scope.level = SentryLevel.ERROR } }
+    }
+
     @Volatile
     private var enabledNow = false
 

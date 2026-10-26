@@ -237,7 +237,7 @@ object FolderExport {
         }.isSuccess
         // No service allowed (Android 15's data sync allowance spent, say): the copy still runs,
         // in the process, for as long as the app is in use.
-        if (!started) CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { run(app) }
+        if (!started) CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("FolderExport")).launch { run(app) }
         return true
     }
 
@@ -513,7 +513,7 @@ object FolderExport {
  */
 class FolderExportService : Service() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("FolderExport"))
     private var started = false
 
     override fun onBind(intent: Intent?): IBinder? = null

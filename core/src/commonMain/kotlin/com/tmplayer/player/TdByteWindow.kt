@@ -206,7 +206,7 @@ class TdByteWindow(private val td: TdlClient) {
         lowStorage = LowStorageStreams.isRolling(fileId)
         saveData = !lowStorage && SaveDataStreams.isActive(fileId)
         stopWatching()
-        val watcher = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val watcher = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("TdByteWindow"))
         scope = watcher
         val watched = fileId
         updates = watcher.launch {

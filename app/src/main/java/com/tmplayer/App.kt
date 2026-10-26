@@ -51,6 +51,9 @@ class App : Application() {
         com.tmplayer.data.SettingsDefaults.evenVolume = !com.tmplayer.data.FormFactor.isTv(this)
         // The shared code logs through a facade; on Android it goes to logcat as it always has.
         Logger.sink = AndroidLogSink
+        // A background job or a view model's job that throws is logged and reported (with the
+        // switch on), never the end of the process (HX10).
+        com.tmplayer.platform.JobFailures.report = CrashReports::handled
         // The clock Home's first paint is timed against (adb logcat -s tm-perf).
         com.tmplayer.data.PerfLog.processStart
         Updates.configureForAndroid(this)

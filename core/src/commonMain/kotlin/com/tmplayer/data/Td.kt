@@ -75,7 +75,7 @@ object Td {
     val client: TdlClient
         get() = current ?: error("TDLib client is not running")
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("Td"))
     private val gate = Mutex()
     private var lastHandled: AuthorizationState? = null
 

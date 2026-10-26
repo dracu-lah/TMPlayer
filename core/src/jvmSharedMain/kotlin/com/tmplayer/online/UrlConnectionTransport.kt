@@ -15,7 +15,15 @@ object UrlConnectionTransport : HttpTransport {
     private const val MAX_BYTES = 8 * 1024 * 1024
 
     override suspend fun send(request: HttpRequest): HttpResponse = withContext(Dispatchers.IO) {
-        val connection = URI(request.url).toURL().openConnection() as HttpURLConnection
+        // An address that does not parse, or is not http, is a failed request like any other
+        // (HX10): the providers catch IOException only.
+        val connection = try {
+            URI(request.url).toURL().openConnection() as HttpURLConnection
+        } catch (e: IOException) {
+            throw e
+        } catch (e: Exception) {
+            throw IOException("Not a web address: ${e.message}", e)
+        }
         try {
             connection.requestMethod = request.method
             connection.connectTimeout = 15_000

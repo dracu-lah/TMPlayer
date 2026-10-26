@@ -237,7 +237,7 @@ class HomeViewModel(
     private val connected: Flow<Boolean> = Td.connected,
     /** Milliseconds that only go forward, for the budgets' pauses; the tests pass their virtual clock. */
     private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
-) : ViewModel() {
+) : ViewModel(com.tmplayer.platform.JobFailures.viewModelScope("Home")) {
 
     /**
      * Every TDLib fetch Home makes, run to a budget ([HomeFetches]). Declared ahead of `init`,

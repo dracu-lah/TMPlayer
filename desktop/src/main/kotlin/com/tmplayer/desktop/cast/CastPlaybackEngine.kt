@@ -65,7 +65,7 @@ class CastPlaybackEngine(
     private val describe: () -> CastTitle,
 ) : PlaybackEngine {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.tmplayer.platform.JobFailures.handler("CastPlaybackEngine"))
     private val _state = MutableStateFlow(PlaybackStatus())
     override val state: StateFlow<PlaybackStatus> = _state.asStateFlow()
     private val _tracks = MutableStateFlow<List<MediaTrack>>(emptyList())

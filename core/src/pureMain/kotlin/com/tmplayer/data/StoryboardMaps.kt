@@ -53,6 +53,9 @@ object StoryboardMaps {
     /** A scrub preview's width on the phone and the desktop; the tiles closest under it are used. */
     const val PREFERRED_TILE_WIDTH = 320
 
+    /** More tiles than any sheet holds: a three hour video at one a second. */
+    const val MAX_TILES = 10_800
+
     fun parse(
         text: String,
         tileWidth: Int,
@@ -84,8 +87,9 @@ object StoryboardMaps {
             }
             val box = XYWH.find(line)
             if (box != null && at != null) {
-                val (x, y, w, h) = box.destructured
-                out += StoryboardTile(at, x.toInt(), y.toInt(), w.toInt(), h.toInt())
+                val (x, y, w, h) = box.destructured.toList().map { it.toIntOrNull() }
+                // A number too long for an Int is a broken line, skipped (HX10).
+                if (x != null && y != null && w != null && h != null) out += StoryboardTile(at, x, y, w, h)
                 at = null
             }
         }
@@ -144,7 +148,10 @@ object StoryboardMaps {
         if (tileWidth <= 0 || tileHeight <= 0 || imageWidth < tileWidth || imageHeight < tileHeight) return emptyList()
         val columns = (keys["columns"] ?: keys["cols"])?.toIntOrNull()?.takeIf { it > 0 } ?: (imageWidth / tileWidth)
         val rows = imageHeight / tileHeight
-        val fits = columns * rows
+        // In Long and capped: a map that claims a million columns is not a reason to overflow,
+        // throw in coerceIn or fill the memory with tiles (HX10).
+        val fits = (columns.toLong() * rows).coerceAtMost(MAX_TILES.toLong()).toInt()
+        if (fits < 1) return emptyList()
         val count = (keys["frame_count"] ?: keys["frames"] ?: keys["count"])?.toIntOrNull()
             ?.coerceIn(1, fits) ?: fits
         val stepMs = (keys["frame_duration"] ?: keys["interval"] ?: keys["step"])?.toDoubleOrNull()

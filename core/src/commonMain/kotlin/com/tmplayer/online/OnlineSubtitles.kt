@@ -389,7 +389,11 @@ class OnlineSubtitles(
 
     private fun save(hit: SubtitleHit, text: SubtitleText.Text?): DownloadResult {
         if (text == null) return DownloadResult.Failed(SubtitleNotice.Unreadable)
-        return DownloadResult.Done(cache.putFile(hit.provider, hit.id, text), label(hit), fromCache = false)
+        // A full disk or a folder gone is a failed download (HX10), not an exception for the picker.
+        val file = runCatching { cache.putFile(hit.provider, hit.id, text) }
+            .onFailure { com.tmplayer.platform.Logger.w("OnlineSubtitles", "subtitle not saved: ${it.message}") }
+            .getOrNull() ?: return DownloadResult.Failed(SubtitleNotice.Unreadable)
+        return DownloadResult.Done(file, label(hit), fromCache = false)
     }
 
     // ---- shared ----------------------------------------------------------------------------

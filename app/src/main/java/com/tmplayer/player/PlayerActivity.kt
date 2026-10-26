@@ -64,7 +64,7 @@ import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
+import com.tmplayer.data.guardedLifecycleScope as lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.withStarted
 import com.tmplayer.App
@@ -3861,6 +3861,17 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            // Every way out of here ends in the status sheet (HX10): a recovery step that throws
+            // falls back to the plain error rather than taking the app down with the video.
+            try {
+                handlePlayerError(error)
+            } catch (e: Exception) {
+                com.tmplayer.platform.JobFailures.handle("onPlayerError", e)
+                runCatching { showError(friendlyError(error), retryable = true) }
+            }
+        }
+
+        private fun handlePlayerError(error: PlaybackException) {
             // Worked out before anything else looks at the failure: the sheet shows the button
             // only when the other decoder can take this format.
             decoderPlan = DecoderSwitch.planFor(player, error)
