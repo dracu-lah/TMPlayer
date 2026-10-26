@@ -64,7 +64,7 @@ export function toItem(msg: Message): VideoItem | null {
 }
 
 /** The page's item for a message already known to hold a video, under [title], its file noted. */
-export function itemOf(msg: Message, title: string, poster: PosterAsk | null | undefined): VideoItem | null {
+export function itemOf(msg: Message, title: string, poster: PosterAsk | null | undefined, name?: string): VideoItem | null {
     const m = msg.media
     if (!m || (m.type !== 'video' && m.type !== 'document')) return null
     const key = m.uniqueFileId
@@ -86,6 +86,7 @@ export function itemOf(msg: Message, title: string, poster: PosterAsk | null | u
         messageId: msg.id,
         duration: m.type === 'video' ? m.duration : 0,
         title,
+        name: name || title,
         chat: msg.chat.displayName,
         date: msg.date.getTime(),
         thumb: thumb?.uniqueFileId ?? null,

@@ -6,7 +6,7 @@ import { onBackOnline } from '../net'
 import { t } from '../i18n'
 import { dropResume, progress, resumes, settings, starredIds } from '../store'
 import { Icon } from '../ui/Icon'
-import { Card, tileCard, useProgress, useWarmDataCentres, videoCard, type CardData } from './VideoList'
+import { Card, ContinueCard, tileCard, useLeft, useProgress, useWarmDataCentres, videoCard, type CardData } from './VideoList'
 import { form } from '../form'
 import type { HomePage, HomeRow } from '../tg/types'
 
@@ -117,6 +117,7 @@ function Row(props: { row: HomeRow; selfId: number | null }) {
     const [atStart, setAtStart] = createSignal(true)
     const [atEnd, setAtEnd] = createSignal(false)
     const progressOf = useProgress()
+    const leftOf = useLeft()
     const cards = () => cardsOf(props.row)
     useWarmDataCentres(() => cards().map((c) => c.item))
     const edges = () => {
@@ -149,12 +150,15 @@ function Row(props: { row: HomeRow; selfId: number | null }) {
                     <A class="link see-all" href={`/chat/${props.row.chatId}`}>{t('home.see_all')}</A>
                 </Show>
             </div>
-            <Show when={props.row.loaded} fallback={<Strip />}>
-                <ul class="strip" ref={strip} onScroll={edges}>
+            <Show when={props.row.loaded} fallback={<Strip continues={props.row.kind === 'continue' && form() !== 'tv'} />}>
+                <ul class="strip" classList={{ continues: props.row.kind === 'continue' && form() !== 'tv' }} ref={strip} onScroll={edges}>
                     <For each={cards()}>
                         {(c) => (
                             <li>
-                                <Card card={c} progress={progressOf(c.item)} direct={props.row.kind === 'continue'} />
+                                {/* Continue watching: a landscape card with how long is left, which plays at once. */}
+                                <Show when={props.row.kind === 'continue' && form() !== 'tv'} fallback={<Card card={c} progress={progressOf(c.item)} direct={props.row.kind === 'continue'} />}>
+                                    <ContinueCard item={c.item} left={leftOf(c.item)} />
+                                </Show>
                             </li>
                         )}
                     </For>
@@ -165,13 +169,16 @@ function Row(props: { row: HomeRow; selfId: number | null }) {
 }
 
 /** A row still waiting for Telegram, the height of a filled one, so nothing below moves when it fills. */
-function Strip() {
+function Strip(props: { continues?: boolean }) {
     return (
-        <ul class="strip waiting" aria-hidden="true">
+        <ul class="strip waiting" classList={{ continues: props.continues }} aria-hidden="true">
             <Index each={Array(8)}>
                 {() => (
                     <li>
-                        <div class="card-art" />
+                        <div class={props.continues ? 'continue-art' : 'card-art'} />
+                        <Show when={props.continues}>
+                            <div class="continue-name">&nbsp;</div>
+                        </Show>
                         <div class="card-facts">&nbsp;</div>
                     </li>
                 )}

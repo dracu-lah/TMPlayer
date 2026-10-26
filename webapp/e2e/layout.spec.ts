@@ -51,11 +51,13 @@ test('the Settings choice wins, survives a reload and is set before the page run
     await page.goto('/settings')
     const html = page.locator('html')
     await expect(page.getByRole('radio', { name: 'Auto' })).toBeChecked()
+    // Each form draws Settings in its own way (the TV's one long page, a list of pages elsewhere), so the choice is pressed, not checked: the radio is a new one by the time the form has changed.
     for (const name of ['TV', 'Phone', 'Desktop']) {
-        await page.getByRole('radio', { name }).check({ force: true })
+        await page.getByRole('radio', { name }).click({ force: true })
         await expect(html).toHaveAttribute('data-form', name.toLowerCase())
     }
-    await page.getByRole('radio', { name: 'TV' }).check({ force: true })
+    await page.getByRole('radio', { name: 'TV' }).click({ force: true })
+    await expect(html).toHaveAttribute('data-form', 'tv')
     await page.reload()
     await expect(page.getByRole('radio', { name: 'TV' })).toBeChecked()
     await expect(html).toHaveAttribute('data-form', 'tv')
@@ -66,7 +68,7 @@ test('the Settings choice wins, survives a reload and is set before the page run
         return p.evaluate(() => (window as any).early)
     })
     expect(seen).toBe('tv')
-    await page.getByRole('radio', { name: 'Auto' }).check({ force: true })
+    await page.getByRole('radio', { name: 'Auto' }).click({ force: true })
     await expect(html).toHaveAttribute('data-form', 'desktop')
 })
 

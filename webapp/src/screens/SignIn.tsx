@@ -7,6 +7,7 @@ import { iosBrowser } from '../install'
 import { clock, t } from '../i18n'
 import { failure } from '../errors'
 import { Icon } from '../ui/Icon'
+import { form } from '../form'
 import * as phoneRules from './phone'
 import type { Country, Me, QrEvent, SentCode } from '../tg/types'
 
@@ -28,7 +29,8 @@ const typedAsDigits = (type: string) => type !== 'sms_word' && type !== 'sms_phr
  * an email address and code where Telegram asks for one, and the two-step password.
  */
 export function SignIn() {
-    const wide = matchMedia('(min-width: 600px)').matches
+    // A phone starts with the number (the QR code needs a second device), a computer or a TV with the QR code.
+    const wide = form() !== 'phone'
     const first = (): Step => (wide ? { kind: 'qr' } : { kind: 'phone' })
     const [step, setStep] = createSignal<Step>(first())
     const [error, setError] = createSignal<string | null>(null)
@@ -412,7 +414,11 @@ export function SignIn() {
 
     return (
         <main class="signin">
-            <img class="signin-mark" src="/icon.svg" alt="TMPlayer" width="56" height="56" />
+            {/* The mark and the name beside it, as the apps open sign in (AppLogo). */}
+            <div class="signin-brand">
+                <img class="signin-mark" src="/icon.svg" alt="" width="42" height="42" />
+                <span class="signin-word">TMPlayer</span>
+            </div>
             <Switch>
                 <Match when={step().kind === 'qr'}>
                     <h1>{t('login.qr_title')}</h1>
@@ -441,7 +447,7 @@ export function SignIn() {
                     <Show when={error()}>
                         <button class="link" onClick={startQr}>{t('login.qr_refresh')}</button>
                     </Show>
-                    <button class="link" onClick={() => (stopQr(), go({ kind: 'phone' }))}>{t('login.use_phone')}</button>
+                    <button class="link alt" onClick={() => (stopQr(), go({ kind: 'phone' }))}>{t('login.use_phone')}</button>
                 </Match>
 
                 <Match when={step().kind === 'phone'}>
@@ -478,7 +484,7 @@ export function SignIn() {
                         <button class="primary" disabled={!ready() || busy() || !!waitLeft()}>{sendWords(t('login.send_code'), t('login.sending_code'))}</button>
                     </form>
                     <Problem />
-                    <button class="link" onClick={() => (go({ kind: 'qr' }), startQr())}>{t('login.use_qr')}</button>
+                    <button class="link alt" onClick={() => (go({ kind: 'qr' }), startQr())}>{t('login.use_qr')}</button>
                 </Match>
 
                 <Match when={step().kind === 'code' && (step() as { sent: SentCode }).sent}>

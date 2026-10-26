@@ -6,6 +6,25 @@ export interface Me {
     id: number
     /** Null until Telegram has been asked. */
     name: string | null
+    /** The public @username, without the @; null where there is none or Telegram has not been asked. */
+    username?: string | null
+}
+
+/** A chat's info page: what the apps' ChatInfoSheet shows. Asked for only when the page opens. */
+export interface ChatInfo {
+    title: string
+    kind: 'saved' | 'channel' | 'group' | 'user' | 'bot'
+    /** Key of the large picture, for `thumb`; null where there is none. */
+    photo: string | null
+    /** Members or subscribers; null where Telegram does not say. */
+    members: number | null
+    username: string | null
+    /** A person's bio, or a group's or channel's description. */
+    about: string | null
+    /** t.me/<username> for a public chat. */
+    link: string | null
+    /** The details could not be read (the name, kind and picture are still the list's). */
+    failed: boolean
 }
 
 /** A file the page can ask the worker for, by key. */
@@ -33,6 +52,8 @@ export interface VideoItem extends FileRef {
     messageId: number
     duration: number
     title: string
+    /** The name Continue watching writes under a card (the apps' continueCardTitle): "S1 E3  ·  Harbour Notes", else the title. */
+    name: string
     chat: string
     /** Milliseconds since 1970. */
     date: number
@@ -277,4 +298,19 @@ export interface WatchInfo {
     chatTitle: string
     /** The chat restricts saving content. */
     protected: boolean
+    /** What the file is badged with ("1080p", "4K"), from its name and size; null when neither says. */
+    quality: string | null
+    /** Every copy of this video in the chat (this one among them, best first) when there is more than one file of it. */
+    copies: CopyRef[]
+}
+
+/** One copy of a video, for the copies list on its page: what its name says of the picture, and where it was posted. */
+export interface CopyRef {
+    item: VideoItem
+    /** "1080p", "H.264", "Blu-ray": the quality first, then what the name states. */
+    facts: string[]
+    fileName: string
+    /** Seconds since 1970. */
+    date: number
+    chat: string
 }

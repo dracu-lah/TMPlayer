@@ -13,6 +13,10 @@ export interface Candidate {
     poster: string | null
     /** TMDB's `original_language`, ISO 639-1. */
     originalLanguage: string
+    /** The overview in English (MetaInfo.overview); empty when TMDB has none. */
+    overview?: string
+    /** The wide picture's file (MetaInfo.backdropUrl), or null. */
+    backdrop?: string | null
 }
 
 /** What a video's name asks (MetaQuery, as the page's rules read it: WebRules' PosterAsk). */

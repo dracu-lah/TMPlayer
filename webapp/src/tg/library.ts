@@ -6,7 +6,7 @@ import type { Message, Peer, TelegramClient } from '@mtcute/web'
 import { rules, type Shelf, type ShelfTile, type Video } from '../rules'
 import { chatProtects, itemOf, rawOf, thumbnails, videoId } from './media'
 import { forgetSponsored, loadSponsored } from './sponsored'
-import type { ChatItem, ChatPage, ChatView, Found, ListView, SponsoredItem, Tile, VideoItem, WatchInfo } from './types'
+import type { ChatItem, CopyRef, ChatPage, ChatView, Found, ListView, SponsoredItem, Tile, VideoItem, WatchInfo } from './types'
 
 const PAGE = 100
 const VIDEO_FILTER = { _: 'inputMessagesFilterVideo' } as const
@@ -113,7 +113,7 @@ async function loadPage(tg: TelegramClient, s: ChatState): Promise<void> {
     s.selfDestructing += screened.selfDestructing
     for (const v of screened.videos) {
         const msg = byId.get(v.messageId)
-        const item = msg && itemOf(msg, v.title, r.posterAsk(v))
+        const item = msg && itemOf(msg, v.title, r.posterAsk(v), r.continueTitle(v))
         if (!item) continue
         s.videos.set(v.id, v)
         s.items.set(v.id, item)
@@ -345,7 +345,7 @@ export async function across(tg: TelegramClient, query: string): Promise<{ video
     const videos: Video[] = []
     const items = new Map<string, VideoItem>()
     for (const v of r.screen(raws).videos) {
-        const item = itemOf(byId.get(v.id)!, v.title, r.posterAsk(v))
+        const item = itemOf(byId.get(v.id)!, v.title, r.posterAsk(v), r.continueTitle(v))
         if (!item || items.has(v.id)) continue
         items.set(v.id, item)
         videos.push(v)
@@ -381,7 +381,7 @@ async function addMessage(tg: TelegramClient, s: ChatState, messageId: number): 
     const raw = msg && rawOf(msg, s.protected)
     if (!msg || !raw) return null
     const [v] = r.screen([raw]).videos
-    const item = v && itemOf(msg, v.title, r.posterAsk(v))
+    const item = v && itemOf(msg, v.title, r.posterAsk(v), r.continueTitle(v))
     if (!v || !item) return null
     s.videos.set(v.id, v)
     s.items.set(v.id, item)
@@ -421,6 +421,29 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
             .tiles.filter((t) => videoId(t.item) !== id)
             .slice(0, 12)
     }
+    // Every copy of it in the chat, found by the shelf's own grouping (the size limits left open, as the apps' copy list ignores them).
+    const wholeShelf = r.shelf([...s.videos.values()], 'Newest', 0, r.sizeLimits().ceiling, [], [])
+    const copyIds = new Set<string>()
+    for (const t of wholeShelf.tiles) {
+        if (t.kind === 'show') {
+            for (const season of t.seasons) for (const e of season.episodes) if (e.video.id === id || e.copies.includes(id)) e.copies.forEach((c) => copyIds.add(c))
+        } else if (t.video?.id === id || t.copies.includes(id)) t.copies.forEach((c) => copyIds.add(c))
+    }
+    const copies: CopyRef[] =
+        copyIds.size > 1
+            ? [...copyIds]
+                  .flatMap((cid) => {
+                      const v = s.videos.get(cid)
+                      const it = s.items.get(cid)
+                      if (!v || !it) return []
+                      const facts = r.copyFacts(v)
+                      // The quality heads the facts ("4K", "1080p"); a copy whose name states none (the size heads it) comes last, as the apps' picker has it.
+                      const height = facts[0] === '4K' ? 2160 : /^(\d+)p$/.test(facts[0] ?? '') ? parseInt(facts[0]) : 0
+                      return [{ item: it, facts, fileName: v.fileName, date: v.date, chat: s.title, height, size: v.size }]
+                  })
+                  .sort((a, b) => b.height - a.height || b.size - a.size)
+                  .map(({ height: _h, size: _s, ...copy }) => copy)
+            : []
     const info: WatchInfo = {
         title: steps.current?.show ?? r.tileTitle(current),
         episode: steps.current ? { code: steps.current.code, name: steps.current.name ?? null, show: steps.current.show } : null,
@@ -435,6 +458,8 @@ export async function watchInfo(tg: TelegramClient, chatId: number, messageId: n
         height: current.height,
         chatTitle: s.title,
         protected: s.protected,
+        quality: r.qualityLabel(current) ?? null,
+        copies,
     }
     watchKept.set(id, { version: s.version, view: viewKey, info })
     while (watchKept.size > 20) watchKept.delete(watchKept.keys().next().value!)

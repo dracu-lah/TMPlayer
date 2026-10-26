@@ -5,8 +5,14 @@
 //   GET /tmdb/poster?k=film|show&t=<title>&y=<year>&id=<tmdb id>&s=1&l=ta,hi
 //        the app's lookup for one video, answered as JSON: { match: true, id, kind, title, year,
 //        poster: "/abc.jpg" | null } or { match: false }. 503 when TMDB cannot be asked right now.
-//   GET /tmdb/img/<w185|w342|w500>/<file>.jpg
-//        a poster's bytes from TMDB's image host, same origin so the page can keep them in the
+//        The answer also carries the title's overview (English) and its wide picture's file, which
+//        MetaInfo has beside the poster: `overview`, `backdrop`.
+//   GET /tmdb/extras?k=film|show&id=<tmdb id>[&s=1&e=3][&r=GB]
+//        the detail page's second helping (MetaExtras): genres, length, rating, age rating, directors
+//        or creators, cast, a trailer's YouTube id, and for a show's episode its own name and words.
+//        { found: true, ... } or { found: false }; 503 as above. extras.ts holds the rules.
+//   GET /tmdb/img/<w185|w342|w500|w780>/<file>.jpg
+//        a picture's bytes from TMDB's image host, same origin so the page can keep them in the
 //        Cache API as it keeps thumbnails.
 //
 // The rules are the apps' (OnlineMetadata, MetadataCache): TMDB only, English, the search asked
@@ -17,6 +23,7 @@
 // refused key is not asked with again for a day, a dropped call or a server error is tried once
 // more after a second, and none of these failures is ever cached. The title is the only thing
 // that leaves for TMDB: no chat, file or account.
+import { extras, type Extras } from './extras.ts'
 import { best, normalise, trusted, type Ask, type Candidate } from './match.ts'
 
 export interface Env {
@@ -45,7 +52,7 @@ export const MISS_TTL = 7 * DAY
 const REFUSED_RETRY = DAY * 1000
 const DEFAULT_WAIT = 10_000
 const RETRY = 1_000
-const SIZES = new Set(['w185', 'w342', 'w500'])
+const SIZES = new Set(['w185', 'w342', 'w500', 'w780'])
 const FILE = /^\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp)$/
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
@@ -108,6 +115,8 @@ export function createHandler(deps: Deps) {
             year: yearOf(film ? o.release_date : o.first_air_date),
             poster: typeof o.poster_path === 'string' && o.poster_path.startsWith('/') ? o.poster_path : null,
             originalLanguage: o.original_language ?? '',
+            overview: typeof o.overview === 'string' ? o.overview.trim() : '',
+            backdrop: typeof o.backdrop_path === 'string' && FILE.test(o.backdrop_path) ? o.backdrop_path : null,
         }
     }
 
@@ -205,10 +214,75 @@ export function createHandler(deps: Deps) {
             const { film, candidate: c } = outcome.found
             const kind = film ? 'film' : 'show'
             if (trusted(ask, { kind, year: c.year })) {
-                body = { match: true, id: c.id, kind, title: c.names.find((n) => n.trim()) ?? ask.title, year: c.year, poster: c.poster }
+                body = { match: true, id: c.id, kind, title: c.names.find((n) => n.trim()) ?? ask.title, year: c.year, poster: c.poster, backdrop: c.backdrop ?? null, overview: c.overview ?? '' }
                 ttl = FOUND_TTL
             }
         }
+        const response = json(body, 200, { 'Cache-Control': `public, max-age=3600, s-maxage=${ttl}`, 'X-Poster-Cache': 'miss' })
+        if (deps.cache) {
+            const put = deps.cache.put(cacheKey, response.clone()).catch(() => {})
+            deps.later?.(put)
+        }
+        return response
+    }
+
+    /** What the cache files an extras answer under. */
+    function extrasRequest(origin: string, q: { film: boolean; id: number; season: number | null; episode: number | null; region: string }): Request {
+        const p = new URLSearchParams({ k: q.film ? 'film' : 'show', id: String(q.id), s: String(q.season ?? ''), e: String(q.episode ?? ''), r: q.region })
+        return new Request(`${origin}/tmdb/extras?${p}`)
+    }
+
+    async function details(url: URL, env: Env): Promise<Response> {
+        const p = url.searchParams
+        const kind = p.get('k')
+        const num = (name: string, lo: number, hi: number) => {
+            const raw = p.get(name)
+            if (raw === null || raw === '') return null
+            const n = Number(raw)
+            return Number.isInteger(n) && n >= lo && n <= hi ? n : NaN
+        }
+        const id = num('id', 1, 999_999_999)
+        const season = num('s', 0, 9999)
+        const episode = num('e', 1, 99_999)
+        const region = (p.get('r') ?? 'US').toUpperCase()
+        if ((kind !== 'film' && kind !== 'show') || id === null || Number.isNaN(id) || Number.isNaN(season) || Number.isNaN(episode) || !/^[A-Z]{2}$/.test(region)) return json({ error: 'bad request' }, 400)
+        const key = env.TMDB_API_KEY?.trim()
+        if (!key) return unavailable('no key', 300)
+        const film = kind === 'film'
+        const cacheKey = extrasRequest(url.origin, { film, id, season: film ? null : season, episode: film ? null : episode, region })
+        const kept = await deps.cache?.match(cacheKey).catch(() => undefined)
+        if (kept) {
+            const headers = new Headers(kept.headers)
+            headers.set('X-Poster-Cache', 'hit')
+            return new Response(kept.body, { status: kept.status, headers })
+        }
+        if (now() < pausedUntil) return unavailable('throttled', (pausedUntil - now()) / 1000)
+        if (refusedAt && now() - refusedAt < REFUSED_RETRY) return unavailable('refused', (REFUSED_RETRY - (now() - refusedAt)) / 1000)
+        // MetaApis.extras: the title's own page with its credits, videos and age ratings appended; videos in English and with no language.
+        const append = film ? 'credits,videos,release_dates' : 'aggregate_credits,videos,content_ratings,external_ids'
+        const reply = await retrying(key, `${film ? 'movie' : 'tv'}/${id}`, `language=en-US&include_video_language=en,null&append_to_response=${append}`)
+        const blocked = (r: Reply) => {
+            const out = stopped(r)
+            return unavailable(out.kind === 'blocked' ? out.reason : 'unavailable', out.kind === 'blocked' ? out.waitS : 30)
+        }
+        let body: { found: false } | Extras = { found: false }
+        let ttl = MISS_TTL
+        if (reply.kind === 'ok') {
+            const found = extras(reply.json, film, region)
+            body = found
+            ttl = FOUND_TTL
+            if (!film && season !== null && episode !== null) {
+                // The episode's own name and words (MetaApis.episodes), only for the one the page is about.
+                const one = await retrying(key, `tv/${id}/season/${season}/episode/${episode}`, 'language=en-US')
+                if (one.kind === 'ok') {
+                    const still = typeof one.json.still_path === 'string' && FILE.test(one.json.still_path) ? one.json.still_path : null
+                    found.episode = { name: String(one.json.name ?? '').trim(), overview: String(one.json.overview ?? '').trim(), still }
+                } else if (one.kind !== 'missing') return blocked(one)
+            }
+        } else if (reply.kind !== 'missing') {
+            return blocked(reply)
+        }
+        refusedAt = 0
         const response = json(body, 200, { 'Cache-Control': `public, max-age=3600, s-maxage=${ttl}`, 'X-Poster-Cache': 'miss' })
         if (deps.cache) {
             const put = deps.cache.put(cacheKey, response.clone()).catch(() => {})
@@ -245,6 +319,7 @@ export function createHandler(deps: Deps) {
         // The key's quota is the apps' to spend: another site's page may not use this proxy.
         if (request.headers.get('sec-fetch-site') === 'cross-site') return new Response('Forbidden', { status: 403 })
         if (url.pathname === '/tmdb/poster') return poster(request, url, env)
+        if (url.pathname === '/tmdb/extras') return details(url, env)
         if (url.pathname.startsWith('/tmdb/img/')) return image(url)
         return new Response('Not found', { status: 404 })
     }

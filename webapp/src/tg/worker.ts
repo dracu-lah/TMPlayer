@@ -6,8 +6,8 @@ import { rules } from '../rules'
 import { homePage } from './home'
 import { chatList, chatPage, forgetAll, rankChats, searchAll, watchInfo } from './library'
 import { clickSponsored, reportSponsored, viewSponsored } from './sponsored'
-import { files, itemOf, thumbnails, toItem } from './media'
-import type { ChatItem, ChatPage, ChatsEvent, ChatView, Country, Found, HomePage, HomeView, ListView, Me, QrEvent, RpcError, SentCode, SponsoredReport, VideoItem, WatchInfo } from './types'
+import { chatProtects, files, itemOf, rawOf, thumbnails, toItem } from './media'
+import type { ChatInfo, ChatItem, ChatPage, ChatsEvent, ChatView, Country, Found, HomePage, HomeView, ListView, Me, QrEvent, RpcError, SentCode, SponsoredReport, VideoItem, WatchInfo } from './types'
 
 // `VITE_TG_TEST=1 pnpm dev` signs in on Telegram's test servers (numbers 99966XYYYY, the code
 // is X five times), with its own storage, to try the sign in steps without a real account.
@@ -63,7 +63,7 @@ function isUnauthorized(e: unknown): boolean {
     return (e as { code?: number })?.code === 401 || /AUTH_KEY_UNREGISTERED|SESSION_REVOKED|USER_DEACTIVATED|AUTH_KEY_INVALID/.test(text)
 }
 
-const me = (u: User): Me => ({ id: u.id, name: u.displayName })
+const me = (u: User): Me => ({ id: u.id, name: u.displayName, username: u.username ?? null })
 
 /** An error the page can tell apart by its text, as Telegram's own are. */
 const rpcLike = (text: string) => Object.assign(new Error(text), { text })
@@ -291,10 +291,52 @@ export const api = {
         return { choices: r.rewindChoices(), fallback: r.rewindSetting(null) }
     },
 
+    /**
+     * A chat's info page (the apps' ChatInfoSheet): its large picture, kind, member count, public
+     * username, description and t.me link. The name, kind and picture come from the peer the list
+     * already has, so a failed second call still leaves the page its top.
+     */
+    async chatInfo(_: Ctx, chatId: number): Promise<ChatInfo> {
+        const peer = await tg.getPeer(chatId)
+        const self = peer.type === 'user' && peer.isSelf
+        const big = peer.photo?.big ?? peer.photo?.small ?? null
+        if (big && !self) thumbnails.set(big.uniqueFileId, big)
+        const kind: ChatInfo['kind'] = self ? 'saved' : peer.type === 'user' ? (peer.isBot ? 'bot' : 'user') : peer.chatType === 'channel' ? 'channel' : 'group'
+        const info: ChatInfo = {
+            title: peer.displayName,
+            kind,
+            photo: big && !self ? big.uniqueFileId : null,
+            members: null,
+            username: peer.username ?? null,
+            about: null,
+            link: null,
+            failed: false,
+        }
+        if (self) return info
+        try {
+            if (peer.type === 'user') {
+                info.about = (await tg.getFullUser(chatId)).bio || null
+            } else {
+                const full = await tg.getFullChat(chatId)
+                info.about = full.bio || null
+                info.members = full.membersCount || null
+            }
+        } catch {
+            info.failed = true
+        }
+        if (info.username) info.link = `https://t.me/${info.username}`
+        return info
+    },
+
     /** One message's video, for a watch page opened by its address. Null when it is gone or not a video. */
     async video(_: Ctx, chatId: number, messageId: number): Promise<VideoItem | null> {
         const [msg] = await tg.getMessages(chatId, messageId)
-        return msg ? toItem(msg as Message) : null
+        if (!msg) return null
+        // Through the rules as a list's videos are, so its card name and poster question match theirs.
+        const r = await rules()
+        const raw = rawOf(msg as Message, chatProtects(msg as Message))
+        const [v] = raw ? r.screen([raw]).videos : []
+        return (v && itemOf(msg as Message, v.title, r.posterAsk(v), r.continueTitle(v))) || toItem(msg as Message)
     },
 
     /** The watch page's parts round the player: episodes and the ones either side, or more from the chat. Null when the message is gone. */

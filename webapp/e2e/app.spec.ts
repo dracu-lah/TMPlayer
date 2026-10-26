@@ -114,8 +114,9 @@ test('a browser that refuses storage still works, and Settings says so', async (
             throw new DOMException('refused', 'InvalidStateError')
         }
     })
-    await page.goto('/settings')
+    await page.goto('/settings/storage')
     await expect(page.getByText(/This browser is not keeping TMPlayer's data/)).toBeVisible()
+    await page.goto('/settings/appearance')
     await page.locator('label').filter({ hasText: /^Dark$/ }).click()
     await page.locator('nav a[href="/chats"]').click()
     await expect(page.getByRole('link', { name: /Test Clips/ }).first()).toBeVisible()
