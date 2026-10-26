@@ -278,10 +278,6 @@ input:not([type=range]):not([type=radio]):focus { border-color: var(--accent); }
 .card-progress { position: absolute; left: 10px; right: 10px; bottom: 6px; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .3); overflow: hidden; }
 .card-progress > div { height: 100%; background: var(--accent); border-radius: 2px; }
 .card-art:has(.card-progress) .card-art-title { bottom: 16px; }
-.card-name {
-  margin-top: 8px; font-size: 16px; line-height: 22px;
-  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere;
-}
 .card-facts { margin-top: 4px; font-size: 12px; line-height: 16px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: color var(--fast); }
 .card:active .card-art { transform: scale(.97); }
 @media (hover: hover) and (pointer: fine) {
@@ -290,7 +286,6 @@ input:not([type=range]):not([type=radio]):focus { border-color: var(--accent); }
 }
 @media (max-width: 599px) {
   .card-art-title { font-size: 13px; line-height: 17px; left: 8px; right: 8px; bottom: 10px; }
-  .card-name { font-size: 14px; line-height: 20px; }
 }
 
 /* Chats: the app's list rows, a 56 picture and the name in body large. */

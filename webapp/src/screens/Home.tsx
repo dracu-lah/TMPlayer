@@ -156,7 +156,6 @@ function Strip() {
                 {() => (
                     <li>
                         <div class="card-art" />
-                        <div class="card-name">&nbsp;</div>
                         <div class="card-facts">&nbsp;</div>
                     </li>
                 )}

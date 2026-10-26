@@ -5,6 +5,8 @@ import { markEntry } from './session'
 import { registerWorker } from './install'
 import './styles.css'
 
+if (location.hostname === 'localhost') void import('./survey')
+
 // index.html has said the browser is too old: nothing more starts.
 if (!document.documentElement.dataset.old) {
     markEntry()

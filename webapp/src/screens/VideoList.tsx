@@ -120,7 +120,6 @@ export function Card(props: { card: CardData; progress?: number; replace?: boole
             onPointerDown={(e: PointerEvent) => e.pointerType === 'mouse' && warmFile(props.card.item)}
         >
             <CardArt thumb={props.card.item.thumb} title={props.card.title} progress={props.progress} />
-            <div class="card-name">{props.card.title}</div>
             <div class="card-facts">{props.card.facts}</div>
         </A>
     )
