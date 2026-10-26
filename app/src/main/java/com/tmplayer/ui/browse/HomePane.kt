@@ -316,7 +316,7 @@ internal fun HomePane(
     if (recent != null) LaunchedEffect(recent.key, recent.loaded) {
         if (recent.loaded) return@LaunchedEffect
         onRowShown(recent)
-        rows.filterIsInstance<HomeRow.Chat>().filterNot { it.loaded }.forEach(onRowShown)
+        rows.filterIsInstance<HomeRow.Chat>().filterNot { it.loaded }.take(com.tmplayer.ui.browse.HomeViewModel.EAGER_CHATS).forEach(onRowShown)
     }
     val density = LocalDensity.current
 
@@ -506,8 +506,9 @@ internal fun HomePane(
                 }
                 items(listed, key = { it.key }, contentType = { it::class }) { row ->
                     val loaded = row.isLoaded
-                    // Asked for when the row first comes on screen, and again after a refresh empties it.
-                    LaunchedEffect(row.key, loaded) { if (!loaded) onRowShown(row) }
+                    // Asked for whenever the row comes on screen: the model fetches it the first
+                    // time, and again only when a refresh passed it by (HomeViewModel.request).
+                    LaunchedEffect(row.key) { onRowShown(row) }
                     val isFirst = row === listed.first()
                     val title = homeRowTitle(row, s)
                     // Only a row that leaves something out offers the rest of it.

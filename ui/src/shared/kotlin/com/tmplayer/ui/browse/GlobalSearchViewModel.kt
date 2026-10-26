@@ -386,7 +386,7 @@ class GlobalSearchViewModel(
      * Telegram's first answer for [query]. A [fresh] one takes the place of whatever was carried
      * over from the words before ([start]); a revalidation of kept pages merges into them.
      */
-    private suspend fun firstAnswer(query: SearchQuery, fresh: Boolean = true) {
+    private suspend fun firstAnswer(query: SearchQuery, fresh: Boolean = true, floodRetries: Int = 0) {
         val filters = _state.value.filters
         asked = query.server
         try {
@@ -435,13 +435,15 @@ class GlobalSearchViewModel(
             _state.update { it.copy(searching = false, stillSearching = false, offline = true) }
         } catch (e: Exception) {
             val wait = Failures.floodWaitSeconds(e.message)
-            if (wait != null && wait in 1..MAX_FLOOD_WAIT) {
+            // Waited out and asked again, a couple of times at most: a flood wait answered by
+            // another one is said as a failure, with Retry, rather than counted down for good.
+            if (wait != null && wait in 1..MAX_FLOOD_WAIT && floodRetries < MAX_FLOOD_RETRIES) {
                 for (left in wait downTo 1) {
                     _state.update { it.copy(searching = false, stillSearching = false, floodWait = left) }
                     delay(1_000)
                 }
                 _state.update { it.copy(floodWait = 0, searching = true) }
-                firstAnswer(query, fresh)
+                firstAnswer(query, fresh, floodRetries + 1)
                 return
             }
             asked = ""
@@ -496,5 +498,8 @@ class GlobalSearchViewModel(
 
         /** A longer wait than this is not counted down on screen: it is a failure to report. */
         const val MAX_FLOOD_WAIT = 120
+
+        /** Flood waits a search waits out by itself before it says it failed. */
+        const val MAX_FLOOD_RETRIES = 2
     }
 }

@@ -191,7 +191,7 @@ fun ChatsPage(
                 },
             )
         }
-        StateBox(ui, onRetry = { model.load() }, onAction = { model.load() }, skeleton = { ChatListSkeleton() }) { data ->
+        StateBox(ui, onRetry = { model.retry() }, onAction = { model.load() }, skeleton = { ChatListSkeleton() }) { data ->
             LaunchedEffect(data.chats) { state.noteChatTitles(data.chats) }
             val filter = state.chatFilter
             val sort = state.chatSort
