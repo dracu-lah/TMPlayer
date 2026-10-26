@@ -23,6 +23,7 @@ export type Shelf = Plain<core.Shelf>
 export type ShelfTile = Plain<core.ShelfTile>
 export type Steps = Plain<core.Steps>
 export type Parsed = Plain<core.Parsed>
+export type PosterAsk = Plain<core.PosterAsk>
 export type SizeLimits = Plain<core.SizeLimits>
 export type WebResume = Plain<core.WebResume>
 export type WebHomeRow = Plain<core.WebHomeRow>

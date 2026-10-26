@@ -1,12 +1,14 @@
 import { createEffect, createResource, createSignal, onCleanup, onMount, Show } from 'solid-js'
 import { A } from '@solidjs/router'
-import { resumes } from '../store'
+import { resumes, settings } from '../store'
 import { loadThumb } from './thumbs'
+import { loadPoster } from './posters'
 import { warmDataCentres, warmFile } from '../stream/reader'
 import { t } from '../i18n'
 import { cardLayout, VirtualGrid } from '../ui/VirtualGrid'
 import { placeSponsored, SponsoredCard } from './Sponsored'
 import type { SponsoredItem, Tile, VideoItem } from '../tg/types'
+import type { PosterAsk } from '../rules'
 
 export function size(bytes: number): string {
     if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
@@ -24,26 +26,44 @@ export const watchPath = (v: Pick<VideoItem, 'chatId' | 'messageId'>) => `/watch
 
 /**
  * The art of a portrait card, as the app draws a video's: the frame across the card's width, the
- * same frame blurred to fill the 2:3 card round it, and the name on a shade at its foot.
+ * same frame blurred to fill the 2:3 card round it, and the name on a shade at its foot. With
+ * posters on (Settings), TMDB's poster for the video's title fades in over all of that when there
+ * is one, as the app's PosterArt does, and the name is left to the poster (kept for screen
+ * readers). A lookup that fails, or posters turned off, leaves the thumbnail.
  */
-function CardArt(props: { thumb: string | null; title: string; progress?: number }) {
+function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk | null; progress?: number }) {
     let el!: HTMLDivElement
     const [src, setSrc] = createSignal<string | null>(null)
+    const [seen, setSeen] = createSignal(false)
+    const [picture, setPicture] = createSignal<string | null>(null)
     onMount(() => {
-        if (!props.thumb) return
         const io = new IntersectionObserver((entries) => {
             if (!entries.some((e) => e.isIntersecting)) return
             io.disconnect()
-            loadThumb(props.thumb!).then(setSrc, () => {})
+            setSeen(true)
+            if (props.thumb) loadThumb(props.thumb).then(setSrc, () => {})
         })
         io.observe(el)
         onCleanup(() => io.disconnect())
     })
+    createEffect(() => {
+        const ask = props.poster
+        if (!seen() || !ask || !settings().posters) return void setPicture(null)
+        let live = true
+        loadPoster(ask).then(
+            (url) => live && setPicture(url),
+            () => {},
+        )
+        onCleanup(() => (live = false))
+    })
     return (
-        <div class="card-art" ref={el}>
+        <div class="card-art" classList={{ posted: !!picture() }} ref={el} title={picture() ? props.title : undefined}>
             <Show when={src()}>
                 <img class="card-fill" src={src()!} alt="" decoding="async" />
                 <img class="card-frame" src={src()!} alt="" decoding="async" />
+            </Show>
+            <Show when={picture()}>
+                <img class="card-poster" src={picture()!} alt="" decoding="async" />
             </Show>
             <div class="card-shade" />
             <div class="card-art-title">{props.title}</div>
@@ -119,7 +139,7 @@ export function Card(props: { card: CardData; progress?: number; replace?: boole
             // A touch may be the start of a scroll: the watch page warms the file once it opens.
             onPointerDown={(e: PointerEvent) => e.pointerType === 'mouse' && warmFile(props.card.item)}
         >
-            <CardArt thumb={props.card.item.thumb} title={props.card.title} progress={props.progress} />
+            <CardArt thumb={props.card.item.thumb} title={props.card.title} poster={props.card.item.poster} progress={props.progress} />
             <div class="card-facts">{props.card.facts}</div>
         </A>
     )

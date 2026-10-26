@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
 import solid from 'vite-plugin-solid'
 import { notices } from './notices.config'
+import { createHandler } from './tmdb/handler.ts'
 import { PAGE_STRINGS } from './strings.config'
 
 // The app's own api_id and hash: from the environment in CI, else from the repo's local.properties
@@ -59,6 +60,43 @@ function tooOldStrings(): Plugin {
     }
 }
 
+/**
+ * /tmdb/* for `pnpm dev` and `pnpm preview`: the poster proxy (tmdb/handler.ts, which Cloudflare
+ * runs as functions/tmdb/[[path]].ts) with the key from the environment or local.properties.
+ * Without one every lookup answers 503 and the cards keep their thumbnails.
+ */
+function tmdbProxy(): Plugin {
+    const kept = new Map<string, Response>()
+    const handle = createHandler({
+        fetch: (request) => fetch(request),
+        cache: { match: async (r) => kept.get(r.url)?.clone(), put: async (r, res) => void kept.set(r.url, res) },
+    })
+    const mount = (use: (path: string, fn: (req: any, res: any) => void) => void) =>
+        use('/tmdb', (req, res) => {
+            const url = new URL(req.originalUrl ?? req.url, `http://${req.headers.host ?? 'localhost'}`)
+            handle(new Request(url, { method: req.method, headers: req.headers }), { TMDB_API_KEY: secret('TMDB_API_KEY') }).then(
+                async (r) => {
+                    res.statusCode = r.status
+                    r.headers.forEach((v, k) => res.setHeader(k, v))
+                    res.end(Buffer.from(await r.arrayBuffer()))
+                },
+                () => {
+                    res.statusCode = 500
+                    res.end()
+                },
+            )
+        })
+    return {
+        name: 'tmplayer-tmdb-proxy',
+        configureServer(server) {
+            mount((path, fn) => void server.middlewares.use(path, fn))
+        },
+        configurePreviewServer(server) {
+            mount((path, fn) => void server.middlewares.use(path, fn))
+        },
+    }
+}
+
 /** A release build needs the app's own api_id: one without it could never sign in. */
 function needsApiId(): Plugin {
     return {
@@ -100,7 +138,7 @@ function offlineShell(): Plugin {
 const licences = notices()
 
 export default defineConfig({
-    plugins: [solid(), pageStrings(), tooOldStrings(), needsApiId(), ...licences.page, offlineShell()],
+    plugins: [solid(), pageStrings(), tooOldStrings(), needsApiId(), tmdbProxy(), ...licences.page, offlineShell()],
     define: {
         __TG_API_ID__: JSON.stringify(Number(secret('TG_API_ID')) || 0),
         __TG_API_HASH__: JSON.stringify(secret('TG_API_HASH')),

@@ -5,3 +5,6 @@ src/rules/core/
 # Playwright output
 test-results/
 playwright-report/
+# wrangler pages dev: the local TMDB_API_KEY secret and its state
+.dev.vars
+.wrangler/

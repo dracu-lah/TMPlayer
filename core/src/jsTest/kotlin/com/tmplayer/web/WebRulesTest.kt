@@ -122,6 +122,30 @@ class WebRulesTest {
     }
 
     @Test
+    fun `the poster question is the one the apps ask`() {
+        val videos = screen(
+            arrayOf(
+                raw(1, "Clap.2022.1080p.WEBRip.Tamil-Hindi.x265.mkv"),
+                raw(2, "Harbour.Notes.S01E02.720p.mkv"),
+                raw(3, "1080p.x265.mkv"),
+            ),
+        ).videos
+        val film = posterAsk(videos[0])!!
+        assertEquals("Clap", film.title)
+        assertEquals(2022, film.year)
+        assertEquals("film", film.kind)
+        assertFalse(film.series)
+        assertContentEquals(arrayOf("ta", "hi"), film.languages)
+        isPlain(film)
+        val show = posterAsk(videos[1])!!
+        assertEquals("Harbour Notes", show.title)
+        assertEquals("show", show.kind)
+        assertTrue(show.series)
+        assertNull(show.year)
+        assertNull(posterAsk(videos[2]))
+    }
+
+    @Test
     fun `fuzzy search forgives a typo and ranks the whole phrase first`() {
         val texts = arrayOf("Quiet Valley", "Harbour Notes", "Harbor Notes Extra")
         assertContentEquals(arrayOf(1, 2), rank(texts, "harbour notes"))

@@ -5,6 +5,7 @@ import { api } from '../tg/rpc'
 import { t } from '../i18n'
 import { sizeScale } from './sizes'
 import { size } from './VideoList'
+import { TmdbMark } from '../ui/TmdbMark'
 import { install, installed, installPrompt, iosBrowser, keepData, kept, refused } from '../install'
 
 const THEMES: Theme[] = ['system', 'dark', 'light', 'black']
@@ -26,6 +27,7 @@ export function Settings() {
             </div>
             <SizeLimits />
             <Rewind />
+            <Posters />
             <Install />
             <Storage />
             <Account />
@@ -156,6 +158,30 @@ function Rewind() {
                     onPick={(v) => setSetting('rewindMs', v)}
                 />
             </Show>
+        </div>
+    )
+}
+
+/** Posters from TMDB on the cards, on by default like the apps' (off: nothing is looked up online), with TMDB's credit. */
+function Posters() {
+    return (
+        <div class="panel">
+            <h2 class="panel-title" id="posters-label">{t('web.posters_title')}</h2>
+            <p class="muted small">{settings().posters ? t('web.posters_on_detail') : t('metadata.toggle_off')}</p>
+            <Choices
+                label="posters-label"
+                name="posters"
+                options={[
+                    { value: 'on', label: t('common.on') },
+                    { value: 'off', label: t('common.off') },
+                ]}
+                value={settings().posters ? 'on' : 'off'}
+                onPick={(v) => setSetting('posters', v === 'on')}
+            />
+            <a class="tmdb-credit" href="https://www.themoviedb.org/" target="_blank" rel="noopener" aria-label="TMDB">
+                <TmdbMark height={14} />
+            </a>
+            <p class="muted small">{t('metadata.about_notice')}</p>
         </div>
     )
 }

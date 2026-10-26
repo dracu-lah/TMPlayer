@@ -3007,6 +3007,8 @@
     "offline": "Offline. TMPlayer carries on once the connection is back.",
     "other_tab_body": "Only one tab can use your Telegram account at a time. Close the other tab, or use TMPlayer here instead.",
     "other_tab_title": "TMPlayer is open in another tab",
+    "posters_on_detail": "Looked up on TMDB by each video's cleaned-up title. Nothing else is sent, no chat, file or account.",
+    "posters_title": "Posters",
     "proxy_detail": "Set in this device's or browser's network settings",
     "proxy_unavailable": "In a browser, TMPlayer reaches Telegram over the browser's own secure connection, which cannot go through a Telegram proxy. To use a proxy or a VPN, set it up in this device's or browser's network settings.",
     "quality_original": "Original file",

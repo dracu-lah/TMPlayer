@@ -17,6 +17,8 @@ export interface Settings {
     sizeMin: number
     sizeMax: number
     sort: Sort
+    /** Posters from TMDB on the cards (the apps' MetadataStore `enabled`, on by default); off, nothing is looked up online. */
+    posters: boolean
     /** Taken off a saved position when a video resumes, in milliseconds; null for the app's default. */
     rewindMs: number | null
 }
@@ -35,7 +37,7 @@ export interface Resume {
 const MB = 1024 * 1024
 /** SizeFilter.DEFAULT_MIN and DEFAULT_MAX: 50 MB up, no top. */
 export const SIZE_DEFAULTS = { sizeMin: 50 * MB, sizeMax: 8 * 1024 * MB }
-const DEFAULTS: Settings = { theme: 'system', ...SIZE_DEFAULTS, sort: 'Newest', rewindMs: null }
+const DEFAULTS: Settings = { theme: 'system', ...SIZE_DEFAULTS, sort: 'Newest', posters: true, rewindMs: null }
 const THEME_KEY = 'tmplayer-theme'
 
 let db: UseStore | null = null
@@ -239,6 +241,8 @@ export async function starred(): Promise<number[]> {
 // Thumbnails
 
 const THUMBS = 'tmplayer-thumbs'
+/** The Cache API's store for poster answers and pictures (screens/posters.ts). */
+export const POSTERS = 'tmplayer-posters'
 
 /** A thumbnail's JPEG from the Cache API, or from `fetch` (and then kept there). */
 export async function cachedThumb(key: string, fetch: () => Promise<ArrayBuffer>): Promise<Blob> {
@@ -251,7 +255,7 @@ export async function cachedThumb(key: string, fetch: () => Promise<ArrayBuffer>
     return blob
 }
 
-/** Sign out: settings, positions, watched, stars and thumbnails go; the theme falls back to the system's. */
+/** Sign out: settings, positions, watched, stars, thumbnails and posters go; the theme falls back to the system's. */
 export async function clearAll() {
     memory.clear()
     try {
@@ -259,6 +263,7 @@ export async function clearAll() {
     } catch {}
     if (db) await stored(clear).catch(() => {})
     await globalThis.caches?.delete(THUMBS).catch(() => {})
+    await globalThis.caches?.delete(POSTERS).catch(() => {})
     setSettings({ ...DEFAULTS })
     setStarredIds(new Set<number>())
     applyTheme(DEFAULTS.theme)

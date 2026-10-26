@@ -76,6 +76,10 @@ jobs:
       - name: Type check
         run: pnpm -C webapp check
 
+      # The poster proxy (webapp/tmdb) over a mocked TMDB, and its port of the apps' match rules.
+      - name: Poster worker tests
+        run: pnpm -C webapp test:tmdb
+
       # The Telegram id and hash end up in the page's script, exactly as they are in the APK, so
       # only a push or a manual run gets them; a pull request stops at the type check (a release
       # build refuses to run without them, vite.config.ts).
@@ -162,11 +166,18 @@ jobs:
       url: ${{ inputs.deploy == 'production' && 'https://web.tmplayer.org' || 'https://solid-preview.tmplayer-webapp.pages.dev' }}
 
     steps:
+      # webapp/functions (the /tmdb poster proxy) ships with the site: wrangler finds it beside
+      # the folder it deploys. Its key is the Pages project's secret TMDB_API_KEY, set once with
+      # `wrangler pages secret put TMDB_API_KEY --project-name tmplayer-webapp` (never here).
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: webapp/functions webapp/tmdb
+
       - name: Download the site
         uses: actions/download-artifact@v8
         with:
           name: webapp-dist
-          path: dist
+          path: webapp/dist
 
       - uses: actions/setup-node@v7
         with:
@@ -175,6 +186,7 @@ jobs:
       # Project tmplayer-webapp: its main branch is web.tmplayer.org, any other branch a preview
       # address of its own.
       - name: Deploy to Cloudflare Pages
+        working-directory: webapp
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
