@@ -31,6 +31,8 @@ async function mockTmdb(page: Page, extras: object | number = EXTRAS) {
 /** The form a test runs in, set before the page starts. */
 async function inForm(page: Page, form: 'phone' | 'desktop') {
     await page.addInitScript((f) => localStorage.setItem('tmplayer-layout', f), form)
+    // A desktop is drawn at a desktop's width, whatever size the project runs at.
+    if (form === 'desktop') await page.setViewportSize({ width: 1280, height: 800 })
 }
 
 /** Where videos were left, written where the app keeps them. */

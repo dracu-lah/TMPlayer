@@ -99,7 +99,9 @@ export function Player(props: {
     const [audio, setAudio] = createSignal<SoundTrack | null>(null)
     const [switchable, setSwitchable] = createSignal(false)
     const [details, setDetails] = createSignal('')
-    const [readout, setReadout] = createSignal('')
+    // The numbers behind the Details sheet's buffer line; the words are made only while that sheet reads them.
+    const [sampled, setSampled] = createSignal<[number, number]>([0, 0])
+    const readout = () => `${t('player.details_buffered')}: ${t('player.seek_seconds', { seconds: Math.round(sampled()[0]) })}  ·  ${speedText(Math.max(0, sampled()[1]))}`
     const [stall, setStall] = createSignal<'start' | 'mid' | 'offline' | null>(null)
     /** Where the video was resumed from (seconds), for the Start over offer. */
     const [resumedAt, setResumedAt] = createSignal<number | null>(null)
@@ -372,7 +374,7 @@ export function Player(props: {
         const b = video.buffered
         let ahead = 0
         for (let i = 0; i < b.length; i++) if (video.currentTime >= b.start(i) - 0.5 && video.currentTime <= b.end(i)) ahead = b.end(i) - video.currentTime
-        setReadout(`${t('player.details_buffered')}: ${t('player.seek_seconds', { seconds: Math.round(ahead) })}  ·  ${speedText(Math.max(0, rate))}`)
+        setSampled([ahead, rate])
         // Waiting to play with the clock not moving: say so after a while, as the app does.
         // Before the first frame the element is paused with nothing in it: that is waiting too.
         const waiting = (!everPlayed || !video.paused) && video.readyState < 3

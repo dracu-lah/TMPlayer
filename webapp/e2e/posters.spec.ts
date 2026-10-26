@@ -18,6 +18,8 @@ async function mockTmdb(page: Page, answer: object | number): Promise<Seen> {
     const seen: Seen = { asks: [], pictures: [], others: [] }
     await page.route('**/*', (route) => {
         const url = new URL(route.request().url())
+        // WebKit also routes the page's own blob: and data: pictures; they never leave it.
+        if (!url.protocol.startsWith('http')) return route.continue()
         if (url.hostname !== '127.0.0.1') {
             seen.others.push(url.hostname)
             return route.continue()
@@ -65,7 +67,8 @@ test('a show card draws the poster for the title the app asks about, and nothing
     await expect(page.locator('.card-shade')).toBeHidden()
 })
 
-test('the answer is kept: a second visit draws the poster without asking again', async ({ page }) => {
+test('the answer is kept: a second visit draws the poster without asking again', async ({ page, browserName }) => {
+    test.skip(browserName === 'webkit', "Playwright's WebKit forgets the Cache API on every reload (a plain put and match shows it), so the kept answer cannot be seen there")
     const seen = await mockTmdb(page, FOUND)
     await openShows(page)
     await expect(page.locator('.card-poster')).toHaveCount(1)

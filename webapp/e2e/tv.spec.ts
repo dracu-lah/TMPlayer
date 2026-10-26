@@ -325,6 +325,26 @@ for (const size of [
             await press(page, 'ArrowUp')
             expect(await focused(page)).toBe('tv-tab|/search')
         })
+
+        test('keys only, every screen: the remote lands on something, never falls to the page, and Back always gets out', async ({ page }) => {
+            test.setTimeout(150_000)
+            const onBody = () => page.evaluate(() => !document.activeElement || document.activeElement === document.body || document.activeElement === document.documentElement)
+            for (const path of ['/', '/chats', '/chat/-1001', '/search', '/settings', '/history', '/history/later', '/history/watched']) {
+                await page.goto(path)
+                await expect(page.locator('html')).toHaveAttribute('data-form', 'tv')
+                await expect.poll(() => onBody(), { message: `${path}: focus starts on a control` }).toBe(false)
+                const seen = new Set<string>([await focused(page)])
+                for (const key of ['ArrowDown', 'ArrowDown', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowRight', 'ArrowDown', 'ArrowUp', 'ArrowUp', 'ArrowLeft', 'ArrowLeft']) {
+                    await press(page, key)
+                    expect(await onBody(), `${path}: ${key} dropped the focus`).toBe(false)
+                    seen.add(await focused(page))
+                }
+                expect(seen.size, `${path}: the arrows reach more than one control`).toBeGreaterThan(1)
+                // Back, over and over, leaves every screen for the bar and stays there.
+                for (let i = 0; i < 6; i++) await press(page, 'Backspace')
+                expect(await onBody(), `${path}: Back dropped the focus`).toBe(false)
+            }
+        })
     })
 }
 
