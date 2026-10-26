@@ -13,5 +13,11 @@
             android:screenOrientation="fullUser"
             android:theme="@style/Theme.TMPlayer.Player"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|locale|layoutDirection" />
+        <!-- A decode bench for slow TVs: a file from the disk through the real renderers (HX2). -->
+        <activity
+            android:name=".PromoDecodeBenchActivity"
+            android:exported="true"
+            android:theme="@style/Theme.TMPlayer.Player"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|locale|layoutDirection" />
     </application>
 </manifest>
