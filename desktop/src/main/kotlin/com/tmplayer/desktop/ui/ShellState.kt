@@ -72,6 +72,9 @@ enum class Destination(private val labelText: () -> String) {
     Settings({ L.navSettings }),
     ;
 
+    /** Settings and Downloads open as a panel over the page they were reached from (ModalPageHost). */
+    val isModal: Boolean get() = this == Downloads || this == Settings
+
     /** The sidebar label, in the UI language. */
     val label: String get() = labelText()
 }
@@ -124,6 +127,21 @@ class ShellState(
 
     var destination by mutableStateOf(Destination.Home)
         private set
+
+    /** The page drawn under Settings or Downloads: where they were reached from, Home if nowhere. */
+    var underlay by mutableStateOf(Destination.Home)
+        private set
+
+    /** Whether Settings or Downloads is showing as a panel (not in the big-screen mode, which keeps them as pages). */
+    val modalOpen: Boolean get() = destination.isModal && !BigScreen.on
+
+    /** The page that fills the window: [destination], or the one under the panel while one is open. */
+    val pageDestination: Destination get() = if (modalOpen) underlay else destination
+
+    /** Closes the panel, back to the page it was opened over. */
+    fun closeModal() {
+        if (destination.isModal) go(underlay)
+    }
 
     /**
      * Which slice of the chat list the Chats page shows: Chats (with its chips), Saved Messages or
@@ -347,6 +365,8 @@ class ShellState(
         details.clear()
         detailUnderPlayer = false
         if (to != Destination.Settings) settingsUnlocked = false
+        // A panel opened from another panel (Settings to Downloads) keeps the page under both.
+        if (to.isModal && !destination.isModal) underlay = destination
         destination = to
     }
 
@@ -457,6 +477,10 @@ class ShellState(
      * the picture goes straight to Home. On the desktop, Home at once.
      */
     fun backFromPage() {
+        if (modalOpen) {
+            closeModal()
+            return
+        }
         if (BigScreen.on && destination == Destination.Chats && tvBar.shown && !tvBar.focused) {
             focusBar()
             return
