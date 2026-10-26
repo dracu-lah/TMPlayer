@@ -27,6 +27,9 @@ export class User {
     get displayName() {
         return 'Dana Test'
     }
+    get username() {
+        return 'danatest'
+    }
 }
 export class SentCode {}
 export class BaseTelegramClient {
@@ -50,6 +53,9 @@ interface Peer {
     displayName: string
     type: 'user' | 'chat'
     chatType: string
+    username?: string | null
+    about?: string
+    members?: number
     isSelf: boolean
     isBot: boolean
     isForum: boolean
@@ -113,10 +119,11 @@ function msg(chat: Peer, name: string, o: Opts = {}) {
 type Msg = ReturnType<typeof msg>
 
 const me = peer(1, 'Dana Test', 'user', { isSelf: true })
-const clips = peer(-1001, 'Test Clips', 'chat', { chatType: 'channel' })
+const clips = peer(-1001, 'Test Clips', 'chat', { chatType: 'channel', username: 'testclips', about: 'Short clips for trying the player: every container and codec the web player knows.', members: 12400 })
 const shows = peer(-1002, 'Test Shows', 'chat')
 const locked = peer(-1003, 'Locked Room', 'chat', { chatType: 'channel', raw: { noforwards: true } })
 const quiet = peer(-1004, 'Quiet Room', 'chat')
+const copies = peer(-1005, 'Test Copies', 'chat', { chatType: 'channel' })
 
 const messages = new Map<number, Msg[]>([
     [
@@ -143,9 +150,11 @@ const messages = new Map<number, Msg[]>([
     [locked.id, [msg(locked, 'Locked Clip.mp4', { file: 'h264-aac.mp4' })]],
     [quiet.id, [msg(quiet, 'readme.pdf', { size: 2000 })]],
     [me.id, [msg(me, 'Saved Clip.mp4', { file: 'h264-aac.mp4' })]],
+    // One film posted three times, as copies of it: the page lists them for choosing.
+    [copies.id, ['2160p.HDR.HEVC', '1080p.BluRay.x264', '720p.WEB-DL.x264'].map((q) => msg(copies, `Big.Buck.Bunny.2008.${q}.mkv`, { file: 'h264-aac.mkv' }))],
 ])
 
-const dialogs: Peer[] = [me, clips, shows, locked, quiet]
+const dialogs: Peer[] = [me, clips, shows, locked, quiet, copies]
 for (let i = 0; i < 1500; i++) dialogs.push(peer(-5000 - i, `Group ${i}`, 'chat'))
 
 /** The raw calls made, readable in the worker as `fakeCalls`. */
@@ -165,6 +174,16 @@ export class TelegramClient {
     async logOut() {}
     async resolvePeer(id: number) {
         return { _: 'inputPeerChannel', channelId: id, accessHash: 0 }
+    }
+    async getFullChat(id: number) {
+        const p = peers.get(id)
+        if (!p) throw rpcError('PEER_ID_INVALID')
+        if (flags.has('infofail')) throw rpcError('CHANNEL_PRIVATE')
+        return { bio: p.about ?? '', membersCount: p.members ?? 0 }
+    }
+    async getFullUser(id: number) {
+        if (!peers.has(id)) throw rpcError('PEER_ID_INVALID')
+        return { bio: '' }
     }
     async getPeer(id: number) {
         const p = peers.get(id)

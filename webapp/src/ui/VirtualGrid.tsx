@@ -120,3 +120,16 @@ export function cardLayout(width: number): GridLayout {
     // The 2:3 art (the name sits on it) and the facts.
     return { cols, estimate: Math.round(card * 1.5 + (dp ? 22 * dp : 4 + 16) + rowGap) }
 }
+
+/**
+ * "As rows" (the apps' MediaRow): one column on a phone, as many 440 wide columns as fit on a
+ * desktop (the app's ROW_MIN_WIDTH), each row a small 2:3 poster (56 wide, 72 on a desktop) with its padding.
+ */
+export function rowLayout(width: number): GridLayout {
+    if (form() === 'tv') {
+        const dp = tvDp()
+        return { cols: Math.max(1, Math.floor((width + 12 * dp) / (440 * dp + 12 * dp))), estimate: Math.round(130 * dp) }
+    }
+    if (form() === 'phone') return { cols: 1, estimate: 84 + 20 + 2 }
+    return { cols: Math.max(1, Math.floor((width + 12) / (440 + 12))), estimate: 108 + 24 + 2 }
+}

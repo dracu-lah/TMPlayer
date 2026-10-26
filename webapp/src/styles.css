@@ -18,6 +18,7 @@
   --accent-container: #004d64;
   --on-accent-container: #bee9ff;
   --error: #ffb4ab;
+  --on-error: #690005;
   /* Tone.outline (outlineVariant): hairlines and the floating border */
   --line: #2e3337;
   --caution: #f5a524;
@@ -50,6 +51,7 @@
     --on-accent-container: #001f28;
     --caution: #8a5300;
     --error: #ba1a1a;
+    --on-error: #ffffff;
     --line: #c0c8cd;
     --shadow: 0 6px 20px rgba(0, 0, 0, .14);
     color-scheme: light;
@@ -69,6 +71,7 @@
   --on-accent-container: #001f28;
   --caution: #8a5300;
   --error: #ba1a1a;
+  --on-error: #ffffff;
   --line: #c0c8cd;
   --shadow: 0 6px 20px rgba(0, 0, 0, .14);
   color-scheme: light;
@@ -317,6 +320,77 @@ input:not([type=range]):not([type=radio]):focus { border-color: var(--accent); }
 .search-field:focus-within { border-color: var(--accent); }
 .search-field input:not([type=range]):not([type=radio]) { border: 0; background: none; padding: 0; height: 100%; }
 
+/*
+ * Continue watching (ContinueCardArt): a 16:9 card with how long is left in a chip at its top end and a
+ * pill of progress along its foot, the name under it ("S1 E3  ·  Harbour Notes") over the chat and
+ * size. A strip of them on Home, a grid under History's Continue; the TV keeps its portrait cards.
+ */
+.strip.continues { grid-auto-columns: 247px; }
+@media (min-width: 840px) { .strip.continues { grid-auto-columns: 272px; } }
+.cards.continue-cards { grid-template-columns: repeat(auto-fill, minmax(247px, 1fr)); gap: 20px 16px; }
+@media (min-width: 840px) { .cards.continue-cards { grid-template-columns: repeat(auto-fill, minmax(272px, 1fr)); } }
+.continue-art {
+  position: relative; aspect-ratio: 16 / 9; border-radius: var(--r-m); overflow: hidden; isolation: isolate;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 38%, #15181b), #15181b 70%);
+  transition: transform var(--fast) var(--ease);
+}
+.continue-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; animation: fade 200ms ease-out; }
+.continue-scrim { position: absolute; inset: 40% 0 0; background: linear-gradient(transparent, rgba(0, 0, 0, .55) 45%, rgba(0, 0, 0, .85)); }
+.tile-badge {
+  position: absolute; top: 6px; right: 6px; height: 20px; padding: 0 8px; border-radius: 999px;
+  background: rgba(0, 0, 0, .64); color: #fff; font-size: 11px; line-height: 20px; font-weight: 500; white-space: nowrap;
+}
+.pill-progress { position: absolute; left: 12px; right: 12px; bottom: 10px; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .3); overflow: hidden; }
+.pill-progress > div { height: 100%; border-radius: 2px; background: var(--accent); }
+.continue-name { margin-top: 8px; font-size: 14px; line-height: 20px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.continue-card:active .continue-art { transform: scale(.97); }
+@media (hover: hover) and (pointer: fine) { .continue-card:hover .continue-art, .continue-card:focus-visible .continue-art { transform: scale(1.03); } }
+.strip.waiting .continue-art { background: var(--surface-high); animation: waiting 1.2s ease-in-out infinite alternate; }
+@media (prefers-reduced-motion: reduce) { .strip.waiting .continue-art { animation: none; } .continue-art { transition: none; } }
+
+/*
+ * "As rows" (MediaRow): a small 2:3 poster beside the name over up to three lines and its facts, one
+ * column on a phone and 440 wide columns on a desktop. No card round a row.
+ */
+.vrow.rowcards { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); column-gap: 12px; list-style: none; padding: 0 0 2px; }
+.vrow.rowcards > li { min-width: 0; }
+.row-card { display: flex; align-items: center; gap: 14px; padding: 10px; border-radius: var(--r-m); color: inherit; text-decoration: none; transition: background var(--fast); }
+.row-card:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.row-card:active { background: color-mix(in srgb, var(--fg) 9%, transparent); }
+.row-art { flex: none; width: 56px; }
+.row-art .card-art { border-radius: var(--r-s); }
+.card-art.bare .card-shade, .card-art.bare .card-art-title { display: none; }
+.row-text { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.row-name { font-size: 16px; line-height: 22px; font-weight: 500; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.row-facts { font-size: 12px; line-height: 16px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:root[data-form="desktop"] .row-card { gap: 16px; padding: 12px; }
+:root[data-form="desktop"] .row-art { width: 72px; }
+:root[data-form="desktop"] .row-name { font-size: 18px; line-height: 24px; }
+
+/* A chat's info page (ChatInfoSheet): the picture, the name, the kind and members, @username, the description and the t.me link, in one centred column. */
+.avatar.huge { width: 96px; height: 96px; font-size: 38px; }
+:root[data-form="desktop"] .avatar.huge { width: 104px; height: 104px; }
+.chat-info { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 480px; margin: 8px auto 0; padding: 12px 8px; text-align: center; }
+.chat-info-name { font-size: 24px; line-height: 32px; font-weight: 400; overflow-wrap: anywhere; }
+.chat-info-username { border: 0; background: none; color: var(--accent); font-size: 16px; line-height: 24px; font-weight: 500; padding: 6px 10px; border-radius: var(--r-m); }
+.chat-info-username:hover { background: var(--surface); }
+.chat-info-about { font-size: 16px; line-height: 24px; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.chat-info-links { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.chat-info-links .outline-button { gap: 8px; height: 40px; cursor: pointer; background: none; font: inherit; font-weight: 500; }
+.chat-info .outline-button { cursor: pointer; background: none; font: inherit; font-weight: 500; height: 40px; }
+.chat-info-said { min-height: 16px; }
+
+.title-pill:not(:has(.chat-picture)) { padding-left: 18px; }
+.vrow.rowcards > li.wide { grid-column: 1 / -1; }
+
+/* On a picture (always dark under its fade) the accent is the dark theme's, as the apps' PillProgress takes inversePrimary in a light theme. */
+.pill-progress > div { background: #79d0f5; }
+
+/* The TV keeps its one page of panels (session 20): the blocks inside them take the panel's own padding and its title's size. */
+.panel .set-block { padding: 0; }
+.panel .set-block-title { font-size: 16px; line-height: 24px; font-weight: 500; }
+html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 24); }
+
 /* Settings: panels in Corner.Large, the theme as one segmented choice. */
 .settings { display: flex; flex-direction: column; gap: 16px; max-width: 640px; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-l); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
@@ -329,6 +403,76 @@ input:not([type=range]):not([type=radio]):focus { border-color: var(--accent); }
 .segmented label.on { background: var(--bg); color: var(--fg); box-shadow: 0 1px 3px rgba(0, 0, 0, .25); }
 .segmented label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
 .segmented input { position: absolute; opacity: 0; pointer-events: none; }
+
+/*
+ * Settings pages (SettingsScreen, the desktop's Settings): the account over a card of page rows, Sign
+ * out under it, and each page its own cards of rows (an icon on a tinted square, the name, what it
+ * does, and a chevron or the app's switch at the end). A phone takes the list and a page in turn; the
+ * desktop shows the list beside the page. The TV keeps `.settings` and `.panel` above.
+ */
+.set { display: flex; flex-direction: column; gap: 12px; max-width: 720px; margin: 0 auto; }
+.set.wide { max-width: 1180px; }
+.set-bar { display: flex; align-items: center; gap: 16px; margin: 2px 0 8px; min-height: 48px; }
+.set-bar h1 { font-size: 28px; line-height: 36px; font-weight: 400; min-width: 0; overflow-wrap: anywhere; }
+.set-head { margin-bottom: 4px; }
+.set-head .page-title { margin-bottom: 4px; }
+.set-panes { display: grid; grid-template-columns: 324px minmax(0, 1fr); gap: 32px; align-items: start; }
+.set-list { display: flex; flex-direction: column; gap: 12px; }
+.set-page { display: flex; flex-direction: column; gap: 12px; max-width: 760px; }
+.set-page-title { font-size: 24px; line-height: 32px; font-weight: 400; padding: 0 4px; }
+.set-card { background: var(--surface); border-radius: 24px; overflow: hidden; display: flex; flex-direction: column; }
+.set-card > * { position: relative; }
+.set-card > * + *::before { content: ''; position: absolute; top: 0; left: 68px; right: 0; border-top: 1px solid var(--line); }
+.set-card > .set-block::before { left: 16px; }
+.set-row {
+  display: flex; align-items: center; gap: 16px; width: 100%; min-height: 72px; padding: 12px 16px; border: 0; background: none;
+  color: inherit; text-align: start; text-decoration: none; font: inherit; cursor: pointer; transition: background var(--fast);
+}
+.set-row:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); }
+.set-row:active { background: color-mix(in srgb, var(--fg) 9%, transparent); }
+.set-row[aria-current=page] { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.set-row[aria-current=page] .set-title { color: var(--accent); }
+.set-icon {
+  flex: none; width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface)); color: var(--accent);
+}
+.set-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.set-title { font-size: 16px; line-height: 24px; }
+.set-sub { font-size: 14px; line-height: 20px; color: var(--muted); }
+.set-chevron { flex: none; color: var(--muted); }
+.set-block { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.set-block-title { font-size: 16px; line-height: 24px; font-weight: 500; }
+.set-credit { gap: 8px; }
+.set-account { display: flex; align-items: center; gap: 14px; padding: 4px 16px; }
+.set-account .initial { width: 56px; height: 56px; font-size: 22px; flex: none; }
+.set-account .set-title { font-weight: 500; }
+.set-foot { padding: 4px 16px; }
+.set .danger-button.set-signout {
+  align-self: stretch; display: flex; align-items: center; justify-content: center; gap: 8px; height: 48px; margin-top: 8px;
+  background: var(--error); color: var(--on-error); border: 0; font-size: 14px;
+}
+.set .danger-button.set-signout:hover { background: color-mix(in srgb, var(--error) 88%, var(--fg)); }
+/* The app's switch: a 52 by 32 track, a small grey thumb that grows and takes the accent when on. */
+.switch {
+  position: relative; flex: none; width: 52px; height: 32px; border-radius: 16px; border: 2px solid var(--muted); background: var(--surface-high);
+  transition: background var(--fast), border-color var(--fast);
+}
+.switch::after {
+  content: ''; position: absolute; top: 50%; left: 6px; width: 16px; height: 16px; margin-top: -8px; border-radius: 50%; background: var(--muted);
+  transition: left 200ms var(--ease), width 200ms var(--ease), height 200ms var(--ease), margin-top 200ms var(--ease), background var(--fast);
+}
+[aria-checked=true] > .switch { background: var(--accent); border-color: var(--accent); }
+[aria-checked=true] > .switch::after { left: 24px; width: 24px; height: 24px; margin-top: -12px; background: var(--on-accent); }
+/* The choices as the app's segmented buttons: outlined, the picked one tinted and ticked. */
+.set .segmented { background: none; border: 1px solid var(--muted); border-radius: 999px; padding: 0; gap: 0; overflow: hidden; }
+.set .segmented label { border-radius: 0; min-height: 40px; color: var(--fg); gap: 6px; grid-auto-flow: column; justify-content: center; }
+.set .segmented label + label { border-inline-start: 1px solid var(--muted); }
+.set .segmented label.on { background: color-mix(in srgb, var(--accent) 22%, var(--surface-high)); box-shadow: none; }
+.set .segmented label.on::before {
+  content: ''; width: 18px; height: 18px; background: currentColor; flex: none;
+  -webkit-mask: var(--tick) center / contain no-repeat; mask: var(--tick) center / contain no-repeat;
+}
+:root { --tick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 14.5s3.5 3.5 4 4.5c0 0 6.5-11.5 10-14'/%3E%3C/svg%3E"); }
 
 @media (prefers-reduced-motion: reduce) {
   .nav-highlight, .card-art, .nav-cell, .icon * { transition: none !important; }
@@ -359,6 +503,31 @@ input:not([type=range]):not([type=radio]):focus { border-color: var(--accent); }
 }
 .qr-over button.primary { background: #00677f; color: #fff; }
 .steps { margin: 0; padding-left: 20px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+
+/*
+ * Sign in's look from the apps: the mark and the name beside it. A phone's (LoginScreen) is left aligned from
+ * the top, its other way in a tonal pill under the button; a computer's (the desktop's SignIn) is one centred
+ * column in the middle of the window, its other way a link. The TV's is its own (src/tv).
+ */
+.signin-brand { display: flex; align-items: center; gap: 14px; }
+.signin-brand .signin-mark { width: 42px; height: 42px; border-radius: 10px; }
+.signin-word { font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -.2px; }
+:root[data-form="phone"] .signin { gap: 16px; padding-top: max(16px, env(safe-area-inset-top)); }
+:root[data-form="phone"] .signin h1 { font-size: 32px; line-height: 40px; margin-top: 12px; }
+:root[data-form="phone"] .signin p.muted { font-size: 16px; line-height: 24px; color: var(--fg); }
+:root[data-form="phone"] .signin button.link.alt {
+  align-self: stretch; min-height: 44px; border-radius: 999px; padding: 10px 24px; text-align: center; font-weight: 500;
+  color: var(--fg); background: color-mix(in srgb, var(--accent) 24%, var(--surface-high));
+}
+:root[data-form="desktop"] .signin { max-width: 396px; justify-content: center; align-items: stretch; text-align: center; padding-top: 32px; padding-bottom: 32px; gap: 16px; }
+:root[data-form="desktop"] .signin-brand { justify-content: center; margin-bottom: 4px; }
+:root[data-form="desktop"] .signin h1 { font-size: 24px; line-height: 32px; }
+:root[data-form="desktop"] .signin button.link, :root[data-form="desktop"] .signin .signin-links { align-self: center; }
+:root[data-form="desktop"] .signin .signin-links { justify-content: center; }
+:root[data-form="desktop"] .signin .steps { align-self: center; text-align: start; }
+:root[data-form="desktop"] .signin-foot { margin-top: 8px; padding-top: 8px; align-items: center; text-align: center; }
+:root[data-form="desktop"] .signin-foot a.link { align-self: center; }
+:root[data-form="desktop"] .country-row { text-align: start; }
 
 /* The number: the country above, the calling code beside the national number, as the app has it. */
 .country-row {
@@ -462,6 +631,42 @@ input:not([type=range]):not([type=radio]):focus { border-color: var(--accent); }
 :root[data-form="desktop"] .detail-rounds { justify-content: flex-start; gap: 8px; }
 :root[data-form="desktop"] .detail-round { width: 72px; }
 :root[data-form="desktop"] .detail-round-disc { width: 56px; height: 56px; }
+/* A video's page: what TMDB adds (the title's wide picture, genres and age rating, its score, the overview, the cast), and the copies line. */
+.detail-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 25%; animation: fade 200ms ease-out; }
+.detail-meta { display: flex; flex-direction: column; gap: 6px; }
+.detail-genres { margin: 0; color: var(--muted); font-size: 16px; line-height: 22px; }
+.detail-scores { margin: 0; display: flex; align-items: center; gap: 16px; }
+.detail-score { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; line-height: 22px; font-weight: 500; }
+a.detail-round { text-decoration: none; }
+.detail-overview { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: 760px; }
+.detail-synopsis { margin: 0; font-size: 16px; line-height: 24px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.detail-synopsis.open { display: block; }
+.detail-more { padding: 4px 0; font-weight: 600; }
+.detail-credit { margin: 0 0 10px; color: var(--muted); }
+.detail-versions { display: flex; flex-direction: column; gap: 8px; max-width: 640px; }
+.detail-copy-summary {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: start; background: none; border: 1px solid var(--line);
+  border-radius: var(--r-m); padding: 12px 16px; color: inherit;
+}
+.detail-copy-summary:hover { background: var(--surface); }
+.detail-copy-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.detail-copy-line { font-size: 14px; line-height: 20px; font-weight: 600; }
+.detail-copy-change { color: var(--accent); font-weight: 500; flex: none; }
+.detail-copy-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.detail-copy { display: flex; align-items: center; gap: 12px; width: 100%; text-align: start; background: none; border: 0; border-radius: var(--r-m); padding: 10px 12px; color: inherit; }
+.detail-copy:hover { background: var(--surface); }
+.detail-copy[aria-selected="true"] { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.detail-copy-file { overflow-wrap: anywhere; }
+.cast-row { list-style: none; margin: 0; padding: 0 0 8px; display: flex; gap: 16px; overflow-x: auto; scrollbar-width: none; }
+.cast-row::-webkit-scrollbar { display: none; }
+.cast-person { flex: none; width: 88px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.cast-face { width: 72px; height: 72px; border-radius: 50%; overflow: hidden; display: grid; background: var(--surface-high); margin-bottom: 4px; }
+.cast-face > * { grid-area: 1 / 1; width: 100%; height: 100%; }
+.cast-face img { object-fit: cover; animation: fade 200ms ease-out; }
+.cast-face .initial { font-size: 24px; }
+.cast-name { font-size: 13px; line-height: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.cast-role { font-size: 12px; line-height: 16px; color: var(--muted); overflow-wrap: anywhere; }
+
 .season-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
 .season-chip { flex: none; display: flex; flex-direction: column; align-items: flex-start; background: var(--surface-high); border: 1px solid transparent; border-radius: var(--r-s); padding: 6px 14px; font-size: 14px; line-height: 20px; color: var(--fg); }
 .season-chip small { font-size: 11px; line-height: 14px; color: var(--muted); }

@@ -140,7 +140,7 @@ export async function homePage(tg: TelegramClient, view: HomeView, signal: Abort
                     if (!msg || !raw) return void gone.push({ chatId: mark.chatId, messageId: mark.messageId })
                     // Withheld or self-destructing now: not played, but its place is kept.
                     const video = r.screen([raw]).videos[0]
-                    const item = video && itemOf(msg, video.title, r.posterAsk(video))
+                    const item = video && itemOf(msg, video.title, r.posterAsk(video), r.continueTitle(video))
                     if (!video || !item) return
                     items.set(video.id, item)
                     resumeTitles.set(video.id, r.tileTitle(video))

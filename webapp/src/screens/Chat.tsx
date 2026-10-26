@@ -1,6 +1,6 @@
 import { createEffect, createResource, createSignal, For, on, onCleanup, Show } from 'solid-js'
-import { useParams, useSearchParams } from '@solidjs/router'
-import { Cancel01Icon, RefreshIcon, Search01Icon, Sorting01Icon, StarIcon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { A, useParams, useSearchParams } from '@solidjs/router'
+import { Cancel01Icon, GridViewIcon, InformationCircleIcon, LeftToRightListBulletIcon, RefreshIcon, Search01Icon, Sorting01Icon, StarIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { call, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
 import { t } from '../i18n'
@@ -141,26 +141,79 @@ export function Chat() {
         setSearch({ q: undefined }, { replace: true })
     }
 
+    const SearchCell = () => (
+        <button type="button" class="nav-cell" aria-pressed={searching()} title={t('browse.search_chat')} onClick={() => (searching() ? closeSearch() : setSearching(true))}>
+            <span class="nav-glyph"><Icon icon={searching() ? Cancel01Icon : Search01Icon} size={22} /></span>
+            <span class="nav-label">{t('common.search')}</span>
+        </button>
+    )
+    const StarCell = () => (
+        <button
+            type="button"
+            class="nav-cell star"
+            classList={{ on: starredIds().has(chatId()) }}
+            aria-pressed={starredIds().has(chatId())}
+            title={starredIds().has(chatId()) ? t('chats.unfavourite') : t('chats.favourite')}
+            onClick={() => setStarred(chatId(), !starredIds().has(chatId()))}
+        >
+            <span class="nav-glyph"><Icon icon={StarIcon} size={22} selected={starredIds().has(chatId())} /></span>
+            <span class="nav-label">{t('browse.favourite')}</span>
+        </button>
+    )
+    /** As rows and As tiles (the apps' layout toggle): the icon and the name say what a press shows next. */
+    const RowsCell = () => (
+        <button
+            type="button"
+            class="nav-cell"
+            title={settings().rows ? t('browse.show_as_tiles') : t('browse.show_as_rows')}
+            onClick={() => setSetting('rows', !settings().rows)}
+        >
+            <span class="nav-glyph"><Icon icon={settings().rows ? GridViewIcon : LeftToRightListBulletIcon} size={22} /></span>
+            <span class="nav-label">{settings().rows ? t('browse.as_tiles') : t('browse.as_rows')}</span>
+        </button>
+    )
+
     return (
         <>
             <PageBar
                 title={title()}
                 picture={<ChatPicture photo={page()?.photo ?? null} name={title()} self={page()?.self} class="avatar compact" />}
                 actions={
-                    // The TV keeps the chat's buttons at the top; a phone and a desktop have them on the chat's own bar at the foot.
-                    <Show when={form() === 'tv'}>
-                        <StarButton chatId={chatId()} round />
-                        <SortMenu />
-                        <button
-                            class="round-button"
-                            type="button"
-                            aria-pressed={searching()}
-                            aria-label={t('browse.search_chat')}
-                            title={t('browse.search_chat')}
-                            onClick={() => (searching() ? closeSearch() : setSearching(true))}
-                        >
-                            <Icon icon={searching() ? Cancel01Icon : Search01Icon} size={22} />
-                        </button>
+                    <Show
+                        when={form() !== 'tv'}
+                        fallback={
+                            // The TV keeps the chat's buttons at the top; a phone and a desktop have them on the chat's own bar at the foot.
+                            <>
+                                <StarButton chatId={chatId()} round />
+                                <SortMenu />
+                                <button
+                                    class="round-button"
+                                    type="button"
+                                    aria-pressed={searching()}
+                                    aria-label={t('browse.search_chat')}
+                                    title={t('browse.search_chat')}
+                                    onClick={() => (searching() ? closeSearch() : setSearching(true))}
+                                >
+                                    <Icon icon={searching() ? Cancel01Icon : Search01Icon} size={22} />
+                                </button>
+                                <button
+                                    class="round-button"
+                                    classList={{ spinning: busy() === 'refresh' }}
+                                    type="button"
+                                    disabled={busy() === 'refresh' || busy() === 'open'}
+                                    aria-label={t('common.refresh')}
+                                    title={t('common.refresh')}
+                                    onClick={() => run('refresh')}
+                                >
+                                    <Icon icon={RefreshIcon} size={22} />
+                                </button>
+                            </>
+                        }
+                    >
+                        {/* The chat's info beside its name (the apps' Info button), then Refresh, which the apps have as a pull or a key. */}
+                        <A class="round-button" href={`/chat/${chatId()}/info`} state={{ chat: page() ? { title: title(), photo: page()!.photo, self: page()!.self } : undefined }} aria-label={t('chats.info_about')} title={t('chats.info_about')}>
+                            <Icon icon={InformationCircleIcon} size={22} />
+                        </A>
                         <button
                             class="round-button"
                             classList={{ spinning: busy() === 'refresh' }}
@@ -179,33 +232,19 @@ export function Chat() {
                 {/* The chat's bar (ChatBar): in place of the main bar while a chat is open, as the apps have it. */}
                 <nav class="nav chat-bar" aria-label={title()}>
                     <div class="nav-cells">
-                        <button type="button" class="nav-cell" aria-pressed={searching()} title={t('browse.search_chat')} onClick={() => (searching() ? closeSearch() : setSearching(true))}>
-                            <span class="nav-glyph"><Icon icon={searching() ? Cancel01Icon : Search01Icon} size={22} /></span>
-                            <span class="nav-label">{t('common.search')}</span>
-                        </button>
-                        <button
-                            type="button"
-                            class="nav-cell star"
-                            classList={{ on: starredIds().has(chatId()) }}
-                            aria-pressed={starredIds().has(chatId())}
-                            title={starredIds().has(chatId()) ? t('chats.unfavourite') : t('chats.favourite')}
-                            onClick={() => setStarred(chatId(), !starredIds().has(chatId()))}
-                        >
-                            <span class="nav-glyph"><Icon icon={StarIcon} size={22} selected={starredIds().has(chatId())} /></span>
-                            <span class="nav-label">{t('browse.favourite')}</span>
-                        </button>
-                        <SortMenu cell />
-                        <button
-                            type="button"
-                            class="nav-cell"
-                            classList={{ spinning: busy() === 'refresh' }}
-                            disabled={busy() === 'refresh' || busy() === 'open'}
-                            title={t('common.refresh')}
-                            onClick={() => run('refresh')}
-                        >
-                            <span class="nav-glyph"><Icon icon={RefreshIcon} size={22} /></span>
-                            <span class="nav-label">{t('common.refresh')}</span>
-                        </button>
+                        {/* The order of each app's bar: a phone Favourite, As rows, Search, Sort (Sort last, where the thumb reaches first); the desktop Search, Favourite, Sort, As rows. */}
+                        <Show when={form() === 'desktop'} fallback={<StarCell />}>
+                            <SearchCell />
+                        </Show>
+                        <Show when={form() === 'desktop'} fallback={<RowsCell />}>
+                            <StarCell />
+                        </Show>
+                        <Show when={form() === 'desktop'} fallback={<SearchCell />}>
+                            <SortMenu cell />
+                        </Show>
+                        <Show when={form() === 'desktop'} fallback={<SortMenu cell />}>
+                            <RowsCell />
+                        </Show>
                     </div>
                 </nav>
             </Show>
@@ -245,7 +284,7 @@ export function Chat() {
             <Show when={empty()}>
                 <p class="muted">{empty()}</p>
             </Show>
-            <VideoList cards={cards()} label={title()} onEnd={atEnd} sponsored={page()?.sponsored} sponsoredBetween={page()?.sponsoredBetween} />
+            <VideoList cards={cards()} label={title()} onEnd={atEnd} sponsored={page()?.sponsored} sponsoredBetween={page()?.sponsoredBetween} rows={settings().rows && form() !== 'tv'} />
             <div class="list-foot">
                 <Show when={busy() === 'more'}>
                     <p class="muted">{t('grid.loading_more')}</p>

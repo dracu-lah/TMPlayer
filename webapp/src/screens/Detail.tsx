@@ -1,43 +1,31 @@
-import { createMemo, createResource, createSignal, For, Match, onMount, Show, Switch } from 'solid-js'
+import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
 import { A, useLocation, useNavigate, useParams } from '@solidjs/router'
-import { Cancel01Icon, Clock01Icon, ListVideoIcon, PlayIcon, RepeatIcon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { Cancel01Icon, ClapperboardIcon, Clock01Icon, ListVideoIcon, PlayIcon, RepeatIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { api, errorText } from '../tg/rpc'
 import { back } from '../session'
 import { t } from '../i18n'
 import { dropResume, getResume, laterIds, progress as readProgress, setLater, setWatched, settings, watchedList, watchedTick } from '../store'
 import { Icon, type IconData } from '../ui/Icon'
+import { TmdbMark } from '../ui/TmdbMark'
 import { StarButton } from './Chats'
 import { loadThumb } from './thumbs'
-import { loadPoster } from './posters'
-import { Card, size, tileCard, useProgress, watchPath } from './VideoList'
+import { answer, loadBackdrop, loadExtras, loadFile, loadPoster, type Answer, type Extras } from './posters'
+import { Card, clock, detailPath, shortLength, size, tileCard, useProgress, watchPath } from './VideoList'
 import { warmFile } from '../stream/reader'
-import type { ChatView, VideoItem, WatchInfo } from '../tg/types'
+import type { ChatView, CopyRef, VideoItem, WatchInfo } from '../tg/types'
 
 const dot = '  ·  '
-
-/** SeekMath.clock. */
-function clock(seconds: number): string {
-    const s = Math.max(0, Math.floor(seconds))
-    const h = Math.floor(s / 3600)
-    const m = Math.floor((s % 3600) / 60)
-    const sec = String(s % 60).padStart(2, '0')
-    return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
-}
-
-/** The app's short length: 24m, 1h 52m. */
-function shortLength(seconds: number): string {
-    if (!seconds) return ''
-    const m = Math.max(1, Math.round(seconds / 60))
-    return m >= 60 ? t('format.hours_minutes', { hours: Math.floor(m / 60), minutes: m % 60 }) : t('format.minutes', { minutes: m })
-}
 
 /**
  * A video's detail, as the phone's MediaDetailScreen and the desktop's WideDetail draw it: the
  * picture across the top fading into the page with the name set large on its foot, the facts on
- * one line, Play (or Resume at the place left) as the one bright pill with the everyday actions as
- * round buttons beside or under it, then the show's episodes, the file's own facts under About,
- * and more from the chat. Opened from a card with the item the card passed along; by its address
- * it asks Telegram first. Close and Back go back to where the card was.
+ * one line, then its genres, age rating and score, Play (or Resume at the place left) as the one
+ * bright pill with the everyday actions as round buttons beside or under it, the copies it comes
+ * in, its overview, the show's episodes, the file's own facts under About, the cast and more from
+ * the chat. The overview, genres, score, cast and trailer come from TMDB (the apps' MetaInfo and
+ * MetaExtras) through the worker, only while posters are on; without them the page is the file's
+ * own facts. Opened from a card with the item the card passed along; by its address it asks
+ * Telegram first. Close and Back go back to where the card was.
  */
 export function Detail() {
     const params = useParams<{ chatId: string; messageId: string }>()
@@ -80,29 +68,64 @@ export function Detail() {
                 </div>
             </Match>
             <Match when={video()} keyed>
-                {(item) => <Page item={item} info={info() ?? null} onClose={close} />}
+                {(item) => <Page item={item} info={info() ?? null} infoSettled={info.state === 'ready' || info.state === 'errored'} onClose={close} />}
             </Match>
         </Switch>
     )
 }
 
-function Page(props: { item: VideoItem; info: WatchInfo | null; onClose: () => void }) {
+/** What TMDB says of the title: the poster answer (title, year, overview, wide picture) and the extras. */
+interface Meta {
+    found: Answer
+    extras: Extras | null
+}
+
+function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boolean; onClose: () => void }) {
     const item = props.item
     const navigate = useNavigate()
     const [art, setArt] = createSignal<string | null>(null)
     const [poster, setPoster] = createSignal<string | null>(null)
+    const [backdrop, setBackdrop] = createSignal<string | null>(null)
     const [left] = createResource(() => getResume(item.chatId, item.messageId))
     const [watched] = createResource(watchedTick, async () => (await watchedList()).some((w) => w.chatId === item.chatId && w.messageId === item.messageId))
     const later = () => laterIds().has(`${item.chatId}:${item.messageId}`)
+    const [more, setMore] = createSignal(false)
+    // "More" is offered only for an overview that is cut short (the app's SynopsisSlot).
+    let synopsis: HTMLParagraphElement | undefined
+    const [cut, setCut] = createSignal(false)
+    const measure = () => synopsis && setCut(synopsis.scrollHeight > synopsis.clientHeight + 1)
     onMount(() => {
+        window.addEventListener('resize', measure)
+        onCleanup(() => window.removeEventListener('resize', measure))
         if (item.thumb) loadThumb(item.thumb).then(setArt, () => {})
-        if (item.poster && settings().posters) loadPoster(item.poster).then((u) => u && setPoster(u), () => {})
         // Play is the likely next press: the file's head and tail start arriving now.
         warmFile(item)
     })
-    const title = () => props.info?.title ?? item.title
+    // TMDB's picture of the title and its words, once the page knows which episode it is (a show's own words are the episode's).
+    const [meta] = createResource(
+        () => (settings().posters && item.poster && props.infoSettled ? { ask: item.poster, code: props.info?.episode?.code ?? null } : null),
+        async ({ ask, code }): Promise<Meta | null> => {
+            const found = await answer(ask)
+            if (!found.match) return null
+            const m = code ? /^S(\d+)E(\d+)/i.exec(code) : null
+            const extras = await loadExtras(found, m ? { season: Number(m[1]), episode: Number(m[2]) } : null).catch(() => null)
+            return { found, extras: extras?.found ? extras : null }
+        },
+    )
+    const found = () => meta.latest?.found ?? null
+    const extras = () => meta.latest?.extras ?? null
+    // The poster stands behind a show's page, the title's wide picture behind a film's, as the apps draw them.
+    const film = () => found()?.kind === 'film'
+    onMount(() => {
+        if (item.poster && settings().posters) {
+            loadPoster(item.poster).then((u) => u && setPoster(u), () => {})
+            loadBackdrop(item.poster).then((u) => u && setBackdrop(u), () => {})
+        }
+    })
+    const title = () => found()?.title || props.info?.title || item.title
     const ep = () => props.info?.episode ?? null
-    const resolution = () => (props.info?.height ? `${props.info.height}p` : '')
+    const episodeName = () => extras()?.episode?.name || ep()?.name || ''
+    const resolution = () => props.info?.quality ?? (props.info?.height ? `${props.info.height}p` : '')
     const container = () => (props.info?.fileName ?? item.title).match(/\.([a-z0-9]{2,4})$/i)?.[1]?.toUpperCase() ?? ''
     const resumeAt = () => {
         const r = left()
@@ -123,15 +146,35 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; onClose: () => v
         return r && total ? Math.min(1, r.position / total) : 0
     }
     const posted = () => new Date(item.date).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' })
+    const year = () => found()?.year ?? null
+    const overview = () => extras()?.episode?.overview || found()?.overview || ''
+    createEffect(() => (overview(), more(), queueMicrotask(() => !more() && measure())))
+    const genres = () => [(extras()?.genres ?? []).join(', '), extras()?.certification ?? ''].filter(Boolean).join(dot)
+    // The facts line: year, length, quality, size and the chat, with a dot between (the apps' FactLine).
+    const facts = () => [year() ? String(year()) : '', shortLength(item.duration), resolution(), size(item.size)].filter(Boolean)
+    const credit = () => {
+        const x = extras()
+        if (!x) return ''
+        if (x.directors?.length) return t('metadata.directed_by', { names: x.directors.join(', ') })
+        if (x.creators?.length) return t('metadata.created_by', { names: x.creators.join(', ') })
+        return ''
+    }
 
     return (
         <article class="detail">
-            <div class="detail-hero" classList={{ blank: !art() && !poster() }}>
+            <div class="detail-hero" classList={{ blank: !art() && !poster() && !backdrop() }}>
                 <Show when={art()}>
                     <img class="detail-art" src={art()!} alt="" />
                 </Show>
-                <Show when={poster()} fallback={<Show when={art()}><img class="detail-frame" src={art()!} alt="" /></Show>}>
-                    <img class="detail-poster" src={poster()!} alt="" />
+                <Show
+                    when={film() && backdrop()}
+                    fallback={
+                        <Show when={poster()} fallback={<Show when={art()}><img class="detail-frame" src={art()!} alt="" /></Show>}>
+                            <img class="detail-poster" src={poster()!} alt="" />
+                        </Show>
+                    }
+                >
+                    <img class="detail-backdrop" src={backdrop()!} alt="" />
                 </Show>
                 <div class="detail-fade" />
                 <button type="button" class="detail-close" aria-label={t('detail.close')} title={t('detail.close')} onClick={props.onClose}>
@@ -141,11 +184,11 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; onClose: () => v
             <div class="detail-body">
                 <header class="detail-head">
                     <Show when={ep()}>
-                        {(e) => <p class="detail-code">{e().name ? `${e().code}${dot}${e().name}` : e().code}</p>}
+                        {(e) => <p class="detail-code">{episodeName() ? `${e().code}${dot}${episodeName()}` : e().code}</p>}
                     </Show>
                     <h1 class="detail-title">{title()}</h1>
                     <p class="detail-facts">
-                        <For each={[shortLength(item.duration), resolution(), size(item.size)].filter(Boolean)}>
+                        <For each={facts()}>
                             {(f) => (
                                 <>
                                     {f === resolution() ? <span class="detail-badge">{f}</span> : <span>{f}</span>}
@@ -155,6 +198,22 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; onClose: () => v
                         </For>
                         <A class="detail-chat" href={`/chat/${item.chatId}`}>{props.info?.chatTitle ?? item.chat}</A>
                     </p>
+                    <Show when={genres() || extras()?.rating}>
+                        <div class="detail-meta">
+                            <Show when={genres()}>
+                                <p class="detail-genres">{genres()}</p>
+                            </Show>
+                            <Show when={extras()?.rating}>
+                                {/* TMDB's score (MetaScore): its mark and the number out of ten. */}
+                                <p class="detail-scores">
+                                    <span class="detail-score" role="img" aria-label={t('metadata.score_out_of_ten', { site: 'TMDB', score: extras()!.rating! })}>
+                                        <TmdbMark height={14} />
+                                        <span>{extras()!.rating!.toFixed(1)}</span>
+                                    </span>
+                                </p>
+                            </Show>
+                        </div>
+                    </Show>
                     <Show when={watched()}>
                         <p class="detail-watched">{t('detail.watched_line')}</p>
                     </Show>
@@ -177,18 +236,37 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; onClose: () => v
                         <Show when={resumeAt() > 0}>
                             <Round icon={RepeatIcon} label={t('detail.start_over')} onClick={() => play('start')} />
                         </Show>
-                        <Round icon={Tick02Icon} label={watched() ? t('detail.round_watched') : t('detail.round_watched')} on={!!watched()} onClick={() => setWatched(item.chatId, item.messageId, !watched())} />
+                        <Round icon={Tick02Icon} label={t('detail.round_watched')} on={!!watched()} onClick={() => setWatched(item.chatId, item.messageId, !watched())} />
                         <Round icon={Clock01Icon} label={t('detail.round_watch_later')} on={later()} onClick={() => setLater(item, !later())} />
+                        {/* The trailer plays on YouTube, in another tab: the page keeps no key and embeds nothing. */}
+                        <Show when={extras()?.trailer}>
+                            <Round icon={ClapperboardIcon} label={t('detail.round_trailer')} href={`https://www.youtube.com/watch?v=${extras()!.trailer}`} />
+                        </Show>
                     </div>
                 </div>
+                <Show when={(props.info?.copies.length ?? 0) > 1}>
+                    <Versions item={item} info={props.info!} />
+                </Show>
                 <Show when={props.info?.protected || !item.canBeSaved}>
                     <p class="notice muted small">{t('detail.protected')}</p>
+                </Show>
+                <Show when={overview()}>
+                    <section class="detail-overview">
+                        <p class="detail-synopsis" classList={{ open: more() }} ref={synopsis}>{overview()}</p>
+                        <Show when={cut() || more()}>
+                            <button type="button" class="link detail-more" onClick={() => setMore(!more())}>{more() ? t('common.less') : t('common.more')}</button>
+                        </Show>
+                        <p class="muted small">{t('metadata.credit', { provider: 'TMDB' })}</p>
+                    </section>
                 </Show>
                 <Show when={props.info?.seasons.length}>
                     <Episodes info={props.info!} current={item} />
                 </Show>
                 <section class="detail-about">
                     <h2 class="detail-section">{t('detail.about')}</h2>
+                    <Show when={credit()}>
+                        <p class="detail-credit">{credit()}</p>
+                    </Show>
                     <dl>
                         <Show when={props.info?.fileName}>
                             <dt>{t('detail.file_name')}</dt>
@@ -217,6 +295,9 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; onClose: () => v
                         </dd>
                     </dl>
                 </section>
+                <Show when={extras()?.cast?.length}>
+                    <Cast people={extras()!.cast!} />
+                </Show>
                 <Show when={!props.info?.seasons.length && props.info?.more.length}>
                     <More info={props.info!} />
                 </Show>
@@ -225,15 +306,117 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; onClose: () => v
     )
 }
 
-/** One of the everyday actions: a round outlined button with its name under it; a switch fills when on. */
-function Round(props: { icon: IconData; label: string; on?: boolean; onClick: () => void }) {
-    return (
-        <button type="button" class="detail-round" aria-pressed={props.on === undefined ? undefined : props.on} onClick={props.onClick}>
+/** One of the everyday actions: a round outlined button with its name under it; a switch fills when on. A link opens elsewhere. */
+function Round(props: { icon: IconData; label: string; on?: boolean; onClick?: () => void; href?: string }): JSX.Element {
+    const inner = () => (
+        <>
             <span class="detail-round-disc">
                 <Icon icon={props.icon} size={22} />
             </span>
             <span class="detail-round-label">{props.label}</span>
-        </button>
+        </>
+    )
+    return (
+        <Show
+            when={props.href}
+            fallback={
+                <button type="button" class="detail-round" aria-pressed={props.on === undefined ? undefined : props.on} onClick={props.onClick}>
+                    {inner()}
+                </button>
+            }
+        >
+            <a class="detail-round" href={props.href} target="_blank" rel="noopener noreferrer">
+                {inner()}
+            </a>
+        </Show>
+    )
+}
+
+/**
+ * The copies of this video the chat holds (the apps' Versions): one quiet line naming the copy this
+ * page is about ("1080p · H.264 · Blu-ray · 885 MB · from Film Club") with Change at its end, and
+ * under it, once Change is pressed, every copy as a row of its own to choose from. Choosing one turns
+ * the page to that copy, so Play and the facts speak of it.
+ */
+function Versions(props: { item: VideoItem; info: WatchInfo }) {
+    const navigate = useNavigate()
+    const [open, setOpen] = createSignal(false)
+    const here = () => props.info.copies.find((c) => c.item.messageId === props.item.messageId && c.item.chatId === props.item.chatId)
+    const heading = (c: CopyRef) => (c.facts.length ? c.facts.join(dot) : size(c.item.size))
+    const summary = () => {
+        const c = here()
+        return c ? [heading(c), c.facts.length ? size(c.item.size) : '', t('detail.copy_from', { chat: c.chat })].filter(Boolean).join(dot) : ''
+    }
+    const pick = (c: CopyRef) => {
+        setOpen(false)
+        if (c === here()) return
+        navigate(detailPath(c.item), { replace: true, state: { video: c.item } })
+    }
+    const datesDiffer = () => new Set(props.info.copies.map((c) => Math.floor(c.date / 86_400_000))).size > 1
+    return (
+        <section class="detail-versions" aria-label={t('detail.copies_title')}>
+            <button type="button" class="detail-copy-summary" aria-expanded={open()} onClick={() => setOpen(!open())}>
+                <span class="detail-copy-text">
+                    <span class="detail-copy-line">{summary()}</span>
+                    <span class="muted small">{t('detail.versions', { count: props.info.copies.length })}</span>
+                </span>
+                <span class="detail-copy-change">{open() ? t('detail.copy_done') : t('detail.copy_change')}</span>
+            </button>
+            <Show when={open()}>
+                <ul class="detail-copy-list" role="listbox" aria-label={t('detail.copies_title')}>
+                    <For each={props.info.copies}>
+                        {(c) => (
+                            <li>
+                                <button type="button" role="option" class="detail-copy" aria-selected={c === here()} onClick={() => pick(c)}>
+                                    <span class="detail-copy-text">
+                                        <span class="detail-copy-line">{heading(c)}</span>
+                                        <span class="muted small">
+                                            {[c.facts.length ? size(c.item.size) : '', shortLength(c.item.duration), datesDiffer() ? new Date(c.item.date).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' }) : ''].filter(Boolean).join(dot)}
+                                        </span>
+                                        <span class="muted small detail-copy-file">{c.fileName}</span>
+                                    </span>
+                                    <Show when={c === here()}>
+                                        <Icon icon={Tick02Icon} size={22} />
+                                    </Show>
+                                </button>
+                            </li>
+                        )}
+                    </For>
+                </ul>
+            </Show>
+        </section>
+    )
+}
+
+/** The cast: a face (or its first letter), the name and who they play, in a row that scrolls sideways. */
+function Cast(props: { people: { name: string; role: string; photo: string | null }[] }) {
+    return (
+        <section class="detail-cast">
+            <h2 class="detail-section">{t('metadata.cast')}</h2>
+            <ul class="cast-row">
+                <For each={props.people}>{(p) => <Person person={p} />}</For>
+            </ul>
+        </section>
+    )
+}
+
+function Person(props: { person: { name: string; role: string; photo: string | null } }) {
+    const [src, setSrc] = createSignal<string | null>(null)
+    onMount(() => {
+        if (props.person.photo) loadFile(props.person.photo, 'w185').then(setSrc, () => {})
+    })
+    return (
+        <li class="cast-person">
+            <span class="cast-face" aria-hidden="true">
+                <Show when={src()} fallback={<span class="initial">{props.person.name.trim().charAt(0).toUpperCase()}</span>}>
+                    <img src={src()!} alt="" decoding="async" />
+                </Show>
+            </span>
+            <span class="cast-name">{props.person.name}</span>
+            <Show when={props.person.role}>
+                <span class="cast-role">{props.person.role}</span>
+            </Show>
+        </li>
     )
 }
 

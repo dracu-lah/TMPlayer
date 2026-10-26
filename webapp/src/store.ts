@@ -23,6 +23,8 @@ export interface Settings {
     rewindMs: number | null
     /** The carousel at the top of Home in the TV layout (the apps' "Carousel on Home"), on by default. */
     carousel: boolean
+    /** A chat's videos as rows of a small poster and the name instead of tiles (the apps' "As rows"), kept for every chat. */
+    rows: boolean
 }
 
 export interface Resume {
@@ -39,7 +41,7 @@ export interface Resume {
 const MB = 1024 * 1024
 /** SizeFilter.DEFAULT_MIN and DEFAULT_MAX: 50 MB up, no top. */
 export const SIZE_DEFAULTS = { sizeMin: 50 * MB, sizeMax: 8 * 1024 * MB }
-const DEFAULTS: Settings = { theme: 'system', ...SIZE_DEFAULTS, sort: 'Newest', posters: true, rewindMs: null, carousel: true }
+const DEFAULTS: Settings = { theme: 'system', ...SIZE_DEFAULTS, sort: 'Newest', posters: true, rewindMs: null, carousel: true, rows: false }
 const THEME_KEY = 'tmplayer-theme'
 
 let db: UseStore | null = null

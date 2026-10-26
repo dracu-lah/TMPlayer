@@ -7,8 +7,9 @@ import { api, call } from '../tg/rpc'
 import { t } from '../i18n'
 import { laterIds, laterList, resumes, starredIds, watchedList, watchedTick } from '../store'
 import { Icon, type IconData } from '../ui/Icon'
-import { Card, useProgress, videoCard } from './VideoList'
+import { Card, ContinueCard, useLeft, useProgress, videoCard } from './VideoList'
 import { ChatRow } from './Chats'
+import { form } from '../form'
 import type { VideoItem } from '../tg/types'
 
 /** How many videos a tab asks Telegram about at most: the ones further back wait for their own page. */
@@ -81,6 +82,7 @@ export function HistoryPage() {
         },
     )
     const progress = useProgress()
+    const leftOf = useLeft()
     const days = () => byDay(entries.latest ?? [])
     return (
         <>
@@ -109,8 +111,14 @@ export function HistoryPage() {
                         {(d) => (
                             <section class="history-day">
                                 <h2 class="history-day-title">{d.label}</h2>
-                                <div class="cards">
-                                    <For each={d.entries}>{(e) => <Card card={videoCard(e.item)} progress={progress(e.item)} direct={tab() === 'continue'} />}</For>
+                                <div class="cards" classList={{ 'continue-cards': tab() === 'continue' && form() !== 'tv' }}>
+                                    <For each={d.entries}>
+                                        {(e) => (
+                                            <Show when={tab() === 'continue' && form() !== 'tv'} fallback={<Card card={videoCard(e.item)} progress={progress(e.item)} direct={tab() === 'continue'} />}>
+                                                <ContinueCard item={e.item} left={leftOf(e.item)} />
+                                            </Show>
+                                        )}
+                                    </For>
                                 </div>
                             </section>
                         )}

@@ -146,6 +146,33 @@ class WebRulesTest {
     }
 
     @Test
+    fun `a Continue watching card is named as the apps name it`() {
+        val videos = screen(
+            arrayOf(
+                raw(1, "Harbour.Notes.S01E02.720p.mkv"),
+                raw(2, "Clap.2022.1080p.WEBRip.x265.mkv"),
+            ),
+        ).videos
+        assertEquals("S1 E2  \u00B7  Harbour Notes", continueTitle(videos[0]))
+        assertEquals("Clap", continueTitle(videos[1]))
+    }
+
+    @Test
+    fun `a copy is told by its quality, its picture codec and where it came from`() {
+        val videos = screen(
+            arrayOf(
+                raw(1, "Clap.2022.1080p.BluRay.x264.mkv"),
+                raw(2, "Clap.2022.2160p.HDR.HEVC.mkv"),
+                raw(3, "clap.mkv"),
+            ),
+        ).videos
+        assertContentEquals(arrayOf("1080p", "H.264", "Blu-ray"), copyFacts(videos[0]))
+        assertEquals("4K", copyFacts(videos[1])[0])
+        assertEquals("1080p", qualityLabel(videos[0]))
+        assertNull(qualityLabel(videos[2]))
+    }
+
+    @Test
     fun `fuzzy search forgives a typo and ranks the whole phrase first`() {
         val texts = arrayOf("Quiet Valley", "Harbour Notes", "Harbor Notes Extra")
         assertContentEquals(arrayOf(1, 2), rank(texts, "harbour notes"))

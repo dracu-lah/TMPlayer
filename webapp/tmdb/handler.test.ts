@@ -41,6 +41,8 @@ const get = (handle: ReturnType<typeof createHandler>, path: string, env: { TMDB
 const film = (id: number, title: string, year: number, poster: string | null = `/p${id}abcdefgh.jpg`, language = 'en') => ({
     id,
     title,
+    overview: id === 2 ? ' A gentle giant of a rabbit. ' : '',
+    backdrop_path: id === 2 ? '/b2abcdefghij.jpg' : null,
     original_title: title,
     release_date: `${year}-05-01`,
     poster_path: poster,
@@ -53,7 +55,7 @@ test('a film is found by its title and year and answered with the poster path', 
     const handle = createHandler(m.deps)
     const r = await get(handle, '/tmdb/poster?k=film&t=Clap&y=2022')
     assert.equal(r.status, 200)
-    assert.deepEqual(await r.json(), { match: true, id: '2', kind: 'film', title: 'Clap', year: 2022, poster: '/p2abcdefgh.jpg' })
+    assert.deepEqual(await r.json(), { match: true, id: '2', kind: 'film', title: 'Clap', year: 2022, poster: '/p2abcdefgh.jpg', backdrop: '/b2abcdefghij.jpg', overview: 'A gentle giant of a rabbit.' })
     assert.equal(m.calls.length, 1)
     assert.equal(m.calls[0].searchParams.get('query'), 'Clap')
     assert.equal(m.calls[0].searchParams.get('year'), '2022')
@@ -211,4 +213,84 @@ test('posters come through the image route at the sizes the page uses, and nothi
     // No key is needed, or sent, for a picture.
     assert.equal((await get(handle, '/tmdb/img/w342/abcdefgh12.jpg', {})).status, 200)
     assert.ok(m.calls.every((u) => !u.search))
+})
+
+const FILM_PAGE = {
+    id: 2,
+    genres: [{ id: 16, name: 'Animation' }, { id: 35, name: 'Comedy' }],
+    runtime: 24,
+    vote_average: 6.46,
+    vote_count: 3100,
+    imdb_id: 'tt1254207',
+    credits: {
+        cast: [
+            { name: 'Second', character: 'Frank', order: 1, profile_path: '/second0123.jpg' },
+            { name: 'First', character: 'Big Buck', order: 0, profile_path: null },
+        ],
+        crew: [{ name: 'Sacha', job: 'Director' }, { name: 'Sacha', job: 'Director' }, { name: 'Someone', job: 'Editor' }],
+    },
+    videos: { results: [{ site: 'YouTube', key: 'teaser1', type: 'Teaser', official: true, iso_639_1: 'en', published_at: '2020-01-01' }, { site: 'YouTube', key: 'trailer1', type: 'Trailer', official: true, iso_639_1: 'en', published_at: '2019-01-01' }, { site: 'Vimeo', key: 'v', type: 'Trailer' }] },
+    release_dates: { results: [{ iso_3166_1: 'US', release_dates: [{ certification: 'G', type: 3 }, { certification: 'PG', type: 4 }] }, { iso_3166_1: 'GB', release_dates: [{ certification: 'U', type: 3 }] }] },
+}
+
+test('the extras: genres, length, rating, age rating, directors, cast in order, the trailer on YouTube', async () => {
+    const m = mock((u) => (u.pathname.endsWith('/movie/2') ? j(FILM_PAGE) : j({}, 500)))
+    const r = await get(createHandler(m.deps), '/tmdb/extras?k=film&id=2&r=GB')
+    assert.equal(r.status, 200)
+    const body = await r.json()
+    assert.deepEqual(body, {
+        found: true,
+        genres: ['Animation', 'Comedy'],
+        runtime: 24,
+        seasons: null,
+        rating: 6.5,
+        certification: 'U',
+        directors: ['Sacha'],
+        creators: [],
+        cast: [{ name: 'First', role: 'Big Buck', photo: null }, { name: 'Second', role: 'Frank', photo: '/second0123.jpg' }],
+        trailer: 'trailer1',
+        ended: false,
+        imdb: 'tt1254207',
+    })
+    assert.match(m.calls[0].searchParams.get('append_to_response')!, /credits,videos,release_dates/)
+    assert.match(r.headers.get('cache-control')!, new RegExp(`s-maxage=${FOUND_TTL}`))
+})
+
+test('too few votes say nothing: no rating', async () => {
+    const m = mock(() => j({ ...FILM_PAGE, vote_count: 24 }))
+    const body = await (await get(createHandler(m.deps), '/tmdb/extras?k=film&id=2')).json()
+    assert.equal(body.rating, null)
+    assert.equal(body.certification, 'G', 'the US one when the region has none given')
+})
+
+test('a show with an episode asks for the episode too, and a failed episode keeps the show', async () => {
+    const page = { id: 9, genres: [], episode_run_time: [0, 45], number_of_seasons: 3, status: 'Ended', created_by: [{ name: 'Maker' }], aggregate_credits: { cast: [{ name: 'A', total_episode_count: 3, roles: [{ character: 'x', episode_count: 1 }, { character: 'y', episode_count: 2 }] }] }, content_ratings: { results: [{ iso_3166_1: 'US', rating: 'TV-14' }] }, external_ids: { imdb_id: 'tt1' } }
+    const m = mock((u) => (u.pathname.endsWith('/episode/4') ? j({ name: 'The Lighthouse', overview: 'Words.', still_path: '/still01234.jpg' }) : j(page)))
+    const handle = createHandler(m.deps)
+    const body = await (await get(handle, '/tmdb/extras?k=show&id=9&s=1&e=4')).json()
+    assert.deepEqual([body.runtime, body.seasons, body.ended, body.creators, body.certification, body.cast[0].role], [45, 3, true, ['Maker'], 'TV-14', 'y'])
+    assert.deepEqual(body.episode, { name: 'The Lighthouse', overview: 'Words.', still: '/still01234.jpg' })
+    const m2 = mock((u) => (u.pathname.endsWith('/episode/4') ? j({}, 404) : j(page)))
+    const again = await (await get(createHandler(m2.deps), '/tmdb/extras?k=show&id=9&s=1&e=4')).json()
+    assert.equal(again.found, true)
+    assert.equal(again.episode, undefined)
+})
+
+test('extras: nothing is kept for a failure, a missing title is kept as a miss, the key stays in the worker', async () => {
+    const down = mock(() => j({}, 500))
+    const r = await get(createHandler(down.deps), '/tmdb/extras?k=film&id=2')
+    assert.equal(r.status, 503)
+    assert.equal(down.cache.size, 0)
+    const gone = mock(() => j({}, 404))
+    const g = await get(createHandler(gone.deps), '/tmdb/extras?k=film&id=2')
+    assert.deepEqual(await g.json(), { found: false })
+    assert.match(g.headers.get('cache-control')!, new RegExp(`s-maxage=${MISS_TTL}`))
+    const ok = mock(() => j(FILM_PAGE))
+    const h = createHandler(ok.deps)
+    const first = await get(h, '/tmdb/extras?k=film&id=2')
+    assert.ok(!(await first.text()).includes(KEY))
+    await get(h, '/tmdb/extras?k=film&id=2')
+    assert.equal(ok.calls.length, 1, 'the second answer comes from the cache')
+    assert.equal((await get(h, '/tmdb/extras?k=film&id=abc')).status, 400)
+    assert.equal((await get(createHandler(ok.deps), '/tmdb/extras?k=film&id=2', {})).status, 503)
 })

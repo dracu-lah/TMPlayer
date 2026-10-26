@@ -43,7 +43,7 @@ async function openShows(page: Page) {
     await expect(page).toHaveURL(/\/chat\/-1002/)
 }
 
-const FOUND = { match: true, id: '77', kind: 'show', title: 'Harbour Notes', year: 2019, poster: '/harbournotes0.jpg' }
+const FOUND = { match: true, id: '77', kind: 'show', title: 'Harbour Notes', year: 2019, poster: '/harbournotes0.jpg', backdrop: null, overview: '' }
 
 test('a show card draws the poster for the title the app asks about, and nothing else leaves the page', async ({ page }) => {
     const seen = await mockTmdb(page, FOUND)
@@ -105,15 +105,17 @@ test('the Settings switch turns lookups off at once, and stays off after a reloa
     await page.goto('/')
     await page.locator('[data-you]').click()
     await page.getByRole('menuitem', { name: 'Settings' }).click()
+    // Settings is a list of pages; Posters is on Library.
+    await page.getByRole('link', { name: /^Library/ }).click()
     await expect(page.getByText('This product uses the TMDB API but is not endorsed or certified by TMDB.')).toBeVisible()
     await expect(page.getByLabel('TMDB').first()).toBeVisible()
-    const group = page.getByRole('radiogroup', { name: 'Posters' })
-    await expect(group.getByLabel('On')).toBeChecked()
-    await group.getByText('Off', { exact: true }).click()
+    const posters = page.getByRole('switch', { name: /^Posters/ })
+    await expect(posters).toHaveAttribute('aria-checked', 'true')
+    await posters.click()
     await expect(page.getByText('Off. Nothing is looked up online')).toBeVisible()
     const asked = seen.asks.length
     await page.reload()
-    await expect(group.getByLabel('Off')).toBeChecked()
+    await expect(posters).toHaveAttribute('aria-checked', 'false')
     await page.goBack()
     await page.goto('/chats')
     await page.getByRole('link', { name: /Test Shows/ }).first().click()

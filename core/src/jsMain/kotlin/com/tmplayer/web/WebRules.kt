@@ -13,6 +13,8 @@ import com.tmplayer.data.EpisodeTag
 import com.tmplayer.data.Fuzzy
 import com.tmplayer.data.HomeRow
 import com.tmplayer.data.HomeRows
+import com.tmplayer.data.LessonSteps
+import com.tmplayer.data.MediaFacts
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaName
 import com.tmplayer.data.MediaText
@@ -20,8 +22,10 @@ import com.tmplayer.data.ResumeRecord
 import com.tmplayer.data.ResumeRewind
 import com.tmplayer.data.Series
 import com.tmplayer.data.SeriesShelf
+import com.tmplayer.data.copyQuality
 import com.tmplayer.data.ShelfEntry
 import com.tmplayer.data.SizeFilter
+import com.tmplayer.data.VideoCopies
 import com.tmplayer.data.VideoSort
 import com.tmplayer.data.VideoSorting
 import com.tmplayer.i18n.L
@@ -337,6 +341,49 @@ fun posterAsk(video: Video): PosterAsk? {
 
 /** The title a tile shows for [video], as the apps' cards do. */
 fun tileTitle(video: Video): String = SeriesShelf.tileTitle(toItem(video))
+
+/**
+ * The name a Continue watching card writes under its picture (the apps' continueCardTitle): "S1 E3  ·  Harbour
+ * Notes" for an episode, "Part 4  ·  Small shelf" for a lesson, the film's or the video's name otherwise.
+ */
+fun continueTitle(video: Video): String {
+    val item = toItem(video)
+    val parsed = SeriesShelf.episodeOf(item)
+    val episode = parsed.episode?.let { number -> parsed.season?.let { L.seriesEpisodeShort(it, number) } ?: L.seriesEpisode(number) }
+    val (label, title) = if (episode != null) {
+        val name = parsed.title.ifBlank { SeriesShelf.tileTitle(item) }
+        // A file named by its episode alone ("Episode 1") is not given the label twice.
+        if (name.isBlank() || episode.startsWith(name, ignoreCase = true)) null to episode else episode to name
+    } else {
+        val lesson = LessonSteps.lessonOf(item)
+        if (lesson != null) {
+            lesson.code to readable(lesson.course).ifBlank { SeriesShelf.tileTitle(item) }
+        } else {
+            null to if (SeriesShelf.isFilm(item)) SeriesShelf.posterTitle(item) else SeriesShelf.tileTitle(item)
+        }
+    }
+    return listOfNotNull(label, title.ifBlank { null }).joinToString("  \u00B7  ")
+}
+
+/**
+ * What a copy is called in a list of copies (the apps' copyHeading): its quality ("1080p", "4K", else
+ * its size), then what its name says of the picture: "1080p", "H.264", "Blu-ray". Facts the name does not state are left out.
+ */
+fun copyFacts(video: Video): Array<String> {
+    val item = toItem(video)
+    val facts = MediaFacts.read(item.fileName.ifBlank { item.title }, item.width, item.height)
+    val quality = VideoCopies.heightOf(item)?.let { item.copyQuality() }
+    return listOfNotNull(quality, facts.videoCodec, facts.dynamicRange, facts.source).toTypedArray()
+}
+
+/** The quality a video is badged with on its page ("1080p", "4K"), or null when neither its name nor its size says (VideoCopies.qualityLabel). */
+fun qualityLabel(video: Video): String? = VideoCopies.qualityLabel(toItem(video))
+
+/** A course's name as a file name writes it ("small-shelf"), read as words ("Small shelf"). */
+private fun readable(name: String): String {
+    val words = name.replace(Regex("[._-]+"), " ").trim().replace(Regex("\\s+"), " ")
+    return if (words == words.lowercase()) words.replaceFirstChar { it.titlecase() } else words
+}
 
 /** Indexes of [texts] that answer [query], best first; every index for a blank query. */
 fun rank(texts: Array<String>, query: String): Array<Int> =

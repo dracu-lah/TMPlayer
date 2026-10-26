@@ -2,11 +2,11 @@ import { createEffect, createResource, createSignal, onCleanup, onMount, Show } 
 import { A } from '@solidjs/router'
 import { resumes, settings } from '../store'
 import { loadThumb } from './thumbs'
-import { loadPoster } from './posters'
+import { loadBackdrop, loadPoster } from './posters'
 import { warmDataCentres, warmFile } from '../stream/reader'
 import { t } from '../i18n'
 import { form } from '../form'
-import { cardLayout, VirtualGrid } from '../ui/VirtualGrid'
+import { cardLayout, rowLayout, VirtualGrid } from '../ui/VirtualGrid'
 import { placeSponsored, SponsoredCard } from './Sponsored'
 import type { SponsoredItem, Tile, VideoItem } from '../tg/types'
 import type { PosterAsk } from '../rules'
@@ -21,6 +21,22 @@ export function length(s: number): string {
     const h = Math.floor(s / 3600)
     const m = Math.round((s % 3600) / 60)
     return h ? `${h} h ${m} min` : `${Math.max(1, m)} min`
+}
+
+/** SeekMath.clock: 1:05, 1:02:03. */
+export function clock(seconds: number): string {
+    const s = Math.max(0, Math.floor(seconds))
+    const h = Math.floor(s / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    const sec = String(s % 60).padStart(2, '0')
+    return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
+}
+
+/** The app's short length: 24m, 1h 52m. */
+export function shortLength(seconds: number): string {
+    if (!seconds) return ''
+    const m = Math.max(1, Math.round(seconds / 60))
+    return m >= 60 ? t('format.hours_minutes', { hours: Math.floor(m / 60), minutes: m % 60 }) : t('format.minutes', { minutes: m })
 }
 
 export const watchPath = (v: Pick<VideoItem, 'chatId' | 'messageId'>) => `/watch/${v.chatId}/${v.messageId}`
@@ -39,7 +55,7 @@ const cardPath = (v: VideoItem, direct?: boolean) => (direct || form() === 'tv' 
  * is one, as the app's PosterArt does, and the name is left to the poster (kept for screen
  * readers). A lookup that fails, or posters turned off, leaves the thumbnail.
  */
-function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk | null; progress?: number }) {
+function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk | null; progress?: number; bare?: boolean }) {
     let el!: HTMLDivElement
     const [src, setSrc] = createSignal<string | null>(null)
     const [seen, setSeen] = createSignal(false)
@@ -65,7 +81,7 @@ function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk
         onCleanup(() => (live = false))
     })
     return (
-        <div class="card-art" classList={{ posted: !!picture() }} ref={el} title={picture() ? props.title : undefined}>
+        <div class="card-art" classList={{ posted: !!picture(), bare: !!props.bare }} ref={el} title={picture() ? props.title : undefined}>
             <Show when={src()}>
                 <img class="card-fill" src={src()!} alt="" decoding="async" />
                 <img class="card-frame" src={src()!} alt="" decoding="async" />
@@ -133,22 +149,117 @@ const intent = (v: VideoItem) => {
     hoverTimer = window.setTimeout(() => warmFile(v), 250)
 }
 
+/** What every card's link does: warm the file on intent, keep the video it stands for for the page it opens. */
+function cardLink(item: VideoItem, direct?: boolean, replace?: boolean) {
+    return {
+        href: cardPath(item, direct),
+        state: { video: item },
+        replace,
+        onPointerEnter: () => intent(item),
+        onPointerLeave: () => clearTimeout(hoverTimer),
+        onFocus: () => intent(item),
+        // A touch may be the start of a scroll: the watch page warms the file once it opens.
+        onPointerDown: (e: PointerEvent) => e.pointerType === 'mouse' && warmFile(item),
+    }
+}
+
 /** One portrait card, which opens the video's page (or plays it, from Continue watching). */
 export function Card(props: { card: CardData; progress?: number; replace?: boolean; direct?: boolean }) {
     return (
-        <A
-            class="card"
-            href={cardPath(props.card.item, props.direct)}
-            state={{ video: props.card.item }}
-            replace={props.replace}
-            onPointerEnter={() => intent(props.card.item)}
-            onPointerLeave={() => clearTimeout(hoverTimer)}
-            onFocus={() => intent(props.card.item)}
-            // A touch may be the start of a scroll: the watch page warms the file once it opens.
-            onPointerDown={(e: PointerEvent) => e.pointerType === 'mouse' && warmFile(props.card.item)}
-        >
+        <A class="card" {...cardLink(props.card.item, props.direct, props.replace)}>
             <CardArt thumb={props.card.item.thumb} title={props.card.title} poster={props.card.item.poster} progress={props.progress} />
             <div class="card-facts">{props.card.facts}</div>
+        </A>
+    )
+}
+
+/**
+ * One video as a row (the apps' MediaRow, "As rows"): a small 2:3 poster, the name over up to three
+ * lines and a line of facts under it. No card round it: rows read as a list on spacing alone.
+ */
+export function RowCard(props: { card: CardData; progress?: number }) {
+    return (
+        <A class="row-card" {...cardLink(props.card.item)}>
+            <div class="row-art">
+                <CardArt thumb={props.card.item.thumb} title={props.card.title} poster={props.card.item.poster} progress={props.progress} bare />
+            </div>
+            <div class="row-text">
+                <div class="row-name">{props.card.title}</div>
+                <div class="row-facts">{props.card.facts}</div>
+            </div>
+        </A>
+    )
+}
+
+/** Where a video was left: how far through, and how long is left. */
+export interface Left {
+    fraction: number
+    seconds: number
+}
+
+/** Where each video was left, as its Continue watching card says it. */
+export function useLeft(): (v: VideoItem) => Left | undefined {
+    const [left] = createResource(async () => new Map((await resumes()).map((r) => [`${r.chatId}:${r.messageId}`, r])))
+    return (v: VideoItem) => {
+        const r = left()?.get(`${v.chatId}:${v.messageId}`)
+        const total = r?.length || v.duration
+        return r && total ? { fraction: Math.min(1, r.position / total), seconds: Math.max(0, total - r.position) } : undefined
+    }
+}
+
+/**
+ * A Continue watching card (ContinueCardArt): the picture across 16:9 under the tile's foot fade,
+ * how long is left in a chip at its top end, a pill of progress along its foot, and under it the
+ * name ("S1 E3  ·  Harbour Notes") over the chat and size. It plays the video at once.
+ */
+export function ContinueCard(props: { item: VideoItem; left?: Left }) {
+    let el!: HTMLDivElement
+    const [src, setSrc] = createSignal<string | null>(null)
+    const [seen, setSeen] = createSignal(false)
+    const [wide, setWide] = createSignal<string | null>(null)
+    onMount(() => {
+        const io = new IntersectionObserver((entries) => {
+            if (!entries.some((e) => e.isIntersecting)) return
+            io.disconnect()
+            setSeen(true)
+            if (props.item.thumb) loadThumb(props.item.thumb).then(setSrc, () => {})
+        })
+        io.observe(el)
+        onCleanup(() => io.disconnect())
+    })
+    // The title's own wide picture where TMDB has one (OnlineArt), the video's frame until then.
+    createEffect(() => {
+        const ask = props.item.poster
+        if (!seen() || !ask || !settings().posters) return void setWide(null)
+        let live = true
+        loadBackdrop(ask).then(
+            (url) => live && setWide(url),
+            () => {},
+        )
+        onCleanup(() => live && setWide(null))
+    })
+    const facts = () => [props.item.chat, size(props.item.size)].filter(Boolean).join(dot)
+    return (
+        <A class="card continue-card" {...cardLink(props.item, true)}>
+            <div class="continue-art" ref={el}>
+                <Show when={src()}>
+                    <img class="continue-img" src={src()!} alt="" decoding="async" />
+                </Show>
+                <Show when={wide()}>
+                    <img class="continue-img" src={wide()!} alt="" decoding="async" />
+                </Show>
+                <div class="continue-scrim" />
+                <Show when={props.left && props.left.seconds > 0}>
+                    <span class="tile-badge">{t('browse.time_left', { time: shortLength(props.left!.seconds) })}</span>
+                </Show>
+                <Show when={props.left}>
+                    <div class="pill-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(props.left!.fraction * 100)}>
+                        <div style={{ width: `${Math.max(props.left!.fraction * 100, 3)}%` }} />
+                    </div>
+                </Show>
+            </div>
+            <div class="continue-name">{props.item.name}</div>
+            <div class="card-facts">{facts()}</div>
         </A>
     )
 }
@@ -170,14 +281,14 @@ const isSponsored = (e: CardData | SponsoredItem): e is SponsoredItem => !('item
  * A grid of portrait cards, drawn a few rows at a time. `onEnd` asks for more near the foot. A
  * channel's sponsored messages take rows of their own, spaced as Telegram asks.
  */
-export function VideoList(props: { cards: CardData[]; label?: string; onEnd?: () => void; sponsored?: SponsoredItem[]; sponsoredBetween?: number }) {
+export function VideoList(props: { cards: CardData[]; label?: string; onEnd?: () => void; sponsored?: SponsoredItem[]; sponsoredBetween?: number; rows?: boolean }) {
     useWarmDataCentres(() => props.cards.map((c) => c.item))
     onCleanup(() => clearTimeout(hoverTimer))
     const progress = useProgress()
     const entries = () => placeSponsored(props.cards, props.sponsored ?? [], props.sponsoredBetween ?? 0)
     return (
-        <VirtualGrid items={entries()} layout={cardLayout} rowClass="cards" label={props.label} onEnd={props.onEnd} wide={isSponsored}>
-            {(e) => (isSponsored(e) ? <SponsoredCard item={e} /> : <Card card={e} progress={progress(e.item)} />)}
+        <VirtualGrid items={entries()} layout={props.rows ? rowLayout : cardLayout} rowClass={props.rows ? 'rowcards' : 'cards'} label={props.label} onEnd={props.onEnd} wide={isSponsored}>
+            {(e) => (isSponsored(e) ? <SponsoredCard item={e} /> : props.rows ? <RowCard card={e} progress={progress(e.item)} /> : <Card card={e} progress={progress(e.item)} />)}
         </VirtualGrid>
     )
 }
@@ -188,7 +299,7 @@ export function HiddenBySize(props: { count: number }) {
         <Show when={props.count}>
             <p class="notice muted small">
                 {t('browse.hidden_by_size', { count: props.count })}{' '}
-                <A class="inline-link" href="/settings#size">{t('browse.size_limits_in_settings')}</A>
+                <A class="inline-link" href="/settings/library#size">{t('browse.size_limits_in_settings')}</A>
             </p>
         </Show>
     )
