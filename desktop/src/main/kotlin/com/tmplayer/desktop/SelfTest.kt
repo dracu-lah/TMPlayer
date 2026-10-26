@@ -15,7 +15,8 @@ import java.io.File
 
 /**
  * `TMPlayer --self-test`: loads every native library the app depends on and every UI language's
- * catalog, prints what it found and exits 0, or 1 if anything failed to load. No window, no Telegram account, no network.
+ * catalog, links every class of the app's own code with the verifier on ([ClassLinkCheck]), prints
+ * what it found and exits 0, or 1 if anything failed to load. No window, no Telegram account, no network.
  *
  * CI runs it against the packaged app (the Linux app image, the AppImage, the Flatpak, the
  * installed MSI and the portable zip), so a release can never ship an installer whose natives do
@@ -56,6 +57,7 @@ object SelfTest {
         step("libmpv") { mpvVersions() }
         step("jna") { "${Native.VERSION}, native ${Native.VERSION_NATIVE}, pointer size ${Native.POINTER_SIZE}" }
         step("i18n") { catalogs() }
+        step("classes") { linkClasses() }
         step("skiko") {
             org.jetbrains.skiko.Library.load()
             "loaded"
@@ -126,6 +128,19 @@ object SelfTest {
         Translator.load(Languages.PSEUDO)
         return "${keys.size} English keys; ${present.size} of ${others.size} translations present" +
             present.joinToString(prefix = if (present.isEmpty()) "" else " (", postfix = if (present.isEmpty()) "" else ")")
+    }
+
+    /**
+     * Links every class of the app's own code in the packaged jars with the verifier on, so a
+     * class the JVM would refuse (HX1, 1.28.1's SeriesKt) fails here and not on a viewer's screen.
+     */
+    private fun linkClasses(): String {
+        val result = ClassLinkCheck.run()
+        check(result.passed) {
+            "${result.failures.size} of ${result.linked + result.failures.size} classes failed to link: " +
+                result.failures.take(5).joinToString("; ")
+        }
+        return "${result.linked} com.tmplayer classes linked from ${result.roots.joinToString { it.name }}"
     }
 
     private val VALUE = Regex(""""value"\s*:\s*"([^"]*)"""")
