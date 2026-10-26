@@ -101,7 +101,8 @@ function Shell(props: ParentProps) {
                         </ErrorBoundary>
                     </main>
                     <Show when={!playing() && !detail()}>
-                        <Show when={form() === 'tv'} fallback={<Nav />}>
+                        {/* A chat has its own bar at the foot on a phone and a desktop (Chat.tsx). */}
+                        <Show when={form() === 'tv'} fallback={<Show when={!location.pathname.startsWith('/chat/')}><Nav /></Show>}>
                             <TvBar />
                         </Show>
                     </Show>

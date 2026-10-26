@@ -19,6 +19,7 @@ export const PAGE_STRINGS = [
     'browse.empty_favourites_touch',
     'browse.empty_watch_later',
     'browse.empty_watched',
+    'browse.favourite',
     'browse.finding_videos',
     'browse.go_to_chats',
     'browse.hidden_by_size',

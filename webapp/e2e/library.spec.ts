@@ -14,6 +14,8 @@ test('Watch later on a video page puts it in the You menu list, and off again', 
     await later.click()
     await expect(later).toHaveAttribute('aria-pressed', 'true')
     await page.locator('.detail-close').click()
+    // A chat has its own bar at the foot; the main bar, with the viewer's picture, is a step back.
+    await page.goBack()
     await page.locator('[data-you]').click()
     await page.getByRole('menuitem', { name: 'Watch later' }).click()
     await expect(page).toHaveURL(/\/history\/later$/)

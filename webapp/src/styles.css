@@ -746,3 +746,11 @@ button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor
 :root[data-form="desktop"] .hero-dots { left: auto; right: calc(var(--gutter) + 8px); bottom: 56px; }
 :root[data-form="desktop"] .hero-frame { left: auto; right: 0; transform: translateY(-50%); width: min(70%, 900px); -webkit-mask-image: linear-gradient(to right, transparent, #000 30%); mask-image: linear-gradient(to right, transparent, #000 30%); }
 @media (prefers-reduced-motion: reduce) { .hero-wait, .hero-fill, .hero-frame { animation: none; } }
+
+/* A chat's own bar at the foot (ChatBar): Search, Favourite, Sort and Refresh in the main bar's pill. */
+.chat-bar .nav-cell[aria-pressed="true"] { color: var(--accent); }
+.chat-bar .nav-cell.star.on { color: var(--accent); }
+.chat-bar .nav-cell:disabled { opacity: .5; cursor: default; }
+.chat-bar .nav-cell.spinning .icon { animation: spin 800ms linear infinite; }
+.chat-bar .menu-box { position: relative; display: flex; }
+.chat-bar .pop-menu { top: auto; bottom: calc(100% + 14px); right: 50%; transform: translateX(50%); animation: none; }

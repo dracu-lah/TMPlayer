@@ -1,10 +1,11 @@
 import { createEffect, createResource, createSignal, For, on, onCleanup, Show } from 'solid-js'
 import { useParams, useSearchParams } from '@solidjs/router'
-import { Cancel01Icon, RefreshIcon, Search01Icon, Sorting01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { Cancel01Icon, RefreshIcon, Search01Icon, Sorting01Icon, StarIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { call, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
 import { t } from '../i18n'
-import { progress as readProgress, settings, setSetting } from '../store'
+import { progress as readProgress, settings, setSetting, setStarred, starredIds } from '../store'
+import { form } from '../form'
 import { Icon } from '../ui/Icon'
 import { PageBar } from '../ui/PageBar'
 import { ChatPicture } from './ChatPicture'
@@ -146,7 +147,8 @@ export function Chat() {
                 title={title()}
                 picture={<ChatPicture photo={page()?.photo ?? null} name={title()} self={page()?.self} class="avatar compact" />}
                 actions={
-                    <>
+                    // The TV keeps the chat's buttons at the top; a phone and a desktop have them on the chat's own bar at the foot.
+                    <Show when={form() === 'tv'}>
                         <StarButton chatId={chatId()} round />
                         <SortMenu />
                         <button
@@ -170,9 +172,43 @@ export function Chat() {
                         >
                             <Icon icon={RefreshIcon} size={22} />
                         </button>
-                    </>
+                    </Show>
                 }
             />
+            <Show when={form() !== 'tv'}>
+                {/* The chat's bar (ChatBar): in place of the main bar while a chat is open, as the apps have it. */}
+                <nav class="nav chat-bar" aria-label={title()}>
+                    <div class="nav-cells">
+                        <button type="button" class="nav-cell" aria-pressed={searching()} title={t('browse.search_chat')} onClick={() => (searching() ? closeSearch() : setSearching(true))}>
+                            <span class="nav-glyph"><Icon icon={searching() ? Cancel01Icon : Search01Icon} size={22} /></span>
+                            <span class="nav-label">{t('common.search')}</span>
+                        </button>
+                        <button
+                            type="button"
+                            class="nav-cell star"
+                            classList={{ on: starredIds().has(chatId()) }}
+                            aria-pressed={starredIds().has(chatId())}
+                            title={starredIds().has(chatId()) ? t('chats.unfavourite') : t('chats.favourite')}
+                            onClick={() => setStarred(chatId(), !starredIds().has(chatId()))}
+                        >
+                            <span class="nav-glyph"><Icon icon={StarIcon} size={22} selected={starredIds().has(chatId())} /></span>
+                            <span class="nav-label">{t('browse.favourite')}</span>
+                        </button>
+                        <SortMenu cell />
+                        <button
+                            type="button"
+                            class="nav-cell"
+                            classList={{ spinning: busy() === 'refresh' }}
+                            disabled={busy() === 'refresh' || busy() === 'open'}
+                            title={t('common.refresh')}
+                            onClick={() => run('refresh')}
+                        >
+                            <span class="nav-glyph"><Icon icon={RefreshIcon} size={22} /></span>
+                            <span class="nav-label">{t('common.refresh')}</span>
+                        </button>
+                    </div>
+                </nav>
+            </Show>
             <Show when={searching()}>
                 <label class="search-field">
                     <Icon icon={Search01Icon} size={20} />
@@ -235,7 +271,7 @@ export function Chat() {
 }
 
 /** Sort videos by: the app's seven orders in one list, the chosen one ticked. Kept for every chat. */
-function SortMenu() {
+function SortMenu(props: { cell?: boolean }) {
     const [open, setOpen] = createSignal(false)
     let box!: HTMLDivElement
     const close = (e: Event) => {
@@ -253,7 +289,7 @@ function SortMenu() {
     return (
         <div class="menu-box" ref={box}>
             <button
-                class="round-button"
+                class={props.cell ? 'nav-cell' : 'round-button'}
                 type="button"
                 aria-haspopup="true"
                 aria-expanded={open()}
@@ -261,7 +297,10 @@ function SortMenu() {
                 title={t('grid.sort_label')}
                 onClick={() => setOpen(!open())}
             >
-                <Icon icon={Sorting01Icon} size={22} />
+                <Show when={props.cell} fallback={<Icon icon={Sorting01Icon} size={22} />}>
+                    <span class="nav-glyph"><Icon icon={Sorting01Icon} size={22} /></span>
+                    <span class="nav-label">{t('grid.sort')}</span>
+                </Show>
             </button>
             <Show when={open()}>
                 <div class="pop-menu" role="menu" aria-label={t('grid.sort_label')}>
