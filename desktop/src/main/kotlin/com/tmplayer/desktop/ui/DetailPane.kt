@@ -85,9 +85,8 @@ import java.io.File
 
 /**
  * The detail sheet (R5) over whatever page is showing, when [ShellState.detail] asks for one: the
- * large title page ([WideDetailPanel]) on a sheet that floats over the page from the end edge,
- * over a scrim. The page under it never moves or resizes. Esc, Back, the sheet's Close or a click
- * on the scrim closes it, and focus goes back to the poster it came from. Focus stays inside the
+ * large title page ([WideDetailPanel]) filling the window over the page. The page under it never moves or resizes. Esc, Back or the page's Back button
+ * closes it, and focus goes back to the poster it came from. Focus stays inside the
  * sheet while it is open, so Tab walks the sheet's buttons rather than the page hidden under it.
  *
  * The sheet slides a little way in from the end edge as it fades in, and back out as it closes;
@@ -120,7 +119,6 @@ fun BoxScope.DetailPaneHost(state: ShellState) {
     }
     BoxWithConstraints(Modifier.matchParentSize()) {
         val width = sheetWidth(maxWidth)
-        val full = width >= maxWidth
         val slide = androidx.compose.animation.core.tween<androidx.compose.ui.unit.IntOffset>(
             com.tmplayer.ui.theme.Motion.Normal,
             easing = com.tmplayer.ui.theme.Motion.Standard,
@@ -131,41 +129,32 @@ fun BoxScope.DetailPaneHost(state: ShellState) {
             enter = fadeIn(fade) + if (still) EnterTransition.None else slideInHorizontally(slide) { it / 10 },
             exit = fadeOut(fade) + if (still) ExitTransition.None else slideOutHorizontally(slide) { it / 10 },
         ) {
-            shown?.let { PaneSheet(state, it, open, full, Modifier.width(width)) }
+            shown?.let { PaneSheet(state, it, open, Modifier.width(width)) }
         }
     }
 }
 
 /**
- * How wide the sheet is over a page [available] wide: most of a laptop's window, never wider than
- * a title page reads well at, and the whole window where a sheet would leave no page to see.
+ * The detail page fills the whole window (user, 2026-10-27), like a page of its own with a Back
+ * button, so nobody takes it for a card to dismiss. The page under it stays where it was.
  */
-internal fun sheetWidth(available: Dp): Dp = when {
-    available < SHEET_WHOLE_BELOW -> available
-    else -> (available * 0.62f).coerceIn(SHEET_MIN, SHEET_MAX).coerceAtMost(available - SHEET_INSET * 2)
-}
-
-private val SHEET_WHOLE_BELOW = 840.dp
-private val SHEET_MIN = 760.dp
-private val SHEET_MAX = 1080.dp
-private val SHEET_INSET = 12.dp
+internal fun sheetWidth(available: Dp): Dp = available
 
 /** Frames to wait for Play to be placed before giving its focus up. */
 private const val FOCUS_TRIES = 10
 
 @Composable
-private fun PaneSheet(state: ShellState, request: DetailRequest, open: Boolean, full: Boolean, modifier: Modifier) {
-    val shape = if (full) RoundedCornerShape(0.dp) else RoundedCornerShape(Corner.ExtraLarge)
+private fun PaneSheet(state: ShellState, request: DetailRequest, open: Boolean, modifier: Modifier) {
+    val shape = RoundedCornerShape(0.dp)
     Surface(
         shape = shape,
         // The page's own colour, so the backdrop's fade runs into it; the border and the scrim
         // set it apart from the page under it.
         color = Tone.background,
-        border = if (full) null else floatingBorder(),
+        border = null,
         modifier = modifier
             .fillMaxHeight()
-            .padding(if (full) 0.dp else SHEET_INSET)
-            // Focus that would leave the open sheet stays in it; once it is closing, it may go.
+                        // Focus that would leave the open sheet stays in it; once it is closing, it may go.
             .focusProperties { onExit = { if (open && state.detail != null) cancelFocusChange() } }
             .focusGroup()
             .onPreviewKeyEvent { event ->

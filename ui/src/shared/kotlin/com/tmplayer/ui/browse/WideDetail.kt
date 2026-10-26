@@ -346,7 +346,7 @@ fun WideDetailPanel(
                 }
             }
         }
-        PageDiscButton(TmIcons.Close, s.detailClose, onClose, Modifier.align(Alignment.TopStart).padding(16.dp))
+        PageDiscButton(TmIcons.ArrowBack, s.commonBack, onClose, Modifier.align(Alignment.TopStart).padding(16.dp))
     }
     // Play is composed once the first frame is drawn, which the caches may hold back a moment:
     // focus is asked for again then, so a held page still opens on Play.
