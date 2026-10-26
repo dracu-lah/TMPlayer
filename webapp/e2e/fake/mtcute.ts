@@ -145,8 +145,17 @@ const messages = new Map<number, Msg[]>([
     [me.id, [msg(me, 'Saved Clip.mp4', { file: 'h264-aac.mp4' })]],
 ])
 
+// A chat of its own at the very end (opened by its address, /chat/-1006), made last so no other id moves: 20 s,
+// chaptered, two episodes of one show, for the chapter, skip and autoplay tests.
+const lighthouse = peer(-1006, 'Lighthouse Show', 'chat')
+messages.set(
+    lighthouse.id,
+    ['Lighthouse.S01E01.mkv', 'Lighthouse.S01E02.mkv'].map((name) => msg(lighthouse, name, { file: 'chapters.mkv', video: true, duration: 20 })),
+)
+
 const dialogs: Peer[] = [me, clips, shows, locked, quiet]
 for (let i = 0; i < 1500; i++) dialogs.push(peer(-5000 - i, `Group ${i}`, 'chat'))
+dialogs.push(lighthouse)
 
 /** The raw calls made, readable in the worker as `fakeCalls`. */
 const calls: string[] = []

@@ -12,6 +12,8 @@
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
 import {
     Add01Icon,
+    Bookmark02Icon,
+    CheckmarkCircle02Icon,
     ArrowExpandIcon,
     ArrowLeft02Icon,
     ArrowShrinkIcon,
@@ -21,18 +23,21 @@ import {
     FitToScreenIcon,
     HeadphonesIcon,
     InformationCircleIcon,
+    KeyboardIcon,
     ListVideoIcon,
     MaximizeScreenIcon,
     MinusSignIcon,
+    Moon02Icon,
     MoreVerticalIcon,
     NextIcon,
+    PictureInPictureOnIcon,
     PreviousIcon,
+    RepeatIcon,
     ScreenRotationIcon,
     SquareLock02Icon,
     SquareUnlock02Icon,
     SubtitleIcon,
     Sun03Icon,
-    Tick02Icon,
     VolumeHighIcon,
     VolumeLowIcon,
     VolumeMute02Icon,
@@ -40,9 +45,16 @@ import {
 import './player.css'
 import { Icon, type IconData } from '../ui/Icon'
 import { t } from '../i18n'
-import { form } from '../form'
+import { Choice, Entry, Menu, PhoneSheet, Picker, variant, walk } from './sheets'
 import { remoteKey } from '../tv/remote'
 import { frameAt, type Frames } from './storyboard'
+import { chapterAt, chapterMarks, chapterNext, chapterPrevious, isGeneric, skipSegments, type Chapter, type SkipSegment } from './chapters'
+import { applyDelay, look, setLook, setSubDelay, subDelay } from './cues'
+import { BookmarksSheet, delayText, ShortcutsSheet, SIZES, TimingSheet } from './extra-sheets'
+import { AUTOPLAY_LIMIT, fineRate, IDLE_LIMIT, noteInput, pressLoop, SeekUndo, SLEEP_CHOICES, sleepState, watching, wrapLoop, type Loop } from './extras'
+import {
+    addBookmark, deleteBookmark, loadBookmarks, readAutoplay, renameBookmark, writeAutoplay, writeLook, type Bookmark, type SubtitleLook,
+} from './keep'
 import type { SoundTrack } from './engines'
 import type { VideoCopy, VideoItem, WatchInfo } from '../tg/types'
 
@@ -132,12 +144,18 @@ export interface Ctl {
     startOver: () => void
     /** The controls came up or went: subtitles move up out of the bar's way while they show. */
     onControls?: (up: boolean) => void
+    /** The file's chapter marks (empty when it has none or they are not read). */
+    chapters: () => Chapter[]
+    /** How much of the file has arrived (0 to 1); null once all of it has. */
+    loaded: () => number | null
+    /** Whether the video is on the Watched list, and the menu's way to change it. */
+    watched: () => boolean
+    markWatched: (on: boolean) => void
 }
 
-type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | null
+type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | null
 
-/** The skin in use: the phone's, the desktop's or the TV's. */
-export const variant = () => (form() === 'phone' ? 'phone' : form() === 'tv' ? 'tv' : 'desktop')
+export { variant }
 
 export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     const c = props.ctl
@@ -301,10 +319,12 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     onCleanup(() => clearTimeout(noteTimer))
 
     const togglePlay = () => (v.paused ? v.play().catch(() => {}) : v.pause())
-    const seekTo = (s: number) => {
+    const seekTo = (s: number, from = v.currentTime) => {
         const d = duration()
-        v.currentTime = Math.max(0, d ? Math.min(d - 0.1, s) : s)
+        const to = Math.max(0, d ? Math.min(d - 0.1, s) : s)
+        v.currentTime = to
         setTime(v.currentTime)
+        noteSeek(from, to)
     }
     const seekBy = (s: number) => seekTo(v.currentTime + s)
     const setSpeed = (r: number) => {
@@ -349,6 +369,279 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         setShape(next)
         flash(t('player.picture_shape_now', { shape: shapeName(next) }))
     }
+
+
+    // ---- chapters (Chapters.kt) --------------------------------------------------------------
+    const chapters = () => c.chapters()
+    const chapterText = (i: number) => {
+        const list = chapters()
+        const count = t('player.chapter_of', { number: i + 1, total: list.length })
+        const name = list[i]?.title?.trim()
+        return name && !isGeneric(name) ? t('player.chapter_named', { chapter: count, name }) : count
+    }
+    const chapterTextAt = (s: number) => {
+        const i = chapterAt(chapters(), s)
+        return i < 0 ? null : chapterText(i)
+    }
+    const stepChapter = (forward: boolean) => {
+        const list = chapters()
+        const i = forward ? chapterNext(list, v.currentTime) : chapterPrevious(list, v.currentTime)
+        if (i === null) return flash(forward ? t('player.last_chapter') : t('player.before_first_chapter'))
+        seekTo(list[i].start)
+        flash(chapterText(i))
+    }
+
+    // ---- the way back from a long jump (SeekUndo) --------------------------------------------
+    const undo = new SeekUndo()
+    const [backTo, setBackTo] = createSignal<number | null>(null)
+    let backTimer = 0
+    function noteSeek(from: number, to: number) {
+        const offer = undo.seeked(from, to, performance.now())
+        clearTimeout(backTimer)
+        setBackTo(offer ? offer.backTo : null)
+        if (offer) backTimer = window.setTimeout(() => setBackTo(null), Math.max(0, offer.until - performance.now()))
+    }
+    const takeBack = () => {
+        const to = undo.take(performance.now())
+        if (to === null) return false
+        clearTimeout(backTimer)
+        setBackTo(null)
+        seekTo(to)
+        return true
+    }
+    onCleanup(() => clearTimeout(backTimer))
+
+    // ---- A-B repeat (AbLoop) -----------------------------------------------------------------
+    const [loop, setLoop] = createSignal<Loop | null>(null)
+    const pressRepeat = () => {
+        const was = loop()
+        const next = pressLoop(was, v.currentTime)
+        if (!was) flash(plain() ? t('player.loop_start_set', { start: clock(next!.start) }) : t('player.loop_from', { start: clock(next!.start) }))
+        else if (next === was) flash(plain() ? t('player.loop_too_short_menu') : t('player.loop_too_short'))
+        else if (next) flash(t('player.repeating', { start: clock(next.start), end: clock(next.end!) }))
+        else flash(t('player.repeat_off'))
+        setLoop(next)
+    }
+    // Played into the end, back to the start; a seek past the loop is the viewer's, and is left alone.
+    listen('timeupdate', () => {
+        const to = wrapLoop(loop(), v.currentTime)
+        if (to === null) return
+        v.currentTime = to
+        undo.clear()
+    })
+
+    // ---- the sleep timer (SleepTimer) and "Still watching?" ----------------------------------
+    const [sleepAt, setSleepAt] = createSignal(sleepState.at)
+    const [sleepEnd, setSleepEnd] = createSignal(sleepState.end)
+    const [sleepPick, setSleepPick] = createSignal<number | null>(null)
+    const [stillWhy, setStillWhy] = createSignal<'idle' | 'autoplay' | 'sleep' | 'sleep_end'>('idle')
+    let sleepTimer = 0
+    /** The next episode keeps the timer; leaving the player ends it. */
+    let keepSleep = false
+    const askStill = (why: 'idle' | 'autoplay' | 'sleep' | 'sleep_end') => {
+        v.pause()
+        setStillWhy(why)
+        setSheet('still')
+        show()
+    }
+    const clearSleep = () => {
+        clearTimeout(sleepTimer)
+        setSleepAt(null)
+        setSleepEnd(false)
+        sleepState.at = null
+        sleepState.end = false
+    }
+    const armSleep = () => {
+        clearTimeout(sleepTimer)
+        const at = sleepAt()
+        if (at !== null) sleepTimer = window.setTimeout(sleepCheck, Math.max(0, Math.min(at - Date.now(), 2 ** 30)))
+    }
+    function sleepCheck() {
+        const at = sleepAt()
+        if (at === null) return
+        if (Date.now() < at) return armSleep()
+        clearSleep()
+        askStill('sleep')
+    }
+    const sleepLabel = (minutes: number) =>
+        minutes === 0
+            ? t('player.sleep_end_of_video')
+            : minutes < 60
+              ? t('unit.minutes', { count: minutes })
+              : minutes % 60 === 0
+                ? t('unit.hours', { count: minutes / 60 })
+                : t('sleep.hours_minutes', { hours: Math.floor(minutes / 60), minutes: minutes % 60 })
+    const setSleep = (minutes: number | null) => {
+        clearSleep()
+        setSleepPick(minutes)
+        if (minutes === null) return flash(t('player.sleep_off'))
+        if (minutes === 0) {
+            setSleepEnd(true)
+            sleepState.end = true
+        } else {
+            const at = Date.now() + minutes * 60_000
+            setSleepAt(at)
+            sleepState.at = at
+            armSleep()
+        }
+        flash(t('player.sleep_in', { time: sleepLabel(minutes) }))
+    }
+    const sleepSummary = () => {
+        const at = sleepAt()
+        if (at !== null) return t('sleep.minutes_left', { count: Math.max(1, Math.ceil((at - Date.now()) / 60_000)) })
+        return sleepEnd() ? t('player.sleep_end_of_video') : t('common.off')
+    }
+    const onVisible = () => document.visibilityState === 'visible' && sleepAt() !== null && sleepCheck()
+    onMount(() => (armSleep(), document.addEventListener('visibilitychange', onVisible)))
+    onCleanup(() => {
+        clearTimeout(sleepTimer)
+        document.removeEventListener('visibilitychange', onVisible)
+        if (!keepSleep) (sleepState.at = null, (sleepState.end = false))
+    })
+    // Two hours of playing with nothing pressed (StillWatching.askAfterIdle): one timer, armed only while it plays.
+    let idleTimer = 0
+    const armIdle = () => {
+        clearTimeout(idleTimer)
+        if (v.paused) return
+        const left = IDLE_LIMIT - (Date.now() - watching.lastInput)
+        idleTimer = window.setTimeout(() => {
+            if (v.paused) return
+            if (Date.now() - watching.lastInput >= IDLE_LIMIT) askStill('idle')
+            else armIdle()
+        }, Math.max(1000, left))
+    }
+    listen('play', armIdle)
+    listen('pause', () => clearTimeout(idleTimer))
+    onMount(() => {
+        for (const e of ['keydown', 'pointerdown'] as const) document.addEventListener(e, noteInput, { capture: true, passive: true })
+        onCleanup(() => (['keydown', 'pointerdown'] as const).forEach((e) => document.removeEventListener(e, noteInput, { capture: true })))
+    })
+    onCleanup(() => clearTimeout(idleTimer))
+
+    /** Another episode: autoplay's count and the sleep timer go with it. */
+    const go = (next: VideoItem | null) => {
+        keepSleep = true
+        c.play(next)
+    }
+
+    // ---- bookmarks (Bookmarks.kt) --------------------------------------------------------------
+    const [bookmarks, setBookmarks] = createSignal<Bookmark[]>([])
+    onMount(() => loadBookmarks(c.item.chatId, c.item.messageId).then(setBookmarks, () => {}))
+    const bookmarkHere = () => {
+        const { list, saved } = addBookmark(c.item.chatId, c.item.messageId, bookmarks(), v.currentTime)
+        setBookmarks(list)
+        flash(t('player.bookmark_saved', { time: clock(saved.at) }))
+    }
+
+    // ---- picture in picture, by hand only ------------------------------------------------------
+    type WebkitVideo = HTMLVideoElement & { webkitSupportsPresentationMode?: (m: string) => boolean; webkitSetPresentationMode?: (m: string) => void; webkitPresentationMode?: string }
+    const wv = v as WebkitVideo
+    const pipSupported = () =>
+        (!!document.pictureInPictureEnabled && !v.disablePictureInPicture && !!v.requestPictureInPicture) ||
+        (typeof wv.webkitSetPresentationMode === 'function' && !!wv.webkitSupportsPresentationMode?.('picture-in-picture'))
+    const togglePip = async () => {
+        try {
+            if (document.pictureInPictureElement) await document.exitPictureInPicture()
+            else if (document.pictureInPictureEnabled && v.requestPictureInPicture) await v.requestPictureInPicture()
+            else wv.webkitSetPresentationMode?.(wv.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture')
+        } catch {}
+    }
+
+    // ---- skip offers from the file's own chapters -----------------------------------------------
+    const segments = createMemo(() => (c.info()?.episode ? skipSegments(chapters(), duration()) : []))
+    const [skipNow, setSkipNow] = createSignal<SkipSegment | null>(null)
+    listen('timeupdate', () => {
+        const list = segments()
+        if (!list.length) return void (skipNow() && setSkipNow(null))
+        const p = v.currentTime
+        const hit = list.find((s) => p >= s.start && p < s.end - 1) ?? null
+        if (hit !== skipNow()) setSkipNow(hit)
+    })
+    const skipLabel = (s: SkipSegment) => t(`player.skip_${s.kind}`)
+    const skipIt = () => {
+        const s = skipNow()
+        if (s) (seekTo(s.end), setSkipNow(null))
+    }
+
+    // ---- subtitle timing and look ----------------------------------------------------------------
+    const nudgeDelay = (d: number) => {
+        const next = Math.round((subDelay() + d) * 10) / 10
+        setSubDelay(next)
+        applyDelay(v, next)
+        flash(t('player.subtitle_delay', { delay: delayText(next) }))
+    }
+    const changeLook = (next: SubtitleLook) => {
+        setLook(next)
+        writeLook(next)
+    }
+    const setDelay = (d: number) => {
+        setSubDelay(d)
+        applyDelay(v, d)
+    }
+    const toggleWatched = () => {
+        const on = !c.watched()
+        c.markWatched(on)
+        flash(on ? t('player.marked_watched') : t('player.marked_unwatched'))
+    }
+    const stepShape = (dir: 1 | -1) => {
+        const next = SHAPES[Math.max(0, Math.min(SHAPES.length - 1, SHAPES.indexOf(shape()) + dir))]
+        if (next === shape()) return
+        setShape(next)
+        flash(t('player.picture_shape_now', { shape: shapeName(next) }))
+    }
+    const repeatText = () => (!loop() ? t('player.loop_set_start') : loop()!.end === null ? t('player.loop_set_end') : t('player.loop_clear'))
+    const stepSize = (dir: -1 | 1) => {
+        const at = SIZES.indexOf(look().size)
+        const next = SIZES[Math.max(0, Math.min(SIZES.length - 1, at + dir))]
+        changeLook({ ...look(), size: next })
+        flash(`${t('tracks.subtitle_size')}: ${t(`subtitles.size_${next}`)}`)
+    }
+
+    // ---- autoplay and the countdown on the next card --------------------------------------------
+    const [autoplay, setAutoplay] = createSignal(true)
+    onMount(() => readAutoplay().then(setAutoplay, () => {}))
+    const changeAutoplay = (on: boolean) => {
+        setAutoplay(on)
+        writeAutoplay(on)
+        if (!on) setCounting(null)
+    }
+    const [counting, setCounting] = createSignal<number | null>(null)
+    let countTimer = 0
+    const stopCount = () => {
+        clearInterval(countTimer)
+        countTimer = 0
+        setCounting(null)
+    }
+    const startCount = (seconds: number) => {
+        stopCount()
+        setCounting(seconds)
+        countTimer = window.setInterval(() => {
+            const left = (counting() ?? 0) - 1
+            if (left > 0) return setCounting(left)
+            const next = c.info()?.next
+            stopCount()
+            if (!next) return
+            watching.autoplayed++
+            go(next)
+        }, 1000)
+    }
+    onCleanup(() => clearInterval(countTimer))
+    // The video ended: a sleep timer set for its end stops here; otherwise autoplay counts down, or asks "Still watching?" after a run.
+    const ended = () => {
+        const next = c.info()?.next
+        if (sleepEnd()) {
+            clearSleep()
+            return askStill('sleep_end')
+        }
+        if (!next) return
+        setNextUp(true)
+        if (!autoplay() || nextHidden()) return
+        if (watching.autoplayed >= AUTOPLAY_LIMIT) return askStill('autoplay')
+        startCount(5)
+    }
+    // Anything the viewer does with the picture stops the countdown.
+    listen('seeking', stopCount)
+    listen('play', stopCount)
 
     // Full screen: the player's own box where the browser has it; the iPhone's video full screen otherwise.
     const canFullscreen = () => !!document.fullscreenEnabled || 'webkitEnterFullscreen' in v
@@ -409,6 +702,8 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         poke()
     }
     const [dragTime, setDragTime] = createSignal<number | null>(null)
+    /** Where the video was when a drag on the bar began: what a slip there is measured from. */
+    let dragFrom = -1
     const shownTime = () => dragTime() ?? time()
     const endText = () => (remaining() && duration() ? `-${clock(duration() - shownTime())}` : clock(duration()))
 
@@ -445,7 +740,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             case 'previous': {
                 const to = key === 'next' ? info()?.next : info()?.previous
                 if (!to) return false
-                c.play(to)
+                go(to)
                 return true
             }
         }
@@ -459,13 +754,14 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         if (sheet()) {
             if (key === 'back' || (sheet() === 'details' && key === 'ok')) setSheet(null)
             else if (key === 'ok') return 'native'
-            else if (arrow && sheet() === 'episodes') walk(c.root.querySelector('.pc-sheet'), key, active)
+            else if (arrow && ['episodes', 'timing', 'bookmarks', 'still'].includes(sheet()!)) walk(c.root.querySelector('.pc-sheet, .pc-still'), key, active)
             return true
         }
         // The next episode's card holds Left, Right and OK once it has the remote; Back puts it away.
+        if (counting() !== null && key === 'back') return (stopCount(), setNextHidden(true), true)
         const card = c.root.querySelector<HTMLElement>('.pc-next')
         if (card && active && card.contains(active)) {
-            if (key === 'back') (setNextHidden(true), focusIt(c.root))
+            if (key === 'back') (stopCount(), setNextHidden(true), focusIt(c.root))
             else if (key === 'left' || key === 'right') walk(card, key, active)
             else if (key === 'ok') return 'native'
             if (key === 'back' || key === 'left' || key === 'right') return true
@@ -473,7 +769,9 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         if (!(visible() && !locked())) {
             const playNow = card?.querySelector<HTMLElement>('button:last-child')
             if (key === 'left' || key === 'right') playNow ? focusIt(playNow) : jumpRemote(key === 'right')
+            else if (key === 'ok' && skipNow() && !playNow) skipIt()
             else if (key === 'ok') playNow ? focusIt(playNow) : togglePlay()
+            else if (key === 'up' && backTo() !== null) takeBack()
             else if (key === 'up' && offer() && c.resumedAt() !== null) (c.startOver(), setOffer(false))
             else if (key === 'up' || key === 'down') show()
             else if (key === 'back') c.close()
@@ -541,19 +839,30 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         if (k === 'ArrowLeft' || k === 'ArrowRight') {
             if (target?.getAttribute('role') === 'slider') return
             const sign = k === 'ArrowRight' ? 1 : -1
-            const s = (e.ctrlKey && e.altKey) ? 300 : shift || e.ctrlKey ? 60 : e.altKey ? 10 : 5
-            seekBy(sign * s)
-            flash(`${sign > 0 ? '+' : '-'}${t('player.seek_seconds', { seconds: s })}`, sign > 0 ? 'right' : 'left')
+            // The command key alone steps through chapters, where the file has them (else it is a minute).
+            if (command && !shift && !e.altKey && chapters().length) stepChapter(sign > 0)
+            else {
+                const s = (e.ctrlKey && e.altKey) ? 300 : shift || e.ctrlKey ? 60 : e.altKey ? 10 : 5
+                seekBy(sign * s)
+                flash(`${sign > 0 ? '+' : '-'}${t('player.seek_seconds', { seconds: s })}`, sign > 0 ? 'right' : 'left')
+            }
         } else if (k === 'ArrowUp' || k === 'ArrowDown') {
             setVol(v.volume + (k === 'ArrowUp' ? 0.05 : -0.05))
             flash(`${Math.round(v.volume * 100)}%`)
         } else if ((k === ' ' || k === 'Enter') && onButton) return
         else if (command || e.altKey) return
         else if ((k === ' ' || k === 'k' || k === 'K' || k === 'Enter') && plain) togglePlay()
-        else if (k === 'p' || k === 'P') shift ? c.play(c.info()?.previous ?? null) : togglePlay()
-        else if ((k === 'n' || k === 'N') && shift) c.play(c.info()?.next ?? null)
-        else if (k === 'PageDown') c.play(c.info()?.next ?? null)
-        else if (k === 'PageUp') c.play(c.info()?.previous ?? null)
+        else if (k === 'p' || k === 'P') shift ? go(c.info()?.previous ?? null) : togglePlay()
+        else if ((k === 'n' || k === 'N') && shift) go(c.info()?.next ?? null)
+        else if (k === 'PageDown') go(c.info()?.next ?? null)
+        else if (k === 'PageUp') go(c.info()?.previous ?? null)
+        else if ((k === 'r' || k === 'R') && !shift) pressRepeat()
+        else if ((k === 'b' || k === 'B') && !shift) bookmarkHere()
+        else if ((k === 'g' || k === 'G') && !shift) skipNow() ? skipIt() : (done = false)
+        else if (k === 'G' && shift) stepSize(1)
+        else if (k === 'F' && shift) stepSize(-1)
+        else if (k === 'z' || k === 'Z' || k === 'x' || k === 'X') nudgeDelay(k === 'z' ? -0.1 : 0.1)
+        else if (k === '?') setSheet('shortcuts')
         else if (k === 'j' || k === 'J') seekBy(-10)
         else if (k === 'l' || k === 'L') seekBy(10)
         else if (k === 'm' || k === 'M') v.muted = !v.muted
@@ -570,6 +879,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         else if (k === 'End') seekTo(duration())
         else if (/^[0-9]$/.test(k) && !shift) seekTo((duration() * Number(k)) / 10)
         else if (k === 'i' || k === 'I') setSheet('details')
+        else if (k === 'Backspace' && shift) takeBack()
         else if (k === 'Backspace') {
             if (Math.abs(v.playbackRate - 1) > 0.001) setSpeed(1)
             else c.close()
@@ -589,11 +899,20 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     const [hold, setHold] = createSignal(false)
     const [ripple, setRipple] = createSignal<{ side: 'left' | 'right'; total: number; x: number; y: number; n: number } | null>(null)
     const [level, setLevel] = createSignal<{ side: 'left' | 'right'; value: number; brightness: boolean } | null>(null)
-    const [scrub, setScrub] = createSignal<{ from: number; to: number } | null>(null)
+    const [scrub, setScrub] = createSignal<{ from: number; to: number; rate?: number } | null>(null)
     const [brightness, setBrightness] = createSignal(1)
     createEffect(() => (v.style.filter = brightness() < 0.999 ? `brightness(${brightness()})` : ''))
 
     let down: { x: number; y: number; at: number; id: number; time: number; vol: number; bright: number } | null = null
+    /** Fingers on the picture (the phone's pinch steps the picture shape, once per pinch). */
+    const touches = new Map<number, { x: number; y: number }>()
+    let pinch: { dist: number; done: boolean } | null = null
+    const spread = () => {
+        const [a, b] = [...touches.values()]
+        return Math.hypot(a.x - b.x, a.y - b.y)
+    }
+    /** The sideways scrub, slowed to a half and a quarter as the finger leaves its line (FineScrub.Tracker). */
+    let fineScrub = { x: 0, last: 0 }
     let mode: 'tap' | 'hold' | 'scrub' | 'level' = 'tap'
     let holdTimer = 0
     let heldRate = 1
@@ -620,8 +939,33 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         clearTimeout(rippleTimer)
         rippleTimer = window.setTimeout(() => setRipple(null), RUN_MS + 300)
     }
+    /** The desktop's wheel over the picture: volume, or with Shift ten seconds a notch. */
+    const onWheel = (e: WheelEvent) => {
+        if (phone() || tv() || locked() || c.blocked() || sheet() || !e.deltaY) return
+        e.preventDefault()
+        if (e.shiftKey) {
+            seekBy(e.deltaY < 0 ? 10 : -10)
+            flash(`${e.deltaY < 0 ? '+' : '-'}${t('player.seek_seconds', { seconds: 10 })}`, e.deltaY < 0 ? 'right' : 'left')
+        } else {
+            setVol(v.volume + (e.deltaY < 0 ? 0.05 : -0.05))
+            flash(`${Math.round(v.volume * 100)}%`)
+        }
+    }
     const onDown = (e: PointerEvent) => {
         if (locked() || e.button > 0) return
+        if (phone() && e.pointerType === 'touch') {
+            touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
+            if (touches.size === 2) {
+                clearTimeout(holdTimer)
+                clearTimeout(tapTimer)
+                if (mode === 'hold') (v.playbackRate = heldRate, setHold(false))
+                mode = 'tap'
+                down = null
+                pinch = { dist: spread(), done: false }
+                return
+            }
+            if (touches.size > 2 || pinch) return
+        }
         const p = local(e)
         down = { ...p, at: performance.now(), id: e.pointerId, time: v.currentTime, vol: v.volume, bright: brightness() }
         mode = 'tap'
@@ -637,6 +981,14 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         }
     }
     const onMove = (e: PointerEvent) => {
+        if (pinch) {
+            if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY })
+            if (!pinch.done && touches.size === 2) {
+                const ratio = spread() / pinch.dist
+                if (ratio > 1.15 || ratio < 0.85) (pinch.done = true, stepShape(ratio > 1 ? 1 : -1))
+            }
+            return
+        }
         if (variant() !== 'phone' && e.pointerType === 'mouse') {
             show()
             return
@@ -648,15 +1000,18 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         if (mode === 'tap' && Math.hypot(dx, dy) > SLOP) {
             clearTimeout(holdTimer)
             ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
-            if (Math.abs(dx) > Math.abs(dy)) mode = 'scrub'
+            if (Math.abs(dx) > Math.abs(dy)) (mode = 'scrub', (fineScrub = { x: down.x, last: down.x }))
             else mode = 'level'
         }
         const w = c.root.clientWidth
         const h = c.root.clientHeight
         if (mode === 'scrub' && duration()) {
             // A full width's drag covers a ninetieth of an hour-long film per pixel, as the app's scrub reads.
-            const to = Math.max(0, Math.min(duration(), down.time + (dx / w) * Math.min(duration(), 600)))
-            setScrub({ from: down.time, to })
+            const rate = fineRate(dy)
+            fineScrub.x += (p.x - fineScrub.last) * rate
+            fineScrub.last = p.x
+            const to = Math.max(0, Math.min(duration(), down.time + ((fineScrub.x - down.x) / w) * Math.min(duration(), 600)))
+            setScrub({ from: down.time, to, rate })
             clearTimeout(scrubTimer)
         } else if (mode === 'level') {
             const left = down.x < w / 2
@@ -673,6 +1028,11 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         }
     }
     const onUp = (e: PointerEvent) => {
+        touches.delete(e.pointerId)
+        if (pinch) {
+            if (!touches.size) pinch = null
+            return
+        }
         clearTimeout(holdTimer)
         if (!down || e.pointerId !== down.id) return
         const start = down
@@ -684,7 +1044,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         }
         if (mode === 'scrub') {
             const s = scrub()
-            if (s) seekTo(s.to)
+            if (s) seekTo(s.to, start.time)
             scrubTimer = window.setTimeout(() => setScrub(null), 400)
             return
         }
@@ -722,7 +1082,12 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         lastTap = { at: now, zone, x: start.x }
         tapTimer = window.setTimeout(toggle, DOUBLE_MS)
     }
-    const onCancel = () => {
+    const onCancel = (e: PointerEvent) => {
+        touches.delete(e.pointerId)
+        if (pinch) {
+            if (!touches.size) pinch = null
+            return
+        }
         clearTimeout(holdTimer)
         if (mode === 'hold') {
             v.playbackRate = heldRate
@@ -757,8 +1122,17 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         const d = v.duration
         setNextUp(!!info()?.next && isFinite(d) && d > 60 && d - v.currentTime <= 30)
     })
-    listen('ended', () => info()?.next && setNextUp(true))
+    listen('ended', ended)
     createEffect(on(() => info()?.next?.key, () => setNextHidden(false), { defer: true }))
+
+    /** "Keep watching": the run starts again, and the video goes on (or on to the next episode, if it had ended). */
+    const keepWatching = () => {
+        noteInput()
+        setSheet(null)
+        const next = c.info()?.next
+        if (v.ended && next) go(next)
+        else v.play().catch(() => {})
+    }
 
     const menuAt = (name: Exclude<Sheet, null>) => (e: MouseEvent) => {
         e.stopPropagation()
@@ -796,6 +1170,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                 onPointerMove={onMove}
                 onPointerUp={onUp}
                 onPointerCancel={onCancel}
+                onWheel={onWheel}
                 onContextMenu={(e) => (phone() || hold()) && e.preventDefault()}
             />
 
@@ -813,6 +1188,10 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                     <Btn icon={MoreVerticalIcon} label={phone() ? t('player.more_options') : t('common.more')} onClick={menuAt('more')} tipBelow shot="more" pressed={sheet() === 'more'} />
                 </div>
 
+                <Show when={c.loaded() !== null && !c.blocked()}>
+                    <span class="pc-chipline loading" role="status">{t('player.cached_chip', { percent: `${Math.round(c.loaded()! * 100)}%` })}</span>
+                </Show>
+
                 <div class="pc-center" onPointerEnter={() => setHeld(true)} onPointerLeave={() => setHeld(false)}>
                     <div class="pc-step" classList={{ gone: !info()?.previous }}>
                         <Show when={phone()}><span class="pc-caption-space" /></Show>
@@ -821,7 +1200,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                             class="tonal step"
                             size={phone() ? 28 : 34}
                             label={t('player.previous_episode_hint', { episode: t('player.previous_up', { title: prevCode() }) })}
-                            onClick={() => c.play(info()?.previous ?? null)}
+                            onClick={() => go(info()?.previous ?? null)}
                         />
                         <Show when={phone()}><span class="pc-caption">{info()?.previousCode ?? ''}</span></Show>
                     </div>
@@ -846,7 +1225,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                             class="tonal step"
                             size={phone() ? 28 : 34}
                             label={t('player.next_episode_hint', { episode: t('player.next_up', { title: nextCode() }) })}
-                            onClick={() => c.play(info()?.next ?? null)}
+                            onClick={() => go(info()?.next ?? null)}
                         />
                         <Show when={phone()}><span class="pc-caption">{info()?.nextCode ?? ''}</span></Show>
                     </div>
@@ -873,12 +1252,18 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         buffered={buffered}
                         frames={c.frames}
                         dragTime={dragTime}
+                        marks={() => chapterMarks(chapters(), duration())}
+                        chapterAt={chapterTextAt}
                         setDragTime={(s) => {
+                            if (s !== null && dragTime() === null) dragFrom = v.currentTime
                             setDragTime(s)
                             if (s === null) poke()
                             else clearTimeout(hideTimer)
                         }}
-                        onSeek={seekTo}
+                        onSeek={(s) => {
+                            seekTo(s, dragFrom >= 0 ? dragFrom : undefined)
+                            dragFrom = -1
+                        }}
                         phone={phone()}
                     />
                     <div class="pc-row">
@@ -952,6 +1337,30 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                 <div class="pc-note hold" role="status">{speedLabel(2)}</div>
             </Show>
             <Show when={note()}>{(n) => <div class={`pc-note ${n().side}`} role="status">{n().text}</div>}</Show>
+            <Show when={loop()}>
+                {(l) => (
+                    <button type="button" class="pc-chipline loop" onClick={() => (setLoop(null), flash(t('player.repeat_off')))} aria-label={t('player.loop_clear')}>
+                        <b>{l().end === null ? t('player.loop_badge_start') : t('player.loop_badge')}</b>
+                        <span>
+                            {l().end === null
+                                ? plain() ? t('player.loop_from_detail', { start: clock(l().start) }) : t('player.loop_start_chip', { start: clock(l().start) })
+                                : plain() ? t('player.repeating', { start: clock(l().start), end: clock(l().end!) }) : t('player.loop_chip', { start: clock(l().start), end: clock(l().end!) })}
+                        </span>
+                    </button>
+                )}
+            </Show>
+            <Show when={backTo() !== null && !c.blocked()}>
+                <button type="button" class="pc-corner back" tabIndex={tv() ? -1 : 0} onClick={takeBack}>
+                    <span>{t('player.back_to', { time: clock(backTo()!) })}</span>
+                    <Show when={tv() && !visible()}><small>{t('player.back_to_up')}</small></Show>
+                </button>
+            </Show>
+            <Show when={skipNow() && !c.blocked() && !(nextUp() && !nextHidden() && info()?.next)}>
+                <button type="button" class="pc-corner skip" tabIndex={tv() ? -1 : 0} onClick={skipIt}>
+                    <span>{skipLabel(skipNow()!)}</span>
+                    <Show when={tv() && !visible()}><small>{t('player.skip_ok_hint')}</small></Show>
+                </button>
+            </Show>
             <Show when={ripple()}>
                 {(r) => (
                     <div class={`pc-ripple ${r().side}`} aria-hidden="true">
@@ -983,6 +1392,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         <span class="pc-scrub-delta">{`${s().to >= s().from ? '+' : '-'}${clock(Math.abs(s().to - s().from))}`}</span>
                         <span class="pc-scrub-target">{`${clock(s().to)} / ${clock(duration())}`}</span>
                         <span class="pc-scrub-bar"><span style={{ width: `${duration() ? (s().to / duration()) * 100 : 0}%` }} /></span>
+                        <Show when={(s().rate ?? 1) < 1}><span class="pc-scrub-hint">{t((s().rate ?? 1) <= 0.25 ? 'player.scrub_quarter' : 'player.scrub_half')}</span></Show>
                     </div>
                 )}
             </Show>
@@ -997,9 +1407,12 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             <Show when={nextUp() && !nextHidden() && info()?.next && !c.blocked()}>
                 <div class="pc-next" role="group" aria-label={t('player.next_episode')}>
                     <p>{t('player.next_up', { title: nextCode() })}</p>
+                    <Show when={counting() !== null}>
+                        <p class="pc-count" role="status">{tv() ? t('player.autoplay_countdown', { seconds: counting()! }) : t('player.next_in', { seconds: counting()! })}</p>
+                    </Show>
                     <div>
-                        <button type="button" onClick={() => setNextHidden(true)}>{t('common.hide')}</button>
-                        <button type="button" onClick={() => c.play(info()!.next)}>{t('player.play_now')}</button>
+                        <button type="button" onClick={() => (stopCount(), setNextHidden(true))}>{counting() !== null ? t('common.cancel') : t('common.hide')}</button>
+                        <button type="button" onClick={() => go(info()!.next)}>{t('player.play_now')}</button>
                     </div>
                 </div>
             </Show>
@@ -1021,11 +1434,83 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         <Show when={c.copies.length}>
                             <Entry text={t('player.copies')} trailing={copyLabel()} onClick={() => setSheet('copies')} />
                         </Show>
+                        <Show when={pipSupported()}>
+                            <Entry icon={PictureInPictureOnIcon} text={t('player.picture_in_picture')} onClick={() => (setSheet(null), togglePip())} />
+                        </Show>
+                        <Entry text={t('player.playback_options')} onClick={() => setSheet('options')} />
                         <Entry text={t('player.picture_shape')} trailing={shapeName(shape())} onClick={() => setSheet('shape')} />
+                        <Entry text={t('player.subtitle_style_and_timing')} onClick={() => setSheet('timing')} />
                         <Entry text={t('player.load_subtitle_file')} onClick={() => (setSheet(null), c.loadSubtitleFile())} />
                         <hr />
+                        <Entry icon={CheckmarkCircle02Icon} text={c.watched() ? t('player.mark_unwatched') : t('player.mark_watched')} onClick={() => (setSheet(null), toggleWatched())} />
+                        <Entry icon={Bookmark02Icon} text={t('player.add_bookmark')} trailing={plain() ? undefined : 'B'} onClick={() => (setSheet(null), bookmarkHere())} />
+                        <Entry text={t('player.bookmarks')} trailing={bookmarks().length ? String(bookmarks().length) : undefined} onClick={() => setSheet('bookmarks')} />
+                        <hr />
+                        <Show when={!plain()}>
+                            <Entry icon={KeyboardIcon} text={t('player.shortcuts')} trailing="?" onClick={() => setSheet('shortcuts')} />
+                        </Show>
                         <Entry icon={InformationCircleIcon} text={t('player.playback_details')} trailing={phone() ? undefined : 'I'} onClick={() => setSheet('details')} />
                     </Menu>
+                </Match>
+                <Match when={sheet() === 'options'}>
+                    <Menu anchor={anchor()} root={c.root} below={!tv()} onClose={() => setSheet(null)}>
+                        <Entry text={t('common.back')} onClick={() => setSheet('more')} />
+                        <hr />
+                        <Entry icon={Moon02Icon} text={t('player.sleep_timer')} trailing={sleepSummary()} onClick={() => setSheet('sleep')} />
+                        <Entry icon={RepeatIcon} text={repeatText()} trailing={plain() ? undefined : 'R'} onClick={() => (setSheet(null), pressRepeat())} />
+                        <Show when={chapters().length}>
+                            <Entry text={t('player.chapter_next')} trailing={plain() ? undefined : `${t(/Mac/.test(navigator.platform) ? 'keys.cmd' : 'keys.ctrl')}+Right`} onClick={() => (setSheet(null), stepChapter(true))} />
+                            <Entry text={t('player.chapter_previous')} trailing={plain() ? undefined : `${t(/Mac/.test(navigator.platform) ? 'keys.cmd' : 'keys.ctrl')}+Left`} onClick={() => (setSheet(null), stepChapter(false))} />
+                        </Show>
+                    </Menu>
+                </Match>
+                <Match when={sheet() === 'sleep'}>
+                    <Picker title={t('player.sleep_timer')} phone={phone()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={phone() ? undefined : () => setSheet('options')}>
+                        <Show when={sleepAt() !== null || sleepEnd()}>
+                            <Choice icon={Cancel01Icon} text={t('player.sleep_turn_off')} phone={phone()} onClick={() => (setSleep(null), setSheet(null))} />
+                        </Show>
+                        <For each={SLEEP_CHOICES}>
+                            {(m) => <Choice text={sleepLabel(m)} on={sleepPick() === m && (sleepAt() !== null || sleepEnd())} phone={phone()} onClick={() => (setSleep(m), setSheet(null))} />}
+                        </For>
+                    </Picker>
+                </Match>
+                <Match when={sheet() === 'bookmarks'}>
+                    <BookmarksSheet
+                        list={bookmarks}
+                        clock={clock}
+                        onHere={bookmarkHere}
+                        onPlay={(b) => (setSheet(null), seekTo(b.at))}
+                        onNote={(b, note) => setBookmarks(renameBookmark(c.item.chatId, c.item.messageId, bookmarks(), b.id, note))}
+                        onDelete={(b) => (setBookmarks(deleteBookmark(c.item.chatId, c.item.messageId, bookmarks(), b.id)), flash(t('player.bookmark_deleted')))}
+                        onClose={() => setSheet(null)}
+                    />
+                </Match>
+                <Match when={sheet() === 'timing'}>
+                    <TimingSheet delay={subDelay} onDelay={setDelay} look={look} onLook={changeLook} onClose={() => setSheet(null)} />
+                </Match>
+                <Match when={sheet() === 'shortcuts'}>
+                    <ShortcutsSheet mac={/Mac/.test(navigator.platform)} onClose={() => setSheet(null)} />
+                </Match>
+                <Match when={sheet() === 'still'}>
+                    <div class="pc-sheet-scrim still">
+                        <div class="pc-still" role="alertdialog" aria-label={t('player.still_watching')} ref={(el) => queueMicrotask(() => el.querySelector<HTMLElement>('.primary')?.focus({ preventScroll: true }))}>
+                            <h2>{t('player.still_watching')}</h2>
+                            <p>
+                                {stillWhy() === 'idle'
+                                    ? t('player.still_watching_idle')
+                                    : stillWhy() === 'autoplay'
+                                      ? t('player.still_watching_autoplay', { count: AUTOPLAY_LIMIT })
+                                      : stillWhy() === 'sleep'
+                                        ? t('player.still_watching_sleep')
+                                        : t('player.still_watching_sleep_end')}
+                            </p>
+                            <p class="muted">{t('player.still_watching_paused')}</p>
+                            <div class="pc-still-actions">
+                                <button type="button" class="pc-sheet-button" onClick={() => c.close()}>{t('player.go_back')}</button>
+                                <button type="button" class="pc-sheet-button primary" onClick={keepWatching}>{t('player.keep_watching')}</button>
+                            </div>
+                        </div>
+                    </div>
                 </Match>
                 <Match when={sheet() === 'shape'}>
                     <Picker title={t('player.picture_shape')} phone={phone()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={phone() ? undefined : () => setSheet('more')}>
@@ -1077,7 +1562,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                     </Picker>
                 </Match>
                 <Match when={sheet() === 'episodes'}>
-                    <EpisodesPanel info={info()!} current={c.item} phone={phone()} onPlay={(item) => (setSheet(null), c.play(item))} onClose={() => setSheet(null)} />
+                    <EpisodesPanel info={info()!} current={c.item} phone={phone()} autoplay={autoplay()} onAutoplay={changeAutoplay} onPlay={(item) => (setSheet(null), go(item))} onClose={() => setSheet(null)} />
                 </Match>
                 <Match when={sheet() === 'details'}>
                     <div class="pc-details" role="dialog" aria-label={t('player.playback_details')}>
@@ -1128,6 +1613,10 @@ function SeekBar(props: {
     setDragTime: (s: number | null) => void
     onSeek: (s: number) => void
     phone: boolean
+    /** The chapter starts, drawn as gaps in the bar. */
+    marks: () => number[]
+    /** The chapter's name for a time, for the preview card. */
+    chapterAt: (s: number) => string | null
 }) {
     let bar!: HTMLDivElement
     const [hoverX, setHoverX] = createSignal<number | null>(null)
@@ -1140,16 +1629,32 @@ function SeekBar(props: {
     }
     const xOf = (clientX: number) => clientX - bar.getBoundingClientRect().left
     let dragging = false
+    // A finger moving off the bar slows the drag to a half and a quarter (FineScrub): the bar's position is its own, not the finger's.
+    let fine = { x: 0, last: 0, y: 0 }
+    const [slow, setSlow] = createSignal(1)
     const down = (e: PointerEvent) => {
         if (!props.duration() || e.button > 0) return
         dragging = true
         bar.setPointerCapture(e.pointerId)
+        const r = bar.getBoundingClientRect()
+        fine = { x: e.clientX, last: e.clientX, y: r.top + r.height / 2 }
+        setSlow(1)
         props.setDragTime(timeAt(e.clientX))
         if (e.pointerType === 'mouse') setHoverX(xOf(e.clientX))
         e.stopPropagation()
     }
     const move = (e: PointerEvent) => {
-        if (dragging) props.setDragTime(timeAt(e.clientX))
+        if (dragging) {
+            if (e.pointerType === 'mouse') props.setDragTime(timeAt(e.clientX))
+            else {
+                const rate = fineRate(e.clientY - fine.y)
+                const r = bar.getBoundingClientRect()
+                fine.x = Math.max(r.left, Math.min(r.right, fine.x + (e.clientX - fine.last) * rate))
+                fine.last = e.clientX
+                setSlow(rate)
+                props.setDragTime(timeAt(fine.x))
+            }
+        }
         if (e.pointerType === 'mouse') {
             setBarWidth(bar.getBoundingClientRect().width)
             setHoverX(xOf(e.clientX))
@@ -1161,6 +1666,7 @@ function SeekBar(props: {
         const s = props.dragTime()
         if (s !== null) props.onSeek(s)
         props.setDragTime(null)
+        setSlow(1)
     }
     const played = () => fraction(props.dragTime() ?? props.time())
     const ahead = () => fraction(props.buffered())
@@ -1210,6 +1716,7 @@ function SeekBar(props: {
                     <div class="pc-buffered" style={{ width: `${ahead() * 100}%` }} />
                 </Show>
                 <div class="pc-played" style={{ width: `${played() * 100}%` }} />
+                <For each={props.marks()}>{(m) => <span class="pc-mark" style={{ left: `${fraction(m) * 100}%` }} />}</For>
             </div>
             <div class="pc-thumb" style={{ left: `${played() * 100}%` }} />
             <Show when={card()}>
@@ -1236,7 +1743,9 @@ function SeekBar(props: {
                     return (
                         <div class="pc-preview" style={{ left: `${left()}px`, width: `${Math.max(cardWidth(), 64)}px` }} aria-hidden="true">
                             <Show when={frame()}>{(style) => <div class="pc-frame" style={style()} />}</Show>
+                            <Show when={props.chapterAt(k().time)}>{(name) => <span class="pc-chapter">{name()}</span>}</Show>
                             <span class="pc-chip">{clock(k().time)}</span>
+                            <Show when={slow() < 1}><span class="pc-slow">{t(slow() <= 0.25 ? 'player.scrub_quarter' : 'player.scrub_half')}</span></Show>
                         </div>
                     )
                 }}
@@ -1266,140 +1775,6 @@ function VolumeControl(props: { volume: () => number; muted: () => boolean; icon
     )
 }
 
-/**
- * A dropdown under or over the button that opened it (TmDropdownMenu: Floating.MenuShape, the
- * menu tone and its hairline), or on a phone the overflow's popup at the top end. A click outside
- * or Escape closes it.
- */
-function Menu(props: { anchor: DOMRect | null; root: HTMLElement; below?: boolean; onClose: () => void; children: JSX.Element }) {
-    let el!: HTMLDivElement
-    const place = () => {
-        const r = props.root.getBoundingClientRect()
-        const a = props.anchor
-        if (!a) return {}
-        const right = Math.max(8, r.right - a.right)
-        if (props.below) return { top: `${a.bottom - r.top + 4}px`, right: `${right}px` }
-        const left = Math.max(8, Math.min(a.left - r.left, r.width - 248))
-        return { bottom: `${r.bottom - a.top + 8}px`, left: `${left}px` }
-    }
-    onMount(() => (el.querySelector<HTMLElement>(variant() === 'tv' ? '[aria-checked=true]:not(:disabled), button:not(:disabled)' : 'button:not(:disabled)')?.focus({ preventScroll: true })))
-    return (
-        <>
-            <div class="pc-dismiss" onClick={props.onClose} />
-            <div ref={el} class="pc-menu" role="menu" style={place()} onKeyDown={(e) => menuKeys(e, el)}>
-                {props.children}
-            </div>
-        </>
-    )
-}
-
-/** The remote's arrow on a screen of buttons: to the nearest one that way (a list or the status sheet). */
-function walk(root: ParentNode | null, dir: 'up' | 'down' | 'left' | 'right', from: HTMLElement | null) {
-    const items = Array.from(root?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]') ?? []).filter((el) => el.getClientRects().length > 0)
-    if (!items.length) return
-    if (!from || !items.includes(from)) return void items[0].focus()
-    const a = from.getBoundingClientRect()
-    let best: HTMLElement | null = null
-    let bestScore = Infinity
-    for (const el of items) {
-        if (el === from) continue
-        const b = el.getBoundingClientRect()
-        const dx = b.left + b.width / 2 - (a.left + a.width / 2)
-        const dy = b.top + b.height / 2 - (a.top + a.height / 2)
-        const along = dir === 'left' ? -dx : dir === 'right' ? dx : dir === 'up' ? -dy : dy
-        if (along <= 1) continue
-        const score = along + Math.abs(dir === 'left' || dir === 'right' ? dy : dx) * 2.5
-        if (score < bestScore) (best = el, (bestScore = score))
-    }
-    best?.focus()
-}
-
-/** Up and Down walk a menu's lines. */
-function menuKeys(e: KeyboardEvent, el: HTMLElement) {
-    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
-    const items = [...el.querySelectorAll<HTMLElement>('button:not(:disabled)')]
-    const at = items.indexOf(document.activeElement as HTMLElement)
-    items[(at + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus()
-    e.preventDefault()
-    e.stopPropagation()
-}
-
-/** One line of a desktop menu: an 18 px slot for the tick or an icon, the words, a quiet figure at the end. */
-function Entry(props: { text: string; trailing?: string; icon?: IconData; checked?: boolean; disabled?: boolean; onClick: () => void }) {
-    return (
-        <button type="button" role={props.checked !== undefined ? 'menuitemradio' : 'menuitem'} aria-checked={props.checked} class="pc-entry" disabled={props.disabled} onClick={props.onClick}>
-            <span class="pc-entry-lead">
-                <Show when={props.checked} fallback={props.icon ? <Icon icon={props.icon} size={18} /> : null}>
-                    <Icon icon={Tick02Icon} size={18} />
-                </Show>
-            </span>
-            <span class="pc-entry-text">{props.text}</span>
-            <Show when={props.trailing}><span class="pc-entry-trail">{props.trailing}</span></Show>
-        </button>
-    )
-}
-
-/**
- * A choice: on a phone the pickers' sheet (ChoiceSheet: the whole screen under 600 dp, the
- * headline and Close at the top, radio rows), on the desktop the menu over its button.
- */
-function Picker(props: { title: string; note?: string; phone: boolean; anchor: DOMRect | null; root: HTMLElement; onClose: () => void; onBack?: () => void; children: JSX.Element }) {
-    return (
-        <Show
-            when={props.phone}
-            fallback={
-                <Menu anchor={props.anchor} root={props.root} below={props.anchor ? props.anchor.top < props.root.getBoundingClientRect().top + props.root.clientHeight / 2 : false} onClose={props.onClose}>
-                    <Show when={props.onBack}>
-                        <Entry text={t('common.back')} onClick={props.onBack!} />
-                        <hr />
-                    </Show>
-                    {props.children}
-                    <Show when={props.note}><p class="pc-menu-note">{props.note}</p></Show>
-                </Menu>
-            }
-        >
-            <PhoneSheet title={props.title} note={props.note} onClose={props.onClose}>
-                {props.children}
-            </PhoneSheet>
-        </Show>
-    )
-}
-
-/** The phone's picker sheet: the whole screen on a phone, a dialog in the middle on a wider one. */
-function PhoneSheet(props: { title: string; note?: string; onClose: () => void; children: JSX.Element; class?: string }) {
-    let el!: HTMLDivElement
-    onMount(() => el.querySelector<HTMLElement>('[aria-checked=true], button')?.focus({ preventScroll: true }))
-    return (
-        <div class="pc-sheet-scrim" onClick={(e) => e.target === e.currentTarget && props.onClose()}>
-            <div ref={el} class={`pc-sheet ${props.class ?? ''}`} role="dialog" aria-label={props.title}>
-                <div class="pc-sheet-head">
-                    <div>
-                        <h2>{props.title}</h2>
-                        <Show when={props.note}><p>{props.note}</p></Show>
-                    </div>
-                    <button type="button" class="pc-sheet-close" aria-label={t('common.close')} onClick={props.onClose}>
-                        <Icon icon={Cancel01Icon} size={24} />
-                    </button>
-                </div>
-                <div class="pc-sheet-body" role="radiogroup">{props.children}</div>
-            </div>
-        </div>
-    )
-}
-
-/** One line of a picker: ChoiceRow on a phone (radio, 56 px), Entry on the desktop. */
-function Choice(props: { text: string; on?: boolean; icon?: IconData; phone: boolean; disabled?: boolean; onClick: () => void }) {
-    return (
-        <Show when={props.phone} fallback={<Entry text={props.text} checked={props.icon ? undefined : !!props.on} icon={props.icon} disabled={props.disabled} onClick={props.onClick} />}>
-            <button type="button" class="pc-choice" role={props.icon ? 'button' : 'radio'} aria-checked={props.icon ? undefined : !!props.on} disabled={props.disabled} onClick={props.onClick}>
-                <Show when={props.icon} fallback={<span class="pc-radio" />}>
-                    <span class="pc-choice-icon"><Icon icon={props.icon!} size={22} /></span>
-                </Show>
-                <span>{props.text}</span>
-            </button>
-        </Show>
-    )
-}
 
 /**
  * The phone's speed sheet: the presets as tiles (four to a row upright, all seven sideways), then
@@ -1440,7 +1815,7 @@ function SpeedSheet(props: { rate: () => number; landscape: boolean; onPick: (s:
  * steps, the seasons as chips and the season's episodes, the one playing marked. On a phone the
  * whole screen; on the desktop a panel in the middle of the picture.
  */
-function EpisodesPanel(props: { info: WatchInfo; current: VideoItem; phone: boolean; onPlay: (v: VideoItem) => void; onClose: () => void }) {
+function EpisodesPanel(props: { info: WatchInfo; current: VideoItem; phone: boolean; autoplay: boolean; onAutoplay: (on: boolean) => void; onPlay: (v: VideoItem) => void; onClose: () => void }) {
     const seasonOf = () => props.info.seasons.find((s) => s.episodes.some((e) => e.item.messageId === props.current.messageId))?.number ?? props.info.seasons[0]?.number
     const [picked, setPicked] = createSignal<number | null>(null)
     const season = createMemo(() => props.info.seasons.find((s) => s.number === (picked() ?? seasonOf())) ?? props.info.seasons[0])
@@ -1462,6 +1837,10 @@ function EpisodesPanel(props: { info: WatchInfo; current: VideoItem; phone: bool
                 </div>
                 <div class="pc-episodes-body">
                     <div class="pc-episodes-side">
+                        <button type="button" class="pc-step-line pc-switch" role="switch" aria-checked={props.autoplay} onClick={() => props.onAutoplay(!props.autoplay)}>
+                            <span class="pc-sw" aria-hidden="true" />
+                            {t('episodes.autoplay')}
+                        </button>
                         <Show when={props.info.previous}>
                             <button type="button" class="pc-step-line" onClick={() => props.onPlay(props.info.previous!)}>
                                 <Icon icon={PreviousIcon} size={18} />
