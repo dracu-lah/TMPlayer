@@ -1,59 +1,13 @@
-import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
+import { createEffect, createSignal, onCleanup, onMount, Show, type JSX } from 'solid-js'
 import '@videojs/html/video/player'
 import '@videojs/html/ui/container'
-import '@videojs/html/ui/controls'
-import '@videojs/html/ui/controls-backdrop'
-import '@videojs/html/ui/controls-content'
-import '@videojs/html/ui/controls-group'
-import '@videojs/html/ui/gesture'
-import '@videojs/html/ui/hotkey'
-import '@videojs/html/ui/buffering-indicator'
-import '@videojs/html/ui/seek-indicator'
-import '@videojs/html/ui/seek-indicator-value'
-import '@videojs/html/ui/play-button'
-import '@videojs/html/ui/seek-button'
-import '@videojs/html/ui/mute-button'
-import '@videojs/html/ui/fullscreen-button'
-import '@videojs/html/ui/time'
-import '@videojs/html/ui/time-group'
-import '@videojs/html/ui/time-separator'
-import '@videojs/html/ui/time-slider'
-import '@videojs/html/ui/slider-track'
-import '@videojs/html/ui/slider-buffer'
-import '@videojs/html/ui/slider-fill'
-import '@videojs/html/ui/slider-thumb'
-import '@videojs/html/ui/slider-preview'
-import '@videojs/html/ui/slider-thumbnail'
-import '@videojs/html/ui/slider-value'
-import '@videojs/html/ui/menu'
-import '@videojs/html/ui/menu-content'
-import '@videojs/html/ui/menu-item'
-import '@videojs/html/ui/menu-radio-group'
-import '@videojs/html/ui/menu-radio-item'
-import '@videojs/html/ui/menu-item-indicator'
-import '@videojs/html/ui/playback-rate-radio-group'
-import '@videojs/html/ui/captions-radio-group'
-import {
-    ArrowLeft02Icon,
-    ArrowRight01Icon,
-    Cancel01Icon,
-    FullScreenIcon,
-    GoBackward10SecIcon,
-    GoForward10SecIcon,
-    MinimizeScreenIcon,
-    NextIcon,
-    PauseIcon,
-    PlayIcon,
-    PreviousIcon,
-    RepeatIcon,
-    Settings02Icon,
-    VolumeHighIcon,
-    VolumeMute02Icon,
-} from '@hugeicons/core-free-icons'
+import { Alert02Icon, Cancel01Icon } from '@hugeicons/core-free-icons'
 import { openFile, streams, warmFile, type TgFile } from '../stream/reader'
 import { codecName, nativeEngine, playableSound, probe, RemuxEngine, route, Unplayable, type Engine, type Probe, type SoundTrack, type Why } from './engines'
 import { LIBAV_FORMATS, LibavEngine } from './libav'
-import { storyboardTrack } from './storyboard'
+import { storyboardFrames, type Frames } from './storyboard'
+import { Chrome, variant } from './Chrome'
+import { loadThumb } from '../screens/thumbs'
 import { readSubtitle, SUBTITLE_EXTENSIONS, SubtitleError } from './subtitles'
 import { api } from '../tg/rpc'
 import { t } from '../i18n'
@@ -74,8 +28,6 @@ interface Source {
 const NEXT_AHEAD = 30
 /** Waiting this long with nothing arriving says so, as the app's OpeningStall. */
 const STALL_MS = 15_000
-/** How long a press is held before the video plays at double speed. */
-const HOLD_MS = 450
 
 /** Local testing only: start and seek times, in the console and in `window.playerTimes`. */
 const timing =
@@ -86,13 +38,6 @@ const timing =
               ;((window as unknown as { playerTimes?: { label: string; ms: number }[] }).playerTimes ??= []).push({ label, ms })
           }
         : () => {}
-
-/**
- * The item Video.js's own option groups (speed, subtitles) copy for each choice. Set as HTML: it is
- * cloned by Video.js, never drawn by Solid. The tick is drawn by CSS (.menu-check).
- */
-const RADIO_TEMPLATE =
-    '<template><media-menu-radio-item class="menu-row"><span data-part="label"></span><media-menu-item-indicator force-mount class="menu-check"></media-menu-item-indicator></media-menu-radio-item></template>'
 
 /** The speed last chosen in this tab: the next episode (or any video opened after) plays at it too. */
 let chosenRate = 1
@@ -112,10 +57,11 @@ function speedText(bytesPerSecond: number): string {
 }
 
 /**
- * The player: Video.js 10's elements (state, gestures, hotkeys, seek bar with Telegram's
- * storyboard, menus) around our own `<video>`, which the engines in engines.ts feed. Quality
- * switches between the posted file and Telegram's copies at the same second; a subtitle file
- * from the device becomes a text track; the next episode is fetched ahead near the end.
+ * The player: our own `<video>`, which the engines in engines.ts feed, inside Video.js 10's player
+ * element, under the apps' own controls (Chrome.tsx). Quality switches between the posted file and
+ * Telegram's copies at the same second; a subtitle file from the device becomes a text track; the
+ * next episode is fetched ahead near the end. A start that stalls, a failure and a file the browser
+ * cannot play get the app's status sheet instead of the controls.
  */
 export function Player(props: {
     item: VideoItem
@@ -127,6 +73,7 @@ export function Player(props: {
     let video!: HTMLVideoElement
     let container!: HTMLElement
     let subtitleInput!: HTMLInputElement
+    const [ready, setReady] = createSignal(false)
     const item = props.item
     const copies = playableCopies(item.copies)
     const mounted = performance.now()
@@ -150,13 +97,10 @@ export function Player(props: {
     const [details, setDetails] = createSignal('')
     const [readout, setReadout] = createSignal('')
     const [stall, setStall] = createSignal<'start' | 'mid' | 'offline' | null>(null)
-    const [startOver, setStartOver] = createSignal(false)
-    const [nextCard, setNextCard] = createSignal(false)
-    const [nextDismissed, setNextDismissed] = createSignal(false)
-    const [holding, setHolding] = createSignal(false)
-    const [fullscreen, setFullscreen] = createSignal(false)
+    /** Where the video was resumed from (seconds), for the Start over offer. */
+    const [resumedAt, setResumedAt] = createSignal<number | null>(null)
+    const [frames, setFrames] = createSignal<Frames | null>(null)
     const subtitleUrls: string[] = []
-    let storyboardUrls: string[] = []
 
     // Resume: where the video was left (seconds), the app's rewind taken off on opening.
     let savedMs: number | null = null
@@ -308,20 +252,15 @@ export function Player(props: {
                 ? t('web.needs_app_no_mse')
                 : t('web.needs_app_codec')
 
-    // Telegram's storyboard as the seek bar's preview, fetched once the picture is up.
+    // Telegram's storyboard for the seek bar's preview card, fetched once the picture is up.
     let storyboardAsked = false
     const addStoryboard = async () => {
         if (storyboardAsked || !item.storyboard) return
         storyboardAsked = true
         try {
-            const sb = await storyboardTrack(item.storyboard, source().duration || video.duration)
-            storyboardUrls = sb.urls
-            const track = document.createElement('track')
-            track.kind = 'metadata'
-            track.label = 'thumbnails'
-            track.src = sb.vtt
-            track.default = true
-            video.append(track)
+            const f = await storyboardFrames(item.storyboard)
+            if (closed) return URL.revokeObjectURL(f.url)
+            setFrames(f)
         } catch (e) {
             console.warn('[player] storyboard', e)
         }
@@ -386,25 +325,6 @@ export function Player(props: {
         if (next) props.onPlay(next)
     }
 
-    // Hold on the picture: double speed while held, back on release.
-    let holdTimer = 0
-    let heldRate = 1
-    const holdStart = (e: PointerEvent) => {
-        if (e.button !== 0 || video.paused) return
-        clearTimeout(holdTimer)
-        holdTimer = window.setTimeout(() => {
-            heldRate = video.playbackRate
-            video.playbackRate = 2
-            setHolding(true)
-        }, HOLD_MS)
-    }
-    const holdEnd = () => {
-        clearTimeout(holdTimer)
-        if (!holding()) return
-        video.playbackRate = heldRate
-        setHolding(false)
-    }
-
     // Loaded ahead and the arrival speed, once a second while the page is seen; also the stall watch.
     let tick = 0
     let lastReceived = 0
@@ -455,17 +375,13 @@ export function Player(props: {
     let saveTimer = 0
     /** Closed while the saved place was still being read: nothing may start after that. */
     let closed = false
-    const watchControls = new MutationObserver(() => placeCues(!!container.querySelector('.controls-content[data-visible]')))
     onMount(async () => {
         const left = (await getResume(item.chatId, item.messageId))?.position ?? 0
         savedMs = left > 0 ? left * 1000 : null
         const at = left > 0 ? (await api.resumeStart(left * 1000, rewindMs()).catch(() => left * 1000)) / 1000 : 0
         if (closed) return
         video.playbackRate = chosenRate
-        if (at > 0) {
-            setStartOver(true)
-            window.setTimeout(() => setStartOver(false), 10_000)
-        }
+        if (at > 0) setResumedAt(at)
         load(source(), at, true)
         saveTimer = window.setInterval(() => savePosition(video.currentTime), 10_000)
         tick = window.setInterval(sample, 1000)
@@ -474,12 +390,10 @@ export function Player(props: {
         document.addEventListener('visibilitychange', onHidden)
         window.addEventListener('pagehide', onLeave)
         tabs?.addEventListener('message', onOtherTab)
-        document.addEventListener('keydown', onKey)
-        document.addEventListener('fullscreenchange', onFullscreen)
-        const controls = container.querySelector('.controls-content')!
-        watchControls.observe(controls, { attributes: true, attributeFilter: ['data-visible'] })
         container.focus({ preventScroll: true })
     })
+    // The controls are drawn once the video element exists.
+    onMount(() => setReady(true))
 
     // The lock screen and media keys: its name, the jumps, previous and next.
     createEffect(() => {
@@ -494,48 +408,39 @@ export function Player(props: {
         navigator.mediaSession.setActionHandler('nexttrack', info?.next ? () => play(info.next) : null)
     })
 
-    // Near the end: the next episode starts arriving, and its card comes up.
+    // Near the end: the next episode starts arriving (its card is the controls').
     let nextWarmed = false
     const onTime = () => {
         const next = props.info?.next
         const d = video.duration
-        if (!next || !isFinite(d) || d < NEXT_AHEAD * 2) return
-        const near = d - video.currentTime <= NEXT_AHEAD
-        if (near && !nextWarmed) {
+        if (!next || !isFinite(d) || d < NEXT_AHEAD * 2 || nextWarmed) return
+        if (d - video.currentTime <= NEXT_AHEAD) {
             nextWarmed = true
             warmFile(next)
         }
-        setNextCard(near)
     }
-    createEffect(on(() => props.info?.next?.key, () => setNextDismissed(false), { defer: true }))
 
     onCleanup(() => {
         closed = true
-        watchControls.disconnect()
         savePosition(video.currentTime)
         clearInterval(saveTimer)
         clearInterval(tick)
-        clearTimeout(holdTimer)
         window.removeEventListener('offline', onOffline)
         window.removeEventListener('online', onOnline)
         document.removeEventListener('visibilitychange', onHidden)
         window.removeEventListener('pagehide', onLeave)
         tabs?.removeEventListener('message', onOtherTab)
-        document.removeEventListener('keydown', onKey)
-        document.removeEventListener('fullscreenchange', onFullscreen)
         generation++
         unload()
-        for (const u of [...subtitleUrls, ...storyboardUrls]) URL.revokeObjectURL(u)
+        for (const u of subtitleUrls) URL.revokeObjectURL(u)
+        const f = frames()
+        if (f) URL.revokeObjectURL(f.url)
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
         if ('mediaSession' in navigator) {
             navigator.mediaSession.metadata = null
             for (const a of ['previoustrack', 'nexttrack', 'seekbackward', 'seekforward', 'seekto'] as const) navigator.mediaSession.setActionHandler(a, null)
         }
     })
-
-    function onFullscreen() {
-        setFullscreen(!!document.fullscreenElement)
-    }
 
     const close = () => {
         // Saved before leaving: Back may leave the site, and then no cleanup runs.
@@ -544,36 +449,14 @@ export function Player(props: {
         props.onClose()
     }
 
-    // The keys Video.js has no action for: Escape closes, Shift+N and Shift+P step episodes.
-    function onKey(e: KeyboardEvent) {
-        if (e.target instanceof HTMLInputElement && e.target.type !== 'range') return
-        if (e.key === 'Escape') {
-            if (document.fullscreenElement || document.querySelector('media-menu[data-open]')) return
-            close()
-        } else if (e.shiftKey && e.key.toLowerCase() === 'n') play(props.info?.next ?? null)
-        else if (e.shiftKey && e.key.toLowerCase() === 'p') play(props.info?.previous ?? null)
-        else return
-        e.preventDefault()
-    }
-
-    const showSettings = () => !needsApp()
-    const episodeLine = () => {
-        const ep = props.info?.episode
-        return ep ? `${ep.code}${ep.name ? `  ·  ${ep.name}` : ''}` : ''
-    }
+    /** The status sheet is up: a stall, a failure or a file this browser cannot play. */
+    const blocked = () => !!(needsApp() || error() || (stall() && stall() !== 'offline'))
+    const sheetTitle = () => (props.info?.episode ? `${props.info.title} ${props.info.episode.code}` : (props.info?.title ?? item.title))
+    const lighter = () => (needsApp() ? copies[0] : copies[copies.length - 1])
 
     return (
         <video-player class="player-root">
-            <media-container
-                ref={container}
-                class="player"
-                classList={{ blocked: !!needsApp(), holding: holding() }}
-                tabIndex={-1}
-                onPointerDown={(e: PointerEvent) => (e.target === video ? holdStart(e) : undefined)}
-                onPointerUp={holdEnd}
-                onPointerCancel={holdEnd}
-                onPointerLeave={holdEnd}
-            >
+            <media-container ref={container} class="player" classList={{ blocked: blocked() }} data-variant={variant()} tabIndex={-1}>
                 <video
                     ref={video}
                     playsinline
@@ -603,280 +486,97 @@ export function Player(props: {
                         }, 60_000)
                     }}
                     onTimeUpdate={onTime}
-                    onRateChange={() => !holding() && (chosenRate = video.playbackRate)}
+                    // A held finger plays at double speed for a moment: that is not a speed chosen.
+                    onRateChange={() => video.playbackRate !== 2 && (chosenRate = video.playbackRate)}
                     onSeeking={() => framed && (seekStarted = performance.now())}
                     onSeeked={() => {
                         if (seekStarted) timing('seek, until the frame', seekStarted)
                         refreshKept()
                     }}
                     onError={onVideoError}
-                    onEnded={() => {
-                        savePosition(video.duration)
-                        if (props.info?.next) setNextCard(true)
-                    }}
+                    onEnded={() => savePosition(video.duration)}
                 />
 
-                <media-gesture type="tap" action="togglePaused" pointer="mouse" />
-                <media-gesture type="doubletap" action="toggleFullscreen" pointer="mouse" />
-                <media-gesture type="doubletap" action="seekStep" attr:value="-10" region="left" pointer="touch" />
-                <media-gesture type="doubletap" action="seekStep" attr:value="10" region="right" pointer="touch" />
-                <media-hotkey target="document" keys="Space" action="togglePaused" />
-                <media-hotkey target="document" keys="k" action="togglePaused" />
-                <media-hotkey target="document" keys="m" action="toggleMuted" />
-                <media-hotkey target="document" keys="f" action="toggleFullscreen" />
-                <media-hotkey target="document" keys="c" action="toggleSubtitles" />
-                <media-hotkey target="document" keys="ArrowLeft" action="seekStep" attr:value="-5" />
-                <media-hotkey target="document" keys="ArrowRight" action="seekStep" attr:value="10" />
-                <media-hotkey target="document" keys="j" action="seekStep" attr:value="-10" />
-                <media-hotkey target="document" keys="l" action="seekStep" attr:value="10" />
-                <media-hotkey target="document" keys="ArrowUp" action="volumeStep" attr:value="0.05" />
-                <media-hotkey target="document" keys="ArrowDown" action="volumeStep" attr:value="-0.05" />
-                <media-hotkey target="document" keys="]" action="speedUp" />
-                <media-hotkey target="document" keys="[" action="speedDown" />
-                <media-hotkey target="document" keys="0-9" action="seekToPercent" />
-
-                <media-buffering-indicator class="buffering">
-                    <div class="spinner" aria-label={t('player.buffering')} />
-                </media-buffering-indicator>
-                <media-seek-indicator class="seek-indicator">
-                    <media-seek-indicator-value />
-                </media-seek-indicator>
-                <Show when={holding()}>
-                    <div class="hold-badge" role="status">{t('format.speed_factor', { speed: 2 })}</div>
-                </Show>
-
-                <Show when={error()}>
-                    <div class="player-error" role="alert">
-                        <p>{error()}</p>
-                        <div class="actions">
-                            <button class="primary" onClick={() => reload()}>{t('player.reload')}</button>
-                            <button onClick={close}>{t('common.back')}</button>
-                        </div>
-                    </div>
-                </Show>
-                <Show when={stall() && !error() && !needsApp()}>
-                    <div class="player-error stall" role="alert">
-                        <Show
-                            when={stall() !== 'offline'}
-                            fallback={<p>{t('player.offline_waiting')}</p>}
-                        >
-                            <h2>{stall() === 'start' ? t('player.stalled_title') : t('player.stalled_mid_title')}</h2>
-                            <p>{stall() === 'start' ? t('player.stalled_slow') : t('player.stalled_mid_slow')}</p>
-                            <div class="actions">
-                                <button class="primary" onClick={() => reload()}>{t('player.reload')}</button>
-                                <Show when={copies.length && source().height === 0}>
-                                    <button onClick={() => pickQuality(copies[copies.length - 1].key)}>
-                                        {t('player.lighter', { quality: `${copies[copies.length - 1].height}p` })}
-                                    </button>
-                                </Show>
-                            </div>
-                        </Show>
-                    </div>
-                </Show>
-                <Show when={needsApp()}>
-                    {(why) => (
-                        <div class="player-error needs-app" role="alert">
-                            <h2>{t('web.needs_app_title')}</h2>
-                            <p>{whyText(why())}</p>
-                            <p class="muted small">{t('web.app_body')}</p>
-                            <div class="actions">
-                                <a class="button primary" href="https://tmplayer.org/#download" target="_blank" rel="noopener">
-                                    {t('web.needs_app_get')}
-                                </a>
-                                <Show when={copies.length && source().height === 0}>
-                                    <button onClick={() => {
-                                        setNeedsApp(null)
-                                        pickQuality(copies[0].key)
-                                    }}>
-                                        {t('player.lighter', { quality: `${copies[0].height}p` })}
-                                    </button>
-                                </Show>
-                                <button onClick={close}>{t('common.back')}</button>
-                            </div>
-                        </div>
-                    )}
-                </Show>
-                <Show when={notice() && !needsApp() && !error()}>
-                    <div class="player-notice" role="status">
-                        <p>{notice()}</p>
-                        <button class="icon" onClick={() => setNotice('')} aria-label={t('common.close')}>
-                            <Icon icon={Cancel01Icon} size={20} />
-                        </button>
-                    </div>
-                </Show>
-                <Show when={startOver() && !needsApp()}>
-                    <button
-                        class="float-chip start-over"
-                        onClick={() => {
-                            video.currentTime = 0
-                            setStartOver(false)
+                <Show when={ready()}>
+                    <Chrome
+                        ctl={{
+                            video,
+                            root: container,
+                            item,
+                            info: () => props.info,
+                            close,
+                            play,
+                            blocked,
+                            audios,
+                            audio,
+                            canSwitchAudio: () => switchable() && audios().length > 1,
+                            pickAudio,
+                            trackLabel,
+                            copies,
+                            sourceKey: () => source().key,
+                            sourceHeight: () => source().height,
+                            pickQuality,
+                            qualityLabel,
+                            readout,
+                            details,
+                            loadSubtitleFile: () => subtitleInput.click(),
+                            frames,
+                            resumedAt,
+                            startOver: () => {
+                                video.currentTime = 0
+                                setResumedAt(null)
+                            },
+                            onControls: placeCues,
                         }}
                     >
-                        <Icon icon={RepeatIcon} size={18} />
-                        {t('player.start_over')}
-                    </button>
-                </Show>
-                <Show when={props.info?.next && nextCard() && !nextDismissed()}>
-                    <div class="next-card" role="group" aria-label={t('player.next_episode')}>
-                        <div class="next-text">
-                            <div class="muted small">{t('player.next_episode')}</div>
-                            <div class="next-name">{props.info!.nextCode ?? props.info!.next!.title}</div>
-                        </div>
-                        <button class="primary" onClick={() => play(props.info!.next)}>
-                            <Icon icon={PlayIcon} size={18} />
-                            {t('player.play_now')}
-                        </button>
-                        <button class="icon" onClick={() => setNextDismissed(true)} aria-label={t('common.close')}>
-                            <Icon icon={Cancel01Icon} size={20} />
-                        </button>
-                    </div>
+                        <Show when={notice() && !blocked()}>
+                            <div class="pc-notice" role="status">
+                                <p>{notice()}</p>
+                                <button type="button" onClick={() => setNotice('')} aria-label={t('common.close')}>
+                                    <Icon icon={Cancel01Icon} size={20} />
+                                </button>
+                            </div>
+                        </Show>
+                    </Chrome>
                 </Show>
 
-                <media-controls class="controls-layer">
-                    <media-controls-backdrop class="controls-backdrop" />
-                    <media-controls-content class="controls-content">
-                        <media-controls-group class="top-bar">
-                            <button class="icon" onClick={close} aria-label={t('common.back')} title={t('player.back_hint')}>
-                                <Icon icon={ArrowLeft02Icon} />
+                <Show when={blocked()}>
+                    <StatusSheet
+                        item={item}
+                        title={sheetTitle()}
+                        heading={needsApp() ? t('web.needs_app_title') : error() ? t('player.cant_play') : stall() === 'start' ? t('player.stalled_title') : t('player.stalled_mid_title')}
+                        body={needsApp() ? whyText(needsApp()!) : (error() ?? (stall() === 'start' ? t('player.stalled_slow') : t('player.stalled_mid_slow')))}
+                        note={needsApp() ? t('web.app_body') : undefined}
+                        warning={!!error() || !!needsApp()}
+                    >
+                        <Show
+                            when={needsApp()}
+                            fallback={
+                                <button type="button" class="pc-sheet-button primary" onClick={() => reload()}>
+                                    {error() ? t('player.reload') : t('common.try_again')}
+                                </button>
+                            }
+                        >
+                            <a class="pc-sheet-button primary" href="https://tmplayer.org/#download" target="_blank" rel="noopener">
+                                {t('web.needs_app_get')}
+                            </a>
+                        </Show>
+                        <Show when={copies.length && source().height === 0}>
+                            <button
+                                type="button"
+                                class="pc-sheet-button"
+                                onClick={() => {
+                                    const pick = lighter()
+                                    setNeedsApp(null)
+                                    pickQuality(pick.key)
+                                }}
+                            >
+                                {t('player.lighter', { quality: `${lighter().height}p` })}
                             </button>
-                            <div class="title">
-                                <div class="title-name">{props.info?.title ?? item.title}</div>
-                                <div class="muted small">{episodeLine() || item.chat}</div>
-                            </div>
-                        </media-controls-group>
-                        <media-controls-group class="bottom-bar">
-                            <media-time-slider class="time-slider">
-                                <media-slider-track class="slider-track">
-                                    <media-slider-buffer class="slider-buffer" />
-                                    <media-slider-fill class="slider-fill" />
-                                </media-slider-track>
-                                <media-slider-thumb class="slider-thumb" />
-                                <media-slider-preview class="slider-preview">
-                                    <media-slider-thumbnail class="slider-thumbnail" />
-                                    <media-slider-value type="pointer" class="slider-value" />
-                                </media-slider-preview>
-                            </media-time-slider>
-                            <div class="row">
-                                <Show when={props.info?.previous}>
-                                    <button class="icon" onClick={() => play(props.info!.previous)} aria-label={t('player.previous_episode')} title={t('player.previous_episode_hint', { episode: props.info!.previousCode ?? '' })}>
-                                        <Icon icon={PreviousIcon} />
-                                    </button>
-                                </Show>
-                                <media-seek-button class="icon" seconds={-10}>
-                                    <Icon icon={GoBackward10SecIcon} />
-                                </media-seek-button>
-                                <media-play-button class="icon play">
-                                    <span class="when-paused"><Icon icon={PlayIcon} size={28} /></span>
-                                    <span class="when-playing"><Icon icon={PauseIcon} size={28} /></span>
-                                </media-play-button>
-                                <media-seek-button class="icon" seconds={10}>
-                                    <Icon icon={GoForward10SecIcon} />
-                                </media-seek-button>
-                                <Show when={props.info?.next}>
-                                    <button class="icon" onClick={() => play(props.info!.next)} aria-label={t('player.next_episode')} title={t('player.next_episode_hint', { episode: props.info!.nextCode ?? '' })}>
-                                        <Icon icon={NextIcon} />
-                                    </button>
-                                </Show>
-                                <media-time-group class="time">
-                                    <media-time type="current" />
-                                    <media-time-separator />
-                                    <media-time type="duration" class="muted" />
-                                </media-time-group>
-                                <div class="spacer" />
-                                <media-mute-button class="icon">
-                                    <span class="when-sound"><Icon icon={VolumeHighIcon} /></span>
-                                    <span class="when-muted"><Icon icon={VolumeMute02Icon} /></span>
-                                </media-mute-button>
-                                <Show when={showSettings()}>
-                                    <button type="button" class="icon" commandfor="player-menu" aria-label={t('player.playback_options')} title={t('player.playback_options')}>
-                                        <Icon icon={Settings02Icon} />
-                                    </button>
-                                </Show>
-                                <media-fullscreen-button class="icon">
-                                    <Show when={fullscreen()} fallback={<Icon icon={FullScreenIcon} />}>
-                                        <Icon icon={MinimizeScreenIcon} />
-                                    </Show>
-                                </media-fullscreen-button>
-                            </div>
-                        </media-controls-group>
-                    </media-controls-content>
-                </media-controls>
-
-                <media-menu id="player-menu" class="player-menu" side="top" align="end">
-                    <media-menu-content class="menu-page">
-                        <media-menu-item commandfor="speed-menu" class="menu-row">
-                            <span>{t('player.speed')}</span>
-                            <span class="menu-value"><span data-part="hint" /><Icon icon={ArrowRight01Icon} size={18} /></span>
-                        </media-menu-item>
-                        <media-menu-item commandfor="subtitles-menu" class="menu-row">
-                            <span>{t('player.subtitles')}</span>
-                            <span class="menu-value"><span data-part="hint" /><Icon icon={ArrowRight01Icon} size={18} /></span>
-                        </media-menu-item>
-                        {/* Its own row: the Subtitles page above hides itself while the video has no subtitles. */}
-                        <media-menu-item class="menu-row" on:click={() => subtitleInput.click()}>
-                            <span>{t('player.load_subtitle_file')}</span>
-                        </media-menu-item>
-                        <Show when={audios().length > 1 && switchable()}>
-                            <media-menu-item commandfor="sound-menu" class="menu-row">
-                                <span>{t('player.audio')}</span>
-                                <span class="menu-value"><span>{audio() ? trackLabel(audio()!, audios().indexOf(audio()!)) : ''}</span><Icon icon={ArrowRight01Icon} size={18} /></span>
-                            </media-menu-item>
                         </Show>
-                        <Show when={copies.length}>
-                            <media-menu-item commandfor="quality-menu" class="menu-row">
-                                <span>{t('series.quality')}</span>
-                                <span class="menu-value"><span>{qualityLabel(source().height)}</span><Icon icon={ArrowRight01Icon} size={18} /></span>
-                            </media-menu-item>
-                        </Show>
-                        <div class="menu-readout muted small">
-                            <div>{readout()}</div>
-                            <div>{details()}</div>
-                        </div>
-                    </media-menu-content>
-
-                    <media-menu-content id="speed-menu" class="menu-page">
-                        <media-menu-item class="menu-back"><Icon icon={ArrowLeft02Icon} size={18} />{t('player.playback_speed')}</media-menu-item>
-                        <media-playback-rate-radio-group innerHTML={RADIO_TEMPLATE} />
-                    </media-menu-content>
-
-                    <media-menu-content id="subtitles-menu" class="menu-page">
-                        <media-menu-item class="menu-back"><Icon icon={ArrowLeft02Icon} size={18} />{t('player.subtitles')}</media-menu-item>
-                        <media-captions-radio-group innerHTML={RADIO_TEMPLATE} />
-                    </media-menu-content>
-
-                    <Show when={audios().length > 1 && switchable()}>
-                        <media-menu-content id="sound-menu" class="menu-page">
-                            <media-menu-item class="menu-back"><Icon icon={ArrowLeft02Icon} size={18} />{t('player.audio')}</media-menu-item>
-                            <media-menu-radio-group attr:value={String(audios().indexOf(audio()!))} on:value-change={(e: CustomEvent<{ value: string }>) => pickAudio(Number(e.detail.value))}>
-                                <For each={audios()}>
-                                    {(tr, i) => (
-                                        <media-menu-radio-item class="menu-row" attr:value={String(i())}>
-                                            <span>{trackLabel(tr, i())}</span>
-                                            <media-menu-item-indicator attr:force-mount="" class="menu-check" />
-                                        </media-menu-radio-item>
-                                    )}
-                                </For>
-                            </media-menu-radio-group>
-                        </media-menu-content>
-                    </Show>
-
-                    <Show when={copies.length}>
-                        <media-menu-content id="quality-menu" class="menu-page">
-                            <media-menu-item class="menu-back"><Icon icon={ArrowLeft02Icon} size={18} />{t('series.quality')}</media-menu-item>
-                            <media-menu-radio-group attr:value={source().key} on:value-change={(e: CustomEvent<{ value: string }>) => pickQuality(e.detail.value)}>
-                                <For each={[{ key: item.key, height: 0 }, ...copies]}>
-                                    {(c) => (
-                                        <media-menu-radio-item class="menu-row" attr:value={c.key}>
-                                            <span>{qualityLabel(c.height)}</span>
-                                            <media-menu-item-indicator attr:force-mount="" class="menu-check" />
-                                        </media-menu-radio-item>
-                                    )}
-                                </For>
-                            </media-menu-radio-group>
-                            <div class="menu-readout muted small">{t('player.copies_note')}</div>
-                        </media-menu-content>
-                    </Show>
-                </media-menu>
+                        <button type="button" class="pc-sheet-button" onClick={close}>{t('player.go_back')}</button>
+                    </StatusSheet>
+                </Show>
 
                 <input
                     ref={subtitleInput}
@@ -891,5 +591,40 @@ export function Player(props: {
                 />
             </media-container>
         </video-player>
+    )
+}
+
+/**
+ * The player's loading and failure sheet (the app's status_sheet): the video's picture, its name,
+ * what happened in a heading and a line, and the ways on as pills in a row that wraps. Stacked on
+ * a phone held upright, the picture beside the words where the height is short.
+ */
+function StatusSheet(props: { item: VideoItem; title: string; heading: string; body: string; note?: string; warning: boolean; children: JSX.Element }) {
+    const [art, setArt] = createSignal<string | null>(null)
+    onMount(() => {
+        if (props.item.thumb && !props.warning) loadThumb(props.item.thumb).then(setArt, () => {})
+    })
+    return (
+        <div class="pc-status" role="alert">
+            <div class="pc-status-inner" classList={{ pictured: !!art() }}>
+                <Show when={art()}>
+                    <img class="pc-status-art" src={art()!} alt="" />
+                </Show>
+                <div class="pc-status-text">
+                    <p class="pc-status-name">{props.title}</p>
+                    <Show when={props.warning}>
+                        <span class="pc-status-warning">
+                            <Icon icon={Alert02Icon} size={40} />
+                        </span>
+                    </Show>
+                    <h2>{props.heading}</h2>
+                    <p class="pc-status-body">{props.body}</p>
+                    <Show when={props.note}>
+                        <p class="pc-status-body">{props.note}</p>
+                    </Show>
+                    <div class="pc-status-actions">{props.children}</div>
+                </div>
+            </div>
+        </div>
     )
 }

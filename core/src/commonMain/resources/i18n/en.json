@@ -3032,6 +3032,7 @@
     "proxy_detail": "Set in this device's or browser's network settings",
     "proxy_unavailable": "In a browser, TMPlayer reaches Telegram over the browser's own secure connection, which cannot go through a Telegram proxy. To use a proxy or a VPN, set it up in this device's or browser's network settings.",
     "quality_original": "Original file",
+    "seek_bar": "Position in the video",
     "signout_body": "You'll be signed out and taken back to the sign-in screen. Your favourites, your watched list and everything you were part way through go with it.",
     "sound_unplayable": "This browser cannot play the {codec} sound, so the sound stays as it was.",
     "stopped_loading": "The video stopped loading. Check your connection, then try again.",

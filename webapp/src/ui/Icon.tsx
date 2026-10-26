@@ -1,7 +1,7 @@
 // The app's icons: Hugeicons' free Stroke Rounded set, the same glyphs TmIcons draws in Compose.
 // A place that is chosen (the nav bar's) fills its glyph in the way the app's SelectableIcon does:
 // the outline's shapes filled, the inner detail (a door, a speech bubble's lines) cut out of it.
-import { createUniqueId, For, Show } from 'solid-js'
+import { createUniqueId, For, Match, Show, Switch } from 'solid-js'
 import { Home03Icon, Message01Icon, Search01Icon, Settings01Icon, StarIcon } from '@hugeicons/core-free-icons'
 
 type Part = readonly [string, Readonly<Record<string, string | number>>]
@@ -27,6 +27,28 @@ const FILLS = new Map<IconData, Fill>([
 
 const d = (icon: IconData, i: number) => String(icon[i][1].d)
 
+/** One part of a glyph: Hugeicons draws with paths, and a few circles, rects and lines. */
+function Shape(props: { part: Part }) {
+    const a = () => props.part[1]
+    const fill = () => (a().fill === 'currentColor' ? 'currentColor' : 'none')
+    return (
+        <Switch fallback={<path d={String(a().d)} fill={fill()} />}>
+            <Match when={props.part[0] === 'circle'}>
+                <circle cx={a().cx} cy={a().cy} r={a().r} fill={fill()} />
+            </Match>
+            <Match when={props.part[0] === 'ellipse'}>
+                <ellipse cx={a().cx} cy={a().cy} rx={a().rx} ry={a().ry} fill={fill()} />
+            </Match>
+            <Match when={props.part[0] === 'rect'}>
+                <rect x={a().x} y={a().y} width={a().width} height={a().height} rx={a().rx} fill={fill()} />
+            </Match>
+            <Match when={props.part[0] === 'line'}>
+                <line x1={a().x1} y1={a().y1} x2={a().x2} y2={a().y2} />
+            </Match>
+        </Switch>
+    )
+}
+
 export function Icon(props: { icon: IconData; size?: number; selected?: boolean; class?: string }) {
     const mask = createUniqueId()
     const fill = () => FILLS.get(props.icon)
@@ -45,7 +67,7 @@ export function Icon(props: { icon: IconData; size?: number; selected?: boolean;
             aria-hidden="true"
         >
             <g class="icon-outline">
-                <For each={props.icon as Part[]}>{([, a]) => <path d={String(a.d)} fill={a.fill === 'currentColor' ? 'currentColor' : 'none'} />}</For>
+                <For each={props.icon as Part[]}>{(part) => <Shape part={part} />}</For>
             </g>
             <Show when={fill()}>
                 {(f) => (

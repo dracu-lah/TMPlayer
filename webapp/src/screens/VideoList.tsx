@@ -5,6 +5,7 @@ import { loadThumb } from './thumbs'
 import { loadPoster } from './posters'
 import { warmDataCentres, warmFile } from '../stream/reader'
 import { t } from '../i18n'
+import { form } from '../form'
 import { cardLayout, VirtualGrid } from '../ui/VirtualGrid'
 import { placeSponsored, SponsoredCard } from './Sponsored'
 import type { SponsoredItem, Tile, VideoItem } from '../tg/types'
@@ -23,6 +24,13 @@ export function length(s: number): string {
 }
 
 export const watchPath = (v: Pick<VideoItem, 'chatId' | 'messageId'>) => `/watch/${v.chatId}/${v.messageId}`
+/** A video's page before it plays (the apps' detail), at `/video/<chat>/<message>`. */
+export const detailPath = (v: Pick<VideoItem, 'chatId' | 'messageId'>) => `/video/${v.chatId}/${v.messageId}`
+/**
+ * Where a card goes: its detail page, as the apps open a card. The TV layout still plays at once
+ * until its own detail pane is drawn (session 21); `direct` (Continue watching) plays at once too.
+ */
+const cardPath = (v: VideoItem, direct?: boolean) => (direct || form() === 'tv' ? watchPath(v) : detailPath(v))
 
 /**
  * The art of a portrait card, as the app draws a video's: the frame across the card's width, the
@@ -125,12 +133,12 @@ const intent = (v: VideoItem) => {
     hoverTimer = window.setTimeout(() => warmFile(v), 250)
 }
 
-/** One portrait card, which opens the video's page. */
-export function Card(props: { card: CardData; progress?: number; replace?: boolean }) {
+/** One portrait card, which opens the video's page (or plays it, from Continue watching). */
+export function Card(props: { card: CardData; progress?: number; replace?: boolean; direct?: boolean }) {
     return (
         <A
             class="card"
-            href={watchPath(props.card.item)}
+            href={cardPath(props.card.item, props.direct)}
             state={{ video: props.card.item }}
             replace={props.replace}
             onPointerEnter={() => intent(props.card.item)}

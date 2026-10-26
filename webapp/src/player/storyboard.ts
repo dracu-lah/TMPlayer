@@ -11,38 +11,55 @@ async function readWhole(f: FileRef): Promise<Uint8Array> {
     }
 }
 
-function vttTime(s: number): string {
-    const h = Math.floor(s / 3600)
-    const m = Math.floor((s % 3600) / 60)
-    const sec = s % 60
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${sec.toFixed(3).padStart(6, '0')}`
+/** Telegram's storyboard, ready to draw: the sprite, one frame's size, and where each frame starts. */
+export interface Frames {
+    url: string
+    /** One frame's size in the sprite. */
+    width: number
+    height: number
+    /** The whole sprite's size, for scaling it as a background. */
+    spriteWidth: number
+    spriteHeight: number
+    frames: { t: number; x: number; y: number }[]
 }
 
 /**
- * Telegram's storyboard as a WebVTT thumbnails track: each cue points at one frame of the JPEG
- * sprite (`sprite.jpg#xywh=x,y,w,h`), the format the player's scrub preview reads. The map is
- * `file=`, `frame_width=`, `frame_height=` and then one `seconds,x,y` line per frame.
+ * Telegram's storyboard: a JPEG sprite and a map, `file=`, `frame_width=`, `frame_height=` and then
+ * one `seconds,x,y` line per frame. The seek bar's preview card draws the frame for a time
+ * ([frameAt]) as a slice of the sprite, as the apps' StoryboardPreview does.
  */
-export async function storyboardTrack(sb: Storyboard, duration: number): Promise<{ vtt: string; urls: string[] }> {
+export async function storyboardFrames(sb: Storyboard): Promise<Frames> {
     const [sprite, map] = await Promise.all([readWhole(sb.sprite), readWhole(sb.map)])
-    const spriteUrl = URL.createObjectURL(new Blob([sprite as BlobPart], { type: 'image/jpeg' }))
-    let w = 0
-    let h = 0
-    const frames: { t: number; x: number; y: number }[] = []
+    const url = URL.createObjectURL(new Blob([sprite as BlobPart], { type: 'image/jpeg' }))
+    let width = 0
+    let height = 0
+    const frames: Frames['frames'] = []
     for (const line of new TextDecoder().decode(map).split('\n')) {
-        if (line.startsWith('frame_width=')) w = Number(line.slice(12))
-        else if (line.startsWith('frame_height=')) h = Number(line.slice(13))
+        if (line.startsWith('frame_width=')) width = Number(line.slice(12))
+        else if (line.startsWith('frame_height=')) height = Number(line.slice(13))
         else {
             const [t, x, y] = line.split(',').map(Number)
             if (line.includes(',') && [t, x, y].every(Number.isFinite)) frames.push({ t, x, y })
         }
     }
-    if (!w || !h || !frames.length) throw new Error('Unreadable storyboard')
-    let vtt = 'WEBVTT\n\n'
-    frames.forEach((f, i) => {
-        const end = frames[i + 1]?.t ?? Math.max(duration, f.t + 1)
-        vtt += `${vttTime(f.t)} --> ${vttTime(end)}\n${spriteUrl}#xywh=${f.x},${f.y},${w},${h}\n\n`
-    })
-    const vttUrl = URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }))
-    return { vtt: vttUrl, urls: [spriteUrl, vttUrl] }
+    if (!width || !height || !frames.length) {
+        URL.revokeObjectURL(url)
+        throw new Error('Unreadable storyboard')
+    }
+    frames.sort((a, b) => a.t - b.t)
+    const spriteWidth = Math.max(...frames.map((f) => f.x)) + width
+    const spriteHeight = Math.max(...frames.map((f) => f.y)) + height
+    return { url, width, height, spriteWidth, spriteHeight, frames }
+}
+
+/** The frame showing at `seconds`: the last one starting at or before it. */
+export function frameAt(f: Frames, seconds: number): { x: number; y: number } {
+    let lo = 0
+    let hi = f.frames.length - 1
+    while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1
+        if (f.frames[mid].t <= seconds) lo = mid
+        else hi = mid - 1
+    }
+    return f.frames[lo]
 }

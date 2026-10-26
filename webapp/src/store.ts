@@ -4,7 +4,7 @@
 // memory. Sign out clears all of it.
 import { createSignal } from 'solid-js'
 import { clear, createStore, del, entries, get, set, type UseStore } from 'idb-keyval'
-import type { Sort } from './tg/types'
+import type { Sort, VideoItem } from './tg/types'
 
 export type Theme = 'system' | 'dark' | 'light' | 'black'
 
@@ -133,9 +133,10 @@ function applyTheme(theme: Theme) {
 }
 
 export async function loadSettings() {
-    const [saved, stars] = await Promise.all([read<Partial<Settings>>('settings'), starred()])
+    const [saved, stars, later] = await Promise.all([read<Partial<Settings>>('settings'), starred(), laterList()])
     setSettings({ ...DEFAULTS, ...saved })
     setStarredIds(new Set(stars))
+    setLaterIds(new Set(later.map((l) => id(l.item.chatId, l.item.messageId))))
     applyTheme(settings().theme)
 }
 
@@ -218,6 +219,56 @@ export async function isWatched(chatId: number, messageId: number): Promise<bool
     return (await read(`watched:${id(chatId, messageId)}`)) !== undefined
 }
 
+/** Watched, as the detail page's round button and the History page read it: finished ids with when. */
+export async function watchedList(): Promise<{ chatId: number; messageId: number; time: number }[]> {
+    return [...(await allEntries<number>('watched:'))]
+        .map(([k, time]) => {
+            const [chatId, messageId] = k.slice('watched:'.length).split(':').map(Number)
+            return { chatId, messageId, time: typeof time === 'number' ? time : 0 }
+        })
+        .sort((a, b) => b.time - a.time)
+}
+
+/** Marks a video watched (its place forgotten, as finishing it does) or not watched. */
+export function setWatched(chatId: number, messageId: number, on: boolean) {
+    const key = id(chatId, messageId)
+    if (on) {
+        remove(`resume:${key}`)
+        write(`watched:${key}`, Date.now())
+    } else remove(`watched:${key}`)
+    setWatchedTick(watchedTick() + 1)
+}
+/** Bumped by every change to Watched, so what shows it reads it again. */
+const [watchedTick, setWatchedTick] = createSignal(0)
+export { watchedTick }
+
+// Watch later: the video itself is kept, so the list draws without asking Telegram.
+
+export interface Later {
+    item: VideoItem
+    time: number
+}
+const [laterIds, setLaterIds] = createSignal<ReadonlySet<string>>(new Set())
+export { laterIds }
+
+export function setLater(item: VideoItem, on: boolean) {
+    const key = id(item.chatId, item.messageId)
+    const next = new Set(laterIds())
+    if (on) {
+        next.add(key)
+        write(`later:${key}`, { item, time: Date.now() } satisfies Later)
+    } else {
+        next.delete(key)
+        remove(`later:${key}`)
+    }
+    setLaterIds(next)
+}
+
+/** Watch later, the latest first. */
+export async function laterList(): Promise<Later[]> {
+    return (await all<Later>('later:')).sort((a, b) => b.time - a.time)
+}
+
 // Starred chats
 
 /** The starred chats, live, for every star drawn. */
@@ -268,5 +319,6 @@ export async function clearAll() {
     await globalThis.caches?.delete(POSTERS).catch(() => {})
     setSettings({ ...DEFAULTS })
     setStarredIds(new Set<number>())
+    setLaterIds(new Set<string>())
     applyTheme(DEFAULTS.theme)
 }

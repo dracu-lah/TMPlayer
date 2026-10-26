@@ -145,7 +145,7 @@ function Row(props: { row: HomeRow; selfId: number | null }) {
                     <For each={cards()}>
                         {(c) => (
                             <li>
-                                <Card card={c} progress={progressOf(c.item)} />
+                                <Card card={c} progress={progressOf(c.item)} direct={props.row.kind === 'continue'} />
                             </li>
                         )}
                     </For>
