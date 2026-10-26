@@ -352,7 +352,7 @@ class PlayerControls(
     }
 
     /** The picture over its time, centred on the scrub point. */
-    private val previewCard = android.widget.LinearLayout(root.context).apply {
+    internal val previewCard = android.widget.LinearLayout(root.context).apply {
         val density = resources.displayMetrics.density
         orientation = android.widget.LinearLayout.VERTICAL
         gravity = android.view.Gravity.CENTER_HORIZONTAL
@@ -447,9 +447,21 @@ class PlayerControls(
         val fraction = position.toFloat() / duration
         val along = if (timeBar.layoutDirection == View.LAYOUT_DIRECTION_RTL) 1f - fraction else fraction
         val centre = bar[0] - origin[0] + timeBar.width * along
-        val maxX = (parent.width - width).toFloat().coerceAtLeast(0f)
-        previewCard.translationX = (centre - width / 2f).coerceIn(0f, maxX)
-        previewCard.translationY = bar[1] - origin[1] - height - gap
+        // Kept off the screen's edges, so the picture's hairline is whole at both ends of the bar.
+        val edge = 8 * density
+        val maxX = (parent.width - width - edge).coerceAtLeast(edge)
+        previewCard.translationX = (centre - width / 2f).coerceIn(edge, maxX)
+        // On a phone the times sit between the card and the bar; the card clears them rather than
+        // landing on the position at either end.
+        // On a television the title and its line stand over the bar, and the card clears them too.
+        var top = bar[1]
+        val above = if (isTv) title else times
+        if (above.isShown && (!isTv || title.text.isNotEmpty())) {
+            val line = IntArray(2)
+            above.getLocationInWindow(line)
+            if (line[1] < top) top = line[1]
+        }
+        previewCard.translationY = top - origin[1] - height - gap
     }
 
     // ---- fine scrubbing ----------------------------------------------------------------------
