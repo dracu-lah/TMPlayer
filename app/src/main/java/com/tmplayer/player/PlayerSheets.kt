@@ -94,6 +94,17 @@ class PlayerSheets(
         /** The video does not fit, but would in Low storage mode: switch to it, or not. */
         class LowStorageOffer(val onAnswer: (Boolean) -> Unit) : Sheet
 
+        /**
+         * The only copy here is too heavy for this device (HX2): play Telegram's lighter copy
+         * ([lighter], its quality, when there is one) or play anyway, with "Don't ask again".
+         */
+        class HeavyAsk(
+            val codec: String,
+            val device: String,
+            val lighter: String?,
+            val onAnswer: (useLighter: Boolean?, dontAsk: Boolean) -> Unit,
+        ) : Sheet
+
         /** The copies of the video playing, [playing] ticked. */
         class Copies(
             val copies: List<MediaItem>,
@@ -170,6 +181,14 @@ class PlayerSheets(
      */
     fun showLowStorageOffer(onAnswer: (Boolean) -> Unit) {
         sheet.value = Sheet.LowStorageOffer(onAnswer)
+    }
+
+    /**
+     * "This video may stutter on this TV": [onAnswer] gets true for Telegram's lighter copy, false
+     * for Play anyway, null for Back (leave the video), and whether "Don't ask again" was ticked.
+     */
+    fun showHeavyAsk(codec: String, device: String, lighter: String?, onAnswer: (Boolean?, Boolean) -> Unit) {
+        sheet.value = Sheet.HeavyAsk(codec, device, lighter, onAnswer)
     }
 
     /** Every copy of the video playing; choosing another plays it from the same moment. */
@@ -267,6 +286,24 @@ class PlayerSheets(
                     focusConfirm = true,
                     onConfirm = { close(); shown.onAnswer(true) },
                     onDismiss = { close(); shown.onAnswer(false) },
+                )
+            }
+            is Sheet.HeavyAsk -> {
+                val s = LocalStrings.current
+                var dontAsk by remember(shown) { mutableStateOf(false) }
+                val lighter = shown.lighter
+                // With a lighter copy the question is which to play, the lighter first; without
+                // one it is whether to play at all, Play anyway first (Back leaves the video).
+                TvConfirm(
+                    title = s.playerHeavyAskTitle,
+                    message = s.playerHeavyAsk(device = shown.device, codec = shown.codec),
+                    confirmLabel = if (lighter != null) s.playerHeavyAskLighter(lighter) else s.playerHeavyAskPlay,
+                    cancelLabel = if (lighter != null) s.playerHeavyAskPlay else s.commonCancel,
+                    destructive = false,
+                    focusConfirm = true,
+                    extra = { com.tmplayer.ui.settings.TickRow(s.playerHeavyAskSkip, dontAsk) { dontAsk = !dontAsk } },
+                    onConfirm = { close(); shown.onAnswer(lighter != null, dontAsk) },
+                    onDismiss = { close(); shown.onAnswer(if (lighter != null) false else null, dontAsk) },
                 )
             }
             is Sheet.Bookmarks -> {
@@ -734,7 +771,7 @@ internal fun CopiesSheet(
                 val ticked = here && playingQuality == 0
                 ChoiceLine(
                     title = if (here && qualities.isNotEmpty()) "${copyHeading(copy)}  ·  ${s.detailUploadQuality}" else copyHeading(copy),
-                    detail = copyDetail(copy, s, chatOf(copy).takeIf { spans }),
+                    detail = copyDetail(copy, s, chatOf(copy).takeIf { spans }, among = copies),
                     selected = ticked,
                     modifier = if (ticked) Modifier.focusRequester(focus) else Modifier,
                 ) {
