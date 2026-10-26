@@ -1,7 +1,7 @@
 // Worker only: turns Telegram messages into the page's plain items and remembers where each file's
 // bytes are, so the page can ask for them by key.
 import type { FileLocation, Message, tl } from '@mtcute/web'
-import type { RawVideo, Video } from '../rules'
+import type { PosterAsk, RawVideo, Video } from '../rules'
 import type { FileRef, Storyboard, VideoCopy, VideoItem } from './types'
 
 /** Where a Telegram document's bytes are. */
@@ -60,11 +60,11 @@ export function toItem(msg: Message): VideoItem | null {
     if (m.type === 'document' && !m.mimeType.startsWith('video/') && !VIDEO_NAME.test(m.fileName ?? '')) return null
     const name = m.fileName?.replace(/\.[^.]+$/, '').replace(/[._]+/g, ' ').trim()
     const caption = msg.text.split('\n')[0]?.trim()
-    return itemOf(msg, name || caption || 'Video')
+    return itemOf(msg, name || caption || 'Video', null)
 }
 
 /** The page's item for a message already known to hold a video, under [title], its file noted. */
-export function itemOf(msg: Message, title: string): VideoItem | null {
+export function itemOf(msg: Message, title: string, poster: PosterAsk | null | undefined): VideoItem | null {
     const m = msg.media
     if (!m || (m.type !== 'video' && m.type !== 'document')) return null
     const key = m.uniqueFileId
@@ -91,6 +91,7 @@ export function itemOf(msg: Message, title: string): VideoItem | null {
         thumb: thumb?.uniqueFileId ?? null,
         ...alternatives(msg, raw?.media),
         canBeSaved: !raw?.noforwards && !chatProtects(msg),
+        poster: poster ?? null,
     }
 }
 

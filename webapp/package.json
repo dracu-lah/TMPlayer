@@ -12,6 +12,7 @@
     "build": "pnpm rules && tsc --noEmit && vite build",
     "preview": "vite preview --port 8091",
     "check": "tsc --noEmit",
+    "test:tmdb": "node --test \"tmdb/*.test.ts\"",
     "e2e": "playwright test"
   },
   "dependencies": {

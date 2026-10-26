@@ -113,7 +113,7 @@ async function loadPage(tg: TelegramClient, s: ChatState): Promise<void> {
     s.selfDestructing += screened.selfDestructing
     for (const v of screened.videos) {
         const msg = byId.get(v.messageId)
-        const item = msg && itemOf(msg, v.title)
+        const item = msg && itemOf(msg, v.title, r.posterAsk(v))
         if (!item) continue
         s.videos.set(v.id, v)
         s.items.set(v.id, item)
@@ -345,7 +345,7 @@ export async function across(tg: TelegramClient, query: string): Promise<{ video
     const videos: Video[] = []
     const items = new Map<string, VideoItem>()
     for (const v of r.screen(raws).videos) {
-        const item = itemOf(byId.get(v.id)!, v.title)
+        const item = itemOf(byId.get(v.id)!, v.title, r.posterAsk(v))
         if (!item || items.has(v.id)) continue
         items.set(v.id, item)
         videos.push(v)
@@ -381,7 +381,7 @@ async function addMessage(tg: TelegramClient, s: ChatState, messageId: number): 
     const raw = msg && rawOf(msg, s.protected)
     if (!msg || !raw) return null
     const [v] = r.screen([raw]).videos
-    const item = v && itemOf(msg, v.title)
+    const item = v && itemOf(msg, v.title, r.posterAsk(v))
     if (!v || !item) return null
     s.videos.set(v.id, v)
     s.items.set(v.id, item)

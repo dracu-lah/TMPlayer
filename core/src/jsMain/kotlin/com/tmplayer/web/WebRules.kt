@@ -26,6 +26,7 @@ import com.tmplayer.data.VideoSort
 import com.tmplayer.data.VideoSorting
 import com.tmplayer.i18n.L
 import com.tmplayer.i18n.Translator
+import com.tmplayer.online.MetaKind
 
 // The app's own rules for the web player (webapp/, CP104), exported as one ES module that runs in
 // the page's Telegram worker: what counts as a video and what it is called, how a chat's videos
@@ -161,6 +162,23 @@ interface Parsed {
     val airDate: String?
     /** "S01E02", or null for a film. */
     val code: String?
+}
+
+/**
+ * What the poster lookup asks about a video (MetaQuery.of, the question every app puts to TMDB):
+ * the cleaned title, the year, whether it is a film or a show, a `{tmdb-123}` the name forces, and
+ * the audio languages the name lists. [series] is whether the name says an episode, which is what
+ * lets a show's title stand without a year (MetaConfidence).
+ */
+interface PosterAsk {
+    val title: String
+    val year: Int?
+    /** "film" or "show". */
+    val kind: String
+    val tmdbId: Int?
+    val series: Boolean
+    /** ISO 639-1 codes, a hint for which of two titles of one name is meant. */
+    val languages: Array<String>
 }
 
 /** A compressed file in a chat, listed as one that cannot be played. */
@@ -300,6 +318,20 @@ fun parse(fileName: String, caption: String?): Parsed {
         "extra" to name.extra?.name,
         "airDate" to name.airDate,
         "code" to name.episodeCode,
+    )
+}
+
+/** The poster lookup's question for [video], or null when its name holds nothing worth asking (MetaQuery.of). */
+fun posterAsk(video: Video): PosterAsk? {
+    val item = toItem(video)
+    val query = item.metaQuery ?: return null
+    return plain(
+        "title" to query.title,
+        "year" to query.year,
+        "kind" to if (query.kind == MetaKind.Show) "show" else "film",
+        "tmdbId" to query.tmdbId,
+        "series" to item.parsedName.isSeries,
+        "languages" to query.languages.toTypedArray(),
     )
 }
 

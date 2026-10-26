@@ -345,7 +345,7 @@ export const api = {
                     // Telegram's file references run out after a while: the message read again carries a new one.
                     refreshed = true
                     const [msg] = await tg.getMessages(f.chatId, f.messageId)
-                    if (!msg || !itemOf(msg as Message, '')) throw new Error('gone')
+                    if (!msg || !itemOf(msg as Message, '', null)) throw new Error('gone')
                     f = files.get(key)!
                     continue
                 }

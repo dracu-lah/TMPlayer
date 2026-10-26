@@ -1,5 +1,6 @@
 // What the Telegram worker hands the page: plain data only. File locations, access hashes and file
 // references stay in the worker; the page names a file by its key.
+import type { PosterAsk } from '../rules'
 
 export interface Me {
     id: number
@@ -42,6 +43,8 @@ export interface VideoItem extends FileRef {
     storyboard: Storyboard | null
     /** False under "restrict saving content" (the chat's or the message's): it streams, nothing is kept. */
     canBeSaved: boolean
+    /** What the poster lookup asks about this video (the apps' MetaQuery), or null when its name holds nothing to ask. */
+    poster: PosterAsk | null
 }
 
 export interface ChatItem {
