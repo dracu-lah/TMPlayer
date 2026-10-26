@@ -1145,6 +1145,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** Settings, Playback: keep the sound going when the player is left ([PlaybackService]). */
     private var backgroundAudioOn = false
 
+    /** Settings, "Picture in picture when leaving the app" (HX9): on unless the viewer turned it off. */
+    private var pipOnLeave = true
+
     /** True while the session is in [PlaybackService]'s hands: the player left, the sound playing on. */
     private var inBackgroundAudio = false
 
@@ -1510,6 +1513,16 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (!FormFactor.isTv(this)) {
             lifecycleScope.launch {
                 runCatching { settings.backgroundAudio.collect { backgroundAudioOn = it } }
+            }
+            // Followed too: turning it off with a video open updates the system's request at once,
+            // so Home from here no longer shrinks the video (Android 12 decided that in advance).
+            lifecycleScope.launch {
+                runCatching {
+                    settings.pictureInPictureOnLeave.collect {
+                        pipOnLeave = it
+                        updatePictureInPictureParams()
+                    }
+                }
             }
         }
         // With the app lock asking on open, the media notification, the lock screen's controls
@@ -5607,12 +5620,17 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         super.onUserLeaveHint()
         if (FormFactor.isTv(this)) return
         if (!hasPictureInPicture()) return
-        if (player?.isPlaying != true) return
-        if (cast?.casting == true) return
-        if (statusOverlay.visibility == View.VISIBLE) return
-        // From Android 12 the system enters on its own, through setAutoEnterEnabled, which is the
-        // smooth version of the same transition; asking again here would only race it.
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) return
+        if (!PictureInPictureRules.entersOnLeaveHint(
+                sdk = android.os.Build.VERSION.SDK_INT,
+                settingOn = pipOnLeave,
+                tv = false,
+                playing = player?.isPlaying == true,
+                casting = cast?.casting == true,
+                sheetUp = statusOverlay.visibility == View.VISIBLE,
+            )
+        ) {
+            return
+        }
         runCatching { enterPictureInPictureMode(pictureInPictureParams()) }
     }
 
@@ -5638,10 +5656,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             // Never on a television: Home there means leaving the film (Decision E10), and the
             // corner window is only for a viewer who asked for it from the row or More.
-            val autoEnter = !FormFactor.isTv(this) &&
-                player?.isPlaying == true &&
-                statusOverlay.visibility != View.VISIBLE &&
-                !locked
+            val autoEnter = PictureInPictureRules.autoEnter(
+                settingOn = pipOnLeave,
+                tv = FormFactor.isTv(this),
+                playing = player?.isPlaying == true,
+                sheetUp = statusOverlay.visibility == View.VISIBLE,
+                locked = locked,
+            )
             builder.setAutoEnterEnabled(autoEnter)
         }
         // The window grows out of the picture rather than out of a grey box.

@@ -55,6 +55,7 @@ private val RESUME_SYNC_MESSAGE = longPreferencesKey("resume_sync_message")
 private val RESUME_SYNC_KEYS = stringPreferencesKey("resume_sync_keys")
 private val SKIP_SILENCE = booleanPreferencesKey("skip_silence")
 private val BACKGROUND_AUDIO = booleanPreferencesKey("background_audio")
+private val PIP_ON_LEAVE = booleanPreferencesKey("pip_on_leave")
 // Not "resume_...": that prefix is a resume point's, and the sweeps over resume points (the
 // broken-history prune at launch, Clear history) would take this setting with them.
 private val RESUME_REWIND = longPreferencesKey("rewind_on_resume_ms")
@@ -871,6 +872,18 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
     }
 
     suspend fun backgroundAudioNow(): Boolean = prefs.data.first()[BACKGROUND_AUDIO] ?: false
+
+    /**
+     * Whether going Home or to another app while a video plays shrinks it into a picture in
+     * picture window (HX9). On by default, as it always was; off, leaving pauses the video (or
+     * keeps the sound going, with [backgroundAudio]). The Picture in picture buttons work either
+     * way, because the viewer asked for those. Android phones only; nothing else enters by itself.
+     */
+    val pictureInPictureOnLeave: Flow<Boolean> = read { it[PIP_ON_LEAVE] ?: true }
+
+    suspend fun setPictureInPictureOnLeave(value: Boolean) {
+        prefs.edit { it[PIP_ON_LEAVE] = value }
+    }
 
     /**
      * How far before the saved position a resumed video starts, one of [ResumeRewind.CHOICES_MS]

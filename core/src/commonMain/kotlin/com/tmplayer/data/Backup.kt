@@ -130,6 +130,7 @@ object Backups {
         "app_typeface" to Kind.TEXT,
         "autoplay_next" to Kind.BOOL,
         "background_audio" to Kind.BOOL,
+        "pip_on_leave" to Kind.BOOL,
         "chat_filter" to Kind.TEXT,
         "chat_layout" to Kind.TEXT,
         "chat_sort" to Kind.TEXT,
