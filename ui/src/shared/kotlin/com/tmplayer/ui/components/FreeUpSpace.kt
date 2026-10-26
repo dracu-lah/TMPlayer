@@ -121,7 +121,9 @@ fun StorageOverview(
             icon = TmIcons.Delete,
             onClick = onFreeUp,
             kind = ButtonKind.Primary,
-            enabled = measured && !busy && !nothingToFree,
+            // Not greyed while the figures are measured or when nothing is listed: the press opens the
+            // review, which says so itself, and a dimmed button read as broken (user, 2026-10-27).
+            enabled = !busy,
             busy = busy,
             large = large,
             modifier = Modifier.fillMaxWidth().then(if (focus != null) Modifier.focusRequester(focus) else Modifier),

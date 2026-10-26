@@ -172,7 +172,6 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
     val askedForRoom = remember { state.downloadsFreeUp }
     LaunchedEffect(Unit) { state.downloadsFreeUp = false }
     var freeUpBusy by remember { mutableStateOf(false) }
-    var freeUpResult by remember { mutableStateOf<String?>(null) }
     var lowStorageTurned by remember { mutableStateOf(false) }
     val lowStorageOn by state.settings.lowStorageMode.collectAsState(initial = true)
     // The downloads that stopped part way or are still arriving, with what each holds here.
@@ -249,7 +248,6 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
         val recents = cached
         freeingUp = false
         freeUpBusy = true
-        freeUpResult = null
         scope.launch {
             val outcome = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.IO) {
                 var freed = 0L
@@ -297,7 +295,8 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
             picked = picked - com.tmplayer.data.FreeUpReview.downloadsPicked(picks, sections).map { it.key }.toSet()
             refresh++
             freeUpBusy = false
-            freeUpResult = com.tmplayer.ui.components.freeUpResult(outcome)
+            // A toast, not a line inside the card.
+            toast(com.tmplayer.ui.components.freeUpResult(outcome))
         }
     }
 
@@ -450,7 +449,6 @@ fun DownloadsPage(state: ShellState, downloadsDir: File = DesktopPaths.downloads
                                 figures,
                                 nothingToFree = com.tmplayer.data.FreeUpReview.nothingToFree(reviewSections),
                                 busy = freeUpBusy,
-                                result = freeUpResult,
                             ) { if (!freeUpBusy) freeingUp = true }
                         }
                     }
