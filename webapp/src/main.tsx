@@ -3,6 +3,7 @@ import { App } from './App'
 import { serveStreams } from './stream/reader'
 import { markEntry } from './session'
 import { registerWorker } from './install'
+import { watchForm } from './form'
 import './styles.css'
 
 if (location.hostname === 'localhost') void import('./survey')
@@ -10,6 +11,7 @@ if (location.hostname === 'localhost') void import('./survey')
 // index.html has said the browser is too old: nothing more starts.
 if (!document.documentElement.dataset.old) {
     markEntry()
+    watchForm()
     serveStreams()
     registerWorker()
     const root = document.getElementById('app')!

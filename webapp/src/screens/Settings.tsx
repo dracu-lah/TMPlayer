@@ -5,9 +5,11 @@ import { api } from '../tg/rpc'
 import { t } from '../i18n'
 import { sizeScale } from './sizes'
 import { size } from './VideoList'
+import { layout, setLayout, type Layout } from '../form'
 import { install, installed, installPrompt, iosBrowser, keepData, kept, refused } from '../install'
 
 const THEMES: Theme[] = ['system', 'dark', 'light', 'black']
+const LAYOUTS: Layout[] = ['auto', 'phone', 'desktop', 'tv']
 
 /** Theme, the size limits every list keeps to, the rewind on resume, the account and the licence notices. */
 export function Settings() {
@@ -23,6 +25,17 @@ export function Settings() {
                     value={settings().theme}
                     onPick={(v) => setSetting('theme', v)}
                 />
+            </div>
+            <div class="panel">
+                <h2 class="panel-title" id="layout-label">{t('settings.layout')}</h2>
+                <Choices
+                    label="layout-label"
+                    name="layout"
+                    options={LAYOUTS.map((v) => ({ value: v, label: t(`settings.layout_${v}`) }))}
+                    value={layout()}
+                    onPick={setLayout}
+                />
+                <p class="muted small">{t('settings.layout_detail')}</p>
             </div>
             <SizeLimits />
             <Rewind />

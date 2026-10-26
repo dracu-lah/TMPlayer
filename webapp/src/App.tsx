@@ -4,6 +4,7 @@ import { api, errorText, sessionHere, useHere } from './tg/rpc'
 import { online } from './net'
 import { entryState, me, setMe, signOut } from './session'
 import { loadSettings } from './store'
+import { holdForm } from './form'
 import { Home } from './screens/Home'
 import { Nav } from './ui/Nav'
 import { applyUpdate, updateReady } from './install'
@@ -62,6 +63,8 @@ function Shell(props: ParentProps) {
 
     const signedIn = () => me() && location.pathname !== '/signin'
     const playing = () => location.pathname.startsWith('/watch/')
+    // A resize in Auto layout waits while a video plays.
+    createEffect(() => holdForm(playing()))
 
     return (
         <>
