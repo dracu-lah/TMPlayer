@@ -168,7 +168,10 @@ jobs:
       # `wrangler pages secret put TMDB_API_KEY --project-name tmplayer-webapp` (never here).
       - uses: actions/checkout@v7
         with:
-          sparse-checkout: webapp/functions webapp/tmdb
+          # One path per line: on one line they are a single path with a space in it.
+          sparse-checkout: |
+            webapp/functions
+            webapp/tmdb
 
       - name: Download the site
         uses: actions/download-artifact@v8
