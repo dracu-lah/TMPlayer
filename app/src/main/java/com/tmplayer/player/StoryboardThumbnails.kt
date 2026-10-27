@@ -11,6 +11,8 @@ import com.tmplayer.data.StoryboardMap
 import com.tmplayer.data.StoryboardMaps
 import com.tmplayer.data.Thumbnails
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -22,10 +24,13 @@ import java.io.File
 
 /**
  * Scrub pictures from Telegram's storyboard for the video (CP80): one small JPEG of tiles and its
- * map, fetched once through TDLib the first time the bar is dragged. Each tile is cut out of the
+ * map, fetched through TDLib as soon as the post says there is one. Each tile is cut out of the
  * JPEG with a region decoder, so the whole sprite is never in memory at once: this is what a
- * 1 GB stick, which has no [TrickplayFrames], gets, and what any device shows before the part of
- * the video under the finger has been fetched.
+ * television, which decodes no frames of its own, gets, and what a phone shows first.
+ *
+ * The fetch is its own job, never a scrub's: it used to run inside the request, which every move
+ * of the finger (every press of the remote) cancelled, and a cancelled thumbnail fetch withdraws
+ * the TDLib download. The sprite never finished arriving, so no storyboard was ever seen.
  */
 class StoryboardThumbnails(
     private val scope: CoroutineScope,
@@ -39,23 +44,49 @@ class StoryboardThumbnails(
     private val loading = Mutex()
     private var job: Job? = null
 
+    /** The sprite's and the map's paths on the disk, on their way or arrived; null for neither. */
+    private var fetch: Deferred<Pair<String?, String?>>? = null
+
     // Touched only on [worker], under [loading].
     private var decoder: BitmapRegionDecoder? = null
     private var map: StoryboardMap? = null
     private var failed = false
 
+    init {
+        fetchFiles()
+    }
+
+    /** Starts the two small downloads unless they are already on their way or here. */
+    private fun fetchFiles(): Deferred<Pair<String?, String?>> {
+        fetch?.let { running -> if (!running.isCompleted || running.getCompletedOrNull()?.first != null) return running }
+        return scope.async(Dispatchers.IO) {
+            val image = Thumbnails.file(files.imageFileId)
+            val map = Thumbnails.file(files.mapFileId)
+            image to map
+        }.also { fetch = it }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun Deferred<Pair<String?, String?>>.getCompletedOrNull(): Pair<String?, String?>? =
+        runCatching { getCompleted() }.getOrNull()
+
     override fun request(positionMs: Long, onFrame: (Bitmap?) -> Unit) {
         // The player answers only on its own thread, so its length is read here, before the worker.
         val totalMs = durationMs()
+        // Asked again where the last try did not arrive (offline, or slow): a new scrub is a
+        // new chance. Never more than one fetch at a time.
+        val files = fetchFiles()
         job?.cancel()
         job = scope.launch {
-            val frame = withContext(worker) { tileFor(positionMs, totalMs) }
+            // Waiting on the fetch here does not cancel it when the next move cancels this job.
+            val paths = files.await()
+            val frame = withContext(worker) { tileFor(positionMs, totalMs, paths) }
             onFrame(frame)
         }
     }
 
-    private suspend fun tileFor(positionMs: Long, totalMs: Long): Bitmap? {
-        val (reader, tiles) = open(totalMs) ?: return null
+    private suspend fun tileFor(positionMs: Long, totalMs: Long, paths: Pair<String?, String?>): Bitmap? {
+        val (reader, tiles) = open(totalMs, paths) ?: return null
         val tile = tiles.tileAt(positionMs) ?: return null
         val index = tiles.tiles.indexOf(tile)
         cache.get(index)?.let { return it }
@@ -64,13 +95,14 @@ class StoryboardThumbnails(
         return runCatching { reader.decodeRegion(rect, null) }.getOrNull()?.also { cache.put(index, it) }
     }
 
-    private suspend fun open(totalMs: Long): Pair<BitmapRegionDecoder, StoryboardMap>? = loading.withLock {
+    private suspend fun open(totalMs: Long, paths: Pair<String?, String?>): Pair<BitmapRegionDecoder, StoryboardMap>? = loading.withLock {
         val ready = decoder
         val tiles = map
         if (ready != null && tiles != null) return ready to tiles
         if (failed) return null
-        val image = Thumbnails.file(files.imageFileId)
-        val mapPath = Thumbnails.file(files.mapFileId)
+        // A map spread over the video's length needs the length: not known yet, asked again later.
+        if (totalMs <= 0) return null
+        val (image, mapPath) = paths
         if (image == null) {
             // Not fetched this time (offline, or slow): asked again on the next drag.
             return null
@@ -102,6 +134,8 @@ class StoryboardThumbnails(
 
     override fun release() {
         job?.cancel()
+        fetch?.cancel()
+        fetch = null
         scope.launch(worker) {
             loading.withLock {
                 runCatching { decoder?.recycle() }
@@ -117,8 +151,9 @@ class StoryboardThumbnails(
 }
 
 /**
- * Two sources of scrub pictures, the first asked first: the frame read from the video where that
- * part is on the disk, else the storyboard's tile.
+ * Two sources of scrub pictures, the first asked first and the second only where the first has
+ * nothing: the storyboard's tile (a small region of a sprite already here), else a frame read from
+ * the part of the video already on the disk.
  */
 class LayeredThumbnails(private val first: ScrubThumbnails, private val second: ScrubThumbnails) : ScrubThumbnails {
     private var asked = 0L
