@@ -1285,6 +1285,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private var downloadedFraction = 0f
     private var downloadComplete = false
 
+    /** Whether the corner chip is wanted while the cache fills: up only while the data ahead runs short ([LoadingChip]). */
+    private var cacheChipWanted = true
+
     /** When the loading sheet was last redrawn, so [applyDownloadState] can throttle itself. */
     private var lastProgressRender = 0L
 
@@ -7097,13 +7100,20 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * A video that is all here says nothing. Complete usually means the watch cache has the whole
      * file, not that it is in Downloads, and "Download completed" pinned to every raise of the row
      * for the rest of the film read as a download that had never been asked for.
+     *
+     * While the watch cache fills it shows only when the data ahead runs short ([LoadingChip]):
+     * "Loading 32%" over a video playing smoothly read as buffering that was not there.
      */
     private fun updateDownloadChip() {
+        val exo = player
+        val aheadMs = if (exo != null && exo.duration != C.TIME_UNSET) (exo.bufferedPosition - exo.currentPosition).coerceAtLeast(0) else -1L
+        cacheChipWanted = LoadingChip.shows(cacheChipWanted, aheadMs, isRealDownload())
         val show = controlsUp &&
             statusOverlay.visibility != View.VISIBLE &&
             rebufferChip.visibility != View.VISIBLE &&
             fileSizeBytes > 0 &&
-            !downloadComplete
+            !downloadComplete &&
+            cacheChipWanted
         downloadChip.visibility = if (show) View.VISIBLE else View.GONE
         if (!show) return
 
