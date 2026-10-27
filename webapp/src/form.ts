@@ -2,7 +2,8 @@
 // <html data-form> before the first paint by index.html's inline script, which holds the same rules
 // as detect() below (keep the two in step). A phone always gets the phone layout; anything else
 // gets the desktop or TV layout from detection, or from Settings > Layout (Desktop or TV, as in the
-// desktop app) once one is picked. A resize or a rotation changes the form live, except while a
+// desktop app) once one is picked. ?tv=1 or ?tv=0 in the address stores TV or Desktop as that choice,
+// in the inline script, before this module runs. A resize or a rotation changes the form live, except while a
 // video plays, when the change waits until the player closes.
 import { createSignal } from 'solid-js'
 
@@ -15,8 +16,17 @@ export const LAYOUT_KEY = 'tmplayer-layout'
 /** Models that call themselves a TV; Android with "TV" in it covers Android TV and Google TV. */
 const TV_AGENT = /Web0S|webOS|Tizen|SMART-TV|SmartTV|\bAFT|CrKey|HbbTV|Android.*\bTV\b/i
 
-export function detect(ua = navigator.userAgent, width = innerWidth, height = innerHeight, media: (q: string) => boolean = (q) => matchMedia(q).matches): Form {
+export function detect(
+    ua = navigator.userAgent,
+    width = innerWidth,
+    height = innerHeight,
+    media: (q: string) => boolean = (q) => matchMedia(q).matches,
+    touchPoints: number | undefined = navigator.maxTouchPoints,
+): Form {
     if (TV_AGENT.test(ua)) return 'tv'
+    // Android without a touch screen is a TV or a stick whose agent does not say so (a Mi TV's WebView
+    // sends "Android 9; MiTV-AESP0 ... Mobile Safari", with a fine pointer); phones and tablets have touch.
+    if (/Android/i.test(ua) && touchPoints === 0) return 'tv'
     // A touch tablet (short side 840 px or more) gets the desktop layout, like the app's wide phone/tablet form.
     if (media('(pointer: coarse)') && media('(hover: none)') && Math.min(width, height) < 840) return 'phone'
     return 'desktop'

@@ -4,8 +4,9 @@ import { fakeCase } from './helpers'
 
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
 const DESKTOP = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36'
+const ANDROID_PHONE = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36'
 
-async function formOf(browser: Browser, opts: { ua: string; width: number; height: number; touch?: boolean }) {
+async function formOf(browser: Browser, opts: { ua: string; width: number; height: number; touch?: boolean; path?: string }) {
     const context = await browser.newContext({
         userAgent: opts.ua,
         viewport: { width: opts.width, height: opts.height },
@@ -14,7 +15,7 @@ async function formOf(browser: Browser, opts: { ua: string; width: number; heigh
     })
     await fakeCase(context, 'signedout')
     const page = await context.newPage()
-    await page.goto('/')
+    await page.goto(opts.path ?? '/')
     const form = await page.evaluate(() => document.documentElement.dataset.form)
     await context.close()
     return form
@@ -29,6 +30,8 @@ test.describe('detection table', () => {
         ['Chromecast', 'Mozilla/5.0 (X11; Linux armv7l) AppleWebKit/537.36 Chrome/114.0 Safari/537.36 CrKey/1.56'],
         ['HbbTV', 'Mozilla/5.0 (Linux; HbbTV/1.5.1) AppleWebKit/537.36 Chrome/79.0 Safari/537.36'],
         ['Android TV', 'Mozilla/5.0 (Linux; Android 11; BRAVIA 4K TV) AppleWebKit/537.36 Chrome/110.0 Safari/537.36'],
+        // No "TV" in it, a fine pointer and no touch: the real one, from a Mi TV's WebView (2026-10-27).
+        ['Mi TV', 'Mozilla/5.0 (Linux; Android 9; MiTV-AESP0 Build/PI; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/138.0.7204.179 Mobile Safari/537.36'],
     ]
     for (const [name, ua] of tvs)
         test(`${name} is tv`, async ({ browser }) => {
@@ -37,6 +40,9 @@ test.describe('detection table', () => {
     test('a phone (coarse, no hover, short side under 840) is phone, in both turns', async ({ browser }) => {
         expect(await formOf(browser, { ua: IPHONE, width: 390, height: 844, touch: true })).toBe('phone')
         expect(await formOf(browser, { ua: IPHONE, width: 844, height: 390, touch: true })).toBe('phone')
+    })
+    test('an Android phone, with touch, is phone and not tv', async ({ browser }) => {
+        expect(await formOf(browser, { ua: ANDROID_PHONE, width: 412, height: 915, touch: true })).toBe('phone')
     })
     test('a touch tablet (short side 840 or more) is desktop', async ({ browser }) => {
         expect(await formOf(browser, { ua: IPHONE, width: 1024, height: 1366, touch: true })).toBe('desktop')
@@ -73,6 +79,19 @@ test('the Settings choice wins, survives a reload and is set before the page run
     })
     expect(seen).toBe('tv')
     await choose('Desktop')
+})
+
+test('?tv=1 and ?tv=0 in the address choose TV and Desktop, and the choice stays for a plain address', async ({ page }) => {
+    const html = page.locator('html')
+    await page.goto('/?tv=1')
+    await expect(html).toHaveAttribute('data-form', 'tv')
+    await page.goto('/settings')
+    await expect(html).toHaveAttribute('data-form', 'tv')
+    await expect(page.getByRole('radio', { name: 'TV' })).toBeChecked()
+    await page.goto('/?tv=0')
+    await expect(html).toHaveAttribute('data-form', 'desktop')
+    await page.goto('/settings')
+    await expect(page.getByRole('radio', { name: 'Desktop' })).toBeChecked()
 })
 
 test('a phone always has the phone layout: no choice in Settings, and a choice saved before is passed over', async ({ browser, browserName }) => {
