@@ -6,6 +6,7 @@ import { openFile, streams, warmFile, type TgFile } from '../stream/reader'
 import { codecName, nativeEngine, playableSound, probe, RemuxEngine, route, Unplayable, type Engine, type Probe, type SoundTrack, type Why } from './engines'
 import { LIBAV_FORMATS, LibavEngine } from './libav'
 import { storyboardFrames, type Frames } from './storyboard'
+import { appleTouch, FrameGrabber } from './seekpreview'
 import { Chrome, variant } from './Chrome'
 import { readChapters, type Chapter } from './chapters'
 import { applyDelay, look, placeCues, lookVars, setLook, setSubDelay } from './cues'
@@ -106,6 +107,8 @@ export function Player(props: {
     /** Where the video was resumed from (seconds), for the Start over offer. */
     const [resumedAt, setResumedAt] = createSignal<number | null>(null)
     const [frames, setFrames] = createSignal<Frames | null>(null)
+    /** The video's own frames for the seek bar's card, for a natively played file (see [FrameGrabber]). */
+    const [grabber, setGrabber] = createSignal<FrameGrabber | null>(null)
     const subtitleUrls: string[] = []
     const [chapters, setChapters] = createSignal<Chapter[]>([])
     /** How much of the file has arrived (0 to 1); null once all of it has. */
@@ -157,6 +160,8 @@ export function Player(props: {
     }
 
     const unload = () => {
+        grabber()?.destroy()
+        setGrabber(null)
         engine?.destroy()
         engine = null
         probed?.input.dispose()
@@ -204,6 +209,9 @@ export function Player(props: {
             if (route(p) === 'native') {
                 const url = `/stream/${encodeURIComponent(src.key)}?size=${src.size}&mime=${encodeURIComponent(p.mime.split(';')[0])}`
                 engine = nativeEngine(video, url, at)
+                // A second element on the same stream for the seek bar's frames; not on an iPhone or
+                // iPad (Safari's memory and range limits) nor on the TV layout.
+                if (!appleTouch && form() !== 'tv') setGrabber(new FrameGrabber(url))
             } else engine = await remux(p, at)
             if (gen !== generation) return
             video.playbackRate = rate
@@ -211,6 +219,8 @@ export function Player(props: {
             setDetails(`${p.container}, ${p.mime.replace(/^[^;]*;\s*/, '')}. ${engine.detail}`)
             if (play) video.play().catch(() => {})
             void findChapters(f, gen)
+            // The storyboard as soon as the video is open, so it is in by the time the bar is touched.
+            void addStoryboard()
         } catch (e) {
             if (gen === generation) fail(e)
         }
@@ -221,6 +231,8 @@ export function Player(props: {
         if (engine?.name !== 'native' || !probed) return
         const p = probed
         const at = video.currentTime
+        grabber()?.destroy()
+        setGrabber(null)
         engine.destroy()
         engine = null
         try {
@@ -570,6 +582,7 @@ export function Player(props: {
                             details,
                             loadSubtitleFile: () => subtitleInput.click(),
                             frames,
+                            grabber,
                             resumedAt,
                             startOver: () => {
                                 video.currentTime = 0

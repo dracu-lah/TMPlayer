@@ -54,6 +54,7 @@
 .pc[data-variant="tv"] .pc-bar:focus .pc-track { height: calc(var(--u) * 6); outline: none; }
 .pc[data-variant="tv"] .pc-bar:focus .pc-thumb { width: calc(var(--u) * 20); height: calc(var(--u) * 20); margin-left: calc(var(--u) * -10); box-shadow: 0 0 0 calc(var(--u) * 3) #fff; }
 .pc[data-variant="tv"] .pc-preview { bottom: calc(100% + var(--u) * 12); }
+.pc[data-variant="tv"] .pc-card-wait { animation: none; }
 .pc[data-variant="tv"] .pc-chip { padding: calc(var(--u) * 6) calc(var(--u) * 14); font-size: calc(var(--u) * 16); line-height: calc(var(--u) * 20); }
 
 /* The row: the pill (4 dp seat, 48 dp buttons 4 dp apart), the two worded pills, then the time. */

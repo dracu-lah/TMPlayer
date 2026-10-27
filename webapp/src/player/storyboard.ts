@@ -1,5 +1,6 @@
 import { TgFile } from '../stream/reader'
 import type { FileRef, Storyboard } from '../tg/types'
+import { parseStoryboardMap } from './seekpreview'
 
 async function readWhole(f: FileRef): Promise<Uint8Array> {
     const file = new TgFile(f.key, f.size, 0)
@@ -25,30 +26,17 @@ export interface Frames {
 
 /**
  * Telegram's storyboard: a JPEG sprite and a map, `file=`, `frame_width=`, `frame_height=` and then
- * one `seconds,x,y` line per frame. The seek bar's preview card draws the frame for a time
+ * one `seconds,x,y` line per frame (or a WebVTT map, see [parseStoryboardMap]). The seek bar's preview card draws the frame for a time
  * ([frameAt]) as a slice of the sprite, as the apps' StoryboardPreview does.
  */
 export async function storyboardFrames(sb: Storyboard): Promise<Frames> {
     const [sprite, map] = await Promise.all([readWhole(sb.sprite), readWhole(sb.map)])
+    const parsed = parseStoryboardMap(new TextDecoder().decode(map))
+    if (!parsed) throw new Error('Unreadable storyboard')
+    const { width, height, frames } = parsed
     const url = URL.createObjectURL(new Blob([sprite as BlobPart], { type: 'image/jpeg' }))
-    let width = 0
-    let height = 0
-    const frames: Frames['frames'] = []
-    for (const line of new TextDecoder().decode(map).split('\n')) {
-        if (line.startsWith('frame_width=')) width = Number(line.slice(12))
-        else if (line.startsWith('frame_height=')) height = Number(line.slice(13))
-        else {
-            const [t, x, y] = line.split(',').map(Number)
-            if (line.includes(',') && [t, x, y].every(Number.isFinite)) frames.push({ t, x, y })
-        }
-    }
-    if (!width || !height || !frames.length) {
-        URL.revokeObjectURL(url)
-        throw new Error('Unreadable storyboard')
-    }
-    frames.sort((a, b) => a.t - b.t)
-    const spriteWidth = Math.max(...frames.map((f) => f.x)) + width
-    const spriteHeight = Math.max(...frames.map((f) => f.y)) + height
+    const spriteWidth = frames.reduce((m, f) => Math.max(m, f.x), 0) + width
+    const spriteHeight = frames.reduce((m, f) => Math.max(m, f.y), 0) + height
     return { url, width, height, spriteWidth, spriteHeight, frames }
 }
 

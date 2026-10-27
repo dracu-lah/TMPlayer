@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { chapterAt, chapterMarks, chapterNext, chapterPrevious, readChapters, skipSegments } from './chapters.ts'
 import { fineRate, pressLoop, SeekUndo, wrapLoop } from './extras.ts'
+import { cardLeft, cardSize, frameSlot, parseStoryboardMap } from './seekpreview.ts'
 import type { TgFile } from '../stream/reader'
 
 const media = (name: string) => new Uint8Array(readFileSync(new URL(`../../e2e/media/${name}`, import.meta.url)))
@@ -86,4 +87,39 @@ test('a finger further from the bar scrubs finer', () => {
     assert.equal(fineRate(10), 1)
     assert.equal(fineRate(-70), 0.5)
     assert.equal(fineRate(200), 0.25)
+})
+
+test('the seek card is 16:9 at its standard size and stays inside the bar', () => {
+    assert.deepEqual(cardSize(false, 1200), { width: 240, height: 135 })
+    assert.deepEqual(cardSize(true, 360), { width: 160, height: 90 })
+    // A bar narrower than the card narrows it, never under 96 px.
+    assert.equal(cardSize(false, 180).width, 180)
+    assert.equal(cardSize(false, 10).width, 96)
+    assert.equal(cardLeft(0, 240, 1000), 0)
+    assert.equal(cardLeft(1000, 240, 1000), 760)
+    assert.equal(cardLeft(500, 240, 1000), 380)
+    assert.equal(cardLeft(0, 160, 300, 16), -16)
+    // A card wider than the bar sits centred over it.
+    assert.equal(cardLeft(50, 240, 100), -70)
+})
+
+test('frames are grabbed at the middle of a slot, a second apart on a short video', () => {
+    assert.equal(frameSlot(3600, 0), 5)
+    assert.equal(frameSlot(3600, 1234), 1235)
+    assert.equal(frameSlot(30, 7.4), 7.5)
+    // Unknown or zero length: ten second slots; never past the end.
+    assert.equal(frameSlot(0, 12), 15)
+    assert.equal(frameSlot(NaN, -4), 5)
+    assert.ok(frameSlot(2, 1.9) <= 2)
+})
+
+test('a storyboard map is read in either shape, garbage skipped', () => {
+    const plain = parseStoryboardMap('file=sb.jpg\nframe_width=160\nframe_height=90\n10,160,0\n0,0,0\nnot,a,line\n')
+    assert.deepEqual(plain, { width: 160, height: 90, frames: [{ t: 0, x: 0, y: 0 }, { t: 10, x: 160, y: 0 }] })
+    const vtt = parseStoryboardMap('WEBVTT\n\n00:00:00.000 --> 00:00:05.000\nsb.jpg#xywh=0,0,128,72\n\n00:01:05.000 --> 00:01:10.000\nsb.jpg#xywh=128,0,128,72\n')
+    assert.deepEqual(vtt, { width: 128, height: 72, frames: [{ t: 0, x: 0, y: 0 }, { t: 65, x: 128, y: 0 }] })
+    assert.equal(parseStoryboardMap(''), null)
+    assert.equal(parseStoryboardMap('frame_width=160\nframe_height=90\n'), null)
+    assert.equal(parseStoryboardMap('\u0000￿ garbage'.repeat(1000)), null)
+    assert.equal(parseStoryboardMap('frame_width=99999\nframe_height=90\n0,0,0'), null)
 })
