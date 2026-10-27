@@ -319,7 +319,6 @@ internal fun LibraryRows(state: ShellState, version: String, chatList: List<com.
     val minSize by settings.minSizeBytes.collectAsState(initial = SizeFilter.DEFAULT_MIN)
     val maxSize by settings.maxSizeBytes.collectAsState(initial = SizeFilter.DEFAULT_MAX)
     val openLast by settings.openLastChat.collectAsState(initial = false)
-    val homeCarousel by settings.homeCarousel.collectAsState(initial = true)
     val lastChatId by settings.lastChatId.collectAsState(initial = 0L)
     val rememberSearches by settings.rememberSearches.collectAsState(initial = true)
     val resumeSync by settings.resumeSync.collectAsState(initial = false)
@@ -392,13 +391,7 @@ internal fun LibraryRows(state: ShellState, version: String, chatList: List<com.
             }
         }
     }
-    // The carousel at the top of Home, as on the phone and the TV.
-    Toggle(
-        s.settingsHomeCarousel,
-        if (homeCarousel) s.settingsHomeCarouselOn else s.settingsHomeCarouselOff,
-        homeCarousel,
-        icon = TmIcons.Home,
-    ) { scope.launch { settings.setHomeCarousel(it) } }
+    // The carousel and Home's other rows are on Settings' Home page (HomeLayoutRows).
 
     // The lists TMPlayer keeps: recent searches, then a clear for each list with anything in it.
     Group(s.settingsLists)

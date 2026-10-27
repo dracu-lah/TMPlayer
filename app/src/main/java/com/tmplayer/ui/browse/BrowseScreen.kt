@@ -286,8 +286,10 @@ internal fun BrowseScreen(
     /** Home's rows, built by [com.tmplayer.data.HomeRows] from what has loaded so far. */
     homeRows: List<HomeRow> = emptyList(),
     homeRowsReady: Boolean = true,
-    /** The carousel at the top of Home, which Settings can turn off. */
-    homeCarousel: Boolean = true,
+    /** Which of Home's rows Settings has on: the carousel, and every row off for the all-off card. */
+    homeLayout: com.tmplayer.data.HomeLayout = com.tmplayer.data.HomeLayout(),
+    /** Settings, on its Home page. */
+    onOpenHomeSettings: () -> Unit = {},
     /** Continue watching videos as Telegram describes them, by progress key, for their pictures. */
     homeArt: Map<String, MediaItem> = emptyMap(),
     homeWatch: SeriesWatch = SeriesWatch.None,
@@ -560,7 +562,9 @@ internal fun BrowseScreen(
                             HomePane(
                                 rows = homeRows,
                                 rowsReady = homeRowsReady,
-                                carouselOn = homeCarousel,
+                                carouselOn = homeLayout.carousel,
+                                allOff = homeLayout.allOff,
+                                onOpenHomeSettings = onOpenHomeSettings,
                                 watch = homeWatch,
                                 art = homeArt,
                                 chatTitle = { titles[it].orEmpty() },
@@ -585,7 +589,7 @@ internal fun BrowseScreen(
                                 // Starred chats get a row each under Recently added (2026-10-23), so
                                 // with none the hint says how to add them; only once the rows are
                                 // built, since it flashed up while they were still coming in.
-                                noFavourites = favorites.isEmpty() && homeRowsReady,
+                                noFavourites = favorites.isEmpty() && homeRowsReady && homeLayout.starredRows,
                                 onOpenSection = { onPickTab(it); query = "" },
                                 onOpenWatchLater = openLater,
                                 onLaterArtWanted = onHomeLaterArtWanted,

@@ -160,6 +160,18 @@ class ShellState(
      */
     var settingsUnlocked by mutableStateOf(false)
 
+    /**
+     * The Settings page to open on next, set by [openSettings] and taken by Settings once it is
+     * shown (after its PIN, when the lock asks for one).
+     */
+    var settingsAsk by mutableStateOf<SettingsCategory?>(null)
+
+    /** Settings, on [category]: Home's own way to its settings. */
+    fun openSettings(category: SettingsCategory) {
+        settingsAsk = category
+        go(Destination.Settings)
+    }
+
     var chatFilter by mutableStateOf(ChatFilter.All)
     var chatSort by mutableStateOf(ChatSort.Recent)
     var historyTab by mutableStateOf(HistoryTab.Continue)

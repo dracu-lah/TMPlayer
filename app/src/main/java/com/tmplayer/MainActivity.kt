@@ -1655,9 +1655,12 @@ private fun Root() {
         // them whichever screen is open. Recently added is the featured carousel at the top of
         // Home, on a phone and a television, so it is worth having with one starred chat: it does
         // not repeat that chat's own row as a row of its own would.
+        // Null until the setting is read, so no row that is off is fetched for the first frame.
+        val homeLayout by remember { settings.homeLayout }.collectAsStateWithLifecycle(initialValue = null)
         val homeRows = rememberHomeRows(
             homeViewModel, chats, favorites, continueWatching, watchLater, watchedVideos.values,
             recentMinStarred = 1,
+            layout = homeLayout,
         )
         val tvChannelsOn by settings.tvChannels.collectAsStateWithLifecycle(initialValue = null)
         TvHomeChannels(
@@ -1847,7 +1850,11 @@ private fun Root() {
                     layout = chatLayout,
                     homeRows = homeRows,
                     homeRowsReady = homeViewModel.rowsSettled,
-                    homeCarousel = settings.homeCarousel.collectAsStateWithLifecycle(initialValue = true).value,
+                    homeLayout = homeLayout ?: com.tmplayer.data.HomeLayout(),
+                    onOpenHomeSettings = {
+                        openSettings()
+                        settingsPage = SettingsPage.Home
+                    },
                     homeArt = homeViewModel.art.collectAsStateWithLifecycle().value,
                     homeWatch = homeWatch,
                     onHomeRowShown = { row ->

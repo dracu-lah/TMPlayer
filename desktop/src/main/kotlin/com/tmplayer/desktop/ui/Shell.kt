@@ -370,6 +370,8 @@ private fun Browse(state: ShellState, player: PlayerContent) {
                     BuildInfo.VERSION,
                     chatList = (chatsUi as? UiState.Content)?.value?.chats.orEmpty(),
                     account = account,
+                    initialCategory = state.settingsAsk,
+                    onInitialTaken = { state.settingsAsk = null },
                 )
             }
         }
