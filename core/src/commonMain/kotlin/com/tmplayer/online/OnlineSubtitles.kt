@@ -532,7 +532,8 @@ class OnlineSubtitles(
             is MsoneApi.Answer.Ok -> {
                 val bytes = answer.value
                 val text = if (SubtitleText.isZip(bytes)) {
-                    runCatching { SubtitleText.fromArchive(bytes, parsed?.season, parsed?.episode, hit.language) }.getOrNull()
+                    // A pack never hands over another episode's subtitles in place of this one.
+                    runCatching { SubtitleText.fromArchive(bytes, parsed?.season, parsed?.episode, hit.language, strict = hit.pack) }.getOrNull()
                 } else {
                     SubtitleText.from(bytes, hit.link.substringAfterLast('/').ifBlank { "${hit.id}.srt" }, language = hit.language)
                 }

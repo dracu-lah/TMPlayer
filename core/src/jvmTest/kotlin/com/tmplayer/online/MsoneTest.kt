@@ -281,6 +281,15 @@ class MsoneTest {
     }
 
     @Test
+    fun `a pack without this episode gives nothing rather than another episode`() = runBlocking {
+        turnOn()
+        http.on("/msone/search", json(200, searchAnswer))
+        val pack = online.searchMsone(episode).hits.first { it.pack }
+        http.on("malayalamsubtitles.org/download/100", HttpResponse(200, body = zip("Night.Sky.S01E01.srt" to srt("one"), "Night.Sky.S01E03.srt" to srt("three"))))
+        assertEquals(DownloadResult.Failed(SubtitleNotice.Unreadable), online.download(pack, episode))
+    }
+
+    @Test
     fun `an oversized or unreadable file fails with a line, not an exception`() = runBlocking {
         turnOn()
         http.on("/msone/search", json(200, searchAnswer))

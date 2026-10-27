@@ -146,8 +146,10 @@ object SubtitleText {
     /**
      * The subtitle inside a zip: the one whose name has the wanted [season] and [episode] when
      * those are known, else the first. Null when there is no subtitle in a format we take.
+     * [strict] (a season pack) never falls back to another episode: when the names number their
+     * episodes and none is this one, there is nothing to take.
      */
-    fun fromArchive(bytes: ByteArray, season: Int? = null, episode: Int? = null, language: String? = null): Text? {
+    fun fromArchive(bytes: ByteArray, season: Int? = null, episode: Int? = null, language: String? = null, strict: Boolean = false): Text? {
         val found = mutableListOf<Pair<String, ByteArray>>()
         ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
             while (true) {
@@ -170,7 +172,8 @@ object SubtitleText {
             found.firstOrNull { (name, _) ->
                 val parsed = MediaName.parse(name)
                 parsed.episode == episode && (season == null || parsed.season == null || parsed.season == season)
-            } ?: found.first()
+            } ?: found.takeUnless { strict && found.size > 1 && it.any { (name, _) -> MediaName.parse(name).episode != null } }?.first()
+                ?: return null
         } else {
             found.first()
         }
