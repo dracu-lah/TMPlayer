@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist-tv/
+dist-tv-fake/
 # The app's rules, compiled from :core by pnpm rules
 src/rules/core/
 # Playwright output
@@ -8,3 +10,5 @@ playwright-report/
 # wrangler pages dev: the local TMDB_API_KEY secret and its state
 .dev.vars
 .wrangler/
+# TV wrapper packages (webapp/tv/package.sh)
+tv/out/

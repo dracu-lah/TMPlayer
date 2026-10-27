@@ -24,6 +24,23 @@ function placeOf(path: string): string | null {
     return null
 }
 
+/**
+ * A Samsung TV hands a page its media and colour keys only once asked for each, and the TMPlayer
+ * wrapper's own request is lost when it opens this page, so the page asks again. Names Tizen does
+ * not know on a given set are skipped, and anywhere else this does nothing.
+ */
+function samsungKeys() {
+    const input = (window as { tizen?: { tvinputdevice?: { getSupportedKeys(): { name: string }[]; registerKeyBatch(names: string[]): void } } }).tizen?.tvinputdevice
+    if (!input) return
+    try {
+        const known = new Set(input.getSupportedKeys().map((k) => k.name))
+        const wanted = ['MediaPlayPause', 'MediaPlay', 'MediaPause', 'MediaStop', 'MediaFastForward', 'MediaRewind', 'ColorF0Red', 'ColorF1Green', 'ColorF2Yellow', 'ColorF3Blue']
+        input.registerKeyBatch(wanted.filter((k) => known.has(k)))
+    } catch (e) {
+        console.warn('[tv] media keys not registered', e)
+    }
+}
+
 /** The remote: listens while the TV layout is on, and puts the focus where it belongs after every page change. */
 export function TvKeys() {
     const location = useLocation()
@@ -35,6 +52,7 @@ export function TvKeys() {
         isSubPage: (p) => !isTop(p.split('?')[0]),
     })
     onMount(map.start)
+    onMount(samsungKeys)
     onCleanup(map.stop)
     // A new page, not new words in its address (a search being typed keeps the remote in its field).
     createEffect(on(() => location.pathname, () => queueMicrotask(() => map.routed(window.location.pathname + window.location.search))))

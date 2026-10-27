@@ -3089,6 +3089,8 @@
     "switch_decoder": "This browser could not play it directly, so TMPlayer is decoding it itself.",
     "too_old_body": "Update it, or open TMPlayer in Safari 16.4 or later, or a recent Chrome, Edge or Firefox. The TMPlayer app runs on Android phones and TVs, Windows, macOS and Linux.",
     "too_old_title": "This browser is too old for TMPlayer",
+    "tv_unreachable_body": "This TV build opens TMPlayer from {address}. Check that the computer serving it is on and on the same network as the TV.",
+    "tv_unreachable_title": "Cannot reach TMPlayer",
     "update_ready": "A new version of TMPlayer is ready.",
     "use_here": "Use it here"
   },

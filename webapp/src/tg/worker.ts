@@ -3,6 +3,7 @@
 // mtcute itself.
 import { BaseTelegramClient, SentCode as MtSentCode, TelegramClient, User, type Message, type tl } from '@mtcute/web'
 import { rules } from '../rules'
+import { cryptoProvider } from './crypto'
 import { homePage } from './home'
 import { chatList, chatPage, forgetAll, rankChats, searchAll, watchInfo } from './library'
 import { clickSponsored, reportSponsored, viewSponsored } from './sponsored'
@@ -16,6 +17,7 @@ const testMode = import.meta.env.DEV && import.meta.env.VITE_TG_TEST === '1'
 const base = new BaseTelegramClient({
     apiId: __TG_API_ID__,
     apiHash: __TG_API_HASH__,
+    crypto: cryptoProvider(),
     storage: testMode ? 'tmplayer-test' : 'tmplayer',
     testMode,
     initConnectionOptions: {

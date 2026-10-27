@@ -23,6 +23,9 @@ importers:
       '@mtcute/web':
         specifier: 0.32.6
         version: 0.32.6
+      '@noble/hashes':
+        specifier: 2.4.0
+        version: 2.4.0
       '@solid-primitives/i18n':
         specifier: 2.2.1
         version: 2.2.1(solid-js@1.9.17)
@@ -38,6 +41,9 @@ importers:
       ass-compiler:
         specifier: 0.1.16
         version: 0.1.16
+      core-js:
+        specifier: 3.50.0
+        version: 3.50.0
       idb-keyval:
         specifier: 6.3.0
         version: 6.3.0
@@ -63,6 +69,9 @@ importers:
       '@types/node':
         specifier: 24.19.0
         version: 24.19.0
+      binaryen:
+        specifier: 132.0.0
+        version: 132.0.0
       rollup-plugin-license:
         specifier: 3.7.1
         version: 3.7.1(picomatch@4.0.7)(rollup@4.65.0)
@@ -237,6 +246,10 @@ packages:
     cpu: [x64]
     os: [linux]
     libc: [glibc]
+
+  '@noble/hashes@2.4.0':
+    resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
+    engines: {node: '>= 20.19.0'}
 
   '@oxc-project/types@0.155.0':
     resolution: {integrity: sha512-SeE8JPwW1xs1tHeNycjUtUBdhorRa8o4jlvjwk49R7/Z291i+4DQa7JJIgOm/TaYQZx+QrPQbVJ/9c8dMIZN8Q==}
@@ -640,6 +653,10 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
+  binaryen@132.0.0:
+    resolution: {integrity: sha512-4Usg7yEvwO3FMso3Oov6qkOOHSod1IEv+boKkh77kTljM+eNBouqCTbqWswGzbG+vDNO/b/v2C4gfEh1WgB9Lg==}
+    hasBin: true
+
   browserslist@4.29.4:
     resolution: {integrity: sha512-2TcbbiwXEq+N0kD36tykpCfyyQigUXmuwNQbnPp4Xk4PX9JOqVIKjJlIDjpH7uY6tmRGoAd+apeT1p60T8wsdA==}
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
@@ -653,6 +670,9 @@ packages:
 
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
+
+  core-js@3.50.0:
+    resolution: {integrity: sha512-BRWgOLKkFeCgRudR6zrs8p9XJZcE14grzKMMssoYrk6krtuEZ7MTKPIY5RzOnqsEKIR9kst7wNzphttraT+Yqw==}
 
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
@@ -1232,6 +1252,8 @@ snapshots:
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
 
+  '@noble/hashes@2.4.0': {}
+
   '@oxc-project/types@0.155.0': {}
 
   '@playwright/test@1.64.1':
@@ -1488,6 +1510,8 @@ snapshots:
 
   baseline-browser-mapping@2.11.30: {}
 
+  binaryen@132.0.0: {}
+
   browserslist@4.29.4:
     dependencies:
       baseline-browser-mapping: 2.11.30
@@ -1501,6 +1525,8 @@ snapshots:
   commenting@1.1.0: {}
 
   convert-source-map@2.0.0: {}
+
+  core-js@3.50.0: {}
 
   csstype@3.2.3: {}
 

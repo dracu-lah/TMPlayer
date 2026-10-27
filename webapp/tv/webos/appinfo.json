@@ -1,0 +1,11 @@
+{
+  "id": "org.tmplayer.tv",
+  "version": "{{VERSION}}",
+  "vendor": "TMPlayer",
+  "type": "web",
+  "main": "index.html",
+  "title": "TMPlayer",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "disableBackHistoryAPI": true
+}

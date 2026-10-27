@@ -2,13 +2,17 @@
 // of @mtcute/web and e2e/media served with byte ranges, as Telegram's chunks would come.
 import { createReadStream, readdirSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { mergeConfig, type Plugin } from 'vite'
+import { defineConfig, mergeConfig, type Plugin } from 'vite'
 import base from '../vite.config'
 
 const MEDIA = fileURLToPath(new URL('./media/', import.meta.url))
 
 const testServer: Plugin = {
     name: 'tmplayer-e2e',
+    // Also behind `vite preview`, for the TV build made with this config (`--mode tv`) in old engines.
+    configurePreviewServer(server) {
+        ;(testServer.configureServer as (s: typeof server) => void)(server)
+    },
     configureServer(server) {
         // The case a test picked, from its `e2e` cookie, for the fake in the worker.
         server.middlewares.use('/__e2e/flags', (req, res) => {
@@ -39,9 +43,11 @@ const testServer: Plugin = {
     },
 }
 
-export default mergeConfig(base, {
-    root: fileURLToPath(new URL('..', import.meta.url)),
-    plugins: [testServer],
-    resolve: { alias: { '@mtcute/web': fileURLToPath(new URL('./fake/mtcute.ts', import.meta.url)) } },
-    server: { port: Number(process.env.E2E_PORT) || 8097, strictPort: true, host: '127.0.0.1' },
-})
+export default defineConfig((env) =>
+    mergeConfig(base(env), {
+        root: fileURLToPath(new URL('..', import.meta.url)),
+        plugins: [testServer],
+        resolve: { alias: { '@mtcute/web': fileURLToPath(new URL('./fake/mtcute.ts', import.meta.url)) } },
+        server: { port: Number(process.env.E2E_PORT) || 8097, strictPort: true, host: '127.0.0.1' },
+    }),
+)

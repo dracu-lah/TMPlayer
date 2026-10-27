@@ -1,8 +1,12 @@
+import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
-import { defineConfig, type Plugin } from 'vite'
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { build as viteBuild, defineConfig, type Plugin, type Rollup } from 'vite'
 import solid from 'vite-plugin-solid'
+import { legacyCss } from './legacy-css'
 import { notices } from './notices.config'
 import { createHandler } from './tmdb/handler.ts'
 import { PAGE_STRINGS } from './strings.config'
@@ -135,18 +139,116 @@ function offlineShell(): Plugin {
     }
 }
 
+let polyfillCode: Promise<string> | undefined
+
+const FLEX_GAP_TEST =
+    "(function(){var h=document.documentElement,d=document.createElement('div');d.style.cssText='display:flex;flex-direction:column;row-gap:1px;position:absolute';" +
+    "d.appendChild(document.createElement('div'));d.appendChild(document.createElement('div'));h.appendChild(d);if(d.scrollHeight!==1)h.className+=' no-flex-gap';h.removeChild(d);" +
+    "try{if(!CSS.supports('selector(:has(a))'))h.className+=' no-has'}catch(e){h.className+=' no-has'}})()"
+
+/** src/legacy.ts (core-js and a few helpers) as one classic script for Chromium 68, built once per run. */
+function polyfills(): Promise<string> {
+    polyfillCode ??= viteBuild({
+        configFile: false,
+        logLevel: 'silent',
+        build: {
+            write: false,
+            target: 'chrome68',
+            lib: { entry: fileURLToPath(new URL('./src/legacy.ts', import.meta.url)), formats: ['iife'], name: 'tmplayerPolyfills', fileName: 'polyfills' },
+        },
+    }).then((out) => {
+        const chunk = (Array.isArray(out) ? out[0] : (out as Rollup.RollupOutput)).output[0]
+        return chunk.code.trim()
+    })
+    return polyfillCode
+}
+
+/**
+ * `--mode tv`: the build smart TVs open (webOS 5 and 6 run Chromium 68 and 79, Tizen 2020 runs 69).
+ * Syntax lowered to Chromium 68 and a classic worker, as module workers came in Chromium 80. core-js
+ * fills the built-ins those engines lack, as its own classic script run before anything else: in
+ * the page a script tag ahead of the module, in the Telegram worker the start of its file (core-js
+ * is CommonJS, so imported first it would still run after the modules that need it). index.html's
+ * old browser check asks only for what the lowered code still needs.
+ */
+function tvLegacy(inWorker = false): Plugin {
+    const OLD_CHECK = "try{new Function('class A{static{}}');ok=!!([].at&&window.structuredClone&&window.BigInt&&window.Worker&&Promise.allSettled)}catch(e){}"
+    let file = ''
+    return {
+        name: 'tmplayer-tv-legacy',
+        enforce: 'pre',
+        async buildStart() {
+            const code = await polyfills()
+            if (inWorker) return
+            file = `assets/polyfills-${createHash('sha256').update(code).digest('hex').slice(0, 8)}.js`
+            this.emitFile({ type: 'asset', fileName: file, source: code })
+        },
+        transform(code, id) {
+            if (/\/src\/.*\.tsx?$/.test(id) && code.includes('new Worker(')) {
+                const out = code.replace(/(new Worker\([^)]*\),\s*\{\s*)type: 'module'/g, "$1type: 'classic'")
+                if (out === code) this.error(`${id} starts a module worker the TV build cannot make classic`)
+                return { code: out, map: null }
+            }
+        },
+        async renderChunk(code, chunk) {
+            if (inWorker && chunk.isEntry) return { code: `${await polyfills()}\n${code}`, map: null }
+        },
+        // mtcute's wasm uses saturating float to int, sign extension and bulk memory (Chromium 74 and
+        // 75); Binaryen lowers them to the first wasm, which Chromium 68 compiles. Its SIMD build is
+        // left alone: no TV engine here has SIMD, so mtcute never asks for it.
+        async generateBundle(_, bundle) {
+            if (!inWorker) return
+            const wasmOpt = join(dirname(fileURLToPath(import.meta.resolve('binaryen'))), 'bin', 'wasm-opt')
+            const tmp = mkdtempSync(join(tmpdir(), 'tmplayer-wasm-'))
+            try {
+                for (const out of Object.values(bundle)) {
+                    if (out.type !== 'asset' || !/^assets\/mtcute-[\w-]+\.wasm$/.test(out.fileName) || out.fileName.startsWith('assets/mtcute-simd-')) continue
+                    const from = join(tmp, 'in.wasm')
+                    const to = join(tmp, 'out.wasm')
+                    writeFileSync(from, out.source)
+                    const lower = ['--detect-features', '--llvm-nontrapping-fptoint-lowering', '--signext-lowering', '--llvm-memory-copy-fill-lowering', '-O2']
+                    execFileSync(process.execPath, [wasmOpt, from, ...lower, '-o', to])
+                    // Fails unless the result is the first wasm alone.
+                    execFileSync(process.execPath, [wasmOpt, to, '--mvp-features', '-o', join(tmp, 'check.wasm')])
+                    out.source = readFileSync(to)
+                }
+            } finally {
+                rmSync(tmp, { recursive: true, force: true })
+            }
+        },
+        transformIndexHtml(html) {
+            if (inWorker) return
+            if (!html.includes(OLD_CHECK)) this.error('index.html has no old browser check to replace')
+            return {
+                html: html.replace(OLD_CHECK, 'ok=!!(window.BigInt&&window.Worker&&window.WebAssembly&&window.indexedDB)'),
+                tags: [
+                    { tag: 'script', attrs: { src: `/${file}` }, injectTo: 'head' },
+                    // For legacy-css.ts: `no-flex-gap` where gap does nothing in a flex box (Chromium 83 and older),
+                    // `no-has` where :has() is missing (104 and older).
+                    { tag: 'script', children: FLEX_GAP_TEST, injectTo: 'head' },
+                ],
+            }
+        },
+    }
+}
+
 const licences = notices()
 
-export default defineConfig({
-    plugins: [solid(), pageStrings(), tooOldStrings(), needsApiId(), tmdbProxy(), ...licences.page, offlineShell()],
-    define: {
-        __TG_API_ID__: JSON.stringify(Number(secret('TG_API_ID')) || 0),
-        __TG_API_HASH__: JSON.stringify(secret('TG_API_HASH')),
-    },
-    worker: { format: 'es', plugins: licences.worker },
-    optimizeDeps: { exclude: ['@mtcute/wasm', '@mtcute/web', '@mediabunny/ac3', '@mediabunny/dts'] },
-    build: { target: 'es2022', sourcemap: true },
-    // The UI catalog is read from :core, where every app reads it.
-    server: { port: 8091, host: true, fs: { allow: ['.', '../core/src/commonMain/resources/i18n'] } },
-    preview: { port: 8091, host: true },
+export default defineConfig(({ mode }) => {
+    const tv = mode === 'tv'
+    return {
+        plugins: [solid(), pageStrings(), tooOldStrings(), needsApiId(), tmdbProxy(), ...licences.page, tv ? tvLegacy() : offlineShell()],
+        define: {
+            __TG_API_ID__: JSON.stringify(Number(secret('TG_API_ID')) || 0),
+            __TG_API_HASH__: JSON.stringify(secret('TG_API_HASH')),
+        },
+        css: tv ? { postcss: { plugins: [legacyCss()] } } : {},
+        worker: { format: tv ? 'iife' : 'es', plugins: () => (tv ? [tvLegacy(true), ...licences.worker()] : licences.worker()) },
+        optimizeDeps: { exclude: ['@mtcute/wasm', '@mtcute/web', '@mediabunny/ac3', '@mediabunny/dts'] },
+        build: tv ? { target: 'chrome68', cssTarget: 'chrome68', outDir: 'dist-tv', sourcemap: true } : { target: 'es2022', sourcemap: true },
+        // The UI catalog is read from :core, where every app reads it.
+        server: { port: 8091, host: true, fs: { allow: ['.', '../core/src/commonMain/resources/i18n'] } },
+        // The TV build (`pnpm serve:tv`) answers on its own port, so both can run at once.
+        preview: { port: tv ? 8092 : 8091, host: true },
+    }
 })

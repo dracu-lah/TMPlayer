@@ -32,6 +32,9 @@ export class User {
     }
 }
 export class SentCode {}
+export class WebCryptoProvider {
+    constructor(_?: unknown) {}
+}
 export class BaseTelegramClient {
     constructor(_: unknown) {}
 }

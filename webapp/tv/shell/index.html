@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TMPlayer</title>
+<style>
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
+body { background: #0c0e10; color: #f2f4f5; font-family: "Helvetica Neue", Helvetica, Arial, "Noto Sans", sans-serif; }
+#card { display: none; position: absolute; top: 0; right: 0; bottom: 0; left: 0; text-align: center; padding: 0 160px; }
+#card .inner { position: absolute; top: 50%; left: 160px; right: 160px; -webkit-transform: translateY(-50%); transform: translateY(-50%); }
+#card.on { display: block; }
+h1 { font-size: 72px; line-height: 1.15; font-weight: 700; margin: 0 0 40px 0; }
+p { font-size: 40px; line-height: 1.45; color: #c4c9ce; margin: 0 auto 72px auto; max-width: 1300px; }
+p b { color: #f2f4f5; font-weight: 600; word-break: break-all; }
+button { font-family: inherit; font-size: 40px; font-weight: 600; color: #0c0e10; background: #f2f4f5; border: 6px solid transparent; border-radius: 16px; padding: 22px 72px; cursor: pointer; }
+button:focus { outline: none; border-color: #6ea8ff; -webkit-box-shadow: 0 0 0 6px rgba(110, 168, 255, 0.35); box-shadow: 0 0 0 6px rgba(110, 168, 255, 0.35); }
+#spin { display: none; position: absolute; top: 50%; left: 50%; width: 96px; height: 96px; margin: -48px 0 0 -48px; border: 8px solid #262a2e; border-top-color: #f2f4f5; border-radius: 50%; -webkit-animation: spin 1s linear infinite; animation: spin 1s linear infinite; }
+#spin.on { display: block; }
+@-webkit-keyframes spin { to { -webkit-transform: rotate(360deg); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div id="spin"></div>
+<div id="card">
+  <div class="inner">
+    <h1>{{TITLE}}</h1>
+    <p>{{BODY}}</p>
+    <button id="retry" type="button">{{RETRY}}</button>
+  </div>
+</div>
+<script>
+(function () {
+  // Filled in by package.sh: the one place the address lives.
+  var ADDRESS = {{ADDRESS_JS}};
+  var TIMEOUT_MS = 5000;
+
+  var card = document.getElementById('card');
+  var spin = document.getElementById('spin');
+  var retry = document.getElementById('retry');
+  var busy = false;
+
+  function closeApp() {
+    try {
+      if (window.webOS && typeof window.webOS.platformBack === 'function') { window.webOS.platformBack(); return; }
+    } catch (e) {}
+    try {
+      if (window.tizen && tizen.application) { tizen.application.getCurrentApplication().exit(); return; }
+    } catch (e2) {}
+    try { window.close(); } catch (e3) {}
+  }
+
+  // Samsung: ask for the media and colour keys so the page gets them, when the API is there.
+  function registerTizenKeys() {
+    try {
+      if (!(window.tizen && tizen.tvinputdevice && tizen.tvinputdevice.registerKeyBatch)) { return; }
+      tizen.tvinputdevice.registerKeyBatch([
+        'MediaPlayPause', 'MediaPlay', 'MediaPause', 'MediaStop', 'MediaFastForward', 'MediaRewind',
+        'ColorF0Red', 'ColorF1Green', 'ColorF2Yellow', 'ColorF3Blue'
+      ]);
+    } catch (e) {}
+  }
+
+  function showCard() {
+    spin.className = '';
+    card.className = 'on';
+    try { retry.focus(); } catch (e) {}
+    busy = false;
+  }
+
+  function check() {
+    if (busy) { return; }
+    busy = true;
+    card.className = '';
+    spin.className = 'on';
+    var finished = false;
+    function done(ok) {
+      if (finished) { return; }
+      finished = true;
+      clearTimeout(timer);
+      if (ok) { location.replace(ADDRESS); } else { showCard(); }
+    }
+    var timer = setTimeout(function () { done(false); }, TIMEOUT_MS);
+    var sep = ADDRESS.indexOf('?') < 0 ? '?' : '&';
+    var probe = ADDRESS + sep + '_tvprobe=' + new Date().getTime();
+    try {
+      if (window.fetch) {
+        // no-cors: any answer from the server counts, the body is never read.
+        fetch(probe, { mode: 'no-cors', cache: 'no-store' }).then(function () { done(true); }, function () { done(false); });
+      } else {
+        var x = new XMLHttpRequest();
+        x.open('GET', probe, true);
+        x.timeout = TIMEOUT_MS;
+        x.onreadystatechange = function () { if (x.readyState === 4) { done(x.status > 0); } };
+        x.send();
+      }
+    } catch (e) { done(false); }
+  }
+
+  retry.addEventListener('click', check, false);
+  document.addEventListener('keydown', function (e) {
+    var k = e.keyCode;
+    if (k === 461 || k === 10009) { e.preventDefault(); closeApp(); return; }
+    if (k === 13 && card.className === 'on') { e.preventDefault(); check(); }
+  }, false);
+
+  registerTizenKeys();
+  check();
+})();
+</script>
+</body>
+</html>

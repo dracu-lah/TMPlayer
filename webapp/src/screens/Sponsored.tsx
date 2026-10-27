@@ -87,7 +87,7 @@ export function SponsoredCard(props: { item: SponsoredItem }) {
     }
 
     return (
-        <div class="sponsored">
+        <div class="sponsored" classList={{ 'no-art': !props.item.thumb }}>
             <Show when={props.item.thumb}>
                 <button class="sponsored-art" type="button" tabIndex={-1} aria-hidden="true" onClick={() => open(true)}>
                     <Show when={src()}>

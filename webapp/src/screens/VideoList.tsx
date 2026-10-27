@@ -86,7 +86,7 @@ function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk
     return (
         // The desktop's cover gradient for the title under everything, so a card waiting for its
         // frame or poster, or one with neither, is never a grey box.
-        <div class="card-art" classList={{ posted: !!picture() }} ref={el} title={picture() ? props.title : undefined} style={{ background: coverBackground(props.title) }}>
+        <div class="card-art" classList={{ posted: !!picture(), progressed: !!props.progress }} ref={el} title={picture() ? props.title : undefined} style={{ background: coverBackground(props.title) }}>
             <Show when={src()}>
                 <img class="card-fill" src={src()!} alt="" decoding="async" />
                 <img class="card-frame" src={src()!} alt="" decoding="async" />
