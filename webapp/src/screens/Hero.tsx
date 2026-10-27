@@ -3,7 +3,8 @@ import { A } from '@solidjs/router'
 import { InformationCircleIcon, PlayIcon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
 import { Icon } from '../ui/Icon'
-import { loadThumb } from './thumbs'
+import { loadBackdropLightFirst } from './posters'
+import { coverBackground } from './cover'
 import { useFeatured } from './featured'
 import { detailPath, tileCard, useProgress, watchPath } from './VideoList'
 import type { HomeRow } from '../tg/types'
@@ -60,16 +61,14 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
         onCleanup(() => clearTimeout(timer))
     })
 
+    // The title's wide picture, the light copy at once and the full one after it; the cover until then.
     const [src, setSrc] = createSignal<string | null>(null)
     createEffect(() => {
-        const thumb = pick()?.item.thumb
-        let live = true
-        if (!thumb) return setSrc(null)
-        loadThumb(thumb).then(
-            (url) => live && setSrc(url),
-            () => live && setSrc(null),
-        )
-        onCleanup(() => (live = false))
+        const ask = pick()?.item.poster
+        setSrc(null)
+        if (!ask) return
+        const stop = loadBackdropLightFirst(ask, setSrc)
+        onCleanup(stop)
     })
 
     const progressOf = useProgress()
@@ -100,7 +99,7 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
                 onPointerUp={up}
             >
                 <Show when={pick()} fallback={<div class="hero-wait" aria-hidden="true" />}>
-                    <div class="hero-art" aria-hidden="true">
+                    <div class="hero-art" aria-hidden="true" style={{ background: src() ? undefined : coverBackground(card()!.title) }}>
                         <Show when={src()}>
                             <For each={[src()!]}>
                                 {(url) => (
