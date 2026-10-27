@@ -82,6 +82,16 @@ export async function checkKept() {
     setKept((await navigator.storage?.persisted?.().catch(() => null)) ?? null)
 }
 
+/** Once the user is signed in, asks the browser to keep the data (one ask per browser; Settings can ask again). */
+export async function askKeepOnce() {
+    try {
+        if (localStorage.getItem('tmplayer-persist-asked')) return
+        localStorage.setItem('tmplayer-persist-asked', '1')
+    } catch {}
+    await checkKept()
+    if (kept() === false) await keepData()
+}
+
 /** Asks the browser to keep the data. Installed apps get it without a question; a tab may be refused. */
 export async function keepData(): Promise<boolean> {
     const ok = (await navigator.storage?.persist?.().catch(() => false)) ?? false

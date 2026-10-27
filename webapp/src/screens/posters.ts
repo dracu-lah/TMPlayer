@@ -1,4 +1,5 @@
 import { POSTERS } from '../store'
+import { touch } from '../cacheBounds'
 import type { PosterAsk } from '../rules'
 
 // Posters, as the apps show them: TMDB's poster for a video's cleaned title (the question the app's
@@ -92,6 +93,7 @@ async function fetchAnswer<T extends { match?: boolean; found?: boolean }>(url: 
     const cache = await open()
     const hit = await cache?.match(url).catch(() => undefined)
     if (hit) {
+        touch(POSTERS, url)
         const saved = Number(hit.headers.get('x-saved'))
         const body = (await hit.clone().json().catch(() => null)) as T | null
         // A poster answer kept before the overview and the wide picture were added is asked again.
@@ -113,7 +115,7 @@ async function fetchAnswer<T extends { match?: boolean; found?: boolean }>(url: 
     if (!response.ok) throw new Error(`posters ${response.status}`)
     const text = await response.text()
     const body = JSON.parse(text) as T
-    cache?.put(url, new Response(text, { headers: { 'Content-Type': 'application/json', 'x-saved': String(Date.now()) } })).catch(() => {})
+    cache?.put(url, new Response(text, { headers: { 'Content-Type': 'application/json', 'x-saved': String(Date.now()) } })).then(() => touch(POSTERS, url, text.length), () => {})
     return body
 }
 
@@ -125,11 +127,16 @@ async function picture(path: string, size: string): Promise<Blob> {
     const url = `/tmdb/img/${size}${path}`
     const cache = await open()
     const hit = await cache?.match(url).catch(() => undefined)
-    if (hit) return hit.blob()
+    if (hit) {
+        touch(POSTERS, url)
+        return hit.blob()
+    }
     const response = await fetch(url)
     if (!response.ok) throw new Error(`poster picture ${response.status}`)
-    cache?.put(url, response.clone()).catch(() => {})
-    return response.blob()
+    const copy = response.clone()
+    const blob = await response.blob()
+    cache?.put(url, copy).then(() => touch(POSTERS, url, blob.size), () => {})
+    return blob
 }
 
 const known = new Map<string, Promise<string | null>>()

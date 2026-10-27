@@ -9,7 +9,8 @@ import { Home } from './screens/Home'
 import { Nav } from './ui/Nav'
 import { Toaster } from './ui/Toast'
 import { CardMenu } from './ui/CardMenu'
-import { applyUpdate, updateReady } from './install'
+import { applyUpdate, askKeepOnce, updateReady } from './install'
+import { scheduleTrim } from './cacheBounds'
 import { t } from './i18n'
 
 // Home comes with the first load. Sign in (with its QR code), the watch page (with the player and
@@ -72,6 +73,14 @@ function Shell(props: ParentProps) {
         }
         // Fetched ahead only: one that fails now (offline) is fetched again when its page opens.
         if (user) idle(() => later.forEach((load) => load().catch(() => {})))
+    })
+    // Signed in: ask the browser once to keep the data, and keep the picture caches within their caps.
+    let kept = false
+    createEffect(() => {
+        if (!me() || kept) return
+        kept = true
+        askKeepOnce().catch(() => {})
+        scheduleTrim()
     })
 
     const signedIn = () => me() && location.pathname !== '/signin'

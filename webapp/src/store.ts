@@ -5,6 +5,7 @@
 import { createSignal } from 'solid-js'
 import { clear, createStore, del, entries, get, set, type UseStore } from 'idb-keyval'
 import type { Sort, VideoItem } from './tg/types'
+import { clearIndex, POSTERS as POSTER_CACHE, THUMBS, touch } from './cacheBounds'
 
 export type Theme = 'system' | 'dark' | 'light' | 'black'
 
@@ -404,18 +405,20 @@ export async function starred(): Promise<number[]> {
 
 // Thumbnails
 
-const THUMBS = 'tmplayer-thumbs'
 /** The Cache API's store for poster answers and pictures (screens/posters.ts). */
-export const POSTERS = 'tmplayer-posters'
+export const POSTERS = POSTER_CACHE
 
 /** A thumbnail's JPEG from the Cache API, or from `fetch` (and then kept there). */
 export async function cachedThumb(key: string, fetch: () => Promise<ArrayBuffer>): Promise<Blob> {
     const url = `/thumb/${encodeURIComponent(key)}`
     const cache = await globalThis.caches?.open(THUMBS).catch(() => undefined)
     const hit = await cache?.match(url).catch(() => undefined)
-    if (hit) return hit.blob()
+    if (hit) {
+        touch(THUMBS, url)
+        return hit.blob()
+    }
     const blob = new Blob([await fetch()], { type: 'image/jpeg' })
-    cache?.put(url, new Response(blob)).catch(() => {})
+    cache?.put(url, new Response(blob)).then(() => touch(THUMBS, url, blob.size), () => {})
     return blob
 }
 
@@ -430,6 +433,7 @@ export async function clearAll() {
     if (db) await stored(clear).catch(() => {})
     await globalThis.caches?.delete(THUMBS).catch(() => {})
     await globalThis.caches?.delete(POSTERS).catch(() => {})
+    await clearIndex()
     setSettings({ ...DEFAULTS })
     setStarredIds(new Set<number>())
     setLaterIds(new Set<string>())

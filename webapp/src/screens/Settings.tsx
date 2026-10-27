@@ -1,4 +1,4 @@
-import { createEffect, createResource, createSignal, For, Match, Show, Switch, type JSX } from 'solid-js'
+import { createEffect, createResource, createSignal, For, Match, onMount, Show, Switch, type JSX } from 'solid-js'
 import { A, useNavigate, useParams } from '@solidjs/router'
 import {
     ArrowLeft02Icon,
@@ -27,7 +27,8 @@ import { form, layout, layoutFixed, setLayout, type Layout } from '../form'
 import { Icon, type IconData } from '../ui/Icon'
 import { TmdbMark } from '../ui/TmdbMark'
 import { initialOf } from '../ui/initial'
-import { install, installed, installPrompt, iosBrowser, keepData, kept, refused } from '../install'
+import { checkKept, install, installed, installPrompt, iosBrowser, keepData, kept, refused } from '../install'
+import { cacheSizes, clearCaches } from '../cacheBounds'
 
 const THEMES: Theme[] = ['system', 'dark', 'light', 'black']
 const LAYOUTS: Layout[] = ['desktop', 'tv']
@@ -500,8 +501,23 @@ function Install() {
 }
 
 /** What the browser holds for TMPlayer, and asking it to keep that when the device runs low on space. */
+const small = (bytes: number) => (bytes < 500_000 ? '0 MB' : size(bytes))
+
 function StorageBlock() {
-    const [estimate] = createResource(() => navigator.storage?.estimate?.().catch(() => null) ?? null)
+    const [version, setVersion] = createSignal(0)
+    const [estimate] = createResource(version, () => navigator.storage?.estimate?.().catch(() => null) ?? null)
+    const [sizes] = createResource(version, () => cacheSizes())
+    const [clearing, setClearing] = createSignal(false)
+    onMount(() => void checkKept())
+    // Thumbnails and posters only: the sign in, settings, places and watched stay.
+    const clear = async () => {
+        setClearing(true)
+        try {
+            await clearCaches()
+        } catch {}
+        setClearing(false)
+        setVersion((v) => v + 1)
+    }
     return (
         <div class="set-block">
             <h3 class="set-block-title">{t('web.storage_title')}</h3>
@@ -511,6 +527,20 @@ function StorageBlock() {
             </Show>
             <Show when={estimate()?.quota}>
                 <p class="small">{t('web.storage_used', { used: size(estimate()!.usage ?? 0), quota: size(estimate()!.quota!) })}</p>
+            </Show>
+            <Show when={estimate()?.usage !== undefined && sizes()}>
+                {(sz) => {
+                    const app = () => Math.max(0, (estimate()!.usage ?? 0) - sz().thumbs - sz().posters)
+                    return (
+                        <>
+                            <p class="muted small">
+                                {t('web.storage_breakdown', { thumbs: small(sz().thumbs), posters: small(sz().posters), app: small(app()) })}
+                            </p>
+                            <button class="link" style={{ 'align-self': 'start' }} type="button" disabled={clearing()} onClick={clear}>{t('web.storage_clear_cache')}</button>
+                            <p class="muted small">{t('web.storage_clear_cache_detail')}</p>
+                        </>
+                    )
+                }}
             </Show>
             <Show when={kept() !== null}>
                 <p class="muted small">{kept() ? t('web.keep_storage_on') : refused() ? t('web.keep_storage_refused') : t('web.keep_storage_off')}</p>
