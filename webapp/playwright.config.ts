@@ -5,16 +5,17 @@ import { defineConfig, devices } from '@playwright/test'
 // E2E_PORT runs a second checkout's tests beside another's (8097 by default).
 const PORT = Number(process.env.E2E_PORT) || 8097
 
-/** A Chromium run that sets the layout (`tmplayer-layout`) before the page starts, as Settings would. */
+/** A Chromium run as a phone (a touch screen, which is what gives the phone layout) or a desktop (layout set to Desktop, as Settings would). */
 function form(layout: 'phone' | 'desktop', width: number, height: number) {
     return {
         ...devices['Desktop Chrome'],
         viewport: { width, height },
         hasTouch: layout === 'phone',
+        isMobile: layout === 'phone',
         launchOptions: { executablePath: process.env.CHROMIUM_PATH || undefined },
         storageState: {
             cookies: [],
-            origins: [{ origin: `http://127.0.0.1:${PORT}`, localStorage: [{ name: 'tmplayer-layout', value: layout }] }],
+            origins: layout === 'phone' ? [] : [{ origin: `http://127.0.0.1:${PORT}`, localStorage: [{ name: 'tmplayer-layout', value: layout }] }],
         },
     }
 }

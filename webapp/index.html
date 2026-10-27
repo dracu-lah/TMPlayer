@@ -22,9 +22,9 @@
   <script>try{var t=localStorage.getItem('tmplayer-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
   <script>
     // The layout (phone, desktop or TV) before the first paint: the same rules as src/form.ts, whose Settings choice is kept under tmplayer-layout.
-    (function(){var d=document.documentElement,f;try{f=localStorage.getItem('tmplayer-layout')}catch(e){}
-    if(f!=='phone'&&f!=='desktop'&&f!=='tv'){var m=function(q){return matchMedia(q).matches};
-    f=/Web0S|webOS|Tizen|SMART-TV|SmartTV|\bAFT|CrKey|HbbTV|Android.*\bTV\b/i.test(navigator.userAgent)?'tv':(m('(pointer: coarse)')&&m('(hover: none)')&&Math.min(innerWidth,innerHeight)<840)?'phone':'desktop'}
+    (function(){var d=document.documentElement,f,s,m=function(q){return matchMedia(q).matches};try{s=localStorage.getItem('tmplayer-layout')}catch(e){}
+    f=/Web0S|webOS|Tizen|SMART-TV|SmartTV|\bAFT|CrKey|HbbTV|Android.*\bTV\b/i.test(navigator.userAgent)?'tv':(m('(pointer: coarse)')&&m('(hover: none)')&&Math.min(innerWidth,innerHeight)<840)?'phone':'desktop';
+    if(f!=='phone'&&(s==='desktop'||s==='tv'))f=s;
     d.dataset.form=f})()
   </script>
   <style>#old{max-width:420px;margin:0 auto;padding:48px 16px;font:16px/24px system-ui,sans-serif;text-align:center}#old a{color:#4fb3ff}</style>

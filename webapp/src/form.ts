@@ -1,12 +1,14 @@
 // Which of the apps' three layouts (DeviceForm) the page shows: phone, desktop or TV, set on
 // <html data-form> before the first paint by index.html's inline script, which holds the same rules
-// as detect() below (keep the two in step). Settings > Layout (auto, phone, desktop, tv) wins over
-// detection; in Auto a resize or a rotation changes the form live, except while a video plays,
-// when the change waits until the player closes.
+// as detect() below (keep the two in step). A phone always gets the phone layout; anything else
+// gets the desktop or TV layout from detection, or from Settings > Layout (Desktop or TV, as in the
+// desktop app) once one is picked. A resize or a rotation changes the form live, except while a
+// video plays, when the change waits until the player closes.
 import { createSignal } from 'solid-js'
 
 export type Form = 'phone' | 'desktop' | 'tv'
-export type Layout = 'auto' | Form
+/** The choice Settings offers off a phone. */
+export type Layout = 'desktop' | 'tv'
 
 export const LAYOUT_KEY = 'tmplayer-layout'
 
@@ -20,26 +22,29 @@ export function detect(ua = navigator.userAgent, width = innerWidth, height = in
     return 'desktop'
 }
 
-export function savedLayout(): Layout {
+/** The stored choice, or null for none (an old 'phone' choice counts as none). */
+export function savedLayout(): Layout | null {
     try {
         const v = localStorage.getItem(LAYOUT_KEY)
-        if (v === 'phone' || v === 'desktop' || v === 'tv') return v
+        if (v === 'desktop' || v === 'tv') return v
     } catch {}
-    return 'auto'
+    return null
 }
 
-const [layout, setLayoutSignal] = createSignal<Layout>(savedLayout())
-const [form, setForm] = createSignal<Form>(
-    (document.documentElement.dataset.form as Form | undefined) ?? (layout() === 'auto' ? detect() : layout() as Form),
-)
-export { form, layout }
-
-let holding = false
+const [saved, setSaved] = createSignal<Layout | null>(savedLayout())
 
 function resolve(): Form {
-    const l = layout()
-    return l === 'auto' ? detect() : l
+    const d = detect()
+    return d === 'phone' ? d : saved() ?? d
 }
+
+const [form, setForm] = createSignal<Form>((document.documentElement.dataset.form as Form | undefined) ?? resolve())
+export { form }
+
+/** What Settings > Layout shows as picked: the form itself off a phone. */
+export const layout = (): Layout => (form() === 'tv' ? 'tv' : 'desktop')
+
+let holding = false
 
 function apply() {
     const f = resolve()
@@ -49,25 +54,24 @@ function apply() {
 
 /** Settings > Layout: stored (so the next load paints in it) and applied at once, even while a video plays. */
 export function setLayout(next: Layout) {
-    setLayoutSignal(next)
+    setSaved(next)
     try {
-        if (next === 'auto') localStorage.removeItem(LAYOUT_KEY)
-        else localStorage.setItem(LAYOUT_KEY, next)
+        localStorage.setItem(LAYOUT_KEY, next)
     } catch {}
     apply()
 }
 
-/** The watch page tells whether a video is playing: a resize in Auto waits, and is applied when it ends. */
+/** The watch page tells whether a video is playing: a resize waits, and is applied when it ends. */
 export function holdForm(on: boolean) {
     holding = on
-    if (!on && layout() === 'auto' && resolve() !== form()) apply()
+    if (!on && resolve() !== form()) apply()
 }
 
-/** Called once at start: makes sure the attribute is there and follows resizes and pointer changes in Auto. */
+/** Called once at start: makes sure the attribute is there and follows resizes and pointer changes. */
 export function watchForm() {
     apply()
     const again = () => {
-        if (layout() === 'auto' && !holding && resolve() !== form()) apply()
+        if (!holding && resolve() !== form()) apply()
     }
     addEventListener('resize', again)
     addEventListener('orientationchange', again)

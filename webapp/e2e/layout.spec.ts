@@ -1,4 +1,4 @@
-// Plan 8.3: the layout (data-form) from faked user agents and pointers, the Settings override, and the live switch.
+// Plan 8.3: the layout (data-form) from faked user agents and pointers, the Settings choice (Desktop or TV, none on a phone), and the live switch.
 import { expect, test, type Browser } from '@playwright/test'
 import { fakeCase } from './helpers'
 
@@ -50,7 +50,9 @@ test.describe('detection table', () => {
 test('the Settings choice wins, survives a reload and is set before the page runs', async ({ page, context }) => {
     await page.goto('/settings')
     const html = page.locator('html')
-    await expect(page.getByRole('radio', { name: 'Auto' })).toBeChecked()
+    await expect(page.getByRole('radio', { name: 'Desktop' })).toBeChecked()
+    await expect(page.getByRole('radio', { name: 'Phone' })).toHaveCount(0)
+    await expect(page.getByRole('radio', { name: 'Auto' })).toHaveCount(0)
     // Each form draws Settings in its own way (the TV's one long page, a list of pages elsewhere), so the choice is pressed, not checked: the radio is a new one by the time the form has changed.
     // A press can land on the old radio while the page redraws for the last choice, so a press is tried again until the form follows.
     const choose = (name: string) =>
@@ -58,7 +60,7 @@ test('the Settings choice wins, survives a reload and is set before the page run
             await page.getByRole('radio', { name }).click({ force: true })
             await expect(html).toHaveAttribute('data-form', name.toLowerCase(), { timeout: 2000 })
         }).toPass({ timeout: 15_000 })
-    for (const name of ['TV', 'Phone', 'Desktop']) await choose(name)
+    for (const name of ['TV', 'Desktop']) await choose(name)
     await choose('TV')
     await page.reload()
     await expect(page.getByRole('radio', { name: 'TV' })).toBeChecked()
@@ -70,13 +72,22 @@ test('the Settings choice wins, survives a reload and is set before the page run
         return p.evaluate(() => (window as any).early)
     })
     expect(seen).toBe('tv')
-    await expect(async () => {
-        await page.getByRole('radio', { name: 'Auto' }).click({ force: true })
-        await expect(html).toHaveAttribute('data-form', 'desktop', { timeout: 2000 })
-    }).toPass({ timeout: 15_000 })
+    await choose('Desktop')
 })
 
-test('Auto follows a resize live; the route stays', async ({ page, browserName }) => {
+test('a phone always has the phone layout: no choice in Settings, and a choice saved before is passed over', async ({ browser, browserName }) => {
+    test.skip(browserName !== 'chromium', 'pointer overrides are Chromium only')
+    const context = await browser.newContext({ userAgent: IPHONE, viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+    await context.addInitScript(() => localStorage.setItem('tmplayer-layout', 'tv'))
+    const page = await context.newPage()
+    await page.goto('/settings/appearance')
+    await expect(page.locator('html')).toHaveAttribute('data-form', 'phone')
+    await expect(page.getByRole('radio', { name: 'Dark' })).toBeVisible()
+    await expect(page.getByRole('radio', { name: 'TV' })).toHaveCount(0)
+    await context.close()
+})
+
+test('a desktop follows a resize live; the route stays', async ({ page, browserName }) => {
     test.skip(browserName !== 'chromium', 'desktop viewport resize')
     await page.goto('/settings')
     await expect(page.locator('html')).toHaveAttribute('data-form', 'desktop')
@@ -86,7 +97,7 @@ test('Auto follows a resize live; the route stays', async ({ page, browserName }
     await expect(page).toHaveURL(/\/settings/)
 })
 
-test('Auto on a touch device changes the form live with the window, keeping the route', async ({ browser, browserName }) => {
+test('a touch device changes the form live with the window, keeping the route', async ({ browser, browserName }) => {
     test.skip(browserName !== 'chromium', 'pointer overrides are Chromium only')
     const context = await browser.newContext({ userAgent: IPHONE, viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
     const page = await context.newPage()

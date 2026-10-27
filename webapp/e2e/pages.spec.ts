@@ -28,11 +28,10 @@ async function mockTmdb(page: Page, extras: object | number = EXTRAS) {
     return asked
 }
 
-/** The form a test runs in, set before the page starts. */
-async function inForm(page: Page, form: 'phone' | 'desktop') {
-    await page.addInitScript((f) => localStorage.setItem('tmplayer-layout', f), form)
-    // A desktop is drawn at a desktop's width, whatever size the project runs at.
-    if (form === 'desktop') await page.setViewportSize({ width: 1280, height: 800 })
+/** The device a test runs on, whatever the project is: a phone is a touch screen (the layout follows the device, not a setting), a desktop is drawn at a desktop's width. */
+const IN = {
+    phone: { viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true },
+    desktop: { viewport: { width: 1280, height: 800 }, hasTouch: false, isMobile: false },
 }
 
 /** Where videos were left, written where the app keeps them. */
@@ -54,56 +53,67 @@ async function leave(page: Page, resumes: [number, number, number, number][]) {
 }
 
 test.describe('Settings as pages', () => {
-    test('a desktop shows the list beside the page, which its address names', async ({ page }) => {
-        await inForm(page, 'desktop')
-        await page.goto('/settings')
-        await expect(page).toHaveURL(/\/settings\/appearance$/)
-        const list = page.getByRole('navigation', { name: 'Settings' })
-        await expect(list.getByRole('link')).toHaveCount(5)
-        await expect(page.getByRole('radio', { name: 'Dark' })).toBeVisible()
-        await expect(list.getByRole('link', { name: /^Appearance/ })).toHaveAttribute('aria-current', 'page')
-        await list.getByRole('link', { name: /^Library/ }).click()
-        await expect(page).toHaveURL(/\/settings\/library$/)
-        await expect(page.getByRole('switch', { name: /^Carousel on Home/ })).toBeVisible()
-        await expect(page.getByRole('radio', { name: 'Dark' })).toHaveCount(0)
-        // The account and Sign out stay beside every page.
-        await expect(page.getByText('@danatest')).toBeVisible()
-        await expect(page.getByRole('button', { name: 'Sign out of Telegram' })).toBeVisible()
+    test.describe('on a desktop', () => {
+        test.use(IN.desktop)
+        test('a desktop shows the list beside the page, which its address names', async ({ page }) => {
+            await page.goto('/settings')
+            await expect(page).toHaveURL(/\/settings\/appearance$/)
+            const list = page.getByRole('navigation', { name: 'Settings' })
+            await expect(list.getByRole('link')).toHaveCount(5)
+            await expect(page.getByRole('radio', { name: 'Dark' })).toBeVisible()
+            await expect(list.getByRole('link', { name: /^Appearance/ })).toHaveAttribute('aria-current', 'page')
+            await list.getByRole('link', { name: /^Library/ }).click()
+            await expect(page).toHaveURL(/\/settings\/library$/)
+            await expect(page.getByRole('switch', { name: /^Carousel on Home/ })).toBeVisible()
+            await expect(page.getByRole('radio', { name: 'Dark' })).toHaveCount(0)
+            // The account and Sign out stay beside every page.
+            await expect(page.getByText('@danatest')).toBeVisible()
+            await expect(page.getByRole('button', { name: 'Sign out of Telegram' })).toBeVisible()
+        })
     })
 
-    test('a phone takes the list and a page in turn, and Back from a page is the list', async ({ page }) => {
-        await inForm(page, 'phone')
-        await page.setViewportSize({ width: 393, height: 852 })
-        await page.goto('/settings')
-        await expect(page).toHaveURL(/\/settings$/)
-        await expect(page.getByRole('radio', { name: 'Dark' })).toHaveCount(0)
-        await page.getByRole('link', { name: /^Appearance/ }).click()
-        await expect(page).toHaveURL(/\/settings\/appearance$/)
-        await expect(page.getByRole('radio', { name: 'Dark' })).toBeVisible()
-        await expect(page.getByRole('link', { name: /^Playback/ })).toHaveCount(0)
-        await page.getByRole('button', { name: 'Back' }).click()
-        await expect(page).toHaveURL(/\/settings$/)
-        await expect(page.getByRole('link', { name: /^Playback/ })).toBeVisible()
+    test.describe('on a phone', () => {
+        test.use(IN.phone)
+        test('a phone takes the list and a page in turn, and Back from a page is the list', async ({ page }) => {
+            await page.goto('/settings')
+            await expect(page).toHaveURL(/\/settings$/)
+            await expect(page.getByRole('radio', { name: 'Dark' })).toHaveCount(0)
+            await page.getByRole('link', { name: /^Appearance/ }).click()
+            await expect(page).toHaveURL(/\/settings\/appearance$/)
+            await expect(page.getByRole('radio', { name: 'Dark' })).toBeVisible()
+            await expect(page.getByRole('link', { name: /^Playback/ })).toHaveCount(0)
+            await page.getByRole('button', { name: 'Back' }).click()
+            await expect(page).toHaveURL(/\/settings$/)
+            await expect(page.getByRole('link', { name: /^Playback/ })).toBeVisible()
+        })
     })
 
-    test('the carousel switch is a switch, and stays as it was left after a reload', async ({ page }) => {
-        await inForm(page, 'desktop')
-        await page.goto('/settings/library')
-        const carousel = page.getByRole('switch', { name: /^Carousel on Home/ })
-        await expect(carousel).toHaveAttribute('aria-checked', 'true')
-        await carousel.click()
-        await expect(carousel).toHaveAttribute('aria-checked', 'false')
-        await page.reload()
-        await expect(carousel).toHaveAttribute('aria-checked', 'false')
+    test.describe('on a desktop', () => {
+        test.use(IN.desktop)
+        test('the carousel switch is a switch, and stays as it was left after a reload', async ({ page }) => {
+            await page.goto('/settings/library')
+            const carousel = page.getByRole('switch', { name: /^Carousel on Home/ })
+            await expect(carousel).toHaveAttribute('aria-checked', 'true')
+            await carousel.click()
+            await expect(carousel).toHaveAttribute('aria-checked', 'false')
+            await page.reload()
+            await expect(carousel).toHaveAttribute('aria-checked', 'false')
+        })
     })
 
-    test('changing the layout on a page keeps the viewer on it', async ({ page }) => {
-        await inForm(page, 'desktop')
-        await page.goto('/settings')
-        await page.getByRole('radio', { name: 'Phone' }).click({ force: true })
-        await expect(page.locator('html')).toHaveAttribute('data-form', 'phone')
-        await expect(page).toHaveURL(/\/settings\/appearance$/)
-        await expect(page.getByRole('radio', { name: 'Desktop' })).toBeVisible()
+    test.describe('on a desktop', () => {
+        test.use(IN.desktop)
+        test('changing the layout on a page keeps the viewer on it', async ({ page }) => {
+            await page.goto('/settings')
+            await page.getByRole('radio', { name: 'TV' }).click({ force: true })
+            await expect(page.locator('html')).toHaveAttribute('data-form', 'tv')
+            // The TV's Settings is one page: back on the desktop, the page it was on comes back.
+            await expect(page).toHaveURL(/\/settings$/)
+            await page.getByRole('radio', { name: 'Desktop' }).click({ force: true })
+            await expect(page.locator('html')).toHaveAttribute('data-form', 'desktop')
+            await expect(page).toHaveURL(/\/settings\/appearance$/)
+            await expect(page.getByRole('radio', { name: 'TV' })).toBeVisible()
+        })
     })
 })
 
@@ -135,56 +145,65 @@ test.describe('a chat', () => {
         await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible()
     })
 
-    test('As rows swaps the tiles for rows, keeps its place across a reload, and As tiles brings them back', async ({ page }) => {
-        await inForm(page, 'phone')
-        await page.setViewportSize({ width: 393, height: 852 })
-        await page.goto('/chat/-1001')
-        await expect(page.locator('.card').first()).toBeVisible()
-        await page.getByTitle('Show as rows').click()
-        await expect(page.locator('.row-card').first()).toBeVisible()
-        await expect(page.locator('.card')).toHaveCount(0)
-        // A phone's row is a 56 wide poster beside the name, in one column.
-        const box = await page.locator('.row-art').first().boundingBox()
-        expect(Math.round(box!.width)).toBe(56)
-        await page.reload()
-        await expect(page.locator('.row-card').first()).toBeVisible()
-        await page.getByTitle('Show as tiles').click()
-        await expect(page.locator('.card').first()).toBeVisible()
-        await expect(page.locator('.row-card')).toHaveCount(0)
+    test.describe('on a phone', () => {
+        test.use(IN.phone)
+        test('As rows swaps the tiles for rows, keeps its place across a reload, and As tiles brings them back', async ({ page }) => {
+            await page.goto('/chat/-1001')
+            await expect(page.locator('.card').first()).toBeVisible()
+            await page.getByTitle('Show as rows').click()
+            await expect(page.locator('.row-card').first()).toBeVisible()
+            await expect(page.locator('.card')).toHaveCount(0)
+            // A phone's row is a 56 wide poster beside the name, in one column.
+            const box = await page.locator('.row-art').first().boundingBox()
+            expect(Math.round(box!.width)).toBe(56)
+            await page.reload()
+            await expect(page.locator('.row-card').first()).toBeVisible()
+            await page.getByTitle('Show as tiles').click()
+            await expect(page.locator('.card').first()).toBeVisible()
+            await expect(page.locator('.row-card')).toHaveCount(0)
+        })
     })
 
-    test("the chat's bar has each form's order: a phone Favourite, As rows, Search, Sort; a desktop Search, Favourite, Sort, As rows", async ({ page }) => {
-        const labels = page.locator('.chat-bar .nav-label')
-        await inForm(page, 'phone')
-        await page.goto('/chat/-1001')
-        await expect(labels).toHaveText(['Favourite', 'As rows', 'Search', 'Sort'])
-        await page.addInitScript(() => localStorage.setItem('tmplayer-layout', 'desktop'))
-        await page.reload()
-        await expect(labels).toHaveText(['Search', 'Favourite', 'Sort', 'As rows'])
+    test.describe('on a phone', () => {
+        test.use(IN.phone)
+        test("the chat's bar has a phone's order: Favourite, As rows, Search, Sort", async ({ page }) => {
+            await page.goto('/chat/-1001')
+            await expect(page.locator('.chat-bar .nav-label')).toHaveText(['Favourite', 'As rows', 'Search', 'Sort'])
+        })
     })
+    test.describe('on a desktop', () => {
+        test.use(IN.desktop)
+        test("the chat's bar has a desktop's order: Search, Favourite, Sort, As rows", async ({ page }) => {
+            await page.goto('/chat/-1001')
+            await expect(page.locator('.chat-bar .nav-label')).toHaveText(['Search', 'Favourite', 'Sort', 'As rows'])
+        })
+    })
+
 })
 
 test.describe('Continue watching', () => {
-    test('Home and History show landscape cards with how long is left, a pill of progress and the card name', async ({ page }) => {
-        await inForm(page, 'desktop')
-        await leave(page, [[-1002, 16, 600, 1700]])
-        await page.goto('/')
-        const card = page.locator('.continue-card').first()
-        await expect(card).toBeVisible()
-        await expect(card.locator('.tile-badge')).toHaveText('18m left')
-        await expect(card.locator('.pill-progress')).toBeVisible()
-        // The name is the apps' continueCardTitle: the episode, then the show.
-        await expect(card.locator('.continue-name')).toHaveText('S1 E1  ·  Harbour Notes'.replace(/ {2}/g, ' '))
-        const art = await card.locator('.continue-art').boundingBox()
-        expect(Math.round((art!.width / art!.height) * 100)).toBe(178)
-        // It plays at once.
-        await expect(card).toHaveAttribute('href', /\/watch\/-1002\/16$/)
-        await page.goto('/history/continue')
-        await expect(page.locator('.continue-card')).toHaveCount(1)
-        await expect(page.getByRole('heading', { name: 'Today' })).toBeVisible()
-        // The other tabs keep their portrait cards.
-        await page.goto('/history/watched')
-        await expect(page.locator('.continue-card')).toHaveCount(0)
+    test.describe('on a desktop', () => {
+        test.use(IN.desktop)
+        test('Home and History show landscape cards with how long is left, a pill of progress and the card name', async ({ page }) => {
+            await leave(page, [[-1002, 16, 600, 1700]])
+            await page.goto('/')
+            const card = page.locator('.continue-card').first()
+            await expect(card).toBeVisible()
+            await expect(card.locator('.tile-badge')).toHaveText('18m left')
+            await expect(card.locator('.pill-progress')).toBeVisible()
+            // The name is the apps' continueCardTitle: the episode, then the show.
+            await expect(card.locator('.continue-name')).toHaveText('S1 E1  ·  Harbour Notes'.replace(/ {2}/g, ' '))
+            const art = await card.locator('.continue-art').boundingBox()
+            expect(Math.round((art!.width / art!.height) * 100)).toBe(178)
+            // It plays at once.
+            await expect(card).toHaveAttribute('href', /\/watch\/-1002\/16$/)
+            await page.goto('/history/continue')
+            await expect(page.locator('.continue-card')).toHaveCount(1)
+            await expect(page.getByRole('heading', { name: 'Today' })).toBeVisible()
+            // The other tabs keep their portrait cards.
+            await page.goto('/history/watched')
+            await expect(page.locator('.continue-card')).toHaveCount(0)
+        })
     })
 })
 
@@ -193,34 +212,37 @@ test.describe('sign in', () => {
         await fakeCase(context, 'signedout')
     })
 
-    test('a desktop centres one column under the mark and the name', async ({ page }) => {
-        await inForm(page, 'desktop')
-        await page.goto('/signin')
-        const brand = page.locator('.signin-brand')
-        await expect(brand).toContainText('TMPlayer')
-        const box = await brand.boundingBox()
-        const width = page.viewportSize()!.width
-        expect(Math.abs(box!.x + box!.width / 2 - width / 2)).toBeLessThan(4)
-        expect(await page.locator('.signin h1').evaluate((h) => getComputedStyle(h).textAlign)).toBe('center')
+    test.describe('on a desktop', () => {
+        test.use(IN.desktop)
+        test('a desktop centres one column under the mark and the name', async ({ page }) => {
+            await page.goto('/signin')
+            const brand = page.locator('.signin-brand')
+            await expect(brand).toContainText('TMPlayer')
+            const box = await brand.boundingBox()
+            const width = page.viewportSize()!.width
+            expect(Math.abs(box!.x + box!.width / 2 - width / 2)).toBeLessThan(4)
+            expect(await page.locator('.signin h1').evaluate((h) => getComputedStyle(h).textAlign)).toBe('center')
+        })
     })
 
-    test('a phone starts at the top left with the mark and the name, and the other way in is a button', async ({ page }) => {
-        await inForm(page, 'phone')
-        await page.setViewportSize({ width: 393, height: 852 })
-        await page.goto('/signin')
-        const box = await page.locator('.signin-brand').boundingBox()
-        expect(box!.x).toBeLessThan(40)
-        await expect(page.locator('.signin-word')).toHaveText('TMPlayer')
-        await expect(page.getByRole('heading', { name: 'Your phone number' })).toBeVisible()
-        const alt = await page.getByRole('button', { name: 'Scan a QR code instead' }).boundingBox()
-        expect(alt!.width).toBeGreaterThan(300)
+    test.describe('on a phone', () => {
+        test.use(IN.phone)
+        test('a phone starts at the top left with the mark and the name, and the other way in is a button', async ({ page }) => {
+            await page.goto('/signin')
+            const box = await page.locator('.signin-brand').boundingBox()
+            expect(box!.x).toBeLessThan(40)
+            await expect(page.locator('.signin-word')).toHaveText('TMPlayer')
+            await expect(page.getByRole('heading', { name: 'Your phone number' })).toBeVisible()
+            const alt = await page.getByRole('button', { name: 'Scan a QR code instead' }).boundingBox()
+            expect(alt!.width).toBeGreaterThan(300)
+        })
     })
 })
 
 test.describe('a video page', () => {
+    test.use(IN.desktop)
     test.beforeEach(async ({ page }) => {
         await noSizeFloor(page)
-        await inForm(page, 'desktop')
     })
 
     test("shows TMDB's overview, genres and age rating, score, cast and a trailer that opens YouTube, and has no Download", async ({ page }) => {

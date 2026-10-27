@@ -30,7 +30,7 @@ import { initialOf } from '../ui/initial'
 import { install, installed, installPrompt, iosBrowser, keepData, kept, refused } from '../install'
 
 const THEMES: Theme[] = ['system', 'dark', 'light', 'black']
-const LAYOUTS: Layout[] = ['auto', 'phone', 'desktop', 'tv']
+const LAYOUTS: Layout[] = ['desktop', 'tv']
 
 type PageId = 'appearance' | 'playback' | 'library' | 'storage' | 'about'
 
@@ -40,7 +40,7 @@ const PAGES: { id: PageId; icon: IconData; title: () => string; summary: () => s
         id: 'appearance',
         icon: PaintBoardIcon,
         title: () => t('settings.appearance'),
-        summary: () => `${t(`theme.${settings().theme}`)}${dot}${t(`settings.layout_${layout()}`)}`,
+        summary: () => (form() === 'phone' ? t(`theme.${settings().theme}`) : `${t(`theme.${settings().theme}`)}${dot}${t(`settings.layout_${layout()}`)}`),
     },
     { id: 'playback', icon: PlayIcon, title: () => t('settings.playback'), summary: () => t('settings.resume_rewind') },
     { id: 'library', icon: GridViewIcon, title: () => t('settings.library'), summary: () => t('settings.page_library_summary') },
@@ -245,6 +245,7 @@ function Appearance() {
                         onPick={(v) => setSetting('theme', v)}
                     />
                 </div>
+                <Show when={form() !== 'phone'}>
                 <div class="set-block">
                     <h3 class="set-block-title" id="layout-label">{t('settings.layout')}</h3>
                     <Choices
@@ -254,8 +255,9 @@ function Appearance() {
                         value={layout()}
                         onPick={setLayout}
                     />
-                    <p class="muted small">{t('settings.layout_detail')}</p>
+                    <p class="muted small">{t('settings.layout_detail_desktop')}</p>
                 </div>
+                </Show>
             </div>
         </>
     )
@@ -569,7 +571,7 @@ function TvSettings() {
                     value={layout()}
                     onPick={setLayout}
                 />
-                <p class="muted small">{t('settings.layout_detail')}</p>
+                <p class="muted small">{t('settings.layout_detail_desktop')}</p>
             </TvPanel>
             <TvPanel title={t('settings.home_carousel')} id="carousel-label">
                 <p class="muted small">{settings().carousel ? t('settings.home_carousel_on') : t('settings.home_carousel_off')}</p>
