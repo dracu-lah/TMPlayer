@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import com.tmplayer.data.ChatBrief
 import com.tmplayer.data.GlobalSearch
 import com.tmplayer.data.HidingFilter
+import com.tmplayer.data.NameInitial
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.MediaMapper
 import com.tmplayer.data.ResultGroup
@@ -66,7 +67,7 @@ fun ChatAvatar(chat: ChatBrief?, size: Dp, modifier: Modifier = Modifier) {
         modifier = modifier.size(size).clip(CircleShape),
     ) {
         Text(
-            chat?.title?.take(1)?.uppercase().orEmpty(),
+            NameInitial.of(chat?.title).orEmpty(),
             style = if (size >= 40.dp) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelSmall,
             color = Tone.muted,
         )

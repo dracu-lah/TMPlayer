@@ -6,6 +6,7 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Sh
 import { A, useLocation, useNavigate } from '@solidjs/router'
 import { Home03Icon, Message01Icon, PlayIcon, Search01Icon } from '@hugeicons/core-free-icons'
 import { Icon, type IconData } from '../ui/Icon'
+import { initialOf } from '../ui/initial'
 import { me, back } from '../session'
 import { t } from '../i18n'
 import { loadThumb } from '../screens/thumbs'
@@ -62,7 +63,7 @@ const [heroUp, setHeroUp] = createSignal(false)
 export function TvBar() {
     const location = useLocation()
     const place = () => placeOf(location.pathname)
-    const initial = () => (me()?.name ?? '').trim().charAt(0).toUpperCase()
+    const initial = () => initialOf(me()?.name)
     const [scrolled, setScrolled] = createSignal(scrollY > 0)
     const onScroll = () => {
         const s = scrollY > innerHeight * 0.25

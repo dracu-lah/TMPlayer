@@ -24,6 +24,7 @@ import { size } from './VideoList'
 import { form, layout, setLayout, type Layout } from '../form'
 import { Icon, type IconData } from '../ui/Icon'
 import { TmdbMark } from '../ui/TmdbMark'
+import { initialOf } from '../ui/initial'
 import { install, installed, installPrompt, iosBrowser, keepData, kept, refused } from '../install'
 
 const THEMES: Theme[] = ['system', 'dark', 'light', 'black']
@@ -164,7 +165,7 @@ function AccountHeader() {
     return (
         <Show when={me()?.name}>
             <div class="set-account">
-                <span class="initial" aria-hidden="true">{me()!.name!.trim().charAt(0).toUpperCase()}</span>
+                <span class="initial" aria-hidden="true">{initialOf(me()!.name)}</span>
                 <span class="set-text">
                     <span class="set-title">{me()!.name}</span>
                     <Show when={me()?.username}>

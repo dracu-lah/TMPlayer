@@ -1,5 +1,6 @@
 package com.tmplayer.ui.browse
 
+import com.tmplayer.data.NameInitial
 import com.tmplayer.data.ShelfEntry
 import com.tmplayer.data.VideoSort
 import com.tmplayer.data.VideoSorting
@@ -36,7 +37,7 @@ object ScrollLabels {
      * filed as "#" so a run of "1917", "2012" and "300" is one stretch of the list.
      */
     fun letter(name: String): String? {
-        val first = name.trim().firstOrNull { it.isLetterOrDigit() } ?: return null
-        return if (first.isDigit()) "#" else first.uppercaseChar().toString()
+        val first = NameInitial.of(name) ?: return null
+        return if (first.first().isDigit()) "#" else first
     }
 }

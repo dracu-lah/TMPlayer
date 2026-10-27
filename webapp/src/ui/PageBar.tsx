@@ -4,6 +4,7 @@ import type { JSX } from 'solid-js'
 import { useNavigate } from '@solidjs/router'
 import { ArrowLeft02Icon } from '@hugeicons/core-free-icons'
 import { Icon } from './Icon'
+import { initialOf } from './initial'
 import { back } from '../session'
 
 /** `actions`, round buttons, sit at the far end, as the chat's own bar has Star, Sort, Search and Refresh. */
@@ -27,7 +28,7 @@ export function PageBar(props: { title: string; picture?: JSX.Element; actions?:
 export function Initial(props: { name: string; class?: string }) {
     return (
         <span class={props.class ? `initial ${props.class}` : 'initial'} aria-hidden="true">
-            {props.name.trim().charAt(0).toUpperCase()}
+            {initialOf(props.name)}
         </span>
     )
 }
