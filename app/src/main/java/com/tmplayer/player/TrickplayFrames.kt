@@ -36,7 +36,8 @@ interface ScrubThumbnails {
  * without "fast start") cannot be opened until that end is here, and simply gets no thumbnails.
  *
  * One retriever, on one background thread, so a scrub never decodes two frames at once beside the
- * film that is already decoding, and only the newest request is worth finishing.
+ * film that is already decoding, and only the newest request is worth finishing. A phone's only:
+ * a television decodes nothing beside the film (see `PlayerActivity.startTrickplay`).
  */
 class TrickplayFrames(
     private val scope: CoroutineScope,
@@ -86,10 +87,23 @@ class TrickplayFrames(
         // The newest position is the only one still on screen when its frame lands.
         job?.cancel()
         job = scope.launch {
-            val frame = withContext(worker) { frameAt(file, done, slot) }
-            if (frame != null) cache.put(slot, frame)
+            // Kept on the worker as soon as it is made: a decode cannot be stopped part way, and
+            // one finished after the finger moved on used to be thrown away, so a drag that never
+            // rested made frame after frame and kept none.
+            val frame = withContext(worker) {
+                cache.get(slot) ?: frameAt(file, done, slot)?.also { cache.put(slot, it) }
+            }
             onFrame(frame ?: nearest(positionMs))
         }
+    }
+
+    /**
+     * Lets go of the pictures made for the video before: a next episode played in the same player
+     * must not be shown the last one's frames. The retriever opens the new file by itself.
+     */
+    fun forget() {
+        job?.cancel()
+        cache.evictAll()
     }
 
     override fun release() {
