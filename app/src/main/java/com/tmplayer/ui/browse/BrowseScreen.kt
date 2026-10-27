@@ -123,6 +123,7 @@ import com.tmplayer.data.WatchedRecord
 import com.tmplayer.data.WatchedWhen
 import com.tmplayer.data.DayGroup
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.snapshotFlow
@@ -519,6 +520,9 @@ internal fun BrowseScreen(
     // A phone lists chats as rows, always: tiles of chat pictures are for a television across the
     // room. History's videos keep the choice, and so does every list on a television.
     val chatLayout: (BrowseSection) -> CardLayout = { section -> if (touch && !section.listsVideos) CardLayout.List else layout }
+    // The chat the television's list was left for is put back only on the way back from it: a
+    // page with no chat list in between (Home, History) means the viewer moved on.
+    LaunchedEffect(tab) { if (tab.isHome || tab.listsVideos) ChatListReturn.forget() }
     val goToChats: () -> Unit = {
         pickFilter(ChatFilter.All)
         onPickTab(BrowseSection.of(BrowseTab.Chats))
@@ -539,7 +543,7 @@ internal fun BrowseScreen(
         StateScaffold(
             paneState,
             onRetry = onRetry,
-            loading = { ChatListSkeleton(layout = chatLayout(tab)) },
+            loading = { ChatListSkeleton(layout = chatLayout(tab), columns = if (touch) 1 else TV_CHAT_COLUMNS) },
             // "No chats yet" offers Refresh: the list may still be on its way after a sign in.
             onAction = { onRetry() },
         ) { data ->
@@ -2273,24 +2277,152 @@ private fun ChatSection(
         else -> Modifier
     }
 
+    // A television lists its chats in two columns (user, 2026-10-27): one row stretched across a
+    // 16:9 screen left most of every row empty, as the desktop's wide window did (237dbe2). The
+    // remote moves left and right between the columns and up and down within one, by the grid's
+    // own focus search, and the grid composes only the rows on screen and the next, so a 3,000
+    // chat account costs what a short one does. A phone keeps its one column of full bleed rows.
+    val twoColumns = !rowsAreFullBleed && layout == CardLayout.List
+    // The chat this list was left for, read once as the list comes back from it (Back from that
+    // chat's videos), so the remote lands on its row again rather than on the first chat.
+    val back = remember { if (autoFocus) ChatListReturn.key else null }
+    val backFocus = remember { FocusRequester() }
+    val backOn = remember { BooleanArray(1) }
+    fun backOf(key: Any): Modifier =
+        if (back != null && key == back) {
+            Modifier.focusRequester(backFocus).onFocusChanged { backOn[0] = it.hasFocus }
+        } else {
+            Modifier
+        }
+    val startIndex = if (back != null) ChatListReturn.firstIndex else 0
+    val startOffset = if (back != null) ChatListReturn.firstOffset else 0
+
     val listState = com.tmplayer.ui.components.rememberAheadListState(column = true)
-    val gridState = com.tmplayer.ui.components.rememberAheadGridState()
+    val gridState = com.tmplayer.ui.components.rememberAheadGridState(
+        initialFirstVisibleItemIndex = if (layout == CardLayout.Grid) startIndex else 0,
+        initialFirstVisibleItemScrollOffset = if (layout == CardLayout.Grid) startOffset else 0,
+    )
+    val rowsState = com.tmplayer.ui.components.rememberAheadGridState(
+        initialFirstVisibleItemIndex = if (twoColumns) startIndex else 0,
+        initialFirstVisibleItemScrollOffset = if (twoColumns) startOffset else 0,
+    )
+    // The grid the remote is in, when it is in one: the tiles, or the television's two columns.
+    val shownGrid: LazyGridState? = when {
+        layout == CardLayout.Grid -> gridState
+        twoColumns -> rowsState
+        else -> null
+    }
+    // Opening a chat on a television notes which card it was and where the list stood.
+    val open: (ChatSummary, Any) -> Unit = { chat, key ->
+        if (autoFocus && shownGrid != null) {
+            ChatListReturn.key = key
+            ChatListReturn.firstIndex = shownGrid.firstVisibleItemIndex
+            ChatListReturn.firstOffset = shownGrid.firstVisibleItemScrollOffset
+        }
+        onOpenChat(chat)
+    }
+    // The strip of recent chats is the grid's first line, across both columns.
+    val stripLines = if (recent.isNotEmpty()) 1 else 0
+
     // Telegram's older chats read as the end of the list comes near, a screen ahead.
     val readMore = paging.more && !paging.loading && paging.failure == null
-    when (layout) {
-        CardLayout.List -> com.tmplayer.ui.components.LoadMoreAhead(listState, readMore, onLoadMore = onMoreChats)
-        CardLayout.Grid -> com.tmplayer.ui.components.LoadMoreAhead(gridState, readMore, onLoadMore = onMoreChats)
+    when {
+        twoColumns -> com.tmplayer.ui.components.LoadMoreAhead(rowsState, readMore, onLoadMore = onMoreChats)
+        layout == CardLayout.List -> com.tmplayer.ui.components.LoadMoreAhead(listState, readMore, onLoadMore = onMoreChats)
+        else -> com.tmplayer.ui.components.LoadMoreAhead(gridState, readMore, onLoadMore = onMoreChats)
     }
     // Chats pressed again on the bar: back to the top of the list.
     ScrollToTopOnReselect(TouchDestination.Chats) { animate ->
-        if (layout == CardLayout.Grid) gridState.toTop(animate) else listState.toTop(animate)
+        when {
+            twoColumns -> rowsState.toTop(animate)
+            layout == CardLayout.Grid -> gridState.toTop(animate)
+            else -> listState.toTop(animate)
+        }
+    }
+    // The strip of recent chats, over the list on either device.
+    val strip: @Composable () -> Unit = {
+        // The rows below are full bleed on a phone, but a heading is not a row: with
+        // the list's side padding dropped for their sake, this heading has to put it
+        // back or it prints hard against the panel edge.
+        Column(
+            if (rowsAreFullBleed) {
+                Modifier.padding(start = insets.start, end = insets.end)
+            } else {
+                Modifier
+            },
+        ) {
+            Text(
+                s.browseJumpBackIn,
+                style = MaterialTheme.typography.titleLarge,
+                color = Tone.text,
+                modifier = Modifier.padding(bottom = 14.dp),
+            )
+            LazyRow(
+                // Drawn [clearance] past every side and padded back in by as much, so
+                // a focused tile keeps its border and the strip still lines up under its
+                // heading and sits where it did.
+                modifier = Modifier.bleed(clearance),
+                contentPadding = PaddingValues(clearance),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                items(recent, key = { "r-${it.id}" }) { chat ->
+                    ChatTile(
+                        chat = chat,
+                        favorite = chat.id in favorites,
+                        opensOnLaunch = chat.id == launchChatId,
+                        onClick = { open(chat, "r-${chat.id}") },
+                        onHold = { onHold(chat) },
+                        modifier = focusOf(chat, inStrip = true)
+                            .then(backOf("r-${chat.id}"))
+                            .width(RECENT_TILE_WIDTH),
+                    )
+                }
+            }
+            Text(
+                // Not "All chats": that is the name of a rail tab, and repeating it as
+                // a sub-heading inside a different tab reads as if the viewer moved.
+                s.browseMoreChats,
+                style = MaterialTheme.typography.titleLarge,
+                color = Tone.text,
+                modifier = Modifier.padding(top = 32.dp, bottom = 4.dp),
+            )
+        }
     }
     // On a phone a chip, a sort or a search moves the rows to their new places and fades newcomers
     // in. Not past a few hundred chats, where the bookkeeping costs more than the motion is worth.
     val animateRows = rowsAreFullBleed && !(rememberReducedMotion() || Motion.reduced) && chats.size <= ANIMATED_ROWS_MAX
     Box(Modifier.fillMaxSize()) {
-        when (layout) {
-            CardLayout.List -> LazyColumn(
+        when {
+            twoColumns -> LazyVerticalGrid(
+                columns = GridCells.Fixed(TV_CHAT_COLUMNS),
+                state = rowsState,
+                modifier = Modifier.fillMaxSize().keepTopInSight(rowsState),
+                // The television's rows are cards, with room on every side to grow a border.
+                contentPadding = PaddingValues(start = insets.start, end = insets.end, bottom = insets.bottom),
+                horizontalArrangement = Arrangement.spacedBy(TV_CHAT_COLUMN_GAP),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                if (recent.isNotEmpty()) {
+                    item(key = "recent-strip", span = { GridItemSpan(maxLineSpan) }, contentType = "recent-strip") { strip() }
+                }
+                gridItems(chats, key = { it.id }, contentType = { "chat" }) { chat ->
+                    ChatRow(
+                        chat = chat,
+                        favorite = chat.id in favorites,
+                        opensOnLaunch = chat.id == launchChatId,
+                        onClick = { open(chat, chat.id) },
+                        onHold = { onHold(chat) },
+                        modifier = focusOf(chat, inStrip = false).then(backOf(chat.id)),
+                    )
+                }
+                if (paging.loading || paging.failure != null) {
+                    item(key = "more-chats", span = { GridItemSpan(maxLineSpan) }, contentType = "more-chats") {
+                        MoreChatsFoot(paging, onMoreChats)
+                    }
+                }
+            }
+
+            layout == CardLayout.List -> LazyColumn(
                 Modifier.fillMaxSize().keepTopInSight(listState, enabled = !isTouch()),
                 state = listState,
                 // Rows carry their own side padding on a phone so the ripple reaches both edges, and
@@ -2304,53 +2436,7 @@ private fun ChatSection(
                 verticalArrangement = Arrangement.spacedBy(if (rowsAreFullBleed) 0.dp else 14.dp),
             ) {
                 if (recent.isNotEmpty()) {
-                    item(key = "recent-strip") {
-                        // The rows below are full bleed on a phone, but a heading is not a row: with
-                        // the list's side padding dropped for their sake, this heading has to put it
-                        // back or it prints hard against the panel edge.
-                        Column(
-                            if (rowsAreFullBleed) {
-                                Modifier.padding(start = insets.start, end = insets.end)
-                            } else {
-                                Modifier
-                            },
-                        ) {
-                            Text(
-                                s.browseJumpBackIn,
-                                style = MaterialTheme.typography.titleLarge,
-                                color = Tone.text,
-                                modifier = Modifier.padding(bottom = 14.dp),
-                            )
-                            LazyRow(
-                                // Drawn [clearance] past every side and padded back in by as much, so
-                                // a focused tile keeps its border and the strip still lines up under its
-                                // heading and sits where it did.
-                                modifier = Modifier.bleed(clearance),
-                                contentPadding = PaddingValues(clearance),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            ) {
-                                items(recent, key = { "r-${it.id}" }) { chat ->
-                                    ChatTile(
-                                        chat = chat,
-                                        favorite = chat.id in favorites,
-                                        opensOnLaunch = chat.id == launchChatId,
-                                        onClick = { onOpenChat(chat) },
-                                        onHold = { onHold(chat) },
-                                        modifier = focusOf(chat, inStrip = true)
-                                            .width(RECENT_TILE_WIDTH),
-                                    )
-                                }
-                            }
-                            Text(
-                                // Not "All chats": that is the name of a rail tab, and repeating it as
-                                // a sub-heading inside a different tab reads as if the viewer moved.
-                                s.browseMoreChats,
-                                style = MaterialTheme.typography.titleLarge,
-                                color = Tone.text,
-                                modifier = Modifier.padding(top = 32.dp, bottom = 4.dp),
-                            )
-                        }
-                    }
+                    item(key = "recent-strip") { strip() }
                 }
 
                 items(chats, key = { it.id }) { chat ->
@@ -2358,7 +2444,7 @@ private fun ChatSection(
                         chat = chat,
                         favorite = chat.id in favorites,
                         opensOnLaunch = chat.id == launchChatId,
-                        onClick = { onOpenChat(chat) },
+                        onClick = { open(chat, chat.id) },
                         onHold = { onHold(chat) },
                         modifier = focusOf(chat, inStrip = false)
                             .then(if (animateRows) Modifier.animateItem() else Modifier),
@@ -2371,7 +2457,7 @@ private fun ChatSection(
                 }
             }
 
-            CardLayout.Grid -> LazyVerticalGrid(
+            else -> LazyVerticalGrid(
                 columns = tiles,
                 state = gridState,
                 modifier = Modifier.fillMaxSize().keepTopInSight(gridState, enabled = !isTouch()),
@@ -2391,9 +2477,9 @@ private fun ChatSection(
                         chat = chat,
                         favorite = chat.id in favorites,
                         opensOnLaunch = chat.id == launchChatId,
-                        onClick = { onOpenChat(chat) },
+                        onClick = { open(chat, chat.id) },
                         onHold = { onHold(chat) },
-                        modifier = focusOf(chat, inStrip = false).fillMaxWidth(),
+                        modifier = focusOf(chat, inStrip = false).then(backOf(chat.id)).fillMaxWidth(),
                     )
                 }
                 if (paging.loading || paging.failure != null) {
@@ -2403,16 +2489,18 @@ private fun ChatSection(
                 }
             }
         }
-        when (layout) {
-            CardLayout.List -> ScrollToTop(listState)
-            CardLayout.Grid -> ScrollToTop(gridState)
+        when {
+            twoColumns -> ScrollToTop(rowsState)
+            layout == CardLayout.List -> ScrollToTop(listState)
+            else -> ScrollToTop(gridState)
         }
         // The hold to scroll handle; listed by name, its bubble gives the letter.
         val byId = remember(chats) { chats.associateBy { it.id } }
         val scrollLabel: ((Any) -> String?)? = if (sort != ChatSort.Name) null else { key -> byId[key]?.let { ScrollLabels.letter(it.title) } }
-        when (layout) {
-            CardLayout.List -> FastScroller(listState, label = scrollLabel)
-            CardLayout.Grid -> FastScroller(gridState, label = scrollLabel)
+        when {
+            twoColumns -> FastScroller(rowsState, label = scrollLabel)
+            layout == CardLayout.List -> FastScroller(listState, label = scrollLabel)
+            else -> FastScroller(gridState, label = scrollLabel)
         }
         if (rowsAreFullBleed) {
             // The rows pass under the pinned title and chips: a short fade at the top edge lets
@@ -2432,9 +2520,63 @@ private fun ChatSection(
     // The remote has nowhere to go until something holds focus. Switching arrangement is included:
     // it rebuilds the list, and the card that was holding focus leaves the composition with it.
     LaunchedEffect(chats.firstOrNull()?.id, recent.firstOrNull()?.id, layout, autoFocus) {
-        if (autoFocus && mayTakeFocus()) runCatching { first.requestFocus() }
+        if (!autoFocus || !mayTakeFocus()) return@LaunchedEffect
+        // Back from a chat: its card again, scrolled back into the list if the list went back to
+        // its top. Held a few frames against the list's own first claim, as a video's page is
+        // (TileReturn). A chat gone from the list (archived, filtered out) falls to the first.
+        if (back != null && ChatListReturn.key == back && shownGrid != null) {
+            val index = when (back) {
+                is Long -> chats.indexOfFirst { it.id == back }.let { if (it < 0) -1 else it + stripLines }
+                else -> if (recent.any { "r-${it.id}" == back }) 0 else -1
+            }
+            if (index >= 0) {
+                var settled = 0
+                for (frame in 0 until CHAT_RETURN_FRAMES) {
+                    withFrameNanos { }
+                    if (backOn[0]) {
+                        if (++settled >= CHAT_RETURN_SETTLED_FRAMES) break
+                        continue
+                    }
+                    settled = 0
+                    val placed = runCatching { backFocus.requestFocus() }.getOrDefault(false)
+                    if (!placed) runCatching { shownGrid.scrollToItem(index) }
+                }
+            }
+            ChatListReturn.forget()
+            if (backOn[0]) return@LaunchedEffect
+        }
+        runCatching { first.requestFocus() }
     }
 }
+
+/**
+ * The chat a television's list was left for, so Back from its videos puts the remote on that card
+ * again rather than on the first chat. The list leaves the composition while a chat is open, so
+ * this outlives it; plain fields, read once as the list comes back, and forgotten once used or
+ * once the viewer goes to a page with no chat list ([BrowseScreen]).
+ */
+internal object ChatListReturn {
+    /** The card's list key: the chat's id, or "r-" and the id for the strip of recent chats. */
+    @Volatile var key: Any? = null
+    @Volatile var firstIndex: Int = 0
+    @Volatile var firstOffset: Int = 0
+
+    fun forget() {
+        key = null
+        firstIndex = 0
+        firstOffset = 0
+    }
+}
+
+/** Columns of chat rows on a television, and the gap between them. */
+private const val TV_CHAT_COLUMNS = 2
+private val TV_CHAT_COLUMN_GAP = 20.dp
+
+/** How many frames after coming back from a chat its card is held against other claims. */
+private const val CHAT_RETURN_FRAMES = 12
+
+/** Frames in a row the remote has to stay on the card for it to count as back. */
+private const val CHAT_RETURN_SETTLED_FRAMES = 3
 
 /**
  * A chat as a tile: the "Jump back in" strip and the grid are the same card at two widths, so

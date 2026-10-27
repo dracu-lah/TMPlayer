@@ -143,7 +143,12 @@ fun SkeletonBox(
  * three, so nothing shifts when the real cards arrive.
  */
 @Composable
-fun ChatListSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLayout.List) {
+fun ChatListSkeleton(
+    modifier: Modifier = Modifier,
+    layout: CardLayout = CardLayout.List,
+    /** Rows side by side in the list layout: two on a television, whose list is two columns. */
+    columns: Int = 1,
+) {
     val shimmer = rememberShimmer()
     val touch = isTouch()
 
@@ -175,10 +180,14 @@ fun ChatListSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLay
             ),
         ) {
             when (layout) {
-                CardLayout.List -> repeat(rowsToFill(height, rowHeight + rowGap)) { index ->
+                CardLayout.List -> repeat(rowsToFill(height, rowHeight + rowGap)) { line ->
+                    // A television's rows stand in [columns] side by side, as the list does.
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    repeat(columns.coerceAtLeast(1)) { column ->
+                    val index = line * columns.coerceAtLeast(1) + column
                     Row(
                         Modifier
-                            .fillMaxWidth()
+                            .weight(1f)
                             .height(rowHeight)
                             .then(
                                 if (touch) {
@@ -210,6 +219,8 @@ fun ChatListSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLay
                             )
                             SkeletonBox(shimmer, Modifier.fillMaxWidth(0.3f).height(11.dp))
                         }
+                    }
+                    }
                     }
                 }
 
