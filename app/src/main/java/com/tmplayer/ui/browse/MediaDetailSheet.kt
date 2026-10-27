@@ -190,6 +190,29 @@ internal fun MediaDetailOpened(
         return
     }
 
+    // Remove from history: at once with Undo on a touch screen, asked first under a remote,
+    // which cannot reach the Undo line.
+    val historyRemoval = rememberHistoryRemoval()
+    var confirmingHistory by remember { mutableStateOf(false) }
+    val removeFromHistory: () -> Unit = {
+        historyRemoval.run({ s.browseRemovedFromHistory(it) }) { st, w -> com.tmplayer.data.HistoryEdits.removeVideo(st, w, item) }
+    }
+    if (confirmingHistory) {
+        TvConfirm(
+            title = s.browseRemoveFromHistoryTitle,
+            message = s.browseRemoveFromHistoryMessage(rememberVideoName(item)),
+            detail = s.browseRemoveSelectedDetail,
+            confirmLabel = s.commonRemove,
+            onConfirm = {
+                confirmingHistory = false
+                removeFromHistory()
+                if (asMenu) onDismiss()
+            },
+            onDismiss = { if (asMenu) onDismiss() else confirmingHistory = false },
+        )
+        return
+    }
+
     // The viewer's corrections to this file, and whether a provider's match is showing for it.
     val corrections by com.tmplayer.data.VideoCorrections.state.collectAsStateWithLifecycle()
     val correction = corrections[item.id]
@@ -261,6 +284,7 @@ internal fun MediaDetailOpened(
             // The phone's gallery: Android 10 and later, where MediaStore needs no permission. A
             // television has no gallery anyone looks at.
             canExport = touch && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q,
+            canRemoveFromHistory = true,
         ),
     )
     val free = DiskInfo.freeLabel(freeBytes)
@@ -287,6 +311,15 @@ internal fun MediaDetailOpened(
             // the viewer back to the list for a tick they could have seen right here.
             DetailAction.MarkWatched -> { { if (asMenu) onDismiss(); onSetWatched(true) } }
             DetailAction.MarkUnwatched -> { { if (asMenu) onDismiss(); onSetWatched(false) } }
+            // The page stays on a touch screen: Resume turns into Play, and the line says Undo.
+            DetailAction.RemoveFromHistory -> { {
+                if (touch) {
+                    removeFromHistory()
+                    if (asMenu) onDismiss()
+                } else {
+                    confirmingHistory = true
+                }
+            } }
             DetailAction.AddWatchLater, DetailAction.RemoveWatchLater -> { {
                 val add = action == DetailAction.AddWatchLater
                 // On the app's scope: the hold menu closes at once and takes its own scope with it.

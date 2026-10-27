@@ -359,7 +359,18 @@ internal fun BrowseScreen(
     var watchedMenu by remember { mutableStateOf<WatchedRecord?>(null) }
     var laterMenu by remember { mutableStateOf<WatchLaterRecord?>(null) }
     var confirmClearHistory by remember { mutableStateOf(false) }
-    var confirmClearWatched by remember { mutableStateOf(false) }
+    var confirmClearLater by remember { mutableStateOf(false) }
+    // Remove from history on a Continue card, asked first under a remote only: a touch screen
+    // gets Undo instead, which a remote cannot reach.
+    var confirmForget by remember { mutableStateOf<ResumeRecord?>(null) }
+    // History's select mode: the cards ticked, by card key, on the tab it was started on.
+    var selecting by remember { mutableStateOf(false) }
+    var ticked by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var confirmRemoveTicked by remember { mutableStateOf(false) }
+    // Leaving select mode under a remote puts it back on the list's first card: the bar it stood
+    // on goes with the mode.
+    var listRefocus by remember { mutableStateOf(0) }
+    val historyRemoval = rememberHistoryRemoval()
     var confirmClearFavorites by remember { mutableStateOf(false) }
     // The video whose detail panel is open, with its chat's name, from Home or the search, over
     // the pages "More like this" was taken from, so Back walks back through them.
@@ -437,6 +448,84 @@ internal fun BrowseScreen(
     }
     val showsWatched = tab.listsVideos && historyTab == HistoryTab.Watched
     val showsWatchLater = tab.listsVideos && historyTab == HistoryTab.WatchLater
+    val touchHere = !FormFactor.isTv(LocalContext.current)
+
+    // The cards of the History tab on screen, by the key each card is ticked by.
+    val shownKeys: Set<String> = remember(historyTab, continuing, watchedShown, laterShown) {
+        when (historyTab) {
+            HistoryTab.Continue -> continuing.mapTo(LinkedHashSet()) { SettingsStore.progressKey(it.chatId, it.messageId) }
+            HistoryTab.Watched -> watchedShown.mapTo(LinkedHashSet()) { it.key }
+            HistoryTab.WatchLater -> laterShown.mapTo(LinkedHashSet()) { it.key }
+        }
+    }
+    // A card that left the list while ticked (finished on another device, removed from its page)
+    // is no longer counted or removed.
+    val tickedShown = ticked intersect shownKeys
+    val leaveSelecting: () -> Unit = {
+        if (selecting && !touchHere) listRefocus++
+        selecting = false
+        ticked = emptySet()
+    }
+    // A new tab, or another page, is a new start: nothing ticked is carried over.
+    LaunchedEffect(historyTab, tab.listsVideos) { selecting = false; ticked = emptySet() }
+    // An emptied list has nothing left to pick.
+    LaunchedEffect(shownKeys.isEmpty()) { if (shownKeys.isEmpty()) { selecting = false; ticked = emptySet() } }
+    val startSelecting: (String?) -> Unit = { key ->
+        selecting = true
+        ticked = setOfNotNull(key)
+    }
+    val tick: (String) -> Unit = { key -> ticked = if (key in ticked) ticked - key else ticked + key }
+    val historyHas = shownKeys.isNotEmpty()
+    // Remove from history for the ticked cards, or Remove from Watch later on that tab.
+    val removeTicked: () -> Unit = {
+        val keys = tickedShown
+        when (historyTab) {
+            HistoryTab.Continue -> {
+                val cards = continuing.filter { SettingsStore.progressKey(it.chatId, it.messageId) in keys }
+                historyRemoval.run({ s.browseRemovedFromHistory(it) }) { st, w -> com.tmplayer.data.HistoryEdits.removeContinueCards(st, w, cards) }
+            }
+            HistoryTab.Watched -> {
+                val cards = watchedShown.filter { it.key in keys }
+                historyRemoval.run({ s.browseRemovedFromHistory(it) }) { st, w -> com.tmplayer.data.HistoryEdits.removeWatchedCards(st, w, cards) }
+            }
+            HistoryTab.WatchLater -> {
+                val cards = laterShown.filter { it.key in keys }
+                historyRemoval.run({ s.browseRemovedFromWatchLater(it) }) { _, w -> com.tmplayer.data.HistoryEdits.removeLater(w, cards.map { it.key }, cards.size) }
+            }
+        }
+        leaveSelecting()
+    }
+    // Clear history (Continue watching and Watched together), or Clear Watch later on its tab.
+    val clearShown: () -> Unit = {
+        if (historyTab == HistoryTab.WatchLater) {
+            historyRemoval.run({ s.browseWatchLaterCleared }) { _, w -> com.tmplayer.data.HistoryEdits.clearLater(w) }
+        } else {
+            historyRemoval.run({ s.browseHistoryCleared }) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
+        }
+        leaveSelecting()
+    }
+    // One press with Undo on a touch screen; asked first under a remote.
+    val askClear: () -> Unit = {
+        when {
+            touchHere -> clearShown()
+            historyTab == HistoryTab.WatchLater -> confirmClearLater = true
+            else -> confirmClearHistory = true
+        }
+    }
+    val askRemoveTicked: () -> Unit = {
+        if (tickedShown.isNotEmpty()) {
+            if (touchHere) removeTicked() else confirmRemoveTicked = true
+        }
+    }
+    val removeContinue: (ResumeRecord) -> Unit = { record ->
+        historyRemoval.run({ s.browseRemovedFromHistory(it) }) { st, w -> com.tmplayer.data.HistoryEdits.removeContinueCards(st, w, listOf(record)) }
+    }
+    val removeWatched: (WatchedRecord) -> Unit = { record ->
+        historyRemoval.run({ s.browseRemovedFromHistory(it) }) { st, w -> com.tmplayer.data.HistoryEdits.removeWatchedCards(st, w, listOf(record)) }
+    }
+    val removeLater: (WatchLaterRecord) -> Unit = { record ->
+        historyRemoval.run({ s.browseRemovedFromWatchLater(it) }) { _, w -> com.tmplayer.data.HistoryEdits.removeLater(w, listOf(record.key), 1) }
+    }
 
     // One question decides the whole shape of this screen: a permanent rail beside the listing on
     // a television, a drawer behind a hamburger on a phone. Everything below the chrome is the
@@ -514,6 +603,20 @@ internal fun BrowseScreen(
                     add(ChipSpec(entry.name, entry.label, entry.icon, selected = entry == historyTab) { pickHistory(entry) })
                 }
             },
+        )
+    }
+
+    // The bar that stands in for History's chips while cards are being ticked.
+    val historySelectionBar: @Composable () -> Unit = {
+        HistorySelectionBar(
+            count = tickedShown.size,
+            all = tickedShown.size == shownKeys.size,
+            insets = insets,
+            removeLabel = s.browseRemoveCount(tickedShown.size),
+            onSelectAll = { ticked = shownKeys },
+            onSelectNone = { ticked = emptySet() },
+            onRemove = askRemoveTicked,
+            onDone = leaveSelecting,
         )
     }
 
@@ -617,24 +720,18 @@ internal fun BrowseScreen(
                                 LayoutAction(layout, onToggleLayout)
                                 // No Refresh here: History is read off this device and cannot be
                                 // behind, so the button would be one that visibly does nothing.
-                                if (showsContinue && continuing.isNotEmpty()) {
+                                if (historyHas) {
+                                    HeaderAction(label = s.browseSelect, icon = TmIcons.Checklist, onClick = { startSelecting(null) })
                                     HeaderAction(
-                                        label = s.browseClearContinue,
-                                        icon = TmIcons.Close,
-                                        onClick = { confirmClearHistory = true },
-                                    )
-                                }
-                                if (showsWatched && watchedHistory.isNotEmpty()) {
-                                    HeaderAction(
-                                        label = s.browseClearWatched,
-                                        icon = TmIcons.Close,
-                                        onClick = { confirmClearWatched = true },
+                                        label = if (showsWatchLater) s.browseClearWatchLater else s.browseClearHistory,
+                                        icon = TmIcons.Delete,
+                                        onClick = askClear,
                                     )
                                 }
                             }
                             // No heading under the top bar, which already names the page: the chips
                             // lead, and the page's own buttons close their line.
-                            Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (selecting) historySelectionBar() else Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(Modifier.weight(1f)) { historyChips() }
                                 Row(
                                     Modifier.padding(start = 12.dp, end = insets.end),
@@ -642,9 +739,12 @@ internal fun BrowseScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) { historyActions() }
                             }
+                        } else if (selecting) {
+                            historySelectionBar()
                         } else {
                             historyChips()
                         }
+                        val tickedOrNull = if (selecting) tickedShown else null
                         if (showsContinue) {
                             if (continuing.isEmpty()) {
                                 EmptyTab(tab, query = "", history = HistoryTab.Continue, onGoToChats = goToChats)
@@ -662,6 +762,9 @@ internal fun BrowseScreen(
                                     onResume = openResume,
                                     onHold = { mediaMenu = it },
                                     dayOf = { it.updatedAt },
+                                    ticked = tickedOrNull,
+                                    onTick = { tick(SettingsStore.progressKey(it.chatId, it.messageId)) },
+                                    refocusSignal = listRefocus,
                                 )
                             }
                         } else if (showsWatchLater) {
@@ -680,6 +783,9 @@ internal fun BrowseScreen(
                                     pageOpen = details.top != null,
                                     onResume = openLater,
                                     onHold = { laterMenu = it },
+                                    ticked = tickedOrNull,
+                                    onTick = { tick(it.key) },
+                                    refocusSignal = listRefocus,
                                 )
                             }
                         } else {
@@ -704,6 +810,9 @@ internal fun BrowseScreen(
                                     onHold = { watchedMenu = it },
                                     dayOf = { it.watchedAt },
                                     dayText = { record, day -> record.cardText(now, day) },
+                                    ticked = tickedOrNull,
+                                    onTick = { tick(it.key) },
+                                    refocusSignal = listRefocus,
                                 )
                             }
                         }
@@ -872,25 +981,20 @@ internal fun BrowseScreen(
                         onClick = onToggleLayout,
                     )
                 }
-                // Everything destructive goes behind the overflow. A "Clear history" button
-                // sitting in the bar beside Refresh is one mis-tap from emptying the tab.
-                val clearHistory = showsContinue && continueWatching.isNotEmpty()
-                val clearFavorites = tab == BrowseSection.of(BrowseTab.Favorites) && favorites.isNotEmpty()
-                val clearWatched = showsWatched && watchedHistory.isNotEmpty()
-                if (clearHistory || clearFavorites || clearWatched) {
-                    BarOverflow(
-                        items = buildList {
-                            if (clearHistory) {
-                                add(s.browseClearContinue to { confirmClearHistory = true })
-                            }
-                            if (clearWatched) {
-                                add(s.browseClearWatchedList to { confirmClearWatched = true })
-                            }
-                            if (clearFavorites) {
-                                add(s.browseClearFavourites to { confirmClearFavorites = true })
-                            }
-                        },
+                // History's Select and Clear sit in the bar, one press each: a clear here is said
+                // with Undo, so a mis-tap costs nothing. Favourites' clear has no Undo and stays
+                // behind the overflow, asked first.
+                if (tab.listsVideos && historyHas && !selecting) {
+                    BarIcon(label = s.browseSelect, icon = TmIcons.Checklist, onClick = { startSelecting(null) })
+                    BarIcon(
+                        label = if (showsWatchLater) s.browseClearWatchLater else s.browseClearHistory,
+                        icon = TmIcons.Delete,
+                        onClick = askClear,
                     )
+                }
+                val clearFavorites = tab == BrowseSection.of(BrowseTab.Favorites) && favorites.isNotEmpty()
+                if (clearFavorites) {
+                    BarOverflow(items = listOf(s.browseClearFavourites to { confirmClearFavorites = true }))
                 }
             },
             sections = sections,
@@ -1167,34 +1271,68 @@ internal fun BrowseScreen(
         )
     }
 
+    // Only under a remote: a touch screen clears at once and offers Undo.
     if (confirmClearHistory) {
         TvConfirm(
-            title = s.browseClearContinueTitle,
-            // The cards the tab shows, copies of one video folded into one, as its count says.
-            message = s.browseClearContinueMessage(continuing.size),
-            detail = s.browseClearContinueDetail,
+            title = s.browseClearHistoryTitle,
+            // The cards both lists show, copies of one video folded into one.
+            message = s.browseClearHistoryMessage(continuing.size + watchedHistory.size),
+            detail = s.browseClearHistoryDetail,
             confirmLabel = s.commonClear,
             onConfirm = {
                 confirmClearHistory = false
-                onClearHistory()
+                clearShown()
             },
             onDismiss = { confirmClearHistory = false },
         )
     }
 
-    if (confirmClearWatched) {
+    if (confirmClearLater) {
         TvConfirm(
-            title = s.browseClearWatchedTitle,
-            message = s.browseClearWatchedMessage(watchedHistory.size),
-            detail = s.browseClearWatchedDetail,
+            title = s.browseClearWatchLaterTitle,
+            message = s.browseClearWatchLaterMessage(watchLater.size),
+            detail = s.browseClearWatchLaterDetail,
             confirmLabel = s.commonClear,
             onConfirm = {
-                confirmClearWatched = false
-                onClearWatched()
+                confirmClearLater = false
+                clearShown()
             },
-            onDismiss = { confirmClearWatched = false },
+            onDismiss = { confirmClearLater = false },
         )
     }
+
+    if (confirmRemoveTicked) {
+        val count = tickedShown.size
+        TvConfirm(
+            title = s.browseRemoveSelectedTitle(count),
+            message = if (historyTab == HistoryTab.WatchLater) s.browseRemoveSelectedLaterMessage(count) else s.browseRemoveSelectedMessage(count),
+            detail = s.browseRemoveSelectedDetail,
+            confirmLabel = s.commonRemove,
+            onConfirm = {
+                confirmRemoveTicked = false
+                removeTicked()
+            },
+            onDismiss = { confirmRemoveTicked = false },
+        )
+    }
+
+    confirmForget?.let { record ->
+        TvConfirm(
+            title = s.browseRemoveFromHistoryTitle,
+            message = s.browseRemoveFromHistoryMessage(SeriesShelf.tileTitle(record.toMediaItem())),
+            detail = s.browseRemoveSelectedDetail,
+            confirmLabel = s.commonRemove,
+            onConfirm = {
+                confirmForget = null
+                // The card leaving is the answer, and the remote moves to the one beside it.
+                removeContinue(record)
+            },
+            onDismiss = { confirmForget = null },
+        )
+    }
+
+    // Back leaves select mode before it leaves the page.
+    BackHandler(enabled = selecting) { leaveSelecting() }
 
     watchedMenu?.let { record ->
         TvMenu(
@@ -1209,14 +1347,20 @@ internal fun BrowseScreen(
                     watchedMenu = null
                     onOpenWatched(record)
                 },
+                // On the Watched list taking the tick off is taking it out of History, so it is
+                // called that, as on Continue watching: one action with one name.
                 MenuAction(
-                    label = s.gridMarkUnwatched,
-                    icon = TmIcons.Close,
-                    detail = s.browseMarkUnwatchedDetail,
+                    label = s.browseRemoveFromHistory,
+                    icon = TmIcons.History,
+                    detail = s.browseWatchedRemoveDetail,
                     destructive = true,
                 ) {
                     watchedMenu = null
-                    onMarkUnwatched(record)
+                    removeWatched(record)
+                },
+                MenuAction(s.browseSelect, TmIcons.Checklist) {
+                    watchedMenu = null
+                    startSelecting(record.key)
                 },
             ),
         )
@@ -1238,7 +1382,11 @@ internal fun BrowseScreen(
                     destructive = true,
                 ) {
                     laterMenu = null
-                    onRemoveWatchLater(record)
+                    removeLater(record)
+                },
+                MenuAction(s.browseSelect, TmIcons.Checklist) {
+                    laterMenu = null
+                    startSelecting(record.key)
                 },
             ),
         )
@@ -1267,13 +1415,17 @@ internal fun BrowseScreen(
                     onMarkMediaWatched(record)
                 },
                 MenuAction(
-                    label = s.browseForgetResume,
-                    icon = TmIcons.Close,
-                    detail = s.browseForgetResumeDetail,
+                    label = s.browseRemoveFromHistory,
+                    icon = TmIcons.History,
+                    detail = s.browseRemoveFromHistoryDetail,
                     destructive = true,
                 ) {
                     mediaMenu = null
-                    onForgetMedia(record)
+                    if (touchHere) removeContinue(record) else confirmForget = record
+                },
+                MenuAction(s.browseSelect, TmIcons.Checklist) {
+                    mediaMenu = null
+                    startSelecting(SettingsStore.progressKey(record.chatId, record.messageId))
                 },
             ),
         )
@@ -1425,6 +1577,14 @@ private fun <T : Any> ContinueSection(
     byName: Boolean = false,
     /** A video's page is up over the list: once it closes, the remote goes back to its card. */
     pageOpen: Boolean = false,
+    /**
+     * The keys ([VideoCardText.key]) of the cards ticked while History is in select mode, or null
+     * outside it. In it a press, a tap or OK, ticks the card instead of opening it.
+     */
+    ticked: Set<String>? = null,
+    onTick: (T) -> Unit = {},
+    /** Raised to put the remote back on the first card, as when select mode ends. */
+    refocusSignal: Int = 0,
 ) {
     val first = remember { FocusRequester() }
     // The card a page was opened from, which the remote goes back to when the page closes.
@@ -1442,13 +1602,21 @@ private fun <T : Any> ContinueSection(
     val heldGone = held?.let { (key, _) -> records.none { text(it).key == key } } == true
     val standIn: T? = if (heldGone) records.getOrNull(minOf(held!!.second, records.lastIndex)) else null
     val holdThis: (T) -> Unit = { record ->
-        held = text(record).key to records.indexOf(record)
-        tileReturn.open(text(record).key)
-        onHold(record)
+        if (ticked != null) {
+            onTick(record)
+        } else {
+            held = text(record).key to records.indexOf(record)
+            tileReturn.open(text(record).key)
+            onHold(record)
+        }
     }
     val resumeThis: (T) -> Unit = { record ->
-        tileReturn.open(text(record).key)
-        onResume(record)
+        if (ticked != null) {
+            onTick(record)
+        } else {
+            tileReturn.open(text(record).key)
+            onResume(record)
+        }
     }
     // Only the first card asks for focus, and which card that is does not change with the
     // arrangement, so the two branches can share one modifier.
@@ -1483,17 +1651,19 @@ private fun <T : Any> ContinueSection(
                 if (day != null) item(key = "day-$day") { DayHeading(day) }
                 items(members, key = { text(it).key }) { record ->
                     val card = cardOf(record, day)
-                    VideoListRow(
-                        item = card.item,
-                        title = card.title,
-                        detail = card.detail,
-                        chatTitle = card.chatTitle,
-                        fraction = card.fraction,
-                        finished = card.fraction >= 1f,
-                        onClick = { resumeThis(record) },
-                        onHold = { holdThis(record) },
-                        modifier = focusOf(record).returnTile(tileReturn, text(record).key),
-                    )
+                    TickedCard(ticked?.let { card.key in it }, row = true) {
+                        VideoListRow(
+                            item = card.item,
+                            title = card.title,
+                            detail = card.detail,
+                            chatTitle = card.chatTitle,
+                            fraction = card.fraction,
+                            finished = card.fraction >= 1f,
+                            onClick = { resumeThis(record) },
+                            onHold = { holdThis(record) },
+                            modifier = focusOf(record).returnTile(tileReturn, text(record).key),
+                        )
+                    }
                 }
                 }
             }
@@ -1509,12 +1679,15 @@ private fun <T : Any> ContinueSection(
                 sections.forEach { (day, members) ->
                 if (day != null) item(key = "day-$day", span = { GridItemSpan(maxLineSpan) }) { DayHeading(day) }
                 gridItems(members, key = { text(it).key }) { record ->
-                    ContinueTile(
-                        text = cardOf(record, day),
-                        onResume = { resumeThis(record) },
-                        onHold = { holdThis(record) },
-                        modifier = focusOf(record).returnTile(tileReturn, text(record).key),
-                    )
+                    val card = cardOf(record, day)
+                    TickedCard(ticked?.let { card.key in it }, row = false) {
+                        ContinueTile(
+                            text = card,
+                            onResume = { resumeThis(record) },
+                            onHold = { holdThis(record) },
+                            modifier = focusOf(record).returnTile(tileReturn, text(record).key),
+                        )
+                    }
                 }
                 }
             }
@@ -1548,6 +1721,18 @@ private fun <T : Any> ContinueSection(
     LaunchedEffect(records.firstOrNull()?.let { text(it).key }, layout, autoFocus) {
         if (autoFocus && mayTakeFocus()) runCatching { first.requestFocus() }
     }
+    // Select mode over: the bar the remote stood on is gone, so it goes back to the list, at the
+    // top, where the first card is drawn.
+    LaunchedEffect(refocusSignal) {
+        if (refocusSignal == 0 || !autoFocus) return@LaunchedEffect
+        androidx.compose.runtime.withFrameNanos { }
+        when (layout) {
+            CardLayout.List -> runCatching { listState.scrollToItem(0) }
+            CardLayout.Grid -> runCatching { gridState.scrollToItem(0) }
+        }
+        androidx.compose.runtime.withFrameNanos { }
+        runCatching { first.requestFocus() }
+    }
     // Back from a video's page, the remote lands on the card it was opened from, scrolled back
     // to where the list went while the page was up. Its lazy index counts the day headings.
     ReturnToTile(tileReturn, pageOpen) { key ->
@@ -1576,6 +1761,96 @@ private fun <T : Any> ContinueSection(
             runCatching { refocus.requestFocus() }
         }
         held = null
+    }
+}
+
+/**
+ * A History card in select mode: a round tick at its corner, filled when [ticked], and an accent
+ * edge, so what is ticked reads across a room whatever the remote stands on. [ticked] null is a
+ * card outside select mode, drawn as it is.
+ */
+@Composable
+private fun TickedCard(ticked: Boolean?, row: Boolean, content: @Composable () -> Unit) {
+    if (ticked == null) {
+        content()
+        return
+    }
+    val s = LocalStrings.current
+    val shape = RoundedCornerShape(if (row) 12.dp else 16.dp)
+    Box(if (ticked) Modifier.border(2.dp, Tone.accent, shape) else Modifier) {
+        content()
+        val ring = if (isTouch()) 26.dp else 34.dp
+        Box(
+            Modifier
+                .align(if (row) Alignment.CenterEnd else Alignment.TopEnd)
+                .padding(10.dp)
+                .size(ring)
+                .clip(CircleShape)
+                .background(if (ticked) Tone.accent else Color.Black.copy(alpha = 0.55f))
+                .border(2.dp, Color.White, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (ticked) {
+                Icon(TmIcons.Check, contentDescription = s.browseBadgeSelected, tint = Tone.onAccent, modifier = Modifier.size(ring * 0.6f))
+            }
+        }
+    }
+}
+
+/**
+ * History's select mode bar, in place of its chips: how many are ticked, Select all (or none once
+ * all are), Remove (n) and Done. On a television Up from the first row reaches it.
+ */
+@Composable
+private fun HistorySelectionBar(
+    count: Int,
+    all: Boolean,
+    insets: BrowseInsets,
+    removeLabel: String,
+    onSelectAll: () -> Unit,
+    onSelectNone: () -> Unit,
+    onRemove: () -> Unit,
+    onDone: () -> Unit,
+) {
+    val s = LocalStrings.current
+    val label = s.browseSelectedCount(count)
+    if (isTouch()) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = insets.start, end = insets.end, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onDone) { M3Icon(TmIcons.Close, contentDescription = s.commonDone) }
+            M3Text(
+                label,
+                style = M3MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            androidx.compose.material3.TextButton(onClick = if (all) onSelectNone else onSelectAll) {
+                M3Text(if (all) s.browseSelectNone else s.browseSelectAll, maxLines = 1)
+            }
+            androidx.compose.material3.Button(
+                onClick = onRemove,
+                enabled = count > 0,
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+            ) {
+                M3Icon(TmIcons.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                M3Text(removeLabel, maxLines = 1)
+            }
+        }
+        return
+    }
+    Row(
+        Modifier.fillMaxWidth().padding(start = insets.start, end = insets.end, top = 4.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.headlineSmall, color = Tone.text, modifier = Modifier.weight(1f))
+        HeaderAction(label = if (all) s.browseSelectNone else s.browseSelectAll, icon = TmIcons.Check, onClick = if (all) onSelectNone else onSelectAll)
+        HeaderAction(label = removeLabel, icon = TmIcons.Delete, onClick = onRemove)
+        HeaderAction(label = s.commonDone, icon = TmIcons.Close, onClick = onDone)
     }
 }
 

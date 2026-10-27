@@ -463,9 +463,9 @@ class PromoCaptureActivity : ComponentActivity() {
                         // Continue watching entry lives in MainActivity, and the online caches
                         // here are empty, which skips the question.
                         "forget" -> TvConfirm(
-                            title = L.confirmForgetResumeTitle,
-                            message = L.confirmForgetResumeMessage(title = "The Quiet Orbit"),
-                            detail = L.browseForgetResumeDetail,
+                            title = L.browseRemoveFromHistoryTitle,
+                            message = L.browseRemoveFromHistoryMessage(title = "The Quiet Orbit"),
+                            detail = L.browseRemoveSelectedDetail,
                             confirmLabel = L.commonRemove,
                             onConfirm = { overlay = null },
                             onDismiss = { overlay = null },
