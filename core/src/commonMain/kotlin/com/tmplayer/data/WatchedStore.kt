@@ -99,6 +99,36 @@ class WatchedStore(private val store: DataStore<Preferences>) {
         }
     }
 
+    /**
+     * Remove from history for the marks of [ids] ([SettingsStore.progressKey]s): taken off in one
+     * edit and handed back, for Undo ([putBackMarks]). An id without a mark is skipped.
+     */
+    suspend fun takeMarks(ids: Collection<String>): List<WatchedRecord> {
+        if (ids.isEmpty()) return emptyList()
+        val taken = ArrayList<WatchedRecord>()
+        store.edit { prefs ->
+            for (id in ids.toSet()) {
+                val key = stringPreferencesKey(PREFIX + id)
+                val record = WatchedRecord.decode(id, prefs[key])
+                if (prefs[key] != null) prefs.remove(key)
+                if (record != null) taken += record
+            }
+        }
+        return taken
+    }
+
+    /** Undo for [takeMarks]: each mark back as it was, unless the video was marked again since. */
+    suspend fun putBackMarks(records: List<WatchedRecord>) {
+        if (records.isEmpty()) return
+        store.edit { prefs ->
+            for (record in records) {
+                val key = keyOf(record.chatId, record.messageId)
+                if (prefs[key] == null) prefs[key] = record.encode()
+            }
+            evictOldest(prefs)
+        }
+    }
+
     /** Every stored mark under its stored name, for [Backups]. */
     suspend fun rawEntries(): Map<String, Any> = store.data.first().asMap().mapKeys { it.key.name }
 

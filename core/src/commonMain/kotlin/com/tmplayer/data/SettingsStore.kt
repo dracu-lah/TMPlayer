@@ -2720,7 +2720,54 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
         }
     }
 
+    /**
+     * Remove from history, for the places of [ids] ([progressKey]s): every line of each (the
+     * place, the length, the description and the sync delays) taken out in one edit and handed
+     * back as stored, so Undo ([putBackResume]) writes exactly them again. An id with nothing
+     * stored is skipped, so removing the same card twice takes nothing the second time.
+     */
+    suspend fun takeResume(ids: Collection<String>): Map<String, Any> {
+        if (ids.isEmpty()) return emptyMap()
+        val wanted = ids.toHashSet()
+        val taken = LinkedHashMap<String, Any>()
+        prefs.edit { prefs ->
+            // Collected before anything is removed: the map cannot be walked while it is written.
+            val doomed = prefs.asMap().entries.filter { (key, _) ->
+                val ids = RESUME_LINES.firstNotNullOfOrNull { key.name.removePrefixOrNull(it) }
+                ids != null && ids in wanted
+            }
+            for ((key, value) in doomed) {
+                taken[key.name] = value
+                prefs.remove(key)
+            }
+        }
+        return taken
+    }
+
+    /**
+     * Undo for [takeResume]: the lines put back as they were, the card's place and its spot in
+     * the order included. A video played again since keeps its newer place: an older one written
+     * over it would move the viewer back. The history cap applies after, as after any place.
+     */
+    suspend fun putBackResume(taken: Map<String, Any>) {
+        if (taken.isEmpty()) return
+        prefs.edit { prefs ->
+            val byIds = taken.entries.groupBy { (name, _) -> RESUME_LINES.firstNotNullOfOrNull { name.removePrefixOrNull(it) }.orEmpty() }
+            for ((ids, lines) in byIds) {
+                if (ids.isEmpty()) continue
+                val then = ResumeRecord.updatedAtOf(taken["meta_$ids"] as? String) ?: Long.MIN_VALUE
+                val now = prefs[stringPreferencesKey("meta_$ids")]?.let(ResumeRecord::updatedAtOf)
+                if (prefs[longPreferencesKey("resume_$ids")] != null && now != null && now > then) continue
+                for ((name, value) in lines) prefs.putRaw(name, value)
+            }
+            evictOldestHistory(prefs)
+        }
+    }
+
     companion object {
+        /** What one video's place is kept in, each followed by its [progressKey]. */
+        private val RESUME_LINES = listOf("resume_", "duration_", "meta_", "delay_")
+
         /**
          * The file name Android's `preferencesDataStore("tmplayer")` delegate has always used, in
          * `filesDir/datastore/`. Keeping it is what keeps an upgraded install's settings.

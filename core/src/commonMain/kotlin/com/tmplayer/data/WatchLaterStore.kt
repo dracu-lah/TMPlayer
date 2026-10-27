@@ -59,6 +59,33 @@ class WatchLaterStore internal constructor(private val store: DataStore<Preferen
         store.edit { it.remove(keyOf(chatId, messageId)) }
     }
 
+    /** Takes [ids] ([SettingsStore.progressKey]s) off the list in one edit, handed back for Undo ([putBack]). */
+    suspend fun take(ids: Collection<String>): List<WatchLaterRecord> {
+        if (ids.isEmpty()) return emptyList()
+        val taken = ArrayList<WatchLaterRecord>()
+        store.edit { prefs ->
+            for (id in ids.toSet()) {
+                val key = stringPreferencesKey(PREFIX + id)
+                val record = WatchLaterRecord.decode(id, prefs[key])
+                if (prefs[key] != null) prefs.remove(key)
+                if (record != null) taken += record
+            }
+        }
+        return taken
+    }
+
+    /** Undo for [take]: each video back where it stood, by the time it was first added. */
+    suspend fun putBack(records: List<WatchLaterRecord>) {
+        if (records.isEmpty()) return
+        store.edit { prefs ->
+            for (record in records) {
+                val key = keyOf(record.chatId, record.messageId)
+                if (prefs[key] == null) prefs[key] = record.encode()
+            }
+            evictOldest(prefs)
+        }
+    }
+
     /** Empties the list. Keys are collected first: the map cannot be walked while it is written. */
     suspend fun clear() {
         store.edit { prefs ->

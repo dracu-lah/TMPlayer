@@ -261,6 +261,28 @@ internal fun HomePane(
     val shellLifecycle = LocalLifecycleOwner.current.lifecycle
     val shellState by shellLifecycle.currentStateFlow.collectAsState()
     val windowFocusedNow by androidx.compose.runtime.rememberUpdatedState(windowFocused)
+    // The Continue watching card a hold menu was opened on, and where it stood in the row: when
+    // the menu takes it out of History the remote moves to the card that took its place (or, the
+    // row gone, to the top of Home), rather than being left on nothing. Forgotten once the shell
+    // is covered (the player), so a card finished there does not move the remote on the way back.
+    var heldContinue by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    val continueRefocus = remember { FocusRequester() }
+    val continueRecords = (listed.firstOrNull { it is HomeRow.Continue } as? HomeRow.Continue)?.records.orEmpty()
+    val heldContinueGone = heldContinue?.let { (key, _) ->
+        continueRecords.none { SettingsStore.progressKey(it.chatId, it.messageId) == key }
+    } == true
+    val continueStandIn = if (heldContinueGone) continueRecords.getOrNull(minOf(heldContinue?.second ?: 0, continueRecords.lastIndex)) else null
+    LaunchedEffect(shellState.isAtLeast(Lifecycle.State.RESUMED)) {
+        if (!shellState.isAtLeast(Lifecycle.State.RESUMED)) heldContinue = null
+    }
+    LaunchedEffect(heldContinueGone, continueStandIn?.let { SettingsStore.progressKey(it.chatId, it.messageId) }) {
+        if (!heldContinueGone) return@LaunchedEffect
+        if (!touch) {
+            withFrameNanos { }
+            if (continueStandIn != null) runCatching { continueRefocus.requestFocus() } else runCatching { first.requestFocus() }
+        }
+        heldContinue = null
+    }
     // The row (by key) or the carousel the remote is in right now, null when it is elsewhere.
     val focusedSpot = remember { arrayOfNulls<String>(1) }
     // Whether the remote has been in Home in this composition, so the first "no focus" report a
@@ -604,9 +626,13 @@ internal fun HomePane(
                                         // The detail panel, as on every other tile here: it already
                                         // offers Resume, Start over and Mark watched for a video with
                                         // a saved place.
-                                        onLongClick = { onHoldMedia(item, chat) },
+                                        onLongClick = {
+                                            heldContinue = key to row.records.indexOf(record)
+                                            onHoldMedia(item, chat)
+                                        },
                                         modifier = Modifier.width(continueWidth(touch))
-                                            .then(if (isFirst && record === row.records.first()) Modifier.focusRequester(first) else Modifier),
+                                            .then(if (isFirst && record === row.records.first()) Modifier.focusRequester(first) else Modifier)
+                                            .then(if (record === continueStandIn) Modifier.focusRequester(continueRefocus) else Modifier),
                                         meta = { ink -> CaptionLine(telegramFacts(chat, item), ink) },
                                     ) {
                                         ContinueCardArt(record, item, Modifier.fillMaxSize())

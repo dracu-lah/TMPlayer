@@ -177,6 +177,7 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
     val item = request.item
     val scope = rememberCoroutineScope()
     val toast = rememberToast()
+    val undoToast = com.tmplayer.ui.components.rememberActionToast()
     val progress by state.settings.watchProgress.collectAsState(initial = emptyMap())
     val watchedList by state.watched.watched.collectAsState(initial = emptyMap())
     val laterKeys by state.watched.watchLater.keys.collectAsState(initial = emptySet())
@@ -233,6 +234,7 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
             comments = comments,
             // A copy of the finished download in a folder the viewer picks (CP82).
             canExport = true,
+            canRemoveFromHistory = true,
         ),
     ).filterNot { it == DetailAction.Share }
 
@@ -287,6 +289,18 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
                 outlives.launch { runCatching { setWatched(state.watched, state.settings, item, title, mark) } }
                 return
             }
+            // The pane stays: Resume turns into Play, and the line under the title says Undo.
+            DetailAction.RemoveFromHistory -> {
+                outlives.launch {
+                    val undo = runCatching { com.tmplayer.data.HistoryEdits.removeVideo(state.settings, state.watched, item) }.getOrNull()
+                    if (undo != null && !undo.isEmpty) {
+                        undoToast(s.browseRemovedFromHistory(1), s.browseUndo) {
+                            outlives.launch { runCatching { com.tmplayer.data.HistoryEdits.undo(state.settings, state.watched, undo) } }
+                        }
+                    }
+                }
+                return
+            }
             DetailAction.AddWatchLater, DetailAction.RemoveWatchLater -> {
                 val add = action == DetailAction.AddWatchLater
                 outlives.launch {
@@ -305,7 +319,7 @@ private fun DetailPane(state: ShellState, request: DetailRequest) {
             // Handled above, with the pane left open.
             DetailAction.Resume, DetailAction.Play, DetailAction.StartOver -> Unit
             DetailAction.MarkWatched, DetailAction.MarkUnwatched -> Unit
-            DetailAction.AddWatchLater, DetailAction.RemoveWatchLater -> Unit
+            DetailAction.AddWatchLater, DetailAction.RemoveWatchLater, DetailAction.RemoveFromHistory -> Unit
             DetailAction.Download, DetailAction.SaveToDownloads, DetailAction.CancelDownload -> Unit
             DetailAction.InDownloads -> state.go(Destination.Downloads)
             DetailAction.RemoveDownload -> Unit

@@ -21,6 +21,12 @@ enum class DetailAction {
     AddWatchLater,
     RemoveWatchLater,
 
+    /**
+     * Takes the video out of History: its saved place and its watched tick, every copy of it
+     * ([HistoryEdits]). Offered while it is part way through.
+     */
+    RemoveFromHistory,
+
     /** Fetch the file into Downloads. */
     Download,
 
@@ -108,6 +114,8 @@ data class DetailContext(
     val comments: Int = 0,
     /** The platform can copy a finished download out (the phone's gallery, a desktop folder). */
     val canExport: Boolean = false,
+    /** The panel can take the video out of History ([DetailAction.RemoveFromHistory]). */
+    val canRemoveFromHistory: Boolean = false,
 )
 
 object DetailActions {
@@ -149,6 +157,9 @@ object DetailActions {
         if (context.canExport && KeepRules.mayExport(context.canBeSaved, context.inDownloads)) add(DetailAction.ExportCopy)
         if (context.comments > 0) add(DetailAction.CommentVideos)
         if (context.outsideChat) add(DetailAction.OpenChat)
+        // Only for a video part way through: a finished one leaves History by Mark as unwatched,
+        // and two buttons doing the same would only ask which to press.
+        if (context.canRemoveFromHistory && resuming) add(DetailAction.RemoveFromHistory)
         // Last, being repairs rather than things to do with the video. Each one has its undo.
         if (context.canCorrect) {
             when {

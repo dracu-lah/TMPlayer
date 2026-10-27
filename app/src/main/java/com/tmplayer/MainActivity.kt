@@ -950,8 +950,6 @@ private fun Root() {
     LaunchedEffect(offeredLowStorage) {
         if (offeredLowStorage != null) LowStorageOffers.take()?.let { lowStorageAsk = it to null }
     }
-    // The Continue watching entry waiting on "Remove from Continue watching?".
-    var forgetPrompt by remember { mutableStateOf<ResumeRecord?>(null) }
     // The machine the space message is about, since "this phone is 2 GB short" on a television
     // reads as the app talking about something else entirely.
     val device = remember { if (FormFactor.isTv(context)) "tv" else "phone" }
@@ -1810,9 +1808,8 @@ private fun Root() {
                             resumeMedia(record)
                         }
                     },
-                    // Asked first: the saved place is the whole of what this forgets, and there
-                    // is no getting it back short of finding the spot by hand.
-                    onForgetMedia = { record -> forgetPrompt = record },
+                    // Remove from history, Clear history and select mode are BrowseScreen's own
+                    // (HistoryRemoval): Undo on a touch screen, asked first under a remote.
                     // The clears below were asked first, and the emptied row or tab is their answer.
                     onClearFavorites = { scope.launch { settings.clearFavorites(allowedChats) } },
                     onClearHistory = { scope.launch { settings.clearWatchHistory() } },
@@ -2162,21 +2159,6 @@ private fun Root() {
                     screen = Screen.Downloads
                 },
                 onDismiss = { roomPrompt = null },
-            )
-        }
-
-        forgetPrompt?.let { record ->
-            TvConfirm(
-                title = L.confirmForgetResumeTitle,
-                message = L.confirmForgetResumeMessage(title = record.title),
-                detail = L.browseForgetResumeDetail,
-                confirmLabel = L.commonRemove,
-                onConfirm = {
-                    forgetPrompt = null
-                    // The card leaving Continue watching is the answer.
-                    scope.launch { settings.clearResumeCopies(record) }
-                },
-                onDismiss = { forgetPrompt = null },
             )
         }
 

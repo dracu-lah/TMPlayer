@@ -137,11 +137,13 @@ fun detailRow(
         DetailAction.MarkUnwatched -> DetailRow(action, s.gridMarkUnwatched, TmIcons.Close, s.gridMarkUnwatchedDetail, onSelect = onSelect)
         DetailAction.AddWatchLater -> DetailRow(action, s.detailWatchLaterAdd, TmIcons.Clock, s.detailWatchLaterAddDetail, onSelect = onSelect)
         DetailAction.RemoveWatchLater -> DetailRow(action, s.detailWatchLaterRemove, TmIcons.Close, onSelect = onSelect)
+        DetailAction.RemoveFromHistory ->
+            DetailRow(action, s.browseRemoveFromHistory, TmIcons.History, s.browseRemoveFromHistoryDetail, destructive = true, onSelect = onSelect)
         DetailAction.Download -> DetailRow(action, s.gridDownload, TmIcons.Download, withFree(s.gridDownloadDetail), onSelect = onSelect)
         DetailAction.SaveToDownloads ->
             DetailRow(action, s.gridSaveToDownloads, TmIcons.Download, withFree(s.gridSaveToDownloadsDetail), onSelect = onSelect)
         DetailAction.InDownloads -> DetailRow(action, s.gridInDownloads, TmIcons.Download, s.gridInDownloadsDetail, onSelect = onSelect)
-        DetailAction.RemoveDownload -> DetailRow(action, s.gridRemoveDownload, TmIcons.Close, destructive = true, onSelect = onSelect)
+        DetailAction.RemoveDownload -> DetailRow(action, s.gridRemoveDownload, TmIcons.Delete, destructive = true, onSelect = onSelect)
         DetailAction.CancelDownload -> DetailRow(action, s.gridCancelRunning, TmIcons.Close, onSelect = onSelect)
         DetailAction.SelectVideos -> DetailRow(action, s.gridSelectVideos, TmIcons.Checklist, s.gridSelectVideosDetail, onSelect = onSelect)
         DetailAction.Share -> DetailRow(action, s.commonShare, TmIcons.Share, onSelect = onSelect)

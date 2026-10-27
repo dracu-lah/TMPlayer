@@ -41,12 +41,27 @@ import kotlinx.coroutines.launch
  * underneath does not change what was picked.
  */
 @Stable
-class GridSelection(private val idAt: (Int) -> String?) {
+class GridSelection(
+    /**
+     * History's: every card can be ticked (a chat's grid leaves out a video its chat will not let
+     * anyone keep), each tile shows its tick box on hover, and the mode can be on with none ticked.
+     */
+    val history: Boolean = false,
+    private val idAt: (Int) -> String?,
+) {
     var ids by mutableStateOf<Set<String>>(emptySet())
         private set
     private var anchor: Int? = null
 
-    val active: Boolean get() = ids.isNotEmpty()
+    /** Select mode started from History's Select button, before anything is ticked. */
+    private var started by mutableStateOf(false)
+
+    val active: Boolean get() = ids.isNotEmpty() || started
+
+    /** History's Select: the mode on, nothing ticked yet; a click then ticks rather than opens. */
+    fun start() {
+        started = true
+    }
 
     fun isSelected(id: String) = id in ids
 
@@ -72,6 +87,12 @@ class GridSelection(private val idAt: (Int) -> String?) {
     fun clear() {
         ids = emptySet()
         anchor = null
+        started = false
+    }
+
+    /** Takes away ticks whose cards have left the page, so the count says what Remove would take. */
+    fun keepOnly(present: Set<String>) {
+        if (ids.any { it !in present }) ids = ids.filterTo(HashSet()) { it in present }
     }
 }
 
