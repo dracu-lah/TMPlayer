@@ -450,9 +450,40 @@ jobs:
           retention-days: 3
           if-no-files-found: error
 
+  # The LG (webOS) and Samsung (Tizen) wrappers: a page that opens web.tmplayer.org, which answers a
+  # TV's browser with the web player's TV build (webapp/functions/_middleware.ts). Nothing in them
+  # is secret, so they are built without the release environment. webOS and Tizen take three
+  # numbers, so a test version's packages carry its release's (1.28.2 for 1.28.2-beta.2).
+  tv:
+    name: TV wrappers (LG, Samsung)
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Package
+        run: |
+          VERSION="${{ needs.version.outputs.name }}"
+          TV_VERSION="${VERSION%%-*}" webapp/tv/package.sh https://web.tmplayer.org/
+          mkdir -p dist
+          mv webapp/tv/out/TMPlayer-tv.ipk "dist/TMPlayer-$VERSION-lg-webos.ipk"
+          mv webapp/tv/out/TMPlayer-tv.wgt "dist/TMPlayer-$VERSION-samsung-tizen.wgt"
+
+      - name: Hand the TV packages to the publish job
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-tv
+          path: dist/*
+          retention-days: 3
+          if-no-files-found: error
+
   publish:
     name: Publish the release
-    needs: [version, android, desktop-linux, desktop-windows, desktop-macos]
+    needs: [version, android, desktop-linux, desktop-windows, desktop-macos, tv]
     runs-on: ubuntu-latest
     # id-token and attestations are for the provenance step below; naming any permission here
     # replaces the workflow's list for this job, so contents: write is restated.
@@ -482,7 +513,9 @@ jobs:
             "TMPlayer-$VERSION-macos-arm64.dmg" \
             "TMPlayer-$VERSION-x86_64.AppImage" \
             "TMPlayer-$VERSION-x86_64.AppImage.zsync" \
-            "TMPlayer-$VERSION-linux-x64.tar.xz"; do
+            "TMPlayer-$VERSION-linux-x64.tar.xz" \
+            "TMPlayer-$VERSION-lg-webos.ipk" \
+            "TMPlayer-$VERSION-samsung-tizen.wgt"; do
             if [ ! -s "dist/$f" ]; then
               echo "::error::dist/$f is missing"
               exit 1
@@ -494,7 +527,8 @@ jobs:
               "TMPlayer-$VERSION-universal.apk" | "TMPlayer-$VERSION-windows-x64.msi" | \
                 "TMPlayer-$VERSION-macos-arm64.dmg" | \
                 "TMPlayer-$VERSION-x86_64.AppImage" | "TMPlayer-$VERSION-x86_64.AppImage.zsync" | \
-                "TMPlayer-$VERSION-linux-x64.tar.xz") ;;
+                "TMPlayer-$VERSION-linux-x64.tar.xz" | \
+                "TMPlayer-$VERSION-lg-webos.ipk" | "TMPlayer-$VERSION-samsung-tizen.wgt") ;;
               *) echo "::error::$path is not one of the release's files"; exit 1 ;;
             esac
           done
@@ -639,6 +673,8 @@ jobs:
             | macOS 26 or newer, Apple Silicon (preview, [first launch](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/INSTALL.md#macos)) | `TMPlayer-${{ needs.version.outputs.name }}-macos-arm64.dmg` |
             | Linux, glibc 2.38 or newer | `TMPlayer-${{ needs.version.outputs.name }}-x86_64.AppImage` |
             | Arch Linux | [the PKGBUILD](https://github.com/${{ github.repository }}/tree/${{ github.ref_name }}/desktop/packaging/aur), from `TMPlayer-${{ needs.version.outputs.name }}-linux-x64.tar.xz` |
+            | LG TVs, webOS 5 and newer ([Developer Mode](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/webapp/tv/README.md#2-lg-webos)) | `TMPlayer-${{ needs.version.outputs.name }}-lg-webos.ipk` |
+            | Samsung TVs, Tizen 2020 and newer ([Developer Mode](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/webapp/tv/README.md#3-samsung-tizen)) | `TMPlayer-${{ needs.version.outputs.name }}-samsung-tizen.wgt` |
 
             Installed copies offer each update. [How to install](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/INSTALL.md) · [Moving from the deb, rpm, Flatpak or Windows zip](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/INSTALL.md#moving-from-a-format-that-is-no-longer-published) · [GPL-3.0](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/LICENSE) · [Third party notices](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/THIRD_PARTY_NOTICES.md) · [nextlib source](${{ steps.nextlib.outputs.url }}) · [mediamp source](${{ steps.mediamp.outputs.url }}) · [mediamp macOS source](${{ steps.mediamp.outputs.url_mac }})
 

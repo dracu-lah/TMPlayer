@@ -1,5 +1,5 @@
 {
   "version": 1,
-  "include": ["/tmdb/*"],
-  "exclude": []
+  "include": ["/*"],
+  "exclude": ["/assets/*", "/tv/*", "/libav/*", "/sw.js", "/manifest.webmanifest", "/licenses.txt", "/*.png", "/*.svg"]
 }

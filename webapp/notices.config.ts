@@ -76,6 +76,20 @@ function kotlin(): string {
     ].join('\n')
 }
 
+/** core-js, in the TV build's separately built polyfill file (vite.config.ts), which the collectors never see. */
+export function coreJs(): string {
+    const read = (f: string) => readFileSync(new URL(`./node_modules/core-js/${f}`, import.meta.url), 'utf8')
+    const { version } = JSON.parse(read('package.json')) as { version: string }
+    return [
+        `core-js ${version}`,
+        'Licence: MIT',
+        "In the TV build's assets/polyfills-*.js, which fills in what older TV browsers lack.",
+        'Source: https://github.com/zloirock/core-js',
+        '',
+        read('LICENSE').trim(),
+    ].join('\n')
+}
+
 function entry(dep: Dependency): string {
     const repo = typeof dep.repository === 'string' ? dep.repository : dep.repository?.url
     const author = dep.author?.text?.() ?? dep.author?.name
@@ -92,7 +106,7 @@ function entry(dep: Dependency): string {
  * The plugins that write /licenses.txt: one collector for each build (the page's and every
  * worker's), and the writer in the page's build, which runs last.
  */
-export function notices(): { page: Plugin[]; worker: () => Plugin[] } {
+export function notices(extra: () => string[] = () => []): { page: Plugin[]; worker: () => Plugin[] } {
     const found = new Map<string, Dependency>()
     const collect = (deps: Dependency[]) => {
         for (const dep of deps) if (dep.name) found.set(`${dep.name}@${dep.version}`, dep)
@@ -105,7 +119,7 @@ export function notices(): { page: Plugin[]; worker: () => Plugin[] } {
             if (found.size === 0) this.error('rollup-plugin-license found no packages: the notices would be empty')
             const rule = '-'.repeat(80)
             const deps = [...found.values()].sort((a, b) => a.name!.localeCompare(b.name!))
-            const body = [own(), ...deps.map(entry), ffmpeg(), kotlin(), text('LGPL-2.1.txt'), text('Apache-2.0.txt')]
+            const body = [own(), ...deps.map(entry), ...extra(), ffmpeg(), kotlin(), text('LGPL-2.1.txt'), text('Apache-2.0.txt')]
             this.emitFile({ type: 'asset', fileName: 'licenses.txt', source: `${body.join(`\n\n${rule}\n\n`)}\n` })
         },
     }

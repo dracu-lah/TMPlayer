@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { build as viteBuild, defineConfig, type Plugin, type Rollup } from 'vite'
 import solid from 'vite-plugin-solid'
 import { legacyCss } from './legacy-css'
-import { notices } from './notices.config'
+import { coreJs, notices } from './notices.config'
 import { createHandler } from './tmdb/handler.ts'
 import { PAGE_STRINGS } from './strings.config'
 
@@ -222,7 +222,7 @@ function tvLegacy(inWorker = false): Plugin {
             return {
                 html: html.replace(OLD_CHECK, 'ok=!!(window.BigInt&&window.Worker&&window.WebAssembly&&window.indexedDB)'),
                 tags: [
-                    { tag: 'script', attrs: { src: `/${file}` }, injectTo: 'head' },
+                    { tag: 'script', attrs: { src: `${TV_BASE}${file}` }, injectTo: 'head' },
                     // For legacy-css.ts: `no-flex-gap` where gap does nothing in a flex box (Chromium 83 and older),
                     // `no-has` where :has() is missing (104 and older).
                     { tag: 'script', children: FLEX_GAP_TEST, injectTo: 'head' },
@@ -232,11 +232,20 @@ function tvLegacy(inWorker = false): Plugin {
     }
 }
 
-const licences = notices()
+/**
+ * Where the TV build lives on web.tmplayer.org: functions/_middleware.ts answers a TV's page loads
+ * with /tv/index.html, so its assets and licences sit there while its routes stay the site's own.
+ * `TV_BASE=/` builds it for the root, as served from this computer for the LAN wrappers (tv/README.md).
+ */
+const TV_BASE = process.env.TV_BASE || '/tv/'
+let tvBuild = false
+const licences = notices(() => (tvBuild ? [coreJs()] : []))
 
 export default defineConfig(({ mode }) => {
     const tv = mode === 'tv'
+    tvBuild = tv
     return {
+        base: tv ? TV_BASE : '/',
         plugins: [solid(), pageStrings(), tooOldStrings(), needsApiId(), tmdbProxy(), ...licences.page, tv ? tvLegacy() : offlineShell()],
         define: {
             __TG_API_ID__: JSON.stringify(Number(secret('TG_API_ID')) || 0),
@@ -248,7 +257,7 @@ export default defineConfig(({ mode }) => {
         build: tv ? { target: 'chrome68', cssTarget: 'chrome68', outDir: 'dist-tv', sourcemap: true } : { target: 'es2022', sourcemap: true },
         // The UI catalog is read from :core, where every app reads it.
         server: { port: 8091, host: true, fs: { allow: ['.', '../core/src/commonMain/resources/i18n'] } },
-        // The TV build (`pnpm serve:tv`) answers on its own port, so both can run at once.
+        // The TV build (`pnpm serve:tv`, at /tv/) answers on its own port, so both can run at once.
         preview: { port: tv ? 8092 : 8091, host: true },
     }
 })

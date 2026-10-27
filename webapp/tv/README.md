@@ -12,13 +12,18 @@ closes the app). The words come from `core/src/commonMain/resources/i18n/en.json
 | `tizen/` | `config.xml` and the 512 px icon for Samsung Tizen (5.5 and later) |
 | `package.sh` | Builds `out/TMPlayer-tv.ipk` and `out/TMPlayer-tv.wgt` |
 
-## 1. Serve the app and build the packages
+## 1. Build the packages
 
-On this computer, in `webapp/`:
+Each release carries both, made for `https://web.tmplayer.org/` (`TMPlayer-<version>-lg-webos.ipk`
+and `TMPlayer-<version>-samsung-tizen.wgt`). The site answers a TV's browser with the TV build,
+deployed under `/tv/` (`webapp/functions/_middleware.ts`); `?tv=1` shows it on any browser, `?tv=0`
+goes back.
+
+To try a change before it is deployed, serve the TV build from this computer, in `webapp/`:
 
 ```sh
-pnpm build:tv                                  # the TV build, into dist-tv/ (again after every change)
-pnpm serve:tv                                  # serves it on port 8092, leave it running
+TV_BASE=/ pnpm build:tv                        # the TV build for the root, into dist-tv/ (again after every change)
+TV_BASE=/ pnpm serve:tv                        # serves it on port 8092, leave it running
 ```
 
 Fedora Workstation's firewall already lets other devices reach ports 1025 to 65535, 8092 among
@@ -33,8 +38,8 @@ Worker and without `crypto.subtle` (the two-step password goes through `@noble/h
 Then, in `webapp/tv/`:
 
 ```sh
-./package.sh                                   # http://10.27.27.27:8092/
-./package.sh http://192.168.1.20:8092/         # another address, if the computer's IP changes
+./package.sh                                   # https://web.tmplayer.org/
+./package.sh http://10.27.27.27:8092/          # this computer, for a build not yet deployed
 ```
 
 The address is written into the package, so a new IP means a new package. `ares-package` is fetched

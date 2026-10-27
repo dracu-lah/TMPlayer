@@ -31,6 +31,8 @@ import { install, installed, installPrompt, iosBrowser, keepData, kept, refused 
 
 const THEMES: Theme[] = ['system', 'dark', 'light', 'black']
 const LAYOUTS: Layout[] = ['desktop', 'tv']
+/** The build's own notices: the TV build's (under /tv/) also name core-js. */
+const LICENCES = `${import.meta.env.BASE_URL}licenses.txt`
 
 type PageId = 'appearance' | 'playback' | 'library' | 'storage' | 'about'
 
@@ -323,7 +325,7 @@ function StoragePage() {
 function About() {
     return (
         <div class="set-card">
-            <a class="set-row" href="/licenses.txt" target="_blank" rel="noopener">
+            <a class="set-row" href={LICENCES} target="_blank" rel="noopener">
                 <RowBody icon={File01Icon} title={t('about.notices_title')} subtitle={t('about.notices_detail')} />
                 <Icon icon={ArrowRight01Icon} size={20} class="set-chevron" />
             </a>
@@ -333,7 +335,7 @@ function About() {
             </a>
             <div class="set-block">
                 <p class="muted small">{t('about.licence_line')}</p>
-                <a class="link" href="/licenses.txt" target="_blank" rel="noopener">{t('about.read')}</a>
+                <a class="link" href={LICENCES} target="_blank" rel="noopener">{t('about.read')}</a>
             </div>
         </div>
     )
@@ -632,7 +634,7 @@ function TvSettings() {
                 <h2 class="panel-title">{t('about.notices_title')}</h2>
                 <p class="muted small">{t('about.licence_line')}</p>
                 <p class="muted small">{t('about.notices_detail')}</p>
-                <a class="link" href="/licenses.txt" target="_blank" rel="noopener">{t('about.read')}</a>
+                <a class="link" href={LICENCES} target="_blank" rel="noopener">{t('about.read')}</a>
             </div>
         </section>
     )

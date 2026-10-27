@@ -88,6 +88,12 @@ jobs:
         run: |
           pnpm -C webapp exec vite build
           test -s webapp/dist/licenses.txt
+          # The TV build goes under /tv/ (functions/_middleware.ts answers a TV's page loads with
+          # it). The site's own libav files, headers and routes serve both.
+          pnpm -C webapp exec vite build --mode tv
+          grep -q '^core-js ' webapp/dist-tv/licenses.txt
+          rm -rf webapp/dist-tv/libav webapp/dist-tv/_headers webapp/dist-tv/_routes.json
+          mv webapp/dist-tv webapp/dist/tv
           webapp/libav/sources.sh webapp/dist/libav/sources
           echo "First load, gzip: $(cat webapp/dist/assets/index-*.js webapp/dist/assets/store-*.js webapp/dist/assets/rolldown-runtime-*.js | gzip -9 | wc -c) bytes of JS" >> "$GITHUB_STEP_SUMMARY"
 
@@ -200,9 +206,12 @@ jobs:
 
       # A deploy without the Functions bundle still succeeds, and /tmdb/* then answers the page's
       # index.html: fail here instead. The proxy answers JSON (503 "no key" without the secret).
-      - name: The poster proxy answers
+      - name: The poster proxy and the TV page answer
         run: |
           url=$(grep -oE 'https://[0-9a-f]+\.tmplayer-webapp\.pages\.dev' "$RUNNER_TEMP/deploy.log" | head -1)
           type=$(curl -sS -o /dev/null -w '%{content_type}' "$url/tmdb/poster?k=film&t=Test&y=2020")
           echo "$url/tmdb/poster: $type"
           case "$type" in application/json*) ;; *) echo "::error::/tmdb/ is not the proxy on $url"; exit 1 ;; esac
+          # And a TV's browser gets the TV build's page (it loads assets from /tv/).
+          curl -sS -H 'Accept: text/html' -A 'Mozilla/5.0 (Web0S; Linux/SmartTV) Chrome/68.0.3440.106' "$url/" | grep -q '/tv/assets/' \
+            || { echo "::error::a TV's page load on $url is not the TV build"; exit 1; }

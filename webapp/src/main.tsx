@@ -17,7 +17,8 @@ if (!document.documentElement.dataset.old) {
     markEntry()
     watchForm()
     serveStreams()
-    registerWorker()
+    // The TV build has no offline shell, and the site's service worker would answer its page loads with the other build.
+    if (import.meta.env.MODE !== 'tv') registerWorker()
     const root = document.getElementById('app')!
     root.textContent = ''
     render(() => <App />, root)

@@ -2,12 +2,13 @@
 # Builds the two thin "hosted" TV wrappers for the TMPlayer web player:
 #   out/TMPlayer-tv.ipk  (LG webOS)
 #   out/TMPlayer-tv.wgt  (Samsung Tizen, unsigned: the install tool signs it)
-# Usage: ./package.sh [address]      default http://10.27.27.27:8092/
+# Usage: ./package.sh [address]      default https://web.tmplayer.org/
+# TV_VERSION=x.y.z sets the packages' version (the release job passes the tag's), else the Android default.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-ADDRESS="${1:-http://10.27.27.27:8092/}"
+ADDRESS="${1:-https://web.tmplayer.org/}"
 OUT="$HERE/out"
 EN_JSON="$ROOT/core/src/commonMain/resources/i18n/en.json"
 
@@ -18,7 +19,7 @@ esac
 
 # The app's version (x.y.z) from the Android build's default; webOS and Tizen want exactly three numbers.
 VERSION="$(sed -n 's/.*findProperty("tmVersionName") as String?) ?: "\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/p' "$ROOT/app/build.gradle.kts" | head -n 1)"
-VERSION="${VERSION:-0.0.1}"
+VERSION="${TV_VERSION:-${VERSION:-0.0.1}}"
 
 rm -rf "$OUT/webos" "$OUT/tizen" "$OUT"/*.ipk "$OUT"/*.wgt
 mkdir -p "$OUT/webos" "$OUT/tizen" "$OUT/.tools"
