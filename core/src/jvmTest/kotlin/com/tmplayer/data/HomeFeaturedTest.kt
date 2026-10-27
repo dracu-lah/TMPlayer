@@ -103,12 +103,97 @@ class HomeFeaturedTest {
     }
 
     @Test
-    fun `a sharp online picture goes first, the rest keep their order`() {
-        val entries = (1..5).map { n -> file(video("Film Number ${'A' + n} ${2000 + n}.mkv", date = n)) }
-        val picks = HomeFeatured.pick(entries)
-        val sharp = setOf(picks[2].key, picks[4].key)
-        val ranked = HomeFeatured.rank(picks) { it.key in sharp }
-        assertEquals(listOf(picks[2], picks[4], picks[0], picks[1], picks[3]), ranked)
-        assertEquals(titles(picks), titles(HomeFeatured.rank(picks) { false }))
+    fun `only files of 400 MB or more make a page, whatever the size filter says`() {
+        val small = video("Small Film 2001.mkv", date = 40).copy(sizeBytes = 399 * SizeFilter.MB)
+        val unknown = video("Unknown Size Film 2002.mkv", date = 39).copy(sizeBytes = 0)
+        val floor = video("Floor Film 2003.mkv", date = 38).copy(sizeBytes = HomeFeatured.MIN_BYTES)
+        val big = video("Big Film 2004.mkv", date = 37)
+        val picks = HomeFeatured.pick(listOf(small, unknown, floor, big).map(::file))
+        assertEquals(listOf(floor.id, big.id), picks.map { it.item.id })
+        // A small copy leading still passes when another copy of it is big.
+        val led = video("Copies Film 2005.mkv", date = 36).copy(sizeBytes = 200 * SizeFilter.MB, versions = listOf(big))
+        assertTrue(HomeFeatured.bigEnough(FeaturedPick(file(led))))
+        assertTrue(!HomeFeatured.eligible(FeaturedPick(file(small))))
+    }
+
+    @Test
+    fun `a show counts by its episode files`() {
+        fun show(size: Long) = SeriesShelf.arrange(
+            listOf(
+                video("Harbour.Notes.S01E02.1080p.mkv", date = 20, durationSec = 2_600).copy(sizeBytes = size),
+                video("Harbour.Notes.S01E01.1080p.mkv", date = 19, durationSec = 2_600).copy(sizeBytes = size),
+            ),
+        ).single()
+        assertEquals(1, HomeFeatured.pick(listOf(show(450 * SizeFilter.MB))).size)
+        assertTrue(HomeFeatured.pick(listOf(show(250 * SizeFilter.MB))).isEmpty())
+        // A lone episode by its own file.
+        val lone = video("Harbour.Notes.S01E03.720p.mkv", date = 15, durationSec = 2_600).copy(sizeBytes = 300 * SizeFilter.MB)
+        assertTrue(HomeFeatured.pick(listOf(file(lone))).isEmpty())
+    }
+
+    @Test
+    fun `a complete page has a wide picture and an overview`() {
+        val full = com.tmplayer.online.MetaInfo(
+            provider = com.tmplayer.online.MetaProvider.Tmdb, id = "1", kind = com.tmplayer.online.MetaKind.Film,
+            title = "Night Train", year = 2019, overview = "A night on a train.",
+            posterUrl = "https://image.tmdb.org/p.jpg", backdropUrl = "https://image.tmdb.org/b.jpg",
+        )
+        assertTrue(HomeFeatured.isComplete(full))
+        assertTrue(!HomeFeatured.isComplete(null))
+        // A poster alone is not a wide picture.
+        assertTrue(!HomeFeatured.isComplete(full.copy(backdropUrl = null)))
+        assertTrue(!HomeFeatured.isComplete(full.copy(overview = " ")))
+    }
+
+    private fun films(count: Int) = HomeFeatured.pick(
+        (1..count).map { n -> file(video("Film Number ${'A' + n} ${2000 + n}.mkv", date = n)) },
+        HomeFeatured.CANDIDATES,
+    )
+
+    @Test
+    fun `a fill keeps what is known complete and asks about the rest`() = kotlinx.coroutines.runBlocking<Unit> {
+        val picks = films(8)
+        val known = mapOf(picks[0].key to true, picks[1].key to false)
+        val asked = java.util.Collections.synchronizedList(ArrayList<String>())
+        val keys = HomeFeatured.completeKeys(
+            picks,
+            known = { known[it.key] },
+            ask = { pick ->
+                asked += pick.key
+                // "No match" for the third, complete for the rest.
+                pick.key != picks[2].key
+            },
+            scope = this,
+        )
+        assertEquals(listOf(0, 3, 4, 5, 6), keys.map { key -> picks.indexOfFirst { it.key == key } })
+        // Nothing already known is asked again.
+        assertTrue(picks[0].key !in asked && picks[1].key !in asked)
+    }
+
+    @Test
+    fun `a lookup that does not answer in time is left out of this fill`() = kotlinx.coroutines.runBlocking<Unit> {
+        val picks = films(3)
+        val keys = HomeFeatured.completeKeys(
+            picks,
+            known = { null },
+            ask = { pick ->
+                if (pick.key == picks[0].key) kotlinx.coroutines.delay(5_000)
+                if (pick.key == picks[2].key) error("garbage answer")
+                true
+            },
+            scope = this,
+            waitMs = 300,
+        )
+        assertEquals(setOf(picks[1].key), keys)
+        coroutineContext[kotlinx.coroutines.Job]?.children?.forEach { it.cancel() }
+    }
+
+    @Test
+    fun `nothing complete means no carousel`() = kotlinx.coroutines.runBlocking<Unit> {
+        val picks = films(4)
+        val keys = HomeFeatured.completeKeys(picks, known = { false }, ask = { true }, scope = this)
+        assertTrue(keys.isEmpty())
+        assertTrue(picks.filter { it.key in keys }.isEmpty())
+        assertTrue(HomeFeatured.completeKeys(emptyList(), known = { true }, ask = { true }, scope = this).isEmpty())
     }
 }

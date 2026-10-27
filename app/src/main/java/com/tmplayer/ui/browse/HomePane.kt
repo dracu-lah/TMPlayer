@@ -238,8 +238,9 @@ internal fun HomePane(
         return
     }
     // Recently added is the featured carousel at the top as well as a row, on a phone and a
-    // television alike: present from the first frame whenever the row is, so nothing below it
-    // moves when it fills.
+    // television alike: its frame is held from the first frame whenever the row is, so nothing
+    // below it moves when it fills, and given up (the rows moving up) once its fill finds no
+    // complete page, a moment after the row is in at most ([HomeFeatured.FILL_WAIT_MS]).
     val recent = rows.firstNotNullOfOrNull { it as? HomeRow.Recent }
     // Off in Settings, nothing is picked or turned over for it either.
     val featured = rememberFeatured(recent.takeIf { carouselOn })
@@ -357,6 +358,13 @@ internal fun HomePane(
         // On a television too: a carousel arriving after the rows otherwise sits above the screen,
         // out of reach of Up.
         if (carousel && !scrolled) listState.scrollToItem(0)
+        // The carousel gone (no complete page once its fill decided) with the remote on its
+        // stand-in: the remote moves to the first row, now at the top, rather than onto nothing.
+        if (!carousel && !touch && focusedSpot[0] == FEATURED_KEY) {
+            focusedSpot[0] = null
+            withFrameNanos { }
+            runCatching { first.requestFocus() }
+        }
     }
 
     // Asked for as the row would be when it first came on screen, and again after a refresh.
@@ -1366,37 +1374,43 @@ private val TV_DOWN_STEP = 200.dp
 
 /**
  * The carousel's pages from the Recently added row [recent]: null while that row is still being
- * asked for (the carousel then holds its frame with a stand-in), empty for nothing to feature.
- * Ranked once per fill, those with a sharp online picture first ([HomeFeatured.rank]), off the
- * main thread since that reads the metadata cache; a refresh keeps the pages up until new ones
- * are ready.
+ * asked for or the fill is still deciding (the carousel then holds its frame with a stand-in, at
+ * most [HomeFeatured.FILL_WAIT_MS] once the row is in), empty for nothing to feature, which hides
+ * the carousel. Only complete pages ([com.tmplayer.ui.online.completeFeatured]), decided once
+ * per fill so no page comes or goes while it is looked at; a refresh keeps the pages up until
+ * the new ones are decided. With online lookups off there are no complete pages, so none at once.
  */
 @Composable
 private fun rememberFeatured(recent: HomeRow.Recent?): List<com.tmplayer.data.FeaturedPick>? {
     val online = com.tmplayer.online.OnlineMetadata.current
-    val base = remember(recent) { recent?.takeIf { it.loaded }?.let { com.tmplayer.data.HomeFeatured.pick(it.entries) } }
-    var ranked by remember { mutableStateOf<List<com.tmplayer.data.FeaturedPick>?>(null) }
-    LaunchedEffect(base, online) {
-        val picks = base ?: return@LaunchedEffect
-        if (picks.isEmpty()) {
-            ranked = picks
+    val enabled = online?.settings?.collectAsState()?.value?.enabled == true
+    val candidates = remember(recent) {
+        recent?.takeIf { it.loaded }?.let { com.tmplayer.data.HomeFeatured.pick(it.entries, com.tmplayer.data.HomeFeatured.CANDIDATES) }
+    }
+    var decided by remember { mutableStateOf<List<com.tmplayer.data.FeaturedPick>?>(null) }
+    LaunchedEffect(candidates, online, enabled) {
+        if (!enabled) {
+            decided = emptyList()
             return@LaunchedEffect
         }
-        // Ranking asks for each pick's online picture, which on a slow stick took over ten
-        // seconds: the carousel waits a moment for it, then shows the picks in Telegram's order
-        // and takes the ranked order once it is in (the page being looked at stays, by its key).
-        suspend fun rankAll() = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            com.tmplayer.data.HomeFeatured.rank(picks) { sharpOnline(it, online) }
+        val picks = candidates ?: return@LaunchedEffect
+        if (picks.isEmpty()) {
+            decided = picks
+            return@LaunchedEffect
         }
-        val quick = kotlinx.coroutines.withTimeoutOrNull(RANK_WAIT_MS) { rankAll() }
-        ranked = quick ?: picks
-        if (quick == null) ranked = rankAll()
+        // The lookups still unanswered when the wait is up go on in this effect, so their answers
+        // are on the device for the next fill; they stop with it.
+        val keys = try {
+            com.tmplayer.ui.online.completeFeatured(picks, this)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptySet()
+        }
+        decided = picks.filter { it.key in keys }.take(com.tmplayer.data.HomeFeatured.LIMIT)
     }
-    return ranked
+    return if (!enabled) emptyList() else decided
 }
-
-/** How long the carousel waits for its ranked order before showing the picks as they came. */
-private const val RANK_WAIT_MS = 1_200L
 
 
 /**

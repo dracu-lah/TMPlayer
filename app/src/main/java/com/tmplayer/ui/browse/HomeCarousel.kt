@@ -71,9 +71,6 @@ import com.tmplayer.data.FeaturedPick
 import com.tmplayer.data.HomeFeatured
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.SeriesShelf
-import com.tmplayer.online.MetaConfidence
-import com.tmplayer.online.MetaQuery
-import com.tmplayer.online.OnlineMetadata
 import com.tmplayer.ui.components.EdgeBackdrop
 import com.tmplayer.ui.components.BackdropSource
 import com.tmplayer.ui.components.SkeletonBox
@@ -481,16 +478,6 @@ internal fun featuredHeight(width: Dp, height: Dp): Dp =
     } else {
         (width * 1.33f).coerceAtMost(height * VIEWPORT_SHARE).coerceAtLeast(min(MIN_HEIGHT, height * 0.9f))
     }
-
-/** Whether [pick] has a sharp online picture already on this device: see [HomeFeatured.rank]. Reads the disk. */
-internal fun sharpOnline(pick: FeaturedPick, online: OnlineMetadata?): Boolean {
-    online ?: return false
-    val item = pick.item
-    val query = MetaQuery.of(item.nameForParsing, item.caption)?.let { if (pick.isShow) it.showOnly() else it } ?: return false
-    val info = runCatching { online.cachedMatch(query) }.getOrNull() ?: return false
-    if (info.wideUrl == null) return false
-    return MetaConfidence.basis(SeriesShelf.episodeOf(item), info) != null
-}
 
 /**
  * Light status bar icons while the carousel's picture is under the status bar, whatever the

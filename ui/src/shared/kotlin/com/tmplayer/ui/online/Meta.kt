@@ -600,6 +600,88 @@ suspend fun prefetchTitleLogo(item: MediaItem, showOnly: Boolean) {
     prefetchTitleLogo(info)
 }
 
+/**
+ * The keys of [candidates] that make complete Home carousel pages ([HomeFeatured.completeKeys]),
+ * worked out once for a fill, the same on every device. A page is complete when its match is the
+ * one the page itself will show ([rememberMatched]: the viewer's own name for the video first, a
+ * "Wrong match" refused, the provider's runtime asked where the name alone does not vouch for it)
+ * and that match has a wide picture and an overview ([HomeFeatured.isComplete]). A "no match"
+ * answer drops the page; lookups off, or no metadata in this build, leave none. The lookups run in
+ * [scope] off the main thread, at most [HomeFeatured.FILL_WAIT_MS] in all, which also covers the
+ * first page's title logo, so the carousel opens on the logo where TMDB has one.
+ */
+suspend fun completeFeatured(
+    candidates: List<com.tmplayer.data.FeaturedPick>,
+    scope: kotlinx.coroutines.CoroutineScope,
+    limit: Int = com.tmplayer.data.HomeFeatured.LIMIT,
+): Set<String> {
+    val online = OnlineMetadata.current ?: return emptySet()
+    if (!online.settings.value.enabled || candidates.isEmpty()) return emptySet()
+    val began = kotlin.time.TimeSource.Monotonic.markNow()
+    val corrections = com.tmplayer.data.VideoCorrections.state.value
+    val targets = candidates.associate { pick -> pick.key to featuredTarget(pick, corrections[pick.item.id]) }
+    fun known(pick: com.tmplayer.data.FeaturedPick): Boolean? {
+        val target = targets[pick.key] ?: return false
+        if (target.refused) return false
+        val query = target.query ?: return false
+        return when (val answer = online.cachedAnswer(query)) {
+            null, MetaResult.Unavailable -> null
+            MetaResult.Off, MetaResult.NoMatch -> false
+            is MetaResult.Found -> {
+                val info = answer.info
+                when {
+                    !com.tmplayer.data.HomeFeatured.isComplete(info) -> false
+                    online.peekMatched(target.item, target.name, info) != null -> true
+                    // The runtime still to be asked about: a lookup decides.
+                    com.tmplayer.online.MetaConfidence.needsRuntime(target.name, info, target.item.durationSec) -> null
+                    else -> false
+                }
+            }
+        }
+    }
+    suspend fun ask(pick: com.tmplayer.data.FeaturedPick): Boolean? {
+        val target = targets[pick.key] ?: return false
+        val query = target.query ?: return false
+        val info = when (val answer = online.lookup(query)) {
+            is MetaResult.Found -> answer.info
+            MetaResult.Unavailable -> return null
+            MetaResult.Off, MetaResult.NoMatch -> return false
+        }
+        if (!com.tmplayer.data.HomeFeatured.isComplete(info)) return false
+        return online.matched(target.item, target.name, info) != null
+    }
+    val keys = withContext(Dispatchers.IO) {
+        com.tmplayer.data.HomeFeatured.completeKeys(candidates, ::known, ::ask, scope, Dispatchers.IO, limit = limit)
+    }
+    // The first page's title logo within what is left of the wait: the page opens on it rather
+    // than on its name with the logo fading in a moment later.
+    val first = candidates.firstOrNull { it.key in keys }?.let { targets[it.key]?.query }
+    val left = com.tmplayer.data.HomeFeatured.FILL_WAIT_MS - began.elapsedNow().inWholeMilliseconds
+    if (first != null && left > 0) {
+        kotlinx.coroutines.withTimeoutOrNull(left) {
+            try {
+                withContext(Dispatchers.IO) { online.cachedMatch(first) }?.let { prefetchTitleLogo(it) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // No logo ahead: the page sets its name, or fetches the logo itself.
+            }
+        }
+    }
+    return keys
+}
+
+/** A carousel candidate as its page will look it up: the question, the name that checks the answer, and a refused match. */
+private class FeaturedTarget(val item: MediaItem, val query: MetaQuery?, val name: com.tmplayer.data.ParsedName, val refused: Boolean)
+
+private fun featuredTarget(pick: com.tmplayer.data.FeaturedPick, correction: com.tmplayer.data.VideoCorrection?): FeaturedTarget {
+    val item = pick.item
+    val renamed = correction?.title
+    val query = (if (renamed == null) item.metaQuery else MetaQuery.of(renamed, null))?.let { if (pick.isShow) it.showOnly() else it }
+    val name = com.tmplayer.data.SeriesShelf.episodeOf(item, onlyThis(item, correction))
+    return FeaturedTarget(item, query, name, correction?.wrongMatch == true)
+}
+
 /** [info]'s title logo fetched and decoded ahead, with its light page verdict: see [prefetchTitleLogo]. */
 suspend fun prefetchTitleLogo(info: MetaInfo) {
     val online = OnlineMetadata.current ?: return

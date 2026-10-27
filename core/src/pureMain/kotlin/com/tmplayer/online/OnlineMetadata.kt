@@ -841,6 +841,16 @@ class OnlineMetadata(
     }
 
     /**
+     * [cachedMatch] with "nothing matched" kept apart from "not asked yet": the answer kept in
+     * memory or on the disk, [MetaResult.Off] while lookups are off, null when it was never asked.
+     * Reads the disk: run it off the main thread.
+     */
+    fun cachedAnswer(query: MetaQuery): MetaResult? {
+        if (!store.now.enabled) return MetaResult.Off
+        return remembered(query.cacheKey(tmdbLanguage()))
+    }
+
+    /**
      * [extras]' recommendations narrowed to [items] the viewer has, by the matches already made
      * for them (no new lookups). A show is opened at its earliest episode. Run it off the main
      * thread: a title not in memory is read from the disk.
