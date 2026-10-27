@@ -552,8 +552,18 @@ internal fun HomePane(
                             },
                         )
                         // The app's mark and name in the picture's top corner, under the status
-                        // bar, as the desktop sets them (user, 2026-10-22).
-                        PhoneHomeBrand(Modifier.align(Alignment.TopStart).padding(start = start, top = under + BRAND_TOP), onArt = true)
+                        // bar, as the desktop sets them (user, 2026-10-22). A phone on its side
+                        // sets the title's art down the left, so there the name takes the right
+                        // corner and stays off it (user, 2026-10-27).
+                        val sideways = androidx.compose.ui.platform.LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
+                        PhoneHomeBrand(
+                            if (sideways) {
+                                Modifier.align(Alignment.TopEnd).padding(end = end, top = under + BRAND_TOP)
+                            } else {
+                                Modifier.align(Alignment.TopStart).padding(start = start, top = under + BRAND_TOP)
+                            },
+                            onArt = true,
+                        )
                       }
                     }
                 } else if (touch) {
