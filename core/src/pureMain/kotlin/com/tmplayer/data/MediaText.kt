@@ -156,6 +156,63 @@ object MediaText {
             .take(CAPTION_MAX)
     }
 
+    /**
+     * The caption as a detail page's overview, or null when it says nothing the page does not.
+     *
+     * Channels often post a file's own facts as its caption: "FILE NAME : Pulimada 1080P ...",
+     * "Size: 1.4 GB", "Quality - 1080p". The page lists those facts in its details block, and the
+     * same words a second time where an overview goes read as clutter. So a line that is one of
+     * those facts ("key: value" with a key from [FACT_KEYS], an emoji or bullet in front allowed),
+     * a line that is only the file name or the title again, and the channel's links and hashtags
+     * ([captionOf]) are taken off. Anything else is the poster's own words and stays.
+     */
+    fun overviewOf(caption: String?, fileName: String?, title: String?): String? {
+        val text = captionOf(caption)
+        if (text.isEmpty()) return null
+        val repeats = buildSet {
+            fileName?.let { name ->
+                add(plainWords(name))
+                add(plainWords(name.substringBeforeLast('.', name)))
+            }
+            title?.let { add(plainWords(it)) }
+        }.filterTo(HashSet()) { it.isNotEmpty() }
+        return text.lineSequence()
+            .filterNot { line -> isFactLine(line) || (line.isNotBlank() && plainWords(line) in repeats) }
+            .joinToString("\n")
+            .replace(BLANK_RUN, "\n\n")
+            .trim()
+            .takeIf { it.any(Char::isLetterOrDigit) }
+    }
+
+    /** Overload for a video as it is listed. */
+    fun overviewOf(item: MediaItem): String? = overviewOf(item.caption, item.fileName, item.title)
+
+    private fun isFactLine(line: String): Boolean {
+        val match = FACT_LINE.find(line) ?: return false
+        return match.groupValues[1].lowercase().replace(SPACES, " ").trim() in FACT_KEYS
+    }
+
+    /** Lowercase letters and digits with one space between runs, so "A.B_C" and "a b c" match. */
+    private fun plainWords(text: String): String =
+        text.lowercase().replace(NOT_A_LETTER_OR_SPACE, " ").replace(SPACES, " ").trim()
+
+    /** A key at the start of a line (after any emoji, bullet or symbol), then ":", "=", "-", "|" or ">". */
+    private val FACT_LINE = Regex("""^[^\p{L}\p{N}]*([\p{L}][\p{L} ]{0,24}?)\s*[:=|>\-]""")
+    private val SPACES = Regex("""\s+""")
+    private val NOT_A_LETTER_OR_SPACE = Regex("""[^\p{L}\p{N}]+""")
+
+    /** Facts a detail page already shows from the file itself, as channels label them. */
+    private val FACT_KEYS = setOf(
+        "file name", "filename", "file", "name", "title",
+        "size", "file size", "filesize", "total size",
+        "quality", "resolution", "res", "video quality", "print",
+        "codec", "video codec", "audio codec", "video", "audio", "audio track", "audio tracks", "format",
+        "extension", "ext", "container", "type", "file type",
+        "duration", "runtime", "run time", "length",
+        "uploaded by", "upload by", "uploader", "encoded by", "encoder", "ripped by", "posted by", "shared by",
+        "source",
+    )
+
     private fun isBoilerplate(line: String): Boolean {
         if (line.isBlank() || !LINKISH.containsMatchIn(line)) return false
         val rest = line.replace(LINKISH, " ").replace(NOT_A_LETTER, " ").trim().lowercase()

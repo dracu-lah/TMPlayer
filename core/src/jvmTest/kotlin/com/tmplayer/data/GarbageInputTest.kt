@@ -160,6 +160,11 @@ class GarbageInputTest {
             survive("PostStart.parse", text) { PostStart.parse(text) }
             survive("Decimal.parse", text) { Decimal.parse(text) }
             survive("MediaName.parse", text) { MediaName.parse(text); MediaName.parse(text, text) }
+            survive("MediaText.overviewOf", text) {
+                MediaText.overviewOf(text, text, text)
+                MediaText.overviewOf(text, null, "")
+                MediaText.overviewOf("File name: $text\n$text", "$text.mkv", text)
+            }
             survive("VideoCopies.keyOfTitle", text) { VideoCopies.keyOfTitle(text); VideoCopies.languagesIn(text) }
         }
         assertNoFailures()

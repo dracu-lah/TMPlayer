@@ -128,7 +128,7 @@ fun WideDetailPanel(
         ?: parsed.title.ifBlank { item.title }.let { if (' ' in it) it else it.replace(WIDE_JOINERS, " ") }
     val eyebrow = listOfNotNull(parsed.episodeCode, meta?.episode?.name?.takeIf { it.isNotBlank() }).joinToString("  ·  ")
     val metaOverview = meta?.let { it.episode?.overview?.takeIf { o -> o.isNotBlank() } ?: it.overview.takeIf { o -> o.isNotBlank() } }
-    val overview = metaOverview ?: item.caption.takeIf { it.isNotBlank() }
+    val overview = metaOverview ?: remember(item) { com.tmplayer.data.MediaText.overviewOf(item) }
     val extrasState = rememberMetaExtrasState(meta, metaState.settled)
     val extras = extrasState.value
     val logoReady = rememberTitleLogoReady(meta, metaState.settled)
