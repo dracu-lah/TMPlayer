@@ -332,7 +332,7 @@ internal fun LibraryRows(state: ShellState, version: String, chatList: List<com.
     // The chats hidden from their menus (see HiddenChats), listed below with Show.
     val hiddenChats by settings.hiddenChats.collectAsState(initial = emptyList())
     var confirm by remember { mutableStateOf<Confirm?>(null) }
-    var confirmClearWatched by remember { mutableStateOf(false) }
+    val undoToast = com.tmplayer.ui.components.rememberActionToast()
     // A backup file picked, with what restoring it would change, while the prompt is up.
     var restorePlan by remember { mutableStateOf<RestorePlan?>(null) }
     val backups = remember(settings, state.watched, version) {
@@ -446,22 +446,11 @@ internal fun LibraryRows(state: ShellState, version: String, chatList: List<com.
             }
         }
     }
-    if (history.isNotEmpty()) Action(s.settingsClearHistory, s.settingsClearHistoryDetail(history.size), TmIcons.Close, end = RowEnd.None) {
-        confirm = Confirm(
-            title = s.settingsContinueClearTitle,
-            message = s.settingsContinueClearMessage,
-            detail = s.settingsContinueClearDetail,
-        ) {
-            scope.launch {
-                val count = history.size
-                settings.clearWatchHistory()
-                toast(s.settingsContinueCleared(count))
-            }
-        }
-    }
-    if (watchedList.isNotEmpty()) {
-        Action(s.settingsClearWatched, s.settingsClearWatchedDetail(watchedList.size), TmIcons.Close, end = RowEnd.None) {
-            confirmClearWatched = true
+    // One Clear history, as History's own: Continue watching and Watched together, Watch later
+    // kept, done at once and said with Undo.
+    if (history.isNotEmpty() || watchedList.isNotEmpty()) {
+        Action(s.browseClearHistory, s.browseClearHistoryDetail, TmIcons.Close, end = RowEnd.None) {
+            runHistoryEdit(scope, state, undoToast, toast, { s.browseHistoryCleared }, s.browseUndo) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
         }
     }
 
@@ -497,9 +486,6 @@ internal fun LibraryRows(state: ShellState, version: String, chatList: List<com.
 
     OnlineMetadataGroup(Modifier.jumpTarget(jumps.getValue(SetupStep.Posters)))
 
-    if (confirmClearWatched) {
-        ClearWatchedDialog(state, watchedList.size, scope, onDismiss = { confirmClearWatched = false })
-    }
     restorePlan?.let { plan ->
         ConfirmDialog(
             title = s.backupRestoreTitle,

@@ -222,7 +222,6 @@ private sealed interface Prompt {
     /** "Get test versions" being switched on: pre-releases may have bugs, so it is asked first. Off is not asked. */
     data object TestVersions : Prompt
     data object ClearHistory : Prompt
-    data object ClearWatched : Prompt
     data object ClearFavorites : Prompt
 
     /** The chats hidden from their menus, each with Show, and Show all. */
@@ -337,6 +336,8 @@ fun SettingsScreen(
     val videoDecoder by settings.videoDecoder.collectAsStateWithLifecycle(initialValue = com.tmplayer.data.VideoDecoder.Automatic)
     val watchedStore = remember { WatchedStore(context) }
     val watchedList by watchedStore.history.collectAsStateWithLifecycle(initialValue = emptyList())
+    val historyRemoval = com.tmplayer.ui.browse.rememberHistoryRemoval()
+    val touchHere = isTouch()
     // Only those the kids lock shows, as the Favourites tab counts them.
     val storedFavorites by settings.favorites.collectAsStateWithLifecycle(initialValue = emptySet())
     // The chats hidden from their menus (see HiddenChats), for Library's Hidden chats list.
@@ -1284,23 +1285,21 @@ fun SettingsScreen(
                         )
                     }
                 }
-                if (history.isNotEmpty()) {
+                // One Clear history, as History's own: Continue watching and Watched together, Watch
+                // later kept. At once with Undo on a touch screen, asked first under a remote.
+                if (history.isNotEmpty() || watchedList.isNotEmpty()) {
                     item {
                         ActionRow(
-                            title = s.settingsClearHistory,
-                            subtitle = s.settingsClearHistoryDetail(history.size),
+                            title = s.browseClearHistory,
+                            subtitle = s.browseClearHistoryDetail,
                             icon = TmIcons.Close,
-                            onClick = { prompt = Prompt.ClearHistory },
-                        )
-                    }
-                }
-                if (watchedList.isNotEmpty()) {
-                    item {
-                        ActionRow(
-                            title = s.settingsClearWatched,
-                            subtitle = s.settingsClearWatchedDetail(watchedList.size),
-                            icon = TmIcons.Close,
-                            onClick = { prompt = Prompt.ClearWatched },
+                            onClick = {
+                                if (touchHere) {
+                                    historyRemoval.run({ s.browseHistoryCleared }) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
+                                } else {
+                                    prompt = Prompt.ClearHistory
+                                }
+                            },
                         )
                     }
                 }
@@ -2301,35 +2300,15 @@ fun SettingsScreen(
         )
 
         Prompt.ClearHistory -> TvConfirm(
-            title = s.settingsClearHistoryTitle,
-            message = s.settingsClearHistoryMessage,
-            detail = s.settingsClearHistoryUntouched,
+            title = s.browseClearHistoryTitle,
+            message = s.browseClearHistoryMessage(history.size + watchedList.size),
+            detail = s.browseClearHistoryDetail,
             confirmLabel = s.commonClear,
             onConfirm = {
                 prompt = null
-                scope.launch {
-                    val count = history.size
-                    settings.clearWatchHistory()
-                    // What was cleared lives on the browse screen, not this one, so the toast is
-                    // the only sign anything happened.
-                    toast(s.settingsHistoryCleared(count))
-                }
-            },
-            onDismiss = { prompt = null },
-        )
-
-        Prompt.ClearWatched -> TvConfirm(
-            title = s.settingsClearWatchedTitle,
-            message = s.settingsClearWatchedMessage,
-            detail = s.settingsClearWatchedUntouched,
-            confirmLabel = s.commonClear,
-            onConfirm = {
-                prompt = null
-                scope.launch {
-                    val count = watchedList.size
-                    runCatching { watchedStore.clear() }
-                    toast(s.settingsWatchedCleared(count))
-                }
+                historyRemoval.run({ s.browseHistoryCleared }) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
+                // What was cleared lives on History, not here, so the line is the only sign.
+                toast(s.browseHistoryCleared)
             },
             onDismiss = { prompt = null },
         )

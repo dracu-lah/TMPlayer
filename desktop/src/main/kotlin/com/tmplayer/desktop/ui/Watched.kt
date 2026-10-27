@@ -357,27 +357,6 @@ private fun WatchLaterTile(
     )
 }
 
-/** "Clear the watched list?", from the page and from Settings alike. */
-@Composable
-internal fun ClearWatchedDialog(state: ShellState, count: Int, scope: CoroutineScope, onDismiss: () -> Unit) {
-    val s = LocalStrings.current
-    val toast = rememberToast()
-    ConfirmDialog(
-        title = s.watchedClearTitle,
-        message = s.watchedClearMessage,
-        detail = s.watchedClearDetail,
-        confirmLabel = s.commonClear,
-        onConfirm = {
-            onDismiss()
-            scope.launch {
-                runCatching { state.watched.clear() }
-                toast(s.watchedCleared(count))
-            }
-        },
-        onDismiss = onDismiss,
-    )
-}
-
 private const val CLOCK_TICK_MS = 60_000L
 
 /** History's records under day headings, with the grid item that draws each cell. */
