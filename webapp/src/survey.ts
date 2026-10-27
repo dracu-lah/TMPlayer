@@ -17,10 +17,11 @@ export interface Row {
     picture: string
     sound: string
     verdict: string
+    url: string
 }
 
-async function one(chat: string, t: { title: string; item: { key: string; size: number; duration: number } }): Promise<Row> {
-    const row: Row = { chat, title: t.title, size: t.item.size, duration: t.item.duration, container: '?', picture: '?', sound: '?', verdict: '' }
+async function one(chat: string, t: { title: string; item: { key: string; size: number; duration: number; chatId: number; messageId: number } }): Promise<Row> {
+    const row: Row = { chat, title: t.title, size: t.item.size, duration: t.item.duration, container: '?', picture: '?', sound: '?', verdict: '', url: `/watch/${t.item.chatId}/${t.item.messageId}` }
     const f = openFile(t.item as never)
     try {
         const p = await Promise.race([probe(f, t.item.duration), new Promise<never>((_, r) => setTimeout(() => r(new Error('probe timeout')), 40_000))])

@@ -3,8 +3,9 @@ import '@videojs/html/video/player'
 import '@videojs/html/ui/container'
 import { Alert02Icon, Cancel01Icon } from '@hugeicons/core-free-icons'
 import { openFile, streams, warmFile, type TgFile } from '../stream/reader'
-import { codecName, nativeEngine, playableSound, probe, RemuxEngine, route, Unplayable, type Engine, type Probe, type SoundTrack, type Why } from './engines'
+import { codecName, keyFrames, nativeEngine, playableSound, probe, RemuxEngine, route, Unplayable, type Engine, type Probe, type SoundTrack, type Why } from './engines'
 import { LIBAV_FORMATS, LibavEngine } from './libav'
+import { MoviEngine, moviSupported } from './movi'
 import { storyboardFrames, type Frames } from './storyboard'
 import { appleTouch, FrameGrabber } from './seekpreview'
 import { Chrome, variant } from './Chrome'
@@ -149,12 +150,20 @@ export function Player(props: {
         } else setError(t('player.error_other'))
     }
 
+    /** Said once per video: the picture is made here more slowly than it plays. */
+    let saidSlow = ''
+    const slowHere = () => {
+        if (saidSlow === source().key) return
+        saidSlow = source().key
+        setNotice(t('web.slow_decode'))
+    }
+
     /** The remux engine with the first sound track this browser plays; without sound when none does. */
     const remux = async (p: Probe, at: number): Promise<Engine> => {
         const sound = await playableSound(p.audios)
         if (!sound && p.audios.length) setNotice(t('web.no_sound', { codec: codecName(p.audios[0]) }))
         setAudio(sound)
-        const e = new RemuxEngine(video, p, sound, at, { onError: fail, onDetail: (d) => setDetails(`${p.container}. ${d}`) })
+        const e = new RemuxEngine(video, p, sound, at, { onError: (err) => void remuxFailed(err), onDetail: (d) => setDetails(`${p.container}. ${d}`), onSlow: slowHere })
         if (at) video.currentTime = at
         return e
     }
@@ -182,6 +191,7 @@ export function Player(props: {
     const load = async (src: Source, at: number, play: boolean) => {
         const gen = ++generation
         openingAt = at
+        moviTried = ''
         loadStarted = performance.now()
         framed = false
         retryOnline = false
@@ -197,16 +207,28 @@ export function Player(props: {
         streams.set(src.key, f)
         f.warmUp()
         try {
+            // Local testing: ?engine=movi plays the file through movi whatever the browser could do.
+            if (location.hostname === 'localhost' && new URLSearchParams(location.search).get('engine') === 'movi') {
+                return await fallback(new Error('movi asked for'), f, at, play, gen, rate)
+            }
             const p = await probe(f, src.duration).catch((e) => {
                 if (e instanceof Unplayable && e.why.kind === 'format' && LIBAV_FORMATS.has(e.why.format)) return e.why.format
                 throw e
             })
-            if (typeof p === 'string') return await software(f, p, at, play, gen, rate)
+            if (typeof p === 'string') return await fallback(new Unplayable({ kind: 'format', format: p }), f, at, play, gen, rate)
             if (gen !== generation) return p.input.dispose()
             probed = p
             setAudios(p.audios)
             setAudio(p.audios[0] ?? null)
-            if (route(p) === 'native') {
+            let way: 'native' | 'remux'
+            try {
+                way = route(p)
+            } catch (e) {
+                // The browser plays neither the file nor a repack of it (HEVC without a decoder, say): movi next.
+                probed = null
+                return await fallback(e, f, at, play, gen, rate, p)
+            }
+            if (way === 'native') {
                 const url = `/stream/${encodeURIComponent(src.key)}?size=${src.size}&mime=${encodeURIComponent(p.mime.split(';')[0])}`
                 engine = nativeEngine(video, url, at)
                 // A second element on the same stream for the seek bar's frames; not on an iPhone or
@@ -222,6 +244,100 @@ export function Player(props: {
             // The storyboard as soon as the video is open, so it is in by the time the bar is touched.
             void addStoryboard()
         } catch (e) {
+            if (gen !== generation) return
+            // A container mediabunny does not open at all goes to movi too.
+            if (e instanceof Unplayable && e.why.kind === 'format' && file === f) return void fallback(e, f, at, play, gen, rate).catch(fail)
+            fail(e)
+        }
+    }
+
+    /** The source movi was tried on, so a failure there is not handed to movi again. */
+    let moviTried = ''
+
+    /**
+     * What the browser cannot play: movi (FFmpeg and WebCodecs), then libav.js for its containers,
+     * then the reason the video needs the app. A loader stays up throughout; only the last step
+     * shows anything else.
+     */
+    const fallback = async (why: unknown, f: TgFile, at: number, play: boolean, gen: number, rate: number, p: Probe | null = null) => {
+        const container = why instanceof Unplayable && why.why.kind === 'format' ? why.why.format : null
+        // AVI: libav.js first, which plays through the element (picture in picture, AirPlay); movi when it cannot.
+        if (container && LIBAV_FORMATS.has(container)) {
+            try {
+                return await software(f, container, at, play, gen, rate)
+            } catch (e) {
+                if (gen !== generation) return
+                console.warn('[player] libav.js could not play it', e)
+                why = e
+            }
+        }
+        if (moviSupported() && moviTried !== f.key) {
+            moviTried = f.key
+            try {
+                return await viaMovi(f, at, play, gen, rate, p)
+            } catch (e) {
+                if (gen !== generation) return
+                console.warn('[player] movi could not play it', e)
+            }
+        } else p?.input.dispose()
+        throw why
+    }
+
+    /** movi on `f`; mediabunny's reading of the file (`p`), when there is one, finds its key frames and goes with the engine. */
+    const viaMovi = async (f: TgFile, at: number, play: boolean, gen: number, rate: number, p: Probe | null) => {
+        const e = await MoviEngine.open(
+            f,
+            video,
+            at,
+            {
+                onError: (err) => {
+                    if (engine !== e) return
+                    console.warn('[player] movi stopped', err)
+                    fail(err)
+                },
+                onDetail: (d) => setDetails(d),
+                onSlow: slowHere,
+            },
+            p ? keyFrames(p) : null,
+            () => p?.input.dispose(),
+        ).catch((err) => {
+            p?.input.dispose()
+            throw err
+        })
+        if (gen !== generation) return e.destroy()
+        grabber()?.destroy()
+        setGrabber(null)
+        engine = e
+        setAudios(e.sounds)
+        setAudio(e.sounds[0] ?? null)
+        video.playbackRate = rate
+        setSwitchable(e.sounds.length > 1)
+        setDetails(e.detail)
+        if (play) video.play().catch(() => {})
+        void findChapters(f, gen)
+        void addStoryboard()
+    }
+
+    /**
+     * The repack failed part way: movi at the same second when the browser turned the media down (a
+     * codec, a broken stream); Telegram's and the network's failures are said as they are.
+     */
+    const remuxFailed = async (err: unknown) => {
+        const f = file
+        const media = err instanceof Unplayable || err instanceof DOMException || /could not take this part|MediaSource|SourceBuffer|decod|codec|hevc/i.test(String((err as Error)?.message ?? err))
+        if (!f || engine?.name !== 'remux' || !media) return fail(err)
+        const gen = generation
+        const at = video.currentTime || openingAt
+        const rate = video.playbackRate
+        const play = !video.paused
+        console.warn('[player] repack failed, trying movi', err)
+        engine.destroy()
+        engine = null
+        const p = probed
+        probed = null
+        try {
+            await fallback(err, f, at, play, gen, rate, p)
+        } catch (e) {
             if (gen === generation) fail(e)
         }
     }
@@ -236,7 +352,12 @@ export function Player(props: {
         engine.destroy()
         engine = null
         try {
-            if (!p.remuxable) throw new Unplayable({ kind: 'picture', codec: p.videoCodec })
+            if (!p.remuxable) {
+                probed = null
+                if (file) return await fallback(new Unplayable({ kind: 'picture', codec: p.videoCodec }), file, at, true, generation, video.playbackRate, p)
+                p.input.dispose()
+                throw new Unplayable({ kind: 'picture', codec: p.videoCodec })
+            }
             engine = await remux(p, at)
             setSwitchable(true)
             setDetails(`${p.container}. ${engine.detail} (the browser refused it as it is)`)

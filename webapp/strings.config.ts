@@ -451,6 +451,7 @@ export const PAGE_STRINGS = [
     'web.seek_bar',
     'web.settings_storage',
     'web.settings_storage_summary',
+    'web.slow_decode',
     'web.sound_unplayable',
     'web.storage_body_stream',
     'web.storage_breakdown',

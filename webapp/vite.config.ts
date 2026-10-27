@@ -112,8 +112,11 @@ function needsApiId(): Plugin {
     }
 }
 
-/** Built files the service worker leaves for later: the sound decoders, fetched only for some videos. */
-const NOT_IN_SHELL = /^mediabunny-(ac3|aac-encoder|dts)-|\.map$/
+/**
+ * Built files the service worker leaves for later, fetched (and then kept) only for the videos that
+ * need them: the sound decoders, movi-player (player-*, about 10 MB) and hevc.js (hevc-*).
+ */
+const NOT_IN_SHELL = /^mediabunny-(ac3|aac-encoder|dts)-|^player-|^hevc-|\.map$/
 
 /**
  * Writes the built file list and a version made from it into dist/sw.js, which keeps them for

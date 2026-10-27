@@ -340,7 +340,7 @@ for (const size of [
             await press(page, 'Enter')
             await expect.poll(() => focused(page)).toBe('detail-play|')
             await press(page, 'Enter')
-            await expect(page.getByText('This video needs the TMPlayer app')).toBeVisible()
+            await expect(page.getByText('This video needs the TMPlayer app')).toBeVisible({ timeout: 30_000 })
             expect(await page.evaluate(() => !!document.activeElement?.closest('.pc-status'))).toBe(true)
             await press(page, 'Backspace')
             await expect(page).toHaveURL(/\/video\/-1001\/11/)

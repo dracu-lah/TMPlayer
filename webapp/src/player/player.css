@@ -29,6 +29,11 @@
 .player[data-variant="phone"] { --bar-played: #2aabee; }
 .player:fullscreen { width: 100vw; height: 100vh; max-height: none; border-radius: 0; aspect-ratio: auto; }
 .player video { width: 100%; height: 100%; display: block; object-fit: contain; transition: filter 120ms linear; }
+/* movi's picture (player/movi.ts) over the element it stands in for; the element keeps its box. */
+.player .movi-canvas { position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important; display: block; pointer-events: none; }
+.player video.movi-active { opacity: 0; }
+.player .movi-cues { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; pointer-events: none; box-sizing: border-box; padding-inline: 5%; }
+.player .movi-cue { font-family: var(--font); font-size: var(--cue-size, clamp(16px, 4.2cqw, 40px)); color: var(--cue-colour, #fff); background: var(--cue-box, transparent); text-shadow: var(--cue-edge, 0 0 3px #000, 0 0 3px #000, 1px 1px 2px #000); text-align: center; white-space: pre-line; line-height: 1.25; }
 /* Subtitles as the app's default draws them (medium, white, a black outline, no box); Player.tsx sets the look's custom properties. */
 .player video::cue { font-family: var(--font); font-size: var(--cue-size, clamp(16px, 4.2cqw, 40px)); color: var(--cue-colour, #fff); background: var(--cue-box, transparent); text-shadow: var(--cue-edge, 0 0 3px #000, 0 0 3px #000, 1px 1px 2px #000); }
 

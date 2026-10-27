@@ -183,6 +183,7 @@ export class TgFile {
     private async fetch(job: Job) {
         const offset = job.index * this.chunk
         const startedAt = performance.now()
+        let floodWaits = 0
         for (let attempt = 0; ; attempt++) {
             try {
                 // One aligned request per chunk; Telegram returns fewer bytes for the file's tail.
@@ -195,6 +196,14 @@ export class TgFile {
                 job.resolve(this.cache.get(job.index) ?? out)
                 break
             } catch (e) {
+                // Telegram asks to wait: this chunk waits as long as it says (up to a minute, five
+                // times), the other chunks go on, and it is not counted as a failure.
+                const flood = /FLOOD_(?:PREMIUM_)?WAIT_(\d+)/.exec(String((e as Error)?.message ?? e))
+                if (flood && Number(flood[1]) <= 60 && floodWaits++ < 5 && !job.abort.signal.aborted && !this.closed) {
+                    await new Promise((r) => setTimeout(r, Number(flood[1]) * 1000 + 250 + Math.random() * 500))
+                    attempt--
+                    continue
+                }
                 if (job.abort.signal.aborted || this.closed || attempt >= 3 || (e as Error).message === 'gone') {
                     this.jobs.delete(job.index)
                     job.reject(e)
@@ -220,6 +229,12 @@ export class TgFile {
             return bytes.length
         }
         return 0
+    }
+
+    /** Whether a read someone waits on is still on its way (read-ahead not counted). */
+    get waiting(): boolean {
+        for (const job of this.jobs.values()) if (job.urgent) return true
+        return false
     }
 
     get cachedBytes(): number {

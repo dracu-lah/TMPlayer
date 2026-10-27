@@ -18,9 +18,11 @@ for (const name of PLAYS) {
     })
 }
 
+// movi (player/movi.ts) opens these after the repack and libav.js gave up, finds it decodes no
+// picture, and says so after its 10 s watch: hence the longer wait.
 test('a WMV says it needs the app', async ({ page }) => {
     await openCard(page, 'Windows Clip')
-    await expect(page.getByText('This video needs the TMPlayer app')).toBeVisible()
+    await expect(page.getByText('This video needs the TMPlayer app')).toBeVisible({ timeout: 30_000 })
     await expect(page.locator('a[href="https://tmplayer.org/#download"]')).toBeVisible()
 })
 
@@ -31,7 +33,7 @@ test('a damaged AVI says it needs the app', async ({ page }) => {
 
 test('an AVI whose picture libav.js cannot decode says it needs the app', async ({ page }) => {
     await openCard(page, 'Odd Picture Clip')
-    await expect(page.getByText('This video needs the TMPlayer app')).toBeVisible()
+    await expect(page.getByText('This video needs the TMPlayer app')).toBeVisible({ timeout: 30_000 })
 })
 
 test('an AVI with sound libav.js cannot decode plays without it, and says so', async ({ page }) => {

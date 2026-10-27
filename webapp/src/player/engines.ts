@@ -19,6 +19,7 @@ import {
     type StreamTargetChunk,
 } from 'mediabunny'
 import type { TgFile } from '../stream/reader'
+import type { HevcTranscoder, Transcoded } from './hevc'
 
 export interface Probe {
     input: Input
@@ -39,6 +40,8 @@ export interface Probe {
     remuxable: boolean
     /** The picture codec in plain words, for messages. */
     videoCodec: string
+    /** HEVC this browser cannot decode, turned into H.264 by hevc.js on the way (player/hevc.ts). */
+    transcode: boolean
 }
 
 /** Why a file cannot play here: the page says "needs the app" with the reason. */
@@ -159,8 +162,13 @@ export async function probe(file: TgFile, durationHint: number): Promise<Probe> 
     const probeEl = document.createElement('video')
     const native = isoOrWebm && probeEl.canPlayType(asMp4) !== '' && !!navigator.serviceWorker?.controller
     const vcodec = (await video?.getCodecParameterString().catch(() => null)) ?? null
-    const remuxable = !!MS && !!vcodec && MS.isTypeSupported(`video/mp4; codecs="${vcodec.replace(/^hev1/, 'hvc1')}"`)
-    return { input, container: format.name, video, audios, duration, base, mime: asMp4, native, remuxable, videoCodec: codecName(video) }
+    let remuxable = !!MS && !!vcodec && MS.isTypeSupported(`video/mp4; codecs="${vcodec.replace(/^hev1/, 'hvc1')}"`)
+    // No HEVC decoder here: hevc.js can stand it in as H.264 where the browser encodes that.
+    let transcode = false
+    if (!remuxable && !native && vcodec && /^(hev1|hvc1)/.test(vcodec) && (await (await import('./hevc')).canTranscodeHevc())) {
+        transcode = remuxable = true
+    }
+    return { input, container: format.name, video, audios, duration, base, mime: asMp4, native, remuxable, videoCodec: codecName(video), transcode }
 }
 
 /**
@@ -249,10 +257,12 @@ export interface EngineEvents {
     onError?: (e: unknown) => void
     /** The engine's `detail` changed (another sound track, converted or copied). */
     onDetail?: (detail: string) => void
+    /** The picture is made more slowly than it plays (a software decode on a slow device): said once. */
+    onSlow?: () => void
 }
 
 export interface Engine {
-    readonly name: 'native' | 'remux' | 'libav'
+    readonly name: 'native' | 'remux' | 'libav' | 'movi'
     readonly detail: string
     /** Plays another sound track; false when this browser cannot play that one. */
     setAudio?(track: SoundTrack): Promise<boolean>
@@ -294,6 +304,10 @@ export abstract class FeedEngine implements Engine {
     private seekTimer: ReturnType<typeof setTimeout> | undefined
     private watchdog: ReturnType<typeof setTimeout> | undefined
     private retries = 0
+    /** Set by a repack of HEVC this browser cannot decode: each fragment goes through it first. */
+    protected transcoder: HevcTranscoder | null = null
+    /** Whether the transcoded fragments carry the (AAC) sound too. */
+    protected transcodedSound = false
     // A drag over the seek bar fires `seeking` dozens of times a second: only where it settles is
     // fed, not every place it passed.
     private readonly onSeeking = () => {
@@ -377,6 +391,7 @@ export abstract class FeedEngine implements Engine {
 
     destroy() {
         this.destroyed = true
+        this.transcoder?.destroy()
         this.gen++
         this.wake?.()
         this.stop().catch(() => {})
@@ -449,7 +464,7 @@ export abstract class FeedEngine implements Engine {
             this.retries++
             mark(`stalled, run again ${this.retries}`, this.t0 || performance.now())
             this.restart(v.currentTime)
-        }, STALL_MS)
+        }, this.transcoder ? STALL_MS * 2.5 : STALL_MS)
     }
 
     private async clearBuffer() {
@@ -470,6 +485,37 @@ export abstract class FeedEngine implements Engine {
      */
     protected sink(gen: number, output: () => Output, offset: () => number, codec: string): StreamTarget {
         let written = 0
+        const tx = this.transcoder
+        const boxes = tx ? new Boxes() : null
+        /** Converted fragments in the order they went in, while the workers work on several at once. */
+        const inflight: { result: Promise<Transcoded | null>; times: number[] }[] = []
+        /** The run's first fragment's times, in and out, which the others are placed from (see [placeTimes]). */
+        let first: { in: number[]; out: number[] } | null = null
+        const put = async (data: Uint8Array, mime?: string) => {
+            const sb = await this.sourceBuffer(output(), offset(), codec, mime)
+            await this.roomAhead(gen)
+            if (gen !== this.gen) return false
+            await this.append(sb, data)
+            this.retries = 0
+            if (this.t0) {
+                mark(`first append ${data.length} B`, this.t0)
+                this.t0 = 0
+            }
+            return true
+        }
+        const putConverted = async () => {
+            const next = inflight.shift()!
+            const r = await next.result
+            if (debug && !r) console.debug('[hevc] skipped', gen, 'current', this.gen)
+            if (!r || gen !== this.gen) return false
+            if (tx?.slow()) this.ev.onSlow?.()
+            if (r.bytes) first = placeTimes(r.bytes, next.times, first)
+            if (debug && r.init) console.debug('[hevc] first fragment', r.codec)
+            // hevc.js names both tracks itself when the sound is in (avc1...,mp4a.40.2).
+            const mime = `video/mp4; codecs="${r.codec.includes(',') || !this.transcodedSound ? r.codec : `${r.codec},mp4a.40.2`}"`
+            for (const data of [r.init, r.bytes]) if (data && !(await put(data, mime))) return false
+            return true
+        }
         return new StreamTarget(
             new WritableStream<StreamTargetChunk>({
                 write: async (chunk) => {
@@ -478,22 +524,29 @@ export abstract class FeedEngine implements Engine {
                     if (chunk.position < written) return
                     written = chunk.position + chunk.data.length
                     if (chunk.position === 0) relabelHevc(chunk.data)
-                    const sb = await this.sourceBuffer(output(), offset(), codec)
-                    await this.roomAhead(gen)
-                    if (gen !== this.gen) return
-                    await this.append(sb, chunk.data)
-                    this.retries = 0
-                    if (this.t0) {
-                        mark(`first append ${chunk.data.length} B`, this.t0)
-                        this.t0 = 0
+                    if (!tx || !boxes) return void (await put(chunk.data))
+                    // HEVC in, H.264 out: the init segment starts the run in the workers, each fragment comes back converted.
+                    for (const piece of boxes.push(chunk.data)) {
+                        if (Boxes.isInit(piece)) {
+                            const ok = await tx.init(gen, piece)
+                            if (debug) console.debug('[hevc] init', gen, ok, 'current', this.gen)
+                            if (!ok) return
+                            continue
+                        }
+                        const times = tfdts(piece)
+                        inflight.push({ result: tx.media(gen, piece), times })
+                        while (inflight.length >= tx.parallel) if (!(await putConverted())) return
                     }
+                },
+                close: async () => {
+                    while (inflight.length && gen === this.gen) if (!(await putConverted())) return
                 },
             }),
         )
     }
 
-    private async sourceBuffer(output: Output, offset: number, codec: string): Promise<SourceBuffer> {
-        const mime = (await output.getMimeType()).replace(/hev1\./g, 'hvc1.')
+    private async sourceBuffer(output: Output, offset: number, codec: string, as?: string): Promise<SourceBuffer> {
+        const mime = as ?? (await output.getMimeType()).replace(/hev1\./g, 'hvc1.')
         if (!this.sb) {
             if (!MS!.isTypeSupported(mime)) throw new Unplayable({ kind: 'picture', codec })
             this.sb = this.ms.addSourceBuffer(mime)
@@ -610,12 +663,19 @@ export class RemuxEngine extends FeedEngine {
     }
 
     protected async stop() {
+        // What the workers still convert for the old place is not waited for.
+        this.transcoder?.abandon()
         const previous = this.conversion
         this.conversion = null
         await previous?.cancel()
     }
 
     protected async produce(gen: number, t: number) {
+        if (this.p.transcode && !this.transcoder) {
+            const { HevcTranscoder } = await import('./hevc')
+            if (this.destroyed) return
+            this.transcoder = new HevcTranscoder()
+        }
         const key = await this.keySink.getKeyPacket(t + this.p.base, { metadataOnly: true }).catch(() => null)
         // Before the first key frame (or none found): from the start.
         const from = Math.max(key?.timestamp ?? this.p.base, this.p.base)
@@ -654,12 +714,28 @@ export class RemuxEngine extends FeedEngine {
 
     private async soundPlan() {
         const track = this.audio
+        this.transcodedSound = false
         if (!track) {
             this.detail = 'Remuxed to MP4, no sound'
             return null
         }
         const sound = await soundOf(track)
         if (sound.kind === 'none') return null
+        this.transcodedSound = true
+        if (this.p.transcode) {
+            // hevc.js passes AAC through and nothing else: anything but AAC becomes AAC.
+            if (sound.kind === 'copy' && track.codec === 'aac') {
+                this.detail = `HEVC converted to H.264 here, sound copied (AAC)`
+                return {}
+            }
+            const channels = await aacEncoder(Math.min(2, track.numberOfChannels || 2))
+            if (!channels) {
+                this.transcodedSound = false
+                return null
+            }
+            this.detail = `HEVC converted to H.264 here, sound converted from ${codecName(track)} to AAC`
+            return { codec: 'aac', numberOfChannels: channels, sampleRate: 48000, quality: QUALITY_HIGH, forceTranscode: true } as const
+        }
         if (sound.kind === 'copy') {
             this.detail = `Remuxed to MP4, sound copied (${codecName(track)})`
             return {}
@@ -689,3 +765,112 @@ function relabelHevc(data: Uint8Array) {
 }
 
 if (debug) (window as unknown as { probe: typeof probe }).probe = probe
+
+/**
+ * The key frame at or before `t` (the player's seconds), read from the file's index or clusters
+ * by mediabunny; null when it cannot say within `budgetMs`. movi lands a software-decoded seek
+ * there instead of decoding its way to the exact second.
+ */
+export function keyFrames(p: Probe, budgetMs = 2000): ((t: number) => Promise<number | null>) | null {
+    if (!p.video) return null
+    const sink = new EncodedPacketSink(p.video)
+    return async (t) => {
+        const key = sink.getKeyPacket(t + p.base, { metadataOnly: true }).then((k) => (k ? Math.max(0, k.timestamp - p.base) : null), () => null)
+        return Promise.race([key, new Promise<null>((r) => setTimeout(() => r(null), budgetMs))])
+    }
+}
+
+/** An AAC encoder for `channels`: the browser's, else mediabunny's in WebAssembly; the channels it takes, or null. */
+async function aacEncoder(channels: number): Promise<number | null> {
+    const config = { numberOfChannels: channels, sampleRate: 48000 }
+    if (await canEncodeAudio('aac', config)) return channels
+    if (!aacRegistered) {
+        const { registerAacEncoder } = await import('@mediabunny/aac-encoder')
+        registerAacEncoder()
+        aacRegistered = true
+    }
+    return (await canEncodeAudio('aac', config)) ? channels : null
+}
+
+/**
+ * Joins the MP4 writer's pieces into whole top-level boxes, as hevc.js takes them: ftyp with moov
+ * as one, then each moof with its mdat.
+ */
+class Boxes {
+    private pending = new Uint8Array(0)
+
+    static isInit(data: Uint8Array): boolean {
+        if (data.length < 8) return false
+        const type = String.fromCharCode(data[4], data[5], data[6], data[7])
+        return type === 'ftyp' || type === 'moov'
+    }
+
+    push(data: Uint8Array): Uint8Array[] {
+        const joined = new Uint8Array(this.pending.length + data.length)
+        joined.set(this.pending)
+        joined.set(data, this.pending.length)
+        const view = new DataView(joined.buffer)
+        const out: Uint8Array[] = []
+        let start = 0
+        let at = 0
+        while (at + 8 <= joined.length) {
+            let size = view.getUint32(at)
+            if (size === 1) {
+                if (at + 16 > joined.length) break
+                size = Number(view.getBigUint64(at + 8))
+            }
+            if (size < 8 || at + size > joined.length) break
+            const type = String.fromCharCode(joined[at + 4], joined[at + 5], joined[at + 6], joined[at + 7])
+            at += size
+            if (type === 'moov' || type === 'mdat') {
+                out.push(joined.slice(start, at))
+                start = at
+            }
+        }
+        this.pending = joined.slice(start)
+        return out
+    }
+}
+
+/** Where each track fragment's decode time (tfdt) sits in a moof, in track order. */
+function tfdtAt(data: Uint8Array): number[] {
+    const at: number[] = []
+    const v = new DataView(data.buffer, data.byteOffset, data.byteLength)
+    const walk = (from: number, to: number) => {
+        for (let i = from; i + 8 <= to; ) {
+            const size = v.getUint32(i)
+            if (size < 8 || i + size > to) return
+            const type = String.fromCharCode(data[i + 4], data[i + 5], data[i + 6], data[i + 7])
+            if (type === 'moof' || type === 'traf') walk(i + 8, i + size)
+            else if (type === 'tfdt') at.push(i)
+            i += size
+        }
+    }
+    walk(0, data.length)
+    return at
+}
+
+function tfdts(data: Uint8Array): number[] {
+    const v = new DataView(data.buffer, data.byteOffset, data.byteLength)
+    return tfdtAt(data).map((i) => (data[i + 8] === 1 ? Number(v.getBigUint64(i + 12)) : v.getUint32(i + 12)))
+}
+
+/**
+ * hevc.js numbers a worker's fragments by counting them, not from their own decode times, so with
+ * several workers each would start where the run did. The run's first fragment is taken as it
+ * comes; every later one is placed as far after it as its input was after the first input.
+ */
+function placeTimes(out: Uint8Array, input: number[], first: { in: number[]; out: number[] } | null) {
+    const at = tfdtAt(out)
+    const v = new DataView(out.buffer, out.byteOffset, out.byteLength)
+    const read = (i: number) => (out[i + 8] === 1 ? Number(v.getBigUint64(i + 12)) : v.getUint32(i + 12))
+    if (!first) return at.length === input.length ? { in: input, out: at.map(read) } : null
+    if (at.length !== input.length || first.in.length !== input.length) return first
+    at.forEach((i, k) => {
+        const t = Math.max(0, first.out[k] + (input[k] - first.in[k]))
+        if (out[i + 8] === 1) v.setBigUint64(i + 12, BigInt(t))
+        else v.setUint32(i + 12, t)
+    })
+    return first
+}
+

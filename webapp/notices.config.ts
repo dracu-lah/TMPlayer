@@ -64,6 +64,13 @@ function ffmpeg(): string {
         'loaded only when an AVI file plays, so they can be replaced with your own build of the same names.',
         'The exact sources (FFmpeg, libav.js, emfiberthreads) and the build script are served beside them:',
         '/libav/sources/ (README.txt there), and are in TMPlayer\'s repository under webapp/libav/.',
+        '',
+        "Videos the browser plays neither as they are nor repacked are played by movi-player (Apache 2.0,",
+        'listed above), whose WebAssembly part is a build of FFmpeg (libavformat, libavcodec 63.1.102,',
+        'libavutil, libswresample, libswscale) with dav1d (BSD 2-Clause), no GPL parts. It comes inside',
+        "movi-player's own file (assets/player-*.js), loaded only when such a video plays.",
+        'How it is built, with the code that joins it to FFmpeg: https://github.com/mrujjwalg/movi-player',
+        '(wasm/ and scripts/), dav1d: https://code.videolan.org/videolan/dav1d',
     ].join('\n')
 }
 
