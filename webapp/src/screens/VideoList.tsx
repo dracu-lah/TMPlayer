@@ -6,7 +6,7 @@ import { loadBackdrop, loadPoster } from './posters'
 import { warmDataCentres, warmFile } from '../stream/reader'
 import { t } from '../i18n'
 import { form } from '../form'
-import { cardLayout, rowLayout, VirtualGrid } from '../ui/VirtualGrid'
+import { cardLayout, VirtualGrid } from '../ui/VirtualGrid'
 import { placeSponsored, SponsoredCard } from './Sponsored'
 import type { SponsoredItem, Tile, VideoItem } from '../tg/types'
 import type { PosterAsk } from '../rules'
@@ -55,7 +55,7 @@ const cardPath = (v: VideoItem, direct?: boolean) => (direct || form() === 'tv' 
  * is one, as the app's PosterArt does, and the name is left to the poster (kept for screen
  * readers). A lookup that fails, or posters turned off, leaves the thumbnail.
  */
-function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk | null; progress?: number; bare?: boolean }) {
+function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk | null; progress?: number }) {
     let el!: HTMLDivElement
     const [src, setSrc] = createSignal<string | null>(null)
     const [seen, setSeen] = createSignal(false)
@@ -81,7 +81,7 @@ function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk
         onCleanup(() => (live = false))
     })
     return (
-        <div class="card-art" classList={{ posted: !!picture(), bare: !!props.bare }} ref={el} title={picture() ? props.title : undefined}>
+        <div class="card-art" classList={{ posted: !!picture() }} ref={el} title={picture() ? props.title : undefined}>
             <Show when={src()}>
                 <img class="card-fill" src={src()!} alt="" decoding="async" />
                 <img class="card-frame" src={src()!} alt="" decoding="async" />
@@ -169,24 +169,6 @@ export function Card(props: { card: CardData; progress?: number; replace?: boole
         <A class="card" {...cardLink(props.card.item, props.direct, props.replace)}>
             <CardArt thumb={props.card.item.thumb} title={props.card.title} poster={props.card.item.poster} progress={props.progress} />
             <div class="card-facts">{props.card.facts}</div>
-        </A>
-    )
-}
-
-/**
- * One video as a row (the apps' MediaRow, "As rows"): a small 2:3 poster, the name over up to three
- * lines and a line of facts under it. No card round it: rows read as a list on spacing alone.
- */
-export function RowCard(props: { card: CardData; progress?: number }) {
-    return (
-        <A class="row-card" {...cardLink(props.card.item)}>
-            <div class="row-art">
-                <CardArt thumb={props.card.item.thumb} title={props.card.title} poster={props.card.item.poster} progress={props.progress} bare />
-            </div>
-            <div class="row-text">
-                <div class="row-name">{props.card.title}</div>
-                <div class="row-facts">{props.card.facts}</div>
-            </div>
         </A>
     )
 }
@@ -281,18 +263,14 @@ const isSponsored = (e: CardData | SponsoredItem): e is SponsoredItem => !('item
  * A grid of portrait cards, drawn a few rows at a time. `onEnd` asks for more near the foot. A
  * channel's sponsored messages take rows of their own, spaced as Telegram asks.
  */
-export function VideoList(props: { cards: CardData[]; label?: string; onEnd?: () => void; sponsored?: SponsoredItem[]; sponsoredBetween?: number; rows?: boolean }) {
+export function VideoList(props: { cards: CardData[]; label?: string; onEnd?: () => void; sponsored?: SponsoredItem[]; sponsoredBetween?: number }) {
     useWarmDataCentres(() => props.cards.map((c) => c.item))
     onCleanup(() => clearTimeout(hoverTimer))
     const progress = useProgress()
     const entries = () => placeSponsored(props.cards, props.sponsored ?? [], props.sponsoredBetween ?? 0)
-    // Plain calls, not `props.rows ? a : b` in the JSX: the compiler would make a memo of that, and
-    // the virtualizer reads `layout` from its own callbacks, outside any owner (one leaked memo per read).
-    const layout = () => (props.rows ? rowLayout : cardLayout)
-    const rowClass = () => (props.rows ? 'rowcards' : 'cards')
     return (
-        <VirtualGrid items={entries()} layout={layout()} rowClass={rowClass()} label={props.label} onEnd={props.onEnd} wide={isSponsored}>
-            {(e) => (isSponsored(e) ? <SponsoredCard item={e} /> : props.rows ? <RowCard card={e} progress={progress(e.item)} /> : <Card card={e} progress={progress(e.item)} />)}
+        <VirtualGrid items={entries()} layout={cardLayout} rowClass="cards" label={props.label} onEnd={props.onEnd} wide={isSponsored}>
+            {(e) => (isSponsored(e) ? <SponsoredCard item={e} />  : <Card card={e} progress={progress(e.item)} />)}
         </VirtualGrid>
     )
 }
