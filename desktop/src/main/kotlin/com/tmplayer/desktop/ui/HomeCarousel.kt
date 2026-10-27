@@ -94,8 +94,6 @@ import com.tmplayer.data.HomeRow
 import com.tmplayer.data.MediaItem
 import com.tmplayer.data.Series
 import com.tmplayer.data.SeriesShelf
-import com.tmplayer.online.MetaConfidence
-import com.tmplayer.online.MetaQuery
 import com.tmplayer.online.OnlineMetadata
 import com.tmplayer.ui.browse.CarouselDots
 import com.tmplayer.ui.browse.FeaturedInfo
@@ -118,6 +116,7 @@ import com.tmplayer.ui.theme.Tone
 import com.tmplayer.ui.theme.floatingBorder
 import com.tmplayer.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.Dispatchers
+import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -566,49 +565,63 @@ private fun FeaturedSkeleton(side: Dp) {
 
 /**
  * The carousel's pages: what [HomeFeatured.pick] chooses from the Recently added row [recent],
- * mixed with Continue watching [resume] ([HomeFeatured.mix]), only pages with a picture of their
- * own. A Continue watching record joins once its video is in [art]. Null while Recently added is
- * still being asked for, empty for nothing to feature. Ranked once per fill, sharp online pictures
- * first, off the main thread since that reads the metadata cache.
+ * mixed with Continue watching [resume] ([HomeFeatured.mix]): films and shows of at least
+ * [HomeFeatured.MIN_BYTES] whose pages are complete ([com.tmplayer.ui.online.completeFeatured]).
+ * A Continue watching record joins once its video is in [art]. Null while Recently added is still
+ * being asked for or the fill is deciding (the skeleton, at most [HomeFeatured.FILL_WAIT_MS] once
+ * the row is in), empty for nothing to feature, which hides the carousel. Decided once per fill, so
+ * no page comes or goes while it is looked at; with online lookups off, empty at once.
  */
 @Composable
 internal fun rememberFeatured(recent: HomeRow.Recent?, resume: HomeRow.Continue?, art: Map<String, MediaItem>): List<FeaturedPick>? {
     val online = OnlineMetadata.current
-    // More than a carousel's worth, so pages without a picture can be passed over.
-    val fresh = remember(recent) { recent?.takeIf { it.loaded }?.let { HomeFeatured.pick(it.entries, HomeFeatured.LIMIT * 2) } }
+    val enabled = online?.settings?.collectAsState()?.value?.enabled == true
+    // More than a carousel's worth, so pages without a match or a picture can be passed over.
+    val fresh = remember(recent) {
+        recent?.takeIf { it.loaded }?.let { HomeFeatured.pick(it.entries, HomeFeatured.CANDIDATES - HomeFeatured.LIMIT) }
+    }
     val going = remember(resume, art) {
         resume?.records.orEmpty().mapNotNull { art[com.tmplayer.data.SettingsStore.progressKey(it.chatId, it.messageId)] }
     }
-    var ranked by remember { mutableStateOf<List<FeaturedPick>?>(null) }
-    LaunchedEffect(fresh, going, online) {
+    // Looked up: the new pages, and a carousel's worth of Continue watching's films and shows. A
+    // record's picture arriving refills only when it adds one of those, not for every card.
+    val resumable = remember(going) {
+        going.asSequence().map { FeaturedPick(com.tmplayer.data.ShelfEntry.File(it)) }
+            .filter(HomeFeatured::eligible).take(HomeFeatured.LIMIT).toList()
+    }
+    val resumeKeys = remember(resumable) { resumable.map { it.key } }
+    val latestResumable by androidx.compose.runtime.rememberUpdatedState(resumable)
+    var decided by remember { mutableStateOf<List<FeaturedPick>?>(null) }
+    LaunchedEffect(fresh, resumeKeys, online, enabled) {
+        val resumable = latestResumable
+        if (!enabled) {
+            decided = emptyList()
+            return@LaunchedEffect
+        }
         // Recently added still on its way: the skeleton, not the empty carousel worked out before
         // the row was there, which dropped the frame and let the loader go before the carousel.
         if (recent != null && fresh == null) {
-            ranked = null
+            decided = null
             return@LaunchedEffect
         }
-        suspend fun order(sharp: (FeaturedPick) -> Boolean) = withContext(Dispatchers.IO) {
-            val mixed = HomeFeatured.mix(fresh.orEmpty(), going, online = sharp)
-            if (mixed.isEmpty()) mixed else HomeFeatured.rank(mixed, sharp)
+        val candidates = (fresh.orEmpty() + resumable).distinctBy { it.key }
+        if (candidates.isEmpty()) {
+            decided = emptyList()
+            return@LaunchedEffect
         }
-        val online = { pick: FeaturedPick -> sharpOnline(pick, online) }
-        // Asking for every pick's online picture can take seconds: after a moment the carousel
-        // shows the picks without it, and takes the ranked order once it is in.
-        val quick = kotlinx.coroutines.withTimeoutOrNull(RANK_WAIT_MS) { order(online) }
-        ranked = quick ?: order { false }
-        if (quick == null) ranked = order(online)
+        val keys = try {
+            com.tmplayer.ui.online.completeFeatured(candidates, this, limit = candidates.size)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptySet()
+        }
+        // Off the main thread: the copies' online keys ([SameTitle]) read the metadata cache.
+        decided = withContext(Dispatchers.IO) {
+            HomeFeatured.mix(fresh.orEmpty(), resumable.map { it.item }, complete = { it.key in keys })
+        }
     }
-    return ranked
-}
-
-/** Whether [pick] has a sharp online picture already on this device: see [HomeFeatured.rank]. */
-private fun sharpOnline(pick: FeaturedPick, online: OnlineMetadata?): Boolean {
-    online ?: return false
-    val item = pick.item
-    val query = MetaQuery.of(item.nameForParsing, item.caption)?.let { if (pick.isShow) it.showOnly() else it } ?: return false
-    val info = runCatching { online.cachedMatch(query) }.getOrNull() ?: return false
-    if (info.wideUrl == null) return false
-    return MetaConfidence.basis(SeriesShelf.episodeOf(item), info) != null
+    return if (!enabled) emptyList() else decided
 }
 
 /** How tall the carousel is in a page [width] by [height]: wide, never most of the window. */
@@ -648,9 +661,6 @@ private val PAGE_FOOT = 12.dp
 
 /** Between a page's name and Play. */
 private val WORDS_GAP = 8.dp
-
-/** How long the carousel waits for its ranked order before showing the picks without it. */
-private const val RANK_WAIT_MS = 1_200L
 
 /** The most a title logo takes over the desktop's carousel. */
 private val DESKTOP_LOGO_MAX_WIDTH = 420.dp

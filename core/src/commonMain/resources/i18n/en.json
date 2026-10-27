@@ -2344,6 +2344,7 @@
     "hold_speed_detail": "Plays fast for as long as a finger is held on the picture",
     "hold_speed_detail_desktop": "Plays fast for as long as the left mouse button is held on the picture",
     "home_carousel": "Carousel on Home",
+    "home_carousel_no_online": "Hidden while Posters and details is off: each page needs a picture and an overview",
     "home_carousel_off": "Off: Home opens on Continue watching and Recently added",
     "home_carousel_on": "The newest videos turn over in a large picture at the top of Home",
     "home_chats_no_match": "No chat matches",

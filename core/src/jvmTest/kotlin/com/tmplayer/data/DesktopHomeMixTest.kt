@@ -30,40 +30,50 @@ class DesktopHomeMixTest {
     fun `new and part way through take turns, two of the latter at most`() {
         val new = (1..6).map { video("New Film ${'A' + it} ${2000 + it}.mkv", date = 100 - it) }
         val going = (1..4).map { video("Going Film ${'A' + it} ${1990 + it}.mkv", date = 10 - it) }
-        val mixed = HomeFeatured.mix(fresh(*new.toTypedArray()), going)
+        val mixed = HomeFeatured.mix(fresh(*new.toTypedArray()), going, complete = { true })
         assertEquals(listOf(new[0], going[0], new[1], going[1], new[2]).map { it.id }, mixed.map { it.item.id })
     }
 
     @Test
     fun `either side fills the other's places`() {
         val going = (1..4).map { video("Going Film ${'A' + it} ${1990 + it}.mkv", date = 10 - it) }
-        assertEquals(4, HomeFeatured.mix(emptyList(), going).size)
+        assertEquals(4, HomeFeatured.mix(emptyList(), going, complete = { true }).size)
         val new = (1..2).map { video("New Film ${'A' + it} ${2000 + it}.mkv", date = 100 - it) }
-        assertEquals(2, HomeFeatured.mix(fresh(*new.toTypedArray()), emptyList()).size)
+        assertEquals(2, HomeFeatured.mix(fresh(*new.toTypedArray()), emptyList(), complete = { true }).size)
     }
 
     @Test
     fun `an episode part way through stands for its show`() {
         val episode = video("Three.Body.Problem.S01E02.1080p.mkv", date = 10)
-        val page = HomeFeatured.mix(emptyList(), listOf(episode)).single()
+        val page = HomeFeatured.mix(emptyList(), listOf(episode), complete = { true }).single()
         assertNull(page.series)
         assertTrue(page.isShow)
         assertEquals("S01E02", page.loneEpisodeCode)
         assertEquals("three body problem", page.loneEpisode?.title?.lowercase())
-        val film = HomeFeatured.mix(emptyList(), listOf(video("Night.Train.2019.1080p.mkv", date = 5))).single()
+        val film = HomeFeatured.mix(emptyList(), listOf(video("Night.Train.2019.1080p.mkv", date = 5)), complete = { true }).single()
         assertTrue(!film.isShow)
         assertNull(film.loneEpisodeCode)
     }
 
     @Test
-    fun `nothing without a picture, and one page for a film in both`() {
+    fun `nothing incomplete, and one page for a film in both`() {
         val bare = video("Bare Film 2001.mkv", date = 50, art = false)
         val both = video("Night.Train.2019.1080p.mkv", date = 40)
         val copy = video("Night.Train.2019.720p.mkv", date = 5, chatId = 2)
-        val mixed = HomeFeatured.mix(fresh(bare, both), listOf(copy))
+        // Telegram's own thumbnail does not make a page complete; only the online match does.
+        val mixed = HomeFeatured.mix(fresh(bare, both), listOf(copy), complete = { it.item.id != bare.id })
         assertEquals(listOf(both.id), mixed.map { it.item.id })
-        // The providers' picture counts as one.
-        assertEquals(2, HomeFeatured.mix(fresh(bare, both), listOf(copy), online = { it.item.id == bare.id }).size)
+        assertEquals(2, HomeFeatured.mix(fresh(bare, both), listOf(copy), complete = { true }).size)
+        assertTrue(HomeFeatured.mix(fresh(bare, both), listOf(copy), complete = { false }).isEmpty())
+    }
+
+    @Test
+    fun `Continue watching's small files and clips stay out of the carousel`() {
+        val small = video("Small Film 2001.mkv", date = 10).copy(sizeBytes = 100 * SizeFilter.MB)
+        val clip = video("holiday_clip_b.mp4", date = 9).copy(durationSec = 90)
+        val film = video("Night.Train.2019.1080p.mkv", date = 8)
+        val mixed = HomeFeatured.mix(emptyList(), listOf(small, clip, film), complete = { true })
+        assertEquals(listOf(film.id), mixed.map { it.item.id })
     }
 
     @Test

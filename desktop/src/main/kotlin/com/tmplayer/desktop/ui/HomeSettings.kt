@@ -57,11 +57,17 @@ internal fun HomeLayoutRows(state: ShellState, chatList: List<ChatSummary>) {
     val scope = rememberCoroutineScope()
     val layout by settings.homeLayout.collectAsState(initial = HomeLayout())
     var picking by remember { mutableStateOf(false) }
+    val metaOn = com.tmplayer.online.OnlineMetadata.current?.settings?.collectAsState()?.value?.enabled == true
 
     Group(s.settingsHomeRows)
     Toggle(
         s.settingsHomeCarousel,
-        if (layout.carousel) s.settingsHomeCarouselOn else s.settingsHomeCarouselOff,
+        when {
+            !layout.carousel -> s.settingsHomeCarouselOff
+            // Each page needs its online picture and overview: none while lookups are off.
+            !metaOn -> s.settingsHomeCarouselNoOnline
+            else -> s.settingsHomeCarouselOn
+        },
         layout.carousel,
         icon = TmIcons.Home,
     ) { scope.launch { settings.setHomeCarousel(it) } }

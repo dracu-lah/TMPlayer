@@ -301,6 +301,8 @@ fun SettingsScreen(
     val openLastChat by settings.openLastChat.collectAsStateWithLifecycle(initialValue = false)
     // Every row on until read, which is the stored default.
     val homeLayout by settings.homeLayout.collectAsStateWithLifecycle(initialValue = com.tmplayer.data.HomeLayout())
+    // Posters and details on, which the Home carousel's pages need (its line says so when off).
+    val metaOn = com.tmplayer.online.OnlineMetadata.current?.settings?.collectAsStateWithLifecycle()?.value?.enabled == true
     var pickingHomeSource by remember { mutableStateOf(false) }
     var pickingHomeChats by remember { mutableStateOf(false) }
     // The single video watching leaves behind. Empty until the first read, which reads the same as
@@ -1341,7 +1343,12 @@ fun SettingsScreen(
                     ToggleRow(
                         title = s.settingsHomeCarousel,
                         modifier = Modifier.focusRequester(landing),
-                        subtitle = if (homeLayout.carousel) s.settingsHomeCarouselOn else s.settingsHomeCarouselOff,
+                        subtitle = when {
+                            !homeLayout.carousel -> s.settingsHomeCarouselOff
+                            // Each page needs its online picture and overview: none while lookups are off.
+                            !metaOn -> s.settingsHomeCarouselNoOnline
+                            else -> s.settingsHomeCarouselOn
+                        },
                         icon = TmIcons.Home,
                         checked = homeLayout.carousel,
                         onToggle = { scope.launch { settings.setHomeCarousel(!homeLayout.carousel) } },

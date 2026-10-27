@@ -89,7 +89,7 @@ class SameTitleTest {
     fun `the desktop carousel does not repeat a film from Continue watching under another name`() {
         val fresh = HomeFeatured.pick(listOf(ShelfEntry.File(video(1, 10, "Khalifa 2026 1080p.mkv"))), online = noOnline)
         val going = listOf(video(2, 20, "Khalifa.mkv", caption = "Khalifa (2026)"))
-        val mixed = HomeFeatured.mix(fresh, going, matched = noOnline)
+        val mixed = HomeFeatured.mix(fresh, going, complete = { true }, matched = noOnline)
         assertEquals(1, mixed.size)
     }
 
