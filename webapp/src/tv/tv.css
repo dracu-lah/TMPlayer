@@ -202,11 +202,13 @@ html[data-form=tv][data-tv-keys] .search-field:has(input[data-tv-locked]:focus) 
 html[data-form=tv] .search-field:has(input[data-tv-locked]:focus) input::placeholder { color: inherit; }
 
 /* ---- Buttons and links ---- */
-html[data-form=tv] button.primary, html[data-form=tv] .danger-button, html[data-form=tv] a.primary-link, html[data-form=tv] button.tonal {
-  min-height: calc(var(--dp) * 40); padding: calc(var(--dp) * 8) calc(var(--dp) * 24); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20);
+html[data-form=tv] button.primary, html[data-form=tv] .danger-button, html[data-form=tv] a.primary-link, html[data-form=tv] button.tonal,
+html[data-form=tv] .outline-button {
+  height: auto; min-height: calc(var(--dp) * 40); padding: calc(var(--dp) * 8) calc(var(--dp) * 24); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20);
 }
 html[data-form=tv][data-tv-keys] button.primary:focus, html[data-form=tv][data-tv-keys] .danger-button:focus,
-html[data-form=tv][data-tv-keys] a.primary-link:focus, html[data-form=tv][data-tv-keys] button.tonal:focus { transform: scale(var(--focus-scale)); }
+html[data-form=tv][data-tv-keys] a.primary-link:focus, html[data-form=tv][data-tv-keys] button.tonal:focus,
+html[data-form=tv][data-tv-keys] .outline-button:focus { transform: scale(var(--focus-scale)); }
 html[data-form=tv] button.link, html[data-form=tv] a.link {
   padding: calc(var(--dp) * 6) calc(var(--dp) * 12); margin-inline-start: calc(var(--dp) * -12); border-radius: 999px; align-self: start;
   font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20);

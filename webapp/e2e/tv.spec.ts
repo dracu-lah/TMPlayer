@@ -25,6 +25,17 @@ async function tv(page: Page) {
     )
 }
 
+/**
+ * How far, in px, `inner` sits from the middle of `outer` along one axis; with no `inner`, the words'
+ * row against the button's (0 when the button is a single centred row).
+ */
+const offCentre = (page: Page, outer: string, inner: string, axis: 'x' | 'y') =>
+    page.locator(outer).first().evaluate((el, [inner, axis]) => {
+        const mid = (r: DOMRect) => (axis === 'x' ? r.left + r.width / 2 : r.top + r.height / 2)
+        if (!inner) return getComputedStyle(el).display.endsWith('flex') && getComputedStyle(el).alignItems === 'center' ? 0 : 99
+        return Math.abs(mid(el.getBoundingClientRect()) - mid(el.querySelector(inner)!.getBoundingClientRect()))
+    }, [inner, axis] as const)
+
 /** What has the focus: its address, label or words. */
 const focused = (page: Page) =>
     page.evaluate(() => {
@@ -119,6 +130,9 @@ for (const size of [
             expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('dark')
             for (let i = 0; i < 30 && !(await focused(page)).includes('danger-button'); i++) await press(page, 'ArrowDown')
             expect(await focused(page)).toContain('danger-button')
+            // Its icon beside the words, not on a line above them (the TV's Settings is not .set).
+            expect(await offCentre(page, '.danger-button', 'svg', 'y')).toBeLessThanOrEqual(1)
+            expect(await offCentre(page, '.outline-button', '', 'y')).toBe(0)
             await press(page, 'Enter')
             await expect(page.locator('dialog[open]')).toHaveCount(1)
             expect(await page.evaluate(() => !!document.activeElement?.closest('dialog[open]'))).toBe(true)
@@ -195,6 +209,8 @@ for (const size of [
             await expect.poll(() => paused(page)).toBe(true)
             expect(await controlsUp(page)).toBe(true)
             expect(await onControl(page)).toBe('disc')
+            // The glyph in the middle of its disc: the TV's text-pill padding on button.tonal pushed it 7 px right.
+            expect(await offCentre(page, '.pc-play', '.pc-play-glyph', 'x')).toBeLessThanOrEqual(1)
             // OK on the disc plays again (the 4 s test clip loops so the walk below has time).
             await press(page, 'Enter')
             await expect.poll(() => paused(page)).toBe(false)

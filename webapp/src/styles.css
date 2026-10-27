@@ -127,7 +127,9 @@ button.primary:disabled { opacity: .5; cursor: default; }
 button.primary:active:not(:disabled), a.button.primary:active, .danger-button:active { transform: scale(.96); }
 button.link { background: none; border: 0; color: var(--accent); padding: 8px 0; }
 a.link { color: var(--accent); text-decoration: none; display: inline-block; padding: 8px 0; }
+/* An icon and its words on one row, centred on each other, wherever the button sits (the TV's Settings is not .set). */
 .danger-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   align-self: start; background: none; color: var(--error); border: 1px solid var(--line); border-radius: 999px;
   min-height: 44px; padding: 10px 24px; font-weight: 500; transition: transform var(--fast) var(--ease), background var(--fast);
 }
@@ -937,7 +939,8 @@ button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 64px 16px; text-align: center; color: var(--muted); }
 .empty-state p { max-width: 420px; font-size: 14px; line-height: 20px; }
 .empty-disc { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-high); color: var(--accent); }
-.outline-button { display: inline-flex; align-items: center; height: 36px; padding: 0 16px; border: 1px solid var(--line); border-radius: 999px; color: var(--fg); text-decoration: none; font-size: 13px; font-weight: 500; }
+/* A link or a button alike: as a <button> it would keep the browser's grey fill and system font. */
+.outline-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--fg); text-decoration: none; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
 .outline-button:hover { background: var(--surface); }
 
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

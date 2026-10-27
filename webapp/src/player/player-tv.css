@@ -36,7 +36,8 @@
   border-width: calc(var(--u) * 4) !important; pointer-events: none;
 }
 .pc[data-variant="tv"] .pc-btn:hover, .pc[data-variant="tv"] .pc-btn:active { background-color: transparent; transform: none; }
-.pc[data-variant="tv"] .pc-btn.tonal { background-color: var(--tonal-button); }
+/* tv.css pads every button.tonal as a text pill (8 by 24): here that squeezed the play disc's glyph 7 px right. */
+.pc[data-variant="tv"] .pc-btn.tonal { background-color: var(--tonal-button); padding: 0; min-height: 0; }
 .pc[data-variant="tv"] .pc-btn:focus, .pc[data-variant="tv"] .pc-btn.tonal:focus,
 .pc[data-variant="tv"] .pc-chip-button:focus, .pc[data-variant="tv"] .pc-readout:focus {
   background-color: #fff; color: var(--on-focus); outline: none; box-shadow: none;
