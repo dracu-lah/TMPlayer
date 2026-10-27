@@ -51,11 +51,13 @@ for (const size of [
             await tv(page)
         })
 
-        test('Home: carousel first, rows, Back from the player returns to the card, Back goes to the bar', async ({ page }) => {
+        // The fake account's files are under 400 MB, so Home has no carousel and opens on its first card.
+        test('Home: no carousel to show opens on the first card, rows, Back from the player returns to the card, Back goes to the bar', async ({ page }) => {
             await page.goto('/')
             await expect(page.locator('html')).toHaveAttribute('data-form', 'tv')
-            await expect.poll(() => focused(page)).toContain('tv-hero-play')
-            await press(page, 'ArrowDown', 3)
+            await expect.poll(() => focused(page)).toContain('card|/watch/')
+            await expect(page.locator('.tv-hero')).toHaveCount(0)
+            await press(page, 'ArrowDown', 2)
             await press(page, 'ArrowRight', 2)
             const card = await focused(page)
             expect(card).toContain('card|/watch/')
@@ -73,7 +75,7 @@ for (const size of [
 
         test('Chats and a chat: the bar keeps the remote, a chat opens on its first card, the sort menu and Back', async ({ page }) => {
             await page.goto('/')
-            await expect.poll(() => focused(page)).toContain('tv-hero-play')
+            await expect.poll(() => focused(page)).toContain('card|/watch/')
             await press(page, 'ArrowUp')
             await press(page, 'ArrowRight')
             await press(page, 'Enter')
@@ -104,7 +106,7 @@ for (const size of [
 
         test('Settings: a choice is made with OK, not by moving; Sign out asks, Back closes the question onto it', async ({ page }) => {
             await page.goto('/')
-            await expect.poll(() => focused(page)).toContain('tv-hero-play')
+            await expect.poll(() => focused(page)).toContain('card|/watch/')
             await press(page, 'ArrowUp')
             await press(page, 'ArrowLeft', 3)
             await press(page, 'Enter')
@@ -282,7 +284,22 @@ for (const size of [
         test('Player: a file that needs the app puts the remote on its sheet, and Back leaves', async ({ page }) => {
             await page.goto('/chat/-1001')
             await expect.poll(() => focused(page)).toContain('card|/watch/')
-            for (let i = 0; i < 40 && !(await page.evaluate(() => document.activeElement?.textContent?.includes('Windows Clip'))); i++) await press(page, 'ArrowRight')
+            // Toward the WMV with the arrows, whatever the columns: the sponsored card after the third video breaks the first row.
+            for (let i = 0; i < 30; i++) {
+                const way = await page.evaluate(() => {
+                    const at = document.activeElement
+                    const goal = [...document.querySelectorAll('a.card')].find((c) => c.textContent?.includes('Windows Clip'))
+                    if (!at || !goal || at === goal) return ''
+                    const f = at.getBoundingClientRect()
+                    const g = goal.getBoundingClientRect()
+                    if (g.top >= f.bottom) return 'ArrowDown'
+                    if (g.bottom <= f.top) return 'ArrowUp'
+                    return g.left > f.left ? 'ArrowRight' : 'ArrowLeft'
+                })
+                if (!way) break
+                await press(page, way)
+            }
+            expect(await focused(page)).toBe('card|/watch/-1001/11')
             await press(page, 'Enter')
             await expect(page.getByText('This video needs the TMPlayer app')).toBeVisible()
             expect(await page.evaluate(() => !!document.activeElement?.closest('.pc-status'))).toBe(true)

@@ -1,4 +1,4 @@
-// Session 19b: Settings as pages, a chat's info, "As rows", Continue watching's landscape cards, sign in's
+// Session 19b: Settings as pages, a chat's info and bar, Continue watching's landscape cards, sign in's
 // centring and the video page's TMDB words and copies, phone and desktop.
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
@@ -109,8 +109,11 @@ test.describe('Settings as pages', () => {
             await expect(page.locator('html')).toHaveAttribute('data-form', 'tv')
             // The TV's Settings is one page: back on the desktop, the page it was on comes back.
             await expect(page).toHaveURL(/\/settings$/)
-            await page.getByRole('radio', { name: 'Desktop' }).click({ force: true })
-            await expect(page.locator('html')).toHaveAttribute('data-form', 'desktop')
+            // A click while the TV's Settings is still taking the desktop's place can land on the page going away: clicked again then.
+            await expect(async () => {
+                await page.getByRole('radio', { name: 'Desktop' }).click({ force: true })
+                await expect(page.locator('html')).toHaveAttribute('data-form', 'desktop', { timeout: 2000 })
+            }).toPass()
             await expect(page).toHaveURL(/\/settings\/appearance$/)
             await expect(page.getByRole('radio', { name: 'TV' })).toBeVisible()
         })
@@ -147,35 +150,16 @@ test.describe('a chat', () => {
 
     test.describe('on a phone', () => {
         test.use(IN.phone)
-        test('As rows swaps the tiles for rows, keeps its place across a reload, and As tiles brings them back', async ({ page }) => {
+        test("the chat's bar has a phone's order: Favourite, Search, Sort", async ({ page }) => {
             await page.goto('/chat/-1001')
-            await expect(page.locator('.card').first()).toBeVisible()
-            await page.getByTitle('Show as rows').click()
-            await expect(page.locator('.row-card').first()).toBeVisible()
-            await expect(page.locator('.card')).toHaveCount(0)
-            // A phone's row is a 56 wide poster beside the name, in one column.
-            const box = await page.locator('.row-art').first().boundingBox()
-            expect(Math.round(box!.width)).toBe(56)
-            await page.reload()
-            await expect(page.locator('.row-card').first()).toBeVisible()
-            await page.getByTitle('Show as tiles').click()
-            await expect(page.locator('.card').first()).toBeVisible()
-            await expect(page.locator('.row-card')).toHaveCount(0)
-        })
-    })
-
-    test.describe('on a phone', () => {
-        test.use(IN.phone)
-        test("the chat's bar has a phone's order: Favourite, As rows, Search, Sort", async ({ page }) => {
-            await page.goto('/chat/-1001')
-            await expect(page.locator('.chat-bar .nav-label')).toHaveText(['Favourite', 'As rows', 'Search', 'Sort'])
+            await expect(page.locator('.chat-bar .nav-label')).toHaveText(['Favourite', 'Search', 'Sort'])
         })
     })
     test.describe('on a desktop', () => {
         test.use(IN.desktop)
-        test("the chat's bar has a desktop's order: Search, Favourite, Sort, As rows", async ({ page }) => {
+        test("the chat's bar has a desktop's order: Search, Favourite, Sort", async ({ page }) => {
             await page.goto('/chat/-1001')
-            await expect(page.locator('.chat-bar .nav-label')).toHaveText(['Search', 'Favourite', 'Sort', 'As rows'])
+            await expect(page.locator('.chat-bar .nav-label')).toHaveText(['Search', 'Favourite', 'Sort'])
         })
     })
 
@@ -185,7 +169,7 @@ test.describe('Continue watching', () => {
     test.describe('on a desktop', () => {
         test.use(IN.desktop)
         test('Home and History show landscape cards with how long is left, a pill of progress and the card name', async ({ page }) => {
-            await leave(page, [[-1002, 16, 600, 1700]])
+            await leave(page, [[-1002, 19, 600, 1700]])
             await page.goto('/')
             const card = page.locator('.continue-card').first()
             await expect(card).toBeVisible()
@@ -196,7 +180,7 @@ test.describe('Continue watching', () => {
             const art = await card.locator('.continue-art').boundingBox()
             expect(Math.round((art!.width / art!.height) * 100)).toBe(178)
             // It plays at once.
-            await expect(card).toHaveAttribute('href', /\/watch\/-1002\/16$/)
+            await expect(card).toHaveAttribute('href', /\/watch\/-1002\/19$/)
             await page.goto('/history/continue')
             await expect(page.locator('.continue-card')).toHaveCount(1)
             await expect(page.getByRole('heading', { name: 'Today' })).toBeVisible()
@@ -283,7 +267,7 @@ test.describe('a video page', () => {
 
     test('a film posted three times lists its copies, and choosing one turns the page to it', async ({ page }) => {
         await mockTmdb(page)
-        await page.goto('/video/-1005/23')
+        await page.goto('/video/-1005/26')
         const summary = page.locator('.detail-copy-summary')
         await expect(summary).toContainText('1080p · H.264 · Blu-ray')
         await expect(summary).toContainText('3 versions')
@@ -294,7 +278,7 @@ test.describe('a video page', () => {
         await expect(options.nth(0)).toContainText('4K')
         await expect(options.nth(1)).toHaveAttribute('aria-selected', 'true')
         await options.nth(2).click()
-        await expect(page).toHaveURL(/\/video\/-1005\/24$/)
+        await expect(page).toHaveURL(/\/video\/-1005\/27$/)
         await expect(page.locator('.detail-copy-summary')).toContainText('720p')
     })
 })

@@ -59,7 +59,9 @@ test('a show card draws the poster for the title the app asks about, and nothing
     expect(seen.asks[0].get('s')).toBe('1')
     // One lookup for the show's one card, however many episodes it holds, and its picture at the card's size.
     expect(seen.asks).toHaveLength(1)
-    expect(seen.pictures).toEqual(['/tmdb/img/w342/harbournotes0.jpg'])
+    // w185 unless the card's screen pixels need more, as posters.ts picks it.
+    const px = await page.locator('.card-art').evaluate((el) => el.getBoundingClientRect().width * Math.min(2, devicePixelRatio))
+    expect(seen.pictures).toEqual([`/tmdb/img/${px <= 260 ? 'w185' : 'w342'}/harbournotes0.jpg`])
     // TMDB itself is never contacted by the page: only the worker is, so the key stays there.
     expect(seen.others).toEqual([])
     // The poster carries the title; the name stays for screen readers and as a tooltip.

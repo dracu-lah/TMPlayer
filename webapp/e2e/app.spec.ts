@@ -36,7 +36,9 @@ test('a chat is arranged by the app rules, with what Telegram restricts left out
 
 test('the default size limits hide the small test files and say so', async ({ page }) => {
     await openClips(page)
-    await expect(page.getByText('No videos here of 50 MB or more.')).toBeVisible()
+    // 400 MB is the default minimum, as in the apps, and the chat's chip counts what it hides.
+    await expect(page.getByText('No videos here of 400 MB or more.')).toBeVisible()
+    await expect(page.getByRole('button', { name: /^15 videos are hidden by their size/ })).toHaveText('15 hidden')
 })
 
 test('thousands of chats stay a short list on the page', async ({ page }) => {

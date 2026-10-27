@@ -482,11 +482,11 @@ export function SignIn() {
                                 <Show when={qr()} fallback={<div class="loader on-white" role="progressbar" aria-label={t('login.qr_renewing')} />}>
                                     <div class="qr-code" role="img" aria-label={t('login.qr_description')} innerHTML={qr()!} />
                                 </Show>
-                                <div class="qr-veil" classList={{ on: scanned() }} aria-hidden={!scanned()}>
+                                <div class="qr-veil" classList={{ on: scanned() }} aria-hidden={!scanned()} inert={!scanned()}>
                                     <span class="qr-tick"><Icon icon={Tick02Icon} size={32} /></span>
                                     <b>{t('login.qr_scanned')}</b>
                                 </div>
-                                <div class="qr-veil" classList={{ on: qrExpired() && !scanned() }} aria-hidden={!(qrExpired() && !scanned())}>
+                                <div class="qr-veil" classList={{ on: qrExpired() && !scanned() }} aria-hidden={!(qrExpired() && !scanned())} inert={!(qrExpired() && !scanned())}>
                                     <b>{t('login.qr_expired')}</b>
                                     <button type="button" class="qr-refresh on-white" onClick={refreshQr}>
                                         <Icon icon={RefreshIcon} size={20} />
