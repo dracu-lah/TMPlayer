@@ -59,6 +59,7 @@ class SeekPreviewShotsTest {
         backdrop: Color,
         frames: FrameSource? = null,
         board: DesktopStoryboard? = null,
+        settleMs: Long = 300,
     ) {
         var before = ByteArray(0)
         val png = ImageComposeScene(width, 540, Density(1f)) {
@@ -111,8 +112,10 @@ class SeekPreviewShotsTest {
             scene.render(600_000_000)
             Thread.sleep(500)
             scene.render(900_000_000)
-            Thread.sleep(300)
-            scene.render(1_200_000_000).encodeToData(EncodedImageFormat.PNG)!!.bytes
+            Thread.sleep(settleMs)
+            // The picture fades in from the frame it lands on: drawn again once the fade is over.
+            scene.render(1_200_000_000)
+            scene.render(1_600_000_000).encodeToData(EncodedImageFormat.PNG)!!.bytes
         }
         assertTrue(png.size > 1000)
         // What the hover added above the times row: there is a card, and it is whole inside the
@@ -156,6 +159,8 @@ class SeekPreviewShotsTest {
             for ((edge, f) in listOf("left" to 0.0f, "mid" to 0.5f, "right" to 1.0f)) {
                 shot("frame-$label-$edge-dark", w, f, dark, FrameSource { frame() })
                 shot("frame-$label-$edge-light", w, f, light, FrameSource { frame() })
+                shot("fallback-$label-$edge-dark", w, f, dark, FrameSource { null }, settleMs = 1_800)
+                shot("waiting-$label-$edge-dark", w, f, dark, FrameSource { kotlinx.coroutines.delay(10_000); null })
                 shot("time-only-$label-$edge-dark", w, f, dark, null)
                 shot("time-only-$label-$edge-light", w, f, light, null)
             }

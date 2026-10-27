@@ -801,9 +801,10 @@ private fun TimeBar(
         val labelX = dragX ?: hoverX
         if (labelX != null && duration > 0) {
             val at = SeekMath.timeAt(labelX, width, duration)
-            // The picture for the moment under the pointer, where there is one (Telegram's
-            // storyboard, CP80, else the video's own frame), over its time in a chip.
-            SeekPreview(SeekMath.clock(at), at, labelX, width, Modifier.align(Alignment.TopStart))
+            // The card for the moment under the pointer (Telegram's storyboard, CP80, else the
+            // video's own frame), with its time in a chip. Placed from the bar's left edge in a
+            // right to left layout too: the bar and the pointer's x run left to right there.
+            SeekPreview(SeekMath.clock(at), at, labelX, width, Modifier.align(androidx.compose.ui.AbsoluteAlignment.TopLeft))
         }
     }
 }
