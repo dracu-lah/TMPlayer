@@ -153,6 +153,12 @@ object Backups {
         "downloads_sort" to Kind.TEXT,
         "hold_speed" to Kind.FLOAT,
         "home_carousel" to Kind.BOOL,
+        "home_continue" to Kind.BOOL,
+        "home_recent" to Kind.BOOL,
+        // The chats ticked for Recently added, by id, as one text setting ([HomeLayout.encodeChats]).
+        "home_recent_chats" to Kind.TEXT,
+        "home_recent_source" to Kind.TEXT,
+        "home_starred_rows" to Kind.BOOL,
         "language" to Kind.TEXT,
         "lighter_pictures" to Kind.BOOL,
         "low_storage_mode" to Kind.BOOL,

@@ -71,6 +71,11 @@ private val TRICKPLAY = booleanPreferencesKey("trickplay")
 private val WATCH_NEXT = booleanPreferencesKey("watch_next")
 private val TV_CHANNELS = booleanPreferencesKey("tv_channels")
 private val HOME_CAROUSEL = booleanPreferencesKey("home_carousel")
+private val HOME_CONTINUE = booleanPreferencesKey("home_continue")
+private val HOME_RECENT = booleanPreferencesKey("home_recent")
+private val HOME_STARRED_ROWS = booleanPreferencesKey("home_starred_rows")
+private val HOME_RECENT_SOURCE = stringPreferencesKey("home_recent_source")
+private val HOME_RECENT_CHATS = stringPreferencesKey("home_recent_chats")
 private val CRASH_REPORTS = booleanPreferencesKey("crash_reports")
 private val LAST_CHAT = longPreferencesKey("last_chat")
 private val MIN_SIZE = longPreferencesKey("min_size_bytes")
@@ -1087,6 +1092,39 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     suspend fun setHomeCarousel(value: Boolean) {
         prefs.edit { it[HOME_CAROUSEL] = value }
+    }
+
+    /** Which rows Home shows and where Recently added reads from ([HomeLayout]); every row on by default. */
+    val homeLayout: Flow<HomeLayout> = read {
+        HomeLayout.of(
+            carousel = it[HOME_CAROUSEL],
+            continueWatching = it[HOME_CONTINUE],
+            recentlyAdded = it[HOME_RECENT],
+            starredRows = it[HOME_STARRED_ROWS],
+            source = it[HOME_RECENT_SOURCE],
+            chats = it[HOME_RECENT_CHATS],
+        )
+    }
+
+    suspend fun setHomeContinue(value: Boolean) {
+        prefs.edit { it[HOME_CONTINUE] = value }
+    }
+
+    suspend fun setHomeRecent(value: Boolean) {
+        prefs.edit { it[HOME_RECENT] = value }
+    }
+
+    suspend fun setHomeStarredRows(value: Boolean) {
+        prefs.edit { it[HOME_STARRED_ROWS] = value }
+    }
+
+    suspend fun setHomeRecentSource(value: RecentSource) {
+        prefs.edit { it[HOME_RECENT_SOURCE] = value.name }
+    }
+
+    /** The chats ticked for Recently added; an empty set clears the setting. */
+    suspend fun setHomeRecentChats(ids: Set<Long>) {
+        prefs.edit { if (ids.isEmpty()) it.remove(HOME_RECENT_CHATS) else it[HOME_RECENT_CHATS] = HomeLayout.encodeChats(ids) }
     }
 
     // ---- the support window ----------------------------------------------------------------

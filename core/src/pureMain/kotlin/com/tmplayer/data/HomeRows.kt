@@ -89,6 +89,16 @@ sealed interface HomeRow {
         val starredOnly: Boolean = true,
         /** The chats it draws from, which its See all page reads on through ([HomeRows.seeAll]). */
         val chatIds: List<Long> = emptyList(),
+        /**
+         * False when Settings turned the row off but kept the carousel, which is drawn from it:
+         * the row is there for the carousel's pages and is not drawn as a row ([HomeLayout]).
+         */
+        val asRow: Boolean = true,
+        /**
+         * Recently added reads chosen chats ([RecentSource.Chosen]) and none is chosen, or none of
+         * them is left in the chat list: a line in the row's place says so and leads to Settings.
+         */
+        val noneChosen: Boolean = false,
     ) : HomeRow {
         override val key: String get() = "recent"
 
@@ -126,6 +136,12 @@ object HomeRows {
 
     /** Tiles per row. Ten fill a television's width twice over and keep each row cheap to compose. */
     const val LIMIT = 10
+
+    /**
+     * Chosen chats Recently added waits on before it says it found nothing: the ones Home reads
+     * at once (HomeViewModel's EAGER_CHATS). The rest count through the search across chats.
+     */
+    const val CHOSEN_WAIT = 8
 
     /** Starred chats it takes for Recently added: one alone already has a row of its own. */
     const val RECENT_MIN_STARRED = 2
@@ -214,8 +230,14 @@ object HomeRows {
         starred: Set<Long>? = null,
         autoFill: Boolean = false,
         chatsPending: Boolean = false,
+        layout: HomeLayout = HomeLayout(),
+        recentFrom: List<Long>? = null,
+        noneChosen: Boolean = false,
     ): List<HomeRow> = buildList<HomeRow> {
         val seen = HashSet<String>()
+        // Continue watching off: nothing is in progress as far as Home goes, so a film part way
+        // through still shows in its chat's row rather than vanishing from Home altogether.
+        val continueWatching = if (layout.continueWatching) continueWatching else emptyList()
 
         val distinct = continueWatching.distinctBy { keyOf(it.chatId, it.messageId) }
         val everyResume = foldCopies(distinct)
@@ -233,13 +255,21 @@ object HomeRows {
         val inContinue = HashSet(seen)
 
         val homeChats = favourites.distinctBy { it.id }
-        val homeIds = homeChats.mapTo(HashSet()) { it.id }
-        val homeOrder = homeChats.map { it.id }
+        // The chats Recently added draws from: Home's chats, or the chosen ones (in Home's order).
+        val homeOrder = if (recentFrom == null) homeChats.map { it.id } else recentFrom.distinct()
+        val homeIds = homeOrder.toHashSet()
         val starredOnly = starred == null || homeIds.all { it in starred }
-        if (homeChats.size >= recentMinStarred.coerceAtLeast(1) || (autoFill && (recent == null || chatsPending))) {
+        val asRow = layout.recentlyAdded
+        val wanted = layout.needsRecent
+        if (wanted && noneChosen) {
+            add(HomeRow.Recent(emptyList(), loaded = true, starredOnly = false, asRow = asRow, noneChosen = true))
+        } else if (wanted && recentFrom != null && homeIds.isEmpty()) {
+            // Chosen chats, none of them in the chat list yet: it is still on its way.
+            add(HomeRow.Recent(emptyList(), loaded = false, starredOnly = false, asRow = asRow))
+        } else if (wanted && (homeIds.size >= recentMinStarred.coerceAtLeast(1) || (recentFrom == null && autoFill && (recent == null || chatsPending)))) {
             val starredIds = homeIds
             if (recent == null) {
-                add(HomeRow.Recent(emptyList(), loaded = false, starredOnly = starredOnly, chatIds = homeOrder))
+                add(HomeRow.Recent(emptyList(), loaded = false, starredOnly = starredOnly, chatIds = homeOrder, asRow = asRow))
             } else {
                 // The search across chats reaches a starred chat further back than its own row's
                 // fetch, and a starred chat's fetch fills in whatever the search did not reach.
@@ -247,12 +277,12 @@ object HomeRows {
                 // A copy, so the rows below still show these videos in their own chats.
                 val entries = row(pool, HashSet(inContinue), shownCopies, inContinue)
                 if (entries.isNotEmpty()) {
-                    add(HomeRow.Recent(entries, loaded = true, starredOnly = starredOnly, chatIds = homeOrder))
-                } else if (chatsPending || starredIds.any { it !in loaded }) {
+                    add(HomeRow.Recent(entries, loaded = true, starredOnly = starredOnly, chatIds = homeOrder, asRow = asRow))
+                } else if (chatsPending || (if (recentFrom == null) starredIds.any { it !in loaded } else homeOrder.take(CHOSEN_WAIT).any { it !in loaded })) {
                     // Nothing yet, but a starred chat's own videos are still on their way: the row
                     // stays as loading, so the carousel holds its place rather than vanishing and
                     // coming back once they land (seen on a cold start on the TV stick).
-                    add(HomeRow.Recent(emptyList(), loaded = false, starredOnly = starredOnly, chatIds = homeOrder))
+                    add(HomeRow.Recent(emptyList(), loaded = false, starredOnly = starredOnly, chatIds = homeOrder, asRow = asRow))
                 }
             }
         }
@@ -268,7 +298,8 @@ object HomeRows {
         // A row for each starred chat, under Recently added, in the chat list's order (user,
         // 2026-10-23: carousel, Continue watching, Recently added, then the favourites). The chats
         // Home picked for itself feed Recently added and the carousel only.
-        homeChats.filter { starred == null || it.id in starred }.forEach { chat ->
+        // Off in Settings: no starred chat has a row, and none is read for one.
+        if (layout.starredRows) homeChats.filter { starred == null || it.id in starred }.forEach { chat ->
             val items = loaded[chat.id]
             if (items == null) {
                 add(HomeRow.Chat(chat.id, chat.title, emptyList(), loaded = false))
@@ -492,7 +523,8 @@ object HomeRows {
             is HomeRow.WatchLater -> row.copy(records = row.records.filter { pictured(it.chatId, it.messageId) })
             is HomeRow.NewEpisodes -> row.copy(episodes = row.episodes.filter { HomeFeatured.hasArt(it.item) })
             is HomeRow.Chat -> if (!row.loaded) return row else row.copy(entries = row.entries.filter(HomeFeatured::hasArt))
-            is HomeRow.Recent -> if (!row.loaded) return row else row.copy(entries = row.entries.filter(HomeFeatured::hasArt))
+            // The line saying no chosen chat is there stands as it is.
+            is HomeRow.Recent -> if (!row.loaded || row.noneChosen) return row else row.copy(entries = row.entries.filter(HomeFeatured::hasArt))
         }
         val empty = when (kept) {
             is HomeRow.Continue -> kept.records.isEmpty()
