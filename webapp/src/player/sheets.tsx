@@ -67,8 +67,8 @@ export function menuKeys(e: KeyboardEvent, el: HTMLElement) {
     e.stopPropagation()
 }
 
-/** One line of a desktop menu: an 18 px slot for the tick or an icon, the words, a quiet figure at the end. */
-export function Entry(props: { text: string; trailing?: string; icon?: IconData; checked?: boolean; disabled?: boolean; onClick: () => void }) {
+/** One line of a desktop menu: an 18 px slot for the tick or an icon, the words (a quieter line under them if given), a quiet figure at the end. */
+export function Entry(props: { text: string; detail?: string; trailing?: string; icon?: IconData; checked?: boolean; disabled?: boolean; onClick: () => void }) {
     return (
         <button type="button" role={props.checked !== undefined ? 'menuitemradio' : 'menuitem'} aria-checked={props.checked} class="pc-entry" disabled={props.disabled} onClick={props.onClick}>
             <span class="pc-entry-lead">
@@ -76,7 +76,12 @@ export function Entry(props: { text: string; trailing?: string; icon?: IconData;
                     <Icon icon={Tick02Icon} size={18} />
                 </Show>
             </span>
-            <span class="pc-entry-text">{props.text}</span>
+            <Show when={props.detail} fallback={<span class="pc-entry-text">{props.text}</span>}>
+                <span class="pc-entry-text pc-entry-two">
+                    {props.text}
+                    <small class="pc-entry-detail">{props.detail}</small>
+                </span>
+            </Show>
             <Show when={props.trailing}><span class="pc-entry-trail">{props.trailing}</span></Show>
         </button>
     )
@@ -131,14 +136,19 @@ export function PhoneSheet(props: { title: string; note?: string; onClose: () =>
 }
 
 /** One line of a picker: ChoiceRow on a phone (radio, 56 px), Entry on the desktop. */
-export function Choice(props: { text: string; on?: boolean; icon?: IconData; phone: boolean; disabled?: boolean; onClick: () => void }) {
+export function Choice(props: { text: string; detail?: string; on?: boolean; icon?: IconData; phone: boolean; disabled?: boolean; onClick: () => void }) {
     return (
-        <Show when={props.phone} fallback={<Entry text={props.text} checked={props.icon ? undefined : !!props.on} icon={props.icon} disabled={props.disabled} onClick={props.onClick} />}>
+        <Show when={props.phone} fallback={<Entry text={props.text} detail={props.detail} checked={props.icon ? undefined : !!props.on} icon={props.icon} disabled={props.disabled} onClick={props.onClick} />}>
             <button type="button" class="pc-choice" role={props.icon ? 'button' : 'radio'} aria-checked={props.icon ? undefined : !!props.on} disabled={props.disabled} onClick={props.onClick}>
                 <Show when={props.icon} fallback={<span class="pc-radio" />}>
                     <span class="pc-choice-icon"><Icon icon={props.icon!} size={22} /></span>
                 </Show>
-                <span>{props.text}</span>
+                <Show when={props.detail} fallback={<span>{props.text}</span>}>
+                    <span class="pc-choice-text">
+                        {props.text}
+                        <small>{props.detail}</small>
+                    </span>
+                </Show>
             </button>
         </Show>
     )

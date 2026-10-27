@@ -146,3 +146,15 @@
 .player[data-variant="tv"] .pc-status-name, .player[data-variant="tv"] .pc-status-body { font-size: calc(var(--u) * 16); line-height: calc(var(--u) * 22); }
 .player[data-variant="tv"] .pc-sheet-button { min-height: calc(var(--u) * 48); padding: 0 calc(var(--u) * 28); font-size: calc(var(--u) * 16); }
 .player[data-variant="tv"] .pc-sheet-button:focus { background: #fff; color: var(--on-focus); border-color: #fff; outline: none; }
+
+/* MSone's sheet: a room's sizes, the row or link under the remote filled white. */
+.pc[data-variant="tv"] .pc-entry-detail { font-size: calc(var(--u) * 13); line-height: calc(var(--u) * 18); }
+.pc[data-variant="tv"] .pc-entry:focus .pc-entry-detail { color: rgba(14, 15, 19, .65); }
+.pc[data-variant="tv"] .pc-msone-wait, .pc[data-variant="tv"] .pc-msone-state p { font-size: calc(var(--u) * 16); line-height: calc(var(--u) * 22); }
+.pc[data-variant="tv"] .pc-msone-name { font-size: calc(var(--u) * 17); line-height: calc(var(--u) * 24); }
+.pc[data-variant="tv"] .pc-msone-facts, .pc[data-variant="tv"] .pc-msone-links, .pc[data-variant="tv"] .pc-msone-loading { font-size: calc(var(--u) * 14); line-height: calc(var(--u) * 20); }
+.pc[data-variant="tv"] .pc-msone-pick:hover { background: none; }
+.pc[data-variant="tv"] .pc-msone-pick:focus { background: #fff; color: var(--on-focus); outline: none; }
+.pc[data-variant="tv"] .pc-msone-pick:focus .pc-msone-facts, .pc[data-variant="tv"] .pc-msone-pick:focus .pc-msone-loading { color: rgba(14, 15, 19, .7); }
+.pc[data-variant="tv"] .pc-msone-links a:focus { background: #fff; color: var(--on-focus); text-decoration: none; outline: 2px solid #fff; }
+.pc[data-variant="tv"] .pc-msone-state .pc-sheet-button:focus { background: #fff; color: var(--on-focus); border-color: #fff; outline: none; }

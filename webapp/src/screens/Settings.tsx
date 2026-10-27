@@ -15,6 +15,7 @@ import {
     Logout05Icon,
     PaintBoardIcon,
     PlayIcon,
+    TranslateIcon,
 } from '@hugeicons/core-free-icons'
 import { settings, setSetting, SIZE_DEFAULTS, storageWorks, type Theme } from '../store'
 import { back, me, signOut } from '../session'
@@ -29,6 +30,8 @@ import { TmdbMark } from '../ui/TmdbMark'
 import { initialOf } from '../ui/initial'
 import { checkKept, install, installed, installPrompt, iosBrowser, keepData, kept, refused } from '../install'
 import { cacheSizes, clearCaches } from '../cacheBounds'
+import { msoneOn, stateLine } from '../msoneFlag'
+import { health, knownHealth, type Health } from '../player/msone'
 
 const THEMES: Theme[] = ['system', 'dark', 'light', 'black']
 const LAYOUTS: Layout[] = ['desktop', 'tv']
@@ -206,7 +209,7 @@ function PageBody(props: { id: PageId }) {
 
 // What a row is made of
 
-function RowBody(props: { icon: IconData; title: string; subtitle?: string }) {
+function RowBody(props: { icon: IconData; title: string; subtitle?: string; note?: string }) {
     return (
         <>
             <span class="set-icon">
@@ -216,6 +219,9 @@ function RowBody(props: { icon: IconData; title: string; subtitle?: string }) {
                 <span class="set-title">{props.title}</span>
                 <Show when={props.subtitle}>
                     <span class="set-sub">{props.subtitle}</span>
+                </Show>
+                <Show when={props.note}>
+                    <span class="set-sub">{props.note}</span>
                 </Show>
             </span>
         </>
@@ -268,9 +274,58 @@ function Appearance() {
 
 function Playback() {
     return (
-        <div class="set-card set-blocks">
-            <Rewind />
-        </div>
+        <>
+            <div class="set-card set-blocks">
+                <Rewind />
+            </div>
+            <Show when={msoneOn()}>
+                <div class="set-card">
+                    <MsoneRow />
+                </div>
+            </Show>
+        </>
+    )
+}
+
+/**
+ * MSone subtitles, behind the hidden flag (msoneFlag.ts): the state the gateway last gave, with
+ * its message, and a press checks again (at most once a minute, msone.ts holds that).
+ */
+function useMsoneHealth() {
+    const [state, setState] = createSignal<Health>(knownHealth())
+    const [checking, setChecking] = createSignal(false)
+    const check = async (force: boolean) => {
+        if (checking()) return
+        setChecking(true)
+        // health() never throws: a failed check keeps the last state.
+        setState(await health(force))
+        setChecking(false)
+    }
+    onMount(() => void check(false))
+    return { state, checking, check }
+}
+
+function MsoneRow() {
+    const m = useMsoneHealth()
+    return (
+        <button type="button" class="set-row" aria-busy={m.checking()} onClick={() => void m.check(true)}>
+            <RowBody icon={TranslateIcon} title={t('msone.title')} subtitle={m.checking() ? t('msone.checking') : stateLine(m.state().state)} note={m.checking() ? undefined : m.state().message ?? undefined} />
+        </button>
+    )
+}
+
+function TvMsone() {
+    const m = useMsoneHealth()
+    return (
+        <TvPanel title={t('msone.title')} id="msone-label">
+            <p class="muted small" role="status">{m.checking() ? t('msone.checking') : stateLine(m.state().state)}</p>
+            <Show when={!m.checking() && m.state().message}>
+                <p class="muted small">{m.state().message}</p>
+            </Show>
+            <button class="outline-button" style={{ 'align-self': 'start' }} type="button" aria-labelledby="msone-label" onClick={() => void m.check(true)}>
+                {t('msone.check_again')}
+            </button>
+        </TvPanel>
     )
 }
 
@@ -632,6 +687,9 @@ function TvSettings() {
             <TvPanel title="" id="rewind-panel">
                 <Rewind />
             </TvPanel>
+            <Show when={msoneOn()}>
+                <TvMsone />
+            </Show>
             <TvPanel title={t('web.posters_title')} id="posters-label">
                 <p class="muted small">{settings().posters ? t('web.posters_on_detail') : t('metadata.toggle_off')}</p>
                 <Choices

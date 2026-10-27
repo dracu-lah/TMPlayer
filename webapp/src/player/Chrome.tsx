@@ -38,6 +38,7 @@ import {
     SquareUnlock02Icon,
     SubtitleIcon,
     Sun03Icon,
+    TranslateIcon,
     VolumeHighIcon,
     VolumeLowIcon,
     VolumeMute02Icon,
@@ -54,6 +55,9 @@ import { loadThumb } from '../screens/thumbs'
 import { chapterAt, chapterMarks, chapterNext, chapterPrevious, isGeneric, skipSegments, type Chapter, type SkipSegment } from './chapters'
 import { applyDelay, look, setLook, setSubDelay, subDelay } from './cues'
 import { BookmarksSheet, delayText, ShortcutsSheet, SIZES, TimingSheet } from './extra-sheets'
+import { MsoneSheet, type MsoneTarget } from './msone-sheet'
+import { episodeOf } from './msone'
+import { msoneOn } from '../msoneFlag'
 import { AUTOPLAY_LIMIT, fineRate, IDLE_LIMIT, noteInput, pressLoop, SeekUndo, SLEEP_CHOICES, sleepState, watching, wrapLoop, type Loop } from './extras'
 import {
     addBookmark, deleteBookmark, loadBookmarks, readAutoplay, renameBookmark, writeAutoplay, writeLook, type Bookmark, type SubtitleLook,
@@ -143,6 +147,8 @@ export interface Ctl {
     readout: () => string
     details: () => string
     loadSubtitleFile: () => void
+    /** Lays a subtitle file over the video and shows it; throws when the file cannot be read. */
+    addSubtitle: (file: File, as?: { label: string; language: string }) => Promise<void>
     frames: () => Frames | null
     /** The video's own frames for the seek bar's card, for a natively played file; null otherwise. */
     grabber: () => FrameGrabber | null
@@ -160,7 +166,7 @@ export interface Ctl {
     markWatched: (on: boolean) => void
 }
 
-type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | null
+type Sheet = 'subtitles' | 'audio' | 'speed' | 'copies' | 'episodes' | 'more' | 'shape' | 'details' | 'options' | 'sleep' | 'bookmarks' | 'timing' | 'shortcuts' | 'still' | 'msone' | null
 
 export { variant }
 
@@ -770,7 +776,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         if (sheet()) {
             if (key === 'back' || (sheet() === 'details' && key === 'ok')) setSheet(null)
             else if (key === 'ok') return 'native'
-            else if (arrow && ['episodes', 'timing', 'bookmarks', 'still'].includes(sheet()!)) walk(c.root.querySelector('.pc-sheet, .pc-still'), key, active)
+            else if (arrow && ['episodes', 'timing', 'bookmarks', 'still', 'msone'].includes(sheet()!)) walk(c.root.querySelector('.pc-sheet, .pc-still'), key, active)
             return true
         }
         // The next episode's card holds Left, Right and OK once it has the remote; Back puts it away.
@@ -1545,7 +1551,13 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         <For each={subs()}>{(tt, i) => <Choice text={subLabel(tt, i())} on={subOn() === tt} phone={phone()} onClick={() => (pickSub(tt), setSheet(null))} />}</For>
                         <Show when={!phone()}><hr /></Show>
                         <Choice icon={Add01Icon} text={t('player.load_subtitle_file')} phone={phone()} onClick={() => (setSheet(null), c.loadSubtitleFile())} />
+                        <Show when={msoneOn()}>
+                            <Choice icon={TranslateIcon} text={t('msone.search')} detail={t('msone.search_detail')} phone={phone()} onClick={() => setSheet('msone')} />
+                        </Show>
                     </Picker>
+                </Match>
+                <Match when={sheet() === 'msone'}>
+                    <MsoneSheet target={msoneTarget(c.item, info())} onLoad={c.addSubtitle} onPickFile={() => (setSheet(null), c.loadSubtitleFile())} onClose={() => setSheet(null)} />
                 </Match>
                 <Match when={sheet() === 'audio'}>
                     <Picker title={t('player.audio')} phone={phone()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)}>
@@ -1611,6 +1623,20 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             </Show>
         </div>
     )
+}
+
+/**
+ * What MSone is asked about the video: the title the poster lookup cleaned from its name (the
+ * show's, for an episode) and its year, and the episode's season and number from its code ("S1 E3").
+ */
+function msoneTarget(item: VideoItem, info: WatchInfo | null): MsoneTarget {
+    const ep = info?.episode ? episodeOf(info.episode.code) : null
+    return {
+        q: item.poster?.title || info?.episode?.show || item.title,
+        year: item.poster?.year ?? null,
+        season: ep?.season ?? null,
+        episode: ep?.episode ?? null,
+    }
 }
 
 /**

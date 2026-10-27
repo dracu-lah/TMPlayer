@@ -419,20 +419,26 @@ export function Player(props: {
         }
     }
 
+    /** A subtitle file laid over the video and shown at once; throws when it cannot be read (MSone's sheet says so itself). */
+    const addSubtitle = async (picked: File, as?: { label: string; language: string }) => {
+        const sub = await readSubtitle(picked)
+        if (closed) return URL.revokeObjectURL(sub.url)
+        subtitleUrls.push(sub.url)
+        const track = document.createElement('track')
+        track.kind = 'subtitles'
+        track.label = as?.label ?? sub.label
+        const language = as?.language ?? sub.language
+        if (language) track.srclang = language
+        track.src = sub.url
+        track.addEventListener('load', () => (placeCues(video, controlsUp), applyDelay(video)))
+        video.append(track)
+        // Shown at once: the one just loaded is the one wanted.
+        for (const tt of Array.from(video.textTracks)) if (tt.kind === 'subtitles' || tt.kind === 'captions') tt.mode = tt === track.track ? 'showing' : 'disabled'
+        setNotice('')
+    }
     const loadSubtitle = async (picked: File) => {
         try {
-            const sub = await readSubtitle(picked)
-            subtitleUrls.push(sub.url)
-            const track = document.createElement('track')
-            track.kind = 'subtitles'
-            track.label = sub.label
-            if (sub.language) track.srclang = sub.language
-            track.src = sub.url
-            track.addEventListener('load', () => (placeCues(video, controlsUp), applyDelay(video)))
-            video.append(track)
-            // Shown at once: the one just loaded is the one wanted.
-            for (const tt of Array.from(video.textTracks)) if (tt.kind === 'subtitles' || tt.kind === 'captions') tt.mode = tt === track.track ? 'showing' : 'disabled'
-            setNotice('')
+            await addSubtitle(picked)
         } catch (e) {
             setNotice(e instanceof SubtitleError && e.why === 'vobsub' ? t('web.needs_app_picture_subtitles') : t('player.subtitle_load_failed', { file: picked.name }))
         }
@@ -702,6 +708,7 @@ export function Player(props: {
                             readout,
                             details,
                             loadSubtitleFile: () => subtitleInput.click(),
+                            addSubtitle,
                             frames,
                             grabber,
                             resumedAt,

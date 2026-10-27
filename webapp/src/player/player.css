@@ -314,6 +314,10 @@
 .pc-choice[aria-checked="true"] .pc-radio { border-color: var(--accent); }
 .pc-choice[aria-checked="true"] .pc-radio::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
 .pc-choice-icon { width: 24px; height: 24px; display: grid; place-items: center; color: var(--muted); flex: none; }
+/* A menu line or a picker row with a quieter line under its words (MSone's row in the subtitle menu). */
+.pc-entry-two { display: flex; flex-direction: column; -webkit-line-clamp: unset; padding: 6px 0; }
+.pc-entry-detail, .pc-choice-text small { font-size: 12px; line-height: 16px; font-weight: 400; color: rgba(255,255,255,.6); }
+.pc-choice-text { display: flex; flex-direction: column; padding: 6px 0; }
 
 /* The speed sheet's tiles and the fine control. */
 .pc-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 24px; }
@@ -481,3 +485,28 @@
   .pc-card-wait, .pc-card-tile, .pc-card-pic, .pc-layer, .pc-top, .pc-bottom > *, .pc-play-glyph, .pc-menu, .pc-note, .pc-wave, .pc-chevrons i, .pc-sheet-scrim { animation: none !important; transition: none !important; }
   .pc[data-variant="phone"] .pc-top, .pc[data-variant="phone"] .pc-bottom > * { transform: none; }
 }
+
+/* MSone's sheet: a wait, a state or failure with its ways on, or the releases found. */
+.pc-msone { padding: 0 0 8px; }
+.pc-msone-wait { display: flex; align-items: center; gap: 12px; margin: 16px 24px; color: var(--muted); font-size: 15px; line-height: 20px; }
+.pc-msone-spin { width: 18px; height: 18px; flex: none; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); border-top-color: var(--accent); animation: spin 800ms linear infinite; }
+.pc-msone-state { margin: 12px 24px; display: flex; flex-direction: column; gap: 8px; }
+.pc-msone-state p { margin: 0; font-size: 15px; line-height: 20px; }
+.pc-msone-state .pc-msone-message { color: var(--muted); font-size: 14px; overflow-wrap: anywhere; white-space: pre-line; }
+.pc-msone-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+.pc-msone-hits { list-style: none; margin: 0; padding: 0; }
+.pc-msone-hits li { padding: 4px 0 10px; border-bottom: 1px solid var(--line); }
+.pc-msone-hits li:last-child { border-bottom: 0; }
+.pc-msone-hits li .pc-msone-state { margin-top: 4px; }
+.pc-msone-pick {
+  width: 100%; min-height: 56px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; padding: 8px 24px;
+  border: 0; border-radius: 12px; background: none; color: var(--fg); font: inherit; text-align: start; cursor: pointer;
+}
+.pc-msone-pick:hover, .pc-msone-pick:focus-visible { background: rgba(255,255,255,.06); outline: none; }
+.pc-msone-pick:active { transform: scale(.99); }
+.pc-msone-name { font-size: 16px; line-height: 24px; overflow-wrap: anywhere; }
+.pc-msone-facts { font-size: 13px; line-height: 18px; color: var(--accent); }
+.pc-msone-loading { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 18px; color: var(--muted); }
+.pc-msone-links { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 0 24px; font-size: 13px; line-height: 18px; color: var(--muted); }
+.pc-msone-links a { color: var(--accent); text-decoration: none; border-radius: 4px; }
+.pc-msone-links a:hover, .pc-msone-links a:focus-visible { text-decoration: underline; outline: none; }
