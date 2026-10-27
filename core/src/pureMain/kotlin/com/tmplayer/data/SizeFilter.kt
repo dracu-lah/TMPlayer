@@ -23,12 +23,27 @@ object SizeFilter {
     const val STEP = 100 * MB
 
     /**
-     * Low enough for a short or low bitrate episode, high enough to keep trailers and samples out.
+     * High enough to keep trailers, samples and clips out of a chat full of full length videos.
      *
-     * Was 400 MB with a 2.5 GB top until 1.21: viewers saw a series with episodes 9 and 30 missing,
-     * the ones encoded a little smaller or larger than the rest, and nothing said why.
+     * Was 400 MB with a 2.5 GB top until 1.21, then 50 MB: viewers saw a series with episodes 9
+     * and 30 missing, the ones encoded a little smaller than the rest, and nothing said why. Back
+     * to 400 MB since 1.28.2, now that a chat says how many it hides ("n hidden") and changes the
+     * minimum from there ([QUICK_MINIMUMS]).
      */
-    const val DEFAULT_MIN = 50 * MB
+    const val DEFAULT_MIN = 400 * MB
+
+    /**
+     * The old default, kept as a stop on the slider: off the step grid, and the minimum a viewer
+     * who wants short episodes but no clips is most likely to pick.
+     */
+    const val CLIP_MIN = 50 * MB
+
+    /** The choices a chat's "n hidden" chip offers, smallest first; the current one is added when off the list. */
+    val QUICK_MINIMUMS: List<Long> = listOf(FLOOR, CLIP_MIN, 100 * MB, 200 * MB, DEFAULT_MIN, GB)
+
+    /** [QUICK_MINIMUMS] with [current] in its place, so the picker always has the one that is on. */
+    fun quickMinimums(current: Long): List<Long> =
+        if (current in QUICK_MINIMUMS) QUICK_MINIMUMS else (QUICK_MINIMUMS + current).sorted()
 
     /** No upper bound: the top of the slider, which [matches] reads as "anything". */
     const val DEFAULT_MAX = CEILING
@@ -50,7 +65,7 @@ object SizeFilter {
     /**
      * Moves [value] one press in [direction], snapped onto the step grid first.
      *
-     * Snapping matters because a value can sit off the grid (the 50 MB default, or the 2560 MB an
+     * Snapping matters because a value can sit off the grid (50 MB, or the 2560 MB an
      * older build defaulted to), and without this the slider would forever read 150, 250, 350
      * once nudged.
      */
@@ -73,16 +88,16 @@ object SizeFilter {
      * Both ends snap to themselves, since "No minimum" and "No limit" are the two values a viewer
      * is most likely to want exactly.
      *
-     * [DEFAULT_MIN] is a snap point of its own, off the grid as it is. Without it the slider
-     * rounded the stored 50 MB down to "No minimum", the line above it said "from 50 MB upwards",
-     * the chats went on hiding clips, and the first drag of either thumb quietly wrote 0.
+     * [CLIP_MIN] is a snap point of its own, off the grid as it is. Without it the slider rounded
+     * a stored 50 MB down to "No minimum", the line above it said "from 50 MB upwards", the chats
+     * went on hiding clips, and the first drag of either thumb quietly wrote 0.
      */
     fun snap(value: Long): Long {
         if (value <= FLOOR) return FLOOR
         if (value >= CEILING - STEP / 2) return CEILING
         val grid = ((value + STEP / 2) / STEP) * STEP
-        // On a tie the grid wins, so the default only claims the values nearer to it.
-        return if (abs(DEFAULT_MIN - value) < abs(grid - value)) DEFAULT_MIN else grid
+        // On a tie the grid wins, so 50 MB only claims the values nearer to it.
+        return if (abs(CLIP_MIN - value) < abs(grid - value)) CLIP_MIN else grid
     }
 
     /** Whether the bounds are the ones a fresh install starts with, which is what Reset restores. */
@@ -101,14 +116,14 @@ object SizeFilter {
     /**
      * The track's scale, as (bytes, position) corners joined by straight lines.
      *
-     * Not linear: on a straight 0 to 8 GB track the 50 MB default sat 0.6 per cent in, a few
+     * Not linear: on a straight 0 to 8 GB track 50 MB sat 0.6 per cent in, a few
      * pixels from "No minimum", and the two looked the same. Here No minimum, 50 MB and 100 MB
      * are evenly spaced at the start, the first gigabyte takes a little under half the track,
      * where the choices that matter are, and the rest stretches out to No limit.
      */
     private val SCALE = listOf(
         FLOOR to 0f,
-        DEFAULT_MIN to 0.05f,
+        CLIP_MIN to 0.05f,
         100 * MB to 0.10f,
         GB to 0.45f,
         CEILING to 1f,

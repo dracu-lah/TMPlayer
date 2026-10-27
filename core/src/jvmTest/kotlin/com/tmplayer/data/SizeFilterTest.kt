@@ -17,18 +17,19 @@ class SizeFilterTest {
     private val max = 2560 * MB
 
     @Test
-    fun `defaults are 50 MB and no upper bound`() {
-        assertEquals(50 * MB, SizeFilter.DEFAULT_MIN)
+    fun `defaults are 400 MB and no upper bound`() {
+        assertEquals(400 * MB, SizeFilter.DEFAULT_MIN)
         assertEquals(CEILING, SizeFilter.DEFAULT_MAX)
         assertEquals(8 * GB, CEILING)
     }
 
     @Test
-    fun `the defaults keep a trailer out and every episode size in`() {
+    fun `the defaults keep a trailer and a clip out and a full length video in`() {
         val lo = SizeFilter.DEFAULT_MIN
         val hi = SizeFilter.DEFAULT_MAX
         assertFalse(SizeFilter.matches(30 * MB, lo, hi))
-        assertTrue(SizeFilter.matches(180 * MB, lo, hi))
+        assertFalse(SizeFilter.matches(180 * MB, lo, hi))
+        assertTrue(SizeFilter.matches(450 * MB, lo, hi))
         assertTrue(SizeFilter.matches(6 * GB, lo, hi))
         assertTrue(SizeFilter.matches(20 * GB, lo, hi))
     }
@@ -116,10 +117,10 @@ class SizeFilterTest {
     }
 
     @Test
-    fun `no minimum and the 50 MB default sit visibly apart`() {
+    fun `no minimum and 50 MB sit visibly apart`() {
         // On a linear track 50 MB was 0.6 per cent in, a few pixels from "No minimum".
         val noMinimum = SizeFilter.fraction(FLOOR)
-        val default = SizeFilter.fraction(SizeFilter.DEFAULT_MIN)
+        val default = SizeFilter.fraction(SizeFilter.CLIP_MIN)
         val hundred = SizeFilter.fraction(100 * MB)
         assertTrue(default - noMinimum >= 0.04f)
         // The first steps are spaced evenly: No minimum, 50 MB, 100 MB.
@@ -145,7 +146,7 @@ class SizeFilterTest {
         // Every value the slider can land on survives the trip to a position and back.
         val stops = buildList {
             add(FLOOR)
-            add(SizeFilter.DEFAULT_MIN)
+            add(SizeFilter.CLIP_MIN)
             var v = STEP
             while (v < CEILING) { add(v); v += STEP }
             add(CEILING)
@@ -162,7 +163,7 @@ class SizeFilterTest {
     @Test
     fun `a finger near the start picks no minimum or 50 MB, not a guess`() {
         assertEquals(FLOOR, SizeFilter.snap(SizeFilter.bytesAt(0.01f)))
-        assertEquals(SizeFilter.DEFAULT_MIN, SizeFilter.snap(SizeFilter.bytesAt(0.05f)))
+        assertEquals(SizeFilter.CLIP_MIN, SizeFilter.snap(SizeFilter.bytesAt(0.05f)))
         assertEquals(100 * MB, SizeFilter.snap(SizeFilter.bytesAt(0.10f)))
     }
 
@@ -225,8 +226,9 @@ class SizeFilterTest {
         assertEquals(SizeFilter.DEFAULT_MIN, SizeFilter.snap(SizeFilter.DEFAULT_MIN.toFloat().toLong()))
         assertEquals(SizeFilter.DEFAULT_MAX, SizeFilter.snap(SizeFilter.DEFAULT_MAX.toFloat().toLong()))
         // And dragged near it, rather than only resting on it.
-        assertEquals(SizeFilter.DEFAULT_MIN, SizeFilter.snap(40 * MB))
-        assertEquals(SizeFilter.DEFAULT_MIN, SizeFilter.snap(70 * MB))
+        assertEquals(SizeFilter.CLIP_MIN, SizeFilter.snap(40 * MB))
+        assertEquals(SizeFilter.CLIP_MIN, SizeFilter.snap(70 * MB))
+        assertEquals(SizeFilter.CLIP_MIN, SizeFilter.snap(SizeFilter.CLIP_MIN))
         assertEquals(STEP, SizeFilter.snap(80 * MB))
         assertEquals(FLOOR, SizeFilter.snap(10 * MB))
     }
@@ -244,5 +246,15 @@ class SizeFilterTest {
         assertTrue(SizeFilter.matches(60 * MB, min, max))
         assertFalse(SizeFilter.isDefault(FLOOR, CEILING))
         assertFalse(SizeFilter.isDefault(min, 2 * GB))
+    }
+
+    @Test
+    fun `the quick picks run small to large and always hold the current minimum`() {
+        assertEquals(SizeFilter.QUICK_MINIMUMS, SizeFilter.QUICK_MINIMUMS.sorted())
+        assertTrue(SizeFilter.DEFAULT_MIN in SizeFilter.QUICK_MINIMUMS)
+        assertEquals(SizeFilter.QUICK_MINIMUMS, SizeFilter.quickMinimums(SizeFilter.DEFAULT_MIN))
+        val odd = SizeFilter.quickMinimums(700 * MB)
+        assertTrue(700 * MB in odd)
+        assertEquals(odd, odd.sorted())
     }
 }
