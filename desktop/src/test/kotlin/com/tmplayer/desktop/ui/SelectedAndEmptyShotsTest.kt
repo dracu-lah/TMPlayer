@@ -15,6 +15,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -164,6 +166,47 @@ class SelectedAndEmptyShotsTest {
             }
         } finally {
             kotlinx.coroutines.runBlocking { settings.setCompactNav(false) }
+        }
+    }
+
+    /**
+     * History's selection bar over a page under the floating bar: lifted by [footClearance], so
+     * its buttons stand clear of the bar, which is drawn over the page (2026-10-27: the bar sat at
+     * 16 dp and Remove was under it). The `before` shot keeps the old 16 dp for comparison.
+     */
+    @Test
+    fun historySelectionBarClearsTheFloatingBar() {
+        shell.go(Destination.History)
+        val ids = listOf("a", "b", "c")
+        for (lifted in listOf(false, true)) {
+            var barBottom = 0f
+            val selection = GridSelection(history = true) { ids.getOrNull(it) }
+            selection.selectAll(ids.take(2))
+            val density = Density(1.5f)
+            ImageComposeScene(1440, 630, density) {
+                TmMaterialTheme(dark = true) {
+                    Surface(Modifier.fillMaxSize(), color = Tone.background) {
+                        NavFrame(shell, null, null) {
+                            Box(Modifier.fillMaxSize()) {
+                                HistorySelectionBar(
+                                    selection, ids, {},
+                                    Modifier.align(androidx.compose.ui.Alignment.BottomCenter)
+                                        .padding(bottom = if (lifted) footClearance() else 16.dp)
+                                        .onGloballyPositioned { barBottom = it.boundsInRoot().bottom },
+                                )
+                            }
+                        }
+                    }
+                }
+            }.use { scene ->
+                scene.render(0)
+                save("history-selection-${if (lifted) "after" else "before"}.png", scene.render(1_500_000_000).png())
+            }
+            if (lifted) {
+                // The floating bar's top edge: NavBarClearance is the bar, its margin and an 8 dp gap.
+                val navTop = 630 - with(density) { (NavBarClearance - 8.dp).toPx() }
+                assertTrue("selection bar ends at $barBottom, under the floating bar from $navTop", barBottom <= navTop)
+            }
         }
     }
 

@@ -91,7 +91,7 @@ fun <T> StateBox(
             Box(Modifier.fillMaxSize()) {
                 skeleton()
                 Column(
-                    Modifier.align(Alignment.BottomCenter).padding(24.dp).widthIn(max = 480.dp),
+                    Modifier.align(Alignment.BottomCenter).padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = footClearance(24.dp)).widthIn(max = 480.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -124,6 +124,17 @@ fun <T> StateBox(
         }
     }
 }
+
+/**
+ * How far something floating at the foot of a page (a selection's bar, a Try again) sits above the
+ * window's bottom edge: clear of the floating bar where the page has one ([LocalBottomChrome],
+ * which [NavFrame] provides as [NavBarClearance] and a chat's grid as [ChatBarClearance]), [gap]
+ * from the edge where it has none (the big screen, a panel). The floating bar is drawn over the
+ * page, so anything left lower is under it and cannot be clicked.
+ */
+@Composable
+@androidx.compose.runtime.ReadOnlyComposable
+internal fun footClearance(gap: Dp = 16.dp): Dp = maxOf(gap, com.tmplayer.ui.components.LocalBottomChrome.current)
 
 /** Nothing until the wait for [key] passes [afterMs], then the line and a Retry button. */
 @Composable

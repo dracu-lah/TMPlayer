@@ -441,7 +441,12 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         UpdatePopupHost(state)
         LowStorageQuestionHost(state)
         // The language card and What's new wait for the setup, as on the phone.
-        if (!setupPending) ShellNotices(state, Modifier.align(Alignment.BottomEnd).padding(24.dp))
+        // Over the floating bar or a chat's bar: at the window's smallest width the card reaches
+        // in over the bar's right end, and would hide the picture and its menu.
+        if (!setupPending) {
+            val foot = if (BigScreen.on) 24.dp else maxOf(NavBarClearance, ChatBarClearance)
+            ShellNotices(state, Modifier.align(Alignment.BottomEnd).padding(start = 24.dp, top = 24.dp, end = 24.dp, bottom = foot))
+        }
         if (setupPending) {
             SetupOverlay(state, chatsUi is UiState.Content)
         }

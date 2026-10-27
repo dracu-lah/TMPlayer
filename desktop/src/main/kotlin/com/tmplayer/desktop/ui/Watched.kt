@@ -166,7 +166,7 @@ fun WatchedPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
                     }
                   }
                     if (selection.active) {
-                        HistorySelectionBar(selection, ids, removeTicked, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
+                        HistorySelectionBar(selection, ids, removeTicked, Modifier.align(Alignment.BottomCenter).padding(bottom = footClearance()))
                     } else {
                         ScrollToTop(grid)
                     }
@@ -300,7 +300,7 @@ fun WatchLaterPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
                     }
                   }
                     if (selection.active) {
-                        HistorySelectionBar(selection, ids, removeTicked, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
+                        HistorySelectionBar(selection, ids, removeTicked, Modifier.align(Alignment.BottomCenter).padding(bottom = footClearance()))
                     } else {
                         ScrollToTop(grid)
                     }
