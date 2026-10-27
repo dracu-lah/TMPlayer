@@ -470,7 +470,7 @@ internal fun DetailFacts(item: MediaItem, facts: MediaFacts, s: Messages, overvi
         if (item.durationSec > 0) add(s.detailLength to s.formatter.duration(item.durationSec.toLong()))
         if (item.date > TELEGRAM_LAUNCH) add(s.detailPosted to s.formatter.date(item.date * 1000L))
     }
-    val synopsis = (overview?.takeIf { it.isNotBlank() } ?: item.caption.takeIf { it.isNotBlank() })
+    val synopsis = (overview?.takeIf { it.isNotBlank() } ?: com.tmplayer.data.MediaText.overviewOf(item))
         ?.takeIf { showSynopsis }
     val fromName = facts.videoCodec != null || facts.audio != null || facts.tracks.isNotEmpty()
 

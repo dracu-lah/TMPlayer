@@ -1,6 +1,7 @@
 package com.tmplayer.ui.components
 
 import androidx.compose.runtime.Composable
+import com.tmplayer.data.NameInitial
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.tv.material3.MaterialTheme
@@ -30,8 +31,10 @@ fun MediaPreview(
         return
     }
     MediaArt(miniThumbnail, thumbnailFileId, modifier) {
+        // A name of only emoji or symbols has no letter: the plain tile then stands alone.
+        val letter = NameInitial.of(fallbackLabel) ?: return@MediaArt
         Text(
-            fallbackLabel.take(1).uppercase(),
+            letter,
             // The tile this letter stands in for is a third of the size on a phone, where a
             // headline glyph fills it corner to corner and reads as a mistake.
             style = if (isTouch()) {

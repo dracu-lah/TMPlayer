@@ -1,6 +1,7 @@
 package com.tmplayer.desktop.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import com.tmplayer.data.NameInitial
 import com.tmplayer.ui.theme.trackedFor
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -419,6 +420,7 @@ fun ConfirmDialog(
 @Composable
 fun ChatAvatar(miniThumbnail: ByteArray?, photoFileId: Int, title: String, size: Dp) {
     MediaArt(miniThumbnail, photoFileId, Modifier.size(size).clip(CircleShape)) {
-        Text(title.take(1).uppercase(), style = MaterialTheme.typography.titleMedium, color = Tone.muted)
+        val letter = NameInitial.of(title) ?: return@MediaArt
+        Text(letter, style = MaterialTheme.typography.titleMedium, color = Tone.muted)
     }
 }

@@ -258,7 +258,12 @@ object HomeRows {
         // The chats Recently added draws from: Home's chats, or the chosen ones (in Home's order).
         val homeOrder = if (recentFrom == null) homeChats.map { it.id } else recentFrom.distinct()
         val homeIds = homeOrder.toHashSet()
-        val starredOnly = starred == null || homeIds.all { it in starred }
+        // Where Home fills itself, its chats are not all known until the chat list and the search
+        // across chats are in: before that only the starred ones are picked, and "in starred
+        // chats" would read true for a few seconds and then flip to the plain heading once the
+        // busiest chats join (TV, 2026-10-27). The plain heading is held until the chats are known.
+        val homeKnown = !chatsPending && !(autoFill && recent == null)
+        val starredOnly = homeKnown && (starred == null || homeIds.all { it in starred })
         val asRow = layout.recentlyAdded
         val wanted = layout.needsRecent
         if (wanted && noneChosen) {

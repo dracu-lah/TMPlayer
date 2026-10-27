@@ -7,6 +7,7 @@ import { createResource, createSignal, For, onCleanup, onMount, Show } from 'sol
 import { A, useLocation, useNavigate } from '@solidjs/router'
 import { Clock01Icon, History, Home03Icon, Message01Icon, Search01Icon, Settings01Icon, StarIcon } from '@hugeicons/core-free-icons'
 import { Icon, type IconData } from './Icon'
+import { initialOf } from './initial'
 import { me } from '../session'
 import { t } from '../i18n'
 import { form } from '../form'
@@ -35,7 +36,7 @@ export function Nav() {
     const location = useLocation()
     const chosen = () => PLACES.findIndex((p) => p.on(location.pathname))
     const inProfile = () => YOURS.test(location.pathname)
-    const initial = () => (me()?.name ?? '').trim().charAt(0).toUpperCase()
+    const initial = () => initialOf(me()?.name)
     const [open, setOpen] = createSignal(false)
     let you!: HTMLButtonElement
     const navigate = useNavigate()

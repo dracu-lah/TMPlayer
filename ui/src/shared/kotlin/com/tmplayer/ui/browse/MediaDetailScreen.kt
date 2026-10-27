@@ -518,7 +518,7 @@ private fun videoFacts(page: DetailPage, year: Int?, s: Messages): List<Fact> {
 private fun synopsisOf(page: DetailPage): String? {
     val meta = page.meta
     return meta?.let { it.episode?.overview?.takeIf { o -> o.isNotBlank() } ?: it.overview.takeIf { o -> o.isNotBlank() } }
-        ?: page.item.caption.takeIf { it.isNotBlank() }
+        ?: com.tmplayer.data.MediaText.overviewOf(page.item)
 }
 
 /** "This chat does not allow saving": said once, quietly, where the download would be. */

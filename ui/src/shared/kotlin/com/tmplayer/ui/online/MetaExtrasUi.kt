@@ -55,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.MediaItem
+import com.tmplayer.data.NameInitial
 import com.tmplayer.i18n.Messages
 import com.tmplayer.i18n.Translator
 import com.tmplayer.online.KnownMedia
@@ -568,7 +569,7 @@ private fun PersonEnlarged(person: MetaPerson, onClose: () -> Unit) {
 
 private fun initials(name: String): String =
     name.split(' ').filter { it.isNotBlank() }.let { listOfNotNull(it.firstOrNull(), it.drop(1).lastOrNull()) }
-        .joinToString("") { it.take(1).uppercase() }
+        .mapNotNull(NameInitial::of).joinToString("")
 
 // ---- more like this ---------------------------------------------------------------------------
 

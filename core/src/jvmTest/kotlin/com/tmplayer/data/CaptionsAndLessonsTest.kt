@@ -54,6 +54,23 @@ class CaptionsAndLessonsTest {
     }
 
     @Test
+    fun `an overview drops the file's own facts and keeps the poster's words`() {
+        val name = "Pulimada.1080P.10bit.Web.Dl.Dolby.hevc.mkv"
+        assertNull(MediaText.overviewOf("FILE NAME : Pulimada 1080P 10bit Web Dl Dolby hevc mkv", name, "Pulimada"))
+        assertNull(MediaText.overviewOf("📁 File Name: x\n💾 Size: 1.4 GB\nQuality - 1080p\nAudio = Malayalam\nJoin @movies_hub", name, "x"))
+        assertNull(MediaText.overviewOf("Pulimada 1080P 10bit Web Dl Dolby hevc", name, "Pulimada"))
+        assertNull(MediaText.overviewOf("Pulimada", name, "Pulimada"))
+        assertNull(MediaText.overviewOf("", name, "Pulimada"))
+        assertNull(MediaText.overviewOf(null, null, null))
+        assertEquals(
+            "A police officer goes missing in the hills.",
+            MediaText.overviewOf("FILE NAME : $name\nA police officer goes missing in the hills.\nSize : 2 GB", name, "Pulimada"),
+        )
+        assertEquals("Two brothers - one good, one bad", MediaText.overviewOf("Two brothers - one good, one bad", name, "Pulimada"))
+        assertEquals("Story: a road trip", MediaText.overviewOf("Story: a road trip", name, "Pulimada"))
+    }
+
+    @Test
     fun `a line on most posts is not shown under each`() {
         val items = (1..5).map { video("Lesson.$it.mp4", "Lesson $it notes\nNew every Friday") }
         val repeated = MediaMapper.repeatedCaptionLines(items)

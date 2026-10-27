@@ -36,6 +36,23 @@ class HomeFeaturedTest {
     }
 
     @Test
+    fun `a short file or one with a made-up name is no film page`() {
+        val short = video("Night.Train.2019.1080p.mkv", date = 10, durationSec = 60)
+        val generic = video("Video (2024).mp4", date = 9)
+        val dated = video("2024-10-13 (2024).mp4", date = 8)
+        val film = video("Quiet.Harbour.2021.1080p.mkv", date = 7)
+        val unknownLength = video("Sintel.2010.mkv", date = 6, durationSec = 0)
+        val numbered = video("1917.2019.1080p.mkv", date = 5)
+        val picks = HomeFeatured.pick(listOf(short, generic, dated, film, unknownLength, numbered).map(::file))
+        assertEquals(listOf(film.id, unknownLength.id, numbered.id), picks.map { it.item.id })
+        assertTrue(HomeFeatured.isGenericTitle("VID_20241013"))
+        assertTrue(HomeFeatured.isGenericTitle("img 1234"))
+        assertTrue(HomeFeatured.isGenericTitle("Untitled"))
+        assertTrue(!HomeFeatured.isGenericTitle("300"))
+        assertTrue(!HomeFeatured.isGenericTitle("Video Game High School"))
+    }
+
+    @Test
     fun `copies of one film in two chats are one page`() {
         val hd = video("Night.Train.2019.1080p.mkv", date = 10, chatId = 1)
         val sd = video("Night.Train.2019.720p.mkv", date = 9, chatId = 2)

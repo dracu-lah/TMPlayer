@@ -178,6 +178,39 @@ object HomeFeatured {
             if (show.isNotEmpty()) return "show:$show" to true
         }
         val key = SeriesShelf.sameVideoKey(item)?.let { "film:$it" } ?: "item:${item.id}"
-        return key to SeriesShelf.isFilm(item)
+        return key to (SeriesShelf.isFilm(item) && filmWorthy(item, name.title))
     }
+
+    /**
+     * Whether a file [SeriesShelf.isFilm] accepts may stand across the top of Home as a film:
+     * at least [FILM_MIN_SEC] long when its length is known, and a real title rather than one a
+     * camera or a messenger wrote. A one minute "Video" got in as "Film  ·  1m" (desktop,
+     * 2026-10-27); it stays in the rows.
+     */
+    internal fun filmWorthy(item: MediaItem, title: String): Boolean {
+        if (item.durationSec in 1 until FILM_MIN_SEC) return false
+        return !isGenericTitle(title)
+    }
+
+    /**
+     * A title that names nothing: blank, "Video", "Untitled", a camera's "VID_20241013", "IMG 1234"
+     * or a date. A bare number stays a title ("1917", "300").
+     */
+    internal fun isGenericTitle(title: String): Boolean {
+        val plain = title.trim().lowercase()
+        if (plain.none(Char::isLetterOrDigit)) return true
+        return GENERIC_TITLES.any { it.matches(plain) }
+    }
+
+    /** Twenty minutes: shorter is a clip, an extra or a short, not a film page. */
+    const val FILM_MIN_SEC = 20 * 60
+
+    private val GENERIC_TITLES = listOf(
+        Regex("""(video|vid|movie|clip|file|untitled|new video|new movie|telegram video)([ _-]*\(?\d+\)?)?"""),
+        Regex("""(vid|img|mov|pxl|mvimg|video|movie|clip|file|document|telegram|tg|record|recording|screen ?record(ing)?|wa)[ _-]*\d[\d _.:-]*(wa\d+)?"""),
+        // A date, with or without the time: "2024-10-13", "13.10.2024 12.00", "20241013 120000".
+        Regex("""\d{4}[ _.-]\d{1,2}[ _.-]\d{1,2}([ _.:-]+\d[\d _.:-]*)?"""),
+        Regex("""\d{1,2}[ _.-]\d{1,2}[ _.-]\d{4}([ _.:-]+\d[\d _.:-]*)?"""),
+        Regex("""\d{8}([ _-]?\d{4,6})?"""),
+    )
 }

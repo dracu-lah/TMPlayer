@@ -7,6 +7,7 @@ import { t } from '../i18n'
 import { dropResume, getResume, laterIds, progress as readProgress, setLater, setWatched, settings, watchedList, watchedTick } from '../store'
 import { Icon, type IconData } from '../ui/Icon'
 import { TmdbMark } from '../ui/TmdbMark'
+import { initialOf } from '../ui/initial'
 import { StarButton } from './Chats'
 import { loadThumb } from './thumbs'
 import { answer, loadBackdrop, loadExtras, loadFile, loadPoster, type Answer, type Extras } from './posters'
@@ -410,7 +411,7 @@ function Person(props: { person: { name: string; role: string; photo: string | n
     return (
         <li class="cast-person">
             <span class="cast-face" aria-hidden="true">
-                <Show when={src()} fallback={<span class="initial">{props.person.name.trim().charAt(0).toUpperCase()}</span>}>
+                <Show when={src()} fallback={<span class="initial">{initialOf(props.person.name)}</span>}>
                     <img src={src()!} alt="" decoding="async" />
                 </Show>
             </span>
