@@ -9,6 +9,7 @@ import { MoviEngine, moviSupported } from './movi'
 import { storyboardFrames, type Frames } from './storyboard'
 import { appleTouch, FrameGrabber } from './seekpreview'
 import { Chrome, variant } from './Chrome'
+import { OpeningLoader } from './loader'
 import { readChapters, type Chapter } from './chapters'
 import { applyDelay, look, placeCues, lookVars, setLook, setSubDelay } from './cues'
 import { readLook } from './keep'
@@ -56,6 +57,9 @@ function playableCopies(copies: VideoCopy[]): VideoCopy[] {
     const av1 = typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported('video/mp4; codecs="av01.0.08M.08"')
     return copies.filter((c) => c.codec !== 'av01' || av1)
 }
+
+/** A transparent pixel: a poster of nothing. */
+const BLANK_POSTER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
 
 function speedText(bytesPerSecond: number): string {
     const mb = bytesPerSecond / 1e6
@@ -107,6 +111,9 @@ export function Player(props: {
     const [stall, setStall] = createSignal<'start' | 'mid' | 'offline' | null>(null)
     /** Where the video was resumed from (seconds), for the Start over offer. */
     const [resumedAt, setResumedAt] = createSignal<number | null>(null)
+    /** The opening loader's stage (loader.tsx); null once the first frame is in, which ends it for good. */
+    const [opening, setOpening] = createSignal<number | null>(0)
+    const advance = (stage: number) => setOpening((s) => (s === null ? null : Math.max(s, stage)))
     const [frames, setFrames] = createSignal<Frames | null>(null)
     /** The video's own frames for the seek bar's card, for a natively played file (see [FrameGrabber]). */
     const [grabber, setGrabber] = createSignal<FrameGrabber | null>(null)
@@ -647,7 +654,16 @@ export function Player(props: {
                     ref={video}
                     playsinline
                     preload="auto"
+                    // Android's WebView draws a grey, blurred play button on a video with no poster; the opening loader covers the wait.
+                    poster={BLANK_POSTER}
+                    onLoadedMetadata={() => advance(1)}
+                    onCanPlay={() => {
+                        advance(2)
+                        // A play the browser held back (no tap to allow it): the controls' Play button, not a loader that never ends.
+                        window.setTimeout(() => video.paused && !framed && setOpening(null), 800)
+                    }}
                     onPlaying={() => {
+                        setOpening(null)
                         if (!framed) {
                             framed = true
                             timing('first frame, from the page opening', mounted)
@@ -736,6 +752,10 @@ export function Player(props: {
                             </div>
                         </Show>
                     </Chrome>
+                </Show>
+
+                <Show when={opening() !== null && !blocked()}>
+                    <OpeningLoader item={item} info={props.info} at={resumedAt() ?? 0} stage={opening()!} onClose={close} />
                 </Show>
 
                 <Show when={blocked()}>

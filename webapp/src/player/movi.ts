@@ -337,6 +337,8 @@ function takeOver(video: HTMLVideoElement, player: MoviPlayer, events: EngineEve
         disablePictureInPicture: { configurable: true, get: () => true },
         requestPictureInPicture: { configurable: true, value: () => Promise.reject(new DOMException('Not with this video', 'NotSupportedError')) },
         webkitSetPresentationMode: { configurable: true, value: undefined },
+        // Nor the iPhone's video full screen, which would open the empty element behind the canvas.
+        webkitEnterFullscreen: { configurable: true, value: undefined },
     }
     video.pause()
     video.removeAttribute('src')

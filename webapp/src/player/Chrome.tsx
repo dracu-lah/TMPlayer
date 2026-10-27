@@ -225,7 +225,11 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     listen('ratechange', () => setRate(v.playbackRate))
     v.textTracks.addEventListener('addtrack', readSubs)
     v.textTracks.addEventListener('change', readSubs)
-    const onFullscreen = () => setFullscreen(!!document.fullscreenElement)
+    const onFullscreen = () => {
+        setFullscreen(!!document.fullscreenElement)
+        // Leaving full screen (the button, Esc, the system's back gesture) hands the turn back to the phone.
+        if (!document.fullscreenElement) unlockTurn()
+    }
     document.addEventListener('fullscreenchange', onFullscreen)
     const resize = new ResizeObserver(() => setWidth(c.root.clientWidth))
     resize.observe(c.root)
@@ -656,16 +660,37 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     listen('seeking', stopCount)
     listen('play', stopCount)
 
-    // Full screen: the player's own box where the browser has it; the iPhone's video full screen otherwise.
-    const canFullscreen = () => !!document.fullscreenEnabled || 'webkitEnterFullscreen' in v
-    const toggleFullscreen = () => {
-        if (document.fullscreenElement) return void document.exitFullscreen().catch(() => {})
-        if (document.fullscreenEnabled && c.root.requestFullscreen) return void c.root.requestFullscreen({ navigationUI: 'hide' }).catch(() => {})
-        ;(v as HTMLVideoElement & { webkitEnterFullscreen?: () => void }).webkitEnterFullscreen?.()
+    // Full screen: the player's own box where the browser has it; the iPhone's video full screen otherwise
+    // (none for movi's canvas, which takes the iPhone's away). The app's player always fills the
+    // screen and opens sideways (ScreenOrientation.DEFAULT), so on a phone the row's button does both:
+    // full screen, then the turn locked sideways for a wide video, where the browser can lock it.
+    type WebkitFull = HTMLVideoElement & { webkitEnterFullscreen?: () => void }
+    const iosFullscreen = () => typeof (v as WebkitFull).webkitEnterFullscreen === 'function'
+    const canFullscreen = () => !!document.fullscreenEnabled || iosFullscreen()
+    const orientation = (screen as Screen & { orientation?: ScreenOrientation & { lock?: (o: string) => Promise<void>; unlock?: () => void } }).orientation
+    const canTurn = () => !!orientation?.lock && !!document.fullscreenEnabled
+    function unlockTurn() {
+        try {
+            orientation?.unlock?.()
+        } catch {}
     }
-    // Rotate: where the browser can lock the screen's turn (Chrome on Android, in full screen).
-    const orientation = (screen as Screen & { orientation?: ScreenOrientation & { lock?: (o: string) => Promise<void> } }).orientation
-    const canRotate = () => phone() && !!orientation?.lock && !!document.fullscreenEnabled
+    const toggleFullscreen = async () => {
+        if (document.fullscreenElement) return void document.exitFullscreen().catch(() => {})
+        if (document.fullscreenEnabled && c.root.requestFullscreen) {
+            try {
+                await c.root.requestFullscreen({ navigationUI: 'hide' })
+            } catch {
+                return
+            }
+            // An upright video (or one not measured yet) is left to the phone; a refused lock changes nothing.
+            if (phone() && canTurn() && v.videoWidth > v.videoHeight) await orientation!.lock!('landscape').catch(() => {})
+            return
+        }
+        try {
+            ;(v as WebkitFull).webkitEnterFullscreen?.()
+        } catch {}
+    }
+    // Rotate (the phone's More menu): flips the locked turn, entering full screen first, where the browser can lock it.
     const rotate = async () => {
         try {
             if (!document.fullscreenElement) await c.root.requestFullscreen({ navigationUI: 'hide' })
@@ -1311,8 +1336,14 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                             <Show when={!phone() || wideRow()}>
                                 <Btn icon={SHAPE_ICON[shape()]} label={plain() ? t('player.picture_shape_now', { shape: shapeName(shape()) }) : t('player.picture_shape_hint', { shape: shapeName(shape()) })} onClick={cycleShape} class="shape" />
                             </Show>
-                            <Show when={canRotate()}>
-                                <Btn icon={ScreenRotationIcon} label={t('player.screen_orientation')} onClick={rotate} />
+                            {/* Where the app has its rotate button: the app's player already fills the screen, a page does not. */}
+                            <Show when={phone() && canFullscreen()}>
+                                <Btn
+                                    icon={fullscreen() ? ArrowShrinkIcon : ArrowExpandIcon}
+                                    label={fullscreen() ? t('player.exit_fullscreen') : t('player.fullscreen')}
+                                    onClick={() => void toggleFullscreen()}
+                                    shot="fullscreen"
+                                />
                             </Show>
                             <Show when={phone() && wideRow()}>
                                 <Btn icon={SquareLock02Icon} label={t('player.lock_screen')} onClick={lock} shot="lock" />
@@ -1351,10 +1382,6 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                             <button type="button" class="pc-readout" onClick={flipRemaining} aria-label={remaining() ? t('player.show_total_length') : t('player.show_time_remaining')}>
                                 {`${clock(shownTime())} / ${endText()}`}
                             </button>
-                        </Show>
-                        <Show when={phone() && canFullscreen() && !canRotate()}>
-                            <span class="pc-spacer" />
-                            <Btn icon={fullscreen() ? ArrowShrinkIcon : ArrowExpandIcon} label={fullscreen() ? t('player.exit_fullscreen_hint') : t('player.fullscreen_hint')} onClick={toggleFullscreen} class="bare" />
                         </Show>
                     </div>
                 </div>
@@ -1455,8 +1482,14 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             <Switch>
                 <Match when={sheet() === 'more'}>
                     <Menu anchor={anchor()} root={c.root} below={!tv()} onClose={() => setSheet(null)}>
-                        <Show when={!tv()}>
+                        {/* As the app's overflow: what the phone's row shows is left out. */}
+                        <Show when={!tv() && !(phone() && wideRow())}>
                             <Entry icon={SquareLock02Icon} text={t('player.lock_screen')} onClick={lock} />
+                        </Show>
+                        <Show when={phone() && canTurn()}>
+                            <Entry icon={ScreenRotationIcon} text={t('player.screen_orientation')} onClick={() => (setSheet(null), rotate())} />
+                        </Show>
+                        <Show when={!tv() && !(phone() && wideRow() && !canTurn())}>
                             <hr />
                         </Show>
                         <Show when={c.copies.length}>
