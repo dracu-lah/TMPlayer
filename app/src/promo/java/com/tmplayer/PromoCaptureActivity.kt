@@ -35,7 +35,6 @@ import kotlinx.coroutines.runBlocking
 import com.tmplayer.data.Account
 import com.tmplayer.data.AuthState
 import com.tmplayer.ui.auth.LoginScreen
-import com.tmplayer.data.CardLayout
 import com.tmplayer.data.SettingsStore
 import com.tmplayer.i18n.Translator
 import com.tmplayer.data.ThemeChoice
@@ -422,8 +421,6 @@ class PromoCaptureActivity : ComponentActivity() {
                             // its Folders group; `--es update 9.9.9` adds the amber Update row.
                             folders = if (intent.getBooleanExtra("folders", false) || groupsDemo) PROMO_FOLDERS else emptyList(),
                             updateVersion = intent.getStringExtra("update"),
-                            // `--es layout grid` for the chat tiles rather than the list.
-                            layout = if (intent.getStringExtra("layout") == "grid") CardLayout.Grid else CardLayout.List,
                             // `--es section saved|favorites|history` opens on that sidebar entry.
                             section = intent.getStringExtra("section"),
                         )
@@ -579,7 +576,6 @@ private fun PromoChatsScreen(
     onOpenSettings: () -> Unit = {},
     onOpenDownloads: () -> Unit = {},
     state: UiState<BrowseData>? = null,
-    layout: CardLayout = CardLayout.List,
     folders: List<ChatFolderSummary> = emptyList(),
     updateVersion: String? = null,
     /** Null for the chat list; otherwise Home, in the named variant (see the "home" screen). */
@@ -643,7 +639,6 @@ private fun PromoChatsScreen(
         picked = picked,
         onPickTab = { picked = it },
         folders = folders,
-        layout = layout,
         updateVersion = updateVersion,
         videoSearch = promoVideoSearch(),
     )
@@ -748,8 +743,6 @@ private fun PhoneMediaScreen(variant: String, onBack: () -> Unit = {}) {
         onSubmit = {},
         onBack = onBack,
         onToggleFavorite = {},
-        layout = CardLayout.Grid,
-        onToggleLayout = {},
         onRefresh = {},
         recentSearches = PROMO_RECENT,
         startSearching = variant == "recent",
@@ -759,7 +752,7 @@ private fun PhoneMediaScreen(variant: String, onBack: () -> Unit = {}) {
             StateScaffold(
                 state,
                 onRetry = {},
-                loading = { MediaGridSkeleton(layout = CardLayout.Grid) },
+                loading = { MediaGridSkeleton() },
                 onAction = {},
             ) {}
             return@TouchMediaScaffold
@@ -824,10 +817,8 @@ private fun TvMediaScreen(variant: String) {
             onQuery = {},
             onSubmit = {},
             onToggleFavorite = {},
-            layout = CardLayout.Grid,
             // Screenshots are taken on a TV, so the heading starts inside the overscan.
             edge = Tv.SafeH,
-            onToggleLayout = {},
             onRefresh = {},
             // The fixture has nowhere to go back to. The pill is drawn, which is the point,
             // since the screenshots have to show the same header the app shows.
@@ -839,7 +830,7 @@ private fun TvMediaScreen(variant: String) {
             StateScaffold(
                 state,
                 onRetry = {},
-                loading = { MediaGridSkeleton(layout = CardLayout.Grid) },
+                loading = { MediaGridSkeleton() },
                 onAction = {},
             ) {}
             return@Column
@@ -905,7 +896,7 @@ private fun PromoShelfGrid(
     val progress = remember(items) {
         items.mapNotNull { item -> watch.point(item)?.let { SettingsStore.progressKey(item.chatId, item.messageId) to it } }.toMap()
     }
-    val shelved = remember(items) { com.tmplayer.ui.browse.arrangeShelf(items, progress, grouping = grouping, layout = CardLayout.Grid) }
+    val shelved = remember(items) { com.tmplayer.ui.browse.arrangeShelf(items, progress, grouping = grouping) }
     val feed = remember(shelved) { shelved.shelf.map { com.tmplayer.data.MediaFeedEntry.Media(it) } }
     var openSeries by remember { mutableStateOf<Series?>(null) }
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {

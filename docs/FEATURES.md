@@ -71,8 +71,8 @@ through the video, each with its own gauge on screen. A video that opens where y
 Start over for a few seconds. Lock the screen against a stray thumb, get a
 "Next episode" card in the last half minute, and set how all of it behaves under Settings, Player.
 
-**Stays out of the way.** Rows or tiles, chosen beside the list it rearranges and remembered.
-Size limits keep a chat full of tiny clips from burying longer videos. A resolution badge on
+**Stays out of the way.** One layout per page, nothing to set: a chat's videos are a poster
+grid with the name and facts under each, the chat lists and History are rows. Size limits keep a chat full of tiny clips from burying longer videos. A resolution badge on
 each tile and nothing else, because the codec was never going to change anyone's mind. A tile
 cuts a long filename short, so the whole name sits in the bottom corner of the screen for whatever
 the remote is standing on, the way a browser shows the link under the cursor.

@@ -180,14 +180,6 @@ class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, Correcti
 
     // ---- layouts, chips and sorting --------------------------------------------------------------
 
-    val chatLayout: Flow<CardLayout> = read { CardLayout.decode(it.string(CHAT_LAYOUT), CardLayout.List) }
-
-    suspend fun setChatLayout(value: CardLayout) = kv.edit { it[CHAT_LAYOUT] = value.name }
-
-    val mediaLayout: Flow<CardLayout> = read { CardLayout.decode(it.string(MEDIA_LAYOUT), CardLayout.Grid) }
-
-    suspend fun setMediaLayout(value: CardLayout) = kv.edit { it[MEDIA_LAYOUT] = value.name }
-
     val chatFilter: Flow<String?> = read { it.string(CHAT_FILTER) }
 
     suspend fun setChatFilter(name: String) = kv.edit { it[CHAT_FILTER] = name }
@@ -392,8 +384,6 @@ class SettingsBook(private val kv: KeyValueStore) : AllowedChatsSource, Correcti
         const val LOCK_ON_OPEN = "app_lock_on_open"
         const val KIDS_LOCK = "kids_lock"
         const val KIDS_CHATS = "kids_chats"
-        const val CHAT_LAYOUT = "chat_layout"
-        const val MEDIA_LAYOUT = "media_layout"
         const val CHAT_FILTER = "chat_filter"
         const val CHAT_SORT = "chat_sort"
         const val HISTORY_TAB = "history_tab"

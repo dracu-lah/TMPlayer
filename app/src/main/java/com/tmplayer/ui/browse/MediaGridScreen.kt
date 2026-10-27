@@ -123,7 +123,6 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.AndroidPaths
 import com.tmplayer.data.CacheShelf
-import com.tmplayer.data.CardLayout
 import com.tmplayer.data.DiskInfo
 import com.tmplayer.data.DiskSpace
 import com.tmplayer.data.FormFactor
@@ -298,13 +297,10 @@ fun MediaGridScreen(
     /** Leaving the chat. On a phone this is the app bar's arrow as well as the hardware key. */
     onBack: () -> Unit = {},
     onPlay: (MediaItem) -> Unit,
-    onToggleLayout: () -> Unit,
     telegramConnected: Boolean,
     offline: Boolean,
     onOfflineAction: (String) -> Unit,
     connectionNotice: ConnectionNotice,
-    /** Thumbnails four across, or one wide row per video with the full title on it. */
-    layout: CardLayout = CardLayout.Grid,
 ) {
     val s = LocalStrings.current
     val context = LocalContext.current
@@ -544,10 +540,6 @@ fun MediaGridScreen(
         refreshing = false
     }
 
-    // Whether the remote is in the heading (the search, the favourite, rows or tiles, Sort): a
-    // switch of arrangement made there leaves it there, on the button just pressed.
-    var headerHasFocus by remember { mutableStateOf(false) }
-    val laidOut = remember { arrayOf(layout) }
     // The television's search field is being typed into. Each pause in the typing lists the
     // answer, and nothing the listing does then may take the field's focus: that closed the
     // keyboard after a letter or two (user, 2026-10-23).
@@ -559,7 +551,7 @@ fun MediaGridScreen(
         StateScaffold(
             state,
             onRetry = viewModel::load,
-            loading = { MediaGridSkeleton(layout = layout) },
+            loading = { MediaGridSkeleton() },
             takeFocus = !typingNow,
             onAction = { action ->
                 viewModel.act(action)
@@ -593,18 +585,18 @@ fun MediaGridScreen(
             // A chat opened again from the page cache lists what it listed last time: the shelf laid
             // out from those same videos then is used for the first frame, rather than a frame or
             // two of skeleton while it is worked out again.
-            val shelfInputs = listOf(list.items, watchProgress, grouping, layout, order, corrections, watchedVideos, shownFilter)
+            val shelfInputs = listOf(list.items, watchProgress, grouping, order, corrections, watchedVideos, shownFilter)
             val shelfBefore = remember(chatId) { ShelfMemo.match(chatId, shelfInputs) }
-            val arrangedShelf by produceState(shelfBefore, list.items, watchProgress, grouping, layout, order, corrections, watchedVideos, shownFilter) {
+            val arrangedShelf by produceState(shelfBefore, list.items, watchProgress, grouping, order, corrections, watchedVideos, shownFilter) {
                 value = withContext(Dispatchers.Default) {
                     // Each tile's online question read here, off the main thread, where the tiles
                     // would otherwise each read it as they scroll in ([MediaItem.metaQuery]).
                     if (com.tmplayer.online.OnlineMetadata.current != null) list.items.forEach { it.metaQuery }
-                    arrangeShelf(list.items, watchProgress, grouping, layout, order, watchedVideos.keys, corrections, shownFilter)
+                    arrangeShelf(list.items, watchProgress, grouping, order, watchedVideos.keys, corrections, shownFilter)
                 }.also { ShelfMemo.keep(chatId, shelfInputs, it) }
             }
             val (shelf, repeatedCaptions, posterKeys) = arrangedShelf ?: run {
-                MediaGridSkeleton(layout = layout)
+                MediaGridSkeleton()
                 return@BoxWithConstraints
             }
             val feed = remember(shelf, list.sponsored) {
@@ -634,7 +626,7 @@ fun MediaGridScreen(
                         shown = shelf.size,
                         total = filterTotal,
                         onClear = clearFilter,
-                        modifier = Modifier.padding(horizontal = if (touch && layout == CardLayout.Grid) 4.dp else 0.dp).padding(bottom = 6.dp),
+                        modifier = Modifier.padding(horizontal = if (touch) 4.dp else 0.dp).padding(bottom = 6.dp),
                     )
                 }
                 if (loadedOnly) {
@@ -642,7 +634,7 @@ fun MediaGridScreen(
                         s.gridSortLoadedNote(list.items.size),
                         style = MaterialTheme.typography.bodySmall,
                         color = Tone.muted,
-                        modifier = Modifier.padding(horizontal = if (touch && layout == CardLayout.Grid) 4.dp else 0.dp).padding(bottom = 6.dp),
+                        modifier = Modifier.padding(horizontal = if (touch) 4.dp else 0.dp).padding(bottom = 6.dp),
                     )
                 }
                 if (selfDestructNote) {
@@ -650,7 +642,7 @@ fun MediaGridScreen(
                         s.gridSelfDestructingHidden(selfDestructing),
                         style = MaterialTheme.typography.bodySmall,
                         color = Tone.muted,
-                        modifier = Modifier.padding(horizontal = if (touch && layout == CardLayout.Grid) 4.dp else 0.dp).padding(bottom = 6.dp),
+                        modifier = Modifier.padding(horizontal = if (touch) 4.dp else 0.dp).padding(bottom = 6.dp),
                     )
                 }
                 course?.let {
@@ -658,7 +650,7 @@ fun MediaGridScreen(
                         progress = it,
                         title = courseTitle,
                         onPlay = onPlay,
-                        modifier = Modifier.padding(horizontal = if (touch && layout == CardLayout.Grid) 4.dp else 0.dp).padding(bottom = 4.dp),
+                        modifier = Modifier.padding(horizontal = if (touch) 4.dp else 0.dp).padding(bottom = 4.dp),
                     )
                 }
             }
@@ -674,12 +666,8 @@ fun MediaGridScreen(
             // same pages at the same place ([MediaListViewModel.restoredScroll]); written as it goes.
             val restored = remember(viewModel) { viewModel.restoredScroll }
             val gridState = com.tmplayer.ui.components.rememberAheadGridState(restored.first, restored.second)
-            val listState = com.tmplayer.ui.components.rememberAheadListState(restored.first, restored.second, column = true)
-            DisposableEffect(viewModel, layout) {
-                onDispose {
-                    if (layout == CardLayout.List) viewModel.rememberScroll(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
-                    else viewModel.rememberScroll(gridState.firstVisibleItemIndex, gridState.firstVisibleItemScrollOffset)
-                }
+            DisposableEffect(viewModel) {
+                onDispose { viewModel.rememberScroll(gridState.firstVisibleItemIndex, gridState.firstVisibleItemScrollOffset) }
             }
             val firstItem = remember { FocusRequester() }
             // The tile a video's page (or a show's, or the hold menu) was opened from, which the
@@ -689,21 +677,21 @@ fun MediaGridScreen(
             // The first row of a television's listing, by key. Focus landing there asks to be
             // brought into view with the focus clearance above it, which scrolls the listing a
             // little way off the top. Back to the very top instead, once that scroll has settled.
-            val firstRowKeys = remember(feed, posterColumns, wideColumns, layout) {
+            val firstRowKeys = remember(feed, posterColumns, wideColumns) {
                 if (touch) {
                     emptySet()
                 } else {
                     val across = if (firstKey in posterKeys) posterColumns else wideColumns
                     feed.takeWhile { it is MediaFeedEntry.Media }
-                        .take(if (layout == CardLayout.Grid) across else 1)
+                        .take(across)
                         .map { (it as MediaFeedEntry.Media).item.key }
                         .toSet()
                 }
             }
             val metaNoticeCard: @Composable () -> Unit = {
                 OnlineMetaNotice(
-                    start = if (touch && layout == CardLayout.Grid) 4.dp else 0.dp,
-                    end = if (touch && layout == CardLayout.Grid) 4.dp else 0.dp,
+                    start = if (touch) 4.dp else 0.dp,
+                    end = if (touch) 4.dp else 0.dp,
                     onTurnedOff = onOfflineAction,
                     // The pressed button goes with the note, so a remote is handed back to a video.
                     onDismissed = { if (!touch) runCatching { firstItem.requestFocus() } },
@@ -724,12 +712,8 @@ fun MediaGridScreen(
                             // after each step and the row jumped.
                             // At once on a television, as every other move of the remote is there.
                             val tv = com.tmplayer.ui.theme.Motion.television
-                            if (layout == CardLayout.Grid) {
-                                if (gridState.firstVisibleItemIndex != 0 || gridState.firstVisibleItemScrollOffset != 0) {
-                                    if (tv) gridState.scrollToItem(0) else gridState.animateScrollToItem(0)
-                                }
-                            } else if (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0) {
-                                if (tv) listState.scrollToItem(0) else listState.animateScrollToItem(0)
+                            if (gridState.firstVisibleItemIndex != 0 || gridState.firstVisibleItemScrollOffset != 0) {
+                                if (tv) gridState.scrollToItem(0) else gridState.animateScrollToItem(0)
                             }
                         }
                     }
@@ -738,7 +722,7 @@ fun MediaGridScreen(
 
             // The phone's grid is compact but not captionless: two lines of the name under each
             // card, since the name is often the only thing telling two releases apart.
-            val dense = touch && layout == CardLayout.Grid
+            val dense = touch
             // On a phone a new order, a search or a filter moves the cards to their new places and
             // fades the newcomers in, rather than redrawing the list at once. Not past a few
             // hundred, where the bookkeeping costs more than the motion is worth.
@@ -771,193 +755,97 @@ fun MediaGridScreen(
                     .fillMaxSize()
                     .onFocusChanged { listHasFocus = it.hasFocus },
             ) {
-                // Rows to tiles and back cross-fade rather than cut, so the switch reads as the
-                // same videos laid out again. Each arrangement keeps its own scroll state.
-                androidx.compose.animation.Crossfade(
-                    targetState = layout,
-                    animationSpec = Motion.standard(if (Motion.reduced) 0 else Motion.Normal),
-                    label = "chatLayout",
-                ) { layout ->
-                when (layout) {
-                        CardLayout.Grid -> LazyVerticalGrid(
-                            columns = GridCells.Fixed(columns),
-                            state = gridState,
-                            modifier = Modifier.fillMaxSize().keepTopInSight(gridState, enabled = !touch),
-                            contentPadding = padding,
-                            horizontalArrangement = Arrangement.spacedBy(gap),
-                            verticalArrangement = Arrangement.spacedBy(gap),
-                        ) {
-                            if (metaNotice) {
-                                item(key = "meta-notice", span = { GridItemSpan(maxLineSpan) }) { metaNoticeCard() }
-                            }
-                            if (course != null || loadedOnly || filterNote || selfDestructNote) {
-                                item(key = "course", span = { GridItemSpan(maxLineSpan) }) { courseHeader() }
-                            }
-                            shelfGrid(
-                                feed = feed,
-                                posterKeys = posterKeys,
-                                columns = columns,
-                                posterColumns = posterColumns,
-                                wideColumns = wideColumns,
-                                animate = animateCards,
-                            ) { entry ->
-                                    when (entry) {
-                                        is MediaFeedEntry.Media -> {
-                                            val shelved = entry.item
-                                            if (shelved is ShelfEntry.Show) {
-                                                SeriesCard(
-                                                    series = shelved.series,
-                                                    progress = remember(shelved.series, watch) { watch.progress(shelved.series) },
-                                                    fresh = remember(shelved.series, watch) { watch.newEpisodes(shelved.series) > 0 },
-                                                    onClick = {
-                                                        tileReturn.open(shelved.key)
-                                                        openSeries.open(shelved.series)
-                                                    },
-                                                    dense = dense,
-                                                    poster = true,
-                                                    onFocused = { standingOn = shelved.series.cover },
-                                                    modifier = focusOf(shelved).returnTile(tileReturn, shelved.key),
-                                                )
-                                            } else {
-                                            val item = (shelved as ShelfEntry.File).item
-                                            MediaCard(
-                                                item = item,
-                                                watched = watchProgress[
-                                                    SettingsStore.progressKey(item.chatId, item.messageId),
-                                                ],
-                                                finished = SettingsStore.progressKey(item.watchedBy.chatId, item.watchedBy.messageId) in watchedVideos,
-                                                dense = dense,
-                                                poster = shelved.key in posterKeys,
-                                                selected = if (selecting) selected.containsKey(item.id) else null,
-                                                onClick = {
-                                                    tileReturn.open(shelved.key)
-                                                    if (selecting) toggle(item) else if (detailFirst) details.open(item) else onPlay(item)
-                                                },
-                                                onLongClick = if (selecting) null else {
-                                                    {
-                                                        tileReturn.open(shelved.key)
-                                                        heldMenuOf = item
-                                                    }
-                                                },
-                                                onFocused = { standingOn = item },
-                                                modifier = focusOf(shelved).returnTile(tileReturn, shelved.key),
-                                            )
-                                            }
-                                        }
-                                        is MediaFeedEntry.Sponsored -> SponsoredCard(
-                                            item = entry.item,
-                                            onFullyVisible = {
-                                                viewModel.markSponsoredViewed(entry.item.messageId)
-                                            },
-                                            onOpen = { openSponsored(entry.item, false) },
-                                            onOpenMedia = { openSponsored(entry.item, true) },
-                                            onReport = { handleReport(entry.item) },
-                                        )
-                                    }
-                            }
-                            // The next page on its way: a row of placeholder tiles where it will land.
-                            if (list.loadingMore) {
-                                item(key = "more-skeleton", span = { GridItemSpan(maxLineSpan) }, contentType = "more-skeleton") {
-                                    com.tmplayer.ui.components.MediaGridSkeletonRow(wideColumns, gap, dense)
-                                }
-                            }
-                        }
-    
-                        CardLayout.List -> LazyColumn(
-                            state = listState,
-                            modifier = Modifier.fillMaxSize().keepTopInSight(listState, enabled = !touch),
-                            contentPadding = padding,
-                            verticalArrangement = Arrangement.spacedBy(if (touch) 2.dp else 4.dp),
-                        ) {
-                            if (metaNotice) item(key = "meta-notice") { metaNoticeCard() }
-                            if (course != null || loadedOnly || filterNote || selfDestructNote) item(key = "course") { courseHeader() }
-                            items(
-                                items = feed,
-                                key = {
-                                    when (it) {
-                                        is MediaFeedEntry.Media -> it.item.key
-                                        is MediaFeedEntry.Sponsored -> "sponsor-${it.item.messageId}"
-                                    }
-                                },
-                                // A row of a kind is reused for the next one of that kind as the list
-                                // scrolls, rather than torn down and built again.
-                                contentType = { feedContentType(it, emptySet()) },
-                            ) { entry ->
-                              Box(if (animateCards) Modifier.animateItem() else Modifier, propagateMinConstraints = true) {
-                                when (entry) {
-                                    is MediaFeedEntry.Media -> {
-                                        val shelved = entry.item
-                                        if (shelved is ShelfEntry.Show) {
-                                            SeriesRow(
-                                                series = shelved.series,
-                                                progress = remember(shelved.series, watch) { watch.progress(shelved.series) },
-                                                fresh = remember(shelved.series, watch) { watch.newEpisodes(shelved.series) > 0 },
-                                                onClick = {
-                                                    tileReturn.open(shelved.key)
-                                                    openSeries.open(shelved.series)
-                                                },
-                                                onFocused = { standingOn = shelved.series.cover },
-                                                modifier = focusOf(shelved).returnTile(tileReturn, shelved.key),
-                                            )
-                                        } else {
-                                        val item = (shelved as ShelfEntry.File).item
-                                        MediaRow(
-                                            item = item,
-                                            captionLine = MediaMapper.captionLine(item, repeatedCaptions),
-                                            watched = watchProgress[
-                                                SettingsStore.progressKey(item.chatId, item.messageId),
-                                            ],
-                                            finished = SettingsStore.progressKey(item.watchedBy.chatId, item.watchedBy.messageId) in watchedVideos,
-                                            selected = if (selecting) selected.containsKey(item.id) else null,
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(columns),
+                    state = gridState,
+                    modifier = Modifier.fillMaxSize().keepTopInSight(gridState, enabled = !touch),
+                    contentPadding = padding,
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                    verticalArrangement = Arrangement.spacedBy(gap),
+                ) {
+                    if (metaNotice) {
+                        item(key = "meta-notice", span = { GridItemSpan(maxLineSpan) }) { metaNoticeCard() }
+                    }
+                    if (course != null || loadedOnly || filterNote || selfDestructNote) {
+                        item(key = "course", span = { GridItemSpan(maxLineSpan) }) { courseHeader() }
+                    }
+                    shelfGrid(
+                        feed = feed,
+                        posterKeys = posterKeys,
+                        columns = columns,
+                        posterColumns = posterColumns,
+                        wideColumns = wideColumns,
+                        animate = animateCards,
+                    ) { entry ->
+                            when (entry) {
+                                is MediaFeedEntry.Media -> {
+                                    val shelved = entry.item
+                                    if (shelved is ShelfEntry.Show) {
+                                        SeriesCard(
+                                            series = shelved.series,
+                                            progress = remember(shelved.series, watch) { watch.progress(shelved.series) },
+                                            fresh = remember(shelved.series, watch) { watch.newEpisodes(shelved.series) > 0 },
                                             onClick = {
                                                 tileReturn.open(shelved.key)
-                                                if (selecting) toggle(item) else if (detailFirst) details.open(item) else onPlay(item)
+                                                openSeries.open(shelved.series)
                                             },
-                                            onLongClick = if (selecting) null else {
-                                                {
-                                                    tileReturn.open(shelved.key)
-                                                    heldMenuOf = item
-                                                }
-                                            },
-                                            onFocused = { standingOn = item },
+                                            dense = dense,
+                                            poster = true,
+                                            onFocused = { standingOn = shelved.series.cover },
                                             modifier = focusOf(shelved).returnTile(tileReturn, shelved.key),
                                         )
-                                        }
-                                    }
-                                    is MediaFeedEntry.Sponsored -> SponsoredCard(
-                                        item = entry.item,
-                                        onFullyVisible = {
-                                            viewModel.markSponsoredViewed(entry.item.messageId)
+                                    } else {
+                                    val item = (shelved as ShelfEntry.File).item
+                                    MediaCard(
+                                        item = item,
+                                        watched = watchProgress[
+                                            SettingsStore.progressKey(item.chatId, item.messageId),
+                                        ],
+                                        finished = SettingsStore.progressKey(item.watchedBy.chatId, item.watchedBy.messageId) in watchedVideos,
+                                        dense = dense,
+                                        poster = shelved.key in posterKeys,
+                                        selected = if (selecting) selected.containsKey(item.id) else null,
+                                        onClick = {
+                                            tileReturn.open(shelved.key)
+                                            if (selecting) toggle(item) else if (detailFirst) details.open(item) else onPlay(item)
                                         },
-                                        onOpen = { openSponsored(entry.item, false) },
-                                        onOpenMedia = { openSponsored(entry.item, true) },
-                                        onReport = { handleReport(entry.item) },
+                                        onLongClick = if (selecting) null else {
+                                            {
+                                                tileReturn.open(shelved.key)
+                                                heldMenuOf = item
+                                            }
+                                        },
+                                        onFocused = { standingOn = item },
+                                        modifier = focusOf(shelved).returnTile(tileReturn, shelved.key),
                                     )
+                                    }
                                 }
-                              }
+                                is MediaFeedEntry.Sponsored -> SponsoredCard(
+                                    item = entry.item,
+                                    onFullyVisible = {
+                                        viewModel.markSponsoredViewed(entry.item.messageId)
+                                    },
+                                    onOpen = { openSponsored(entry.item, false) },
+                                    onOpenMedia = { openSponsored(entry.item, true) },
+                                    onReport = { handleReport(entry.item) },
+                                )
                             }
-                            if (list.loadingMore) {
-                                item(key = "more-skeleton", contentType = "more-skeleton") {
-                                    com.tmplayer.ui.components.MediaListSkeletonRow()
-                                }
-                            }
+                    }
+                    // The next page on its way: a row of placeholder tiles where it will land.
+                    if (list.loadingMore) {
+                        item(key = "more-skeleton", span = { GridItemSpan(maxLineSpan) }, contentType = "more-skeleton") {
+                            com.tmplayer.ui.components.MediaGridSkeletonRow(wideColumns, gap, dense)
                         }
                     }
                 }
-                when (layout) {
-                    CardLayout.Grid -> ScrollToTop(gridState)
-                    CardLayout.List -> ScrollToTop(listState)
-                }
+                ScrollToTop(gridState)
                 // The hold to scroll handle, its bubble saying where the grid is in the chat's order.
                 val scrollStrings = LocalStrings.current
                 val entryByKey = remember(feed) {
                     feed.mapNotNull { (it as? MediaFeedEntry.Media)?.item }.associateBy { it.key }
                 }
                 val scrollLabel: (Any) -> String? = { key -> entryByKey[key]?.let { ScrollLabels.video(it, order, scrollStrings) } }
-                when (layout) {
-                    CardLayout.Grid -> FastScroller(gridState, label = scrollLabel)
-                    CardLayout.List -> FastScroller(listState, label = scrollLabel)
-                }
+                FastScroller(gridState, label = scrollLabel)
 
                 openSeries.series?.let { series ->
                     SeriesOpened(
@@ -1027,14 +915,7 @@ fun MediaGridScreen(
                 // ten times a page folds into a tile or two, so the fetching goes on page after page
                 // while the viewer is still near the top. The chip is for the viewer who has reached
                 // the end and is waiting, not a flash for every quiet fetch ahead of them.
-                val atEnd by remember(layout) {
-                    derivedStateOf {
-                        when (layout) {
-                            CardLayout.Grid -> !gridState.canScrollForward
-                            CardLayout.List -> !listState.canScrollForward
-                        }
-                    }
-                }
+                val atEnd by remember { derivedStateOf { !gridState.canScrollForward } }
                 // The next page's placeholder row is in the listing itself; a page that will not
                 // come says so over the foot, with a way to ask again.
                 if (list.loadingMore && atEnd) {
@@ -1088,16 +969,12 @@ fun MediaGridScreen(
                 )
             }
 
-            // Switching arrangement rebuilds the list, taking the focused card with it, so the
-            // first item has to be asked for again or the remote is left with nowhere to go. Only
-            // on a remote: on a phone this would highlight a card nobody pointed at.
-            // The rows or tiles button pressed in the heading keeps the remote, though: the list
-            // under it changes, and the button is where the viewer is looking to press it again.
-            // Nor while the search is being typed into: the answer is what changed the first item.
-            LaunchedEffect(list.items.firstOrNull()?.id, layout, touch) {
-                val switchedHere = laidOut[0] != layout && headerHasFocus
-                laidOut[0] = layout
-                if (!touch && !switchedHere && !typingNow) runCatching { firstItem.requestFocus() }
+            // A new first item (a search answer, a refresh) asks for focus again, or the remote is
+            // left with nowhere to go. Only on a remote: on a phone this would highlight a card
+            // nobody pointed at. Not while the search is being typed into: the answer is what
+            // changed the first item.
+            LaunchedEffect(list.items.firstOrNull()?.id, touch) {
+                if (!touch && !typingNow) runCatching { firstItem.requestFocus() }
             }
             // Back from a video's page the remote lands on the tile it was opened from: a page
             // of messages arriving meanwhile asked for the first tile above (Mi TV, 2026-10-23).
@@ -1107,36 +984,20 @@ fun MediaGridScreen(
                 // The notes the listing may start with are items of their own.
                 val lead = (if (metaNotice) 1 else 0) +
                     (if (course != null || loadedOnly || filterNote || selfDestructNote) 1 else 0)
-                when (layout) {
-                    CardLayout.Grid -> gridState.scrollToItem(lead + at)
-                    CardLayout.List -> listState.scrollToItem(lead + at)
-                }
+                gridState.scrollToItem(lead + at)
                 true
             }
 
-            // Fetch the next page well before the user reaches the bottom row. The lead is counted
-            // in items, so it has to follow the arrangement: two rows of the grid is eight videos,
-            // while two rows of the list is two.
-            val nearEnd by remember(list.items.size, layout, columns, feed) {
+            // Fetch the next page well before the user reaches the bottom row: two rows ahead.
+            val nearEnd by remember(list.items.size, columns, feed) {
                 derivedStateOf {
-                    // The two states report the same figure through unrelated item types, so the
-                    // index comes out of each branch rather than the item it came from.
-                    val last = when (layout) {
-                        CardLayout.Grid ->
-                            gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
-                        CardLayout.List ->
-                            listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
-                    } ?: 0
-                    val lead = when (layout) {
-                        CardLayout.Grid -> columns * 2
-                        CardLayout.List -> LIST_LEAD
-                    }
-                    last >= feed.size - lead
+                    val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                    last >= feed.size - columns * 2
                 }
             }
             // Keyed on the feed as well: a filter, a search or the grouping changes it without a page
             // arriving, and a short grid left that way has to ask for more by itself.
-            LaunchedEffect(gridState, listState, list.items.size, layout, columns, feed) {
+            LaunchedEffect(gridState, list.items.size, columns, feed) {
                 snapshotFlow { nearEnd }.collect { if (it) viewModel.loadMore() }
             }
             }
@@ -1166,8 +1027,6 @@ fun MediaGridScreen(
             searchBusy = chatSearching,
             onBack = onBack,
             onToggleFavorite = onToggleFavorite,
-            layout = layout,
-            onToggleLayout = onToggleLayout,
             onRefresh = refresh,
             recentSearches = recentSearches,
             onClearRecent = clearRecent,
@@ -1221,7 +1080,6 @@ fun MediaGridScreen(
                 )
             } else {
                 Header(
-                    modifier = Modifier.onFocusChanged { headerHasFocus = it.hasFocus },
                     chatTitle = chatTitle,
                     chatPhotoFileId = chatPhotoFileId,
                     chatMiniThumbnail = chatMiniThumbnail,
@@ -1230,9 +1088,7 @@ fun MediaGridScreen(
                     onQuery = { query = it },
                     onSubmit = submit,
                     onToggleFavorite = onToggleFavorite,
-                    layout = layout,
                     edge = edge,
-                    onToggleLayout = onToggleLayout,
                     onRefresh = refresh,
                     onBack = onBack,
                     recentSearches = recentSearches,
@@ -1308,8 +1164,6 @@ internal fun TouchMediaScaffold(
     searchBusy: Boolean = false,
     onBack: () -> Unit,
     onToggleFavorite: () -> Unit,
-    layout: CardLayout,
-    onToggleLayout: () -> Unit,
     onRefresh: () -> Unit,
     /** Offered as chips while the search is open and still empty. */
     recentSearches: List<String> = emptyList(),
@@ -1480,12 +1334,6 @@ internal fun TouchMediaScaffold(
                         // The star pops as it fills and dips as it empties.
                         glyph = { StarIcon(isFavorite, TmIcons.Star, TmIcons.StarOutline, on = Tone.accent, off = Tone.text) },
                     )
-                    FloatingBarIcon(
-                        icon = if (layout == CardLayout.Grid) TmIcons.List else TmIcons.Grid,
-                        label = if (layout == CardLayout.Grid) s.browseShowAsRows else s.browseShowAsTiles,
-                        onClick = onToggleLayout,
-                        caption = caption(if (layout == CardLayout.Grid) s.gridRowsShort else s.gridTilesShort),
-                    )
                     // Search and Sort at the end, Sort last, where the thumb reaches first.
                     FloatingBarIcon(TmIcons.Search, s.gridSearchThisChat, { searching = true }, caption = caption(s.commonSearch))
                     onSort?.let {
@@ -1606,10 +1454,8 @@ internal fun Header(
     onQuery: (String) -> Unit,
     onSubmit: () -> Unit,
     onToggleFavorite: () -> Unit,
-    layout: CardLayout,
     /** How far in from the side the header starts, which is overscan on a TV and taste on a phone. */
     edge: Dp,
-    onToggleLayout: () -> Unit,
     onRefresh: () -> Unit,
     onBack: () -> Unit,
     /** Offered as a row of pills while the remote is in the header and nothing is typed. */
@@ -1712,15 +1558,6 @@ internal fun Header(
                 tintWhenIdle = if (isFavorite) Tone.accent else Tone.text,
                 starred = isFavorite,
                 onClick = onToggleFavorite,
-            )
-            // Which arrangement suits a chat depends on the chat: tiles for visual browsing,
-            // rows for one that posts long file names. The choice is remembered per screen.
-            Pill(
-                label = if (layout == CardLayout.Grid) s.browseAsRows else s.browseAsTiles,
-                icon = if (layout == CardLayout.Grid) TmIcons.List else TmIcons.Grid,
-                // The two glyphs are the ones every app uses for this, so a label adds nothing.
-                showLabel = false,
-                onClick = onToggleLayout,
             )
             onSort?.let { Pill(if (filtered) s.gridFilterOn else s.gridSort, TmIcons.Sort, tintWhenIdle = if (filtered) Tone.accent else Tone.text, showLabel = false, onClick = it) }
             // Telegram pushes new messages into TDLib's database, but this grid was built from a
@@ -2422,103 +2259,8 @@ internal fun TileCaption(text: String, style: androidx.compose.ui.text.TextStyle
 }
 
 /**
- * The same video as a full-width row.
- *
- * This is the arrangement for a chat full of release file names: the title gets most of the width
- * of the panel rather than a quarter of it, so a name that a media tile cuts after four words is
- * readable without opening anything. The art is a small 2:3 poster for that reason, a film's own
- * poster where one is found, and the frame cropped to fit otherwise.
- */
-@Composable
-private fun MediaRow(
-    item: MediaItem,
-    watched: WatchPoint?,
-    onClick: () -> Unit,
-    onFocused: () -> Unit,
-    modifier: Modifier = Modifier,
-    finished: Boolean = false,
-    onLongClick: (() -> Unit)? = null,
-    /** As on the tile: ticked, unticked, or `null` outside a selection entirely. */
-    selected: Boolean? = null,
-    /** The caption's line worth showing under the title, see [MediaMapper.captionLine]. */
-    captionLine: String? = null,
-) {
-    val touch = isTouch()
-    ListRow(
-        onClick = onClick,
-        onFocused = onFocused,
-        modifier = modifier,
-        onLongClick = onLongClick,
-        selected = selected,
-        art = { artModifier ->
-            MediaArt(item, watched, artModifier, compact = touch, selected = selected, finished = finished, poster = true, thumb = true)
-        },
-    ) {
-        Text(
-            SeriesShelf.tileTitle(item),
-            style = if (touch) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
-            color = Tone.text,
-            // Three lines here, unlike the tile: this is the arrangement someone picked in order
-            // to read the name, and a row can afford the height a grid cell cannot.
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-        )
-        // What the poster wrote under it, when that is more than the title already says: in a
-        // chat of camera files, the caption is the only thing telling two rows apart.
-        if (captionLine != null) {
-            Text(
-                captionLine,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Tone.muted,
-                maxLines = if (touch) 1 else 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        // A list row has no focus colour of its own for the line: it stays muted.
-        val muted = Tone.muted
-        MetaLine(item, watched, remember(muted) { androidx.compose.ui.graphics.ColorProducer { muted } }, finished = finished)
-    }
-}
-
-/** A show as a full-width row, beside the videos' rows: its poster, its name and its seasons. */
-@Composable
-private fun SeriesRow(
-    series: Series,
-    progress: SeriesProgress,
-    fresh: Boolean,
-    onClick: () -> Unit,
-    onFocused: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val touch = isTouch()
-    ListRow(
-        onClick = onClick,
-        onFocused = onFocused,
-        modifier = modifier,
-        art = { artModifier ->
-            SeriesArt(series, progress, artModifier, compact = touch, poster = true, fresh = fresh)
-        },
-    ) {
-        Text(
-            series.title,
-            style = if (touch) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
-            color = Tone.text,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            listOfNotNull(seriesSummary(series), seriesProgressLine(progress)).joinToString("  ·  "),
-            style = MaterialTheme.typography.labelMedium,
-            color = if (progress.watched > 0) Tone.accent else Tone.muted,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-/**
  * A History video (Continue watching, Watch later, Watched) as a list row: the same frame, poster
- * and type as a chat's [MediaRow], so History's rows and a chat's rows are one kind of list.
+ * and type as the chat list's rows.
  *
  * [fraction] lays the progress line on the poster's foot while a video is part way through;
  * [finished] puts the watched tick in the poster's corner instead. [detail] is what the tab says
@@ -2951,9 +2693,6 @@ private fun MetaLine(
 /** No overscan to clear on a phone, so the margin is only what keeps art off the bezel. */
 internal val TOUCH_EDGE = 16.dp
 
-/** How many rows from the bottom the next page is fetched in the list arrangement. */
-private const val LIST_LEAD = 4
-
 private val ROW_POSTER_WIDTH = 72.dp
 private val TOUCH_ROW_POSTER_WIDTH = 56.dp
 
@@ -3014,7 +2753,6 @@ internal fun arrangeShelf(
     items: List<MediaItem>,
     watchProgress: Map<String, WatchPoint>,
     grouping: Boolean,
-    layout: CardLayout,
     /** The chat's order (see [com.tmplayer.data.VideoSorting]); the chat's own by default. */
     sort: com.tmplayer.data.VideoSort = com.tmplayer.data.VideoSort.Newest,
     /** The Watched list's keys, keyed like [watchProgress], for "Unwatched first". */
@@ -3046,7 +2784,7 @@ internal fun arrangeShelf(
         progress = progressOf,
     )
     val shown = com.tmplayer.data.VideoFiltering.filter(led, filter, progressOf)
-    val posters = if (layout == CardLayout.Grid) SeriesShelf.posterKeys(shown) else emptySet()
+    val posters = SeriesShelf.posterKeys(shown)
     return Shelved(shown, MediaMapper.repeatedCaptionLines(items), posters, total = led.size)
 }
 
