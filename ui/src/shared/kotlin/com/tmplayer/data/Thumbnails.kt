@@ -155,12 +155,12 @@ object Thumbnails {
         val key = "backdrop:$fileId"
         if (fileId > 0) cache.get(key)?.let { return it }
         full(fileId)?.let { source ->
-            return withContext(Dispatchers.Default) { shrink(source, BACKDROP_WIDTH) }.also { cache.put(key, it) }
+            return withContext(Dispatchers.Default) { soften(source) }.also { cache.put(key, it) }
         }
         if (mini == null || mini.isEmpty()) return null
         val miniKey = "backdrop:mini:${mini.size}:${mini.contentHashCode()}"
         cache.get(miniKey)?.let { return it }
-        return withContext(Dispatchers.Default) { mini(mini)?.let { shrink(it, BACKDROP_WIDTH) } }
+        return withContext(Dispatchers.Default) { mini(mini)?.let { soften(it) } }
             ?.also { cache.put(miniKey, it) }
     }
 
@@ -335,6 +335,17 @@ object Thumbnails {
      */
     const val BACKDROP_WIDTH = 32
 
+    /**
+     * How wide the field is handed to the screen: [BACKDROP_WIDTH]'s wash grown back smoothly. A
+     * 32 pixel field stretched sixty times across a television came out as a grid of blocks on
+     * the Mi TV (2026-10-27), its GPU sampling it without smoothing; at this width it is
+     * stretched seven or eight times, too little for blocks to show.
+     */
+    const val BACKDROP_DRAW_WIDTH = 256
+
+    /** [source] as [backdrop]'s field: shrunk to a wash of its colours, then grown back smoothly. */
+    private fun soften(source: ImageBitmap): ImageBitmap = grow(shrink(source, BACKDROP_WIDTH), BACKDROP_DRAW_WIDTH)
+
     /** Card art is never larger than ~400 px wide; decoding full size would waste heap. */
     private const val MAX_THUMBNAIL_WIDTH = 400
 
@@ -412,4 +423,25 @@ internal class SizedLru<K : Any, V : Any>(
             entries.remove()
         }
     }
+}
+
+/**
+ * [source] scaled up to [width] pixels across in doublings, each a bilinear draw, so the result
+ * is a smooth gradient between its pixels whatever filtering the screen then draws it with.
+ */
+internal fun grow(source: ImageBitmap, width: Int): ImageBitmap {
+    var current = source
+    while (current.width < width) {
+        val nextWidth = minOf(width, current.width * 2)
+        val nextHeight = maxOf(1, (current.height.toLong() * nextWidth / current.width.coerceAtLeast(1)).toInt())
+        val next = ImageBitmap(nextWidth, nextHeight)
+        Canvas(next).drawImageRect(
+            image = current,
+            srcSize = IntSize(current.width, current.height),
+            dstSize = IntSize(nextWidth, nextHeight),
+            paint = Paint().apply { filterQuality = FilterQuality.Low },
+        )
+        current = next
+    }
+    return current
 }

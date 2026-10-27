@@ -172,7 +172,7 @@ internal fun rememberBackdropArt(source: BackdropSource, drawn: Int): BackdropAr
                         // is on the disk already: it is decoded before the small one could land.
                         val early = launch {
                             if (art == null) {
-                                withContext(Dispatchers.Default) { Thumbnails.mini(source.miniThumbnail) }?.let { if (art == null) art = BackdropArt(field = it) }
+                                Thumbnails.backdrop(0, source.miniThumbnail)?.let { if (art == null) art = BackdropArt(field = it) }
                             }
                             // Not on a television: one download and decode less per page.
                             if (com.tmplayer.ui.theme.Motion.television) return@launch
@@ -198,7 +198,7 @@ internal fun rememberBackdropArt(source: BackdropSource, drawn: Int): BackdropAr
         }
         // Until the thumbnail is in, the inline preview stretched is the backdrop.
         if (art == null) {
-            withContext(Dispatchers.Default) { Thumbnails.mini(source.miniThumbnail) }?.let { art = BackdropArt(field = it) }
+            Thumbnails.backdrop(0, source.miniThumbnail)?.let { art = BackdropArt(field = it) }
         }
         val full = Thumbnails.full(source.thumbnailFileId) ?: wide
         // No wide picture and Telegram's own too small to stand: the online poster, sharp.
