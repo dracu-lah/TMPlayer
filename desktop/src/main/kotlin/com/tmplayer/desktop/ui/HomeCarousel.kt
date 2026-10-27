@@ -424,7 +424,7 @@ private fun FeaturedBackdrop(pick: FeaturedPick, chatTitle: (Long) -> String, to
     val item = pick.item
     val meta = rememberMeta(item, showOnly = pick.isShow)
     val cover = rememberCover(item, chatTitle(item.chatId))
-    val source = remember(item, meta?.wideUrl, cover) { BackdropSource(item.miniThumbnail, item.thumbnailFileId, cover, meta?.wideUrl) }
+    val source = remember(item, meta?.wideUrl, meta?.posterUrl, cover) { BackdropSource(item.miniThumbnail, item.thumbnailFileId, cover, meta?.wideUrl, meta?.posterUrl) }
     EdgeBackdrop(source, Modifier.fillMaxSize(), topFade = topFade, onPictured = com.tmplayer.ui.browse.HomeFirstPaint::markReady)
 }
 

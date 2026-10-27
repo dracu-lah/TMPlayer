@@ -97,8 +97,13 @@ fun EdgeBackdrop(
                 // The stand-in is meant blurry, so it is stretched to the full size, never floated.
                 val standIn = step.picture == null
                 val small = wide && !standIn && picture != null && picture.width < SHARP_MIN_WIDTH
+                // An upright picture (the online poster, for a title with no wide one) cropped to
+                // the wide frame showed a slice of it: it stands whole at the frame's height
+                // instead, over a soft copy of itself filling the rest.
+                val upright = wide && !standIn && !small && picture != null && picture.height > picture.width
                 val (w, h) = when {
                     picture == null -> pictureW to (if (wide) minOf(frameH, pictureW * 9 / 16) else frameH)
+                    upright -> pictureW to frameH
                     !wide -> frameW to frameH
                     else -> {
                         val cap = if (!standIn && picture.width < SHARP_MIN_WIDTH) (picture.width * EDGE_SMALL_SCALE).toInt() else Int.MAX_VALUE
@@ -145,7 +150,29 @@ fun EdgeBackdrop(
                         }
                     }
                 val place = Modifier.align(if (small) Alignment.CenterEnd else Alignment.TopEnd).then(sized).then(fades)
-                if (picture != null) {
+                if (picture != null && upright) {
+                    Box(place) {
+                        // Not on a television: a blur that size is a full screen pass on a stick's GPU.
+                        if (!Motion.television) {
+                            Image(
+                                bitmap = picture,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                filterQuality = Thumbnails.drawFilter,
+                                alpha = UPRIGHT_FIELD_ALPHA,
+                                modifier = Modifier.fillMaxSize().blur(UPRIGHT_FIELD_BLUR),
+                            )
+                        }
+                        Image(
+                            bitmap = picture,
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            alignment = Alignment.CenterEnd,
+                            filterQuality = Thumbnails.drawFilter,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                } else if (picture != null) {
                     Image(
                         bitmap = picture,
                         contentDescription = null,
@@ -241,4 +268,8 @@ private const val CORNER_STRETCH = 2.6f
 
 /** How many times its own width a thumbnail may be drawn here, at most, before it reads as a blur. */
 private const val EDGE_SMALL_SCALE = 2f
+
+/** The soft copy behind an upright picture: blurred past any detail, and dimmed so the picture leads. */
+private val UPRIGHT_FIELD_BLUR = 48.dp
+private const val UPRIGHT_FIELD_ALPHA = 0.55f
 

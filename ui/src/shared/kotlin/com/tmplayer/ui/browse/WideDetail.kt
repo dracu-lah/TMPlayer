@@ -140,7 +140,7 @@ fun WideDetailPanel(
     TrailerHost(trailers)
     val cover = rememberCover(item)
     val art = rememberArtItem(item)
-    val source = remember(item.id, art, cover, meta?.wideUrl) { BackdropSource(art.miniThumbnail, art.thumbnailFileId, cover, meta?.wideUrl) }
+    val source = remember(item.id, art, cover, meta?.wideUrl, meta?.posterUrl) { BackdropSource(art.miniThumbnail, art.thumbnailFileId, cover, meta?.wideUrl, meta?.posterUrl) }
     val facts = remember(item) { MediaFacts.of(item) }
     val online = OnlineMetadata.current
     val lookupsOn = online?.settings?.collectAsState()?.value?.enabled == true
@@ -186,17 +186,21 @@ fun WideDetailPanel(
         val side = if (roomy) 48.dp else 32.dp
         // 16:9 of the sheet's width while that leaves Play on the first screen.
         val heroHeight = minOf(maxWidth * (9f / 16f), maxHeight * 0.56f).coerceAtLeast(240.dp)
+        // How much of the width a 16:9 picture takes at the hero's height (see [WHOLE_PICTURE_BELOW]).
+        val wholeShare = heroHeight * (16f / 9f) / maxWidth
         // The sheet's own ground and Close, for the moment the caches are asked.
         if (firstPaint) Column(Modifier.fillMaxSize().verticalScroll(scroll)) {
             Box(Modifier.fillMaxWidth().height(heroHeight).clipToBounds()) {
-                PageBackdrop(
-                    source,
-                    fade = heroHeight * 0.7f,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        // Half the page's speed, so the picture drifts away under the title.
-                        .graphicsLayer { if (!reduced) translationY = scroll.value * PARALLAX },
-                )
+                // Half the page's speed, so the picture drifts away under the title.
+                val drift = Modifier.fillMaxSize().graphicsLayer { if (!reduced) translationY = scroll.value * PARALLAX }
+                // Much wider than 16:9 (a full window), a picture across the whole width showed
+                // only its middle half: it stands whole at the end instead, as the carousel's
+                // does, its height the frame's and its start melting into the page under the title.
+                if (wholeShare < WHOLE_PICTURE_BELOW) {
+                    com.tmplayer.ui.components.EdgeBackdrop(source, drift, share = wholeShare.coerceAtLeast(WHOLE_PICTURE_MIN))
+                } else {
+                    PageBackdrop(source, fade = heroHeight * 0.7f, modifier = drift)
+                }
                 Column(
                     Modifier
                         .align(Alignment.BottomStart)
@@ -471,3 +475,12 @@ private val FILE_COLUMN = 300.dp
 internal val WIDE_ACTION = 56.dp
 
 private val WIDE_JOINERS = Regex("[-_.]+")
+
+/**
+ * Below this share of the width, a 16:9 picture at the hero's height would leave the frame's
+ * start empty: the page draws it whole at the end ([EdgeBackdrop]) rather than cropped across.
+ */
+private const val WHOLE_PICTURE_BELOW = 0.85f
+
+/** The least share of the width the whole picture takes, so a very short hero still shows one. */
+private const val WHOLE_PICTURE_MIN = 0.45f

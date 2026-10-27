@@ -119,16 +119,22 @@ data class BackdropSource(
     val thumbnailFileId: Int,
     val cover: Cover,
     val wideUrl: String? = null,
+    /**
+     * The online poster, for a title the providers have no wide picture of: drawn over its own
+     * blurred field ([EdgeBackdrop]) rather than Telegram's 320 pixel thumbnail blown up.
+     */
+    val posterUrl: String? = null,
 ) {
     override fun equals(other: Any?): Boolean =
         other is BackdropSource &&
             other.thumbnailFileId == thumbnailFileId &&
             other.cover == cover &&
             other.wideUrl == wideUrl &&
+            other.posterUrl == posterUrl &&
             (other.miniThumbnail?.contentEquals(miniThumbnail) ?: (miniThumbnail == null))
 
     override fun hashCode(): Int =
-        ((thumbnailFileId * 31 + cover.hashCode()) * 31 + wideUrl.hashCode()) * 31 + (miniThumbnail?.contentHashCode() ?: 0)
+        (((thumbnailFileId * 31 + cover.hashCode()) * 31 + wideUrl.hashCode()) * 31 + posterUrl.hashCode()) * 31 + (miniThumbnail?.contentHashCode() ?: 0)
 }
 
 
@@ -195,6 +201,16 @@ internal fun rememberBackdropArt(source: BackdropSource, drawn: Int): BackdropAr
             withContext(Dispatchers.Default) { Thumbnails.mini(source.miniThumbnail) }?.let { art = BackdropArt(field = it) }
         }
         val full = Thumbnails.full(source.thumbnailFileId) ?: wide
+        // No wide picture and Telegram's own too small to stand: the online poster, sharp.
+        if (full == null || full.width < SHARP_MIN_WIDTH) {
+            val poster = source.posterUrl?.let { url ->
+                online?.let { provider -> Thumbnails.sharp(url, POSTER_WIDTH, POSTER_WIDTH, MetaImageSize::atLeast) { provider.image(it) } }
+            }
+            if (poster != null && poster.width >= SHARP_MIN_WIDTH) {
+                art = BackdropArt(picture = poster)
+                return@LaunchedEffect
+            }
+        }
         val field = Thumbnails.backdrop(source.thumbnailFileId, source.miniThumbnail)
         art = when {
             full != null && full.width >= SHARP_MIN_WIDTH -> BackdropArt(picture = full)
@@ -301,6 +317,9 @@ private fun SmallPicture(picture: ImageBitmap, modifier: Modifier) {
  * screen, and the least the desktop fetches.
  */
 private const val ONLINE_WIDTH = 1280
+
+/** The online poster's width when it stands in for a wide picture: TMDB's `w780`, sharp at a carousel's height. */
+private const val POSTER_WIDTH = 780
 
 /** The steps the desktop's measured width is rounded up to before it picks a picture. */
 private const val WIDTH_STEP = 320
