@@ -43,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -379,7 +380,14 @@ private fun Browse(state: ShellState, player: PlayerContent) {
     // With the picture under the window (LocalVideoBehindPage), the page is kept but not drawn
     // while a video plays, so the picture shows through around the player's controls.
     val seeThrough = LocalVideoBehindPage.current && state.nowPlaying != null
-    Box(Modifier.fillMaxSize()) {
+    // Whether Compose's focus is in this page or the player over it, rather than in a dialog or a
+    // popup over the window: a text field here is behind the player, so its keys are the player's.
+    var pageFocused by remember { mutableStateOf(false) }
+    DisposableEffect(Unit) {
+        com.tmplayer.desktop.player.PlayerKeyRoute.pageHasFocus = { pageFocused }
+        onDispose { com.tmplayer.desktop.player.PlayerKeyRoute.pageHasFocus = { false } }
+    }
+    Box(Modifier.fillMaxSize().onFocusChanged { pageFocused = it.hasFocus }) {
         Box(Modifier.fillMaxSize().then(if (seeThrough) Modifier.drawWithContent { } else Modifier)) {
             // The detail sheet floats over the page (DetailPaneHost), so the page keeps its size
             // and its place under it. A chat brings its own bar, which takes the floating one's place.

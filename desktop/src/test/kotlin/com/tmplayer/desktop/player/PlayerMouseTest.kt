@@ -9,6 +9,14 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.assert
+import androidx.compose.foundation.focusable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.ScrollWheel
@@ -316,6 +324,86 @@ class PlayerMouseTest {
         onNodeWithText("Up, Down, Shift+wheel").assertExists()
         onNodeWithText("Repeat A to B: start, end, off").assertExists()
         onNodeWithText("Previous, next chapter").assertExists()
+    }
+
+    /**
+     * The player over a page, as in the app's window: the window's preview goes through
+     * [PlayerKeyRoute] (Main.kt), and the page behind holds a focusable cell and a search field.
+     */
+    private fun ComposeUiTest.openOverPage(cell: androidx.compose.ui.focus.FocusRequester, field: androidx.compose.ui.focus.FocusRequester) {
+        setContent {
+            var text by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
+            Box(Modifier.size(1280.dp, 720.dp).onPreviewKeyEvent(PlayerKeyRoute::onWindowKey)) {
+                androidx.compose.foundation.layout.Column {
+                    Box(Modifier.size(100.dp).testTag("page-cell").focusRequester(cell).focusable())
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        modifier = Modifier.testTag("page-search").focusRequester(field),
+                    )
+                }
+                if (shown.value) PlayerScreen(
+                    media = media,
+                    startFromBeginning = true,
+                    screenshotDir = { shots },
+                    watched = watched,
+                    onBack = { backs++ },
+                    fullscreen = false,
+                    onToggleFullscreen = { fullscreenToggles++ },
+                    settings = settings,
+                    prefs = prefs,
+                    engineFactory = { engine },
+                )
+            }
+        }
+        waitUntil(timeoutMillis = 5_000) { engine.state.value.opened }
+        waitForIdle()
+    }
+
+    @Test
+    fun `the keys reach the player when the page behind it takes the focus`() = runComposeUiTest {
+        val cell = androidx.compose.ui.focus.FocusRequester()
+        val field = androidx.compose.ui.focus.FocusRequester()
+        openOverPage(cell, field)
+        // A cell of the page asks for the focus after the player opened (a detail pane's Play,
+        // a row's pending cell): F still goes fullscreen, and the focus is back on the picture.
+        runOnIdle { cell.requestFocus() }
+        onNodeWithTag("page-cell").assertIsFocused()
+        onNodeWithTag("page-cell").performKeyInput { pressKey(Key.F) }
+        waitForIdle()
+        assertEquals(1, fullscreenToggles)
+        onNodeWithTag("page-cell").assertIsNotFocused()
+        // The next key takes the usual way, through the picture's own focus.
+        onNode(isFocused()).performKeyInput { pressKey(Key.Spacebar) }
+        waitForIdle()
+        assertEquals(1, engine.count("toggle"))
+    }
+
+    @Test
+    fun `a search field left focused behind the player does not swallow its keys`() = runComposeUiTest {
+        val cell = androidx.compose.ui.focus.FocusRequester()
+        val field = androidx.compose.ui.focus.FocusRequester()
+        openOverPage(cell, field)
+        runOnIdle { field.requestFocus() }
+        onNodeWithTag("page-search").assertIsFocused()
+        onNodeWithTag("page-search").performKeyInput { pressKey(Key.Spacebar) }
+        waitForIdle()
+        assertEquals(1, engine.count("toggle"))
+        onNodeWithTag("page-search").assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
+    }
+
+    @Test
+    fun `the window leaves keys alone once the player is closed`() = runComposeUiTest {
+        val cell = androidx.compose.ui.focus.FocusRequester()
+        val field = androidx.compose.ui.focus.FocusRequester()
+        openOverPage(cell, field)
+        shown.value = false
+        waitForIdle()
+        assertEquals(false, PlayerKeyRoute.isOpen)
+        runOnIdle { field.requestFocus() }
+        onNodeWithTag("page-search").performKeyInput { pressKey(Key.F) }
+        waitForIdle()
+        assertEquals(0, fullscreenToggles)
     }
 
     /** [command] is Ctrl, or Cmd on a Mac, where the player reads the chapter keys from Cmd. */

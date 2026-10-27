@@ -135,8 +135,21 @@ fun main(argv: Array<String>) {
             size = DpSize(w.dp, h.dp),
         )
         var fullscreen by remember { mutableStateOf(false) }
-        Window(onCloseRequest = ::exitApplication, state = state, title = "TMPlayer player (dev): ${file.name}") {
-            // The same way in as the app's window takes (see Main.kt).
+        Window(
+            onCloseRequest = ::exitApplication,
+            state = state,
+            title = "TMPlayer player (dev): ${file.name}",
+            onPreviewKeyEvent = PlayerKeyRoute::onWindowKey,
+        ) {
+            // The same ways in as the app's window takes (see Main.kt).
+            androidx.compose.runtime.DisposableEffect(window) {
+                val undo = com.tmplayer.desktop.os.WindowKeyFocus.install(window)
+                PlayerKeyRoute.textInput = { com.tmplayer.desktop.os.WindowKeyFocus.textInputActive(window) }
+                onDispose {
+                    undo()
+                    PlayerKeyRoute.textInput = { false }
+                }
+            }
             val native = remember(window) { NativeFullscreen(window) }
             LaunchedEffect(fullscreen) {
                 if (native.set(fullscreen)) return@LaunchedEffect

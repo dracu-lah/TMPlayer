@@ -1542,6 +1542,111 @@ fun PlayerScreen(
     }
     LaunchedEffect(screenLocked) { onLockedChanged(screenLocked) }
 
+    /**
+     * The player's keys, whichever way they come: through the picture's own focus, or from the
+     * window when Compose's focus is somewhere else (see [PlayerKeyRoute]).
+     */
+    fun playerKey(event: androidx.compose.ui.input.key.KeyEvent): Boolean {
+        // Locked: every key is the lock's, the downs and the ups, so not even the
+        // window's Esc and Backspace hear one. Enter held unlocks; any key shows how.
+        if (screenLocked) {
+            lockedKey(event)
+            return true
+        }
+        if (event.type != KeyEventType.KeyDown) return false
+        noteInput()
+        // The episode list has the keyboard while it is up: Esc closes it, and every
+        // other key (the arrows, Enter) is its own, not a seek or a fullscreen. The
+        // other back keys close it too, or the window would take Backspace as a way
+        // out of the whole player.
+        if (showEpisodes) {
+            if (com.tmplayer.ui.nav.isBackKey(event)) {
+                showEpisodes = false
+                refocus()
+                return true
+            }
+            return false
+        }
+        // Sheets peel off before Esc means anything else.
+        if (event.key == androidx.compose.ui.input.key.Key.Escape && (showShortcuts || showDetails || showOnline)) {
+            showShortcuts = false
+            showDetails = false
+            showOnline = false
+            refocus()
+            return true
+        }
+        val tv = com.tmplayer.desktop.ui.BigScreen.on
+        val remote = com.tmplayer.desktop.ui.remoteKeyOf(event)
+        val plain = !event.isShiftPressed && !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed
+        if (tv && !keysOnPlayer && menu == null && !showShortcuts && !showDetails && !showOnline) {
+            // A remote on the controls: the arrows walk them, OK presses the one it is
+            // on, and Back leaves them for the picture, the controls staying up meanwhile.
+            poke()
+            val direction = PlayerRemote.direction(event.key)
+            when {
+                com.tmplayer.ui.nav.isBackKey(event) || remote == com.tmplayer.desktop.ui.RemoteKey.Back -> {
+                    refocus()
+                    return true
+                }
+                plain && direction != null -> {
+                    focusManager.moveFocus(direction)
+                    return true
+                }
+                plain && event.key in PlayerRemote.OK -> return false
+            }
+        } else if (tv && plain && phase == Phase.Playing && (event.key == Key.DirectionUp || event.key == Key.DirectionDown)) {
+            // Up and Down on the picture bring the controls up and the remote into them;
+            // the sound is the television's own volume keys.
+            poke()
+            scope.launch {
+                androidx.compose.runtime.withFrameNanos { }
+                focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Enter)
+            }
+            return true
+        }
+        // A remote's key the JDK has no name for (Back, the media keys), from its raw code.
+        PlayerRemote.actionFor(remote)?.let { action ->
+            if (phase != Phase.Playing && action !in OUTSIDE_PLAYBACK) return false
+            val playKey = action == PlayerAction.TogglePlay || action == PlayerAction.Play || action == PlayerAction.Pause
+            if (playKey && !MediaKeyEcho.claim(MediaKeyEcho.Source.Keyboard)) return true
+            dispatchNow(action)
+            return true
+        }
+        val press = KeyPress(
+            key = event.key,
+            shift = event.isShiftPressed,
+            ctrl = event.isCtrlPressed,
+            alt = event.isAltPressed,
+            meta = event.isMetaPressed,
+        )
+        val context = KeyContext(fullscreen = fullscreen, speedIsNormal = status.speed == 1f, mac = mac, tv = tv)
+        val action = PlayerKeys.actionFor(press, context) ?: return false
+        // Over the loading and error sheets only the way out works.
+        if (phase != Phase.Playing && action !in OUTSIDE_PLAYBACK) return false
+        // The same key may already have reached the player through the media session.
+        val playKey = event.key == Key.MediaPlayPause || event.key == Key.MediaPlay || event.key == Key.MediaPause
+        if (playKey && !MediaKeyEcho.claim(MediaKeyEcho.Source.Keyboard)) return true
+        dispatchNow(action)
+        return true
+    }
+    val playerKeyNow by rememberUpdatedState(::playerKey)
+    // Whether Compose's focus is on the picture or inside it, where [playerKey] hears the keys itself.
+    var focusInside by remember { mutableStateOf(false) }
+    // A sheet or a menu that takes typing or holds the keyboard itself: the window leaves its keys alone.
+    val typingUp = notePrompt != null || timePrompt || showOnline || menu != null
+    val typingUpNow by rememberUpdatedState(typingUp)
+    val sheetUpNow by rememberUpdatedState(showEpisodes || showShortcuts || showDetails)
+    DisposableEffect(Unit) {
+        val route = PlayerKeyRoute.Route(
+            handle = { playerKeyNow(it) },
+            focusInside = { focusInside },
+            typing = { typingUpNow },
+            refocus = { if (!sheetUpNow) refocus() },
+        )
+        PlayerKeyRoute.open(route)
+        onDispose { PlayerKeyRoute.close(route) }
+    }
+
     // ---- layout ------------------------------------------------------------------------------
 
     PlayerTheme {
@@ -1549,90 +1654,11 @@ fun PlayerScreen(
             modifier
                 .fillMaxSize()
                 .background(backdrop)
-                .onPreviewKeyEvent { event ->
-                    // Locked: every key is the lock's, the downs and the ups, so not even the
-                    // window's Esc and Backspace hear one. Enter held unlocks; any key shows how.
-                    if (screenLocked) {
-                        lockedKey(event)
-                        return@onPreviewKeyEvent true
-                    }
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    noteInput()
-                    // The episode list has the keyboard while it is up: Esc closes it, and every
-                    // other key (the arrows, Enter) is its own, not a seek or a fullscreen. The
-                    // other back keys close it too, or the window would take Backspace as a way
-                    // out of the whole player.
-                    if (showEpisodes) {
-                        if (com.tmplayer.ui.nav.isBackKey(event)) {
-                            showEpisodes = false
-                            refocus()
-                            return@onPreviewKeyEvent true
-                        }
-                        return@onPreviewKeyEvent false
-                    }
-                    // Sheets peel off before Esc means anything else.
-                    if (event.key == androidx.compose.ui.input.key.Key.Escape && (showShortcuts || showDetails || showOnline)) {
-                        showShortcuts = false
-                        showDetails = false
-                        showOnline = false
-                        refocus()
-                        return@onPreviewKeyEvent true
-                    }
-                    val tv = com.tmplayer.desktop.ui.BigScreen.on
-                    val remote = com.tmplayer.desktop.ui.remoteKeyOf(event)
-                    val plain = !event.isShiftPressed && !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed
-                    if (tv && !keysOnPlayer && menu == null && !showShortcuts && !showDetails && !showOnline) {
-                        // A remote on the controls: the arrows walk them, OK presses the one it is
-                        // on, and Back leaves them for the picture, the controls staying up meanwhile.
-                        poke()
-                        val direction = PlayerRemote.direction(event.key)
-                        when {
-                            com.tmplayer.ui.nav.isBackKey(event) || remote == com.tmplayer.desktop.ui.RemoteKey.Back -> {
-                                refocus()
-                                return@onPreviewKeyEvent true
-                            }
-                            plain && direction != null -> {
-                                focusManager.moveFocus(direction)
-                                return@onPreviewKeyEvent true
-                            }
-                            plain && event.key in PlayerRemote.OK -> return@onPreviewKeyEvent false
-                        }
-                    } else if (tv && plain && phase == Phase.Playing && (event.key == Key.DirectionUp || event.key == Key.DirectionDown)) {
-                        // Up and Down on the picture bring the controls up and the remote into them;
-                        // the sound is the television's own volume keys.
-                        poke()
-                        scope.launch {
-                            androidx.compose.runtime.withFrameNanos { }
-                            focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Enter)
-                        }
-                        return@onPreviewKeyEvent true
-                    }
-                    // A remote's key the JDK has no name for (Back, the media keys), from its raw code.
-                    PlayerRemote.actionFor(remote)?.let { action ->
-                        if (phase != Phase.Playing && action !in OUTSIDE_PLAYBACK) return@onPreviewKeyEvent false
-                        val playKey = action == PlayerAction.TogglePlay || action == PlayerAction.Play || action == PlayerAction.Pause
-                        if (playKey && !MediaKeyEcho.claim(MediaKeyEcho.Source.Keyboard)) return@onPreviewKeyEvent true
-                        dispatchNow(action)
-                        return@onPreviewKeyEvent true
-                    }
-                    val press = KeyPress(
-                        key = event.key,
-                        shift = event.isShiftPressed,
-                        ctrl = event.isCtrlPressed,
-                        alt = event.isAltPressed,
-                        meta = event.isMetaPressed,
-                    )
-                    val context = KeyContext(fullscreen = fullscreen, speedIsNormal = status.speed == 1f, mac = mac, tv = tv)
-                    val action = PlayerKeys.actionFor(press, context) ?: return@onPreviewKeyEvent false
-                    // Over the loading and error sheets only the way out works.
-                    if (phase != Phase.Playing && action !in OUTSIDE_PLAYBACK) return@onPreviewKeyEvent false
-                    // The same key may already have reached the player through the media session.
-                    val playKey = event.key == Key.MediaPlayPause || event.key == Key.MediaPlay || event.key == Key.MediaPause
-                    if (playKey && !MediaKeyEcho.claim(MediaKeyEcho.Source.Keyboard)) return@onPreviewKeyEvent true
-                    dispatchNow(action)
-                    true
+                .onPreviewKeyEvent { playerKeyNow(it) }
+                .onFocusChanged {
+                    keysOnPlayer = it.isFocused || !it.hasFocus
+                    focusInside = it.hasFocus
                 }
-                .onFocusChanged { keysOnPlayer = it.isFocused || !it.hasFocus }
                 .focusRequester(focus)
                 .focusable()
                 .onPointerEvent(PointerEventType.Move, PointerEventPass.Initial) { poke() }

@@ -254,7 +254,9 @@ fun main(args: Array<String>) {
                 title = "TMPlayer",
                 undecorated = undecorated,
                 icon = rememberVectorPainter(AppLogo.Mark),
-                onPreviewKeyEvent = shell::onPreviewKey,
+                // The open player hears its keys from the window too, wherever Compose's focus went
+                // (PlayerKeyRoute).
+                onPreviewKeyEvent = { shell.onPreviewKey(it) || com.tmplayer.desktop.player.PlayerKeyRoute.onWindowKey(it) },
                 onKeyEvent = shell::onKey,
             ) {
                 // The layouts are made for 960 by 600 at the Default size, so the least the window
@@ -277,6 +279,16 @@ fun main(args: Array<String>) {
                     repeat(100) { if (!window.isDisplayable) delay(50) }
                     UndecoratedFrame.restoreCaptionStyles(window)
                     UndecoratedFrame.holdToWorkArea(window)
+                }
+                // AWT's focus kept on Compose's content rather than the frame around it, and the
+                // player told when a text field is being typed into (WindowKeyFocus, PlayerKeyRoute).
+                DisposableEffect(window) {
+                    val undo = com.tmplayer.desktop.os.WindowKeyFocus.install(window)
+                    com.tmplayer.desktop.player.PlayerKeyRoute.textInput = { com.tmplayer.desktop.os.WindowKeyFocus.textInputActive(window) }
+                    onDispose {
+                        undo()
+                        com.tmplayer.desktop.player.PlayerKeyRoute.textInput = { false }
+                    }
                 }
                 val chrome = remember(window) {
                     if (!chromeMode.inApp) {
@@ -346,16 +358,18 @@ fun main(args: Array<String>) {
                     }
                 }
                 // The change remaps the window, and the window system may hand it back without the
-                // keyboard (Esc and Space then reach nothing until a click). Once it has settled,
-                // the window asks for focus again; the player takes it from there (PlayerScreen).
+                // keyboard, or with AWT's focus on the frame rather than Compose's content (Esc and
+                // Space then reach nothing until a click). Once it has settled, the keyboard goes
+                // back to the content, raising the window first if it lost it; the player takes it
+                // from there (PlayerScreen, PlayerKeyRoute).
                 var fullscreenSeen by remember { mutableStateOf(shell.fullscreen) }
                 LaunchedEffect(shell.fullscreen) {
                     if (fullscreenSeen == shell.fullscreen) return@LaunchedEffect
                     fullscreenSeen = shell.fullscreen
                     delay(FULLSCREEN_SETTLE_MS)
-                    if (!window.isShowing || window.isActive) return@LaunchedEffect
-                    window.toFront()
-                    window.requestFocus()
+                    if (!window.isShowing) return@LaunchedEffect
+                    if (!window.isActive) window.toFront()
+                    com.tmplayer.desktop.os.WindowKeyFocus.focus(window)
                 }
                 // "Start in full screen", `--fullscreen` and `--tv`: once the window is shown, so the
                 // window system is asked directly (NativeFullscreen) and leaving it later undoes
@@ -371,7 +385,7 @@ fun main(args: Array<String>) {
                         window.extendedState = window.extendedState and java.awt.Frame.ICONIFIED.inv()
                     }
                     window.toFront()
-                    window.requestFocus()
+                    com.tmplayer.desktop.os.WindowKeyFocus.focus(window)
                 }
                 // The first frame is on screen: later launches may hand over to this one now.
                 LaunchedEffect(Unit) {
