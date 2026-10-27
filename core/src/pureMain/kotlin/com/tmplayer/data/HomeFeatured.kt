@@ -10,6 +10,23 @@ data class FeaturedPick(val entry: ShelfEntry) {
 
     val series: Series? get() = (entry as? ShelfEntry.Show)?.series
 
+    /**
+     * The name of a lone episode standing for its show (a page from Continue watching, or a
+     * show with one episode in the chat), null for a whole show or a film. Such a page is drawn
+     * as its show: the show's name, logo and picture, not the file's name and a still.
+     */
+    val loneEpisode: ParsedName?
+        get() = if (series != null) null else SeriesShelf.episodeOf(item).takeIf { it.isEpisode && it.extra == null && it.title.isNotBlank() }
+
+    /** [loneEpisode]'s "S01E02", as [SeriesEpisode.code] writes it. */
+    val loneEpisodeCode: String?
+        get() = loneEpisode?.let { name ->
+            name.episode?.let { "S${(name.season ?: 1).toString().padStart(2, '0')}E${it.toString().padStart(2, '0')}" }
+        }
+
+    /** A show's page, whole or by one of its episodes ([loneEpisode]). */
+    val isShow: Boolean get() = series != null || loneEpisode != null
+
     /** The file the page stands for: the film (its copies in [MediaItem.versions]), or the show's newest episode. */
     val item: MediaItem
         get() = when (entry) {

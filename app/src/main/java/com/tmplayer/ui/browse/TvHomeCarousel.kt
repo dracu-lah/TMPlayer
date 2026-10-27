@@ -151,7 +151,7 @@ internal fun TvFeaturedCarousel(
         val pick = picks[index]
         // Every page's title logo looked up, fetched and decoded ahead, from the page up on, so a
         // turn shows the next page's logo at once.
-        com.tmplayer.ui.online.PrefetchTitleLogos(remember(picks) { picks.map { it.item to (it.series != null) } }, index)
+        com.tmplayer.ui.online.PrefetchTitleLogos(remember(picks) { picks.map { it.item to it.isShow } }, index)
         val go: (Int) -> Unit = { to -> latest.getOrNull(((to % count) + count) % count)?.let { currentKey = it.key } }
 
         val still = rememberReducedMotion() || Motion.reduced
@@ -196,6 +196,9 @@ internal fun TvFeaturedCarousel(
         val playItem = if (series != null && episode != null && showProgress != null) watch.pick(episode, showProgress) else pick.item
         val playLabel = if (series != null && episode != null && showProgress != null) {
             seriesPlayLabel(episode.code, watch.pointOf(episode), showProgress.watched > 0)
+        } else if (pick.loneEpisodeCode != null) {
+            // A lone episode on its show's page: Resume or Play names the episode, as a show's page does.
+            seriesPlayLabel(pick.loneEpisodeCode.orEmpty(), watch.point(pick.item), anyWatched = false)
         } else if ((watch.point(pick.item)?.positionMs ?: 0L) > 0L) {
             s.commonResume
         } else {
@@ -310,10 +313,10 @@ private fun TvFeaturedArt(pick: FeaturedPick, chatTitle: (Long) -> String, start
     val series = pick.series
     val chat = chatTitle(item.chatId)
     // A show's backdrop rather than one episode's still: the page stands for the whole show.
-    val meta = rememberMeta(item, showOnly = series != null)
+    val meta = rememberMeta(item, showOnly = pick.isShow)
     val cover = rememberCover(item, chat)
     val source = remember(item, meta?.wideUrl, cover) { BackdropSource(item.miniThumbnail, item.thumbnailFileId, cover, meta?.wideUrl) }
-    val title = remember(pick) { series?.title?.ifBlank { null } ?: SeriesShelf.tileTitle(item) }
+    val title = remember(pick) { series?.title?.ifBlank { null } ?: pick.loneEpisode?.title ?: SeriesShelf.tileTitle(item) }
     val facts = remember(pick, chat, s) { featuredFacts(pick, title, chat, s) }
     Box(
         Modifier

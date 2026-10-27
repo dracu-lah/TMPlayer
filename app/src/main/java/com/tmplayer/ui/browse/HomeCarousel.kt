@@ -152,7 +152,7 @@ internal fun FeaturedCarousel(
         }
         // Every page's title logo looked up, fetched and decoded ahead, from the page up on, so a
         // turn shows the next page's logo at once.
-        com.tmplayer.ui.online.PrefetchTitleLogos(remember(picks) { picks.map { it.item to (it.series != null) } }, pager.currentPage)
+        com.tmplayer.ui.online.PrefetchTitleLogos(remember(picks) { picks.map { it.item to it.isShow } }, pager.currentPage)
 
         val still = rememberReducedMotion() || Motion.reduced
         val talkBack = rememberTouchExploration()
@@ -277,10 +277,10 @@ private fun FeaturedPage(
     val series = pick.series
     val chat = chatTitle(item.chatId)
     // A show's backdrop rather than one episode's still: the page stands for the whole show.
-    val meta = rememberMeta(item, showOnly = series != null)
+    val meta = rememberMeta(item, showOnly = pick.isShow)
     val cover = rememberCover(item, chat)
     val source = remember(item, meta?.wideUrl, cover) { BackdropSource(item.miniThumbnail, item.thumbnailFileId, cover, meta?.wideUrl) }
-    val title = remember(pick) { series?.title?.ifBlank { null } ?: SeriesShelf.tileTitle(item) }
+    val title = remember(pick) { series?.title?.ifBlank { null } ?: pick.loneEpisode?.title ?: SeriesShelf.tileTitle(item) }
     val facts = remember(pick, chat, s) { featuredFacts(pick, title, chat, s) }
 
     Box(
@@ -376,6 +376,9 @@ private fun FeaturedControls(
     val playItem = if (series != null && episode != null && showProgress != null) watch.pick(episode, showProgress) else item
     val playLabel = if (series != null && episode != null && showProgress != null) {
         seriesPlayLabel(episode.code, watch.pointOf(episode), showProgress.watched > 0)
+    } else if (pick.loneEpisodeCode != null) {
+        // A lone episode on its show's page: Resume or Play names the episode, as a show's page does.
+        seriesPlayLabel(pick.loneEpisodeCode.orEmpty(), watch.point(item), anyWatched = false)
     } else if ((watch.point(item)?.positionMs ?: 0L) > 0L) {
         s.commonResume
     } else {
@@ -483,7 +486,7 @@ internal fun featuredHeight(width: Dp, height: Dp): Dp =
 internal fun sharpOnline(pick: FeaturedPick, online: OnlineMetadata?): Boolean {
     online ?: return false
     val item = pick.item
-    val query = MetaQuery.of(item.nameForParsing, item.caption)?.let { if (pick.series != null) it.showOnly() else it } ?: return false
+    val query = MetaQuery.of(item.nameForParsing, item.caption)?.let { if (pick.isShow) it.showOnly() else it } ?: return false
     val info = runCatching { online.cachedMatch(query) }.getOrNull() ?: return false
     if (info.wideUrl == null) return false
     return MetaConfidence.basis(SeriesShelf.episodeOf(item), info) != null

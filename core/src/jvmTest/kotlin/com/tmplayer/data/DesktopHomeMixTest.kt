@@ -43,6 +43,19 @@ class DesktopHomeMixTest {
     }
 
     @Test
+    fun `an episode part way through stands for its show`() {
+        val episode = video("Three.Body.Problem.S01E02.1080p.mkv", date = 10)
+        val page = HomeFeatured.mix(emptyList(), listOf(episode)).single()
+        assertNull(page.series)
+        assertTrue(page.isShow)
+        assertEquals("S01E02", page.loneEpisodeCode)
+        assertEquals("three body problem", page.loneEpisode?.title?.lowercase())
+        val film = HomeFeatured.mix(emptyList(), listOf(video("Night.Train.2019.1080p.mkv", date = 5))).single()
+        assertTrue(!film.isShow)
+        assertNull(film.loneEpisodeCode)
+    }
+
+    @Test
     fun `nothing without a picture, and one page for a film in both`() {
         val bare = video("Bare Film 2001.mkv", date = 50, art = false)
         val both = video("Night.Train.2019.1080p.mkv", date = 40)

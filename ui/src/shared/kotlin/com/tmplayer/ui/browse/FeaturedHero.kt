@@ -68,7 +68,7 @@ fun featuredFactsLine(pick: FeaturedPick, meta: MetaInfo?, extras: MetaExtras?, 
         (extras?.runtimeMin?.let { it * 60L } ?: item.durationSec.toLong().takeIf { it > 0 })?.let { s.formatter.duration(it) }
     }
     return listOfNotNull(
-        if (series != null) s.homeFeaturedSeries else s.homeFeaturedFilm,
+        if (pick.isShow) s.homeFeaturedSeries else s.homeFeaturedFilm,
         year?.toString(),
         genres,
         length,
