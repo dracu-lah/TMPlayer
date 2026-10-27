@@ -228,13 +228,6 @@ internal fun ChatBar(
                     )
                 }
                 BarIcon(TmIcons.Sort, if (filtered) s.gridFilterOn else s.gridSort, null, onSort, caption = s.gridSort, modifier = sortAnchor.modifier, tint = if (filtered) Tone.accent else Tone.text)
-                BarIcon(
-                    if (state.chatRows) TmIcons.Grid else TmIcons.List,
-                    if (state.chatRows) s.browseShowAsTiles else s.browseShowAsRows,
-                    null,
-                    { state.chatRows = !state.chatRows },
-                    caption = if (state.chatRows) s.browseAsTiles else s.browseAsRows,
-                )
             }
         }
     }

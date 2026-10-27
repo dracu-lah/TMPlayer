@@ -307,12 +307,10 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
             val back = gridReturn ?: restored
             val grid = com.tmplayer.ui.components.rememberAheadGridState(back.first, back.second)
             LaunchedEffect(grid) { gridReturn = null }
-            val rowsGrid = com.tmplayer.ui.components.rememberAheadGridState()
             DisposableEffect(model, grid) {
                 onDispose { model.rememberScroll(grid.firstVisibleItemIndex, grid.firstVisibleItemScrollOffset) }
             }
             LoadMoreNearEnd(grid, enabled = !content.endReached && !content.loadingMore) { model.loadMore() }
-            LoadMoreNearEnd(rowsGrid, enabled = !content.endReached && !content.loadingMore) { model.loadMore() }
             val ad = content.sponsored?.messages?.firstOrNull()
             // A show as one poster that opens its seasons, and copies of one film (720p, 1080p,
             // HEVC) as one poster with the rest a pick in its details. While searching, every
@@ -450,8 +448,6 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                         }
                     }
                 },
-                rows = state.chatRows,
-                rowsGrid = rowsGrid,
                 topPadding = (if (underChrome) ChatTopClearance else 8.dp) + noticeRoom,
                 posterWidth = CHAT_POSTER_WIDTH,
                 bottomBar = chatBar,
@@ -518,10 +514,6 @@ internal fun VideoGrid(
      * move one column at a time; the videos after the posters are then smaller 16:9 cards.
      */
     posters: Set<String> = emptySet(),
-    /** The videos as rows of a small poster and the name ([Poster]'s row), in as many columns as fit. */
-    rows: Boolean = false,
-    /** The rows' own scroll, kept apart from the tiles' so each arrangement keeps its place. */
-    rowsGrid: LazyGridState = com.tmplayer.ui.components.rememberAheadGridState(),
     /** Room over the first row: more where the page's own buttons float over the grid's top. */
     topPadding: Dp = 8.dp,
     /** The width a tile asks for; a chat's page draws its posters larger than the other grids. */
@@ -539,8 +531,7 @@ internal fun VideoGrid(
     // Every file on its own, episodes included: a chat lists what was posted, one by one.
     val cells by rememberUpdatedState(items)
     val headerItems by rememberUpdatedState(if (header != null) 1 else 0)
-    val shown = if (rows) rowsGrid else grid
-    val nav = rememberKeyboardNav(remember(shown) { GridSurface(shown, { headerItems }, { cells.size }) })
+    val nav = rememberKeyboardNav(remember(grid) { GridSurface(grid, { headerItems }, { cells.size }) })
     LaunchedEffect(nav) { onNav(nav) }
     val history by state.settings.downloadHistory.collectAsState(initial = emptyList())
     val index = remember(history) { history.associateBy { "${it.chatId}:${it.messageId}" } }
@@ -548,30 +539,21 @@ internal fun VideoGrid(
     BackHandler(enabled = selection.active) { selection.clear() }
     Box(Modifier.fillMaxSize()) {
       CompositionLocalProvider(LocalGridSelection provides selection, LocalDownloadIndex provides index) {
-        // Rows to tiles and back cross-fade rather than cut, so the switch reads as the same videos
-        // laid out again; each arrangement keeps its own scroll.
-        androidx.compose.animation.Crossfade(
-            targetState = rows,
-            animationSpec = Motion.standard(if (Motion.reduced) 0 else Motion.Normal),
-            label = "chatLayout",
-        ) { rows ->
         LazyVerticalGrid(
             columns = when {
-                rows -> GridCells.Adaptive(ROW_MIN_WIDTH)
                 posters.isEmpty() -> GridCells.Adaptive(posterWidth)
                 else -> GridCells.Adaptive(posterWidth * POSTER_SHARE)
             },
-            state = if (rows) rowsGrid else grid,
-            // On the page's margin, as the heading and the chips are; a row's own 8 dp inset is
-            // taken off, so its poster starts there too, and the end keeps room for the scrollbar.
+            state = grid,
+            // On the page's margin, as the heading and the chips are; the end keeps room for the scrollbar.
             contentPadding = PaddingValues(
-                start = if (rows) pageMargin() - 8.dp else pageMargin(),
-                end = if (rows) pageMargin() else pageMargin() + 8.dp,
+                start = pageMargin(),
+                end = pageMargin() + 8.dp,
                 top = topPadding,
                 bottom = 24.dp + com.tmplayer.ui.components.LocalBottomChrome.current,
             ),
-            horizontalArrangement = Arrangement.spacedBy(if (rows) 12.dp else 16.dp),
-            verticalArrangement = Arrangement.spacedBy(if (rows) 2.dp else 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
             modifier = Modifier.fillMaxSize().navKeys(nav) { cells.size }.remembersRemoteItem(),
         ) {
             if (header != null) {
@@ -582,9 +564,9 @@ internal fun VideoGrid(
                 // A new order (a sort, a correction) moves the cards to their places.
                 Box(Modifier.animateItem()) {
                     if (show != null && watch != null) {
-                        SeriesPoster(show, watch, onOpen = { onOpenSeries(show) }, nav = nav, index = index, poster = item.id in posters, row = rows)
+                        SeriesPoster(show, watch, onOpen = { onOpenSeries(show) }, nav = nav, index = index, poster = item.id in posters)
                     } else {
-                        MediaTile(state, item, chatTitle, nav, index, badge = badge(item), poster = item.id in posters, row = rows)
+                        MediaTile(state, item, chatTitle, nav, index, badge = badge(item), poster = item.id in posters)
                     }
                 }
             }
@@ -600,15 +582,14 @@ internal fun VideoGrid(
                 item(key = "footer", span = { GridItemSpan(maxLineSpan) }) { footer() }
             }
         }
-        }
       }
         // The selection bar takes the bottom centre while it is up.
-        if (!selection.active) ScrollToTop(shown)
+        if (!selection.active) ScrollToTop(grid)
         // The hold to scroll handle on a long chat, its bubble saying where in the chat's order the
         // grid is; a short one keeps the scrollbar.
-        FastScroller(shown, label = scrollLabel) {
+        FastScroller(grid, label = scrollLabel) {
             VerticalScrollbar(
-                rememberScrollbarAdapter(shown),
+                rememberScrollbarAdapter(grid),
                 Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(vertical = 4.dp),
             )
         }
@@ -816,8 +797,6 @@ internal fun MediaTile(
     badge: (@Composable () -> Unit)? = null,
     /** A film's 2:3 poster card ([SeriesShelf.isFilm]); the caller says, as only it knows the grid. */
     poster: Boolean = false,
-    /** A row of a chat's list: see [Poster]'s row. */
-    row: Boolean = false,
 ) {
     val s = LocalStrings.current
     // The grid's selection, when there is one, so the pane can start one with this poster.
@@ -850,14 +829,10 @@ internal fun MediaTile(
                 ),
             )
         },
-        row = row,
         art = {
-            if (poster || row) {
+            if (poster) {
                 val meta = com.tmplayer.ui.online.rememberMeta(item, showOnly = true)
-                // A row's poster is small: no name set on a generated cover, the title is beside it.
-                val cover = rememberCover(item)
-                val shown = if (row) remember(cover) { cover.copy(title = "") } else cover
-                PosterArt(item.miniThumbnail, item.thumbnailFileId, shown, meta?.posterUrl, Modifier.fillMaxSize(), compactCover = row)
+                PosterArt(item.miniThumbnail, item.thumbnailFileId, rememberCover(item), meta?.posterUrl, Modifier.fillMaxSize())
             } else {
                 // On Home, the show's or the film's own picture over the frame once a match arrives.
                 com.tmplayer.ui.online.OnlineArt(item, Modifier.fillMaxSize()) {
@@ -867,10 +842,10 @@ internal fun MediaTile(
         },
         subtitle = buildString {
             // A poster leads with the film's year and leaves the quality to the chip on its art.
-            if (poster || row) item.parsedName.year?.let { append(it).append("  ·  ") }
+            if (poster) item.parsedName.year?.let { append(it).append("  ·  ") }
             if (!poster && item.durationSec > 0) append(MediaMapper.formatDuration(item.durationSec)).append("  ·  ")
             append(if (item.versions.size > 1) s.detailVersions(item.versions.size) else com.tmplayer.data.SplitPieces.sizeFact(item, MediaMapper.formatSize(item.sizeBytes)))
-            if (!poster || row) item.qualityTags.firstOrNull()?.let { append("  ·  ").append(it) }
+            if (!poster) item.qualityTags.firstOrNull()?.let { append("  ·  ").append(it) }
             if (WatchedWords.showsWatched(point?.fraction, finished)) append("  ·  ").append(s.watchedBadge)
         },
     )
@@ -925,11 +900,6 @@ internal fun Poster(
      * Null keeps the menu, as Continue watching and Watched do.
      */
     onDetails: ((refocus: () -> Unit) -> Unit)? = null,
-    /**
-     * A row of a chat's list rather than a tile: a small 2:3 poster at the start with no badge on
-     * it, the name and the facts beside it, no card round it; a tint and an edge when ticked.
-     */
-    row: Boolean = false,
 ) {
     val s = LocalStrings.current
     val interaction = remember { MutableInteractionSource() }
@@ -1051,65 +1021,6 @@ internal fun Poster(
                     Modifier.clickable(interactionSource = interaction, indication = null, onClick = play)
                 },
             )
-    if (row) {
-        val shape = RoundedCornerShape(Corner.Medium)
-        Row(
-            behaviour
-                .fillMaxWidth()
-                .clip(shape)
-                .background(
-                    when {
-                        selected -> Tone.accent.copy(alpha = 0.12f)
-                        lifted || focused || menu -> Tone.surfaceHigh
-                        else -> Color.Transparent
-                    },
-                )
-                .then(if (selected || focused) Modifier.border(Focus.Ring, Tone.accent, shape) else Modifier)
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // The poster alone: the title and the facts beside it already say what a badge would.
-            Box(Modifier.width(ROW_POSTER).aspectRatio(2f / 3f).clip(RoundedCornerShape(Corner.Small))) {
-                art()
-                if (progress != null && progress > 0f) ProgressLine(progress, Modifier.align(Alignment.BottomCenter))
-            }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                val title = remember(item) { SeriesShelf.tileTitle(item) }
-                Text(title, style = MaterialTheme.typography.titleSmall, color = Tone.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(subtitle, style = MaterialTheme.typography.labelMedium, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            if (lifted || focused || menu) {
-                BarTooltip(s.playerPlay, null) {
-                    Surface(
-                        shape = CircleShape,
-                        color = Tone.accent,
-                        modifier = Modifier.size(36.dp).clickable { state.openPlayer(item, startFromBeginning = false) },
-                    ) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Icon(TmIcons.PlaySolid, contentDescription = s.playerPlay, tint = Tone.onAccent, modifier = Modifier.size(20.dp))
-                        }
-                    }
-                }
-            }
-            Box {
-                if (lifted || focused || menu) {
-                    BarTooltip(s.commonMore, null) {
-                        IconButton(onClick = { openMenu() }) { Icon(TmIcons.MoreVert, contentDescription = s.commonMore) }
-                    }
-                } else {
-                    Spacer(Modifier.size(48.dp))
-                }
-                if (details == null) {
-                    TileMenu(state, item, chatTitle, expanded = menu, onDismiss = {
-                        menu = false
-                        if (hasFocus || nav?.current == index) runCatching { requester.requestFocus() }
-                    }, extra = extraMenu, watchedToggle = if (markToggle) finished else null, fileMenu = fileMenu)
-                }
-            }
-        }
-        return
-    }
     Column(
         behaviour,
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1540,11 +1451,6 @@ private val NOTICE_CORNER = 20.dp
 /** A film or show poster's width, as a share of the toolbar's poster size step. */
 private const val POSTER_SHARE = 0.75f
 
-/** The poster of a row in a chat's list: small, since the row is for reading the name. */
-internal val ROW_POSTER = 56.dp
-
-/** The narrowest a column of rows gets before the list drops to fewer columns. */
-private val ROW_MIN_WIDTH = 440.dp
 
 /** How much wider a Continue watching card is than a poster. */
 private const val CONTINUE_WIDTH = 1.25f
