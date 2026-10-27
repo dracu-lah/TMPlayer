@@ -1,14 +1,27 @@
 package com.tmplayer.desktop.ui
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.semantics.SemanticsActions
@@ -16,11 +29,13 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
 import com.tmplayer.i18n.L
 import com.tmplayer.ui.i18n.ProvideStrings
 import com.tmplayer.ui.theme.TmMaterialTheme
 import com.tmplayer.ui.theme.Tone
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -112,6 +127,128 @@ class WindowRecoveryTest {
         recovery.contain(0, null, OutOfMemoryError("heap"))
         assertEquals(1, gaveUp.size)
         assertNull(recovery.failure)
+    }
+
+    /** The error as a macOS log of 1.28.2-beta.2 shows it, thrown on a mouse release. */
+    private fun closedLayerRace() = IllegalArgumentException("RootNodeOwner is already disposed").apply {
+        stackTrace = arrayOf(
+            StackTraceElement("androidx.compose.ui.node.RootNodeOwner", "measureAndLayout", "RootNodeOwner.skiko.kt", 245),
+            StackTraceElement("androidx.compose.ui.scene.CanvasLayersComposeSceneImpl", "doMeasureAndLayout", "CanvasLayersComposeScene.skiko.kt", 299),
+            StackTraceElement("androidx.compose.ui.scene.BaseComposeScene\$inputHandler\$1", "invoke", "BaseComposeScene.skiko.kt", 58),
+            StackTraceElement("androidx.compose.ui.scene.ComposeSceneMediator\$mouseListener\$1", "mouseReleased", "ComposeSceneMediator.desktop.kt", 314),
+        )
+    }
+
+    @Test
+    fun aPopupClosedWhileLaidOutIsLetPassWithoutTheCard() {
+        val recovery = recovery()
+        recovery.contain(0, null, closedLayerRace())
+        assertNull(recovery.failure)
+        assertEquals(0, recovery.generation)
+        assertTrue(reported.isEmpty())
+        assertTrue(gaveUp.isEmpty())
+        // The card's own window too: it is not a second failure there.
+        recovery.contain(0, null, RuntimeException("a real one"))
+        recovery.contain(1, null, closedLayerRace())
+        assertTrue(gaveUp.isEmpty())
+        assertEquals(1, recovery.generation)
+    }
+
+    @Test
+    fun theRaceOverAndOverShowsTheCardInstead() {
+        val recovery = recovery()
+        repeat(WindowRecovery.MAX_PASSING) { recovery.contain(0, null, closedLayerRace()) }
+        assertNull(recovery.failure)
+        val last = closedLayerRace()
+        recovery.contain(0, null, last)
+        assertSame(last, recovery.failure)
+        assertEquals(listOf<Throwable>(last), reported)
+        // A minute later the count starts again.
+        recovery.tryAgain()
+        clock += WindowRecovery.WINDOW_MS + 1
+        recovery.contain(1, null, closedLayerRace())
+        assertNull(recovery.failure)
+    }
+
+    @Test
+    fun onlyThatRaceIsLetPass() {
+        assertTrue(WindowRecovery.isClosedLayerRace(closedLayerRace()))
+        // The same message from somewhere else, or another message, is a failure.
+        val elsewhere = IllegalArgumentException("RootNodeOwner is already disposed").apply {
+            stackTrace = arrayOf(StackTraceElement("com.tmplayer.desktop.ui.Home", "draw", "Home.kt", 1))
+        }
+        assertFalse(WindowRecovery.isClosedLayerRace(elsewhere))
+        val other = IllegalArgumentException("index out of range").apply { stackTrace = closedLayerRace().stackTrace }
+        assertFalse(WindowRecovery.isClosedLayerRace(other))
+        assertFalse(WindowRecovery.isClosedLayerRace(IllegalStateException("RootNodeOwner is already disposed")))
+        val recovery = recovery()
+        recovery.contain(0, null, elsewhere)
+        assertSame(elsewhere, recovery.failure)
+    }
+
+    /**
+     * The race itself, in the window's kind of scene (one canvas, a layer per popup), on the path
+     * the log shows: a mouse release lays the scene out first. Content composed while it is
+     * measured (BoxWithConstraints, as lazy lists and grids do with their items) drops an open
+     * popup when its room changes, so the popup's layer is closed in the middle of the scene's pass
+     * over its layers. Compose 1.12.2 throws for it; a later version may not, which is fine.
+     * Whatever is thrown is what [WindowRecovery] lets pass, and the scene is well after it: the
+     * popup is gone, the content is drawn and the next click lands.
+     */
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun aPopupClosedWhileTheSceneMeasuresIsTheRaceAndTheSceneCarriesOn() {
+        var width by mutableStateOf(600)
+        var tipOpen = false
+        var rowDrawn = 0
+        var clicks = 0
+        val scene = ImageComposeScene(800, 400, density = Density(1f)) {
+            Box(
+                Modifier
+                    // Read while measuring, so a change is laid out without a recomposition.
+                    .layout { measurable, _ ->
+                        val placeable = measurable.measure(Constraints.fixed(width, 300))
+                        layout(width, 300) { placeable.place(0, 0) }
+                    }
+                    .clickable { clicks++ },
+            ) {
+                BoxWithConstraints {
+                    Text("row", Modifier.drawBehind { rowDrawn++ })
+                    if (maxWidth > 400.dp) {
+                        Popup {
+                            DisposableEffect(Unit) {
+                                tipOpen = true
+                                onDispose { tipOpen = false }
+                            }
+                            Text("tip")
+                        }
+                    }
+                }
+            }
+        }
+        try {
+            scene.render()
+            assertTrue(tipOpen)
+            width = 300
+            Snapshot.sendApplyNotifications()
+            val thrown = runCatching { scene.sendPointerEvent(PointerEventType.Release, Offset(10f, 10f)) }.exceptionOrNull()
+            assertFalse(tipOpen)
+            if (thrown != null) {
+                assertTrue("not the race: $thrown", WindowRecovery.isClosedLayerRace(thrown))
+                val recovery = recovery()
+                recovery.contain(0, null, thrown)
+                assertNull(recovery.failure)
+                assertTrue(reported.isEmpty())
+            }
+            val drawn = rowDrawn
+            scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f))
+            scene.sendPointerEvent(PointerEventType.Release, Offset(10f, 10f))
+            scene.render()
+            assertEquals(1, clicks)
+            assertTrue(rowDrawn > drawn)
+        } finally {
+            scene.close()
+        }
     }
 
     /**
