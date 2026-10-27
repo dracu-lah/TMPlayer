@@ -2499,11 +2499,19 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         return fresh
     }
 
-    /** What the message read again brings to a player already up: the quality button and the storyboard. */
+    /**
+     * What the message read again brings to a player already up: the quality button, the
+     * storyboard, and the video's pictures where it was opened without them (the loader's and the
+     * scrub card's fallback).
+     */
     private fun onPostRead(fresh: MediaItem) {
         setCopies(copies)
         startStoryboard(fresh)
+        if (!artworkShown) showArtwork(fresh.miniThumbnail, fresh.thumbnailFileId)
     }
+
+    /** The video's pictures are up or on their way, from the intent or the message read again. */
+    private var artworkShown = false
 
     /**
      * Which copy to stream, decided before anything is asked about the file: the one chosen on the
@@ -3651,6 +3659,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         // The scrub card's pictures were of the last video.
         trickplay?.forget()
         scrubArt = null
+        artworkShown = false
         itemJob.cancel()
         itemJob = Job(lifecycleScope.coroutineContext[Job])
         recoveryJob = null
@@ -7165,10 +7174,16 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * is a file Telegram has to be asked for, so it lands a moment later, sharp, in the poster.
      *
      * A video with no thumbnail at all gets the plain sheet: everything here stays hidden until
-     * there is something to draw.
+     * there is something to draw. A video opened without its pictures (Continue watching keeps
+     * none) gets them from the message once it is read again ([onPostRead]).
      */
-    private fun showArtwork() {
-        val mini = Thumbnails.mini(intent.getByteArrayExtra(EXTRA_MINI_THUMBNAIL))?.asAndroidBitmap()
+    private fun showArtwork(
+        miniBytes: ByteArray? = intent.getByteArrayExtra(EXTRA_MINI_THUMBNAIL),
+        thumbnailId: Int = intent.getIntExtra(EXTRA_THUMBNAIL_ID, 0),
+    ) {
+        val mini = Thumbnails.mini(miniBytes)?.asAndroidBitmap()
+        if (mini == null && thumbnailId <= 0) return
+        artworkShown = true
         if (mini != null) {
             statusArt?.setImageBitmap(mini)
             statusPoster?.setImageBitmap(mini)
@@ -7176,7 +7191,6 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             revealArtwork()
         }
 
-        val thumbnailId = intent.getIntExtra(EXTRA_THUMBNAIL_ID, 0)
         if (thumbnailId <= 0) return
         itemScope.launch {
             val frame = runCatching { Thumbnails.full(thumbnailId) }.getOrNull() ?: return@launch
