@@ -198,7 +198,7 @@ import kotlinx.coroutines.withContext
  * other way round, shown only where the Android TV home screen has Play next or channels. [SetupChoices]
  * gathers the setup's answers (SetupChoicesList), each with a way to the page it also lives on.
  */
-enum class SettingsPage { SetupChoices, Appearance, Playback, Subtitles, Gestures, Library, TvHome, Notifications, Storage, Lock, About }
+enum class SettingsPage { SetupChoices, Appearance, Playback, Subtitles, Gestures, Library, Home, TvHome, Notifications, Storage, Lock, About }
 
 /**
  * Focus for a row in a lazy list, which exists only once the list has been measured: a frame
@@ -299,7 +299,10 @@ fun SettingsScreen(
     // Matches the stored default, so the switch does not show as on for the frame before the
     // first value arrives and then visibly flick off.
     val openLastChat by settings.openLastChat.collectAsStateWithLifecycle(initialValue = false)
-    val homeCarousel by settings.homeCarousel.collectAsStateWithLifecycle(initialValue = true)
+    // Every row on until read, which is the stored default.
+    val homeLayout by settings.homeLayout.collectAsStateWithLifecycle(initialValue = com.tmplayer.data.HomeLayout())
+    var pickingHomeSource by remember { mutableStateOf(false) }
+    var pickingHomeChats by remember { mutableStateOf(false) }
     // The single video watching leaves behind. Empty until the first read, which reads the same as
     // having none: "Nothing cached" for a frame is honest either way.
     val cached by settings.cachedVideos.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -469,6 +472,7 @@ fun SettingsScreen(
         SettingsPage.Subtitles -> s.settingsSubtitles
         SettingsPage.Gestures -> s.settingsPageGestures
         SettingsPage.Library -> s.settingsLibrary
+        SettingsPage.Home -> s.settingsPageHome
         SettingsPage.TvHome -> s.settingsPageTvHome
         SettingsPage.Notifications -> s.settingsPageNotifications
         SettingsPage.Storage -> s.settingsPageStorage
@@ -1224,17 +1228,6 @@ fun SettingsScreen(
                     }
                 }
 
-                // The carousel at the top of Home, which some would rather do without.
-                item(key = "home_carousel") {
-                    ToggleRow(
-                        title = s.settingsHomeCarousel,
-                        subtitle = if (homeCarousel) s.settingsHomeCarouselOn else s.settingsHomeCarouselOff,
-                        icon = TmIcons.Home,
-                        checked = homeCarousel,
-                        onToggle = { scope.launch { settings.setHomeCarousel(!homeCarousel) } },
-                    )
-                }
-
                 // ---- lists ---------------------------------------------------------------------------
 
                 // The lists TMPlayer keeps: recent searches first (moved here from Playback, as
@@ -1338,6 +1331,71 @@ fun SettingsScreen(
                     onEditOmdbKey = { editingOmdbKey = true },
                     toggleModifier = Modifier.jumpTarget(jumps.getValue(SetupStep.Posters)),
                 )
+            }
+
+            // Which rows Home shows, each on by default, and where Recently added (and the carousel,
+            // drawn from it) takes its videos from (users, 2026-10-27).
+            SettingsPage.Home -> {
+                sectionTitle { s.settingsHomeRows }
+                item(key = "home_carousel") {
+                    ToggleRow(
+                        title = s.settingsHomeCarousel,
+                        modifier = Modifier.focusRequester(landing),
+                        subtitle = if (homeLayout.carousel) s.settingsHomeCarouselOn else s.settingsHomeCarouselOff,
+                        icon = TmIcons.Home,
+                        checked = homeLayout.carousel,
+                        onToggle = { scope.launch { settings.setHomeCarousel(!homeLayout.carousel) } },
+                    )
+                }
+                item(key = "home_continue") {
+                    ToggleRow(
+                        title = s.settingsHomeContinue,
+                        subtitle = if (homeLayout.continueWatching) s.settingsHomeContinueOn else s.settingsHomeContinueOff,
+                        icon = TmIcons.History,
+                        checked = homeLayout.continueWatching,
+                        onToggle = { scope.launch { settings.setHomeContinue(!homeLayout.continueWatching) } },
+                    )
+                }
+                item(key = "home_recent") {
+                    ToggleRow(
+                        title = s.settingsHomeRecent,
+                        subtitle = if (homeLayout.recentlyAdded) s.settingsHomeRecentOn else s.settingsHomeRecentOff,
+                        icon = TmIcons.Grid,
+                        checked = homeLayout.recentlyAdded,
+                        onToggle = { scope.launch { settings.setHomeRecent(!homeLayout.recentlyAdded) } },
+                    )
+                }
+                item(key = "home_starred_rows") {
+                    ToggleRow(
+                        title = s.settingsHomeStarredRows,
+                        subtitle = if (homeLayout.starredRows) s.settingsHomeStarredRowsOn else s.settingsHomeStarredRowsOff,
+                        icon = TmIcons.StarOutline,
+                        checked = homeLayout.starredRows,
+                        onToggle = { scope.launch { settings.setHomeStarredRows(!homeLayout.starredRows) } },
+                    )
+                }
+                sectionTitle { s.settingsHomeRecentFrom }
+                item(key = "home_recent_source") {
+                    ActionRow(
+                        title = s.settingsHomeRecentFrom,
+                        subtitle = if (homeLayout.chosen) s.settingsHomeSourceChosen else s.settingsHomeSourceAuto,
+                        icon = TmIcons.List,
+                        onClick = { pickingHomeSource = true },
+                    )
+                }
+                if (homeLayout.chosen) {
+                    item(key = "home_recent_chats") {
+                        // Only the chosen chats still in the list count: one left or deleted is skipped on Home too.
+                        val count = if (chats.isEmpty()) homeLayout.recentChats.size else chats.count { it.id in homeLayout.recentChats }
+                        ActionRow(
+                            title = s.settingsHomeChooseChats,
+                            subtitle = s.settingsHomeSourceChosenDetail(count = count),
+                            icon = TmIcons.Check,
+                            onClick = { pickingHomeChats = true },
+                        )
+                    }
+                }
+                settingsNote { SettingsNoteText(s.settingsHomeRecentFromNote) }
             }
 
             // What TMPlayer puts on the Android TV home screen, a page of its own rather than two rows
@@ -1899,6 +1957,15 @@ fun SettingsScreen(
                         onClick = { showPage(SettingsPage.Library) },
                     )
                 }
+                item {
+                    ActionRow(
+                        title = titleOf(SettingsPage.Home),
+                        subtitle = s.settingsPageHomeSummary,
+                        icon = TmIcons.Home,
+                        modifier = Modifier.focusRequester(categoryFocus.getValue(SettingsPage.Home)),
+                        onClick = { showPage(SettingsPage.Home) },
+                    )
+                }
                 // Android TV and Google TV only: a phone, a Fire TV and a Fire tablet have neither a
                 // Play next row nor channels, and a page of switches that do nothing there is noise.
                 if (watchNextSupported || tvChannelsSupported) {
@@ -2164,6 +2231,27 @@ fun SettingsScreen(
     onlineDialog?.let { OnlineSubtitlesDialog(it, onClose = { onlineDialog = null }) }
     if (editingTmdbKey) MetadataKeyDialog(onClose = { editingTmdbKey = false })
     if (editingOmdbKey) OmdbKeyDialog(onClose = { editingOmdbKey = false })
+
+    if (pickingHomeSource) {
+        HomeSourceSheet(
+            chosen = homeLayout.chosen,
+            onPick = { source ->
+                pickingHomeSource = false
+                scope.launch { settings.setHomeRecentSource(source) }
+                // Chosen with nothing chosen yet: the picker comes up at once.
+                if (source == com.tmplayer.data.RecentSource.Chosen && homeLayout.recentChats.isEmpty()) pickingHomeChats = true
+            },
+            onClose = { pickingHomeSource = false },
+        )
+    }
+    if (pickingHomeChats) {
+        HomeChatsSheet(
+            chats = chats,
+            chosen = homeLayout.recentChats,
+            onChange = { next -> scope.launch { settings.setHomeRecentChats(next) } },
+            onClose = { pickingHomeChats = false },
+        )
+    }
 
     if (pickingKidsChats) {
         KidsChatsSheet(

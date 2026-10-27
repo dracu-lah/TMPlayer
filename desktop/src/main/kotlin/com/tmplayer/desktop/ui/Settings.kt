@@ -104,7 +104,7 @@ import kotlinx.coroutines.withContext
  * player, which is what the phone's gestures are for a finger.
  */
 enum class SettingsCategory {
-    SetupChoices, Appearance, Playback, Subtitles, Mouse, Library, Notifications, Storage, Lock, About;
+    SetupChoices, Appearance, Playback, Subtitles, Mouse, Library, Home, Notifications, Storage, Lock, About;
 
     internal val icon: androidx.compose.ui.graphics.vector.ImageVector
         get() = when (this) {
@@ -114,6 +114,7 @@ enum class SettingsCategory {
             Subtitles -> TmIcons.Subtitles
             Mouse -> SettingsGlyphs.Mouse
             Library -> TmIcons.Grid
+            Home -> TmIcons.Home
             Notifications -> TmIcons.Bell
             Storage -> TmIcons.Download
             Lock -> TmIcons.Lock
@@ -153,6 +154,7 @@ internal fun titleOf(category: SettingsCategory): String {
         SettingsCategory.Subtitles -> s.settingsSubtitles
         SettingsCategory.Mouse -> s.settingsPageMouse
         SettingsCategory.Library -> s.settingsLibrary
+        SettingsCategory.Home -> s.settingsPageHome
         SettingsCategory.Notifications -> s.settingsPageNotifications
         SettingsCategory.Storage -> s.settingsPageStorage
         SettingsCategory.Lock -> s.lockTitle
@@ -178,6 +180,8 @@ fun SettingsPage(
     /** The signed in account, shown over the list; null leaves the header out. */
     account: com.tmplayer.data.Account? = null,
     initialCategory: SettingsCategory? = null,
+    /** Told once [initialCategory] has been opened, so a later visit opens on the list again. */
+    onInitialTaken: () -> Unit = {},
 ) {
     var showAbout by remember { mutableStateOf(false) }
     val settings = state.settings
@@ -206,6 +210,12 @@ fun SettingsPage(
 
     // The page open, by name so it survives a trip to another destination and back.
     var openName by rememberSaveable { mutableStateOf(initialCategory?.name) }
+    // Asked for while Settings was already up (or kept): opened all the same.
+    LaunchedEffect(initialCategory) {
+        val asked = initialCategory ?: return@LaunchedEffect
+        openName = asked.name
+        onInitialTaken()
+    }
     val open = openName?.let { name -> SettingsCategory.entries.firstOrNull { it.name == name } }
     // Setup choices' "Also in": the row to bring the viewer to once its page is open, and the step
     // to come back to, since Back from that page returns to Setup choices.
@@ -444,6 +454,7 @@ private fun CategoryList(
                 }
                 SettingsCategory.Mouse -> s.settingsPageMouseSummary
                 SettingsCategory.Library -> s.settingsPageLibrarySummary
+                SettingsCategory.Home -> s.settingsPageHomeSummary
                 SettingsCategory.Notifications -> settingsSummaryOverride(category) ?: s.settingsPageNotificationsSummary
                 SettingsCategory.Storage -> disk?.takeIf { it.totalBytes > 0 }?.let {
                     s.settingsStorageFree(StorageRelocationPlan.size(it.freeBytes), StorageRelocationPlan.size(it.totalBytes))
@@ -500,6 +511,7 @@ internal class SettingsPages(
                     SettingsCategory.Subtitles -> SubtitlesRows(state)
                     SettingsCategory.Mouse -> MouseRows(state)
                     SettingsCategory.Library -> LibraryRows(state, version, chatList, jumps)
+                    SettingsCategory.Home -> HomeLayoutRows(state, chatList)
                     SettingsCategory.Notifications -> NotificationRows(state)
                     SettingsCategory.Storage -> StorageGroup(state, jumps)
                     SettingsCategory.Lock -> LockRows(state, onPin, onKidsChats)

@@ -50,6 +50,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -147,6 +149,10 @@ internal fun HomePane(
     noFavourites: Boolean = false,
     /** False when Settings turned the carousel off: Home opens on its rows, Recently added among them. */
     carouselOn: Boolean = true,
+    /** Every row of Home off in Settings ([com.tmplayer.data.HomeLayout.allOff]): a card says so, with the way back. */
+    allOff: Boolean = false,
+    /** Settings, on its Home page: from the all-off card and from Recently added's "no chosen chats" line. */
+    onOpenHomeSettings: () -> Unit = {},
     /** False while the rows have not been built from an answer yet ([HomeViewModel.rowsSettled]). */
     rowsReady: Boolean = true,
     /** What the first-run state says and where its button goes: Saved Messages, or a folder. */
@@ -186,6 +192,26 @@ internal fun HomePane(
     val touch = isTouch()
     // On a phone the page runs up under the status bar (see LocalUnderStatusBar).
     val under = if (touch) LocalUnderStatusBar.current else 0.dp
+    if (rows.isEmpty() && allOff) {
+        LaunchedEffect(Unit) { HomeFirstPaint.markReady() }
+        val focus = remember { FocusRequester() }
+        Column(Modifier.fillMaxSize().padding(top = under)) {
+            tvHeader?.invoke(false)
+            if (touch) PhoneHomeBrand(Modifier.padding(start = start, top = BRAND_TOP), onArt = false)
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = if (touch) 16.dp else 72.dp, vertical = 24.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                com.tmplayer.ui.browse.HomeOffCard(onSettings = onOpenHomeSettings, focus = focus)
+            }
+        }
+        // The remote lands on the one thing there is to press, unless the top bar holds it.
+        if (!touch) LaunchedEffect(Unit) { if (mayTakeFocus()) runCatching { focus.requestFocus() } }
+        return
+    }
     if (rows.isEmpty()) {
         LaunchedEffect(Unit) { HomeFirstPaint.markReady() }
         // Rows still being built: the page's heading over a blank page, not the first run's card.
@@ -227,8 +253,10 @@ internal fun HomePane(
         kotlinx.coroutines.delay(if (touch) NO_CAROUSEL_SETTLE_MS else NO_CAROUSEL_SETTLE_TV_MS)
         HomeFirstPaint.markReady()
     }
-    // Recently added is a row of its own as well, under Continue watching (user, 2026-10-23).
-    val listed = rows
+    // Recently added is a row of its own as well, under Continue watching (user, 2026-10-23),
+    // unless Settings turned the row off and kept the carousel it feeds. Its "no chosen chats"
+    // line shows either way, so the carousel's empty place is explained.
+    val listed = remember(rows) { rows.filter { it !is HomeRow.Recent || it.asRow || it.noneChosen } }
     val first = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
     // Kept across a turn of the phone: the show is looked up again in the rows once they are back.
@@ -677,7 +705,14 @@ internal fun HomePane(
                                 }
                             }
                             is HomeRow.Chat -> ShelfRows(row.entries, watch, touch, isFirst, first, { row.title }, onPlay, onHoldMedia, start, end, rowTiles) { opened.open(it) }
-                            is HomeRow.Recent -> {
+                            is HomeRow.Recent -> if (row.noneChosen) {
+                                com.tmplayer.ui.browse.HomeNoneChosenCard(
+                                    onSettings = onOpenHomeSettings,
+                                    start = start,
+                                    end = end,
+                                    focus = if (isFirst) first else null,
+                                )
+                            } else {
                                 // Read on through Home's chats once the row is scrolled near its
                                 // end: the next tiles land after the last, nothing before it moves.
                                 var feed by remember(row.key) { mutableStateOf<com.tmplayer.ui.browse.RowFeed?>(null) }
@@ -733,6 +768,14 @@ internal fun HomePane(
         ScrollToTop(listState)
         // Home's rows are not in an order a bubble could name, so the handle carries no label.
         FastScroller(listState)
+    }
+
+    // The carousel alone on Home (every row off in Settings): the remote stands on its Play.
+    val carouselOnly = !touch && carousel && listed.isEmpty() && !featured.isNullOrEmpty()
+    LaunchedEffect(carouselOnly) {
+        if (!carouselOnly || HomeFocusMemory.away || !mayTakeFocus()) return@LaunchedEffect
+        withFrameNanos { }
+        tvPlayFocus?.let { play -> runCatching { play.requestFocus() } }
     }
 
     // Somewhere for the remote to stand the moment Home opens. Keyed on the first row, so a row

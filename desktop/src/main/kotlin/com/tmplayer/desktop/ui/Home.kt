@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.tmplayer.data.ChatSummary
+import com.tmplayer.data.HomeLayout
 import com.tmplayer.data.HomeRow
 import com.tmplayer.data.HomeRows
 import com.tmplayer.data.MediaItem
@@ -136,11 +137,12 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
     val art by model.art.collectAsState()
     // Recently added fills the carousel, so one starred chat is enough for it, as on the phone and
     // the television; with fewer than two it is not drawn as a row as well (see HomeRowsView).
-    val rows = rememberHomeRows(model, list, favourites, history, later, watched.values, recentMinStarred = 1)
-    // Asked for as soon as the starred chats are known, not once the chat list has loaded and the
-    // row is drawn: the loader waits on the carousel, and the carousel on this row.
-    // Home fills itself from the search across chats, so it is asked for whether or not any are starred.
-    LaunchedEffect(Unit) { model.requestRecent() }
+    // Which rows Settings has on; null until read, so a row that is off is never fetched.
+    val layout by remember { state.settings.homeLayout }.collectAsState(initial = null)
+    // Recently added's search is asked for as soon as the setting is read (rememberHomeRows), not
+    // once the chat list has loaded and the row is drawn: the loader waits on the carousel, and
+    // the carousel on this row. Only while the row or the carousel is on.
+    val rows = rememberHomeRows(model, list, favourites, history, later, watched.values, recentMinStarred = 1, layout = layout)
     // With nothing of its own to show yet, Home waits on the chat list, or says why it failed,
     // rather than greet somebody with starred chats as a first run. With starred chats it waits a
     // moment for them, so the carousel does not land over Continue watching, but never for the
@@ -149,7 +151,8 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
     val ownChats by model.ownChats.collectAsState()
     val starredUnknown = favourites.isNotEmpty() && list.isEmpty() && ownChats.none { it.id in favourites }
     val listBriefly = rememberBriefWait(chatState is UiState.Loading)
-    val waitForChats = rows.isEmpty() || (starredUnknown && listBriefly)
+    val allOff = layout?.allOff == true
+    val waitForChats = (rows.isEmpty() && !allOff) || (starredUnknown && listBriefly && layout?.starredRows != false)
     if (waitForChats && (chatState is UiState.Loading || chatState is UiState.Error)) {
         // Retry goes on with the load that is running rather than asking again from the top.
         StateBox(chatState, onRetry = chats::retry) {}
@@ -158,6 +161,8 @@ fun HomePage(state: ShellState, chats: ChatListViewModel) {
     val stalled by model.stalled.collectAsState()
     HomeRowsView(
         rowsReady = model.rowsSettled,
+        layout = layout ?: HomeLayout(),
+        onOpenHomeSettings = { state.openSettings(SettingsCategory.Home) },
         state = state,
         rows = rows,
         chats = list.ifEmpty { ownChats },
@@ -207,6 +212,10 @@ internal fun HomeRowsView(
     rowsReady: Boolean = true,
     /** Telegram has been slow for a few seconds ([HomeViewModel.stalled]): a line says so, with Refresh. */
     stalled: Boolean = false,
+    /** Which rows Settings has on ([HomeLayout]): the carousel, and every row off for the all-off card. */
+    layout: HomeLayout = HomeLayout(),
+    /** Settings, on its Home page: from the all-off card and Recently added's "no chosen chats" line. */
+    onOpenHomeSettings: () -> Unit = {},
 ) {
     val s = LocalStrings.current
     var openSeries by remember { mutableStateOf<Series?>(null) }
@@ -253,11 +262,15 @@ internal fun HomeRowsView(
     }
     LaunchedEffect(continueRow?.records) { continueRow?.records?.forEach(onArtWanted) }
     // Settings can turn the carousel off: then nothing is picked or turned over for it either.
-    val carouselOn by state.settings.homeCarousel.collectAsState(initial = true)
+    val carouselOn = layout.carousel
     val featured = rememberFeatured(recentRow.takeIf { carouselOn }, continueRow.takeIf { carouselOn }, art)
     // Every tile on Home has a picture of its own; "See all" still lists the whole row. Recently
     // added is a row too, under Continue watching, as well as the carousel (user, 2026-10-23).
-    val shownRows = remember(rows, art) { rows.mapNotNull { HomeRows.withArt(it, art) } }
+    // Recently added turned off as a row is still there for the carousel, and is not drawn; its
+    // "no chosen chats" line is, so the carousel's empty place is explained.
+    val shownRows = remember(rows, art) {
+        rows.filter { it !is HomeRow.Recent || it.asRow || it.noneChosen }.mapNotNull { HomeRows.withArt(it, art) }
+    }
     val watch = rememberSeriesWatch(state)
     // In line with the page header's title, whatever the window's width.
     val side = pageMargin()
@@ -285,6 +298,16 @@ internal fun HomeRowsView(
                 LaunchedEffect(Unit) { com.tmplayer.ui.browse.HomeFirstPaint.markReady() }
                 Box(Modifier.fillMaxWidth().height(TOP_DRAG).windowDrag()) {
                     HomeBrand(Modifier.align(Alignment.TopStart).padding(start = side, top = BRAND_TOP))
+                }
+                // Every row off in Settings: say so, with the way back to them.
+                if (layout.allOff) {
+                    Box(
+                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        com.tmplayer.ui.browse.HomeOffCard(onSettings = onOpenHomeSettings)
+                    }
+                    return@Column
                 }
                 // Rows still being built off the main thread: the brand over a blank page, not the
                 // first run's card, which flashed up at every start for accounts full of videos.
@@ -373,7 +396,7 @@ internal fun HomeRowsView(
                                 count = row.countLabel(s),
                                 side = side,
                                 // Every loaded row opens as a page of its own.
-                                onSeeAll = if (loaded) ({ openRow = row.key }) else null,
+                                onSeeAll = if (loaded && !(row is HomeRow.Recent && row.noneChosen)) ({ openRow = row.key }) else null,
                             )
                             if (!loaded) {
                                 PlaceholderStrip(side, sizes.card)
@@ -397,7 +420,11 @@ internal fun HomeRowsView(
                                     }
                                 }
                                 is HomeRow.Chat -> ShelfStrips(state, side, sizes, row.entries, { row.title }) { openSeries = it }
-                                is HomeRow.Recent -> ShelfStrips(state, side, sizes, row.entries, { titles[it].orEmpty() }) { openSeries = it }
+                                is HomeRow.Recent -> if (row.noneChosen) {
+                                    com.tmplayer.ui.browse.HomeNoneChosenCard(onSettings = onOpenHomeSettings, start = side, end = side)
+                                } else {
+                                    ShelfStrips(state, side, sizes, row.entries, { titles[it].orEmpty() }) { openSeries = it }
+                                }
                             }
                         }
                     }

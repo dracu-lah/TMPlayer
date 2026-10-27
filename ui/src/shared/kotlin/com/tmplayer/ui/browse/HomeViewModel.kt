@@ -15,6 +15,7 @@ import com.tmplayer.data.FeedMerge
 import com.tmplayer.data.MediaCursors
 import com.tmplayer.data.MediaPage
 import com.tmplayer.data.HomeCache
+import com.tmplayer.data.HomeLayout
 import com.tmplayer.data.HomeRow
 import com.tmplayer.data.HomeRows
 import com.tmplayer.data.LocalFileAvailability
@@ -260,6 +261,19 @@ class HomeViewModel(
     /** Home's chats in their order on Home, as last handed to [fill]: the budgets go down it from the top. */
     private var order: List<Long> = emptyList()
 
+    /**
+     * Whether [fill] has been told Home's chats since the last [refresh]: from then on [order] is
+     * the whole of what Home reads, even empty (every row off in Settings), and a refresh never
+     * falls back to the rows the cache held.
+     */
+    @Volatile private var filled = false
+
+    /**
+     * False while Settings has Recently added and the carousel both off ([com.tmplayer.data.HomeLayout.needsRecent]):
+     * the search across chats they are drawn from is not made, by a refresh or a post either.
+     */
+    @Volatile var recentWanted: Boolean = true
+
     /** Rows a refresh did not reach within its budget: asked again when they next come on screen. */
     private val stale = HashSet<Long>()
 
@@ -437,7 +451,7 @@ class HomeViewModel(
             showCache.remove(show.key)
             requestShow(show, fresh = true)
         }
-        val rows = chats.filter { it in _loaded.value }
+        val rows = chats.filter { it in _loaded.value && (!filled || it in order) }
         if (rows.isEmpty()) return
         rows.forEach { chatId -> fetchRow(chatId, fresh = true, minGapMs = LIVE_GAP_MS) }
         if (_recent.value != null) fetchRecent(fresh = true, minGapMs = LIVE_GAP_MS)
@@ -486,6 +500,7 @@ class HomeViewModel(
      */
     fun fill(chats: List<ChatSummary>, whole: Boolean = true) {
         val ids = chats.map { it.id }
+        filled = true
         if (ids != order) {
             order = ids
             val keep = ids.toHashSet()
@@ -533,7 +548,8 @@ class HomeViewModel(
      */
     fun refreshInPlace(background: Boolean = false) {
         refreshedAt = clock()
-        val chats = order.ifEmpty { _loaded.value.keys.toList() }
+        // Before Home's chats are known, the rows drawn from the cache; after, only Home's chats.
+        val chats = if (filled) order else _loaded.value.keys.toList()
         stale += chats
         _refreshing.value = true
         chats.take(REFRESH_CHATS).forEach { chatId ->
@@ -631,6 +647,7 @@ class HomeViewModel(
     fun requestRecent() = fetchRecent(fresh = false)
 
     private fun fetchRecent(fresh: Boolean, minGapMs: Long = 0) {
+        if (!recentWanted) return
         fetches.ask("recent", fresh = fresh, minGapMs = minGapMs, before = if (fresh) ::untilIdle else null) {
             recentFailed = false
             val items = try {
@@ -730,6 +747,7 @@ class HomeViewModel(
         _own.value = emptyList()
         chatsAsked.clear()
         order = emptyList()
+        filled = false
         stale.clear()
         reads.clear()
         feeds.values.forEach { it.close() }
@@ -949,6 +967,12 @@ fun rememberHomeRows(
      * False draws the starred chats alone, as Home did before 2026-10-21.
      */
     autoFill: Boolean = true,
+    /**
+     * Which rows Settings has on and where Recently added reads ([HomeLayout]). Null while the
+     * setting is still being read: nothing is built or asked of Telegram until it is, so a row
+     * that is off is never fetched, not even for the first frame.
+     */
+    layout: HomeLayout? = HomeLayout(),
 ): List<HomeRow> {
     // A hidden chat's videos leave Home with it: its Continue watching and Watch later cards too.
     val hidden by com.tmplayer.data.HiddenChats.ids.collectAsState()
@@ -963,9 +987,21 @@ fun rememberHomeRows(
     val fresh by model.newEpisodes.collectAsState()
     val stalled by model.stalled.collectAsState()
     LaunchedEffect(model, continueWatching, watched) { model.followShows(continueWatching, watched) }
+    // Recently added's search across chats only while it or the carousel is on; turned back on,
+    // it is asked for at once, so the row fills without a restart.
+    val needsRecent = layout?.needsRecent
+    LaunchedEffect(model, needsRecent) {
+        if (needsRecent == null) return@LaunchedEffect
+        model.recentWanted = needsRecent
+        if (needsRecent) model.requestRecent()
+    }
     // Home does not wait for the chat list (HX8): until it is there, Home's chats are its own.
     val fromList = chats.isNotEmpty()
-    val chats = rememberHomeChatList(model, chats, favourites, recent)
+    // The chosen chats are read one by one too while the list is on its way, so Recently added
+    // fills from them within the first seconds rather than after the whole list.
+    val chosenIds = layout?.takeIf { it.chosen && it.needsRecent }?.recentChats.orEmpty()
+    val learn = remember(favourites, chosenIds) { if (chosenIds.isEmpty()) favourites else favourites + chosenIds.take(HomeLayout.CHOSEN_MAX) }
+    val chats = rememberHomeChatList(model, chats, learn, recent)
     // Home's chats are picked with the rows below, off the main thread: picked here they were
     // worked out again on every change to the chat list, which a busy account sends often.
     val homeMemo = remember { HomeChatsMemo() }
@@ -976,13 +1012,27 @@ fun rememberHomeRows(
     // filled Home reads a dozen chats, each answer changed the inputs, and every build reads
     // hundreds of names. Built on the main thread, that held a TV stick past the ANR limit
     // (1.28.0, Bell Streamer). The last rows stay on screen meanwhile.
-    val rows by produceState(model.lastRows, continueWatching, watchLater, chats, favourites, loaded, recent, partial, fresh, corrections, recentMinStarred, autoFill, stalled) {
-        val key = listOf(chats, favourites, recent, autoFill)
-        val home = homeMemo.home.takeIf { homeMemo.same(homeMemo.key, key) } ?: withContext(Dispatchers.Default) {
-            val picked = if (autoFill) HomeRows.homeChats(chats, favourites, recent) else HomeRows.favouriteChats(chats, favourites)
+    val rows by produceState(model.lastRows, continueWatching, watchLater, chats, favourites, loaded, recent, partial, fresh, corrections, recentMinStarred, autoFill, stalled, layout) {
+        // The setting not read yet: nothing is picked, built or fetched (see [layout]).
+        val layout = layout ?: return@produceState
+        // Home's chats picked for itself only feed Recently added and the carousel.
+        val autoPick = autoFill && layout.needsRecent && !layout.chosen
+        val chosen = layout.needsRecent && layout.chosen
+        val key = listOf(chats, favourites, recent, autoFill, layout)
+        val picking = homeMemo.home.takeIf { homeMemo.same(homeMemo.key, key) }?.let { it to homeMemo.recentFrom } ?: withContext(Dispatchers.Default) {
+            val rowChats = if (layout.starredRows || (layout.needsRecent && !chosen)) HomeRows.favouriteChats(chats, favourites) else emptyList()
+            val chosenChats = if (chosen) HomeLayout.chosenChats(chats, layout.recentChats) else emptyList()
+            val picked = when {
+                autoPick -> HomeRows.homeChats(chats, favourites, recent)
+                // The chosen chats first: they are what Recently added waits on, and the first of
+                // Home's chats are the ones read at once ([HomeViewModel.fill]).
+                chosen -> (chosenChats + rowChats).distinctBy { it.id }
+                else -> rowChats
+            }
             // The same chats as before keep the list rows were built from, so the check below holds.
-            homeMemo.home?.takeIf { it == picked } ?: picked
-        }.also { picked ->
+            (homeMemo.home?.takeIf { it == picked } ?: picked) to (if (chosen) chosenChats.map { it.id } else null)
+        }
+        val home = picking.first.also { picked ->
             homeMemo.key = key
             if (picked !== homeMemo.home) {
                 homeMemo.home = picked
@@ -991,25 +1041,30 @@ fun rememberHomeRows(
                 // of Home's chats are asked for their own now, the rest as their rows come on
                 // screen ([HomeViewModel.fill]).
                 // Rows of chats Home no longer picks are let go only once the picking is whole.
-                model.fill(picked, whole = fromList && (recent != null || !autoFill))
+                model.fill(picked, whole = fromList && (recent != null || !autoPick))
             }
+            homeMemo.recentFrom = picking.second
         }
+        val recentFrom = picking.second
+        // Chosen chats, and none chosen, or none of them left in a whole chat list (left, deleted,
+        // hidden or kept out by the kids lock): a line in the row's place says so.
+        val noneChosen = chosen && (layout.recentChats.isEmpty() || (fromList && recentFrom.isNullOrEmpty()))
         // A new chat list that leaves Home's chats as they were, with nothing else changed, is
         // not a new Home: the rows stand, as they did when the chats were picked in composition.
         // The last run's videos are in but the chat list is not: Home's chats are not known yet.
-        val chatsPending = autoFill && chats.isEmpty() && !recent.isNullOrEmpty() && !stalled
+        val chatsPending = autoPick && chats.isEmpty() && !recent.isNullOrEmpty() && !stalled
         // Stalled: what is there is shown, and the rows still out are left out rather than drawn
         // as placeholders for as long as Telegram takes (user, 2026-10-26).
         val loaded = if (stalled) loaded + home.filter { it.id !in loaded }.associate { it.id to emptyList() } else loaded
         val recent = if (stalled) recent ?: emptyList() else recent
-        val inputs = listOf(continueWatching, watchLater, home, favourites, loaded, recent, partial, fresh, corrections, recentMinStarred, autoFill, chatsPending)
+        val inputs = listOf(continueWatching, watchLater, home, favourites, loaded, recent, partial, fresh, corrections, recentMinStarred, autoFill, chatsPending, layout, recentFrom, noneChosen)
         if (value.isNotEmpty() && homeMemo.same(homeMemo.built, inputs)) return@produceState
         if (value.isNotEmpty()) delay(HomeViewModel.ROWS_SETTLE_MS)
         val built = withContext(Dispatchers.Default) {
             HomeRows.build(
                 continueWatching, home, loaded, recent, partial = partial, watchLater = watchLater, fresh = fresh,
                 recentMinStarred = recentMinStarred, starred = favourites, autoFill = autoFill,
-                chatsPending = chatsPending,
+                chatsPending = chatsPending, layout = layout, recentFrom = recentFrom, noneChosen = noneChosen,
             )
         }
         homeMemo.built = inputs
@@ -1017,7 +1072,8 @@ fun rememberHomeRows(
         value = built
         // Rows that are there, or a list of where the videos are that has come back: either way
         // what Home shows now is the answer. Starred chats alone need no such list.
-        if (built.isNotEmpty() || recent != null || !autoFill) model.rowsSettled = true
+        // Starred chats alone need no such list, nor a Home whose Recently added and carousel are off.
+        if (built.isNotEmpty() || recent != null || !autoPick) model.rowsSettled = true
     }
     PrefetchHomeArt(rows, model)
     return rows
@@ -1052,6 +1108,9 @@ private class HomeChatsMemo {
     var key: List<Any?>? = null
     var home: List<ChatSummary>? = null
 
+    /** The chosen chats Recently added reads, as picked with [home]; null for Home's own chats. */
+    var recentFrom: List<Long>? = null
+
     /** What the rows on screen were built from. */
     var built: List<Any?>? = null
 
@@ -1064,7 +1123,7 @@ private class HomeChatsMemo {
         return then.size == now.size && then.indices.all { i ->
             val a = then[i]
             val b = now[i]
-            a === b || ((a is Boolean || a is Number || a is Set<*>) && a == b)
+            a === b || ((a is Boolean || a is Number || a is Set<*> || a is HomeLayout) && a == b)
         }
     }
 }
