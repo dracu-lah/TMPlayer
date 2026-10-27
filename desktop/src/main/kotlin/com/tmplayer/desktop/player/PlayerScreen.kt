@@ -324,11 +324,22 @@ fun PlayerScreen(
     val storyboard = remember(boardFiles, scrubPictures) {
         boardFiles?.takeIf { scrubPictures }?.let { files -> DesktopStoryboard(files, durationMs = { engine.state.value.durationMs.takeIf { it > 0 } ?: current.item.durationSec * 1000L }) }
     }
-    // The video's own frames for the hover where there is no storyboard: a second decoder over
+    // Fetched as the video opens, in the player's lifetime rather than the hover's, so the sprite
+    // is in by the time the pointer reaches the bar (a fetch from inside the hover was cancelled,
+    // and TDLib's download withdrawn, each time the pointer moved on).
+    LaunchedEffect(storyboard) { runCatching { storyboard?.warm() }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it } }
+    // The video's own frames for the hover where the storyboard has none: a second decoder over
     // what is on the disk (see [PlaybackEngine.previewFrame]).
     val frameSource = remember(current.item.id, scrubPictures) {
-        if (!scrubPictures) null else FrameSource { at -> engine.previewFrame(at, FRAME_WIDTH_PX, FRAME_HEIGHT_PX) }
+        if (!scrubPictures) {
+            null
+        } else {
+            FrameSource(durationMs = { engine.state.value.durationMs.takeIf { it > 0 } ?: current.item.durationSec * 1000L }) { at ->
+                engine.previewFrame(at, FRAME_WIDTH_PX, FRAME_HEIGHT_PX)
+            }
+        }
     }
+    val seekCover = remember(current.item.id) { SeekCover(current.item.thumbnailFileId, current.item.miniThumbnail) }
     var resumedFrom by remember { mutableStateOf<Long?>(null) }
     var autoplayNext by remember { mutableStateOf(true) }
     var nextUpDismissed by remember { mutableStateOf(false) }
@@ -1694,6 +1705,7 @@ fun PlayerScreen(
                 LocalPlayerCopies provides PlayerCopies(copies, current.item.id, qualities, current.item.playingQuality),
                 LocalStoryboard provides storyboard,
                 LocalFrameSource provides frameSource,
+                LocalSeekCover provides seekCover,
             ) { PlayerOverlay(
                 visible = showControls,
                 status = status,
@@ -2186,9 +2198,9 @@ private const val POST_READ_MS = 2_500L
 /** What mpv waits for in its cache before it plays (its `cache-pause-wait`), as the loader's buffer. */
 private const val MPV_START_BUFFER_MS = 1_000L
 
-/** The hover frame asked of the preview decoder: twice the 160 dp tip at 1x, room for 2x. */
-private const val FRAME_WIDTH_PX = 320
-private const val FRAME_HEIGHT_PX = 180
+/** The hover frame asked of the preview decoder: the 240 dp card at 2x. */
+private const val FRAME_WIDTH_PX = 480
+private const val FRAME_HEIGHT_PX = 270
 private const val NEXT_UP_LEAD_MS = 30_000L
 
 /** How long the card counts down from the start of timed credits before the next episode. */

@@ -48,6 +48,9 @@ import { t } from '../i18n'
 import { Choice, Entry, Menu, PhoneSheet, Picker, variant, walk } from './sheets'
 import { remoteKey } from '../tv/remote'
 import { frameAt, type Frames } from './storyboard'
+import { cardLeft, cardSize, frameSlot, GIVE_UP_MS, type FrameGrabber } from './seekpreview'
+import { coverBackground } from '../screens/cover'
+import { loadThumb } from '../screens/thumbs'
 import { chapterAt, chapterMarks, chapterNext, chapterPrevious, isGeneric, skipSegments, type Chapter, type SkipSegment } from './chapters'
 import { applyDelay, look, setLook, setSubDelay, subDelay } from './cues'
 import { BookmarksSheet, delayText, ShortcutsSheet, SIZES, TimingSheet } from './extra-sheets'
@@ -94,6 +97,8 @@ const SIDE = 0.35
 /** PlayerControls.WIDE_ROW_DP: from this width the phone's row adds picture shape and the lock. */
 const WIDE_ROW = 540
 const NOTE_MS = 900
+/** How long the TV's card stays after an arrow press on the bar. */
+const PEEK_MS = 1200
 /** An iPhone or iPad: a page cannot set the volume there (the side buttons do), so the right side's drag does nothing. */
 const FIXED_VOLUME = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 const UNLOCK_PILL_MS = 2500
@@ -139,6 +144,8 @@ export interface Ctl {
     details: () => string
     loadSubtitleFile: () => void
     frames: () => Frames | null
+    /** The video's own frames for the seek bar's card, for a natively played file; null otherwise. */
+    grabber: () => FrameGrabber | null
     /** Where the video was resumed from, for the Start over offer; null when it starts at the beginning. */
     resumedAt: () => number | null
     startOver: () => void
@@ -702,6 +709,15 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         poke()
     }
     const [dragTime, setDragTime] = createSignal<number | null>(null)
+    // The TV's arrows seek at once: the card shows the new place for a moment after each press.
+    const [peek, setPeek] = createSignal<number | null>(null)
+    let peekTimer = 0
+    const peekAt = (s: number) => {
+        clearTimeout(peekTimer)
+        setPeek(s)
+        peekTimer = window.setTimeout(() => setPeek(null), PEEK_MS)
+    }
+    onCleanup(() => clearTimeout(peekTimer))
     /** Where the video was when a drag on the bar began: what a slip there is measured from. */
     let dragFrom = -1
     const shownTime = () => dragTime() ?? time()
@@ -788,7 +804,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             togglePlay()
         } else if (key === 'left' || key === 'right') {
             if (at >= 0) focusIt(items[at + (key === 'right' ? 1 : -1)])
-            else if (active === bar) seekBy(key === 'right' ? 10 : -10)
+            else if (active === bar) (seekBy(key === 'right' ? 10 : -10), peekAt(v.currentTime))
             else if (active !== disc) jumpRemote(key === 'right')
         } else if (key === 'up') {
             if (at >= 0) focusIt(bar)
@@ -1253,6 +1269,10 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         duration={duration}
                         buffered={buffered}
                         frames={c.frames}
+                        grabber={() => (tv() ? null : c.grabber())}
+                        item={c.item}
+                        peek={peek}
+                        tv={tv()}
                         dragTime={dragTime}
                         marks={() => chapterMarks(chapters(), duration())}
                         chapterAt={chapterTextAt}
@@ -1605,15 +1625,20 @@ function subtitleLine(info: WatchInfo | null, item: VideoItem): string {
 
 /**
  * The seek bar: the played run in the accent over the buffered run, a thumb that grows while
- * held, and over it the preview card, Telegram's storyboard frame for the time under the finger
- * or the pointer with the time in a chip (StoryboardPreview's SeekPreview; on a phone the chip
- * comes only with a picture, since the times line says it already). The seek lands on release.
+ * held, and over it the preview card for the time under the pointer or the finger, or the TV's
+ * place after an arrow press ([PreviewCard], StoryboardPreview's SeekPreview). The seek lands on
+ * release.
  */
 function SeekBar(props: {
     time: () => number
     duration: () => number
     buffered: () => number
     frames: () => Frames | null
+    grabber: () => FrameGrabber | null
+    item: VideoItem
+    /** The TV's place after an arrow press, for the card; null otherwise. */
+    peek: () => number | null
+    tv: boolean
     dragTime: () => number | null
     setDragTime: (s: number | null) => void
     onSeek: (s: number) => void
@@ -1684,14 +1709,14 @@ function SeekBar(props: {
         const w = barWidth() || bar.clientWidth
         return { time: (Math.max(0, Math.min(w, x)) / w) * props.duration(), x }
     })
+    // The TV's arrows: the card over the new place for a moment.
     const card = createMemo(() => {
         const a = at()
-        if (!a) return null
-        const f = props.frames()
-        if (props.phone && (!f || props.dragTime() === null)) return null
-        return { ...a, frames: f }
+        if (a) return a
+        const p = props.peek()
+        if (p === null || !props.duration()) return null
+        return { time: p, x: fraction(p) * (barWidth() || bar?.clientWidth || 0) }
     })
-    const cardWidth = () => (props.phone ? 200 : 160)
     return (
         <div
             ref={bar}
@@ -1725,35 +1750,147 @@ function SeekBar(props: {
             </div>
             <div class="pc-thumb" style={{ left: `${played() * 100}%` }} />
             <Show when={card()}>
-                {(k) => {
-                    const frame = () => {
-                        const f = k().frames
-                        if (!f) return null
-                        const w = cardWidth()
-                        const scale = w / f.width
-                        const p = frameAt(f, k().time)
-                        return {
-                            width: `${w}px`,
-                            height: `${Math.round(f.height * scale)}px`,
-                            'background-image': `url(${f.url})`,
-                            'background-size': `${f.spriteWidth * scale}px ${f.spriteHeight * scale}px`,
-                            'background-position': `${-p.x * scale}px ${-p.y * scale}px`,
-                        }
+                {(k) => (
+                    <PreviewCard
+                        time={() => k().time}
+                        x={() => k().x}
+                        barWidth={() => barWidth() || bar.clientWidth}
+                        duration={props.duration}
+                        frames={props.frames}
+                        grabber={props.grabber}
+                        item={props.item}
+                        phone={props.phone}
+                        tv={props.tv}
+                        chapter={() => props.chapterAt(k().time)}
+                        slow={slow}
+                    />
+                )}
+            </Show>
+        </div>
+    )
+}
+
+/**
+ * The seek bar's card (StoryboardPreview's SeekPreview): always shown while scrubbing, 16:9 at a
+ * standard size, with the time in a chip at its foot. Telegram's storyboard tile where the video
+ * has one, else the video's own frame from [FrameGrabber]; the skeleton shimmers until a picture
+ * for the moment is in, the last one stays up while the next is grabbed, and where nothing has
+ * answered within [GIVE_UP_MS] it shows the video's thumbnail dimmed (or the title's cover) with
+ * the time large, so it never shimmers for ever.
+ */
+function PreviewCard(props: {
+    time: () => number
+    x: () => number
+    barWidth: () => number
+    duration: () => number
+    frames: () => Frames | null
+    grabber: () => FrameGrabber | null
+    item: VideoItem
+    phone: boolean
+    tv: boolean
+    chapter: () => string | null
+    slow: () => number
+}) {
+    const size = createMemo(() => {
+        const w = props.barWidth()
+        if (props.tv) {
+            const width = Math.round(Math.max(240, Math.min(400, w * 0.22)))
+            return { width, height: Math.round((width * 9) / 16) }
+        }
+        return cardSize(props.phone, w)
+    })
+    const left = () => cardLeft(props.x(), size().width, props.barWidth(), props.phone ? 16 : 0)
+    // A grab ending (picture or none) makes the card look again.
+    const [tick, setTick] = createSignal(0)
+    createEffect(() => {
+        const g = props.grabber()
+        if (!g) return
+        const stop = g.listen(() => setTick((n) => n + 1))
+        onCleanup(stop)
+    })
+    const slot = createMemo(() => frameSlot(props.duration(), props.time()))
+    const tile = createMemo(() => {
+        const f = props.frames()
+        if (!f) return null
+        const { width, height } = size()
+        // Letterboxed: the tile's own shape inside the 16:9 card.
+        const scale = Math.min(width / f.width, height / f.height)
+        const p = frameAt(f, props.time())
+        return {
+            width: `${Math.round(f.width * scale)}px`,
+            height: `${Math.round(f.height * scale)}px`,
+            'background-image': `url(${f.url})`,
+            'background-size': `${f.spriteWidth * scale}px ${f.spriteHeight * scale}px`,
+            'background-position': `${-p.x * scale}px ${-p.y * scale}px`,
+        }
+    })
+    const grabbed = createMemo(() => {
+        tick()
+        return props.grabber()?.frame(slot()) ?? null
+    })
+    const declined = createMemo(() => {
+        tick()
+        return props.grabber()?.declined(slot()) ?? false
+    })
+    // Asked once per slot, and not where the storyboard answers; the grabber throttles and keeps only the newest wish.
+    createEffect(
+        on(slot, (s) => {
+            const g = props.grabber()
+            if (g && !tile()) g.want(s)
+        }),
+    )
+    const [last, setLast] = createSignal<string | null>(null)
+    createEffect(() => {
+        const u = grabbed()
+        if (u) setLast(u)
+    })
+    const [late, setLate] = createSignal(false)
+    createEffect(
+        on(slot, () => {
+            setLate(false)
+            const id = window.setTimeout(() => setLate(true), GIVE_UP_MS)
+            onCleanup(() => clearTimeout(id))
+        }),
+    )
+    const gaveUp = () => !tile() && !grabbed() && (late() || declined())
+    const picture = () => (tile() ? null : (grabbed() ?? (gaveUp() ? null : last())))
+    const [thumb, setThumb] = createSignal<string | null>(null)
+    let thumbAsked = false
+    createEffect(() => {
+        if (!gaveUp() || thumbAsked || !props.item.thumb) return
+        thumbAsked = true
+        loadThumb(props.item.thumb).then(setThumb, () => {})
+    })
+    return (
+        <div class="pc-preview" style={{ left: `${left()}px`, width: `${size().width}px` }} aria-hidden="true">
+            <div class="pc-card" style={{ width: `${size().width}px`, height: `${size().height}px` }}>
+                <Show
+                    when={tile()}
+                    fallback={
+                        <Show
+                            when={picture()}
+                            fallback={
+                                <Show when={gaveUp()} fallback={<div class="pc-card-wait" />}>
+                                    <div class="pc-card-fallback" style={{ background: coverBackground(props.item.title) }}>
+                                        <Show when={thumb()}>{(u) => <img class="pc-card-thumb" src={u()} alt="" />}</Show>
+                                        <span class="pc-card-time">{clock(props.time())}</span>
+                                    </div>
+                                </Show>
+                            }
+                        >
+                            {(u) => <img class="pc-card-pic" src={u()} alt="" />}
+                        </Show>
                     }
-                    const left = () => {
-                        const w = Math.max(cardWidth(), 64)
-                        const total = barWidth() || bar.clientWidth
-                        return Math.max(props.phone ? -16 : 0, Math.min(total - w + (props.phone ? 16 : 0), k().x - w / 2))
-                    }
-                    return (
-                        <div class="pc-preview" style={{ left: `${left()}px`, width: `${Math.max(cardWidth(), 64)}px` }} aria-hidden="true">
-                            <Show when={frame()}>{(style) => <div class="pc-frame" style={style()} />}</Show>
-                            <Show when={props.chapterAt(k().time)}>{(name) => <span class="pc-chapter">{name()}</span>}</Show>
-                            <span class="pc-chip">{clock(k().time)}</span>
-                            <Show when={slow() < 1}><span class="pc-slow">{t(slow() <= 0.25 ? 'player.scrub_quarter' : 'player.scrub_half')}</span></Show>
-                        </div>
-                    )
-                }}
+                >
+                    {(style) => <div class="pc-card-tile" style={style()} />}
+                </Show>
+                <Show when={tile() || picture() || !gaveUp()}>
+                    <span class="pc-chip">{clock(props.time())}</span>
+                </Show>
+            </div>
+            <Show when={props.chapter()}>{(name) => <span class="pc-chapter">{name()}</span>}</Show>
+            <Show when={props.slow() < 1}>
+                <span class="pc-slow">{t(props.slow() <= 0.25 ? 'player.scrub_quarter' : 'player.scrub_half')}</span>
             </Show>
         </div>
     )

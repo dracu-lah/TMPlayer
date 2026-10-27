@@ -848,7 +848,15 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
         val frame = previewLock.withLock {
             PreviewReads.active.incrementAndGet()
             try {
-                runCatching { preview.getPreviewFrame(positionMs, width, height) }.getOrNull()
+                try {
+                    preview.getPreviewFrame(positionMs, width, height)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    // Mostly a part of a stream not on the disk yet; the hover shows its fallback.
+                    Logger.w(TAG, "Preview frame at $positionMs ms not had: ${e.message}")
+                    null
+                }
             } finally {
                 PreviewReads.active.decrementAndGet()
             }
