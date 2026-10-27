@@ -132,6 +132,11 @@ class SeekPreviewCardTest {
     @Config(sdk = [35], qualifiers = "w891dp-h411dp-land-night-xhdpi")
     fun phoneSideways() = suite("phone-land", tv = false, pictures, R.id.controls_times)
 
+    /** No picture for the moment: the still fallback with the time across it, never nothing. */
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h891dp-port-night-xxhdpi")
+    fun phoneFallback() = suite("phone-fallback", tv = false, none, R.id.controls_times)
+
     @Test
     @Config(sdk = [35], qualifiers = "w960dp-h540dp-land-night-xhdpi")
     fun televisionWithPictures() = suite("tv-frames", tv = true, pictures, R.id.controls_title)

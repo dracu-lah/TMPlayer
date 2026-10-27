@@ -312,108 +312,55 @@ class PlayerControls(
     // ---- trickplay ---------------------------------------------------------------------------
 
     /**
-     * Where scrub thumbnails come from, or null for none: the setting is off, the device is short
-     * of memory, or nothing is playing from a file on the disk. See [TrickplayFrames].
+     * Where scrub pictures come from: Telegram's storyboard, the video's own frames, both, or
+     * null where there is neither (the card then shows its still fallback). See
+     * [ScrubPreviewCard] for what the card shows while they look.
      */
     var thumbnails: ScrubThumbnails? = null
-        set(value) {
-            field = value
-            if (value == null) hidePreview()
-        }
-
-    /** Wider on a television, read from across the room. */
-    private val previewWidthDp = if (isTv) PREVIEW_WIDTH_TV_DP else PREVIEW_WIDTH_DP
-
-    /** The picture: the same hairline and corner as the rest of the player's chrome. */
-    private val previewImage = android.widget.ImageView(root.context).apply {
-        val density = resources.displayMetrics.density
-        scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
-        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        background = android.graphics.drawable.GradientDrawable().apply {
-            cornerRadius = PREVIEW_CORNER_DP * density
-            setColor(Color.BLACK)
-            setStroke((2 * density).toInt(), Color.WHITE)
-        }
-        val inset = (2 * density).toInt()
-        setPadding(inset, inset, inset, inset)
-        clipToOutline = true
-        outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
-    }
-
-    /** The time the scrub is at, under the picture, or alone where that part has no picture yet. */
-    private val previewTime = TextView(root.context).apply {
-        val density = resources.displayMetrics.density
-        background = ContextCompat.getDrawable(context, R.drawable.bg_player_chip)
-        setPadding((12 * density).toInt(), (4 * density).toInt(), (12 * density).toInt(), (4 * density).toInt())
-        setTextColor(Color.WHITE)
-        textSize = if (isTv) 16f else 14f
-        maxLines = 1
-        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-    }
-
-    /** The picture over its time, centred on the scrub point. */
-    internal val previewCard = android.widget.LinearLayout(root.context).apply {
-        val density = resources.displayMetrics.density
-        orientation = android.widget.LinearLayout.VERTICAL
-        gravity = android.view.Gravity.CENTER_HORIZONTAL
-        visibility = View.GONE
-        addView(
-            previewImage,
-            android.widget.LinearLayout.LayoutParams(
-                (previewWidthDp * density).toInt(),
-                (previewWidthDp * 9 / 16 * density).toInt(),
-            ),
-        )
-        addView(
-            previewTime,
-            android.widget.LinearLayout.LayoutParams(
-                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
-                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = (6 * density).toInt() },
-        )
-        (root as android.view.ViewGroup).addView(
-            this,
-            android.widget.FrameLayout.LayoutParams(
-                (previewWidthDp * density).toInt(),
-                android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
-            ),
-        )
-    }
-
-    /** The position the newest request was for, so a late frame for an older one is dropped. */
-    private var previewAt = -1L
 
     /**
-     * Shows the frame for [position] over the bar, centred on where the scrubber is, or takes the
-     * card away when that part of the video has no picture.
+     * The viewer turned scrub pictures off in Settings. A phone then shows no card (its clock
+     * under the bar already says the time); a television, whose clock sits apart from the bar,
+     * keeps the card's still face with the time on it.
      */
-    fun preview(position: Long) {
-        previewAt = position
-        // The time answers the scrub at once; the picture follows when there is one.
-        previewTime.text = Translator.messages.formatter.clock(position)
-        val source = thumbnails
-        if (source == null) {
-            showPreview(position, null)
-            return
+    var previewsOff = false
+
+    /** The video's own thumbnail, for the card's fallback; null draws a plain cover. */
+    var previewArt: android.graphics.Bitmap?
+        get() = scrubCard.art
+        set(value) {
+            scrubCard.art = value
         }
-        source.request(position) { frame ->
-            if (previewAt != position || !scrubbing && !previewPinned) return@request
-            showPreview(position, frame)
-        }
-        // Until the frame lands, the last picture stays rather than flickering away.
-        if (previewImage.drawable == null) showPreview(position, null) else placePreview(position)
+
+    private val scrubCard = ScrubPreviewCard(root as android.view.ViewGroup, isTv) {
+        com.tmplayer.ui.theme.Motion.reduced || !com.tmplayer.ui.theme.systemAnimatorsEnabled(container.context)
     }
 
-    private fun showPreview(position: Long, frame: android.graphics.Bitmap?) {
-        if (frame != null) previewImage.setImageBitmap(frame) else previewImage.setImageDrawable(null)
-        previewImage.visibility = if (frame != null) View.VISIBLE else View.GONE
-        // On a phone the clock under the bar already says the time; alone over the bar it would
-        // only repeat it, so the chip shows with a picture. A television's clock sits apart from
-        // the bar, so there the time always rides with the scrub point.
-        previewTime.visibility = if (frame != null || isTv) View.VISIBLE else View.GONE
-        val anything = frame != null || isTv
-        previewCard.visibility = if (anything) View.VISIBLE else View.GONE
-        if (anything) placePreview(position)
+    /** The card over the bar, for the screenshot fixture and its test. */
+    internal val previewCard: View get() = scrubCard.view
+
+    /** The position the card is up for, or -1 with it down. */
+    private var previewAt = -1L
+
+    init {
+        // A turn of the phone or a window resized mid-scrub moves the bar; the card follows it.
+        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            if (previewAt >= 0 && scrubCard.isShown) placePreview(previewAt)
+        }
+    }
+
+    /**
+     * Shows the card for [position] over the bar, centred on where the scrubber is: the time at
+     * once, the picture when a source has one (see [ScrubPreviewCard]).
+     */
+    fun preview(position: Long) {
+        if (previewsOff && !isTv) return
+        previewAt = position
+        val duration = player()?.duration?.takeIf { it > 0 } ?: 0L
+        val label = Translator.messages.formatter.clock(position)
+        val source = if (previewsOff) null else thumbnails
+        scrubCard.show(position, duration, label, source) { scrubbing || previewPinned }
+        placePreview(position)
     }
 
     /** For the screenshot fixture: keep the card up without a scrub in progress. */
@@ -421,36 +368,33 @@ class PlayerControls(
 
     private fun hidePreview() {
         previewAt = -1L
-        previewCard.visibility = View.GONE
-        previewImage.setImageDrawable(null)
+        scrubCard.hide()
     }
 
     private fun placePreview(position: Long) {
-        val duration = player()?.duration?.takeIf { it > 0 } ?: return
-        val parent = previewCard.parent as? View ?: return
+        val card = scrubCard.view
+        val parent = card.parent as? View ?: return
+        val duration = player()?.duration?.takeIf { it > 0 } ?: 0L
         val bar = IntArray(2)
         val origin = IntArray(2)
         timeBar.getLocationInWindow(bar)
         parent.getLocationInWindow(origin)
-        val width = previewCard.layoutParams.width
+        val width = scrubCard.widthPx
+        val height = scrubCard.heightPx
         val density = parent.resources.displayMetrics.density
-        val imageHeight = if (previewImage.visibility == View.VISIBLE) previewImage.layoutParams.height + (6 * density).toInt() else 0
-        val timeHeight = if (previewTime.visibility == View.VISIBLE) {
-            previewTime.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
-            previewTime.measuredHeight
-        } else {
-            0
-        }
-        val height = imageHeight + timeHeight
         val gap = 12 * density
         // Right to left, the bar fills from the right, and so does the scrub point.
-        val fraction = position.toFloat() / duration
+        val fraction = ScrubPreviewRules.fraction(position, duration)
         val along = if (timeBar.layoutDirection == View.LAYOUT_DIRECTION_RTL) 1f - fraction else fraction
         val centre = bar[0] - origin[0] + timeBar.width * along
-        // Kept off the screen's edges, so the picture's hairline is whole at both ends of the bar.
-        val edge = 8 * density
-        val maxX = (parent.width - width - edge).coerceAtLeast(edge)
-        previewCard.translationX = (centre - width / 2f).coerceIn(edge, maxX)
+        // Kept off the screen's edges and out of the cutout and the system bars, so the card's
+        // hairline is whole at both ends of the bar.
+        val safe = ViewCompat.getRootWindowInsets(parent)?.getInsets(
+            androidx.core.view.WindowInsetsCompat.Type.systemBars() or androidx.core.view.WindowInsetsCompat.Type.displayCutout(),
+        )
+        // A television keeps it inside the overscan margin the bar itself keeps.
+        val edge = (if (isTv) 32 else 8) * density
+        card.translationX = ScrubPreviewRules.left(centre, width, parent.width, edge, safe?.left ?: 0, safe?.right ?: 0)
         // On a phone the times sit between the card and the bar; the card clears them rather than
         // landing on the position at either end.
         // On a television the title and its line stand over the bar, and the card clears them too.
@@ -461,7 +405,8 @@ class PlayerControls(
             above.getLocationInWindow(line)
             if (line[1] < top) top = line[1]
         }
-        previewCard.translationY = top - origin[1] - height - gap
+        val minY = (safe?.top ?: 0) + 8 * density
+        card.translationY = (top - origin[1] - height - gap).coerceAtLeast(minY)
     }
 
     // ---- fine scrubbing ----------------------------------------------------------------------
@@ -532,9 +477,13 @@ class PlayerControls(
         timeBar.getLocationInWindow(bar)
         parent.getLocationInWindow(origin)
         val density = parent.resources.displayMetrics.density
-        val above = if (previewCard.visibility == View.VISIBLE) previewCard.layoutParams.height + 12 * density else 0f
         scrubHint.translationX = ((parent.width - scrubHint.width) / 2f).coerceAtLeast(0f)
-        scrubHint.translationY = bar[1] - origin[1] - above - scrubHint.height - 12 * density
+        // Over the card when it is up, else over the bar.
+        scrubHint.translationY = if (scrubCard.isShown) {
+            scrubCard.view.translationY - scrubHint.height - 8 * density
+        } else {
+            bar[1] - origin[1] - scrubHint.height - 12 * density
+        }
     }
 
     /**
@@ -1010,6 +959,8 @@ class PlayerControls(
 
     /** For picture in picture, where a fade would play out in a thumbnail nobody is touching. */
     fun hideNow() {
+        // Picture in picture and the other abrupt exits: no card left over the bar.
+        hidePreview()
         container.removeCallbacks(hide)
         container.removeCallbacks(tick)
         shown = false
@@ -1162,11 +1113,6 @@ class PlayerControls(
 
         /** Twice a second: faster than the eye needs on a scrub bar this size. */
         const val TICK_MS = 500L
-
-        /** The scrub thumbnail's width; its height is the 16:9 of that. */
-        const val PREVIEW_WIDTH_DP = 200
-        const val PREVIEW_WIDTH_TV_DP = 320
-        const val PREVIEW_CORNER_DP = 10f
 
         /**
          * How wide the phone's row must be, in dp inside its padding, to take picture shape and

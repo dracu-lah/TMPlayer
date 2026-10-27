@@ -460,6 +460,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     /** Telegram's seek thumbnails for this video, once read. See [StoryboardThumbnails]. */
     private var storyboardFrames: StoryboardThumbnails? = null
 
+    /** The video's own thumbnail, for the scrub card's fallback where no picture of the moment comes. */
+    private var scrubArt: android.graphics.Bitmap? = null
+        set(value) {
+            field = value
+            controls?.previewArt = value
+        }
+
     /** Why a lighter copy was picked by the player itself, said once it plays; null for none. */
     private var qualityPickedWhy: com.tmplayer.data.TelegramQualities.Why? = null
 
@@ -1450,6 +1457,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 }
             },
         )
+        controls?.previewArt = scrubArt
         // The text answers (and the resume offer) on both devices; the touch feedback around them
         // only ever fires from the phone's gestures.
         feedback = PlayerFeedback(findViewById(R.id.player_root), findViewById(R.id.overlay_container))
@@ -3640,6 +3648,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /** What belonged to the last video, cleared for the next one played in place. */
     private fun forgetTheLastVideo() {
+        // The scrub card's pictures were of the last video.
+        trickplay?.forget()
+        scrubArt = null
         itemJob.cancel()
         itemJob = Job(lifecycleScope.coroutineContext[Job])
         recoveryJob = null
@@ -5404,19 +5415,23 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     /**
-     * Thumbnails over the scrub bar: on unless the viewer turned them off, and never on a device
-     * with too little memory to decode a second picture beside the film (a 1 GB stick).
+     * Frames read from the video for the scrub card: on unless the viewer turned them off, and
+     * only on a phone with the memory to decode a second picture beside the film. A television
+     * decodes nothing beside the film, whatever its memory (a 1 GB stick must not spend its CPU
+     * on it): its card has the storyboard and the still fallback.
      */
     private fun startTrickplay() {
-        if (!DeviceQuirks.trickplayMemory(this)) {
+        lifecycleScope.launch {
+            val on = runCatching { settings.trickplayNow() }.getOrDefault(true)
+            controls?.previewsOff = !on
+            if (!on) stopTrickplaySpans()
+        }
+        if (FormFactor.isTv(this) || !DeviceQuirks.trickplayMemory(this)) {
             stopTrickplaySpans()
             return
         }
         lifecycleScope.launch {
-            if (!runCatching { settings.trickplayNow() }.getOrDefault(true)) {
-                stopTrickplaySpans()
-                return@launch
-            }
+            if (!runCatching { settings.trickplayNow() }.getOrDefault(true)) return@launch
             val frames = TrickplayFrames(
                 scope = lifecycleScope,
                 // Not for a video joined from pieces: one piece's file is not the video's.
@@ -5439,14 +5454,16 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /**
      * Telegram's storyboard for the video (CP80) under the scrub bar, where the setting allows
-     * scrub pictures: on its own on a device too short of memory for [TrickplayFrames], else
-     * behind them, for the parts of the video not on the disk yet.
+     * scrub pictures: on its own on a television and a phone too short of memory for
+     * [TrickplayFrames], else asked before them. Its two small files are fetched at once.
      */
     private fun startStoryboard(fresh: MediaItem) {
         val board = fresh.storyboard ?: return
         if (storyboardFrames != null) return
         lifecycleScope.launch {
             if (!runCatching { settings.trickplayNow() }.getOrDefault(true)) return@launch
+            // Read twice at once, or the video changed while the setting was read.
+            if (storyboardFrames != null || postItem !== fresh) return@launch
             storyboardFrames = StoryboardThumbnails(
                 scope = lifecycleScope,
                 files = board,
@@ -5456,12 +5473,15 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
     }
 
-    /** The scrub bar's pictures from whatever there is: the video's own frames, the storyboard, or both. */
+    /**
+     * The scrub bar's pictures from whatever there is: the storyboard first (a tile cut from a
+     * sprite already fetched, the cheapest answer), then the video's own frames on a phone.
+     */
     private fun showScrubPictures() {
         val frames = trickplay
         val board = storyboardFrames
         controls?.thumbnails = when {
-            frames != null && board != null -> LayeredThumbnails(frames, board)
+            frames != null && board != null -> LayeredThumbnails(board, frames)
             else -> frames ?: board
         }
     }
@@ -7152,6 +7172,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         if (mini != null) {
             statusArt?.setImageBitmap(mini)
             statusPoster?.setImageBitmap(mini)
+            scrubArt = mini
             revealArtwork()
         }
 
@@ -7167,6 +7188,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             }
             val full = frame.asAndroidBitmap()
             statusPoster?.setImageBitmap(full)
+            scrubArt = full
             // Where there was a minithumbnail the backdrop keeps it: stretching a real thumbnail
             // across 1080p is a soft, ugly photograph, while stretching a forty-pixel one is a
             // blur. Where there was not, a soft backdrop still beats a flat sheet.
