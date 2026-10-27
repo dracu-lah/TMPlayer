@@ -40,7 +40,7 @@ data class DesktopSettings(
      */
     val systemTitleBar: Boolean = false,
     /** Settings' Layout: the desktop's, or the big-screen mode for a television (plan 8.7). */
-    val layout: DesktopLayout = DesktopLayout.Auto,
+    val layout: DesktopLayout = DesktopLayout.Desktop,
     /** Open filling the screen, for a media PC that starts TMPlayer with the television. */
     val startFullscreen: Boolean = false,
 ) {
@@ -188,11 +188,12 @@ class DesktopPrefs(private val file: File) {
 }
 
 /**
- * The Layout setting on a computer (plan 8.7, route B): [Auto] stays the desktop's, [Tv] is the
- * big-screen mode for a media PC on a television, driven by a remote. Stored by name.
+ * The Layout setting on a computer (plan 8.7, route B): [Desktop], or [Tv], the big-screen mode
+ * for a media PC on a television, driven by a remote. Stored by name. There is no Auto: a
+ * computer cannot tell a television from a monitor, so an Auto choice only ever meant Desktop and
+ * read as if it did something. An "Auto" stored by an older build reads as Desktop.
  */
 enum class DesktopLayout(private val labelText: () -> String) {
-    Auto({ com.tmplayer.i18n.L.settingsLayoutAuto }),
     Desktop({ com.tmplayer.i18n.L.settingsLayoutDesktop }),
     Tv({ com.tmplayer.i18n.L.settingsLayoutTv }),
     ;
@@ -201,7 +202,7 @@ enum class DesktopLayout(private val labelText: () -> String) {
     val label: String get() = labelText()
 
     companion object {
-        fun from(stored: String?): DesktopLayout = entries.firstOrNull { it.name.equals(stored?.trim(), ignoreCase = true) } ?: Auto
+        fun from(stored: String?): DesktopLayout = entries.firstOrNull { it.name.equals(stored?.trim(), ignoreCase = true) } ?: Desktop
     }
 }
 

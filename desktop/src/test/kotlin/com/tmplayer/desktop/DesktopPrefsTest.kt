@@ -71,7 +71,7 @@ class DesktopPrefsTest {
 
     @Test
     fun theLayoutAndStartInFullScreenSurviveARestart() {
-        assertEquals(DesktopLayout.Auto, DesktopPrefs(file).now.layout)
+        assertEquals(DesktopLayout.Desktop, DesktopPrefs(file).now.layout)
         assertFalse(DesktopPrefs(file).now.startFullscreen)
         DesktopPrefs(file).update { it.copy(layout = DesktopLayout.Tv, startFullscreen = true) }
         val again = DesktopPrefs(file).now
@@ -80,7 +80,7 @@ class DesktopPrefsTest {
         assertTrue(file.readText().contains("layout=Tv"))
         // A value this version does not know reads as Auto, not as an error.
         file.writeText("layout=Wall\nstart_fullscreen=yes\n")
-        assertEquals(DesktopLayout.Auto, DesktopPrefs(file).now.layout)
+        assertEquals(DesktopLayout.Desktop, DesktopPrefs(file).now.layout)
         assertFalse(DesktopPrefs(file).now.startFullscreen)
     }
 }

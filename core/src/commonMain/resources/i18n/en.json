@@ -2333,7 +2333,7 @@
     "layout_auto": "Auto",
     "layout_desktop": "Desktop",
     "layout_detail": "Auto picks the phone, desktop or TV layout from the device. Choose one to always use it.",
-    "layout_detail_desktop": "Auto keeps the desktop layout. TV is for a computer on a television: everything larger, the menu at the top, a remote's arrows reaching every button and the pointer hidden while it rests.",
+    "layout_detail_desktop": "TV is for a computer on a television: everything larger, the menu at the top, a remote's arrows reaching every button and the pointer hidden while it rests.",
     "layout_phone": "Phone",
     "layout_tv": "TV",
     "learnt_languages": "Remembered languages",

@@ -39,14 +39,14 @@ class BigScreenTest {
         assertEquals(DesktopLayout.Tv, DesktopLayout.from("Tv"))
         assertEquals(DesktopLayout.Tv, DesktopLayout.from(" tv "))
         assertEquals(DesktopLayout.Desktop, DesktopLayout.from("Desktop"))
-        assertEquals(DesktopLayout.Auto, DesktopLayout.from(null))
-        assertEquals(DesktopLayout.Auto, DesktopLayout.from("Phone"))
+        assertEquals(DesktopLayout.Desktop, DesktopLayout.from(null))
+        assertEquals(DesktopLayout.Desktop, DesktopLayout.from("Phone"))
     }
 
     @Test
     fun `big screen is the setting unless the command line says otherwise`() {
         try {
-            BigScreen.layout = DesktopLayout.Auto
+            BigScreen.layout = DesktopLayout.Desktop
             BigScreen.override = null
             assertFalse("Auto is the desktop's on a computer", BigScreen.on)
             BigScreen.layout = DesktopLayout.Tv
@@ -57,7 +57,7 @@ class BigScreenTest {
             BigScreen.override = DesktopLayout.Tv
             assertTrue(BigScreen.on)
         } finally {
-            BigScreen.layout = DesktopLayout.Auto
+            BigScreen.layout = DesktopLayout.Desktop
             BigScreen.override = null
         }
     }

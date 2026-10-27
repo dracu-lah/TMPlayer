@@ -41,7 +41,7 @@ data class LaunchOptions(
                         if (fullscreen == null) fullscreen = true
                     }
                     "--desktop", "--layout=desktop" -> layout = DesktopLayout.Desktop
-                    "--layout=auto" -> layout = DesktopLayout.Auto
+                    "--layout=auto" -> layout = DesktopLayout.Desktop
                     "--fullscreen", "--full-screen" -> fullscreen = true
                     "--windowed" -> fullscreen = false
                 }
@@ -59,12 +59,12 @@ data class LaunchOptions(
  */
 object BigScreen {
     /** The Layout setting, as `desktop.properties` holds it. */
-    var layout by mutableStateOf(DesktopLayout.Auto)
+    var layout by mutableStateOf(DesktopLayout.Desktop)
 
     /** `--tv` or `--desktop` for this run, until the viewer picks a layout in Settings. */
     var override by mutableStateOf<DesktopLayout?>(null)
 
-    /** The layout in effect: Auto is the desktop's on a computer. */
+    /** The layout in effect. */
     val effective: DesktopLayout get() = override ?: layout
 
     val on: Boolean get() = effective == DesktopLayout.Tv

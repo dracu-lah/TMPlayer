@@ -120,7 +120,7 @@ internal fun AppearanceRows(state: ShellState) {
         scope.launch { settings.setHighContrast(on) }
     }
     Action(s.settingsLanguage, s.languageRowDetail(language), TmIcons.Language) { pickingLanguage = true }
-    // The big-screen mode for a computer on a television (plan 8.7). Auto stays the desktop's: a
+    // The big-screen mode for a computer on a television (plan 8.7). Desktop or TV, no Auto: a
     // computer cannot tell a television from a monitor, so the viewer, or `--tv`, says so.
     Setting(s.settingsLayout, s.settingsLayoutDetailDesktop, icon = TmIcons.Tv) {
         Segments(DesktopLayout.entries, BigScreen.override ?: desktop.layout, { it.label }) { picked -> pickLayout(state, picked) }

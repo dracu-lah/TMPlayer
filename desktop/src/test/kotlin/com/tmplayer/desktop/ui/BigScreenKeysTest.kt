@@ -97,7 +97,7 @@ class BigScreenKeysTest {
 
     @Before
     fun television() {
-        BigScreen.layout = DesktopLayout.Auto
+        BigScreen.layout = DesktopLayout.Desktop
         BigScreen.override = DesktopLayout.Tv
         FocusVisibility.visible = true
     }
@@ -105,7 +105,7 @@ class BigScreenKeysTest {
     @After
     fun desktop() {
         BigScreen.override = null
-        BigScreen.layout = DesktopLayout.Auto
+        BigScreen.layout = DesktopLayout.Desktop
     }
 
     private fun poster(n: Int) = hasText("Video $n") and hasClickAction()
@@ -385,10 +385,10 @@ class BigScreenKeysTest {
         assertTrue("a television's app fills the screen", shell.fullscreen)
         assertEquals(DesktopLayout.Tv, DesktopPrefs(prefsFile).now.layout)
 
-        pickLayout(shell, DesktopLayout.Auto)
+        pickLayout(shell, DesktopLayout.Desktop)
         assertFalse(BigScreen.on)
         assertFalse(shell.fullscreen)
-        assertEquals(DesktopLayout.Auto, DesktopPrefs(prefsFile).now.layout)
+        assertEquals(DesktopLayout.Desktop, DesktopPrefs(prefsFile).now.layout)
     }
 
     /** A tiny JPEG standing in for Telegram's minithumbnail: Home shows only videos with a picture. */
