@@ -586,7 +586,7 @@ internal fun HomePane(
                             onLeft = { seeAllArmed = false },
                         )
                         if (!loaded) {
-                            PlaceholderRow(start)
+                            PlaceholderRow(start, poster = row is HomeRow.Recent || row is HomeRow.Chat)
                             return@Column
                         }
                         when (row) {
@@ -1204,16 +1204,19 @@ private fun RowHeading(
  * A row still asking Telegram: blank cards the size of the real ones, so nothing jumps when it
  * fills. The caption is the cards' own, in the same type with nothing visible in it, rather than
  * a guessed height: it then matches at any font scale.
+ *
+ * [poster] for a row whose cards are 2:3 ([SeriesShelf.posterKeys]: Recently added and a chat's
+ * row). Drawn 16:9 there, the row grew by half when its posters came in (TV, 2026-10-27).
  */
 @Composable
-private fun PlaceholderRow(start: Dp) {
+private fun PlaceholderRow(start: Dp, poster: Boolean = false) {
     val touch = isTouch()
-    val width = wideWidth(touch)
+    val width = if (poster) posterWidth(touch) else wideWidth(touch)
     Row(
         Modifier.fillMaxWidth().padding(start = start, top = if (touch) 0.dp else Tv.FocusClearance, bottom = if (touch) 0.dp else Tv.FocusClearance),
         horizontalArrangement = Arrangement.spacedBy(if (touch) TILE_GAP_TOUCH else TILE_GAP_TV),
     ) {
-        repeat(PLACEHOLDER_TILES) { PlaceholderTile(width, touch) }
+        repeat(PLACEHOLDER_TILES) { PlaceholderTile(width, touch, poster) }
     }
 }
 

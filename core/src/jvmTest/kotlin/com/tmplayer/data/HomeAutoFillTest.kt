@@ -70,6 +70,38 @@ class HomeAutoFillTest {
     }
 
     @Test
+    fun `Recently added keeps the plain heading while Home's chats are not known`() {
+        val chats = listOf(chat(1), chat(2))
+        val a = video(1)
+        val b = video(2)
+        // The search across chats is still running: only the starred chat is picked so far.
+        val early = HomeRows.homeChats(chats, favourites = setOf(1), recent = null)
+        val first = HomeRows.build(
+            emptyList(), early, mapOf(1L to listOf(a)), recent = null, recentMinStarred = 1,
+            starred = setOf(1), autoFill = true,
+        ).filterIsInstance<HomeRow.Recent>().single()
+        assertFalse(first.starredOnly)
+        // The chat list is not in yet, only the last run's videos.
+        val pending = HomeRows.build(
+            emptyList(), emptyList(), emptyMap(), recent = listOf(a, b), recentMinStarred = 1,
+            starred = setOf(1), autoFill = true, chatsPending = true,
+        ).filterIsInstance<HomeRow.Recent>().single()
+        assertFalse(pending.starredOnly)
+        // Once known, the busiest chats join and the heading stays the plain one: no flip.
+        val home = HomeRows.homeChats(chats, favourites = setOf(1), recent = listOf(a, b))
+        val known = HomeRows.build(
+            emptyList(), home, mapOf(1L to listOf(a), 2L to listOf(b)), recent = listOf(a, b), recentMinStarred = 1,
+            starred = setOf(1), autoFill = true,
+        ).filterIsInstance<HomeRow.Recent>().single()
+        assertFalse(known.starredOnly)
+        // Without auto fill Home is the starred chats only, known from the start.
+        val starredHome = HomeRows.build(
+            emptyList(), listOf(chat(1)), mapOf(1L to listOf(a)), recent = null, recentMinStarred = 1,
+        ).filterIsInstance<HomeRow.Recent>().single()
+        assertTrue(starredHome.starredOnly)
+    }
+
+    @Test
     fun `Home is Continue watching, Recently added, then a row for each starred chat`() {
         val a = video(1, "Big Buck Bunny (2008).mkv")
         val b = video(1, "Harbour Notes S01E01.mkv")
