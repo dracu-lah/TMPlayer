@@ -54,7 +54,47 @@ internal fun LazyListScope.onlineSubtitlesSection(onDialog: (OnlineDialog) -> Un
     item { AccountRow(onDialog) }
     item { MachineRow() }
     item { SubdlRow(onDialog) }
+    item { MsoneRow() }
     item { CacheRow() }
+}
+
+/**
+ * MSone's state at the gateway, on a device where its search was switched on by hand (`msone`
+ * typed as the SubDL key): the same line the picker shows, the gateway's own words after it, and
+ * a press that checks again.
+ */
+@Composable
+private fun MsoneRow() {
+    val s = LocalStrings.current
+    val online = OnlineSubtitles.current ?: return
+    val account by online.account.collectAsState()
+    if (!account.msoneShown) return
+    val scope = rememberCoroutineScope()
+    val toast = rememberToast()
+    var checking by remember { mutableStateOf(false) }
+    // The cached answer unless six hours have passed; a failure leaves the last one standing.
+    LaunchedEffect(Unit) { online.msoneStatus() }
+    val line = OnlineWords.msoneState(account.msoneState)
+    ActionRow(
+        title = s.msoneTitle,
+        subtitle = when {
+            checking -> s.msoneChecking
+            account.msoneMessage.isNotBlank() -> "$line ${account.msoneMessage}"
+            else -> line
+        },
+        icon = TmIcons.Language,
+        tint = if (account.msoneState == com.tmplayer.online.MsoneState.On) androidx.compose.ui.graphics.Color.Unspecified else Tone.muted,
+        onClick = {
+            if (!checking) {
+                checking = true
+                scope.launch {
+                    val status = online.msoneStatus(force = true)
+                    checking = false
+                    toast(OnlineWords.msoneState(status.state))
+                }
+            }
+        },
+    )
 }
 
 @Composable
@@ -245,7 +285,8 @@ fun OnlineSubtitlesDialog(dialog: OnlineDialog, onClose: () -> Unit) {
                 icon = TmIcons.Lock,
                 onDismiss = onClose,
                 onConfirm = {
-                    online.setSubdlKey(key)
+                    // `msone` is the hidden switch for MSone's search, not a key.
+                    online.setSubdlKey(key)?.let { shown -> toast(if (shown) s.msoneHiddenOn else s.msoneHiddenOff) }
                     onClose()
                 },
                 extra = {

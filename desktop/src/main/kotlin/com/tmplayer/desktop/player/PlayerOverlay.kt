@@ -197,6 +197,9 @@ internal sealed interface MenuAction {
     /** The subtitle menu's "Search online", in a build with the OpenSubtitles key. */
     data object SearchOnline : MenuAction
 
+    /** MSone's search, on a device where it was switched on by hand while MSone is being set up. */
+    data object SearchMsone : MenuAction
+
     /** A subtitle file from the disk, through the system's file dialog; dropping one does the same. */
     data object LoadSubtitleFile : MenuAction
 
@@ -966,6 +969,7 @@ internal fun PlayerMenu(
                 Entry(s.commonOff, checked = list.none { it.selected }) { pick(MenuAction.Track(TrackType.Subtitle, null)) }
                 list.forEach { t -> Entry(t.label, checked = t.selected) { pick(MenuAction.Track(TrackType.Subtitle, t)) } }
                 if (com.tmplayer.online.OnlineSubtitles.available) Entry(s.onlineSearchOnline) { pick(MenuAction.SearchOnline) }
+                if (com.tmplayer.online.OnlineSubtitles.current?.store?.now?.msoneShown == true) Entry(s.msoneSearch) { pick(MenuAction.SearchMsone) }
                 Entry(s.playerLoadSubtitleFile) { pick(MenuAction.LoadSubtitleFile) }
                 HorizontalDivider()
                 Entry(s.playerSubtitleStyleAndTiming) { page(MenuPage.SubtitleStyle) }

@@ -32,7 +32,18 @@ data class OnlineAccount(
     /** Downloads left without an account, as the last anonymous download reported; -1 unknown. */
     val anonRemaining: Int = -1,
     val anonResetAt: Long = 0,
+    /**
+     * MSone's search shown on this device. Hidden until MSone's key is set at the gateway: turned
+     * on by typing `msone` as the SubDL key (see [OnlineSubtitles.setSubdlKey]).
+     */
+    val msoneShown: Boolean = false,
+    /** The gateway's last answer about MSone ([MsoneStatus]), kept so a failed check changes nothing. */
+    val msoneState: MsoneState = MsoneState.Unknown,
+    val msoneMessage: String = "",
+    val msoneCheckedAt: Long = 0,
 ) {
+    val msone: MsoneStatus get() = MsoneStatus(msoneState, msoneMessage.ifBlank { null }, msoneCheckedAt)
+
     val signedIn: Boolean get() = token.isNotBlank()
 
     /** No downloads left until [resetAt], as far as the last answer said. */
@@ -80,6 +91,10 @@ class OnlineSubtitlesStore(private val file: File) {
             rejectedAt = l("rejected_at"),
             anonRemaining = i("anon_remaining", -1),
             anonResetAt = l("anon_reset_at"),
+            msoneShown = s("msone_shown") == "true",
+            msoneState = MsoneState.of(s("msone_state")),
+            msoneMessage = s("msone_message").take(300),
+            msoneCheckedAt = l("msone_checked_at"),
         )
     }
 
@@ -99,6 +114,10 @@ class OnlineSubtitlesStore(private val file: File) {
         p["rejected_at"] = a.rejectedAt.toString()
         p["anon_remaining"] = a.anonRemaining.toString()
         p["anon_reset_at"] = a.anonResetAt.toString()
+        p["msone_shown"] = a.msoneShown.toString()
+        p["msone_state"] = a.msoneState.name
+        p["msone_message"] = a.msoneMessage
+        p["msone_checked_at"] = a.msoneCheckedAt.toString()
         runCatching {
             file.parentFile?.mkdirs()
             val temp = File(file.parentFile, file.name + ".tmp")

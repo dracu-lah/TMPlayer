@@ -119,7 +119,7 @@ class TrackPickerFragment : Fragment() {
     /** A track to choose, its name and, under it, what tells it apart from a namesake. */
     private class Option(val group: Tracks.Group?, val trackIndex: Int, val label: String, val detail: String? = null)
 
-    private enum class Page { Tracks, Online }
+    private enum class Page { Tracks, Online, Msone }
 
     /** The groups a page's lines fall into, in order, with the heading each one carries. */
     private enum class Group(val heading: () -> String?) {
@@ -177,6 +177,7 @@ class TrackPickerFragment : Fragment() {
                     @Suppress("UNUSED_EXPRESSION") tick
                     val lines = trackLines(
                         onOnline = { page = Page.Online },
+                        onMsone = { page = Page.Msone },
                         onInPlace = { tick++ },
                         lookIcon = ImageVector.vectorResource(R.drawable.ic_subtitles),
                     )
@@ -193,13 +194,14 @@ class TrackPickerFragment : Fragment() {
                     FocusOnOpen(firstFocus)
                 }
             }
-            Page.Online -> OnlinePage(closeFocus, firstFocus, back)
+            Page.Online -> OnlinePage(closeFocus, firstFocus, back, msone = false)
+            Page.Msone -> OnlinePage(closeFocus, firstFocus, { page = Page.Tracks }, msone = true)
         }
     }
 
     // ---- the tracks ---------------------------------------------------------------------------
 
-    private fun trackLines(onOnline: () -> Unit, onInPlace: () -> Unit, lookIcon: ImageVector): List<Line> {
+    private fun trackLines(onOnline: () -> Unit, onMsone: () -> Unit, onInPlace: () -> Unit, lookIcon: ImageVector): List<Line> {
         val host = host ?: return emptyList()
         val player = host.player ?: return emptyList()
         val options = buildList {
@@ -223,7 +225,10 @@ class TrackPickerFragment : Fragment() {
                 // Sound can still be out of step with only the one track to choose from.
                 if (trackType == C.TRACK_TYPE_AUDIO && options.isNotEmpty()) addAll(timingLines(host, onInPlace))
                 // No subtitles in the file is exactly when looking online is worth it.
-                if (trackType == C.TRACK_TYPE_TEXT) onlineLine(onOnline)?.let(::add)
+                if (trackType == C.TRACK_TYPE_TEXT) {
+                    onlineLine(onOnline)?.let(::add)
+                    msoneLine(onMsone)?.let(::add)
+                }
                 return@buildList
             }
             options.forEachIndexed { index, option ->
@@ -238,7 +243,10 @@ class TrackPickerFragment : Fragment() {
                     ) { choose(option) },
                 )
             }
-            if (trackType == C.TRACK_TYPE_TEXT) onlineLine(onOnline)?.let(::add)
+            if (trackType == C.TRACK_TYPE_TEXT) {
+                onlineLine(onOnline)?.let(::add)
+                msoneLine(onMsone)?.let(::add)
+            }
             addAll(timingLines(host, onInPlace))
             if (trackType == C.TRACK_TYPE_TEXT) addAll(styleLines(host, onInPlace, lookIcon))
         }
@@ -248,6 +256,15 @@ class TrackPickerFragment : Fragment() {
     private fun onlineLine(onOnline: () -> Unit): Line? {
         if (!OnlineSubtitles.available) return null
         return Line("online", L.onlineSearchOnline, L.onlineSearchOnlineDetail, icon = TmIcons.Search, group = Group.Online, onClick = onOnline)
+    }
+
+    /**
+     * MSone's search, only on a device where it was switched on by hand (`msone` as the SubDL
+     * key) while MSone is being set up. It needs no OpenSubtitles key.
+     */
+    private fun msoneLine(onMsone: () -> Unit): Line? {
+        if (OnlineSubtitles.current?.store?.now?.msoneShown != true) return null
+        return Line("msone", L.msoneSearch, L.msoneSearchDetail, icon = TmIcons.Search, group = Group.Online, onClick = onMsone)
     }
 
     /** The offset now in force, under each timing line, so a press shows where it got to. */
@@ -323,11 +340,18 @@ class TrackPickerFragment : Fragment() {
 
     // ---- online -------------------------------------------------------------------------------
 
+    /**
+     * The results of "Search online", or with [msone] of MSone's search. MSone's state at the
+     * gateway (not set up, paused or stopped at its request) shows where the results would be,
+     * with the gateway's own words under it, Check again, and a subtitle file of the viewer's own.
+     */
     @Composable
-    private fun OnlinePage(closeFocus: FocusRequester, firstFocus: FocusRequester, onBack: () -> Unit) {
+    private fun OnlinePage(closeFocus: FocusRequester, firstFocus: FocusRequester, onBack: () -> Unit, msone: Boolean) {
         val online = OnlineSubtitles.current ?: return close()
         val scope = rememberCoroutineScope()
         var attempt by remember { mutableIntStateOf(0) }
+        // Check again asks the gateway even inside the six hours between checks.
+        var force by remember { mutableStateOf(false) }
         var result by remember { mutableStateOf<SearchResult?>(null) }
         var override by remember { mutableStateOf<SubtitleNotice?>(null) }
         var target by remember { mutableStateOf<SubtitleTarget?>(null) }
@@ -338,12 +362,18 @@ class TrackPickerFragment : Fragment() {
             override = null
             val wanted = host?.onlineTarget()
             target = wanted
-            result = if (wanted == null) SearchResult(emptyList()) else online.search(wanted)
+            if (msone && force) online.msoneStatus(force = true)
+            force = false
+            result = when {
+                wanted == null -> SearchResult(emptyList())
+                msone -> online.searchMsone(wanted)
+                else -> online.search(wanted)
+            }
         }
 
         ChoiceSheet(
-            title = L.onlineResultsTitle,
-            note = L.onlineSearchOnlineDetail,
+            title = if (msone) L.msoneTitle else L.onlineResultsTitle,
+            note = if (msone) L.msoneCredit else L.onlineSearchOnlineDetail,
             onDismiss = onBack,
             onClose = ::close,
             closeFocus = closeFocus,
@@ -354,7 +384,7 @@ class TrackPickerFragment : Fragment() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(Modifier.size(18.dp), color = Tone.accent, strokeWidth = 2.dp)
                     Spacer(Modifier.width(10.dp))
-                    Text(L.onlineSearching, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+                    Text(if (msone) L.msoneSearching else L.onlineSearching, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
                 }
                 // A search that runs long says so, with Retry, rather than spinning in silence.
                 com.tmplayer.ui.components.SlowAnswerNotice(key = attempt, onRetry = { attempt++ }, modifier = Modifier.padding(top = 12.dp))
@@ -364,18 +394,21 @@ class TrackPickerFragment : Fragment() {
             }
             val notice = override ?: shown.notice
             if (notice != null) {
-                Text(
-                    OnlineWords.notice(notice),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Tone.text,
-                    modifier = Modifier
+                Column(
+                    Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(Corner.Medium))
                         .background(Tone.surfaceHigh)
                         .padding(12.dp),
-                )
+                ) {
+                    Text(OnlineWords.notice(notice), style = MaterialTheme.typography.bodyMedium, color = Tone.text)
+                    // The gateway's own words, as it gave them (MSone's, quoted by the operator).
+                    OnlineWords.message(notice)?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = Tone.muted, modifier = Modifier.padding(top = 6.dp))
+                    }
+                }
             } else if (shown.hits.isEmpty()) {
-                Text(L.onlineNoResults, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
+                Text(if (msone) L.msoneNoResults else L.onlineNoResults, style = MaterialTheme.typography.bodyMedium, color = Tone.muted)
             }
             val lines = buildList {
                 shown.hits.forEach { hit ->
@@ -401,13 +434,16 @@ class TrackPickerFragment : Fragment() {
                         },
                     )
                 }
-                if (notice == SubtitleNotice.Offline || notice == SubtitleNotice.Busy) {
+                if (notice is SubtitleNotice.MsoneOff) {
+                    add(Line("retry", L.msoneCheckAgain, icon = TmIcons.Refresh, group = Group.Online) { force = true; attempt++ })
+                } else if (notice == SubtitleNotice.Offline || notice == SubtitleNotice.Busy || notice == SubtitleNotice.MsoneBusy) {
                     add(Line("retry", L.commonTryAgain, icon = TmIcons.Refresh, group = Group.Online) { attempt++ })
                 }
-                // Nothing found online: a file of the viewer's own is the way on, where there is a picker.
+                // Nothing found online: a file of the viewer's own is the way on, where there is a
+                // picker. For MSone also whenever it cannot search, paused or stopped included.
                 val pick = host?.pickSubtitleFile
-                if (shown.hits.isEmpty() && notice == null && pick != null) {
-                    add(Line("file", L.playerLoadSubtitleFile, icon = TmIcons.Folder, group = Group.Online) {
+                if (shown.hits.isEmpty() && (notice == null || msone) && pick != null) {
+                    add(Line("file", if (msone) L.msonePickFile else L.playerLoadSubtitleFile, icon = TmIcons.Folder, group = Group.Online) {
                         close()
                         pick()
                     })

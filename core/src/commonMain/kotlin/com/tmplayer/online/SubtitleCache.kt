@@ -85,6 +85,12 @@ class SubtitleCache(
     @Synchronized
     fun bytes(): Long = dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
+    /** Every file downloaded from [provider]; its searches age out on their own. */
+    @Synchronized
+    fun purgeFiles(provider: SubtitleProvider) {
+        files.listFiles { f -> f.name.startsWith(provider.name.lowercase() + "-") }?.forEach { it.delete() }
+    }
+
     /** Everything, searches and files. */
     @Synchronized
     fun purge() {

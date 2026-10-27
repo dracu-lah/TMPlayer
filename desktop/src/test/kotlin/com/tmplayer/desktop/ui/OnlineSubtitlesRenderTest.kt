@@ -77,6 +77,52 @@ class OnlineSubtitlesRenderTest {
         }
     }
 
+    /**
+     * MSone's search in the player's panel, in each state the gateway can be in, and its row in
+     * Settings once switched on with the hidden `msone` key. Every hit credits MSone and its
+     * translator; every state that cannot search offers Check again and a file of one's own.
+     */
+    @Test
+    fun msonePanelInEachState() {
+        val target = SubtitleTarget("The.Coast.S01E04.1080p.WEB.H264.mkv", 1_400_000_000)
+        for ((state, health) in listOf(
+            "off" to """{"providers":{"msone":{"state":"off","message":null}}}""",
+            "paused" to """{"providers":{"msone":{"state":"paused","message":"MSone asked for a short break while they move servers."}}}""",
+            "stopped" to """{"providers":{"msone":{"state":"stopped","message":null}}}""",
+            "on" to """{"providers":{"msone":{"state":"on","message":null}}}""",
+            "unknown" to null,
+        )) {
+            val dir = java.nio.file.Files.createTempDirectory("tm-msone-$state").toFile()
+            val online = OnlineSubtitles(
+                apiKey = "promo-key",
+                store = com.tmplayer.online.OnlineSubtitlesStore(File(dir, "account.properties")),
+                cache = com.tmplayer.online.SubtitleCache(File(dir, "cache")),
+                appVersion = "1.0.0",
+                http = com.tmplayer.online.HttpTransport { request ->
+                    when {
+                        health == null -> throw com.tmplayer.platform.IOException("offline fixture")
+                        "/health" in request.url -> com.tmplayer.online.HttpResponse(200, body = health.toByteArray())
+                        "/msone/search" in request.url -> com.tmplayer.online.HttpResponse(200, body = MSONE_HITS.toByteArray())
+                        else -> com.tmplayer.online.HttpResponse(404)
+                    }
+                },
+            )
+            online.setSubdlKey("msone")
+            OnlineSubtitles.current = online
+            val result = runBlocking { online.searchMsone(target) }
+            if (state == "on") assertTrue(result.hits.size == 2) else assertTrue(result.notice is com.tmplayer.online.SubtitleNotice.MsoneOff)
+            save(
+                "desktop-player-msone-$state.png",
+                render(height = 720, background = Color(0xFF203040)) {
+                    Box(Modifier.fillMaxSize()) {
+                        OnlineSubtitlesPanel(target = { target }, onLoaded = { _, _ -> }, onClose = {}, msone = true, preset = result)
+                    }
+                },
+            )
+            save("desktop-settings-msone-$state.png", render(height = 520) { OnlineSubtitlesGroup() })
+        }
+    }
+
     private fun render(height: Int, background: Color? = null, page: @Composable () -> Unit): ByteArray =
         ImageComposeScene(WIDTH, height, Density(1.5f)) {
             TmMaterialTheme(dark = true) {
@@ -98,5 +144,14 @@ class OnlineSubtitlesRenderTest {
 
     private companion object {
         const val WIDTH = 1280
+
+        const val MSONE_HITS = """{"hits":[
+            {"id":"9001","title":"The Coast","year":2024,"kind":"single","season":1,"episode":4,
+             "translator":{"name":"Anu","url":"https://example.org/anu"},
+             "downloadUrl":"https://malayalamsubtitles.org/download/9001","pageUrl":"https://malayalamsubtitles.org/the-coast-s01e04","credit":"Subtitles by MSone"},
+            {"id":"9000","title":"The Coast","year":2024,"kind":"pack","season":1,"episode":null,
+             "translator":{"name":"Biju","url":null},
+             "downloadUrl":"https://malayalamsubtitles.org/download/9000","pageUrl":"https://malayalamsubtitles.org/the-coast-s01","credit":"Subtitles by MSone"}
+        ]}"""
     }
 }

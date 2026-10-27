@@ -10,6 +10,7 @@ import com.tmplayer.online.HttpResponse
 import com.tmplayer.online.HttpTransport
 import com.tmplayer.online.MetaExtras
 import com.tmplayer.online.MetaInfo
+import com.tmplayer.online.MsoneApi
 import com.tmplayer.online.OmdbApi
 import com.tmplayer.online.RateLimiter
 import com.tmplayer.online.SkipSegment
@@ -171,6 +172,11 @@ class GarbageInputTest {
                 MediaText.overviewOf("File name: $text\n$text", "$text.mkv", text)
             }
             survive("VideoCopies.keyOfTitle", text) { VideoCopies.keyOfTitle(text); VideoCopies.languagesIn(text) }
+            survive("MsoneApi.parse", text) {
+                MsoneApi.parseHealth(text, 0)
+                MsoneApi.parseHits(text)
+                MsoneApi.parseHits("{\"hits\":[{\"id\":$text,\"title\":$text,\"year\":$text,\"translator\":$text,\"downloadUrl\":$text}]}")
+            }
         }
         assertNoFailures()
     }
@@ -219,7 +225,7 @@ class GarbageInputTest {
         assertNoFailures()
     }
 
-    /** TMDB, TVmaze, OMDb, Wikidata, AniList and the skip-times sites answering nonsense. */
+    /** TMDB, TVmaze, OMDb, Wikidata, AniList, MSone's gateway and the skip-times sites answering nonsense. */
     @Test
     fun onlineProvidersNeverThrow() = runBlocking {
         val answers: List<() -> HttpResponse> = corpus.map { body -> { HttpResponse(200, body = body.encodeToByteArray()) } } + listOf(
@@ -257,6 +263,16 @@ class GarbageInputTest {
             survive("WikidataApi", shown) { runBlocking { WikidataApi(http, limiter, "t").scores("tt1") } }
             val ani = AniListApi(http, limiter, "t")
             survive("AniListApi", shown) { runBlocking { ani.search("q"); ani.extras("1") } }
+            val msone = MsoneApi(http, limiter, "t")
+            survive("MsoneApi", shown) {
+                runBlocking {
+                    msone.health()
+                    msone.search(MsoneApi.Query(title = "q", year = 2020, season = 1, episode = 2))
+                    msone.search(MsoneApi.Query(imdb = "tt1234567"))
+                    msone.search(MsoneApi.Query())
+                    msone.fetch(com.tmplayer.online.SubtitleHit(com.tmplayer.online.SubtitleProvider.Msone, "1", "ml", "r"), 1_000)
+                }
+            }
             val skips = SkipTimesApi(http, limiter, limiter, "t")
             survive("SkipTimesApi", shown) {
                 runBlocking {

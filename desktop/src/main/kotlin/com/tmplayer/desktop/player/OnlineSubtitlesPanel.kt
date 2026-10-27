@@ -35,12 +35,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tmplayer.desktop.os.OpenExternal
 import com.tmplayer.online.DownloadResult
 import com.tmplayer.online.OnlineSubtitles
 import com.tmplayer.online.OnlineWords
 import com.tmplayer.online.SearchResult
 import com.tmplayer.online.SubtitleHit
 import com.tmplayer.online.SubtitleNotice
+import com.tmplayer.online.SubtitleProvider
 import com.tmplayer.online.SubtitleTarget
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.icons.TmIcons
@@ -52,12 +54,18 @@ import java.io.File
  * details panel sits, listing what OpenSubtitles (and SubDL, with the viewer's key) has for the
  * video. A click downloads one and hands it to mpv, where the delay and the look apply as they do
  * to any other track. What blocks a download is the first line, and the rows it blocks are dimmed.
+ *
+ * With [msone] it runs MSone's search instead: MSone's state at the gateway (not set up, paused
+ * or stopped at its request) is the first line, with the gateway's own words, Check again and
+ * [onPickFile] under it, and each hit credits MSone and its translator with links to their pages.
  */
 @Composable
 internal fun BoxScope.OnlineSubtitlesPanel(
     target: suspend () -> SubtitleTarget?,
     onLoaded: (File, String) -> Unit,
     onClose: () -> Unit,
+    onPickFile: () -> Unit = {},
+    msone: Boolean = false,
     /** For the render test: a result to show without searching. */
     preset: SearchResult? = null,
 ) {
@@ -69,6 +77,8 @@ internal fun BoxScope.OnlineSubtitlesPanel(
     var wanted by remember { mutableStateOf<SubtitleTarget?>(null) }
     var attempt by remember { mutableIntStateOf(0) }
     var busy by remember { mutableStateOf<SubtitleHit?>(null) }
+    // Check again asks the gateway even inside the six hours between checks.
+    var force by remember { mutableStateOf(false) }
 
     LaunchedEffect(attempt) {
         if (preset != null && attempt == 0) return@LaunchedEffect
@@ -76,7 +86,13 @@ internal fun BoxScope.OnlineSubtitlesPanel(
         notice = null
         val t = target()
         wanted = t
-        result = if (t == null) SearchResult(emptyList()) else online.search(t)
+        if (msone && force) online.msoneStatus(force = true)
+        force = false
+        result = when {
+            t == null -> SearchResult(emptyList())
+            msone -> online.searchMsone(t)
+            else -> online.search(t)
+        }
     }
 
     Surface(
@@ -86,7 +102,7 @@ internal fun BoxScope.OnlineSubtitlesPanel(
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(s.onlineResultsTitle, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(if (msone) s.msoneTitle else s.onlineResultsTitle, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 OverlayButton(TmIcons.Close, s.commonClose, onClose, size = 32)
             }
             Spacer(Modifier.height(8.dp))
@@ -95,7 +111,7 @@ internal fun BoxScope.OnlineSubtitlesPanel(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
                     Spacer(Modifier.width(10.dp))
-                    Text(s.onlineSearching, color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+                    Text(if (msone) s.msoneSearching else s.onlineSearching, color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
                 }
                 // A search that runs long says so, with Try again, rather than spinning in silence.
                 var slow by remember(attempt) { mutableStateOf(false) }
@@ -112,19 +128,26 @@ internal fun BoxScope.OnlineSubtitlesPanel(
             }
             val reason = notice ?: shown.notice
             if (reason != null) {
-                Text(
-                    OnlineWords.notice(reason),
-                    color = Color.White,
-                    fontSize = 13.sp,
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0x33FFFFFF)).padding(10.dp),
-                )
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0x33FFFFFF)).padding(10.dp)) {
+                    Text(OnlineWords.notice(reason), color = Color.White, fontSize = 13.sp)
+                    // The gateway's own words, as it gave them (MSone's, quoted by the operator).
+                    OnlineWords.message(reason)?.let {
+                        Text(it, color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                    }
+                }
                 Spacer(Modifier.height(8.dp))
             }
             if (shown.hits.isEmpty() && reason == null) {
-                Text(s.onlineNoResults, color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+                Text(if (msone) s.msoneNoResults else s.onlineNoResults, color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
             }
-            if (reason == SubtitleNotice.Offline || reason == SubtitleNotice.Busy) {
-                TextButton(onClick = { attempt++ }) { Text(s.commonTryAgain) }
+            Row {
+                if (reason is SubtitleNotice.MsoneOff) {
+                    TextButton(onClick = { force = true; attempt++ }) { Text(s.msoneCheckAgain) }
+                } else if (reason == SubtitleNotice.Offline || reason == SubtitleNotice.Busy || reason == SubtitleNotice.MsoneBusy) {
+                    TextButton(onClick = { attempt++ }) { Text(s.commonTryAgain) }
+                }
+                // MSone that cannot search, or found nothing: a subtitle file of the viewer's own.
+                if (msone && shown.hits.isEmpty()) TextButton(onClick = onPickFile) { Text(s.msonePickFile) }
             }
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 shown.hits.forEach { hit ->
@@ -160,6 +183,16 @@ internal fun BoxScope.OnlineSubtitlesPanel(
                             fontSize = 12.sp,
                             maxLines = 2,
                         )
+                        if (hit.provider == SubtitleProvider.Msone && (hit.pageUrl.isNotEmpty() || hit.translatorUrl.isNotEmpty())) {
+                            Row {
+                                if (hit.pageUrl.isNotEmpty()) {
+                                    TextButton(onClick = { OpenExternal.browse(hit.pageUrl) }) { Text(s.msoneReleasePage, fontSize = 12.sp) }
+                                }
+                                if (hit.translatorUrl.isNotEmpty()) {
+                                    TextButton(onClick = { OpenExternal.browse(hit.translatorUrl) }) { Text(s.msoneTranslator(hit.translator), fontSize = 12.sp) }
+                                }
+                            }
+                        }
                     }
                 }
             }

@@ -58,6 +58,12 @@ class OnlineSubtitles(
         loginLimiter = RateLimiter(1_000, now, sleep),
     )
     private val subdl = SubdlApi(http, RateLimiter(200, now, sleep), userAgent)
+    private val msone = MsoneApi(http, RateLimiter(500, now, sleep), userAgent)
+    private val msoneLock = Mutex()
+
+    /** When the last MSone check failed, so a gateway that is down is asked once a minute, not on every open. */
+    @Volatile
+    private var msoneFailedAt = 0L
     private val locks = HashMap<String, Mutex>()
 
     /** A short, one way fingerprint of the key, which is all [OnlineAccount.rejectedKey] keeps. */
@@ -121,7 +127,20 @@ class OnlineSubtitles(
 
     fun setIncludeMachine(value: Boolean) = store.update { it.copy(includeMachine = value) }
 
-    fun setSubdlKey(key: String) = store.update { it.copy(subdlKey = key.trim(), subdlRefused = false) }
+    /**
+     * Keeps [key] as the viewer's SubDL key. The word `msone` is not a key: it shows or hides
+     * MSone's search on this device instead (the hidden way in while MSone is being set up), and
+     * the answer is whether MSone is now shown; null for an ordinary key.
+     */
+    fun setSubdlKey(key: String): Boolean? {
+        if (key.trim().equals(MSONE_CODE, ignoreCase = true)) {
+            val shown = !store.now.msoneShown
+            store.update { it.copy(msoneShown = shown) }
+            return shown
+        }
+        store.update { it.copy(subdlKey = key.trim(), subdlRefused = false) }
+        return null
+    }
 
     /** What Settings says under "Online subtitles". */
     fun status(a: OnlineAccount = store.now): OnlineStatus = when {
@@ -283,11 +302,22 @@ class OnlineSubtitles(
      * spends nothing; otherwise this is the call that uses one of the day's downloads.
      */
     suspend fun download(hit: SubtitleHit, target: SubtitleTarget? = null): DownloadResult {
-        cache.file(hit.provider, hit.id)?.let { return DownloadResult.Done(it, label(hit), fromCache = true) }
+        cache.file(hit.provider, fileKey(hit, target))?.let { return DownloadResult.Done(it, label(hit), fromCache = true) }
         return when (hit.provider) {
             SubtitleProvider.OpenSubtitles -> downloadOpenSubtitles(hit)
             SubtitleProvider.Subdl -> downloadSubdl(hit, target)
+            SubtitleProvider.Msone -> downloadMsone(hit, target)
         }
+    }
+
+    /**
+     * What a downloaded file is kept under: the hit's id, and for an MSone season pack the
+     * episode taken out of it too, so each episode of one pack is a file of its own.
+     */
+    private fun fileKey(hit: SubtitleHit, target: SubtitleTarget?): String {
+        if (!hit.pack || target == null) return hit.id
+        val parsed = MediaName.parse(target.fileName, target.caption)
+        return "${hit.id}:S${parsed.season ?: 0}E${parsed.episode ?: 0}"
     }
 
     /**
@@ -297,6 +327,10 @@ class OnlineSubtitles(
      * The lists grey out what this names, and say why above them.
      */
     fun blockedFor(hit: SubtitleHit, a: OnlineAccount = store.now): SubtitleNotice? {
+        if (hit.provider == SubtitleProvider.Msone) {
+            return SubtitleNotice.MsoneOff(a.msoneState, a.msone.message)
+                .takeIf { a.msoneState != MsoneState.On && cache.file(hit.provider, hit.id) == null }
+        }
         if (hit.provider != SubtitleProvider.OpenSubtitles || cache.file(hit.provider, hit.id) != null) return null
         if (keyRefused(a)) return SubtitleNotice.Unavailable
         return downloadBlock(a)
@@ -387,13 +421,125 @@ class OnlineSubtitles(
         }
     }
 
-    private fun save(hit: SubtitleHit, text: SubtitleText.Text?): DownloadResult {
+    private fun save(hit: SubtitleHit, text: SubtitleText.Text?, key: String = hit.id): DownloadResult {
         if (text == null) return DownloadResult.Failed(SubtitleNotice.Unreadable)
         // A full disk or a folder gone is a failed download (HX10), not an exception for the picker.
-        val file = runCatching { cache.putFile(hit.provider, hit.id, text) }
+        val file = runCatching { cache.putFile(hit.provider, key, text) }
             .onFailure { com.tmplayer.platform.Logger.w("OnlineSubtitles", "subtitle not saved: ${it.message}") }
             .getOrNull() ?: return DownloadResult.Failed(SubtitleNotice.Unreadable)
         return DownloadResult.Done(file, label(hit), fromCache = false)
+    }
+
+    // ---- MSone -----------------------------------------------------------------------------
+
+    /**
+     * MSone's state at the gateway, asked at most every [MSONE_CHECK_MS] (or a minute after a
+     * [force]d check, the "Check again" button). A check that fails changes nothing: the last
+     * answer stays, so `stopped` is never lost to a bad connection, and a device that never had an
+     * answer stays [MsoneState.Unknown]. Turning `stopped` deletes the MSone subtitles kept here;
+     * `paused` keeps them for watching offline.
+     */
+    suspend fun msoneStatus(force: Boolean = false): MsoneStatus = msoneLock.withLock {
+        val a = store.now
+        val t = now()
+        val age = t - a.msoneCheckedAt
+        val due = a.msoneCheckedAt == 0L || age !in 0 until MSONE_CHECK_MS || (force && age !in 0 until MSONE_FORCE_MS)
+        val failedRecently = t - msoneFailedAt in 0 until MSONE_FORCE_MS
+        if (!due || failedRecently) return@withLock a.msone
+        when (val answer = msone.health()) {
+            is MsoneApi.Answer.Ok -> {
+                msoneFailedAt = 0
+                setMsone(answer.value.state, answer.value.message)
+            }
+            is MsoneApi.Answer.Failed -> msoneFailedAt = t
+        }
+        store.now.msone
+    }
+
+    /** Keeps what the gateway said, and acts on a stop. */
+    private fun setMsone(state: MsoneState, message: String?) {
+        store.update { it.copy(msoneState = state, msoneMessage = message.orEmpty(), msoneCheckedAt = now()) }
+        if (state == MsoneState.Stopped) {
+            runCatching { cache.purgeFiles(SubtitleProvider.Msone) }
+                .onFailure { Logger.w(TAG, "MSone subtitles not deleted: ${it.message}") }
+        }
+    }
+
+    /**
+     * MSone's subtitles for [target], searched by its IMDb id when known, else by title, year,
+     * season and episode. Only answers while the gateway says MSone is on; otherwise the
+     * [SubtitleNotice.MsoneOff] the picker shows where the results would be, with the subtitles
+     * already downloaded from a paused MSone still listed.
+     */
+    suspend fun searchMsone(target: SubtitleTarget): SearchResult {
+        val status = msoneStatus()
+        val parsed = MediaName.parse(target.fileName, target.caption)
+        val query = MsoneApi.Query(
+            imdb = target.imdb,
+            title = parsed.title.trim().takeIf { it.length >= MIN_QUERY },
+            year = parsed.year,
+            season = parsed.season,
+            episode = parsed.episode,
+        )
+        val key = "msone|${query.imdb ?: query.title?.lowercase(Locale.ROOT)}|${query.year}|${query.season}|${query.episode}"
+        if (status.state != MsoneState.On) {
+            val kept = if (status.state == MsoneState.Paused) {
+                cache.search(key).orEmpty().filter { cache.file(it.provider, fileKey(it, target)) != null }
+            } else {
+                emptyList()
+            }
+            return SearchResult(kept, SubtitleNotice.MsoneOff(status.state, status.message), fromCache = kept.isNotEmpty())
+        }
+        if (query.imdb == null && query.title == null) return SearchResult(emptyList(), SubtitleNotice.MsoneTooShort)
+        cache.search(key)?.takeIf { it.isNotEmpty() }?.let { return SearchResult(rankMsone(it, parsed), fromCache = true) }
+        return when (val answer = msone.search(query)) {
+            is MsoneApi.Answer.Ok -> {
+                // An empty answer is not kept: MSone's volunteers may finish this one tomorrow.
+                if (answer.value.isNotEmpty()) cache.putSearch(key, answer.value)
+                SearchResult(rankMsone(answer.value, parsed))
+            }
+            is MsoneApi.Answer.Failed -> SearchResult(emptyList(), msoneNotice(answer.failure))
+        }
+    }
+
+    /** The right episode first, then the right year, then the order MSone gave. */
+    private fun rankMsone(hits: List<SubtitleHit>, parsed: ParsedName): List<SubtitleHit> =
+        hits.sortedWith(
+            compareByDescending<SubtitleHit> { parsed.episode != null && it.featureEpisode == parsed.episode && (it.featureSeason == null || it.featureSeason == parsed.season) }
+                .thenByDescending { parsed.season != null && it.pack && it.featureSeason == parsed.season }
+                .thenByDescending { parsed.year != null && it.featureYear == parsed.year },
+        )
+
+    private fun msoneNotice(failure: MsoneApi.Failure): SubtitleNotice = when (failure) {
+        is MsoneApi.Failure.State -> {
+            setMsone(failure.state, failure.message)
+            SubtitleNotice.MsoneOff(failure.state, failure.message)
+        }
+        MsoneApi.Failure.BadQuery -> SubtitleNotice.MsoneTooShort
+        is MsoneApi.Failure.Busy -> SubtitleNotice.MsoneBusy
+        MsoneApi.Failure.Offline -> SubtitleNotice.Offline
+    }
+
+    /**
+     * One MSone file: a subtitle, or for a season pack the zip, from which the video's episode is
+     * taken (the first subtitle when the name gives none). The download is what MSone counts.
+     */
+    private suspend fun downloadMsone(hit: SubtitleHit, target: SubtitleTarget?): DownloadResult {
+        val a = store.now
+        if (a.msoneState != MsoneState.On) return DownloadResult.Failed(SubtitleNotice.MsoneOff(a.msoneState, a.msone.message))
+        val parsed = target?.let { MediaName.parse(it.fileName, it.caption) }
+        return when (val answer = msone.fetch(hit, if (hit.pack) MSONE_PACK_BYTES else SubtitleText.MAX_BYTES)) {
+            is MsoneApi.Answer.Ok -> {
+                val bytes = answer.value
+                val text = if (SubtitleText.isZip(bytes)) {
+                    runCatching { SubtitleText.fromArchive(bytes, parsed?.season, parsed?.episode, hit.language) }.getOrNull()
+                } else {
+                    SubtitleText.from(bytes, hit.link.substringAfterLast('/').ifBlank { "${hit.id}.srt" }, language = hit.language)
+                }
+                save(hit, text, fileKey(hit, target))
+            }
+            is MsoneApi.Answer.Failed -> DownloadResult.Failed(msoneNotice(answer.failure))
+        }
     }
 
     // ---- shared ----------------------------------------------------------------------------
@@ -517,6 +663,16 @@ class OnlineSubtitles(
 
         /** The shortest title OpenSubtitles accepts as a query. */
         internal const val MIN_QUERY = 3
+
+        /** What typed as the SubDL key shows or hides MSone's search instead. */
+        private const val MSONE_CODE = "msone"
+
+        /** How often MSone's state is asked at most, and how soon a manual "Check again" may ask again. */
+        const val MSONE_CHECK_MS = 6 * 60 * 60 * 1000L
+        const val MSONE_FORCE_MS = 60 * 1000L
+
+        /** The largest MSone season pack fetched; each subtitle in it is held to [SubtitleText.MAX_BYTES]. */
+        const val MSONE_PACK_BYTES = 20 * 1024 * 1024
 
         /** How long a refused key keeps the feature off before one more try. */
         const val REFUSED_RETRY_MS = SubtitleCache.DAY_MS

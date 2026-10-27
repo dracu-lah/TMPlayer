@@ -361,6 +361,8 @@ fun PlayerScreen(
     var menu by remember { mutableStateOf(MenuPage.entries.firstOrNull { it.name.equals(menuOpen, ignoreCase = true) }?.let { MenuAt(it, MenuAt.Anchor.Cursor, Offset(240f, 120f)) }) }
     var showDetails by remember { mutableStateOf(detailsOpen) }
     var showOnline by remember { mutableStateOf(onlineOpen) }
+    // Which search the online panel runs: OpenSubtitles and SubDL, or MSone.
+    var onlineMsone by remember { mutableStateOf(false) }
     var showShortcuts by remember { mutableStateOf(shortcutsOpen) }
     var showEpisodes by remember { mutableStateOf(episodesOpen) }
     var flash by remember { mutableStateOf<Flash?>(null) }
@@ -1813,7 +1815,14 @@ fun PlayerScreen(
                         MenuAction.Details -> showDetails = true
                         MenuAction.Shortcuts -> showShortcuts = true
                         MenuAction.ToggleWatched -> toggleWatched()
-                        MenuAction.SearchOnline -> showOnline = true
+                        MenuAction.SearchOnline -> {
+                            onlineMsone = false
+                            showOnline = true
+                        }
+                        MenuAction.SearchMsone -> {
+                            onlineMsone = true
+                            showOnline = true
+                        }
                         MenuAction.LoadSubtitleFile -> scope.launch {
                             com.tmplayer.desktop.os.FilePicker.open(s.playerLoadSubtitleFile, *SubtitleDrop.EXTENSIONS.toTypedArray())
                                 ?.let { loadSubtitle(it.path) }
@@ -1926,6 +1935,15 @@ fun PlayerScreen(
                         showOnline = false
                         refocus()
                     },
+                    onPickFile = {
+                        showOnline = false
+                        scope.launch {
+                            com.tmplayer.desktop.os.FilePicker.open(s.playerLoadSubtitleFile, *SubtitleDrop.EXTENSIONS.toTypedArray())
+                                ?.let { loadSubtitle(it.path) }
+                            refocus()
+                        }
+                    },
+                    msone = onlineMsone,
                     preset = onlinePreset,
                 )
             }

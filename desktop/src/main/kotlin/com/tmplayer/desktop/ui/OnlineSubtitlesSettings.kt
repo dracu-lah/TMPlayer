@@ -84,6 +84,7 @@ internal fun OnlineSubtitlesGroup() {
         },
         TmIcons.Lock,
     ) { editingKey = true }
+    MsoneSetting()
     Action(
         s.onlineClearCache,
         if (bytes > 0) s.onlineCacheDetail(Translator.messages.formatter.size(bytes)) else s.onlineCacheEmpty,
@@ -124,6 +125,43 @@ internal fun OnlineSubtitlesGroup() {
     }
     if (signingIn) SignInDialog(onClose = { signingIn = false })
     if (editingKey) SubdlKeyDialog(onClose = { editingKey = false })
+}
+
+/**
+ * MSone's state at the gateway, on a device where its search was switched on by hand (`msone`
+ * typed as the SubDL key): the picker's line, the gateway's own words after it, and Check again.
+ */
+@Composable
+private fun MsoneSetting() {
+    val s = LocalStrings.current
+    val online = OnlineSubtitles.current ?: return
+    val account by online.account.collectAsState()
+    if (!account.msoneShown) return
+    val scope = rememberCoroutineScope()
+    val toast = rememberToast()
+    var checking by remember { mutableStateOf(false) }
+    // The cached answer unless six hours have passed; a failure leaves the last one standing.
+    LaunchedEffect(Unit) { online.msoneStatus() }
+    val line = OnlineWords.msoneState(account.msoneState)
+    Action(
+        s.msoneTitle,
+        when {
+            checking -> s.msoneChecking
+            account.msoneMessage.isNotBlank() -> "$line ${account.msoneMessage}"
+            else -> line
+        },
+        TmIcons.Language,
+        titleColor = if (account.msoneState == com.tmplayer.online.MsoneState.On) androidx.compose.ui.graphics.Color.Unspecified else Tone.muted,
+        value = s.msoneCheckAgain,
+        enabled = !checking,
+    ) {
+        checking = true
+        scope.launch {
+            val status = online.msoneStatus(force = true)
+            checking = false
+            toast(OnlineWords.msoneState(status.state))
+        }
+    }
 }
 
 @Composable
@@ -179,6 +217,7 @@ internal fun SignInDialog(onClose: () -> Unit) {
 private fun SubdlKeyDialog(onClose: () -> Unit) {
     val s = LocalStrings.current
     val online = OnlineSubtitles.current ?: return
+    val toast = rememberToast()
     var key by remember { mutableStateOf(online.store.now.subdlKey) }
     TmAlertDialog(
         onDismissRequest = onClose,
@@ -191,7 +230,8 @@ private fun SubdlKeyDialog(onClose: () -> Unit) {
         },
         confirmButton = {
             TextButton(onClick = {
-                online.setSubdlKey(key)
+                // `msone` is the hidden switch for MSone's search, not a key.
+                online.setSubdlKey(key)?.let { shown -> toast(if (shown) s.msoneHiddenOn else s.msoneHiddenOff) }
                 onClose()
             }) { Text(s.commonOk) }
         },

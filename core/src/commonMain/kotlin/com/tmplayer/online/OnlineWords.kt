@@ -21,6 +21,21 @@ object OnlineWords {
         SubtitleNotice.Offline -> L.onlineNoticeOffline
         SubtitleNotice.SubdlKeyRefused -> L.onlineNoticeSubdlRefused
         SubtitleNotice.Unreadable -> L.onlineNoticeUnreadable
+        is SubtitleNotice.MsoneOff -> msoneState(notice.state)
+        SubtitleNotice.MsoneBusy -> L.msoneBusy
+        SubtitleNotice.MsoneTooShort -> L.msoneTooShort
+    }
+
+    /** The gateway's own words under ours, shown as is, or null. */
+    fun message(notice: SubtitleNotice?): String? = (notice as? SubtitleNotice.MsoneOff)?.message
+
+    /** What MSone's state means for the viewer, in the picker and in Settings. */
+    fun msoneState(state: MsoneState): String = when (state) {
+        MsoneState.On -> L.msoneStateOn
+        MsoneState.Off -> L.msoneStateOff
+        MsoneState.Paused -> L.msoneStatePaused
+        MsoneState.Stopped -> L.msoneStateStopped
+        MsoneState.Unknown -> L.msoneStateUnknown
     }
 
     /** The line under the account row in Settings. */
@@ -55,6 +70,13 @@ object OnlineWords {
     /** One line under a result: language, release, and the marks that tell results apart. */
     fun hitDetail(hit: SubtitleHit): String = buildList {
         add(OnlineSubtitles.languageName(hit.language))
+        if (hit.provider == SubtitleProvider.Msone) {
+            hit.featureYear?.let { add(it.toString()) }
+            if (hit.pack) add(L.msonePack)
+            if (hit.translator.isNotEmpty()) add(L.msoneTranslator(hit.translator))
+            add(L.msoneCredit)
+            return@buildList
+        }
         if (hit.hashMatch) add(L.onlineHashMatch)
         if (hit.hearingImpaired) add(L.onlineHearingImpaired)
         if (hit.machine) add(L.onlineMachine)

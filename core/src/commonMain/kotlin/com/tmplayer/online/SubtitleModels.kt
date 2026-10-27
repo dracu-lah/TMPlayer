@@ -7,6 +7,9 @@ import org.json.JSONObject
 enum class SubtitleProvider(val label: String) {
     OpenSubtitles("OpenSubtitles"),
     Subdl("SubDL"),
+
+    /** Malayalam subtitles from malayalamsubtitles.org, through TMPlayer's gateway; see [MsoneApi]. */
+    Msone("MSone"),
 }
 
 /**
@@ -19,6 +22,8 @@ data class SubtitleTarget(
     val hash: String? = null,
     val caption: String? = null,
     val languages: List<String> = listOf("en"),
+    /** The video's IMDb id when the online details found one, which MSone searches by first. */
+    val imdb: String? = null,
 )
 
 /** One subtitle a provider offers. [id] is OpenSubtitles' file id, or SubDL's download path. */
@@ -42,6 +47,15 @@ data class SubtitleHit(
     val featureSeason: Int? = null,
     val featureEpisode: Int? = null,
     val featureYear: Int? = null,
+    /** MSone: a zip of a season's episodes rather than one subtitle. */
+    val pack: Boolean = false,
+    /** MSone: who translated it, and their page (https only, blank when none). */
+    val translator: String = "",
+    val translatorUrl: String = "",
+    /** MSone: the release's page on malayalamsubtitles.org, for the credit (https only). */
+    val pageUrl: String = "",
+    /** MSone: the file's own download address (https only); [MsoneApi.fetch] decides whether to use it. */
+    val link: String = "",
 ) {
     internal fun toJson(): JSONObject = JSONObject()
         .put("provider", provider.name)
@@ -58,6 +72,11 @@ data class SubtitleHit(
             featureSeason?.let { put("feature_season", it) }
             featureEpisode?.let { put("feature_episode", it) }
             featureYear?.let { put("feature_year", it) }
+            if (pack) put("pack", true)
+            if (translator.isNotEmpty()) put("translator", translator)
+            if (translatorUrl.isNotEmpty()) put("translator_url", translatorUrl)
+            if (pageUrl.isNotEmpty()) put("page", pageUrl)
+            if (link.isNotEmpty()) put("link", link)
         }
 
     internal companion object {
@@ -76,6 +95,11 @@ data class SubtitleHit(
                 featureSeason = o.optInt("feature_season", 0).takeIf { it > 0 },
                 featureEpisode = o.optInt("feature_episode", 0).takeIf { it > 0 },
                 featureYear = o.optInt("feature_year", 0).takeIf { it > 0 },
+                pack = o.optBoolean("pack"),
+                translator = o.optString("translator"),
+                translatorUrl = MsoneApi.https(o.optString("translator_url")).orEmpty(),
+                pageUrl = MsoneApi.https(o.optString("page")).orEmpty(),
+                link = MsoneApi.https(o.optString("link")).orEmpty(),
             )
         }.getOrNull()
 
@@ -124,6 +148,18 @@ sealed interface SubtitleNotice {
 
     /** The file arrived but held no subtitle in a format the players read. */
     data object Unreadable : SubtitleNotice
+
+    /**
+     * MSone is not answering searches: not set up yet, paused or stopped at MSone's request, or
+     * not checked yet ([MsoneState]). [message] is the gateway's own text, shown as is under ours.
+     */
+    data class MsoneOff(val state: MsoneState, val message: String? = null) : SubtitleNotice
+
+    /** MSone's gateway asked for a minute's rest. */
+    data object MsoneBusy : SubtitleNotice
+
+    /** The video's name gave nothing MSone could search with. */
+    data object MsoneTooShort : SubtitleNotice
 }
 
 /** A search's answer: the hits, best first, and why there may be fewer than hoped. */
