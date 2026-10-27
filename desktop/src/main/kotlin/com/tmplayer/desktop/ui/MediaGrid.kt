@@ -648,48 +648,37 @@ fun ContinuePage(state: ShellState, tabs: @Composable () -> Unit = {}) {
     // The copies of one film or episode as one card, the one watched last, as on Home.
     val records = remember(stored, state.historySort) { stored?.let(com.tmplayer.data.HomeRows::foldCopies)?.let { historyOrder(state, it) { record -> record.toMediaItem() } } }
     val scope = rememberCoroutineScope()
-    // The card waiting on "Remove from Continue watching?": its saved place cannot be got back.
-    var forgetting by remember { mutableStateOf<ResumeRecord?>(null) }
-    forgetting?.let { record ->
-        ConfirmDialog(
-            title = s.confirmForgetResumeTitle,
-            message = s.confirmForgetResumeMessage(record.title),
-            detail = s.browseForgetResumeDetail,
-            confirmLabel = s.commonRemove,
-            onDismiss = { forgetting = null },
-            onConfirm = {
-                forgetting = null
-                scope.launch { state.settings.clearResumeCopies(record) }
-            },
-        )
-    }
-    // "Clear Continue watching?": every saved place goes, so it is asked first.
-    var confirmClear by remember { mutableStateOf(false) }
+    // Remove from history, one card, the ticked ones or all of them: at once, with Undo.
     val toast = rememberToast()
-    if (confirmClear) {
-        ConfirmDialog(
-            title = s.browseClearContinueTitle,
-            message = s.browseClearContinueMessage(records?.size ?: 0),
-            detail = s.browseClearContinueDetail,
-            confirmLabel = s.commonClear,
-            onDismiss = { confirmClear = false },
-            onConfirm = {
-                confirmClear = false
-                val count = records?.size ?: 0
-                scope.launch {
-                    runCatching { state.settings.clearWatchHistory() }
-                    toast(s.settingsHistoryCleared(count))
-                }
-            },
-        )
+    val undoToast = com.tmplayer.ui.components.rememberActionToast()
+    val removeCards: (List<ResumeRecord>) -> Unit = { cards ->
+        runHistoryEdit(scope, state, undoToast, toast, { s.browseRemovedFromHistory(it) }, s.browseUndo) { st, w ->
+            com.tmplayer.data.HistoryEdits.removeContinueCards(st, w, cards)
+        }
     }
-    Column(Modifier.fillMaxSize()) {
+    val clearAll: () -> Unit = {
+        runHistoryEdit(scope, state, undoToast, toast, { s.browseHistoryCleared }, s.browseUndo) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
+    }
+    // The cards in the grid's order (the day headings' order), by the id a poster is ticked by.
+    val gridOrder = remember(records) { records?.let { list -> daySections(list, System.currentTimeMillis()) { it.updatedAt }.sections.flatMap { it.second } }.orEmpty() }
+    val ids = remember(gridOrder) { gridOrder.map { "${it.chatId}:${it.messageId}" } }
+    val currentIds by rememberUpdatedState(ids)
+    val selection = remember { GridSelection(history = true) { currentIds.getOrNull(it) } }
+    LaunchedEffect(ids) { if (ids.isEmpty()) selection.clear() else selection.keepOnly(ids.toSet()) }
+    BackHandler(enabled = selection.active) { selection.clear() }
+    val removeTicked: () -> Unit = {
+        val cards = gridOrder.filter { selection.isSelected("${it.chatId}:${it.messageId}") }
+        selection.clear()
+        if (cards.isNotEmpty()) removeCards(cards)
+    }
+    Column(Modifier.fillMaxSize().historyKeys(selection, { currentIds }, removeTicked)) {
         PageHeader(
             BrowseTab.History.heading,
             HistoryTab.Continue.blurb,
             actions = {
                 if (!records.isNullOrEmpty()) {
-                    OutlinedButton(onClick = { confirmClear = true }) { Text(s.browseClearContinue) }
+                    if (!selection.active) OutlinedButton(onClick = { selection.start() }) { Text(s.browseSelect) }
+                    OutlinedButton(onClick = clearAll) { Text(s.browseClearHistory) }
                 }
             },
         )
@@ -706,6 +695,7 @@ fun ContinuePage(state: ShellState, tabs: @Composable () -> Unit = {}) {
                 val currentDays by rememberUpdatedState(days)
                 val nav = rememberKeyboardNav(remember(grid) { SectionedGridSurface(grid) { currentDays.gridIndex } })
                 Box(Modifier.fillMaxSize()) {
+                  CompositionLocalProvider(LocalGridSelection provides selection) {
                     LazyVerticalGrid(
                         // A quarter wider than a poster: the card carries its title on the art.
                         columns = GridCells.Adaptive(state.posterWidth * CONTINUE_WIDTH),
@@ -728,11 +718,16 @@ fun ContinuePage(state: ShellState, tabs: @Composable () -> Unit = {}) {
                                     }
                                 },
                             ) {
-                                forgetting = record
+                                removeCards(listOf(record))
                             }
                         }
                     }
-                    ScrollToTop(grid)
+                  }
+                    if (selection.active) {
+                        HistorySelectionBar(selection, ids, removeTicked, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
+                    } else {
+                        ScrollToTop(grid)
+                    }
                     // The hold to scroll handle on a long list, the scrollbar on a short one.
                     FastScroller(grid, label = days.scrollLabels({ "${it.chatId}:${it.messageId}" }, { it.title }, state.historySort == com.tmplayer.ui.browse.ChatSort.Name)) {
                         VerticalScrollbar(rememberScrollbarAdapter(grid), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
@@ -778,7 +773,7 @@ private fun ContinueTile(
                 close()
                 onMarkWatched()
             })
-            DropdownMenuItem(text = { Text(s.continueRemove) }, onClick = { close(); onForget() })
+            DropdownMenuItem(text = { Text(s.browseRemoveFromHistory) }, onClick = { close(); onForget() })
         },
         markToggle = false,
     )
@@ -826,7 +821,7 @@ internal fun MediaTile(
 ) {
     val s = LocalStrings.current
     // The grid's selection, when there is one, so the pane can start one with this poster.
-    val selection = LocalGridSelection.current?.takeIf { item.canBeSaved }
+    val selection = LocalGridSelection.current?.takeIf { item.canBeSaved || it.history }
     val progress by state.settings.watchProgress.collectAsState(initial = emptyMap())
     val key = SettingsStore.progressKey(item.chatId, item.messageId)
     val point: WatchPoint? = progress[key]
@@ -966,13 +961,17 @@ internal fun Poster(
     var menu by remember { mutableStateOf(false) }
     val requester = remember { FocusRequester() }
     // A video its chat will not let anyone keep cannot be picked for Download selected.
-    val selection = LocalGridSelection.current?.takeIf { item.canBeSaved }
+    val selection = LocalGridSelection.current?.takeIf { item.canBeSaved || it.history }
     // Set by a Ctrl or Shift press just before the click it belongs to, so that click picks the
     // poster instead of playing it.
     var picking by remember { mutableStateOf(false) }
-    val play = {
+    // On a History page in select mode a plain click ticks the card, as a tap does on the phone.
+    val ticksOnClick = selection?.history == true && selection.active
+    val play: () -> Unit = {
         if (picking && selection != null) {
             picking = false
+        } else if (ticksOnClick) {
+            selection?.toggle(index)
         } else {
             state.openPlayer(item, startFromBeginning = false)
         }
@@ -992,7 +991,7 @@ internal fun Poster(
     }
     val detailFirst = state.detailFirst
     val click: () -> Unit = {
-        if (detailFirst && !(picking && selection != null)) page() else play()
+        if (detailFirst && !(picking && selection != null) && !ticksOnClick) page() else play()
     }
     val openMenu: () -> Unit = {
         if (details != null) {
@@ -1154,6 +1153,11 @@ internal fun Poster(
                 finished -> WatchedBadge(corner)
             }
             val showing = lifted || menu || focused
+            // History's tick box: on hover, and on every card once select mode is on. A click on it
+            // ticks the card without opening anything; Ctrl and Shift clicks still pick as anywhere.
+            if (selection?.history == true && (showing || selection.active)) {
+                TickBox(selected, Modifier.align(Alignment.TopStart).padding(TileBadgeInset)) { selection.toggle(index) }
+            }
             // The top end corner: the caller's mark, else on a poster the quality its name states.
             val quality = item.qualityTags.firstOrNull()
             if (!showing) when {

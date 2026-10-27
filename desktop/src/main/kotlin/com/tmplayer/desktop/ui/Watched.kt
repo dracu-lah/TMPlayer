@@ -91,9 +91,30 @@ fun WatchedPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
     // One card for the copies of one video, as Continue watching has.
     val records = remember(all, state.historySort) { all?.let(HomeRows::foldWatched)?.let { historyOrder(state, it) { record -> record.toMediaItem() } } }
     val progress by state.settings.watchProgress.collectAsState(initial = emptyMap())
-    var confirmClear by remember { mutableStateOf(false) }
     // The page's, not a tile's: unmarking takes the tile away, and with it any scope of its own.
     val scope = rememberCoroutineScope()
+    // Remove from history, one card, the ticked ones or all of them: at once, with Undo.
+    val toast = rememberToast()
+    val undoToast = com.tmplayer.ui.components.rememberActionToast()
+    val removeCards: (List<WatchedRecord>) -> Unit = { cards ->
+        runHistoryEdit(scope, state, undoToast, toast, { s.browseRemovedFromHistory(it) }, s.browseUndo) { st, w ->
+            com.tmplayer.data.HistoryEdits.removeWatchedCards(st, w, cards)
+        }
+    }
+    val clearAll: () -> Unit = {
+        runHistoryEdit(scope, state, undoToast, toast, { s.browseHistoryCleared }, s.browseUndo) { st, w -> com.tmplayer.data.HistoryEdits.clear(st, w) }
+    }
+    val gridOrder = remember(records) { records?.let { list -> daySections(list, System.currentTimeMillis()) { it.watchedAt }.sections.flatMap { it.second } }.orEmpty() }
+    val ids = remember(gridOrder) { gridOrder.map { "${it.chatId}:${it.messageId}" } }
+    val currentIds by rememberUpdatedState(ids)
+    val selection = remember { GridSelection(history = true) { currentIds.getOrNull(it) } }
+    LaunchedEffect(ids) { if (ids.isEmpty()) selection.clear() else selection.keepOnly(ids.toSet()) }
+    com.tmplayer.ui.nav.BackHandler(enabled = selection.active) { selection.clear() }
+    val removeTicked: () -> Unit = {
+        val cards = gridOrder.filter { selection.isSelected("${it.chatId}:${it.messageId}") }
+        selection.clear()
+        if (cards.isNotEmpty()) removeCards(cards)
+    }
     // "Watched 5 minutes ago" moves on while the page is open.
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
@@ -102,13 +123,14 @@ fun WatchedPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
             now = System.currentTimeMillis()
         }
     }
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().historyKeys(selection, { currentIds }, removeTicked)) {
         PageHeader(
             BrowseTab.History.heading,
             HistoryTab.Watched.blurb,
             actions = {
                 if (!records.isNullOrEmpty()) {
-                    OutlinedButton(onClick = { confirmClear = true }) { Text(s.watchedClear) }
+                    if (!selection.active) OutlinedButton(onClick = { selection.start() }) { Text(s.browseSelect) }
+                    OutlinedButton(onClick = clearAll) { Text(s.browseClearHistory) }
                 }
             },
         )
@@ -125,6 +147,7 @@ fun WatchedPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
                 val currentDays by rememberUpdatedState(days)
                 val nav = rememberKeyboardNav(remember(grid) { SectionedGridSurface(grid) { currentDays.gridIndex } })
                 Box(Modifier.fillMaxSize()) {
+                  androidx.compose.runtime.CompositionLocalProvider(LocalGridSelection provides selection) {
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(state.posterWidth),
                         state = grid,
@@ -136,15 +159,17 @@ fun WatchedPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
                         daySectionItems(days, key = { it.key }) { index, record, day ->
                             LaunchedEffect(record) { state.noteChatTitle(record.chatId, record.chatTitle) }
                             WatchedTile(state, record, progress[record.key]?.fraction, now, nav, index, day) {
-                                // The card leaving this page is the answer.
-                                val item = HomeRows.watchedItem(record, all.orEmpty())
-                                scope.launch {
-                                    runCatching { setWatched(state.watched, state.settings, item, record.chatTitle, watched = false) }
-                                }
+                                // The card leaving this page is the answer, with Undo.
+                                removeCards(listOf(record))
                             }
                         }
                     }
-                    ScrollToTop(grid)
+                  }
+                    if (selection.active) {
+                        HistorySelectionBar(selection, ids, removeTicked, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
+                    } else {
+                        ScrollToTop(grid)
+                    }
                     // The hold to scroll handle on a long list, the scrollbar on a short one.
                     FastScroller(grid, label = days.scrollLabels({ it.key }, { it.title }, state.historySort == com.tmplayer.ui.browse.ChatSort.Name)) {
                         VerticalScrollbar(rememberScrollbarAdapter(grid), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
@@ -152,9 +177,6 @@ fun WatchedPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
                 }
             }
         }
-    }
-    if (confirmClear) {
-        ClearWatchedDialog(state, records?.size ?: 0, scope, onDismiss = { confirmClear = false })
     }
 }
 
@@ -195,7 +217,8 @@ private fun WatchedTile(
                 close()
                 state.openPlayer(item, startFromBeginning = true)
             })
-            DropdownMenuItem(text = { Text(WatchedWords.markLabel(onList = true)) }, onClick = {
+            // On the Watched list the tick coming off is the card leaving History: one name for it.
+            DropdownMenuItem(text = { Text(s.browseRemoveFromHistory) }, onClick = {
                 close()
                 onUnwatch()
             })
@@ -215,27 +238,36 @@ fun WatchLaterPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
     val progress by state.settings.watchProgress.collectAsState(initial = emptyMap())
     // The page's, not a tile's: removing takes the tile away, and with it any scope of its own.
     val scope = rememberCoroutineScope()
-    var confirmClear by remember { mutableStateOf(false) }
-    if (confirmClear) {
-        ConfirmDialog(
-            title = s.browseClearWatchLaterTitle,
-            message = s.browseClearWatchLaterMessage(records?.size ?: 0),
-            detail = s.browseClearWatchLaterDetail,
-            confirmLabel = s.commonClear,
-            onDismiss = { confirmClear = false },
-            onConfirm = {
-                confirmClear = false
-                scope.launch { runCatching { state.watched.watchLater.clear() } }
-            },
-        )
+    // Remove from Watch later, one card, the ticked ones or all of them: at once, with Undo.
+    val toast = rememberToast()
+    val undoToast = com.tmplayer.ui.components.rememberActionToast()
+    val removeCards: (List<WatchLaterRecord>) -> Unit = { cards ->
+        runHistoryEdit(scope, state, undoToast, toast, { s.browseRemovedFromWatchLater(it) }, s.browseUndo) { _, w ->
+            com.tmplayer.data.HistoryEdits.removeLater(w, cards.map { it.key }, cards.size)
+        }
     }
-    Column(Modifier.fillMaxSize()) {
+    val clearAll: () -> Unit = {
+        runHistoryEdit(scope, state, undoToast, toast, { s.browseWatchLaterCleared }, s.browseUndo) { _, w -> com.tmplayer.data.HistoryEdits.clearLater(w) }
+    }
+    val gridOrder = records.orEmpty()
+    val ids = remember(gridOrder) { gridOrder.map { "${it.chatId}:${it.messageId}" } }
+    val currentIds by rememberUpdatedState(ids)
+    val selection = remember { GridSelection(history = true) { currentIds.getOrNull(it) } }
+    LaunchedEffect(ids) { if (ids.isEmpty()) selection.clear() else selection.keepOnly(ids.toSet()) }
+    com.tmplayer.ui.nav.BackHandler(enabled = selection.active) { selection.clear() }
+    val removeTicked: () -> Unit = {
+        val cards = gridOrder.filter { selection.isSelected("${it.chatId}:${it.messageId}") }
+        selection.clear()
+        if (cards.isNotEmpty()) removeCards(cards)
+    }
+    Column(Modifier.fillMaxSize().historyKeys(selection, { currentIds }, removeTicked)) {
         PageHeader(
             BrowseTab.History.heading,
             HistoryTab.WatchLater.blurb,
             actions = {
                 if (!records.isNullOrEmpty()) {
-                    OutlinedButton(onClick = { confirmClear = true }) { Text(s.browseClearWatchLater) }
+                    if (!selection.active) OutlinedButton(onClick = { selection.start() }) { Text(s.browseSelect) }
+                    OutlinedButton(onClick = clearAll) { Text(s.browseClearWatchLater) }
                 }
             },
         )
@@ -249,6 +281,7 @@ fun WatchLaterPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
                 val current by rememberUpdatedState(list)
                 val nav = rememberKeyboardNav(remember(grid) { GridSurface(grid, { 0 }, { current.size }) })
                 Box(Modifier.fillMaxSize()) {
+                  androidx.compose.runtime.CompositionLocalProvider(LocalGridSelection provides selection) {
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(state.posterWidth),
                         state = grid,
@@ -260,12 +293,17 @@ fun WatchLaterPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
                         itemsIndexed(list, key = { _, it -> it.key }) { index, record ->
                             LaunchedEffect(record) { state.noteChatTitle(record.chatId, record.chatTitle) }
                             WatchLaterTile(state, record, progress[record.key]?.fraction, nav, index) {
-                                // The card leaving this page is the answer.
-                                scope.launch { runCatching { state.watched.watchLater.remove(record.chatId, record.messageId) } }
+                                // The card leaving this page is the answer, with Undo.
+                                removeCards(listOf(record))
                             }
                         }
                     }
-                    ScrollToTop(grid)
+                  }
+                    if (selection.active) {
+                        HistorySelectionBar(selection, ids, removeTicked, Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
+                    } else {
+                        ScrollToTop(grid)
+                    }
                     // The hold to scroll handle on a long list, the scrollbar on a short one.
                     val byKey = remember(list) { list.associateBy { it.key } }
                     val byName = state.historySort == com.tmplayer.ui.browse.ChatSort.Name
