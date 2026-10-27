@@ -10,8 +10,8 @@ import { Icon } from '../ui/Icon'
 import { PageBar } from '../ui/PageBar'
 import { ChatPicture } from './ChatPicture'
 import { chatName, StarButton } from './Chats'
-import { noVideosWithin } from './sizes'
-import { HiddenBySize, tileCard, VideoList } from './VideoList'
+import { noVideosWithin, sizeLabel, sizeScale } from './sizes'
+import { tileCard, VideoList } from './VideoList'
 import type { ChatPage, ChatView, RpcError, Sort } from '../tg/types'
 
 const SORTS: { value: Sort; key: Parameters<typeof t>[0] }[] = [
@@ -141,6 +141,34 @@ export function Chat() {
         setSearch({ q: undefined }, { replace: true })
     }
 
+    // "n hidden": the videos under the smallest size shown, opening the quick picks. Not while searching.
+    const SizeChip = () => (
+        <Show when={!view().query && !searching() && (page()?.hiddenBySize ?? 0) > 0}>
+            <button
+                class="size-chip"
+                type="button"
+                aria-label={t('grid.size_hidden_label', { count: page()!.hiddenBySize })}
+                title={t('grid.size_hidden_label', { count: page()!.hiddenBySize })}
+                onClick={() => sizeDialog.showModal()}
+            >
+                {t('grid.size_hidden', { count: page()!.hiddenBySize })}
+            </button>
+        </Show>
+    )
+    let sizeDialog!: HTMLDialogElement
+    /** The quick minimums, with the one on when it is off the list, sorted. */
+    const quick = () => {
+        const q = sizeScale()?.quick ?? []
+        const now = settings().sizeMin
+        return q.includes(now) ? q : [...q, now].sort((a, b) => a - b)
+    }
+    const pickMin = (bytes: number) => {
+        sizeDialog.close()
+        if (bytes === settings().sizeMin) return
+        // Never above the largest size shown: the apps' clampMin keeps one stop under it.
+        const top = sizeScale()?.stops.filter((s) => s.bytes < settings().sizeMax).at(-1)?.bytes ?? bytes
+        setSetting('sizeMin', Math.min(bytes, top))
+    }
     const SearchCell = () => (
         <button type="button" class="nav-cell" aria-pressed={searching()} title={t('browse.search_chat')} onClick={() => (searching() ? closeSearch() : setSearching(true))}>
             <span class="nav-glyph"><Icon icon={searching() ? Cancel01Icon : Search01Icon} size={22} /></span>
@@ -171,6 +199,7 @@ export function Chat() {
                         fallback={
                             // The TV keeps the chat's buttons at the top; a phone and a desktop have them on the chat's own bar at the foot.
                             <>
+                                <SizeChip />
                                 <StarButton chatId={chatId()} round />
                                 <SortMenu />
                                 <button
@@ -198,6 +227,7 @@ export function Chat() {
                         }
                     >
                         {/* The chat's info beside its name (the apps' Info button), then Refresh, which the apps have as a pull or a key. */}
+                        <SizeChip />
                         <A class="round-button" href={`/chat/${chatId()}/info`} state={{ chat: page() ? { title: title(), photo: page()!.photo, self: page()!.self } : undefined }} aria-label={t('chats.info_about')} title={t('chats.info_about')}>
                             <Icon icon={InformationCircleIcon} size={22} />
                         </A>
@@ -256,7 +286,28 @@ export function Chat() {
                     <button class="link" type="button" onClick={() => run(page() ? 'refresh' : 'open')}>{t('common.try_again')}</button>
                 </div>
             </Show>
-            <HiddenBySize count={view().query ? 0 : (page()?.hiddenBySize ?? 0)} />
+            <dialog class="confirm size-picker" ref={sizeDialog} aria-labelledby="size-picker-title" onClick={(e) => e.target === sizeDialog && sizeDialog.close()}>
+                <h2 id="size-picker-title">{t('settings.smallest')}</h2>
+                <div role="radiogroup" aria-labelledby="size-picker-title" class="size-options">
+                    <For each={quick()}>
+                        {(bytes) => (
+                            <button type="button" role="radio" aria-checked={settings().sizeMin === bytes} classList={{ on: settings().sizeMin === bytes }} onClick={() => pickMin(bytes)}>
+                                <span>{sizeLabel(bytes)}</span>
+                                <Show when={bytes === sizeScale()?.min}>
+                                    <span class="muted small">{t('grid.size_default')}</span>
+                                </Show>
+                                <Show when={settings().sizeMin === bytes}>
+                                    <Icon icon={Tick02Icon} size={20} />
+                                </Show>
+                            </button>
+                        )}
+                    </For>
+                </div>
+                <p class="muted small">{t('grid.size_quick_note', { count: page()?.hiddenBySize ?? 0 })}</p>
+                <div class="confirm-buttons">
+                    <button class="link" type="button" onClick={() => sizeDialog.close()}>{t('common.cancel')}</button>
+                </div>
+            </dialog>
             <Show when={page()?.protected}>
                 <p class="notice muted small">{t('detail.protected')}</p>
             </Show>

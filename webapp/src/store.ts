@@ -37,8 +37,8 @@ export interface Resume {
 }
 
 const MB = 1024 * 1024
-/** SizeFilter.DEFAULT_MIN and DEFAULT_MAX: 50 MB up, no top. */
-export const SIZE_DEFAULTS = { sizeMin: 50 * MB, sizeMax: 8 * 1024 * MB }
+/** SizeFilter.DEFAULT_MIN and DEFAULT_MAX: 400 MB up, no top. */
+export const SIZE_DEFAULTS = { sizeMin: 400 * MB, sizeMax: 8 * 1024 * MB }
 const DEFAULTS: Settings = { theme: 'system', ...SIZE_DEFAULTS, sort: 'Newest', posters: true, rewindMs: null, carousel: true }
 const THEME_KEY = 'tmplayer-theme'
 
@@ -292,6 +292,36 @@ export function setWatched(chatId: number, messageId: number, on: boolean) {
 /** Bumped by every change to Watched, so what shows it reads it again. */
 const [watchedTick, setWatchedTick] = createSignal(0)
 export { watchedTick }
+
+/** What Clear history took out, to put back. */
+export interface HistorySnapshot {
+    resumes: [string, Resume][]
+    watched: [string, number][]
+}
+
+/**
+ * Clear history, as the apps do it: Continue watching and Watched go together, Watch later and the
+ * starred chats stay. Returns what was cleared so an Undo can put it back, or null when there was
+ * nothing to clear.
+ */
+export async function clearHistory(): Promise<HistorySnapshot | null> {
+    const [left, done] = await Promise.all([allEntries<Resume>('resume:'), allEntries<number>('watched:')])
+    if (!left.size && !done.size) return null
+    const snap: HistorySnapshot = { resumes: [...left], watched: [...done] }
+    for (const k of [...left.keys(), ...done.keys()]) remove(k)
+    // The last position kept for a closing page would bring one back at the next start.
+    try {
+        localStorage.removeItem(LAST_KEY)
+    } catch {}
+    setWatchedTick(watchedTick() + 1)
+    return snap
+}
+
+export function restoreHistory(snap: HistorySnapshot) {
+    for (const [k, v] of snap.resumes) write(k, v)
+    for (const [k, v] of snap.watched) write(k, v)
+    setWatchedTick(watchedTick() + 1)
+}
 
 // Watch later: the video itself is kept, so the list draws without asking Telegram.
 

@@ -7,6 +7,7 @@ import { loadSettings } from './store'
 import { form, holdForm } from './form'
 import { Home } from './screens/Home'
 import { Nav } from './ui/Nav'
+import { Toaster } from './ui/Toast'
 import { applyUpdate, updateReady } from './install'
 import { t } from './i18n'
 
@@ -116,6 +117,7 @@ function Shell(props: ParentProps) {
                     <p class="offline-line" role="status">{t('web.offline')}</p>
                 </Show>
             </Show>
+            <Toaster />
             <Show when={sessionHere() === 'elsewhere'}>
                 <OtherTab />
             </Show>

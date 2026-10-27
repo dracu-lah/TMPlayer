@@ -209,6 +209,14 @@ input:not([type=range]):not([type=radio]):focus { border-color: var(--accent); }
 @media (max-height: 500px) and (orientation: landscape) {
   .update-notice, .offline-line { bottom: calc(66px + env(safe-area-inset-bottom)); }
 }
+/* A message with Undo, over the bar. */
+.toast {
+  position: fixed; z-index: 7; left: 50%; transform: translateX(-50%);
+  bottom: calc(86px + env(safe-area-inset-bottom)); width: min(480px, calc(100vw - 32px));
+  display: flex; align-items: center; gap: 16px; padding: 8px 8px 8px 16px;
+  background: var(--menu); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--shadow);
+}
+.toast p { flex: 1; font-size: 14px; line-height: 20px; }
 /* Sign in has no bar under it. */
 .signin ~ .offline-line { bottom: calc(16px + env(safe-area-inset-bottom)); }
 /* No connection: a line over the bar on every page but the player, which says it itself. */
@@ -788,6 +796,21 @@ a.detail-round { text-decoration: none; }
 .dual-range input:focus-visible { outline: none; }
 .dual-range input:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
 .dual-range input:focus-visible::-moz-range-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* A chat's "n hidden" chip and its smallest-size picker. */
+.size-chip {
+  min-height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid var(--line); background: transparent;
+  color: var(--accent); font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer;
+}
+.size-chip:hover, .size-chip:focus-visible { background: var(--surface-high); }
+.size-options { display: flex; flex-direction: column; margin: 0 -8px; }
+.size-options button {
+  display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 8px; border-radius: var(--r-md, 12px);
+  background: transparent; border: 0; color: var(--fg); font-size: 16px; text-align: left; cursor: pointer;
+}
+.size-options button span:first-child { flex: 1; }
+.size-options button:hover, .size-options button:focus-visible { background: var(--surface-high); }
+.size-options button.on { color: var(--accent); font-weight: 500; }
 
 /* A question before something that cannot be undone. */
 .confirm {
