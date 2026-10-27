@@ -1,15 +1,15 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js'
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js'
 import { A } from '@solidjs/router'
 import { InformationCircleIcon, PlayIcon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
 import { Icon } from '../ui/Icon'
 import { loadThumb } from './thumbs'
+import { useFeatured } from './featured'
 import { detailPath, tileCard, useProgress, watchPath } from './VideoList'
-import type { HomeRow, Tile } from '../tg/types'
+import type { HomeRow } from '../tg/types'
 
 /** How long a page is up before the next (FeaturedCarousel), and how many pages there are. */
 const ADVANCE_MS = 7_000
-const PAGES = 5
 /** Nobody has touched the page for this long: the carousel stops on the page it is on. */
 const IDLE_MS = 60_000
 
@@ -22,12 +22,7 @@ const IDLE_MS = 60_000
  * from the first frame, so the rows under it never move when it fills.
  */
 export function Hero(props: { rows: HomeRow[] | undefined }) {
-    const picks = createMemo<Tile[] | null>(() => {
-        if (!props.rows) return null
-        const recent = props.rows.find((r) => r.kind === 'recent')
-        if (!recent) return []
-        return recent.loaded ? recent.tiles.slice(0, PAGES) : null
-    })
+    const picks = useFeatured(() => props.rows)
     const [index, setIndex] = createSignal(0)
     const pick = () => picks()?.[Math.min(index(), (picks()?.length ?? 1) - 1)] ?? null
     const go = (i: number) => {

@@ -2,7 +2,8 @@
 // Home.tsx import it on demand): the remote's keys and focus map, the top bar, and Home's carousel.
 // Their look follows the Android TV app's TvTopBar and TvHomeCarousel; sizes are in the app's dp
 // on a 960 x 540 screen (tv.css).
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
+import { useFeatured } from '../screens/featured'
+import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from 'solid-js'
 import { A, useLocation, useNavigate } from '@solidjs/router'
 import { Home03Icon, Message01Icon, PlayIcon, Search01Icon } from '@hugeicons/core-free-icons'
 import { Icon, type IconData } from '../ui/Icon'
@@ -12,7 +13,7 @@ import { t } from '../i18n'
 import { loadThumb } from '../screens/thumbs'
 import { tileCard, useProgress, watchPath } from '../screens/VideoList'
 import { createFocusMap, resting } from './focus'
-import type { HomeRow, Tile } from '../tg/types'
+import type { HomeRow } from '../tg/types'
 import './tv.css'
 
 /** The four places the bar holds: their addresses, and which pages each stands for. */
@@ -103,7 +104,6 @@ export function TvBar() {
 
 /** How long a page of the carousel is up before it moves on. */
 const ADVANCE_MS = 7_000
-const PAGES = 5
 
 /**
  * Home's carousel on a TV (TvHomeCarousel): the newest five in Recently added, one picture at a
@@ -115,12 +115,7 @@ const PAGES = 5
  */
 export function TvHero(props: { rows: HomeRow[] | undefined }) {
     /** null while Recently added is still asked for; empty when there is nothing to show. */
-    const picks = createMemo<Tile[] | null>(() => {
-        if (!props.rows) return null
-        const recent = props.rows.find((r) => r.kind === 'recent')
-        if (!recent) return []
-        return recent.loaded ? recent.tiles.slice(0, PAGES) : null
-    })
+    const picks = useFeatured(() => props.rows)
     const [key, setKey] = createSignal<string | null>(null)
     const index = () => Math.max(0, picks()?.findIndex((p) => p.key === key()) ?? 0)
     const pick = () => picks()?.[index()] ?? null
