@@ -117,6 +117,6 @@ export function cardLayout(width: number): GridLayout {
     const [min, gap, rowGap] = dp ? [126 * dp, 12 * dp, 20 * dp] : vw < 600 ? [0, 10, 16] : vw < 840 ? [140, 16, 20] : [156, 24, 24]
     const cols = min ? Math.max(1, Math.floor((width + gap) / (min + gap))) : 3
     const card = (width - gap * (cols - 1)) / cols
-    // The 2:3 art (the name sits on it) and the facts.
-    return { cols, estimate: Math.round(card * 1.5 + (dp ? 22 * dp : 4 + 16) + rowGap) }
+    // The 2:3 art, the name under it (two lines) and the facts.
+    return { cols, estimate: Math.round(card * 1.5 + (dp ? 62 * dp : 6 + 36 + 4 + 16) + rowGap) }
 }

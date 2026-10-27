@@ -2,7 +2,8 @@ import { createEffect, createResource, createSignal, onCleanup, onMount, Show } 
 import { A } from '@solidjs/router'
 import { resumes, settings } from '../store'
 import { loadThumb } from './thumbs'
-import { loadBackdrop, loadPoster } from './posters'
+import { coverBackground } from './cover'
+import { loadBackdrop, loadPoster, posterSizeFor } from './posters'
 import { warmDataCentres, warmFile } from '../stream/reader'
 import { t } from '../i18n'
 import { form } from '../form'
@@ -74,14 +75,17 @@ function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk
         const ask = props.poster
         if (!seen() || !ask || !settings().posters) return void setPicture(null)
         let live = true
-        loadPoster(ask).then(
+        // The size the card is drawn at, so a phone's small cards take the lighter file.
+        loadPoster(ask, posterSizeFor(el.clientWidth)).then(
             (url) => live && setPicture(url),
             () => {},
         )
         onCleanup(() => (live = false))
     })
     return (
-        <div class="card-art" classList={{ posted: !!picture() }} ref={el} title={picture() ? props.title : undefined}>
+        // The desktop's cover gradient for the title under everything, so a card waiting for its
+        // frame or poster, or one with neither, is never a grey box.
+        <div class="card-art" classList={{ posted: !!picture() }} ref={el} title={picture() ? props.title : undefined} style={{ background: coverBackground(props.title) }}>
             <Show when={src()}>
                 <img class="card-fill" src={src()!} alt="" decoding="async" />
                 <img class="card-frame" src={src()!} alt="" decoding="async" />
@@ -168,6 +172,8 @@ export function Card(props: { card: CardData; progress?: number; replace?: boole
     return (
         <A class="card" {...cardLink(props.card.item, props.direct, props.replace)}>
             <CardArt thumb={props.card.item.thumb} title={props.card.title} poster={props.card.item.poster} progress={props.progress} />
+            {/* Under the card, as the apps write it (two lines kept, so the facts line up along a row). */}
+            <div class="card-name">{props.card.title}</div>
             <div class="card-facts">{props.card.facts}</div>
         </A>
     )

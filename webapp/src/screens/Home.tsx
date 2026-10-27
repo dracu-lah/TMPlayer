@@ -176,7 +176,7 @@ function Strip(props: { continues?: boolean }) {
                 {() => (
                     <li>
                         <div class={props.continues ? 'continue-art' : 'card-art'} />
-                        <Show when={props.continues}>
+                        <Show when={props.continues} fallback={<div class="card-name">&nbsp;</div>}>
                             <div class="continue-name">&nbsp;</div>
                         </Show>
                         <div class="card-facts">&nbsp;</div>
