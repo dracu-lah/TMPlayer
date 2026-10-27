@@ -939,16 +939,14 @@ internal fun Poster(
     val s = LocalStrings.current
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
-    var lifted by remember { mutableStateOf(false) }
-    // Hover intent: a pointer passing over on its way somewhere else does not lift every poster.
+    // The lift and Play answer the pointer at once (a 300 ms wait read as a slow app, user,
+    // 2026-10-27); only the stream's warm-up waits for the pointer to stay, so one passing over
+    // on its way somewhere else starts no download.
+    val lifted = hovered
     LaunchedEffect(hovered) {
         if (hovered) {
             delay(HOVER_INTENT_MS)
-            lifted = true
-            // The same intent warms its stream, so a click a moment later starts sooner.
             state.warmStream(item)
-        } else {
-            lifted = false
         }
     }
     var hasFocus by remember { mutableStateOf(false) }
