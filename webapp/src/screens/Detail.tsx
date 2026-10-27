@@ -10,7 +10,8 @@ import { TmdbMark } from '../ui/TmdbMark'
 import { initialOf } from '../ui/initial'
 import { StarButton } from './Chats'
 import { loadThumb } from './thumbs'
-import { answer, loadBackdrop, loadExtras, loadFile, loadPoster, type Answer, type Extras } from './posters'
+import { answer, loadBackdropLightFirst, loadExtras, loadFile, loadPoster, type Answer, type Extras } from './posters'
+import { coverBackground } from './cover'
 import { Card, clock, detailPath, shortLength, size, tileCard, useProgress, watchPath } from './VideoList'
 import { warmFile } from '../stream/reader'
 import type { ChatView, CopyRef, VideoItem, WatchInfo } from '../tg/types'
@@ -117,13 +118,26 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
     )
     const found = () => meta.latest?.found ?? null
     const extras = () => meta.latest?.extras ?? null
-    // The poster stands behind a show's page, the title's wide picture behind a film's, as the apps draw them.
-    const film = () => found()?.kind === 'film'
+    // The poster stands behind a show's page, the title's wide picture behind a film's, as the apps
+    // draw them. Which one is known from the poster answer alone, asked at once and past the cards'
+    // queue: until it is in, the page shows the video's own frame, never a poster that a film's wide
+    // picture then replaces. The wide picture comes light first (w300), then whole (w780).
+    const [kind, setKind] = createSignal<'film' | 'show' | null | undefined>(undefined)
+    const film = () => kind() === 'film'
     onMount(() => {
-        if (item.poster && settings().posters) {
-            loadPoster(item.poster).then((u) => u && setPoster(u), () => {})
-            loadBackdrop(item.poster).then((u) => u && setBackdrop(u), () => {})
-        }
+        const ask = item.poster
+        if (!ask || !settings().posters) return void setKind(null)
+        let stop = () => {}
+        answer(ask).then(
+            (f) => {
+                const k = f.match ? (f.kind ?? null) : null
+                setKind(k)
+                if (k === 'film' && f.backdrop) stop = loadBackdropLightFirst(ask, setBackdrop)
+                else if (f.poster) loadPoster(ask, 'w342', { priority: true }).then((u) => u && setPoster(u), () => {})
+            },
+            () => setKind(null),
+        )
+        onCleanup(() => stop())
     })
     const title = () => found()?.title || props.info?.title || item.title
     const ep = () => props.info?.episode ?? null
@@ -165,7 +179,7 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
 
     return (
         <article class="detail">
-            <div class="detail-hero" classList={{ blank: !art() && !poster() && !backdrop() }}>
+            <div class="detail-hero" classList={{ blank: !art() && !poster() && !backdrop() }} style={!art() && !poster() && !backdrop() ? { background: coverBackground(title()) } : undefined}>
                 <Show when={art()}>
                     <img class="detail-art" src={art()!} alt="" />
                 </Show>

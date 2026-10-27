@@ -14,9 +14,18 @@ import type { PosterAsk } from '../rules'
 const DAY = 24 * 60 * 60 * 1000
 const FOUND_TTL = 60 * DAY
 const MISS_TTL = 7 * DAY
-/** MetaApis.POSTER_SIZE: the size a card draws. */
-const SIZE = 'w342'
+/** MetaApis.POSTER_SIZE: the size a card draws; a small card takes the lighter w185. */
+export type PosterSize = 'w185' | 'w342'
+/** The wide picture: w300 to show at once on the carousel and a video's page, w780 to replace it. */
+export type BackdropSize = 'w300' | 'w780'
 const PARALLEL = 4
+/** Extra lanes for what the viewer is looking at (the carousel, a video's page), past the cards' queue. */
+const PRIORITY_LANES = 2
+
+/** Asks the carousel and a video's page make: past the cards' queue, ahead of it when the lanes are full. */
+export interface Want {
+    priority?: boolean
+}
 
 /** The question as the worker takes it. */
 function query(a: PosterAsk): string {
@@ -127,11 +136,16 @@ const known = new Map<string, Promise<string | null>>()
 let active = 0
 const waiting: (() => void)[] = []
 
-/** Runs `work` once the page is within its few lookups at a time; a lookup already made is shared. */
-function once<T>(key: string, store: Map<string, Promise<T>>, work: () => Promise<T>): Promise<T> {
+/**
+ * Runs `work` once the page is within its few lookups at a time; a lookup already made is shared.
+ * On a first sign in a Home of cards fills the queue at once, so a `priority` one (the carousel's
+ * picture, a video's page) takes one of its own lanes, or goes to the front of the queue.
+ */
+function once<T>(key: string, store: Map<string, Promise<T>>, work: () => Promise<T>, priority = false): Promise<T> {
     let p = store.get(key)
     if (!p) {
-        p = new Promise<void>((go) => (active < PARALLEL ? (active++, go()) : waiting.push(go)))
+        const limit = priority ? PARALLEL + PRIORITY_LANES : PARALLEL
+        p = new Promise<void>((go) => (active < limit ? (active++, go()) : priority ? waiting.unshift(go) : waiting.push(go)))
             .then(work)
             .catch((e) => {
                 store.delete(key)
@@ -151,23 +165,45 @@ function once<T>(key: string, store: Map<string, Promise<T>>, work: () => Promis
  * An address for `a`'s poster to draw, or null when TMDB has no title the video's name backs.
  * Rejects when the lookup could not be made; the card then keeps its thumbnail.
  */
-export function loadPoster(a: PosterAsk): Promise<string | null> {
-    return once(query(a), known, async () => {
+export function loadPoster(a: PosterAsk, size: PosterSize = 'w342', want: Want = {}): Promise<string | null> {
+    return once(`${size}:${query(a)}`, known, async () => {
         const found = await answer(a)
         if (!found.match || !found.poster) return null
-        return URL.createObjectURL(await picture(found.poster, SIZE))
-    })
+        return URL.createObjectURL(await picture(found.poster, size))
+    }, want.priority)
+}
+
+/** The poster size for a card `width` CSS pixels wide: w185 unless the screen's pixels need more (2x at most). */
+export function posterSizeFor(width: number): PosterSize {
+    return width * Math.min(2, globalThis.devicePixelRatio || 1) <= 260 ? 'w185' : 'w342'
 }
 
 const wide = new Map<string, Promise<string | null>>()
 
-/** An address for `a`'s wide picture (MetaInfo.backdropUrl, w780), or null when it has none. */
-export function loadBackdrop(a: PosterAsk): Promise<string | null> {
-    return once(query(a), wide, async () => {
+/** An address for `a`'s wide picture (MetaInfo.backdropUrl) at `size`, or null when it has none. */
+export function loadBackdrop(a: PosterAsk, size: BackdropSize = 'w780', want: Want = {}): Promise<string | null> {
+    return once(`${size}:${query(a)}`, wide, async () => {
         const found = await answer(a)
         if (!found.match || !found.backdrop) return null
-        return URL.createObjectURL(await picture(found.backdrop, 'w780'))
-    })
+        return URL.createObjectURL(await picture(found.backdrop, size))
+    }, want.priority)
+}
+
+/**
+ * The wide picture light first: `show` gets the w300 copy as soon as it is in, then the w780 one,
+ * which never gives way to the light one arriving late. For the carousel and a video's page, past
+ * the cards' queue. Returns a stop for a page that leaves before either arrives.
+ */
+export function loadBackdropLightFirst(a: PosterAsk, show: (url: string) => void): () => void {
+    let live = true
+    let full = false
+    loadBackdrop(a, 'w300', { priority: true }).then((u) => live && !full && u && show(u), () => {})
+    loadBackdrop(a, 'w780', { priority: true }).then((u) => {
+        if (!live || !u) return
+        full = true
+        show(u)
+    }, () => {})
+    return () => (live = false)
 }
 
 const faces = new Map<string, Promise<string | null>>()

@@ -11,7 +11,7 @@
 //        the detail page's second helping (MetaExtras): genres, length, rating, age rating, directors
 //        or creators, cast, a trailer's YouTube id, and for a show's episode its own name and words.
 //        { found: true, ... } or { found: false }; 503 as above. extras.ts holds the rules.
-//   GET /tmdb/img/<w185|w342|w500|w780>/<file>.jpg
+//   GET /tmdb/img/<w185|w300|w342|w500|w780>/<file>.jpg
 //        a picture's bytes from TMDB's image host, same origin so the page can keep them in the
 //        Cache API as it keeps thumbnails.
 //
@@ -52,7 +52,7 @@ export const MISS_TTL = 7 * DAY
 const REFUSED_RETRY = DAY * 1000
 const DEFAULT_WAIT = 10_000
 const RETRY = 1_000
-const SIZES = new Set(['w185', 'w342', 'w500', 'w780'])
+const SIZES = new Set(['w185', 'w300', 'w342', 'w500', 'w780'])
 const FILE = /^\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp)$/
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
