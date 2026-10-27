@@ -93,7 +93,7 @@ class OnlineSubtitlesStore(private val file: File) {
             anonResetAt = l("anon_reset_at"),
             msoneShown = s("msone_shown") == "true",
             msoneState = MsoneState.of(s("msone_state")),
-            msoneMessage = s("msone_message").take(300),
+            msoneMessage = s("msone_message").take(500),
             msoneCheckedAt = l("msone_checked_at"),
         )
     }

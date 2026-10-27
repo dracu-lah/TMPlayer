@@ -184,11 +184,13 @@ class MsoneTest {
             json(429, """{"error":"rate_limited","message":"Slow down"}""", mapOf("Retry-After" to "30")),
             json(400, """{"error":"bad_query","message":"q"}"""),
             json(502, "<html>bad gateway</html>"),
+            json(503, """{"error":"unavailable","message":"Something went wrong."}"""),
             json(200, "{not json"),
         )
         assertEquals(SubtitleNotice.MsoneBusy, online.searchMsone(episode).notice)
         assertEquals(SubtitleNotice.MsoneTooShort, online.searchMsone(episode).notice)
         assertEquals(SubtitleNotice.Offline, online.searchMsone(episode).notice)
+        assertEquals("the gateway's own failure is not MSone being off", SubtitleNotice.Offline, online.searchMsone(episode).notice)
         assertEquals(SubtitleNotice.Offline, online.searchMsone(episode).notice)
         // None of these changes the state.
         assertEquals(MsoneState.On, store.now.msoneState)

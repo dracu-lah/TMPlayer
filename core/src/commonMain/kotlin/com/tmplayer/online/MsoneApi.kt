@@ -42,7 +42,11 @@ class MsoneApi(
 ) {
     /** Why a call gave no hits: the gateway's own error codes, sorted into what the screens tell apart. */
     sealed interface Failure {
-        /** 410 `stopped`, 503 `paused` or 503 `unavailable` (no key there, or MSone down): the state the gateway is now in. */
+        /**
+         * 410 `stopped` or 503 `paused`: the operator's switch, which is the state from now on. A
+         * 503 `unavailable` is not one: the gateway also answers it for any failure of its own, so
+         * it reads as [Offline] and only `/health` says whether MSone is off.
+         */
         data class State(val state: MsoneState, val message: String?) : Failure
 
         /** 400 `bad_query`: nothing usable to search with. */
@@ -131,7 +135,6 @@ class MsoneApi(
         return when {
             response.code == 410 || error == "stopped" -> Failure.State(MsoneState.Stopped, message)
             error == "paused" -> Failure.State(MsoneState.Paused, message)
-            response.code == 503 && error == "unavailable" -> Failure.State(MsoneState.Off, message)
             response.code == 429 || error == "rate_limited" -> Failure.Busy(retryAfter(response.header("Retry-After")))
             response.code == 400 || error == "bad_query" -> Failure.BadQuery
             else -> Failure.Offline
@@ -147,7 +150,7 @@ class MsoneApi(
 
         /** The most hits read from one answer, and the longest text kept from any field. */
         private const val MAX_HITS = 100
-        private const val MAX_TEXT = 300
+        private const val MAX_TEXT = 500
 
         private val IMDB = Regex("""tt\d{5,10}""")
 
