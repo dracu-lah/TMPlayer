@@ -570,10 +570,12 @@ export function createFocusMap(host: Host) {
         }
 
         if (PLAY_KEYS.has(e.key) || PLAY_CODES.has(code)) {
-            // Play on a card opens it, which starts it.
+            // Play on a card plays it, past its page (OK opens the page); on Home's or the page's Play it presses it.
             if (active?.matches('.card, [data-tv-first]')) {
                 e.preventDefault()
-                active.click()
+                const href = active.getAttribute('href')
+                if (href?.startsWith('/video/')) host.go(href.replace('/video/', '/watch/'))
+                else active.click()
             }
             return
         }

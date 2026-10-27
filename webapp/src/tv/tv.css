@@ -38,7 +38,7 @@ html[data-form=tv] .page {
   --gutter: var(--tv-safe-h);
   padding: var(--tv-bar-h) var(--tv-end) var(--tv-safe-v) var(--tv-safe-h);
 }
-html[data-form=tv] .page.playing { padding: 0; }
+html[data-form=tv] .page.playing, html[data-form=tv] .page.bleed { padding: 0; max-width: none; }
 html[data-form=tv] .update-notice,
 html[data-form=tv] .offline-line { bottom: var(--tv-safe-v); }
 
@@ -284,3 +284,51 @@ html[data-form=tv] .signin form > .keypad { grid-column: 2; grid-row: 1 / -1; }
 }
 html[data-form=tv][data-tv-keys] .keypad .key:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); transform: scale(var(--focus-scale)); }
 html[data-form=tv] .keypad .key svg { width: calc(var(--dp) * 24); height: calc(var(--dp) * 24); }
+
+/*
+ * ---- A video's page: the app's cinema layout (MediaDetailScreen's CinemaLayout on a TV) ----
+ * The picture fills the top right and fades into the page; the name, the facts and three lines of
+ * the overview keep to the faded left, at the foot of the first screen, with Play and the everyday
+ * buttons in one row under them (Play takes the remote first, data-tv-first); About, the cast and
+ * the rest follow below. No Close: Back closes the page.
+ */
+html[data-form=tv] .detail { position: relative; min-height: 100vh; padding-bottom: calc(var(--dp) * 32); }
+html[data-form=tv] .detail-hero { position: absolute; top: 0; right: 0; width: 70%; height: 85vh; background: none; }
+html[data-form=tv] .detail-hero.blank { width: 100%; opacity: .5; }
+html[data-form=tv] .detail-fade {
+  background: linear-gradient(90deg, var(--bg), color-mix(in srgb, var(--bg) 55%, transparent) 30%, transparent 60%), linear-gradient(transparent 45%, var(--bg));
+}
+html[data-form=tv] .detail-poster { left: auto; right: var(--tv-safe-h); top: calc(var(--dp) * 32); height: calc(100% - var(--dp) * 120); transform: none; }
+html[data-form=tv] .detail-frame { inset: 0; left: 0; top: 0; width: 100%; height: 100%; transform: none; aspect-ratio: auto; }
+html[data-form=tv] .detail-close { display: none; }
+html[data-form=tv] .detail-body {
+  margin-top: 0; padding: 40vh var(--tv-safe-h) 0; gap: calc(var(--dp) * 16);
+}
+html[data-form=tv] .detail-body > * { order: 3; }
+html[data-form=tv] .detail-head { order: 0; max-width: 55%; gap: calc(var(--dp) * 8); }
+html[data-form=tv] .detail-overview { order: 1; max-width: 55%; }
+html[data-form=tv] .detail-actions { order: 2; flex-direction: row; align-items: flex-start; gap: calc(var(--dp) * 12); margin-top: calc(var(--dp) * 4); }
+html[data-form=tv] .detail-code { font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 22); }
+html[data-form=tv] .detail-title { font-size: calc(var(--dp) * 36); line-height: calc(var(--dp) * 44); }
+html[data-form=tv] .detail-facts, html[data-form=tv] .detail-genres, html[data-form=tv] .detail-score, html[data-form=tv] .detail-progress {
+  font-size: calc(var(--dp) * 15); line-height: calc(var(--dp) * 22);
+}
+html[data-form=tv] .detail-synopsis { font-size: calc(var(--dp) * 15); line-height: calc(var(--dp) * 22); }
+/* Play as Home's (tv-hero-play): the text colour as its fill; the remote grows it. */
+html[data-form=tv] .detail-play {
+  min-width: calc(var(--dp) * 160); height: calc(var(--dp) * 52); padding: 0 calc(var(--dp) * 28); gap: calc(var(--dp) * 8);
+  font-size: calc(var(--dp) * 16); line-height: calc(var(--dp) * 24); transition: transform var(--fast) var(--ease);
+}
+html[data-form=tv] .detail-play .icon { width: calc(var(--dp) * 26); height: calc(var(--dp) * 26); }
+html[data-form=tv][data-tv-keys] .detail-play:focus { outline: none; transform: scale(var(--focus-scale)); }
+html[data-theme=light][data-tv-keys] .detail-play:focus { box-shadow: 0 0 0 calc(var(--dp) * 2) var(--accent); }
+html[data-form=tv] .detail-rounds { justify-content: flex-start; gap: calc(var(--dp) * 8); }
+html[data-form=tv] .detail-round { width: calc(var(--dp) * 76); gap: calc(var(--dp) * 6); }
+html[data-form=tv] .detail-round-disc { width: calc(var(--dp) * 52); height: calc(var(--dp) * 52); }
+html[data-form=tv] .detail-round-disc .icon { width: calc(var(--dp) * 22); height: calc(var(--dp) * 22); }
+html[data-form=tv] .detail-round-label { font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); }
+html[data-form=tv][data-tv-keys] .detail-round:focus { outline: none; }
+html[data-form=tv][data-tv-keys] .detail-round:focus .detail-round-disc { background: var(--focus-fill); color: var(--on-focus-fill); transform: scale(var(--focus-scale)); }
+html[data-form=tv] .detail-section { font-size: calc(var(--dp) * 18); line-height: calc(var(--dp) * 24); }
+html[data-form=tv] .detail-about, html[data-form=tv] .detail-versions, html[data-form=tv] .detail-cast { max-width: calc(var(--dp) * 720); }
+html[data-form=tv] .detail-about dl { grid-template-columns: calc(var(--dp) * 120) minmax(0, 1fr); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); }

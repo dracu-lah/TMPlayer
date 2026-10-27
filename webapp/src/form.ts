@@ -3,7 +3,7 @@
 // as detect() below (keep the two in step). A phone always gets the phone layout; anything else
 // gets the desktop or TV layout from detection, or from Settings > Layout (Desktop or TV, as in the
 // desktop app) once one is picked. ?tv=1 or ?tv=0 in the address stores TV or Desktop as that choice,
-// in the inline script, before this module runs. A resize or a rotation changes the form live, except while a
+// in the inline script, before this module runs, and fixes it for the tab (layoutFixed). A resize or a rotation changes the form live, except while a
 // video plays, when the change waits until the player closes.
 import { createSignal } from 'solid-js'
 
@@ -30,6 +30,18 @@ export function detect(
     // A touch tablet (short side 840 px or more) gets the desktop layout, like the app's wide phone/tablet form.
     if (media('(pointer: coarse)') && media('(hover: none)') && Math.min(width, height) < 840) return 'phone'
     return 'desktop'
+}
+
+/**
+ * The address chose the layout (?tv=1 from a TV wrapper, or ?tv=0) in this tab: Settings leaves its
+ * Layout out, since a wrapper opens with ?tv=1 every time and Desktop there would only take the remote away.
+ */
+export function layoutFixed(): boolean {
+    try {
+        return sessionStorage.getItem('tmplayer-layout-fixed') === '1'
+    } catch {
+        return false
+    }
 }
 
 /** The stored choice, or null for none (an old 'phone' choice counts as none). */

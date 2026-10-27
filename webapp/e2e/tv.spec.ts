@@ -63,16 +63,30 @@ for (const size of [
         })
 
         // The fake account's files are under 400 MB, so Home has no carousel and opens on its first card.
-        test('Home: no carousel to show opens on the first card, rows, Back from the player returns to the card, Back goes to the bar', async ({ page }) => {
+        test('Home: no carousel to show opens on the first card, rows, OK opens the page on Play, Back returns to Play and then the card, Back goes to the bar', async ({ page }) => {
             await page.goto('/')
             await expect(page.locator('html')).toHaveAttribute('data-form', 'tv')
-            await expect.poll(() => focused(page)).toContain('card|/watch/')
+            await expect.poll(() => focused(page)).toContain('card|/video/')
             await expect(page.locator('.tv-hero')).toHaveCount(0)
             await press(page, 'ArrowDown', 2)
             await press(page, 'ArrowRight', 2)
             const card = await focused(page)
-            expect(card).toContain('card|/watch/')
+            expect(card).toContain('card|/video/')
+            // OK opens the video's page with the remote on Play, as the app's Open a video's page first.
             await press(page, 'Enter')
+            await expect(page).toHaveURL(/\/video\//)
+            await expect.poll(() => focused(page)).toBe('detail-play|')
+            await expect(page.locator('.tv-bar, .detail-close:visible')).toHaveCount(0)
+            await press(page, 'Enter')
+            await expect(page).toHaveURL(/\/watch\//)
+            await press(page, 'Backspace')
+            await expect(page).toHaveURL(/\/video\//)
+            await expect.poll(() => focused(page)).toBe('detail-play|')
+            await press(page, 'Backspace')
+            await expect(page).toHaveURL(/\/$/)
+            await expect.poll(() => focused(page)).toBe(card)
+            // The remote's Play key plays a card at once, past its page.
+            await press(page, 'MediaPlayPause')
             await expect(page).toHaveURL(/\/watch\//)
             await press(page, 'Backspace')
             await expect(page).toHaveURL(/\/$/)
@@ -86,7 +100,7 @@ for (const size of [
 
         test('Chats and a chat: the bar keeps the remote, a chat opens on its first card, the sort menu and Back', async ({ page }) => {
             await page.goto('/')
-            await expect.poll(() => focused(page)).toContain('card|/watch/')
+            await expect.poll(() => focused(page)).toContain('card|/video/')
             await press(page, 'ArrowUp')
             await press(page, 'ArrowRight')
             await press(page, 'Enter')
@@ -98,7 +112,7 @@ for (const size of [
             expect(row).toBe('chat-link|/chat/-1001')
             await press(page, 'Enter')
             await expect(page).toHaveURL(/\/chat\/-1001/)
-            await expect.poll(() => focused(page)).toContain('card|/watch/-1001/')
+            await expect.poll(() => focused(page)).toContain('card|/video/-1001/')
             // Up from the first card is Back; Right passes the title to the chat's star, then Sort.
             await press(page, 'ArrowUp')
             expect(await focused(page)).toBe('round-button|Back')
@@ -117,7 +131,7 @@ for (const size of [
 
         test('Settings: a choice is made with OK, not by moving; Sign out asks, Back closes the question onto it', async ({ page }) => {
             await page.goto('/')
-            await expect.poll(() => focused(page)).toContain('card|/watch/')
+            await expect.poll(() => focused(page)).toContain('card|/video/')
             await press(page, 'ArrowUp')
             await press(page, 'ArrowLeft', 3)
             await press(page, 'Enter')
@@ -159,7 +173,9 @@ for (const size of [
         /** Opens a chat's first card with the remote and waits for the picture to play. */
         async function watch(page: Page, chat: string) {
             await page.goto(`/chat/${chat}`)
-            await expect.poll(() => focused(page)).toContain('card|/watch/')
+            await expect.poll(() => focused(page)).toContain('card|/video/')
+            await press(page, 'Enter')
+            await expect.poll(() => focused(page)).toBe('detail-play|')
             await press(page, 'Enter')
             await expect(page).toHaveURL(/\/watch\//)
             await expect(page.locator('.pc[data-variant=tv]')).toHaveCount(1)
@@ -181,8 +197,10 @@ for (const size of [
 
         test('Player: the picture starts bare, Left jumps, Up raises the row on the bar, Back peels the row and then the video', async ({ page }) => {
             await page.goto('/chat/-1001')
-            await expect.poll(() => focused(page)).toContain('card|/watch/')
+            await expect.poll(() => focused(page)).toContain('card|/video/')
             const card = await focused(page)
+            await press(page, 'Enter')
+            await expect.poll(() => focused(page)).toBe('detail-play|')
             await press(page, 'Enter')
             await expect(page).toHaveURL(/\/watch\//)
             await expect(page.locator('.pc[data-variant=tv]')).toHaveCount(1)
@@ -194,12 +212,15 @@ for (const size of [
             await press(page, 'ArrowUp')
             expect(await controlsUp(page)).toBe(true)
             expect(await onControl(page)).toBe('bar')
-            // Back puts the row away, the next Back leaves the video, and the card has the remote again.
+            // Back puts the row away, the next Back leaves the video for its page, the next the page, and the card has the remote again.
             await press(page, 'Backspace')
             expect(await controlsUp(page)).toBe(false)
             await expect(page).toHaveURL(/\/watch\//)
             await press(page, 'Backspace')
-            await expect(page).toHaveURL(/\/chat\/-1001/)
+            await expect(page).toHaveURL(/\/video\//)
+            await expect.poll(() => focused(page)).toBe('detail-play|')
+            await press(page, 'Backspace')
+            await expect(page).toHaveURL(/\/chat\/-1001$/)
             await expect.poll(() => focused(page)).toBe(card)
         })
 
@@ -294,12 +315,12 @@ for (const size of [
             const rowUp = await controlsUp(page)
             await code(page, 461, 'GoBack')
             if (rowUp) await code(page, 461, 'GoBack')
-            await expect(page).toHaveURL(/\/chat\/-1001/)
+            await expect(page).toHaveURL(/\/video\/-1001\//)
         })
 
         test('Player: a file that needs the app puts the remote on its sheet, and Back leaves', async ({ page }) => {
             await page.goto('/chat/-1001')
-            await expect.poll(() => focused(page)).toContain('card|/watch/')
+            await expect.poll(() => focused(page)).toContain('card|/video/')
             // Toward the WMV with the arrows, whatever the columns: the sponsored card after the third video breaks the first row.
             for (let i = 0; i < 30; i++) {
                 const way = await page.evaluate(() => {
@@ -315,12 +336,14 @@ for (const size of [
                 if (!way) break
                 await press(page, way)
             }
-            expect(await focused(page)).toBe('card|/watch/-1001/11')
+            expect(await focused(page)).toBe('card|/video/-1001/11')
+            await press(page, 'Enter')
+            await expect.poll(() => focused(page)).toBe('detail-play|')
             await press(page, 'Enter')
             await expect(page.getByText('This video needs the TMPlayer app')).toBeVisible()
             expect(await page.evaluate(() => !!document.activeElement?.closest('.pc-status'))).toBe(true)
             await press(page, 'Backspace')
-            await expect(page).toHaveURL(/\/chat\/-1001/)
+            await expect(page).toHaveURL(/\/video\/-1001\/11/)
         })
 
         test('Player: a paused picture with the row away stops the page\'s own timers', async ({ page }) => {
@@ -352,7 +375,7 @@ for (const size of [
             await expect(page).toHaveURL(/q=Clip/)
             await expect(page.locator('.card').first()).toBeVisible()
             await press(page, 'ArrowDown')
-            expect(await focused(page)).toContain('card|/watch/')
+            expect(await focused(page)).toContain('card|/video/')
             await press(page, 'ArrowUp')
             expect(await focused(page)).toBe('INPUT|Search videos and chats')
             await press(page, 'ArrowUp')
@@ -362,7 +385,7 @@ for (const size of [
         test('keys only, every screen: the remote lands on something, never falls to the page, and Back always gets out', async ({ page }) => {
             test.setTimeout(150_000)
             const onBody = () => page.evaluate(() => !document.activeElement || document.activeElement === document.body || document.activeElement === document.documentElement)
-            for (const path of ['/', '/chats', '/chat/-1001', '/search', '/settings', '/history', '/history/later', '/history/watched']) {
+            for (const path of ['/', '/chats', '/chat/-1001', '/video/-1001/1', '/search', '/settings', '/history', '/history/later', '/history/watched']) {
                 await page.goto(path)
                 await expect(page.locator('html')).toHaveAttribute('data-form', 'tv')
                 await expect.poll(() => onBody(), { message: `${path}: focus starts on a control` }).toBe(false)

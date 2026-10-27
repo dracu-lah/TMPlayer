@@ -23,7 +23,7 @@ import { t } from '../i18n'
 import { sizeScale } from './sizes'
 import { clearHistoryWithUndo } from '../clearHistory'
 import { size } from './VideoList'
-import { form, layout, setLayout, type Layout } from '../form'
+import { form, layout, layoutFixed, setLayout, type Layout } from '../form'
 import { Icon, type IconData } from '../ui/Icon'
 import { TmdbMark } from '../ui/TmdbMark'
 import { initialOf } from '../ui/initial'
@@ -42,7 +42,7 @@ const PAGES: { id: PageId; icon: IconData; title: () => string; summary: () => s
         id: 'appearance',
         icon: PaintBoardIcon,
         title: () => t('settings.appearance'),
-        summary: () => (form() === 'phone' ? t(`theme.${settings().theme}`) : `${t(`theme.${settings().theme}`)}${dot}${t(`settings.layout_${layout()}`)}`),
+        summary: () => (form() === 'phone' || layoutFixed() ? t(`theme.${settings().theme}`) : `${t(`theme.${settings().theme}`)}${dot}${t(`settings.layout_${layout()}`)}`),
     },
     { id: 'playback', icon: PlayIcon, title: () => t('settings.playback'), summary: () => t('settings.resume_rewind') },
     { id: 'library', icon: GridViewIcon, title: () => t('settings.library'), summary: () => t('settings.page_library_summary') },
@@ -247,7 +247,7 @@ function Appearance() {
                         onPick={(v) => setSetting('theme', v)}
                     />
                 </div>
-                <Show when={form() !== 'phone'}>
+                <Show when={form() !== 'phone' && !layoutFixed()}>
                 <div class="set-block">
                     <h3 class="set-block-title" id="layout-label">{t('settings.layout')}</h3>
                     <Choices
@@ -565,16 +565,18 @@ function TvSettings() {
                     onPick={(v) => setSetting('theme', v)}
                 />
             </TvPanel>
-            <TvPanel title={t('settings.layout')} id="layout-label">
-                <Choices
-                    label="layout-label"
-                    name="layout"
-                    options={LAYOUTS.map((v) => ({ value: v, label: t(`settings.layout_${v}`) }))}
-                    value={layout()}
-                    onPick={setLayout}
-                />
-                <p class="muted small">{t('settings.layout_detail_desktop')}</p>
-            </TvPanel>
+            <Show when={!layoutFixed()}>
+                <TvPanel title={t('settings.layout')} id="layout-label">
+                    <Choices
+                        label="layout-label"
+                        name="layout"
+                        options={LAYOUTS.map((v) => ({ value: v, label: t(`settings.layout_${v}`) }))}
+                        value={layout()}
+                        onPick={setLayout}
+                    />
+                    <p class="muted small">{t('settings.layout_detail_desktop')}</p>
+                </TvPanel>
+            </Show>
             <TvPanel title={t('settings.home_carousel')} id="carousel-label">
                 <p class="muted small">{settings().carousel ? t('settings.home_carousel_on') : t('settings.home_carousel_off')}</p>
                 <Choices

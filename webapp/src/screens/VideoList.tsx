@@ -45,10 +45,11 @@ export const watchPath = (v: Pick<VideoItem, 'chatId' | 'messageId'>) => `/watch
 /** A video's page before it plays (the apps' detail), at `/video/<chat>/<message>`. */
 export const detailPath = (v: Pick<VideoItem, 'chatId' | 'messageId'>) => `/video/${v.chatId}/${v.messageId}`
 /**
- * Where a card goes: its detail page, as the apps open a card. The TV layout plays at once (the
- * web has no TV detail pane yet, so a card keeps going straight to /watch/; session 21); `direct` (Continue watching) plays at once too.
+ * Where a card goes: its detail page, as the apps open a card (the TV's too, since the app's Open a
+ * video's page first is on by default); `direct` (Continue watching) plays at once. On a TV the
+ * remote's Play key plays any card at once (tv/focus.ts).
  */
-const cardPath = (v: VideoItem, direct?: boolean) => (direct || form() === 'tv' ? watchPath(v) : detailPath(v))
+const cardPath = (v: VideoItem, direct?: boolean) => (direct ? watchPath(v) : detailPath(v))
 
 /**
  * The art of a portrait card, as the app draws a video's: the frame across the card's width, the

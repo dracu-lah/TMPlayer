@@ -81,17 +81,25 @@ test('the Settings choice wins, survives a reload and is set before the page run
     await choose('Desktop')
 })
 
-test('?tv=1 and ?tv=0 in the address choose TV and Desktop, and the choice stays for a plain address', async ({ page }) => {
+test('?tv=1 and ?tv=0 in the address choose TV and Desktop, Settings leaves Layout out in that tab, and the choice stays for a plain address', async ({ page, context }) => {
     const html = page.locator('html')
     await page.goto('/?tv=1')
     await expect(html).toHaveAttribute('data-form', 'tv')
     await page.goto('/settings')
     await expect(html).toHaveAttribute('data-form', 'tv')
-    await expect(page.getByRole('radio', { name: 'TV' })).toBeChecked()
-    await page.goto('/?tv=0')
-    await expect(html).toHaveAttribute('data-form', 'desktop')
-    await page.goto('/settings')
-    await expect(page.getByRole('radio', { name: 'Desktop' })).toBeChecked()
+    await expect(page.getByRole('radio', { name: 'Dark' })).toBeVisible()
+    await expect(page.getByRole('radio', { name: 'TV' })).toHaveCount(0)
+    // Another tab, opened with a plain address: the choice stays, and Settings offers it again.
+    const other = await context.newPage()
+    await other.goto('/settings')
+    await expect(other.locator('html')).toHaveAttribute('data-form', 'tv')
+    await expect(other.getByRole('radio', { name: 'TV' })).toBeChecked()
+    await other.goto('/?tv=0')
+    await expect(other.locator('html')).toHaveAttribute('data-form', 'desktop')
+    await other.goto('/settings/appearance')
+    await expect(other.getByRole('radio', { name: 'Dark' })).toBeVisible()
+    await expect(other.getByRole('radio', { name: 'Desktop' })).toHaveCount(0)
+    await other.close()
 })
 
 test('a phone always has the phone layout: no choice in Settings, and a choice saved before is passed over', async ({ browser, browserName }) => {

@@ -22,8 +22,10 @@
   <script>try{var t=localStorage.getItem('tmplayer-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
   <script>
     // The layout (phone, desktop or TV) before the first paint: the same rules as src/form.ts, whose Settings choice is kept under tmplayer-layout.
-    // ?tv=1 or ?tv=0 in the address (the TV wrappers, a link) is that choice made too: TV or Desktop, kept as Settings keeps it.
+    // ?tv=1 or ?tv=0 in the address (the TV wrappers, a link) is that choice made too: TV or Desktop, kept as Settings keeps it,
+    // and Settings leaves its Layout out for the rest of the tab's life (tmplayer-layout-fixed), as the address decides it.
     (function(){var d=document.documentElement,f,s,u=/[?&]tv=([01])(?:&|$)/.exec(location.search),m=function(q){return matchMedia(q).matches};
+    try{if(u)sessionStorage.setItem('tmplayer-layout-fixed','1')}catch(e){}
     try{if(u)localStorage.setItem('tmplayer-layout',u[1]==='1'?'tv':'desktop');s=localStorage.getItem('tmplayer-layout')}catch(e){if(u)s=u[1]==='1'?'tv':'desktop'}
     f=/Web0S|webOS|Tizen|SMART-TV|SmartTV|\bAFT|CrKey|HbbTV|Android.*\bTV\b/i.test(navigator.userAgent)||(/Android/i.test(navigator.userAgent)&&navigator.maxTouchPoints===0)?'tv':(m('(pointer: coarse)')&&m('(hover: none)')&&Math.min(innerWidth,innerHeight)<840)?'phone':'desktop';
     if(f!=='phone'&&(s==='desktop'||s==='tv'))f=s;

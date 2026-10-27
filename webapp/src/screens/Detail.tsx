@@ -242,7 +242,7 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                     </Show>
                 </header>
                 <div class="detail-actions">
-                    <button type="button" class="detail-play" onClick={() => play()}>
+                    <button type="button" class="detail-play" data-tv-first onClick={() => play()}>
                         <Icon icon={PlayIcon} size={22} />
                         {resumeAt() > 0 ? t('detail.resume_at', { time: clock(resumeAt()) }) : t('common.play')}
                     </button>
