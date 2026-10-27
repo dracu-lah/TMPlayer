@@ -341,7 +341,7 @@ fun MediaGridScreen(
     val filter by remember(chatId) { recentStore.videoFilter(chatId) }.collectAsStateWithLifecycle(initialValue = com.tmplayer.data.VideoFilter.DEFAULT)
     val clearFilter: () -> Unit = { recentScope.launch { recentStore.setVideoFilter(chatId, com.tmplayer.data.VideoFilter.All) } }
     // One menu for the order and the Show filter, the same groups on every device. The size limits
-    // are set in Settings only; the chat says once when they hid something (hiddenNotice).
+    // have their own "n hidden" button (sizeHidden below) and the full pair is in Settings.
     val menu = VideoMenuState(
         sort = sort,
         filter = filter,
@@ -354,15 +354,22 @@ fun MediaGridScreen(
             if (picked != filter) recentScope.launch { recentStore.setVideoFilter(chatId, picked) }
         },
     )
-    // Once per opening of the chat, when its listing settles with videos outside the size limits:
-    // a passing message that says how many and where the limits are changed. The view model keeps
-    // the once, so turning the phone does not say it again.
-    val hiddenNotice by viewModel.hiddenNotice.collectAsStateWithLifecycle()
-    LaunchedEffect(hiddenNotice) {
-        if (hiddenNotice > 0) {
-            com.tmplayer.ui.components.showMessage(context, com.tmplayer.i18n.L.browseHiddenBySizeNotice(hiddenNotice))
-            viewModel.hiddenNoticeShown()
-        }
+    // Videos outside the size limits, said by an "n hidden" button for as long as the chat is open
+    // and changed from there (SizeQuickSheet). A search ignores the limits, so it hides nothing.
+    val sizeHidden by viewModel.sizeHidden.collectAsStateWithLifecycle()
+    val shownHidden = if (query.isBlank()) sizeHidden else 0
+    var sizePicking by remember { mutableStateOf(false) }
+    if (sizePicking) {
+        SizeQuickSheet(
+            current = minSizeBytes,
+            max = maxSizeBytes,
+            hidden = shownHidden,
+            onPick = { picked ->
+                sizePicking = false
+                if (picked != minSizeBytes) recentScope.launch { runCatching { recentStore.setMinSizeBytes(picked) } }
+            },
+            onDismiss = { sizePicking = false },
+        )
     }
     // A search for the developer phrase turns on the hidden name check in Settings instead.
     val submit: () -> Unit = {
@@ -1035,6 +1042,8 @@ fun MediaGridScreen(
                 VideoMenuPopover(open = sorting, anchor = anchor, state = menu, onDismiss = { sorting = false })
             },
             filtered = filter != com.tmplayer.data.VideoFilter.All,
+            sizeHidden = shownHidden,
+            onSizeHidden = { sizePicking = true },
             topicTabs = topicBar?.let { bar ->
                 { TopicTabs(bar, viewModel::selectTopic, Modifier.padding(vertical = 6.dp), edge = edge) }
             },
@@ -1095,6 +1104,8 @@ fun MediaGridScreen(
                     onClearRecent = clearRecent,
                     onSort = { sorting = true },
                     filtered = filter != com.tmplayer.data.VideoFilter.All,
+                    sizeHidden = shownHidden,
+                    onSizeHidden = { sizePicking = true },
                     onChatInfo = { chatInfoOpen = true },
                     onTyping = { typing = it },
                 )
@@ -1174,6 +1185,10 @@ internal fun TouchMediaScaffold(
     sortPopover: (@Composable (anchor: PopoverAnchor) -> Unit)? = null,
     /** A filter is on: the Sort button is drawn in the accent, so the filtered state shows from the bar. */
     filtered: Boolean = false,
+    /** Videos the size limits keep out of this chat, for the "n hidden" button; 0 leaves it out. */
+    sizeHidden: Int = 0,
+    /** Opens the quick size picker ([SizeQuickSheet]) from that button. */
+    onSizeHidden: () -> Unit = {},
     /** The topic row of a group with topics, under the title. Null for every other chat. */
     topicTabs: (@Composable () -> Unit)? = null,
     /** Opens with the search already showing, for the screenshot fixture. */
@@ -1334,6 +1349,16 @@ internal fun TouchMediaScaffold(
                         // The star pops as it fills and dips as it empties.
                         glyph = { StarIcon(isFavorite, TmIcons.Star, TmIcons.StarOutline, on = Tone.accent, off = Tone.text) },
                     )
+                    // Says that the size limits hide some, and changes them, from the chat itself.
+                    if (sizeHidden > 0) {
+                        FloatingBarIcon(
+                            TmIcons.FilterHorizontal,
+                            s.gridSizeHiddenLabel(sizeHidden),
+                            onSizeHidden,
+                            tint = Tone.accent,
+                            caption = s.gridSizeHidden(sizeHidden),
+                        )
+                    }
                     // Search and Sort at the end, Sort last, where the thumb reaches first.
                     FloatingBarIcon(TmIcons.Search, s.gridSearchThisChat, { searching = true }, caption = caption(s.commonSearch))
                     onSort?.let {
@@ -1467,6 +1492,10 @@ internal fun Header(
     onSort: (() -> Unit)? = null,
     /** A filter is on: the Sort pill's glyph is drawn in the accent. */
     filtered: Boolean = false,
+    /** Videos the size limits keep out of this chat, for the "n hidden" pill; 0 leaves it out. */
+    sizeHidden: Int = 0,
+    /** Opens the quick size picker ([SizeQuickSheet]) from that pill. */
+    onSizeHidden: () -> Unit = {},
     /** Opens the chat's info panel, from a button beside its name; null leaves it out. */
     onChatInfo: (() -> Unit)? = null,
     /** Told whether the search field is being typed into (its text field holds the focus). */
@@ -1516,6 +1545,13 @@ internal fun Header(
         }
         Spacer(Modifier.height(12.dp))
         val searchField = remember { FocusRequester() }
+        var sizePillFocused by remember { mutableStateOf(false) }
+        LaunchedEffect(sizeHidden > 0) {
+            if (sizeHidden == 0 && sizePillFocused) {
+                sizePillFocused = false
+                runCatching { searchField.requestFocus() }
+            }
+        }
         // The recent searches belong to the search, so they are shown only while the remote is up
         // here with it: down in the grid they would cost a row of posters for nothing.
         var headerFocused by remember { mutableStateOf(false) }
@@ -1559,6 +1595,13 @@ internal fun Header(
                 starred = isFavorite,
                 onClick = onToggleFavorite,
             )
+            if (sizeHidden > 0) {
+                // Labelled, as the one pill here that says something rather than does it. When a
+                // new limit takes it away while it has the focus, the search field takes it.
+                Box(Modifier.onFocusChanged { sizePillFocused = it.hasFocus }) {
+                    Pill(s.gridSizeHidden(sizeHidden), TmIcons.FilterHorizontal, tintWhenIdle = Tone.accent, onClick = onSizeHidden)
+                }
+            }
             onSort?.let { Pill(if (filtered) s.gridFilterOn else s.gridSort, TmIcons.Sort, tintWhenIdle = if (filtered) Tone.accent else Tone.text, showLabel = false, onClick = it) }
             // Telegram pushes new messages into TDLib's database, but this grid was built from a
             // search that ran when it opened, so a video posted since then needs a fresh search.

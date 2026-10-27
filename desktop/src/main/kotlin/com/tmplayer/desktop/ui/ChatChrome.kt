@@ -140,6 +140,10 @@ internal fun ChatBar(
     sortAnchor: com.tmplayer.ui.components.PopoverAnchor,
     /** A filter is on in this chat: the Sort button is drawn in the accent. */
     filtered: Boolean = false,
+    /** Videos the size limits keep out of this chat, for the "n hidden" button; 0 leaves it out. */
+    sizeHidden: Int = 0,
+    onSizeHidden: () -> Unit = {},
+    sizeAnchor: com.tmplayer.ui.components.PopoverAnchor? = null,
 ) {
     val s = LocalStrings.current
     val command = if (OsInfo.isMac) "⌘" else "Ctrl+"
@@ -225,6 +229,18 @@ internal fun ChatBar(
                         glyph = {
                             com.tmplayer.ui.components.StarIcon(favourite, TmIcons.Star, TmIcons.StarOutline, on = Tone.accent, off = Tone.text)
                         },
+                    )
+                }
+                // Says that the size limits hide some, and changes the smallest size from here.
+                if (sizeHidden > 0) {
+                    BarIcon(
+                        TmIcons.FilterHorizontal,
+                        s.gridSizeHiddenLabel(sizeHidden),
+                        null,
+                        onSizeHidden,
+                        caption = s.gridSizeHidden(sizeHidden),
+                        modifier = sizeAnchor?.modifier ?: Modifier,
+                        tint = Tone.accent,
                     )
                 }
                 BarIcon(TmIcons.Sort, if (filtered) s.gridFilterOn else s.gridSort, null, onSort, caption = s.gridSort, modifier = sortAnchor.modifier, tint = if (filtered) Tone.accent else Tone.text)

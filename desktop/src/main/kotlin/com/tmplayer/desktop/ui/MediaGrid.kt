@@ -217,16 +217,12 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
         // Which of its videos are listed (see VideoFilter), remembered per chat beside the order.
         val filter by remember(chat.id) { state.settings.videoFilter(chat.id) }.collectAsState(initial = com.tmplayer.data.VideoFilter.DEFAULT)
         val clearFilter: () -> Unit = { sortScope.launch { state.settings.setVideoFilter(chat.id, com.tmplayer.data.VideoFilter.All) } }
-        // Once per opening of the chat, when its listing settles with videos outside the size
-        // limits: a passing message with how many and where the limits are changed (Settings only).
-        val toast = com.tmplayer.ui.components.rememberToast()
-        val hiddenNotice by model.hiddenNotice.collectAsState()
-        LaunchedEffect(model, hiddenNotice) {
-            if (hiddenNotice > 0) {
-                toast(L.browseHiddenBySizeNotice(hiddenNotice))
-                model.hiddenNoticeShown()
-            }
-        }
+        // Videos outside the size limits, said by an "n hidden" button in the bar for as long as
+        // the chat is open, which changes the smallest size there. A search ignores the limits.
+        val sizeHidden by model.sizeHidden.collectAsState()
+        val shownHidden = if (query.isBlank()) sizeHidden else 0
+        var sizePicking by remember(chat.id) { mutableStateOf(false) }
+        val sizeAnchor = com.tmplayer.ui.components.rememberPopoverAnchor()
 
         // The search folds into the bar at the foot: "/", Ctrl+F and the bar's magnifier open it.
         var searching by remember(chat.id) { mutableStateOf(false) }
@@ -272,6 +268,9 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 onSort = { sorting = true },
                 sortAnchor = sortAnchor,
                 filtered = filter != com.tmplayer.data.VideoFilter.All,
+                sizeHidden = shownHidden,
+                onSizeHidden = { sizePicking = true },
+                sizeAnchor = sizeAnchor,
             )
         }
         val topicBar by model.topics.collectAsState()
@@ -484,6 +483,22 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
                 },
             ),
             onDismiss = { sorting = false },
+        )
+        com.tmplayer.ui.components.ChoicePopover(
+            open = sizePicking,
+            anchor = sizeAnchor,
+            choices = com.tmplayer.data.SizeFilter.quickMinimums(min).map { bytes ->
+                val label = com.tmplayer.data.SizeFilter.label(bytes)
+                com.tmplayer.ui.components.PopoverChoice(bytes, if (bytes == com.tmplayer.data.SizeFilter.DEFAULT_MIN) "$label (${s.gridSizeDefault})" else label)
+            },
+            selected = min,
+            onPick = { picked ->
+                sizePicking = false
+                val clamped = com.tmplayer.data.SizeFilter.clampMin(picked, max)
+                if (clamped != min) sortScope.launch { runCatching { state.settings.setMinSizeBytes(clamped) }.onFailure { toast(com.tmplayer.data.Failures.humanise(it)) } }
+            },
+            onDismiss = { sizePicking = false },
+            title = s.settingsSmallest,
         )
     }
     }

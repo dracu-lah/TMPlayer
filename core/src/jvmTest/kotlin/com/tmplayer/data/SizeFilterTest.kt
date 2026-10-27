@@ -238,12 +238,12 @@ class SizeFilterTest {
         val min = SizeFilter.DEFAULT_MIN
         val max = SizeFilter.DEFAULT_MAX
         assertTrue(SizeFilter.isDefault(min, max))
-        assertEquals("50 MB", SizeFilter.label(SizeFilter.snap(min)))
+        assertEquals("400 MB", SizeFilter.label(SizeFilter.snap(min)))
         assertEquals("No limit", SizeFilter.label(SizeFilter.snap(max)))
-        assertEquals("You'll see videos from 50 MB upwards.", SizeFilter.describe(min, max))
+        assertEquals("You'll see videos from 400 MB upwards.", SizeFilter.describe(min, max))
         // What the note promises is what the filter does.
-        assertFalse(SizeFilter.matches(30 * MB, min, max))
-        assertTrue(SizeFilter.matches(60 * MB, min, max))
+        assertFalse(SizeFilter.matches(300 * MB, min, max))
+        assertTrue(SizeFilter.matches(450 * MB, min, max))
         assertFalse(SizeFilter.isDefault(FLOOR, CEILING))
         assertFalse(SizeFilter.isDefault(min, 2 * GB))
     }
