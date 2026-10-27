@@ -393,8 +393,12 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         }
         // Settings and Downloads: a panel over the page above, not a page stretched across the window.
         Box(Modifier.fillMaxSize().then(if (seeThrough) Modifier.drawWithContent { } else Modifier)) {
+            // The panel's page, remembered: on the frame it closes, destination is already the page
+            // underneath, and composing that here too used the page's saved-state key twice.
+            var panelPage by remember { mutableStateOf(state.destination) }
+            if (state.destination.isModal) panelPage = state.destination
             ModalPageHost(state) {
-                pages.SaveableStateProvider(state.destination.name) { shownPage(state.destination) }
+                pages.SaveableStateProvider("modal-" + panelPage.name) { shownPage(panelPage) }
             }
         }
 

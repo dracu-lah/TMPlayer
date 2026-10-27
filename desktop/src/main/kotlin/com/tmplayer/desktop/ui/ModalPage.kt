@@ -117,7 +117,12 @@ fun ModalPageHost(state: ShellState, content: @Composable () -> Unit) {
                     .focusGroup(),
             ) {
                 // The pages clear the floating bar by this; the panel has no bar under it.
-                CompositionLocalProvider(LocalBottomChrome provides 0.dp) { content() }
+                // The window's buttons would minimize, maximize or quit the app from inside a panel: it gets a close of its own.
+                val outer = LocalWindowChrome.current
+                val panelChrome = remember(outer, state) {
+                    outer?.let { WindowChrome(it.mode, null, null, {}, { state.closeModal() }, { false }, closeOnly = true) }
+                }
+                CompositionLocalProvider(LocalBottomChrome provides 0.dp, LocalWindowChrome provides panelChrome) { content() }
             }
             LaunchedEffect(Unit) {
                 androidx.compose.runtime.withFrameNanos { }

@@ -75,6 +75,8 @@ class WindowChrome(
     val onToggleMaximize: () -> Unit,
     val onClose: () -> Unit,
     private val maximized: () -> Boolean,
+    /** A panel's own chrome: just a close button, and [onClose] shuts the panel, not the window. */
+    val closeOnly: Boolean = false,
 ) {
     val isMaximized: Boolean get() = maximized()
 
@@ -120,6 +122,10 @@ fun WindowControls(modifier: Modifier = Modifier, onArt: Boolean = false) {
     val chrome = LocalWindowChrome.current ?: return
     val s = LocalStrings.current
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        if (chrome.closeOnly) {
+            WindowButton(WindowGlyphs.Close, s.windowClose, onArt, danger = false, onClick = chrome.onClose)
+            return@Row
+        }
         chrome.onMinimize?.let { WindowButton(WindowGlyphs.Minimize, s.windowMinimize, onArt, danger = false, onClick = it) }
         val maximized = chrome.isMaximized
         WindowButton(
