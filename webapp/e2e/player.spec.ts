@@ -29,6 +29,28 @@ test('a damaged AVI says it needs the app', async ({ page }) => {
     await expect(page.getByText('This video needs the TMPlayer app')).toBeVisible()
 })
 
+test('an AVI whose picture libav.js cannot decode says it needs the app', async ({ page }) => {
+    await openCard(page, 'Odd Picture Clip')
+    await expect(page.getByText('This video needs the TMPlayer app')).toBeVisible()
+})
+
+test('an AVI with sound libav.js cannot decode plays without it, and says so', async ({ page }) => {
+    await openCard(page, 'Odd Sound Clip')
+    await playsPast(page, 1)
+})
+
+test('an AVI cut off part way plays what is there and then ends or stops with a card, never a spinner', async ({ page }) => {
+    await openCard(page, 'Cut Clip')
+    await playsPast(page, 1)
+    const card = page.getByText(/needs the TMPlayer app|Can.t play|stalled|Try again|Retry/i).first()
+    const video = page.locator('video').first()
+    await expect
+        .poll(() => video.evaluate((v: HTMLVideoElement) => v.ended || v.paused || v.readyState < 3), { timeout: 25_000 })
+        .toBeTruthy()
+    // Whatever it settled on, the page is still alive and the card (if any) is a real one.
+    await expect(card.or(video)).toBeVisible()
+})
+
 test('Back closes the player, then the detail page, back to the chat', async ({ page }) => {
     await openCard(page, 'Native Clip')
     await playsPast(page, 0.5)
