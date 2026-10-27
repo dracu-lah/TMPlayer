@@ -209,6 +209,14 @@ input:not([type=range]):not([type=radio]):focus { border-color: var(--accent); }
 @media (max-height: 500px) and (orientation: landscape) {
   .update-notice, .offline-line { bottom: calc(66px + env(safe-area-inset-bottom)); }
 }
+/* A message with Undo, over the bar. */
+.toast {
+  position: fixed; z-index: 7; left: 50%; transform: translateX(-50%);
+  bottom: calc(86px + env(safe-area-inset-bottom)); width: min(480px, calc(100vw - 32px));
+  display: flex; align-items: center; gap: 16px; padding: 8px 8px 8px 16px;
+  background: var(--menu); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--shadow);
+}
+.toast p { flex: 1; font-size: 14px; line-height: 20px; }
 /* Sign in has no bar under it. */
 .signin ~ .offline-line { bottom: calc(16px + env(safe-area-inset-bottom)); }
 /* No connection: a line over the bar on every page but the player, which says it itself. */

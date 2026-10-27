@@ -10,6 +10,7 @@ import { Icon, type IconData } from '../ui/Icon'
 import { Card, ContinueCard, useLeft, useProgress, videoCard } from './VideoList'
 import { ChatRow } from './Chats'
 import { form } from '../form'
+import { clearHistoryWithUndo } from '../clearHistory'
 import type { VideoItem } from '../tg/types'
 
 /** How many videos a tab asks Telegram about at most: the ones further back wait for their own page. */
@@ -87,6 +88,12 @@ export function HistoryPage() {
     return (
         <>
             <PageHead title={t('browse.tab_history_heading')} blurb={meta().blurb()} />
+            {/* One click, no question: Continue watching and Watched are cleared and the toast offers Undo for 8 s. Not on Watch later, which it keeps. */}
+            <Show when={tab() !== 'later' && days().length}>
+                <button class="link" style={{ 'align-self': 'start' }} type="button" onClick={() => void clearHistoryWithUndo()}>
+                    {t('browse.clear_history')}
+                </button>
+            </Show>
             <nav class="history-tabs" aria-label={t('browse.tab_history')}>
                 <For each={TABS}>
                     {(x) => (

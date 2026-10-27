@@ -3,6 +3,7 @@ import { A, useNavigate, useParams } from '@solidjs/router'
 import {
     ArrowLeft02Icon,
     ArrowRight01Icon,
+    Delete02Icon,
     Download04Icon,
     GridViewIcon,
     HardDriveIcon,
@@ -20,6 +21,7 @@ import { back, me, signOut } from '../session'
 import { api } from '../tg/rpc'
 import { t } from '../i18n'
 import { sizeScale } from './sizes'
+import { clearHistoryWithUndo } from '../clearHistory'
 import { size } from './VideoList'
 import { form, layout, setLayout, type Layout } from '../form'
 import { Icon, type IconData } from '../ui/Icon'
@@ -294,6 +296,12 @@ function Library() {
             </div>
             <div class="set-card set-blocks" id="size">
                 <SizeLimits />
+            </div>
+            <div class="set-card">
+                {/* One row for Continue watching and Watched together; Watch later is kept. Done at once, with Undo. */}
+                <button type="button" class="set-row" onClick={() => void clearHistoryWithUndo()}>
+                    <RowBody icon={Delete02Icon} title={t('browse.clear_history')} subtitle={t('browse.clear_history_detail')} />
+                </button>
             </div>
         </>
     )
@@ -578,6 +586,12 @@ function TvSettings() {
             </TvPanel>
             <TvPanel title="" id="size-label" anchor="size">
                 <SizeLimits />
+            </TvPanel>
+            <TvPanel title={t('browse.clear_history')} id="history-label">
+                <p class="muted small">{t('browse.clear_history_detail')}</p>
+                <button class="outline-button" style={{ 'align-self': 'start' }} type="button" aria-labelledby="history-label" onClick={() => void clearHistoryWithUndo()}>
+                    {t('browse.clear_history')}
+                </button>
             </TvPanel>
             <TvPanel title="" id="rewind-panel">
                 <Rewind />
