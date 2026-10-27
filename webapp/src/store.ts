@@ -37,8 +37,8 @@ export interface Resume {
 }
 
 const MB = 1024 * 1024
-/** SizeFilter.DEFAULT_MIN and DEFAULT_MAX: 50 MB up, no top. */
-export const SIZE_DEFAULTS = { sizeMin: 50 * MB, sizeMax: 8 * 1024 * MB }
+/** SizeFilter.DEFAULT_MIN and DEFAULT_MAX: 400 MB up, no top. */
+export const SIZE_DEFAULTS = { sizeMin: 400 * MB, sizeMax: 8 * 1024 * MB }
 const DEFAULTS: Settings = { theme: 'system', ...SIZE_DEFAULTS, sort: 'Newest', posters: true, rewindMs: null, carousel: true }
 const THEME_KEY = 'tmplayer-theme'
 

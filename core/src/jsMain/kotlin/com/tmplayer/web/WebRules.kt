@@ -201,6 +201,8 @@ interface SizeLimits {
     val step: Double
     val defaultMin: Double
     val defaultMax: Double
+    /** The quick minimums a chat's "n hidden" picker lists ([SizeFilter.QUICK_MINIMUMS]). */
+    val quick: Array<Double>
 }
 
 /** A video left part way, as the page keeps its place, with the video read again off its message. */
@@ -412,6 +414,7 @@ fun sizeLimits(): SizeLimits = plain(
     "step" to SizeFilter.STEP.toDouble(),
     "defaultMin" to SizeFilter.DEFAULT_MIN.toDouble(),
     "defaultMax" to SizeFilter.DEFAULT_MAX.toDouble(),
+    "quick" to SizeFilter.QUICK_MINIMUMS.map { it.toDouble() }.toTypedArray(),
 )
 
 /** Whether a file of [bytes] passes; an unknown size (0) always does, the top means no limit. */
