@@ -701,7 +701,7 @@ class BrowseRenderTest {
                             favourite = true, onToggleFavourite = {}, onSort = {}, sortAnchor = anchor,
                         )
                     }
-                    VideoGrid(shell, items, "Film Club", rows = shell.chatRows, topPadding = ChatTopClearance, bottomBar = bar)
+                    VideoGrid(shell, items, "Film Club", topPadding = ChatTopClearance, bottomBar = bar)
                     ChatTopChrome(shell, film)
                     com.tmplayer.ui.browse.VideoMenuPopover(
                         sorting,
@@ -737,13 +737,9 @@ class BrowseRenderTest {
                 })
                 shell.profileOpen = false
                 shell.openChat(film)
-                shell.chatRows = false
                 save("parity-chat-tiles-$theme.png", frame(dark) { chatPage() })
-                shell.chatRows = true
-                save("parity-chat-rows-$theme.png", frame(dark) { chatPage() })
                 save("parity-chat-search-$theme.png", frame(dark) { chatPage(searching = true) })
                 save("parity-chat-sort-$theme.png", frame(dark) { chatPage(sorting = true) })
-                shell.chatRows = false
                 shell.closeChat()
                 shell.go(Destination.Settings)
                 val toasts = androidx.compose.material3.SnackbarHostState()
@@ -761,7 +757,6 @@ class BrowseRenderTest {
             }
         } finally {
             shell.profileOpen = false
-            shell.chatRows = false
             shell.closeChat()
             shell.go(Destination.Chats)
         }

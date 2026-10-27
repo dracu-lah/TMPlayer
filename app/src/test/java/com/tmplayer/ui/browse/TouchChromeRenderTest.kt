@@ -160,8 +160,6 @@ class TouchChromeRenderTest {
             onSubmit = {},
             onBack = {},
             onToggleFavorite = {},
-            layout = com.tmplayer.data.CardLayout.Grid,
-            onToggleLayout = {},
             onRefresh = {},
             onSort = {},
         ) { rows()() }

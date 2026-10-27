@@ -356,25 +356,6 @@ input:not([type=range]):not([type=radio]):focus { border-color: var(--accent); }
 .strip.waiting .continue-art { background: var(--surface-high); animation: waiting 1.2s ease-in-out infinite alternate; }
 @media (prefers-reduced-motion: reduce) { .strip.waiting .continue-art { animation: none; } .continue-art { transition: none; } }
 
-/*
- * "As rows" (MediaRow): a small 2:3 poster beside the name over up to three lines and its facts, one
- * column on a phone and 440 wide columns on a desktop. No card round a row.
- */
-.vrow.rowcards { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); column-gap: 12px; list-style: none; padding: 0 0 2px; }
-.vrow.rowcards > li { min-width: 0; }
-.row-card { display: flex; align-items: center; gap: 14px; padding: 10px; border-radius: var(--r-m); color: inherit; text-decoration: none; transition: background var(--fast); }
-.row-card:hover { background: color-mix(in srgb, var(--fg) 5%, transparent); }
-.row-card:active { background: color-mix(in srgb, var(--fg) 9%, transparent); }
-.row-art { flex: none; width: 56px; }
-.row-art .card-art { border-radius: var(--r-s); }
-.card-art.bare .card-shade, .card-art.bare .card-art-title { display: none; }
-.row-text { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.row-name { font-size: 16px; line-height: 22px; font-weight: 500; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
-.row-facts { font-size: 12px; line-height: 16px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-:root[data-form="desktop"] .row-card { gap: 16px; padding: 12px; }
-:root[data-form="desktop"] .row-art { width: 72px; }
-:root[data-form="desktop"] .row-name { font-size: 18px; line-height: 24px; }
-
 /* A chat's info page (ChatInfoSheet): the picture, the name, the kind and members, @username, the description and the t.me link, in one centred column. */
 .avatar.huge { width: 96px; height: 96px; font-size: 38px; }
 :root[data-form="desktop"] .avatar.huge { width: 104px; height: 104px; }
@@ -389,7 +370,6 @@ input:not([type=range]):not([type=radio]):focus { border-color: var(--accent); }
 .chat-info-said { min-height: 16px; }
 
 .title-pill:not(:has(.chat-picture)) { padding-left: 18px; }
-.vrow.rowcards > li.wide { grid-column: 1 / -1; }
 
 /* On a picture (always dark under its fade) the accent is the dark theme's, as the apps' PillProgress takes inversePrimary in a light theme. */
 .pill-progress > div { background: #79d0f5; }

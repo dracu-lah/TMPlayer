@@ -102,7 +102,6 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.tmplayer.data.Account
-import com.tmplayer.data.CardLayout
 import com.tmplayer.data.ChatFolderSummary
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
@@ -274,12 +273,6 @@ internal fun BrowseScreen(
     onPickTab: (BrowseSection) -> Unit = {},
     /** The viewer's Telegram folders, which become rail items of their own. Empty until TDLib says. */
     folders: List<ChatFolderSummary> = emptyList(),
-    /**
-     * Rows or tiles, chosen from the pill beside the tab name and remembered from then on. One
-     * arrangement covers every tab: they are all lists of the same card.
-     */
-    layout: CardLayout = CardLayout.List,
-    onToggleLayout: () -> Unit = {},
     /** The newer version on GitHub, if there is one. Shown on the rail, in amber. */
     updateVersion: String? = null,
     onUpdate: () -> Unit = {},
@@ -536,9 +529,6 @@ internal fun BrowseScreen(
     // The phone's lists end clear of the floating bar (TouchNav), which their container already
     // lifts above the navigation bar.
     val insets = if (touch) TouchInsets.clearing(touchShellClearance(withActions = true, rail = LocalTouchRail.current)) else TvInsets
-    // Fixed columns suit a screen whose size is known in advance; a phone's is not, and it turns
-    // when the viewer does, so the grid is asked for a tile width instead and works out the rest.
-    val tiles = if (touch) GridCells.Adaptive(TOUCH_TILE_MIN) else GridCells.Fixed(TILE_COLUMNS)
 
     // While a chip has the remote's focus, a list that changes under it (because OK picked that
     // chip) must not pull focus down to its first row: the viewer is still choosing.
@@ -622,9 +612,6 @@ internal fun BrowseScreen(
         )
     }
 
-    // A phone lists chats as rows, always: tiles of chat pictures are for a television across the
-    // room. History's videos keep the choice, and so does every list on a television.
-    val chatLayout: (BrowseSection) -> CardLayout = { section -> if (touch && !section.listsVideos) CardLayout.List else layout }
     // The chat the television's list was left for is put back only on the way back from it: a
     // page with no chat list in between (Home, History) means the viewer moved on.
     LaunchedEffect(tab) { if (tab.isHome || tab.listsVideos) ChatListReturn.forget() }
@@ -648,7 +635,7 @@ internal fun BrowseScreen(
         StateScaffold(
             paneState,
             onRetry = onRetry,
-            loading = { ChatListSkeleton(layout = chatLayout(tab), columns = if (touch) 1 else TV_CHAT_COLUMNS) },
+            loading = { ChatListSkeleton(columns = if (touch) 1 else TV_CHAT_COLUMNS) },
             // "No chats yet" offers Refresh: the list may still be on its way after a sign in.
             onAction = { onRetry() },
         ) { data ->
@@ -721,7 +708,6 @@ internal fun BrowseScreen(
                         // the content area starts with the content.
                         if (!touch) {
                             val historyActions: @Composable () -> Unit = {
-                                LayoutAction(layout, onToggleLayout)
                                 // No Refresh here: History is read off this device and cannot be
                                 // behind, so the button would be one that visibly does nothing.
                                 if (historyHas) {
@@ -756,9 +742,7 @@ internal fun BrowseScreen(
                                 ContinueSection(
                                     records = continuing,
                                     byName = historySort == ChatSort.Name,
-                                    layout = layout,
                                     insets = insets,
-                                    tiles = tiles,
                                     autoFocus = !touch,
                                     mayTakeFocus = listMayTakeFocus,
                                     pageOpen = details.top != null,
@@ -779,9 +763,7 @@ internal fun BrowseScreen(
                                     records = laterShown,
                                     byName = historySort == ChatSort.Name,
                                     text = { it.cardText() },
-                                    layout = layout,
                                     insets = insets,
-                                    tiles = tiles,
                                     autoFocus = !touch,
                                     mayTakeFocus = listMayTakeFocus,
                                     pageOpen = details.top != null,
@@ -804,9 +786,7 @@ internal fun BrowseScreen(
                                     records = watchedShown,
                                     byName = historySort == ChatSort.Name,
                                     text = { it.cardText(now) },
-                                    layout = layout,
                                     insets = insets,
-                                    tiles = tiles,
                                     autoFocus = !touch,
                                     mayTakeFocus = listMayTakeFocus,
                                     pageOpen = details.top != null,
@@ -824,7 +804,6 @@ internal fun BrowseScreen(
                         if (!touch) {
                             val chatActions: @Composable () -> Unit = {
                                 // Refresh is in the account's menu on the top bar.
-                                LayoutAction(layout, onToggleLayout)
                                 // Stars are added one at a time from a menu, so the only way back
                                 // from a tab full of them is here, beside the tab they fill.
                                 if (tab == BrowseSection.of(BrowseTab.Favorites) && favorites.isNotEmpty()) {
@@ -859,23 +838,18 @@ internal fun BrowseScreen(
                                 favorites = favorites,
                                 sort = chatSort,
                                 // Recency order comes straight from Telegram, so the top of the
-                                // unfiltered list already is "recent". The strip is dropped in
-                                // grid view: the grid's own first row is those same chats, and the
-                                // two together read as the list repeating itself.
+                                // unfiltered list already is "recent".
                                 recent = if (
                                     tab.isChats &&
                                     chatFilter == ChatFilter.All &&
                                     chatSort == ChatSort.Recent &&
-                                    query.isBlank() &&
-                                    chatLayout(tab) == CardLayout.List
+                                    query.isBlank()
                                 ) {
                                     visible.take(RECENT_COUNT)
                                 } else {
                                     emptyList()
                                 },
-                                layout = chatLayout(tab),
                                 insets = insets,
-                                tiles = tiles,
                                 autoFocus = !touch,
                                 mayTakeFocus = listMayTakeFocus,
                                 onOpenChat = onOpenChat,
@@ -968,23 +942,10 @@ internal fun BrowseScreen(
                     else -> chats?.let { filterChats(it, section, favorites, query, chatFilter, chatSort).size } ?: 0
                 }
             },
-            // Home is rows of tiles whatever the arrangement, and refreshes with a pull; a list of
-            // chats is rows on a phone; so only History offers rows or tiles, and a page with
-            // nothing to offer has no pill at all.
+            // Home refreshes with a pull, and a page with nothing to offer has no pill at all.
             actions = unlessHidden(
                 tab.isHome || !(tab.listsVideos || (tab == BrowseSection.of(BrowseTab.Favorites) && favorites.isNotEmpty())),
             ) actions@{
-                if (tab.listsVideos) {
-                    BarIcon(
-                        label = if (layout == CardLayout.Grid) s.browseShowAsRows else s.browseShowAsTiles,
-                        icon = if (layout == CardLayout.Grid) {
-                            TmIcons.List
-                        } else {
-                            TmIcons.Grid
-                        },
-                        onClick = onToggleLayout,
-                    )
-                }
                 // History's Select and Clear sit in the bar, one press each: a clear here is said
                 // with Undo, so a mis-tap costs nothing. Favourites' clear has no Undo and stays
                 // behind the overflow, asked first.
@@ -1439,7 +1400,7 @@ internal fun BrowseScreen(
 /**
  * One button in the pill of a page's own buttons over the floating bar: [FloatingBarIcon], in
  * the pill's ink (an [IconButton] here took the theme's content colour, black on the dark pill),
- * sinking under the finger and turning rows into tiles in place.
+ * sinking under the finger.
  */
 @Composable
 private fun RowScope.BarIcon(label: String, icon: ImageVector, onClick: () -> Unit) {
@@ -1561,9 +1522,7 @@ private fun WatchLaterRecord.cardText() = VideoCardText(
 private fun <T : Any> ContinueSection(
     records: List<T>,
     text: (T) -> VideoCardText,
-    layout: CardLayout,
     insets: BrowseInsets,
-    tiles: GridCells,
     /** Only a remote needs somewhere to stand; on a phone a stolen focus only opens the keyboard. */
     autoFocus: Boolean,
     onResume: (T) -> Unit,
@@ -1622,8 +1581,7 @@ private fun <T : Any> ContinueSection(
             onResume(record)
         }
     }
-    // Only the first card asks for focus, and which card that is does not change with the
-    // arrangement, so the two branches can share one modifier.
+    // Only the first card asks for focus.
     fun focusOf(record: T): Modifier {
         val base = if (record === records.firstOrNull()) Modifier.focusRequester(first) else Modifier
         return if (record === standIn) base.focusRequester(refocus) else base
@@ -1640,12 +1598,10 @@ private fun <T : Any> ContinueSection(
     )
 
     val listState = com.tmplayer.ui.components.rememberAheadListState(column = true)
-    val gridState = com.tmplayer.ui.components.rememberAheadGridState()
     Box(Modifier.fillMaxSize()) {
-        when (layout) {
             // The rows of a chat's list, poster, type and spacing alike: History's list is the same
             // kind of list, and a card around each row here made it the one list that was boxed.
-            CardLayout.List -> LazyColumn(
+            LazyColumn(
                 state = listState,
                 modifier = Modifier.keepTopInSight(listState, enabled = !isTouch()),
                 verticalArrangement = Arrangement.spacedBy(if (isTouch()) 2.dp else 4.dp),
@@ -1672,34 +1628,7 @@ private fun <T : Any> ContinueSection(
                 }
             }
 
-            CardLayout.Grid -> LazyVerticalGrid(
-                columns = tiles,
-                state = gridState,
-                modifier = Modifier.keepTopInSight(gridState, enabled = !isTouch()),
-                contentPadding = padding,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                sections.forEach { (day, members) ->
-                if (day != null) item(key = "day-$day", span = { GridItemSpan(maxLineSpan) }) { DayHeading(day) }
-                gridItems(members, key = { text(it).key }) { record ->
-                    val card = cardOf(record, day)
-                    TickedCard(ticked?.let { card.key in it }, row = false) {
-                        ContinueTile(
-                            text = card,
-                            onResume = { resumeThis(record) },
-                            onHold = { holdThis(record) },
-                            modifier = focusOf(record).returnTile(tileReturn, text(record).key),
-                        )
-                    }
-                }
-                }
-            }
-        }
-        when (layout) {
-            CardLayout.List -> ScrollToTop(listState)
-            CardLayout.Grid -> ScrollToTop(gridState)
-        }
+        ScrollToTop(listState)
         // The hold to scroll handle: its bubble says the letter A to Z, else the day.
         val s = LocalStrings.current
         val labels = remember(sections, byName) {
@@ -1713,16 +1642,12 @@ private fun <T : Any> ContinueSection(
             }
         }
         val scrollLabel: (Any) -> String? = { labels[it] }
-        when (layout) {
-            CardLayout.List -> FastScroller(listState, label = scrollLabel)
-            CardLayout.Grid -> FastScroller(gridState, label = scrollLabel)
-        }
+        FastScroller(listState, label = scrollLabel)
     }
 
     // This is the landing tab for anyone with a video on the go, and the remote has nowhere to go
-    // until something holds focus. Re-run on a change of arrangement too: switching rebuilds the
-    // list from scratch, and the card that was holding focus leaves the composition with it.
-    LaunchedEffect(records.firstOrNull()?.let { text(it).key }, layout, autoFocus) {
+    // until something holds focus.
+    LaunchedEffect(records.firstOrNull()?.let { text(it).key }, autoFocus) {
         if (autoFocus && mayTakeFocus()) runCatching { first.requestFocus() }
     }
     // Select mode over: the bar the remote stood on is gone, so it goes back to the list, at the
@@ -1730,10 +1655,7 @@ private fun <T : Any> ContinueSection(
     LaunchedEffect(refocusSignal) {
         if (refocusSignal == 0 || !autoFocus) return@LaunchedEffect
         androidx.compose.runtime.withFrameNanos { }
-        when (layout) {
-            CardLayout.List -> runCatching { listState.scrollToItem(0) }
-            CardLayout.Grid -> runCatching { gridState.scrollToItem(0) }
-        }
+        runCatching { listState.scrollToItem(0) }
         androidx.compose.runtime.withFrameNanos { }
         runCatching { first.requestFocus() }
     }
@@ -1752,10 +1674,7 @@ private fun <T : Any> ContinueSection(
             index += members.size
         }
         if (found < 0) return@ReturnToTile false
-        when (layout) {
-            CardLayout.List -> listState.scrollToItem(found)
-            CardLayout.Grid -> gridState.scrollToItem(found)
-        }
+        listState.scrollToItem(found)
         true
     }
     LaunchedEffect(standIn?.let { text(it).key }, heldGone) {
@@ -1859,90 +1778,6 @@ private fun HistorySelectionBar(
 }
 
 /**
- * A Continue watching card as a tile: the preview carries the progress bar, because there is no
- * row of text alongside it to put the bar under.
- */
-@Composable
-private fun ContinueTile(
-    text: VideoCardText,
-    onResume: () -> Unit,
-    onHold: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val touch = isTouch()
-    val interactions = remember { MutableInteractionSource() }
-    val focused by interactions.collectIsFocusedAsState()
-    val border by animateColorAsState(
-        targetValue = if (focused) Tone.accent else Color.Transparent,
-        animationSpec = tween(FOCUS_FADE_MS),
-        label = "continueTileBorder",
-    )
-
-    // The art, the bar and the two lines are the same on both screens; only what holds them
-    // differs, so the tile is written once and handed to whichever container the device wants.
-    val body: @Composable ColumnScope.() -> Unit = {
-        Box {
-            ContinueArt(text, Modifier.fillMaxWidth().aspectRatio(16f / 9f), badge = 40.dp)
-            if (text.fraction > 0f) {
-                ProgressLine(text.fraction, Modifier.align(Alignment.BottomCenter))
-            }
-        }
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-            Text(
-                text.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = Tone.text,
-                // Two lines, as everywhere else a release name is shown: one line cuts the title
-                // before the resolution, which is the part that tells two of them apart. Always
-                // two, so a short name keeps the detail lines across the grid level.
-                maxLines = 2,
-                minLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.marqueeWhen(focused),
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                // Under a day heading a Watched card may have nothing to add; its chat says where it is.
-                text.detail.ifBlank { text.chatTitle },
-                style = MaterialTheme.typography.bodyMedium,
-                color = Tone.muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-
-    if (touch) {
-        Card(
-            modifier = modifier
-                .fillMaxWidth()
-                .holdable(
-                    interactionSource = interactions,
-                    onClick = onResume,
-                    onHold = onHold,
-                ),
-            shape = M3MaterialTheme.shapes.large,
-            colors = CardDefaults.cardColors(containerColor = Tone.surface),
-            content = body,
-        )
-    } else {
-        Column(
-            modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(Corner.Medium))
-                .background(if (focused) Tone.surfaceHigh else Tone.surface)
-                .border(Focus.Edge, border, RoundedCornerShape(Corner.Medium))
-                .holdable(
-                    interactionSource = interactions,
-                    onClick = onResume,
-                    onHold = onHold,
-                ),
-            content = body,
-        )
-    }
-}
-
-/**
  * Artwork for a History card (Continue watching, Watch later, Watched), with a play mark on it.
  *
  * Home's art: a record keeps no picture, so the card asks Telegram for its video once
@@ -2009,26 +1844,6 @@ internal fun AccountPicture(account: Account?) {
 }
 
 // ---- content ---------------------------------------------------------------------------------
-
-/**
- * Rows or tiles, offered where the arrangement is: beside the list it rearranges.
- *
- * It lives here rather than in Settings because it is a matter of taste that changes with the
- * chat being looked at, and walking to another screen to change how this one looks is a long way
- * round for something the viewer can see the result of immediately.
- */
-@Composable
-private fun LayoutAction(layout: CardLayout, onToggle: () -> Unit) {
-    val s = LocalStrings.current
-    HeaderAction(
-        // A grid of squares and a stack of lines are the two pictures every phone and television
-        // uses for this, so the icon alone carries it.
-        label = if (layout == CardLayout.Grid) s.browseAsRows else s.browseAsTiles,
-        icon = if (layout == CardLayout.Grid) TmIcons.List else TmIcons.Grid,
-        showLabel = false,
-        onClick = onToggle,
-    )
-}
 
 /**
  * A chip beside a heading, for the action that applies to the whole list under it.
@@ -2525,9 +2340,7 @@ private fun ChatSection(
     chats: List<ChatSummary>,
     favorites: Set<Long>,
     recent: List<ChatSummary>,
-    layout: CardLayout,
     insets: BrowseInsets,
-    tiles: GridCells,
     /** Only a remote needs somewhere to stand; on a phone a stolen focus only opens the keyboard. */
     autoFocus: Boolean,
     onOpenChat: (ChatSummary) -> Unit,
@@ -2561,7 +2374,7 @@ private fun ChatSection(
     // remote moves left and right between the columns and up and down within one, by the grid's
     // own focus search, and the grid composes only the rows on screen and the next, so a 3,000
     // chat account costs what a short one does. A phone keeps its one column of full bleed rows.
-    val twoColumns = !rowsAreFullBleed && layout == CardLayout.List
+    val twoColumns = !rowsAreFullBleed
     // The chat this list was left for, read once as the list comes back from it (Back from that
     // chat's videos), so the remote lands on its row again rather than on the first chat.
     val back = remember { if (autoFocus) ChatListReturn.key else null }
@@ -2577,20 +2390,12 @@ private fun ChatSection(
     val startOffset = if (back != null) ChatListReturn.firstOffset else 0
 
     val listState = com.tmplayer.ui.components.rememberAheadListState(column = true)
-    val gridState = com.tmplayer.ui.components.rememberAheadGridState(
-        initialFirstVisibleItemIndex = if (layout == CardLayout.Grid) startIndex else 0,
-        initialFirstVisibleItemScrollOffset = if (layout == CardLayout.Grid) startOffset else 0,
-    )
     val rowsState = com.tmplayer.ui.components.rememberAheadGridState(
         initialFirstVisibleItemIndex = if (twoColumns) startIndex else 0,
         initialFirstVisibleItemScrollOffset = if (twoColumns) startOffset else 0,
     )
-    // The grid the remote is in, when it is in one: the tiles, or the television's two columns.
-    val shownGrid: LazyGridState? = when {
-        layout == CardLayout.Grid -> gridState
-        twoColumns -> rowsState
-        else -> null
-    }
+    // The grid the remote is in, when it is in one: the television's two columns.
+    val shownGrid: LazyGridState? = if (twoColumns) rowsState else null
     // Opening a chat on a television notes which card it was and where the list stood.
     val open: (ChatSummary, Any) -> Unit = { chat, key ->
         if (autoFocus && shownGrid != null) {
@@ -2605,18 +2410,14 @@ private fun ChatSection(
 
     // Telegram's older chats read as the end of the list comes near, a screen ahead.
     val readMore = paging.more && !paging.loading && paging.failure == null
-    when {
-        twoColumns -> com.tmplayer.ui.components.LoadMoreAhead(rowsState, readMore, onLoadMore = onMoreChats)
-        layout == CardLayout.List -> com.tmplayer.ui.components.LoadMoreAhead(listState, readMore, onLoadMore = onMoreChats)
-        else -> com.tmplayer.ui.components.LoadMoreAhead(gridState, readMore, onLoadMore = onMoreChats)
+    if (twoColumns) {
+        com.tmplayer.ui.components.LoadMoreAhead(rowsState, readMore, onLoadMore = onMoreChats)
+    } else {
+        com.tmplayer.ui.components.LoadMoreAhead(listState, readMore, onLoadMore = onMoreChats)
     }
     // Chats pressed again on the bar: back to the top of the list.
     ScrollToTopOnReselect(TouchDestination.Chats) { animate ->
-        when {
-            twoColumns -> rowsState.toTop(animate)
-            layout == CardLayout.Grid -> gridState.toTop(animate)
-            else -> listState.toTop(animate)
-        }
+        if (twoColumns) rowsState.toTop(animate) else listState.toTop(animate)
     }
     // The strip of recent chats, over the list on either device.
     val strip: @Composable () -> Unit = {
@@ -2701,7 +2502,7 @@ private fun ChatSection(
                 }
             }
 
-            layout == CardLayout.List -> LazyColumn(
+            else -> LazyColumn(
                 Modifier.fillMaxSize().keepTopInSight(listState, enabled = !isTouch()),
                 state = listState,
                 // Rows carry their own side padding on a phone so the ripple reaches both edges, and
@@ -2736,51 +2537,12 @@ private fun ChatSection(
                 }
             }
 
-            else -> LazyVerticalGrid(
-                columns = tiles,
-                state = gridState,
-                modifier = Modifier.fillMaxSize().keepTopInSight(gridState, enabled = !isTouch()),
-                // The end inset keeps a focused tile in the last column from having its border
-                // clipped by the panel edge.
-                contentPadding = PaddingValues(
-                    start = insets.start,
-                    end = insets.end,
-                    top = if (rowsAreFullBleed) 0.dp else Tv.FocusClearance,
-                    bottom = insets.bottom,
-                ),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                gridItems(chats, key = { it.id }) { chat ->
-                    ChatTile(
-                        chat = chat,
-                        favorite = chat.id in favorites,
-                        opensOnLaunch = chat.id == launchChatId,
-                        onClick = { open(chat, chat.id) },
-                        onHold = { onHold(chat) },
-                        modifier = focusOf(chat, inStrip = false).then(backOf(chat.id)).fillMaxWidth(),
-                    )
-                }
-                if (paging.loading || paging.failure != null) {
-                    item(key = "more-chats", span = { GridItemSpan(maxLineSpan) }, contentType = "more-chats") {
-                        MoreChatsFoot(paging, onMoreChats)
-                    }
-                }
-            }
         }
-        when {
-            twoColumns -> ScrollToTop(rowsState)
-            layout == CardLayout.List -> ScrollToTop(listState)
-            else -> ScrollToTop(gridState)
-        }
+        if (twoColumns) ScrollToTop(rowsState) else ScrollToTop(listState)
         // The hold to scroll handle; listed by name, its bubble gives the letter.
         val byId = remember(chats) { chats.associateBy { it.id } }
         val scrollLabel: ((Any) -> String?)? = if (sort != ChatSort.Name) null else { key -> byId[key]?.let { ScrollLabels.letter(it.title) } }
-        when {
-            twoColumns -> FastScroller(rowsState, label = scrollLabel)
-            layout == CardLayout.List -> FastScroller(listState, label = scrollLabel)
-            else -> FastScroller(gridState, label = scrollLabel)
-        }
+        if (twoColumns) FastScroller(rowsState, label = scrollLabel) else FastScroller(listState, label = scrollLabel)
         if (rowsAreFullBleed) {
             // The rows pass under the pinned title and chips: a short fade at the top edge lets
             // them go softly rather than being cut by a hard line, once the list has moved.
@@ -2796,9 +2558,8 @@ private fun ChatSection(
         }
     }
 
-    // The remote has nowhere to go until something holds focus. Switching arrangement is included:
-    // it rebuilds the list, and the card that was holding focus leaves the composition with it.
-    LaunchedEffect(chats.firstOrNull()?.id, recent.firstOrNull()?.id, layout, autoFocus) {
+    // The remote has nowhere to go until something holds focus.
+    LaunchedEffect(chats.firstOrNull()?.id, recent.firstOrNull()?.id, autoFocus) {
         if (!autoFocus || !mayTakeFocus()) return@LaunchedEffect
         // Back from a chat: its card again, scrolled back into the list if the list went back to
         // its top. Held a few frames against the list's own first claim, as a video's page is
@@ -3306,21 +3067,6 @@ private const val FOCUS_FADE_MS = 140
 private val HOLD_HINT: String get() = L.browseHoldHint
 private val RECENT_TILE_WIDTH = 224.dp
 private val RECENT_TILE_HEIGHT = 154.dp
-
-/**
- * Columns in the tile arrangement: four, as the video grid has, now the page has the screen's
- * whole width under the top bar.
- */
-private const val TILE_COLUMNS = 4
-
-/**
- * The narrowest a tile may be before the grid drops a column.
- *
- * A phone held upright has 360 to 412 dp, less the margins and the gap, so this is what puts two
- * tiles across the narrowest of them (168 dp left a 360 dp phone one tile a row) and four or five
- * across the same phone turned on its side, without either arrangement being spelled out anywhere.
- */
-private val TOUCH_TILE_MIN = 150.dp
 
 /**
  * A phone chat row, at Material's list-item metrics.

@@ -80,7 +80,6 @@ private val CRASH_REPORTS = booleanPreferencesKey("crash_reports")
 private val LAST_CHAT = longPreferencesKey("last_chat")
 private val MIN_SIZE = longPreferencesKey("min_size_bytes")
 private val MAX_SIZE = longPreferencesKey("max_size_bytes")
-private val CHAT_LAYOUT = stringPreferencesKey("chat_layout")
 private val CHAT_FILTER = stringPreferencesKey("chat_filter")
 private val CHAT_SORT = stringPreferencesKey("chat_sort")
 /** "Only my folders", retired: read once by [SettingsStore.takeOnlyFolders] and removed. */
@@ -118,7 +117,6 @@ private val TOUR = stringPreferencesKey("tour")
 private val HISTORY_TAB = stringPreferencesKey("history_tab")
 private val HISTORY_SORT = stringPreferencesKey("history_sort")
 private val DOWNLOADS_SORT = stringPreferencesKey("downloads_sort")
-private val MEDIA_LAYOUT = stringPreferencesKey("media_layout")
 private val CHAT_SNAPSHOT = stringPreferencesKey("chat_snapshot")
 private val ACCOUNT_SNAPSHOT = stringPreferencesKey("account_snapshot")
 private val THEME_CHOICE = stringPreferencesKey("theme_choice")
@@ -1833,18 +1831,6 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     // ---- card layout ------------------------------------------------------------------------
 
-    /**
-     * How the chat sections are arranged.
-     *
-     * Rows by default: a chat is a name and a picture, and a name is what the viewer is reading.
-     */
-    val chatLayout: Flow<CardLayout> =
-        read { CardLayout.decode(it[CHAT_LAYOUT], CardLayout.List) }
-
-    suspend fun setChatLayout(value: CardLayout) {
-        prefs.edit { it[CHAT_LAYOUT] = value.name }
-    }
-
     // ---- the chips over Chats and History -----------------------------------------------------
 
     /**
@@ -2076,18 +2062,6 @@ class SettingsStore(private val prefs: DataStore<Preferences>) : AllowedChatsSou
 
     suspend fun setDownloadsSort(sort: DownloadShelf.Sort) {
         prefs.edit { it[DOWNLOADS_SORT] = sort.name }
-    }
-
-    /**
-     * How a chat's videos are arranged.
-     *
-     * Tiles by default: previews make individual uploads easy to identify from across the room.
-     */
-    val mediaLayout: Flow<CardLayout> =
-        read { CardLayout.decode(it[MEDIA_LAYOUT], CardLayout.Grid) }
-
-    suspend fun setMediaLayout(value: CardLayout) {
-        prefs.edit { it[MEDIA_LAYOUT] = value.name }
     }
 
     // ---- appearance -------------------------------------------------------------------------

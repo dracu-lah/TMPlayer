@@ -39,7 +39,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.tmplayer.data.CardLayout
 import com.tmplayer.ui.theme.Avatar
 import com.tmplayer.ui.theme.Corner
 import com.tmplayer.ui.theme.Tone
@@ -145,8 +144,7 @@ fun SkeletonBox(
 @Composable
 fun ChatListSkeleton(
     modifier: Modifier = Modifier,
-    layout: CardLayout = CardLayout.List,
-    /** Rows side by side in the list layout: two on a television, whose list is two columns. */
+    /** Rows side by side: two on a television, whose list is two columns. */
     columns: Int = 1,
 ) {
     val shimmer = rememberShimmer()
@@ -158,7 +156,6 @@ fun ChatListSkeleton(
         val top = if (touch) TOUCH_TOP else Tv.SafeV
         // Read here rather than below: inside the Column and Row lambdas the box's scope is no
         // longer the implicit receiver, so the measurements have to be carried in.
-        val room = maxWidth - start - end
         val height = maxHeight - top
 
         // The rows the real list draws, so the two agree. A phone's chat list is Material's
@@ -171,89 +168,53 @@ fun ChatListSkeleton(
 
         Column(
             Modifier.padding(
-                start = if (touch && layout == CardLayout.List) 0.dp else start,
-                end = if (touch && layout == CardLayout.List) 0.dp else end,
+                start = if (touch) 0.dp else start,
+                end = if (touch) 0.dp else end,
                 top = top,
             ),
-            verticalArrangement = Arrangement.spacedBy(
-                if (layout == CardLayout.List) rowGap else 16.dp,
-            ),
+            verticalArrangement = Arrangement.spacedBy(rowGap),
         ) {
-            when (layout) {
-                CardLayout.List -> repeat(rowsToFill(height, rowHeight + rowGap)) { line ->
-                    // A television's rows stand in [columns] side by side, as the list does.
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                    repeat(columns.coerceAtLeast(1)) { column ->
-                    val index = line * columns.coerceAtLeast(1) + column
-                    Row(
-                        Modifier
-                            .weight(1f)
-                            .height(rowHeight)
-                            .then(
-                                if (touch) {
-                                    Modifier
-                                } else {
-                                    Modifier
-                                        .clip(RoundedCornerShape(Corner.Large))
-                                        .background(Tone.surface)
-                                },
-                            )
-                            .padding(horizontal = rowPad),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        SkeletonBox(shimmer, Modifier.size(avatar), CircleShape)
-                        Spacer(Modifier.width(if (touch) 16.dp else 24.dp))
-                        // Weighted, so the bars below are measured against the room the name
-                        // actually has. Widths in dp would run off the side of a phone.
-                        Column(
-                            Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            // Names differ in length, and bars of one uniform width read as a
-                            // barcode rather than as a list of chats.
-                            SkeletonBox(
-                                shimmer,
+            repeat(rowsToFill(height, rowHeight + rowGap)) { line ->
+                // A television's rows stand in [columns] side by side, as the list does.
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                repeat(columns.coerceAtLeast(1)) { column ->
+                val index = line * columns.coerceAtLeast(1) + column
+                Row(
+                    Modifier
+                        .weight(1f)
+                        .height(rowHeight)
+                        .then(
+                            if (touch) {
                                 Modifier
-                                    .fillMaxWidth(TITLE_FRACTIONS[index % TITLE_FRACTIONS.size])
-                                    .height(16.dp),
-                            )
-                            SkeletonBox(shimmer, Modifier.fillMaxWidth(0.3f).height(11.dp))
-                        }
-                    }
-                    }
+                            } else {
+                                Modifier
+                                    .clip(RoundedCornerShape(Corner.Large))
+                                    .background(Tone.surface)
+                            },
+                        )
+                        .padding(horizontal = rowPad),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SkeletonBox(shimmer, Modifier.size(avatar), CircleShape)
+                    Spacer(Modifier.width(if (touch) 16.dp else 24.dp))
+                    // Weighted, so the bars below are measured against the room the name
+                    // actually has. Widths in dp would run off the side of a phone.
+                    Column(
+                        Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        // Names differ in length, and bars of one uniform width read as a
+                        // barcode rather than as a list of chats.
+                        SkeletonBox(
+                            shimmer,
+                            Modifier
+                                .fillMaxWidth(TITLE_FRACTIONS[index % TITLE_FRACTIONS.size])
+                                .height(16.dp),
+                        )
+                        SkeletonBox(shimmer, Modifier.fillMaxWidth(0.3f).height(11.dp))
                     }
                 }
-
-                CardLayout.Grid -> {
-                    val columns = tileColumns(room, CHAT_TILE_COLUMNS, touch)
-                    repeat(rowsToFill(height, 154.dp + 16.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        ) {
-                            repeat(columns) {
-                                Column(
-                                    Modifier
-                                        .weight(1f)
-                                        .height(154.dp)
-                                        .clip(RoundedCornerShape(Corner.Large))
-                                        .background(Tone.surface)
-                                        .padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                                ) {
-                                    SkeletonBox(shimmer, Modifier.size(64.dp), CircleShape)
-                                    SkeletonBox(
-                                        shimmer,
-                                        Modifier.fillMaxWidth(0.82f).height(16.dp),
-                                    )
-                                    SkeletonBox(
-                                        shimmer,
-                                        Modifier.fillMaxWidth(0.45f).height(11.dp),
-                                    )
-                                }
-                            }
-                        }
-                    }
+                }
                 }
             }
         }
@@ -264,10 +225,10 @@ fun ChatListSkeleton(
  * Stand-in for the video listing: the same columns, the same 16:9 art and the same spacing, so
  * nothing shifts sideways when the real tiles arrive. The column count is worked out from the width
  * the way the listing works it out, so a phone in either orientation gets the grid it is about to
- * be given. It follows [layout] for the same reason.
+ * be given.
  */
 @Composable
-fun MediaGridSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLayout.Grid) {
+fun MediaGridSkeleton(modifier: Modifier = Modifier) {
     val shimmer = rememberShimmer()
     val touch = isTouch()
 
@@ -280,75 +241,32 @@ fun MediaGridSkeleton(modifier: Modifier = Modifier, layout: CardLayout = CardLa
 
         // The grid takes the listing's own figures from [TileGrid], so the shimmer resolves into
         // the tiles it stood for rather than a listing that has moved.
-        val dense = touch && layout == CardLayout.Grid
+        val dense = touch
         val gridGap = if (touch) TileGrid.TouchGap else TileGrid.TvGap
 
         Column(
             Modifier.padding(horizontal = edge),
-            verticalArrangement = Arrangement.spacedBy(
-                if (layout == CardLayout.Grid) gridGap else 12.dp,
-            ),
+            verticalArrangement = Arrangement.spacedBy(gridGap),
         ) {
-            when (layout) {
-                CardLayout.Grid -> {
-                    val columns = TileGrid.wideColumns(inner, touch, landscape)
-                    // The art is 16:9 of whatever a column came out as, and the caption beneath it
-                    // is a fixed block, so the tile's height is only known once the width is.
-                    val tile = (inner - gridGap * (columns - 1)) / columns * 9f / 16f +
-                        (if (dense) DENSE_CAPTION_HEIGHT else CAPTION_HEIGHT)
-                    repeat(rowsToFill(height, tile + gridGap)) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(gridGap),
-                        ) {
-                            repeat(columns) {
-                                if (dense) {
-                                    DenseTileSkeleton(shimmer, Modifier.weight(1f))
-                                } else {
-                                    MediaTileSkeleton(shimmer, Modifier.weight(1f))
-                                }
+                val columns = TileGrid.wideColumns(inner, touch, landscape)
+                // The art is 16:9 of whatever a column came out as, and the caption beneath it
+                // is a fixed block, so the tile's height is only known once the width is.
+                val tile = (inner - gridGap * (columns - 1)) / columns * 9f / 16f +
+                    (if (dense) DENSE_CAPTION_HEIGHT else CAPTION_HEIGHT)
+                repeat(rowsToFill(height, tile + gridGap)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(gridGap),
+                    ) {
+                        repeat(columns) {
+                            if (dense) {
+                                DenseTileSkeleton(shimmer, Modifier.weight(1f))
+                            } else {
+                                MediaTileSkeleton(shimmer, Modifier.weight(1f))
                             }
                         }
                     }
                 }
-
-                CardLayout.List -> {
-                    // The art is a share of the row on a phone and a fixed width on a television,
-                    // exactly as the real row is, so the row keeps its height across the swap.
-                    val art = if (touch) (inner - 24.dp - 16.dp) * TOUCH_ART_SHARE else ROW_ART_WIDTH
-                    val step = art * 9f / 16f + 24.dp + 12.dp
-                    repeat(rowsToFill(height, step)) { index ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(Corner.Medium))
-                                .background(Tone.surface)
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            SkeletonBox(
-                                shimmer,
-                                (if (touch) Modifier.weight(TOUCH_ART_SHARE) else Modifier.width(ROW_ART_WIDTH))
-                                    .aspectRatio(16f / 9f),
-                                RoundedCornerShape(Corner.Small),
-                            )
-                            Column(
-                                Modifier.weight(if (touch) 1f - TOUCH_ART_SHARE else 1f),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                SkeletonBox(
-                                    shimmer,
-                                    Modifier
-                                        .fillMaxWidth(TITLE_FRACTIONS[index % TITLE_FRACTIONS.size])
-                                        .height(18.dp),
-                                )
-                                SkeletonBox(shimmer, Modifier.fillMaxWidth(0.55f).height(12.dp))
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
 }
@@ -364,32 +282,6 @@ fun MediaGridSkeletonRow(columns: Int, gap: androidx.compose.ui.unit.Dp, dense: 
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
         repeat(columns.coerceAtLeast(1)) {
             if (dense) DenseTileSkeleton(shimmer, Modifier.weight(1f)) else MediaTileSkeleton(shimmer, Modifier.weight(1f))
-        }
-    }
-}
-
-/** The list layout's one placeholder row, for the same wait as [MediaGridSkeletonRow]. */
-@Composable
-fun MediaListSkeletonRow(modifier: Modifier = Modifier) {
-    val shimmer = rememberShimmer()
-    val touch = isTouch()
-    Row(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Corner.Medium))
-            .background(Tone.surface)
-            .padding(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        SkeletonBox(
-            shimmer,
-            (if (touch) Modifier.weight(TOUCH_ART_SHARE) else Modifier.width(ROW_ART_WIDTH)).aspectRatio(16f / 9f),
-            RoundedCornerShape(Corner.Small),
-        )
-        Column(Modifier.weight(if (touch) 1f - TOUCH_ART_SHARE else 1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SkeletonBox(shimmer, Modifier.fillMaxWidth(TITLE_FRACTIONS[0]).height(18.dp))
-            SkeletonBox(shimmer, Modifier.fillMaxWidth(0.55f).height(12.dp))
         }
     }
 }
@@ -491,26 +383,10 @@ private fun rowsToFill(height: Dp, step: Dp): Int {
     return ((height / step).toInt() + 1).coerceIn(1, MAX_ROWS)
 }
 
-/**
- * How many chat tiles fit across [width], counting the 16dp between them.
- *
- * A television is a known size and keeps its [tv] count. A phone is not, and turns over while it is
- * being held, so it is asked the same question the real grid asks: how many tiles of the minimum
- * width will go in.
- */
-private fun tileColumns(width: Dp, tv: Int, touch: Boolean): Int {
-    if (!touch) return tv
-    return ((width + 16.dp) / (TOUCH_TILE_MIN + 16.dp)).toInt().coerceAtLeast(1)
-}
-
 private const val SWEEP_MS = 1_400
-private const val CHAT_TILE_COLUMNS = 3
 
 /** A ceiling on the row count, so a very tall window cannot ask for a hundred placeholders. */
 private const val MAX_ROWS = 12
-
-/** The smallest chat tile the phone's chat grid accepts. */
-private val TOUCH_TILE_MIN = 120.dp
 
 /** The phone insets, matching `TouchInsets` on the browse screen and `TOUCH_EDGE` on the grid. */
 private val TOUCH_INSET = 16.dp
@@ -522,9 +398,6 @@ private val DENSE_CAPTION_HEIGHT = 68.dp
 /** A line of name and a line of facts under the art of a television's tile. */
 private val CAPTION_HEIGHT = 54.dp
 
-/** The art beside a list row, matching `ROW_ART_WIDTH` and `TOUCH_ART_SHARE` on the media screen. */
-private val ROW_ART_WIDTH = 176.dp
-private const val TOUCH_ART_SHARE = 0.4f
 
 /**
  * Title bars as a share of the room the title has, rather than a width in dp, since fixed bars

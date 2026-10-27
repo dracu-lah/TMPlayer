@@ -550,9 +550,6 @@ class ShellState(
      */
     var refreshAction: (() -> Unit)? = null
 
-    /** A chat's videos as rows of a small poster and the name, rather than tiles. */
-    var chatRows by mutableStateOf(false)
-
     /** Whether the profile popover over the floating bar is open. */
     var profileOpen by mutableStateOf(false)
 

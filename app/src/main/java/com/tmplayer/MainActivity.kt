@@ -58,7 +58,6 @@ import com.tmplayer.i18n.L
 import com.tmplayer.i18n.Translator
 import com.tmplayer.platform.CoalescingTransferNotifier
 import com.tmplayer.data.CacheShelf
-import com.tmplayer.data.CardLayout
 import com.tmplayer.data.ChatKind
 import com.tmplayer.data.ChatSummary
 import com.tmplayer.data.DiskSpace
@@ -632,7 +631,6 @@ private fun Root() {
     val openLastChat by settings.openLastChat.collectAsStateWithLifecycle(initialValue = false)
     val minSize by settings.minSizeBytes.collectAsStateWithLifecycle(initialValue = SizeFilter.DEFAULT_MIN)
     val maxSize by settings.maxSizeBytes.collectAsStateWithLifecycle(initialValue = SizeFilter.DEFAULT_MAX)
-    val chatLayout by settings.chatLayout.collectAsStateWithLifecycle(initialValue = CardLayout.List)
     // When each video was last watched, for the "New" badge on a show's tile.
     val touchTimes = remember(continueWatching, watchedVideos) {
         com.tmplayer.data.NewEpisodes.touchTimes(continueWatching, watchedVideos.values)
@@ -644,7 +642,6 @@ private fun Root() {
             touchedAt = { touchTimes[SettingsStore.progressKey(it.chatId, it.messageId)] },
         )
     }
-    val mediaLayout by settings.mediaLayout.collectAsStateWithLifecycle(initialValue = CardLayout.Grid)
     // The app lock (CP57). Null until the store has answered, which gates nothing: the pad must
     // never flash up over an app that has no PIN.
     val appLock by settings.appLock.collectAsStateWithLifecycle(initialValue = null)
@@ -1843,8 +1840,6 @@ private fun Root() {
                         else pickedTabKey = BrowseSection.encode(section)
                     },
                     folders = folders,
-                    onToggleLayout = { scope.launch { settings.setChatLayout(chatLayout.toggled()) } },
-                    layout = chatLayout,
                     homeRows = homeRows,
                     homeRowsReady = homeViewModel.rowsSettled,
                     homeLayout = homeLayout ?: com.tmplayer.data.HomeLayout(),
@@ -1906,12 +1901,10 @@ private fun Root() {
                         }
                     },
                     onPlay = { play(it, chatTitle = current.chat.title) },
-                    onToggleLayout = { scope.launch { settings.setMediaLayout(mediaLayout.toggled()) } },
                     telegramConnected = telegramConnected,
                     offline = networkStatus == NetworkStatus.Offline && !telegramConnected,
                     onOfflineAction = toast,
                     connectionNotice = connectionNotice,
-                    layout = mediaLayout,
                 )
             }
 
