@@ -18,6 +18,10 @@ ffmpeg $q $SRC -map 0 -map 1 -map 1 $out -c:v mpeg4 -vtag XVID -bf 2 -b:v 200k -
 ffmpeg $q $SRC -map 0 -map 1 $out -c:v msmpeg4 -b:v 200k -g 25 -c:a libmp3lame -ar 44100 -b:a 64k divx3.avi
 ffmpeg $q $SRC -map 0 -map 1 $out $H264 -bf 0 -c:a libmp3lame -ar 44100 -b:a 64k h264-mp3.avi
 ffmpeg $q $SRC -map 0 -map 1 $out -c:v wmv2 -b:v 200k -c:a wmav2 -b:a 64k wmv2.wmv
+# AVIs libav.js cannot finish: a picture it has no decoder for, sound it has none for, a file cut off part way.
+ffmpeg $q $SRC -map 0 -map 1 $out -c:v wmv2 -b:v 200k -c:a libmp3lame -ar 44100 -b:a 64k wmv2.avi
+ffmpeg $q $SRC -map 0 -map 1 $out -c:v mpeg4 -b:v 200k -g 25 -c:a wmav2 -b:a 64k mpeg4-wma.avi
+head -c 143500 xvid-mp3.avi > cut.avi
 # 20 s with three chapters (Intro, The Harbour, Credits): the chapter bar, the skip pill and the autoplay tests.
 printf ';FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=0\nEND=5000\ntitle=Intro\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=5000\nEND=15000\ntitle=The Harbour\n[CHAPTER]\nTIMEBASE=1/1000\nSTART=15000\nEND=20000\ntitle=Credits\n' > chapters.txt
 LONG="-f lavfi -i testsrc2=size=320x180:rate=25:duration=20 -f lavfi -i sine=frequency=440:duration=20:sample_rate=48000 -i chapters.txt -map 0 -map 1 -map_metadata 2"

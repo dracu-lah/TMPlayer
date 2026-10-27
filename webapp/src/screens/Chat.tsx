@@ -112,6 +112,9 @@ export function Chat() {
     onCleanup(() => clearTimeout(waitTimer))
 
     const title = () => (page() ? chatName(page()!) : '')
+    // A call in the JSX, not `settings().rows && form() !== 'tv'`: that would be compiled into a memo,
+    // created anew on every read of the prop from the grid's callbacks, outside any owner.
+    const asRows = () => settings().rows && form() !== 'tv'
     const cards = () => page()?.tiles.map((tile) => tileCard(tile)) ?? []
     const empty = () => {
         const p = page()
@@ -284,7 +287,7 @@ export function Chat() {
             <Show when={empty()}>
                 <p class="muted">{empty()}</p>
             </Show>
-            <VideoList cards={cards()} label={title()} onEnd={atEnd} sponsored={page()?.sponsored} sponsoredBetween={page()?.sponsoredBetween} rows={settings().rows && form() !== 'tv'} />
+            <VideoList cards={cards()} label={title()} onEnd={atEnd} sponsored={page()?.sponsored} sponsoredBetween={page()?.sponsoredBetween} rows={asRows()} />
             <div class="list-foot">
                 <Show when={busy() === 'more'}>
                     <p class="muted">{t('grid.loading_more')}</p>

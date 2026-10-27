@@ -286,8 +286,12 @@ export function VideoList(props: { cards: CardData[]; label?: string; onEnd?: ()
     onCleanup(() => clearTimeout(hoverTimer))
     const progress = useProgress()
     const entries = () => placeSponsored(props.cards, props.sponsored ?? [], props.sponsoredBetween ?? 0)
+    // Plain calls, not `props.rows ? a : b` in the JSX: the compiler would make a memo of that, and
+    // the virtualizer reads `layout` from its own callbacks, outside any owner (one leaked memo per read).
+    const layout = () => (props.rows ? rowLayout : cardLayout)
+    const rowClass = () => (props.rows ? 'rowcards' : 'cards')
     return (
-        <VirtualGrid items={entries()} layout={props.rows ? rowLayout : cardLayout} rowClass={props.rows ? 'rowcards' : 'cards'} label={props.label} onEnd={props.onEnd} wide={isSponsored}>
+        <VirtualGrid items={entries()} layout={layout()} rowClass={rowClass()} label={props.label} onEnd={props.onEnd} wide={isSponsored}>
             {(e) => (isSponsored(e) ? <SponsoredCard item={e} /> : props.rows ? <RowCard card={e} progress={progress(e.item)} /> : <Card card={e} progress={progress(e.item)} />)}
         </VirtualGrid>
     )
