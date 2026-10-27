@@ -547,7 +547,7 @@
     "versions": "{count, plural, one {# version} other {# versions}}",
     "video": "Video",
     "watch_later_add": "Add to Watch later",
-    "watch_later_add_detail": "Keeps this one video on Home, without starring its chat",
+    "watch_later_add_detail": "Saves it in History, Watch later, without starring its chat",
     "watch_later_added": "{title} added to Watch later",
     "watch_later_remove": "Remove from Watch later",
     "watch_later_removed": "{title} removed from Watch later",

@@ -177,4 +177,8 @@ fun BoxScope.TopMessageHost() {
 }
 
 private const val SHOWN_MS = 2_500L
-private const val SHOWN_WITH_ACTION_MS = 5_000L
+/**
+ * A line with Undo stays long enough to reach for it: five seconds was gone before a viewer who
+ * read it first got there (2026-10-27), and Gmail and Google Photos hold theirs about as long as this.
+ */
+private const val SHOWN_WITH_ACTION_MS = 8_000L
