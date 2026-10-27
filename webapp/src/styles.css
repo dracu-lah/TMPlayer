@@ -999,3 +999,29 @@ button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor
 .chat-bar .nav-cell.spinning .icon { animation: spin 800ms linear infinite; }
 .chat-bar .menu-box { position: relative; display: flex; }
 .chat-bar .pop-menu { top: auto; bottom: calc(100% + 14px); right: 50%; transform: translateX(50%); animation: none; }
+
+/* History's select mode: a tick box over each card, and a bar with the count, Select all and Remove (n). */
+.history-actions { display: flex; gap: 16px; align-items: center; }
+.pick { position: relative; display: block; cursor: pointer; border-radius: var(--r-m); }
+.pick input { position: absolute; inset: 0; opacity: 0; margin: 0; width: 100%; height: 100%; cursor: pointer; z-index: 2; }
+.pick-card { pointer-events: none; }
+.pick-box {
+  position: absolute; top: 8px; left: 8px; z-index: 1; width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center; background: rgb(0 0 0 / .45); border: 2px solid #fff; color: transparent;
+}
+.pick.on .pick-box { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.pick.on .pick-card { opacity: .8; }
+.pick input:focus-visible ~ .pick-box { outline: 2px solid var(--accent); outline-offset: 3px; }
+.select-bar {
+  position: fixed; z-index: 7; left: 50%; transform: translateX(-50%);
+  bottom: calc(86px + env(safe-area-inset-bottom)); width: min(480px, calc(100vw - 32px));
+  display: flex; align-items: center; gap: 16px; padding: 8px 8px 8px 16px;
+  background: var(--menu); border: 1px solid var(--line); border-radius: var(--r-l); box-shadow: var(--shadow);
+}
+.select-count { flex: 1; font-size: 14px; }
+.select-bar button.primary { padding: 8px 16px; }
+button.primary.danger:disabled { opacity: .4; }
+/* The long press menu of a history card. */
+.card { -webkit-touch-callout: none; }
+.card-menu .menu-row { display: flex; gap: 16px; align-items: center; background: none; border: 0; color: inherit; text-align: start; padding: 8px 0; font-size: 16px; }
+.card-menu .menu-row small { display: block; color: var(--muted, inherit); opacity: .7; font-size: 13px; }

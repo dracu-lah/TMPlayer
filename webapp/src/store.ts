@@ -323,6 +323,36 @@ export function restoreHistory(snap: HistorySnapshot) {
     setWatchedTick(watchedTick() + 1)
 }
 
+/**
+ * Remove from history (HistoryEdits): each video in `ids` ("chatId:messageId") leaves Continue
+ * watching and Watched together, and stays in its chat. Returns exactly what was taken out (the
+ * saved positions and the watched times, so an Undo puts back the same order), or null when none
+ * of them was in the history.
+ */
+export async function removeFromHistory(ids: string[]): Promise<{ snapshot: HistorySnapshot; count: number } | null> {
+    const wanted = new Set(ids)
+    const [left, done] = await Promise.all([allEntries<Resume>('resume:'), allEntries<number>('watched:')])
+    const snapshot: HistorySnapshot = { resumes: [], watched: [] }
+    const hit = new Set<string>()
+    for (const e of left) {
+        const id = e[0].slice('resume:'.length)
+        if (wanted.has(id)) (snapshot.resumes.push(e), hit.add(id))
+    }
+    for (const e of done) {
+        const id = e[0].slice('watched:'.length)
+        if (wanted.has(id)) (snapshot.watched.push(e), hit.add(id))
+    }
+    if (!hit.size) return null
+    for (const [k] of [...snapshot.resumes, ...snapshot.watched]) remove(k)
+    // The last position kept for a closing page would bring one of them back at the next start.
+    try {
+        const last = JSON.parse(localStorage.getItem(LAST_KEY) ?? 'null') as Last | null
+        if (last?.key && wanted.has(last.key)) localStorage.removeItem(LAST_KEY)
+    } catch {}
+    setWatchedTick(watchedTick() + 1)
+    return { snapshot, count: hit.size }
+}
+
 // Watch later: the video itself is kept, so the list draws without asking Telegram.
 
 export interface Later {

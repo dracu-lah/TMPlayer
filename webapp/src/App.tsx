@@ -8,6 +8,7 @@ import { form, holdForm } from './form'
 import { Home } from './screens/Home'
 import { Nav } from './ui/Nav'
 import { Toaster } from './ui/Toast'
+import { CardMenu } from './ui/CardMenu'
 import { applyUpdate, updateReady } from './install'
 import { t } from './i18n'
 
@@ -118,6 +119,7 @@ function Shell(props: ParentProps) {
                 </Show>
             </Show>
             <Toaster />
+            <CardMenu />
             <Show when={sessionHere() === 'elsewhere'}>
                 <OtherTab />
             </Show>

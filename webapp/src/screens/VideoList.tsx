@@ -1,6 +1,6 @@
 import { createEffect, createResource, createSignal, onCleanup, onMount, Show } from 'solid-js'
 import { A } from '@solidjs/router'
-import { resumes, settings } from '../store'
+import { resumes, settings, watchedTick } from '../store'
 import { loadThumb } from './thumbs'
 import { coverBackground } from './cover'
 import { loadBackdrop, loadPoster, posterSizeFor } from './posters'
@@ -8,6 +8,7 @@ import { warmDataCentres, warmFile } from '../stream/reader'
 import { t } from '../i18n'
 import { form } from '../form'
 import { cardLayout, VirtualGrid } from '../ui/VirtualGrid'
+import { historyMenu } from '../ui/CardMenu'
 import { placeSponsored, SponsoredCard } from './Sponsored'
 import type { SponsoredItem, Tile, VideoItem } from '../tg/types'
 import type { PosterAsk } from '../rules'
@@ -138,7 +139,7 @@ export function tileCard(tile: Tile, showChat = false): CardData {
 
 /** Where each video was left, for the line on its card. */
 export function useProgress(): (v: VideoItem) => number | undefined {
-    const [left] = createResource(async () => new Map((await resumes()).map((r) => [`${r.chatId}:${r.messageId}`, r])))
+    const [left] = createResource(() => ({ tick: watchedTick() }), async () => new Map((await resumes()).map((r) => [`${r.chatId}:${r.messageId}`, r])))
     return (v: VideoItem) => {
         const r = left()?.get(`${v.chatId}:${v.messageId}`)
         const total = r?.length || v.duration
@@ -154,8 +155,9 @@ const intent = (v: VideoItem) => {
 }
 
 /** What every card's link does: warm the file on intent, keep the video it stands for for the page it opens. */
-function cardLink(item: VideoItem, direct?: boolean, replace?: boolean) {
+function cardLink(item: VideoItem, direct?: boolean, replace?: boolean, history?: boolean) {
     return {
+        ...(history ? historyMenu(item) : {}),
         href: cardPath(item, direct),
         state: { video: item },
         replace,
@@ -168,9 +170,9 @@ function cardLink(item: VideoItem, direct?: boolean, replace?: boolean) {
 }
 
 /** One portrait card, which opens the video's page (or plays it, from Continue watching). */
-export function Card(props: { card: CardData; progress?: number; replace?: boolean; direct?: boolean }) {
+export function Card(props: { card: CardData; progress?: number; replace?: boolean; direct?: boolean; history?: boolean }) {
     return (
-        <A class="card" {...cardLink(props.card.item, props.direct, props.replace)}>
+        <A class="card" {...cardLink(props.card.item, props.direct, props.replace, props.history)}>
             <CardArt thumb={props.card.item.thumb} title={props.card.title} poster={props.card.item.poster} progress={props.progress} />
             {/* Under the card, as the apps write it (two lines kept, so the facts line up along a row). */}
             <div class="card-name">{props.card.title}</div>
@@ -187,7 +189,7 @@ export interface Left {
 
 /** Where each video was left, as its Continue watching card says it. */
 export function useLeft(): (v: VideoItem) => Left | undefined {
-    const [left] = createResource(async () => new Map((await resumes()).map((r) => [`${r.chatId}:${r.messageId}`, r])))
+    const [left] = createResource(() => ({ tick: watchedTick() }), async () => new Map((await resumes()).map((r) => [`${r.chatId}:${r.messageId}`, r])))
     return (v: VideoItem) => {
         const r = left()?.get(`${v.chatId}:${v.messageId}`)
         const total = r?.length || v.duration
@@ -228,7 +230,7 @@ export function ContinueCard(props: { item: VideoItem; left?: Left }) {
     })
     const facts = () => [props.item.chat, size(props.item.size)].filter(Boolean).join(dot)
     return (
-        <A class="card continue-card" {...cardLink(props.item, true)}>
+        <A class="card continue-card" {...cardLink(props.item, true, false, form() !== 'tv')}>
             <div class="continue-art" ref={el}>
                 <Show when={src()}>
                     <img class="continue-img" src={src()!} alt="" decoding="async" />

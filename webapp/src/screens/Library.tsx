@@ -1,6 +1,6 @@
 // The viewer's own lists behind the "You" menu: Favourites (the starred chats) and History, with
 // the app's tabs (Recent, Continue, Watch later, Watched), each day under its own heading.
-import { createResource, For, Match, Show, Switch, type JSX } from 'solid-js'
+import { createEffect, createMemo, createResource, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js'
 import { A, useParams } from '@solidjs/router'
 import { CheckmarkCircle02Icon, Clock01Icon, History, PlayIcon, StarIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { api, call } from '../tg/rpc'
@@ -11,6 +11,8 @@ import { Card, ContinueCard, useLeft, useProgress, videoCard } from './VideoList
 import { ChatRow } from './Chats'
 import { form } from '../form'
 import { clearHistoryWithUndo } from '../clearHistory'
+import { historyId, removeWithUndo } from '../historyEdits'
+import { prune, range, toggleAll } from '../ui/selection'
 import type { VideoItem } from '../tg/types'
 
 /** How many videos a tab asks Telegram about at most: the ones further back wait for their own page. */
@@ -79,20 +81,79 @@ export function HistoryPage() {
             if (tab === 'watched') return done()
             if (tab === 'later') return (await laterList()).map((l) => ({ item: l.item, time: l.time }))
             const both = [...(await left()), ...(await done())]
-            return both.sort((a, b) => b.time - a.time)
+            // A video can be in both lists (finished once, left part way since): one card, the newer.
+            const seen = new Set<string>()
+            return both.sort((a, b) => b.time - a.time).filter((e) => !seen.has(historyId(e.item)) && !!seen.add(historyId(e.item)))
         },
     )
     const progress = useProgress()
     const leftOf = useLeft()
     const days = () => byDay(entries.latest ?? [])
+
+    // Select mode (not on Watch later, which keeps its own list): ticks, Select all, Remove (n).
+    const [selecting, setSelecting] = createSignal(false)
+    const [picked, setPicked] = createSignal<ReadonlySet<string>>(new Set())
+    let anchor: string | null = null
+    let confirmDialog!: HTMLDialogElement
+    const order = createMemo(() => (entries.latest ?? []).map((e) => historyId(e.item)))
+    const tv = () => form() === 'tv'
+    // The selection follows what is on the page: an item that vanished (removed, undone away, a tab change) is dropped.
+    createEffect(on(order, (ids) => setPicked((p) => (p.size ? prune(p, ids) : p))))
+    createEffect(on(tab, () => leave(), { defer: true }))
+    const leave = () => {
+        setSelecting(false)
+        setPicked(new Set<string>())
+        anchor = null
+    }
+    const tick = (id: string, shift: boolean) => {
+        const ids = shift ? range(order(), anchor, id) : [id]
+        const on = !picked().has(id)
+        setPicked((p) => {
+            const next = new Set(p)
+            for (const x of ids) (on ? next.add(x) : next.delete(x))
+            return next
+        })
+        anchor = id
+    }
+    const doRemove = async () => {
+        const ids = [...picked()]
+        if (!ids.length) return
+        leave()
+        await removeWithUndo(ids, !tv())
+    }
+    // A TV remote cannot reach the toast's Undo, so it is asked first; the phone and the desktop remove at once.
+    const remove = () => (tv() ? confirmDialog.showModal() : void doRemove())
+    onMount(() => {
+        const keys = (e: KeyboardEvent) => {
+            if (!selecting() || form() !== 'desktop') return
+            const inField = e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) && (e.target as HTMLInputElement).type !== 'checkbox'
+            if (inField) return
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+                e.preventDefault()
+                setPicked(new Set(order()))
+            } else if ((e.key === 'Delete' || e.key === 'Backspace') && picked().size) {
+                e.preventDefault()
+                remove()
+            } else if (e.key === 'Escape' && !confirmDialog.open) leave()
+        }
+        addEventListener('keydown', keys)
+        onCleanup(() => removeEventListener('keydown', keys))
+    })
     return (
         <>
             <PageHead title={t('browse.tab_history_heading')} blurb={meta().blurb()} />
             {/* One click, no question: Continue watching and Watched are cleared and the toast offers Undo for 8 s. Not on Watch later, which it keeps. */}
             <Show when={tab() !== 'later' && days().length}>
-                <button class="link" style={{ 'align-self': 'start' }} type="button" onClick={() => void clearHistoryWithUndo()}>
-                    {t('browse.clear_history')}
-                </button>
+                <div class="history-actions">
+                    <button class="link" type="button" onClick={() => (selecting() ? leave() : setSelecting(true))}>
+                        {selecting() ? t('common.cancel') : t('browse.select')}
+                    </button>
+                    <Show when={!selecting()}>
+                        <button class="link" type="button" onClick={() => void clearHistoryWithUndo()}>
+                            {t('browse.clear_history')}
+                        </button>
+                    </Show>
+                </div>
             </Show>
             <nav class="history-tabs" aria-label={t('browse.tab_history')}>
                 <For each={TABS}>
@@ -120,11 +181,23 @@ export function HistoryPage() {
                                 <h2 class="history-day-title">{d.label}</h2>
                                 <div class="cards" classList={{ 'continue-cards': tab() === 'continue' && form() !== 'tv' }}>
                                     <For each={d.entries}>
-                                        {(e) => (
-                                            <Show when={tab() === 'continue' && form() !== 'tv'} fallback={<Card card={videoCard(e.item)} progress={progress(e.item)} direct={tab() === 'continue'} />}>
-                                                <ContinueCard item={e.item} left={leftOf(e.item)} />
-                                            </Show>
-                                        )}
+                                        {(e) => {
+                                            const id = historyId(e.item)
+                                            const card = (
+                                                <Show when={tab() === 'continue' && form() !== 'tv'} fallback={<Card card={videoCard(e.item)} progress={progress(e.item)} direct={tab() === 'continue'} history={tab() !== 'later' && !tv()} />}>
+                                                    <ContinueCard item={e.item} left={leftOf(e.item)} />
+                                                </Show>
+                                            )
+                                            return (
+                                                <Show when={selecting()} fallback={card}>
+                                                    <label class="pick" classList={{ on: picked().has(id) }}>
+                                                        <input type="checkbox" checked={picked().has(id)} onClick={(ev) => tick(id, ev.shiftKey)} onChange={(ev) => (ev.currentTarget.checked = picked().has(id))} aria-label={e.item.name} />
+                                                        <span class="pick-box" aria-hidden="true"><Icon icon={Tick02Icon} size={16} /></span>
+                                                        <div class="pick-card" inert>{card}</div>
+                                                    </label>
+                                                </Show>
+                                            )
+                                        }}
                                     </For>
                                 </div>
                             </section>
@@ -132,6 +205,35 @@ export function HistoryPage() {
                     </For>
                 </Match>
             </Switch>
+            <Show when={selecting()}>
+                <div class="select-bar" role="toolbar" aria-label={t('browse.select')}>
+                    <span class="select-count" aria-live="polite">{t('browse.selected_count', { count: picked().size })}</span>
+                    <button class="link" type="button" onClick={() => setPicked(toggleAll(picked(), order()))}>
+                        {order().length > 0 && picked().size === order().length ? t('browse.select_none') : t('browse.select_all')}
+                    </button>
+                    <button class="primary danger" type="button" disabled={!picked().size} onClick={remove}>
+                        {t('browse.remove_count', { count: picked().size })}
+                    </button>
+                </div>
+            </Show>
+            <dialog class="confirm" ref={confirmDialog} aria-labelledby="remove-title">
+                <h2 id="remove-title">{t('browse.remove_selected_title', { count: picked().size })}</h2>
+                <p>{t('browse.remove_selected_message', { count: picked().size })}</p>
+                <p class="muted">{t('browse.remove_selected_detail')}</p>
+                <div class="confirm-buttons">
+                    <button class="link" type="button" onClick={() => confirmDialog.close()}>{t('common.cancel')}</button>
+                    <button
+                        class="primary danger"
+                        type="button"
+                        onClick={() => {
+                            confirmDialog.close()
+                            void doRemove()
+                        }}
+                    >
+                        {t('browse.remove_count', { count: picked().size })}
+                    </button>
+                </div>
+            </dialog>
         </>
     )
 }
