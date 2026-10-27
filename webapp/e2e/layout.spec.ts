@@ -89,7 +89,9 @@ test('?tv=1 and ?tv=0 in the address choose TV and Desktop, Settings leaves Layo
     await expect(html).toHaveAttribute('data-form', 'tv')
     await expect(page.getByRole('radio', { name: 'Dark' })).toBeVisible()
     await expect(page.getByRole('radio', { name: 'TV' })).toHaveCount(0)
-    // Another tab, opened with a plain address: the choice stays, and Settings offers it again.
+    // Another tab, opened with a plain address: the choice stays, and Settings offers it again. The
+    // first tab closes first: only one tab can use the account (the second says "open in another tab").
+    await page.close()
     const other = await context.newPage()
     await other.goto('/settings')
     await expect(other.locator('html')).toHaveAttribute('data-form', 'tv')
