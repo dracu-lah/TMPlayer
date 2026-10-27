@@ -9,7 +9,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$out"
 
 fetch() { # url, file, sha256
-    curl -fsSL --retry 3 -o "$out/$2" "$1"
+    curl -fsSL --retry 3 --retry-all-errors -o "$out/$2" "$1"
     echo "$3  $out/$2" | sha256sum -c --quiet -
 }
 fetch https://ffmpeg.org/releases/ffmpeg-9.0.tar.xz ffmpeg-9.0.tar.xz 7f607a00dd0d28a729d5a4811205812eef01cf6ef6155025febb6f36a9062d52
