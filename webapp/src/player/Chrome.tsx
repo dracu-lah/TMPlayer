@@ -1593,11 +1593,14 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     )
 }
 
-/** The top bar's second line: the episode's code and name, else the chat. */
+/**
+ * The top bar's second line: the episode's code and name, then the chat, as the phone, TV and
+ * desktop players write it. The length and size stay in the details.
+ */
 function subtitleLine(info: WatchInfo | null, item: VideoItem): string {
     const ep = info?.episode
-    if (ep) return ep.name ? `${ep.code}  ·  ${ep.name}` : ep.code
-    return info?.chatTitle ?? item.chat
+    const chat = info?.chatTitle || item.chat
+    return [ep ? (ep.name ? `${ep.code}  ·  ${ep.name}` : ep.code) : '', chat].filter((p) => p).join('  ·  ')
 }
 
 /**

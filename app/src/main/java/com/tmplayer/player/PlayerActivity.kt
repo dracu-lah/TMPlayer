@@ -1638,7 +1638,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
 
         override fun title(): String = mediaTitle
-        override fun subtitleLine(): String = mediaSubtitle.ifBlank { chatTitle }
+        override fun subtitleLine(): String = chatTitle.ifBlank { mediaSubtitle }
         override fun audioLanguage(): String? = trackPlan.audioLanguage
 
         override fun subtitleFiles(): List<Triple<File, String, String>> = subtitleFiles.files.mapNotNull { cfg ->
@@ -1744,7 +1744,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         showStatus(L.playerConnecting)
 
         showArtwork()
-        statusMeta?.text = mediaSubtitle.ifBlank { chatTitle }
+        statusMeta?.text = chatTitle.ifBlank { mediaSubtitle }
         statusMeta?.visibility =
             if (statusMeta?.text.isNullOrBlank()) View.GONE else View.VISIBLE
         // The setting as the end of this video will find it ([endLeadsOn]).
@@ -2350,7 +2350,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val name = (episode?.show ?: parsed.title).ifBlank { parsed.title }.ifBlank { mediaTitle }
         val detail = listOfNotNull(
             episode?.label,
-            mediaSubtitle.ifBlank { chatTitle }.takeIf { it.isNotBlank() },
+            // The chat, as YouTube names the channel: the length and size belong in Playback details.
+            chatTitle.ifBlank { mediaSubtitle }.takeIf { it.isNotBlank() },
         ).joinToString("  ·  ")
         controls?.setTitle(name, detail)
     }
