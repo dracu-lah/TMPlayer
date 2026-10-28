@@ -114,9 +114,11 @@ function needsApiId(): Plugin {
 
 /**
  * Built files the service worker leaves for later, fetched (and then kept) only for the videos that
- * need them: the sound decoders, movi-player (player-*, about 10 MB) and hevc.js (hevc-*).
+ * need them: the sound decoders, movi-player (player-*, about 10 MB), hevc.js (hevc-*) and the
+ * subtitle fonts but Malayalam's (subfont-*, for a script the system has no font for), which MSone's
+ * subtitles need offline.
  */
-const NOT_IN_SHELL = /^mediabunny-(ac3|aac-encoder|dts)-|^player-|^hevc-|\.map$/
+const NOT_IN_SHELL = /^mediabunny-(ac3|aac-encoder|dts)-|^player-|^hevc-|^subfont-(?!ml-)|\.map$/
 
 /**
  * Writes the built file list and a version made from it into dist/sw.js, which keeps them for

@@ -83,6 +83,18 @@ function kotlin(): string {
     ].join('\n')
 }
 
+/** The Noto fonts subtitles fall back to (src/player/subfonts.css), with their licence. */
+function fonts(): string {
+    return [
+        'Noto Sans fonts for subtitles',
+        'Licence: SIL Open Font License 1.1',
+        'In assets/subfont-*.woff2, fetched only for a subtitle line in a script the system has no font for.',
+        'Source: https://github.com/google/fonts (ofl/notosans*), cut by ui/fonts/subtitle-fonts.py',
+        '',
+        text('OFL-Noto.txt'),
+    ].join('\n')
+}
+
 /** core-js, in the TV build's separately built polyfill file (vite.config.ts), which the collectors never see. */
 export function coreJs(): string {
     const read = (f: string) => readFileSync(new URL(`./node_modules/core-js/${f}`, import.meta.url), 'utf8')
@@ -126,7 +138,7 @@ export function notices(extra: () => string[] = () => []): { page: Plugin[]; wor
             if (found.size === 0) this.error('rollup-plugin-license found no packages: the notices would be empty')
             const rule = '-'.repeat(80)
             const deps = [...found.values()].sort((a, b) => a.name!.localeCompare(b.name!))
-            const body = [own(), ...deps.map(entry), ...extra(), ffmpeg(), kotlin(), text('LGPL-2.1.txt'), text('Apache-2.0.txt')]
+            const body = [own(), ...deps.map(entry), ...extra(), ffmpeg(), kotlin(), fonts(), text('LGPL-2.1.txt'), text('Apache-2.0.txt')]
             this.emitFile({ type: 'asset', fileName: 'licenses.txt', source: `${body.join(`\n\n${rule}\n\n`)}\n` })
         },
     }
