@@ -21,9 +21,11 @@ class SubtitleFontsTest {
 
     @Test
     fun theConfigTakesTheSystemsOwnFirst() {
-        val text = SubtitleFonts.config("/etc/fonts/fonts.conf", File("/home/a&b/subfonts"), File("/home/a/cache"))
+        val fonts = File("/home/a&b/subfonts")
+        val text = SubtitleFonts.config("/etc/fonts/fonts.conf", fonts, File("/home/a/cache"))
         assertTrue("<include ignore_missing=\"yes\">/etc/fonts/fonts.conf</include>" in text)
-        assertTrue("<dir>/home/a&amp;b/subfonts</dir>" in text)
+        // The path as this system writes it (a drive and backslashes on the Windows runner).
+        assertTrue("<dir>${fonts.absolutePath.replace("&", "&amp;")}</dir>" in text)
         assertTrue(text.indexOf("<include") < text.indexOf("<dir>"))
     }
 
