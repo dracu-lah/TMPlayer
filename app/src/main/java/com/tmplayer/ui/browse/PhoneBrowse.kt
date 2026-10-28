@@ -314,6 +314,7 @@ internal fun PhoneBrowse(
             onPlay = { onPlayMedia(it, chatTitle) },
             onDismiss = { searchSeries = null },
             chatTitle = chatTitle,
+            onOpenChat = chats.firstOrNull { it.id == series.cover.chatId }?.let { chat -> { searchSeries = null; search.remember(); onOpenChat(chat) } },
         )
     }
 }

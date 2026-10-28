@@ -4,8 +4,9 @@ import { Cancel01Icon, ClapperboardIcon, Clock01Icon, ListVideoIcon, PlayIcon, R
 import { api, errorText } from '../tg/rpc'
 import { back } from '../session'
 import { t } from '../i18n'
-import { dropResume, getResume, laterIds, progress as readProgress, setLater, setWatched, settings, watchedList, watchedTick } from '../store'
+import { dropResume, getResume, laterIds, progress as readProgress, setLater, setShowLater, setWatched, setWatchedMany, settings, showLaterId, watchedList, watchedTick } from '../store'
 import { chatGone, forgetGone } from '../goneVideos'
+import { showChoices, type MarkChoice } from './showMarks'
 import { Icon, type IconData } from '../ui/Icon'
 import { TmdbMark } from '../ui/TmdbMark'
 import { TitleLogo } from '../ui/TitleLogo'
@@ -454,18 +455,80 @@ function Person(props: { person: { name: string; role: string; photo: string | n
     )
 }
 
-/** The show's episodes, a season at a time, the one this page is about marked. */
+/**
+ * The show's episodes, a season at a time, the one this page is about marked, the watched ones
+ * ticked. Over them the show's own actions, as the apps' show page has them (HX20): Watch later for
+ * the whole show, and Mark episodes, whose card lists the season's and the show's lines with how
+ * many episodes each changes, so picking one is the confirmation.
+ */
 function Episodes(props: { info: WatchInfo; current: VideoItem }) {
     const progress = useProgress()
     const seasonOf = () => props.info.seasons.find((s) => s.episodes.some((e) => e.item.messageId === props.current.messageId))?.number ?? props.info.seasons[0]?.number
     const [picked, setPicked] = createSignal<number | null>(null)
     const season = createMemo(() => props.info.seasons.find((s) => s.number === (picked() ?? seasonOf())) ?? props.info.seasons[0])
+    const [seen] = createResource(watchedTick, async () => new Set((await watchedList()).map((w) => `${w.chatId}:${w.messageId}`)))
+    const watchedSet = () => seen.latest ?? new Set<string>()
+    const seasons = () => props.info.seasons.map((s) => ({ number: s.number, episodes: s.episodes.map((e) => e.item) }))
+    const choices = createMemo(() => {
+        const all = seasons()
+        return showChoices(all, all.find((s) => s.number === season()?.number), watchedSet())
+    })
+    const showLater = () => laterIds().has(showLaterId(props.current.chatId, props.info.title))
+    const [said, setSaid] = createSignal('')
+    let marks!: HTMLDialogElement
+    const pick = (choice: MarkChoice<VideoItem>) => {
+        marks.close()
+        setWatchedMany(choice.episodes, choice.watched)
+        // Watched whole, the show leaves Watch later, as a finished video does in the apps.
+        if (choice.watched && choice.episodes.length >= props.info.seasons.reduce((n, s) => n + s.episodes.filter((e) => !watchedSet().has(`${e.item.chatId}:${e.item.messageId}`)).length, 0)) {
+            setShowLater(props.current, props.info.title, false)
+        }
+        setSaid(choice.watched ? t('series.marked_watched', { count: choice.episodes.length }) : t('series.marked_unwatched', { count: choice.episodes.length }))
+    }
+    const label = (c: MarkChoice<VideoItem>) =>
+        c.scope === 'season'
+            ? t(c.watched ? 'series.mark_season_watched' : 'series.mark_season_unwatched', { number: c.season ?? 1 })
+            : t(c.watched ? 'series.mark_show_watched' : 'series.mark_show_unwatched')
     return (
         <section class="detail-episodes" id="detail-episodes">
             <h2 class="detail-section with-icon">
                 <Icon icon={ListVideoIcon} size={20} />
                 {t('detail.episodes')}
             </h2>
+            <div class="detail-rounds show-actions">
+                <Round icon={Tick02Icon} label={t('series.mark_title')} on={choices().length > 0 && choices().every((c) => !c.watched)} onClick={() => marks.showModal()} />
+                <Round
+                    icon={Clock01Icon}
+                    label={showLater() ? t('detail.watch_later_remove') : t('detail.watch_later_add')}
+                    on={showLater()}
+                    onClick={() => {
+                        const on = !showLater()
+                        setShowLater(props.current, props.info.title, on)
+                        setSaid(on ? t('detail.watch_later_added', { title: props.info.title }) : t('detail.watch_later_removed', { title: props.info.title }))
+                    }}
+                />
+            </div>
+            <p class="muted small" role="status" aria-live="polite">{said()}</p>
+            <dialog class="confirm card-menu" ref={marks} aria-labelledby="marks-title" onClick={(e) => e.target === marks && marks.close()}>
+                <h2 id="marks-title">{t('series.mark_title')}</h2>
+                <p class="muted">{props.info.title}</p>
+                <Show when={choices().length} fallback={<p class="muted">{t('series.all_watched')}</p>}>
+                    <For each={choices()}>
+                        {(c) => (
+                            <button class="menu-row" type="button" onClick={() => pick(c)}>
+                                <Icon icon={c.watched ? Tick02Icon : Cancel01Icon} size={22} />
+                                <span>
+                                    {label(c)}
+                                    <small>{t('series.episodes_count', { count: c.episodes.length })}</small>
+                                </span>
+                            </button>
+                        )}
+                    </For>
+                </Show>
+                <div class="confirm-buttons">
+                    <button class="link" type="button" onClick={() => marks.close()}>{t('common.cancel')}</button>
+                </div>
+            </dialog>
             <div class="season-tabs" role="tablist">
                 <For each={props.info.seasons}>
                     {(s) => (
@@ -485,6 +548,11 @@ function Episodes(props: { info: WatchInfo; current: VideoItem }) {
                                 <A class="episode" classList={{ playing: here() }} href={watchPath(e.item)} state={{ video: e.item }} aria-current={here() ? 'true' : undefined}>
                                     <span class="episode-code">{e.code}</span>
                                     <span class="episode-name">{e.name ?? shortLength(e.item.duration)}</span>
+                                    <Show when={watchedSet().has(`${e.item.chatId}:${e.item.messageId}`)}>
+                                        <span class="episode-watched" role="img" aria-label={t('detail.watched_line')}>
+                                            <Icon icon={Tick02Icon} size={16} />
+                                        </span>
+                                    </Show>
                                     <Show when={progress(e.item)}>
                                         {(p) => <span class="episode-progress"><span style={{ width: `${Math.min(100, p() * 100)}%` }} /></span>}
                                     </Show>

@@ -45,7 +45,10 @@ on the hardware decoder.
 is recognized locally. During playback, previous and next controls move between neighbouring
 episodes already present in the same chat, on a remote and under a thumb alike, and when one
 finishes the next starts on its own after a countdown you can stop. A switch in Settings turns
-that off.
+that off. A show has what a single video has: put the whole show on Watch later, mark a season or
+the whole show as watched or unwatched (the choice names how many episodes it changes), and go
+to its chat from Home or search. In the apps, hold a show's card (or right click it on the
+desktop) for the same menu.
 
 **Remembers where you stopped.** Every video gets its own saved position. Hold OK in Continue
 watching to forget one, or clear the whole list at once from its heading or from Settings.

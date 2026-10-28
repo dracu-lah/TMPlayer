@@ -94,7 +94,7 @@ object HistoryEdits {
     /** Empties Watch later, as the list shows it. */
     suspend fun clearLater(watched: WatchedStore): HistoryUndo {
         val all = watched.watchLater.items.first()
-        return removeLater(watched, all.map { it.key }, all.size)
+        return removeLater(watched, all.map { it.id }, all.size)
     }
 
     /** Puts back what [undo] took. Safe to call twice: what is there already stays. */
@@ -105,7 +105,7 @@ object HistoryEdits {
         pushLater(settings, undo.resume.isNotEmpty())
     }
 
-    private suspend fun pushLater(settings: SettingsStore, changed: Boolean) {
+    internal suspend fun pushLater(settings: SettingsStore, changed: Boolean) {
         if (changed && runCatching { settings.resumeSyncNow() }.getOrDefault(false)) ResumeSync.pushSoon(settings)
     }
 }

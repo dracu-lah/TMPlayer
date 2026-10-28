@@ -686,15 +686,23 @@ internal fun HomePane(
                                 }
                             }
                             is HomeRow.WatchLater -> TileRow(start, end, rowTiles) {
-                                items(row.records, key = { "l-${it.key}" }) { record ->
+                                items(row.records, key = { "l-${it.id}" }) { record ->
                                     LaunchedEffect(record.key) { onLaterArtWanted(record) }
                                     val item = art[record.key] ?: remember(record) { record.toMediaItem() }
+                                    val holdShow = LocalSeriesHold.current
+                                    val stub = remember(record) { record.stubSeries() }
                                     MediaCard(
                                         item = item,
-                                        watched = watch.point(item),
+                                        watched = if (record.isShow) null else watch.point(item),
+                                        // A show saved whole (HX20) is named as the show, its episode's picture on it.
+                                        title = record.title.takeIf { record.isShow },
                                         onClick = { onOpenWatchLater(record) },
-                                        // The detail panel, which offers Remove from Watch later.
-                                        onLongClick = { onHoldMedia(item, record.chatTitle.ifEmpty { chatTitle(record.chatId) }) },
+                                        // The detail panel, which offers Remove from Watch later; a show's menu for a show.
+                                        onLongClick = if (stub != null && holdShow != null) {
+                                            { holdShow(stub) }
+                                        } else {
+                                            { onHoldMedia(item, record.chatTitle.ifEmpty { chatTitle(record.chatId) }) }
+                                        },
                                         dense = touch,
                                         modifier = Modifier.width(wideWidth(touch))
                                             .then(if (isFirst && record === row.records.first()) Modifier.focusRequester(first) else Modifier),
@@ -886,6 +894,9 @@ internal fun HomePane(
             onDismiss = { opened.open(null) },
             onLongClick = { onHoldMedia(it, chatTitle(it.chatId)) },
             onDownload = onDownloadSeason,
+            // Home is outside every chat: the page names the show's and goes to it (HX20).
+            chatTitle = chatTitle(series.cover.chatId),
+            onOpenChat = { opened.open(null); onOpenChat(series.cover.chatId) },
         )
     }
 }

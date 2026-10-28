@@ -233,6 +233,12 @@ private fun WatchedTile(
 @Composable
 fun WatchLaterPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
     val s = LocalStrings.current
+    // A show saved whole (HX20): its page over the list, made whole from its chat; Close comes back here.
+    var openShow by remember { androidx.compose.runtime.mutableStateOf<com.tmplayer.data.Series?>(null) }
+    openShow?.let { shown ->
+        SeriesPage(state, shown, rememberSeriesWatch(state), onClose = { openShow = null })
+        return
+    }
     val saved by state.watched.watchLater.items.collectAsState(initial = null)
     val records = remember(saved, state.historySort) { saved?.let { historyOrder(state, it) { record -> record.toMediaItem() } } }
     val progress by state.settings.watchProgress.collectAsState(initial = emptyMap())
@@ -243,7 +249,7 @@ fun WatchLaterPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
     val undoToast = com.tmplayer.ui.components.rememberActionToast()
     val removeCards: (List<WatchLaterRecord>) -> Unit = { cards ->
         runHistoryEdit(scope, state, undoToast, toast, { s.browseRemovedFromWatchLater(it) }, s.browseUndo) { _, w ->
-            com.tmplayer.data.HistoryEdits.removeLater(w, cards.map { it.key }, cards.size)
+            com.tmplayer.data.HistoryEdits.removeLater(w, cards.map { it.id }, cards.size)
         }
     }
     val clearAll: () -> Unit = {
@@ -290,9 +296,9 @@ fun WatchLaterPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
                         verticalArrangement = Arrangement.spacedBy(20.dp),
                         modifier = Modifier.fillMaxSize().navKeys(nav) { current.size },
                     ) {
-                        itemsIndexed(list, key = { _, it -> it.key }) { index, record ->
+                        itemsIndexed(list, key = { _, it -> it.id }) { index, record ->
                             LaunchedEffect(record) { state.noteChatTitle(record.chatId, record.chatTitle) }
-                            WatchLaterTile(state, record, progress[record.key]?.fraction, nav, index) {
+                            WatchLaterTile(state, record, progress[record.key]?.fraction, nav, index, onOpenShow = { openShow = it }) {
                                 // The card leaving this page is the answer, with Undo.
                                 removeCards(listOf(record))
                             }
@@ -305,7 +311,7 @@ fun WatchLaterPage(state: ShellState, tabs: @Composable () -> Unit = {}) {
                         ScrollToTop(grid)
                     }
                     // The hold to scroll handle on a long list, the scrollbar on a short one.
-                    val byKey = remember(list) { list.associateBy { it.key } }
+                    val byKey = remember(list) { list.associateBy { it.id } }
                     val byName = state.historySort == com.tmplayer.ui.browse.ChatSort.Name
                     FastScroller(grid, label = { key -> if (byName) byKey[key]?.let { com.tmplayer.ui.browse.ScrollLabels.letter(it.title) } else null }) {
                         VerticalScrollbar(rememberScrollbarAdapter(grid), Modifier.align(Alignment.CenterEnd).fillMaxHeight())
@@ -323,31 +329,40 @@ private fun WatchLaterTile(
     fraction: Float?,
     nav: KeyboardNav?,
     index: Int,
+    /** Opens a show saved whole (HX20) on its page. */
+    onOpenShow: (com.tmplayer.data.Series) -> Unit = {},
     onRemove: () -> Unit,
 ) {
     val s = LocalStrings.current
     // The video as Telegram describes it once it answers, for its thumbnail, as on Home.
     val item = rememberRecordItem(record.chatId, record.messageId, remember(record) { record.toMediaItem() })
+    // A show saved whole: named as the show, opening its page; one whose episode no longer reads as
+    // one plays as the video it was saved by.
+    val show = remember(record) { record.stubSeries() }
+    val open: (() -> Unit)? = show?.let { { onOpenShow(it) } }
     Poster(
         state = state,
         nav = nav,
         index = index,
         item = item,
         chatTitle = record.chatTitle,
-        progress = fraction,
+        progress = if (record.isShow) null else fraction,
         art = { OnHome { OnlineArt(item, Modifier.fillMaxSize()) { RecordArt(item) } } },
         subtitle = listOfNotNull(
             record.chatTitle.ifBlank { null },
+            s.seriesShowLabel.takeIf { record.isShow },
             record.durationSec.takeIf { it > 0 }?.let(MediaMapper::formatDuration),
             record.sizeBytes.takeIf { it > 0 }?.let(MediaMapper::formatSize),
         ).joinToString("  ·  "),
+        titleText = record.title.takeIf { record.isShow },
         markToggle = false,
         // The record does not know whether its chat restricts saving, so no download line is offered.
         fileMenu = false,
+        onOpen = open,
         extraMenu = { close ->
-            DropdownMenuItem(text = { Text(s.playerPlay) }, onClick = {
+            DropdownMenuItem(text = { Text(if (open != null) s.detailOpenDetails else s.playerPlay) }, onClick = {
                 close()
-                state.openPlayer(item, startFromBeginning = false)
+                if (open != null) open() else state.openPlayer(item, startFromBeginning = false)
             })
             DropdownMenuItem(text = { Text(s.detailWatchLaterRemove) }, onClick = {
                 close()

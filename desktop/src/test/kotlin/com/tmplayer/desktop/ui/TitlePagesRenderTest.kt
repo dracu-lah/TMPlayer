@@ -153,6 +153,9 @@ class TitlePagesRenderTest {
                 val theme = if (dark) "dark" else "light"
                 save("series-plain-tall-$theme.png", render(412, 1200, dark) { Series(show) })
                 save("series-plain-wide-$theme.png", render(960, 540, dark) { Series(show) })
+                // HX20: saved for later (the switch filled), and right to left.
+                save("series-later-tall-$theme.png", render(412, 1200, dark) { Series(show, later = true) })
+                save("series-rtl-tall-$theme.png", render(412, 1200, dark) { androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Rtl) { Series(show) } })
             }
         } finally {
             OnlineMetadata.current = null
@@ -232,13 +235,15 @@ class TitlePagesRenderTest {
     }
 
     @Composable
-    private fun Series(show: com.tmplayer.data.Series) {
+    private fun Series(show: com.tmplayer.data.Series, later: Boolean = false) {
         SeriesPanel(
             show,
             watch,
             onPlay = {},
             onDownload = { },
             chatTitle = "Weekend series",
+            // The show's own Watched, Watch later and Go to the chat (HX20).
+            showActions = com.tmplayer.ui.browse.ShowActions(watchLater = later, onMark = {}, onOpenChat = {}, chatTitle = "Weekend series"),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
             modifier = Modifier.fillMaxSize(),
         )

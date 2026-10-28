@@ -91,6 +91,26 @@ class WatchedStore(private val store: DataStore<Preferences>) {
         }
     }
 
+    /**
+     * Marks many videos watched by hand in one edit (a season or a whole show, HX20), each taken
+     * off Watch later as [markWatched] does, and every one of [copies] too. One write for a show of
+     * 500 episodes rather than 500, the cap applied once after.
+     */
+    suspend fun markAllWatched(records: List<WatchedRecord>, copies: List<MediaItem> = emptyList()) {
+        if (records.isEmpty()) return
+        store.edit { prefs ->
+            for (record in records) {
+                val key = keyOf(record.chatId, record.messageId)
+                val before = WatchedRecord.decode(record.key, prefs[key])
+                // Already watched: kept as it was, so the Watched list keeps the day it was seen.
+                if (before == null) prefs[key] = record.encode()
+                prefs.remove(WatchLaterStore.keyOf(record.chatId, record.messageId))
+            }
+            for (copy in copies) prefs.remove(WatchLaterStore.keyOf(copy.chatId, copy.messageId))
+            evictOldest(prefs)
+        }
+    }
+
     /** Empties the list. Keys are collected first: the map cannot be walked while it is written. */
     suspend fun clear() {
         store.edit { prefs ->

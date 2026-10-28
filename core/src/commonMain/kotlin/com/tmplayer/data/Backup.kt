@@ -361,6 +361,7 @@ object Backups {
         put("durationSec", w.durationSec)
         put("mime", w.mimeType)
         put("addedAt", w.addedAt)
+        if (w.isShow) put("series", w.series)
     }
 
     private fun bookmarkJson(b: Bookmark) = JSONObject().apply {
@@ -484,6 +485,7 @@ object Backups {
         durationSec = json.longOrNull("durationSec")?.toInt() ?: 0,
         mimeType = json.optString("mime"),
         addedAt = json.longOrNull("addedAt") ?: return null,
+        series = json.optString("series").trim(),
     )
 
     private fun bookmarkOf(json: JSONObject): Bookmark? = Bookmark(
@@ -529,7 +531,7 @@ object Backups {
             settingsChanged = writes.keys.count { it in SETTINGS } + metaChanged,
             favouritesAdded = (backup.favourites - favouritesBefore).size,
             watchedAdded = backup.watched.count { "$WATCHED_PREFIX${it.key}" !in watched },
-            watchLaterAdded = backup.watchLater.count { "$WATCH_LATER_PREFIX${it.key}" !in watched },
+            watchLaterAdded = backup.watchLater.count { "$WATCH_LATER_PREFIX${it.id}" !in watched },
             bookmarksAdded = bookmarksToAdd(bookmarks, backup).size,
             resumeAdded = writes.keys.count { it.startsWith("resume_") },
             memoryAdded = writes.keys.count { memoryKind(it) != null },
@@ -598,8 +600,8 @@ object Backups {
             put(name, kept.encode())
         }
         for (record in backup.watchLater) {
-            val name = WATCH_LATER_PREFIX + record.key
-            val mine = WatchLaterRecord.decode(record.key, device[name] as? String)
+            val name = WATCH_LATER_PREFIX + record.id
+            val mine = WatchLaterRecord.decode(record.id, device[name] as? String)
             if (mine == null || record.addedAt > mine.addedAt) put(name, record.encode())
         }
     }

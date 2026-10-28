@@ -221,7 +221,8 @@ object TvChannels {
     ): List<Program> {
         // A record keeps no word of the chat's saving rules; the video as Telegram described it
         // for the tile's picture does, and one restricted since it was saved stays off.
-        val kept = records.filter { art[it.key]?.canBeSaved != false }.take(LIMIT)
+        // A show (HX20) is left out: the launcher plays what a card names, and a show is a page to open.
+        val kept = records.filter { !it.isShow && art[it.key]?.canBeSaved != false }.take(LIMIT)
         return kept.mapIndexed { index, record ->
             val item = record.toMediaItem()
             fileProgram(Channel.WatchLater, item, record.chatTitle, progress, kept.size - index, thumbnail = art[record.key] ?: item)

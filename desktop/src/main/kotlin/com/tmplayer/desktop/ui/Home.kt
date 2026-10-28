@@ -410,8 +410,8 @@ internal fun HomeRowsView(
                                 }
                                 // The card a chat's grid draws, so the pane offers Remove from Watch later.
                                 is HomeRow.WatchLater -> Strip(side) {
-                                    items(row.records, key = { "l-${it.key}" }) { record ->
-                                        Box(Modifier.width(sizes.card)) { LaterCell(state, record, art, onLaterArtWanted) }
+                                    items(row.records, key = { "l-${it.id}" }) { record ->
+                                        Box(Modifier.width(sizes.card)) { LaterCell(state, record, art, onLaterArtWanted) { openSeries = it } }
                                     }
                                 }
                                 is HomeRow.NewEpisodes -> Strip(side) {
@@ -498,7 +498,7 @@ private fun RowPage(
                     )
                     is HomeRow.WatchLater -> listOf(
                         sizes.card to (row.records + row.more).map { record ->
-                            "l-${record.key}" to @Composable { LaterCell(state, record, art, onLaterArtWanted) }
+                            "l-${record.id}" to @Composable { LaterCell(state, record, art, onLaterArtWanted, onOpenSeries) }
                         },
                     )
                     is HomeRow.NewEpisodes -> listOf(
@@ -648,11 +648,39 @@ private fun LaterCell(
     record: WatchLaterRecord,
     art: Map<String, MediaItem>,
     onLaterArtWanted: (WatchLaterRecord) -> Unit,
+    /** A show saved whole (HX20): its page. */
+    onOpenShow: (Series) -> Unit = {},
 ) {
     LaunchedEffect(record.key) { onLaterArtWanted(record) }
     LaunchedEffect(record.key) { state.noteChatTitle(record.chatId, record.chatTitle) }
     val item = art[record.key] ?: remember(record) { record.toMediaItem() }
-    OnHome { MediaTile(state, item, record.chatTitle, outsideChat = true) }
+    val show = remember(record) { record.stubSeries() }
+    if (show == null) {
+        OnHome { MediaTile(state, item, record.chatTitle, outsideChat = true) }
+        return
+    }
+    // A show saved whole: named as the show, its episode's picture on it, opening the show's page.
+    Poster(
+        state = state,
+        nav = null,
+        index = 0,
+        item = item,
+        chatTitle = record.chatTitle,
+        progress = null,
+        art = { OnHome { OnlineArt(item, Modifier.fillMaxSize()) { RecordArt(item) } } },
+        subtitle = listOfNotNull(record.chatTitle.ifBlank { null }, LocalStrings.current.seriesShowLabel).joinToString("  ·  "),
+        titleText = record.title,
+        markToggle = false,
+        fileMenu = false,
+        onOpen = { onOpenShow(show) },
+        extraMenu = { close ->
+            androidx.compose.material3.DropdownMenuItem(text = { Text(LocalStrings.current.detailOpenDetails) }, onClick = { close(); onOpenShow(show) })
+            androidx.compose.material3.DropdownMenuItem(text = { Text(LocalStrings.current.detailWatchLaterRemove) }, onClick = {
+                close()
+                com.tmplayer.platform.Background.scope.launch { runCatching { state.watched.watchLater.remove(record) } }
+            })
+        },
+    )
 }
 
 /** A new episode of a show in progress, with the New badge on its art. */
@@ -689,7 +717,7 @@ private fun ShelfCell(
 ) {
     when (entry) {
         is ShelfEntry.File -> OnHome { MediaTile(state, entry.item, chatTitle(entry.item.chatId), outsideChat = true, poster = poster) }
-        is ShelfEntry.Show -> SeriesPoster(entry.series, rememberSeriesWatch(state), onOpen = { onOpenSeries(entry.series) }, poster = poster)
+        is ShelfEntry.Show -> SeriesPoster(entry.series, rememberSeriesWatch(state), onOpen = { onOpenSeries(entry.series) }, poster = poster, state = state)
     }
 }
 

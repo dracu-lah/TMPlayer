@@ -625,6 +625,9 @@ internal fun TvSearchPage(
         account = account,
     )
     opened?.let { (series, chatTitle) ->
-        SeriesOpened(series = series, watch = watch, onPlay = { onPlayMedia(it, chatTitle) }, onDismiss = { opened = null }, chatTitle = chatTitle)
+        SeriesOpened(
+            series = series, watch = watch, onPlay = { onPlayMedia(it, chatTitle) }, onDismiss = { opened = null }, chatTitle = chatTitle,
+            onOpenChat = chats.firstOrNull { it.id == series.cover.chatId }?.let { chat -> { opened = null; search.remember(); onOpenChat(chat) } },
+        )
     }
 }

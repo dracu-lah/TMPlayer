@@ -53,6 +53,12 @@ import com.tmplayer.data.SettingsStore
 import com.tmplayer.ui.browse.SeriesArt
 import com.tmplayer.ui.browse.SeriesPanel
 import com.tmplayer.ui.browse.SeriesWatch
+import com.tmplayer.ui.browse.ShowMenu
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.onPointerEvent
+import com.tmplayer.ui.browse.rememberShowActions
 import com.tmplayer.ui.browse.seriesProgressLine
 import com.tmplayer.ui.browse.seriesSummary
 import com.tmplayer.ui.components.rememberToast
@@ -87,6 +93,7 @@ internal fun rememberSeriesWatch(state: ShellState): SeriesWatch {
  * the show.
  */
 @Composable
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 internal fun SeriesPoster(
     series: Series,
     watch: SeriesWatch,
@@ -95,6 +102,13 @@ internal fun SeriesPoster(
     index: Int = 0,
     /** A 2:3 poster card, as in a chat's grid of films and shows. */
     poster: Boolean = false,
+    /**
+     * For the show's menu ([ShowMenu]) on a right click or the context menu key, as a video's
+     * poster has its own (HX20); null leaves the menu out.
+     */
+    state: ShellState? = null,
+    /** In a grid outside the show's chat (Home): the menu offers Go to it. */
+    outsideChat: Boolean = true,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
@@ -104,19 +118,47 @@ internal fun SeriesPoster(
     val scale by animateFloatAsState(if (hovered || focused) 1.05f else 1f)
     val requester = remember { FocusRequester() }
     val progress = watch.progress(series)
+    var menu by remember(series.key) { mutableStateOf(false) }
     val behaviour = Modifier
             .hoverable(interaction)
             .then(if (nav != null) Modifier.navCell(nav, index, requester) else Modifier.focusRequester(requester))
             .onFocusChanged { hasFocus = it.isFocused }
             .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.NumPadEnter || event.key == Key.Spacebar)) {
-                    onOpen()
-                    true
-                } else {
-                    false
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when {
+                    event.key == Key.Enter || event.key == Key.NumPadEnter || event.key == Key.Spacebar -> {
+                        onOpen()
+                        true
+                    }
+                    state != null && event.key == Key.Menu -> {
+                        menu = true
+                        true
+                    }
+                    else -> false
                 }
             }
+            .then(
+                if (state != null) {
+                    Modifier.onPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Press) { event ->
+                        val macContext = com.tmplayer.desktop.os.OsInfo.isMac && event.keyboardModifiers.isCtrlPressed && event.buttons.isPrimaryPressed
+                        if (event.buttons.isSecondaryPressed || macContext) menu = true
+                    }
+                } else {
+                    Modifier
+                },
+            )
             .clickable(interactionSource = interaction, indication = null, onClick = onOpen)
+    if (menu && state != null) {
+        val whole = com.tmplayer.ui.browse.rememberWholeSeries(series)
+        val toast = rememberToast()
+        val actions = rememberShowActions(
+            whole, watch, state.settings, state.watched,
+            chatTitle = state.chatTitleOf(series.cover.chatId),
+            onMessage = toast,
+            onOpenChat = if (outsideChat) state.chatOf(series.cover.chatId)?.let { chat -> { state.go(Destination.Chats); state.openChat(chat) } } else null,
+        )
+        ShowMenu(whole, watch, actions, onDismiss = { menu = false; runCatching { requester.requestFocus() } }, onOpen = onOpen)
+    }
     Column(
         behaviour,
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -162,6 +204,8 @@ internal fun SeriesPage(
     watch: SeriesWatch,
     onClose: () -> Unit,
     startOpen: Boolean = false,
+    /** Opened outside the show's chat (Home, search, Watch later): the page offers Go to it. */
+    outsideChat: Boolean = true,
 ) {
     // Every episode its chat holds, not only those the screen behind had read.
     val series = com.tmplayer.ui.browse.rememberWholeSeries(shown)
@@ -216,6 +260,13 @@ internal fun SeriesPage(
             chatTitle = state.chatTitleOf(series.cover.chatId),
             // Over the backdrop on a dark disc, in a band that fills in as the page scrolls.
             onBack = onClose,
+            // Watch later, Mark as watched and, from outside the show's chat, Go to it (HX20).
+            showActions = rememberShowActions(
+                series, watch, state.settings, state.watched,
+                chatTitle = state.chatTitleOf(series.cover.chatId),
+                onMessage = toast,
+                onOpenChat = if (outsideChat) state.chatOf(series.cover.chatId)?.let { chat -> { onClose(); state.go(Destination.Chats); state.openChat(chat) } } else null,
+            ),
         )
     }
 }

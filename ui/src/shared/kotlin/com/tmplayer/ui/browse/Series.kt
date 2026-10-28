@@ -758,9 +758,16 @@ fun SeriesPanel(
      * Resume; null leaves it out.
      */
     onStartOver: ((MediaItem) -> Unit)? = null,
+    /**
+     * Watch later, Mark as watched (the season shown or the whole show, through [ShowMenu]) and
+     * Go to the chat, as round buttons after Play (HX20); null leaves them out.
+     */
+    showActions: ShowActions? = null,
 ) {
     val s = LocalStrings.current
     val tv = !isTouch()
+    // The marks card, open while the Watched button's choices are up. Kept in one holder: see HX1 below.
+    val marking = remember(series.key) { mutableStateOf(false) }
     val progress = watch.progress(series)
     val next = progress.next
     var season by rememberSaveable(series.key) {
@@ -1054,6 +1061,8 @@ fun SeriesPanel(
                 if (onStartOver != null && (watch.pointOf(target)?.positionMs ?: 0L) > 0L) {
                     add(PageAction(s.detailStartOver, TmIcons.Refresh, { onStartOver(copyOf(target, next?.item ?: watch.pick(target, progress))) }))
                 }
+                // What a video's page offers beside its pill, for the show (HX20).
+                showActions?.let { addAll(showPageActions(it, progress.finished, marking, s)) }
                 if (trailer != null || holdTrailer) add(PageAction(s.metadataTrailer, TrailerIcon, { trailer?.let(trailers::open); Unit }))
                 if (downloads) {
                     add(
@@ -1121,7 +1130,8 @@ fun SeriesPanel(
                         others.forEach { action ->
                             RoundAction(
                                 action.label, action.icon, action.run,
-                                short = roundLabel(action.label, s),
+                                short = action.short ?: roundLabel(action.label, s),
+                                toggles = action.toggles,
                                 ghost = trailerGhost && action.label == s.metadataTrailer,
                                 waiting = trailerGhost && action.label == s.metadataTrailer && !extrasState.settled,
                                 progress = action.progress,
@@ -1138,7 +1148,8 @@ fun SeriesPanel(
                         others.forEach { action ->
                             RoundAction(
                                 action.label, action.icon, action.run,
-                                short = roundLabel(action.label, s),
+                                short = action.short ?: roundLabel(action.label, s),
+                                toggles = action.toggles,
                                 ghost = trailerGhost && action.label == s.metadataTrailer,
                                 waiting = trailerGhost && action.label == s.metadataTrailer && !extrasState.settled,
                                 progress = action.progress,
@@ -1158,7 +1169,8 @@ fun SeriesPanel(
                             others.forEach { action ->
                             RoundAction(
                                 action.label, action.icon, action.run,
-                                short = roundLabel(action.label, s),
+                                short = action.short ?: roundLabel(action.label, s),
+                                toggles = action.toggles,
                                 ghost = trailerGhost && action.label == s.metadataTrailer,
                                 waiting = trailerGhost && action.label == s.metadataTrailer && !extrasState.settled,
                                 progress = action.progress,
@@ -1288,6 +1300,43 @@ fun SeriesPanel(
         onBack?.let { back ->
             PageBackBand(list, meta?.title?.takeIf { it.isNotBlank() } ?: series.title, back, barInsets, Modifier.align(Alignment.TopStart))
         }
+    }
+    if (showActions != null && marking.value) {
+        ShowMenu(series, watch, showActions, onDismiss = { marking.value = false }, season = shown, marksOnly = true)
+    }
+}
+
+/**
+ * The show's own round buttons on its page (HX20), in a video page's order: Watched (its choices
+ * in [ShowMenu], [marking] opening them), Watch later, then the chat.
+ */
+private fun showPageActions(
+    actions: ShowActions,
+    allWatched: Boolean,
+    marking: androidx.compose.runtime.MutableState<Boolean>,
+    s: com.tmplayer.i18n.Messages,
+): List<PageAction> = buildList {
+    if (actions.onMark != null) {
+        add(
+            PageAction(
+                if (allWatched) s.gridMarkUnwatched else s.gridMarkWatched,
+                TmIcons.Check,
+                { marking.value = true },
+                short = if (allWatched) s.detailRoundUnwatched else s.detailRoundWatched,
+            ),
+        )
+    }
+    actions.watchLater?.let { on ->
+        add(
+            if (on) {
+                PageAction(s.detailWatchLaterRemove, TmIcons.Close, { actions.onWatchLater(false) }, short = s.detailRoundRemove, toggles = false)
+            } else {
+                PageAction(s.detailWatchLaterAdd, TmIcons.Clock, { actions.onWatchLater(true) }, short = s.detailRoundWatchLater, toggles = true)
+            },
+        )
+    }
+    actions.onOpenChat?.let { chat ->
+        add(PageAction(s.detailOpenChat(actions.chatTitle), TmIcons.ArrowForward, chat, short = s.detailRoundChat))
     }
 }
 
@@ -1695,6 +1744,10 @@ private data class PageAction(
     val run: () -> Unit,
     val enabled: Boolean = true,
     val progress: Float? = null,
+    /** The word under a round button, where [roundLabel] cannot tell it from [label]. */
+    val short: String? = null,
+    /** A switch: see [RoundAction]'s toggles. */
+    val toggles: Boolean? = null,
 )
 
 /** How long a pressed season download shows its empty ring while the queue has not shown it. */

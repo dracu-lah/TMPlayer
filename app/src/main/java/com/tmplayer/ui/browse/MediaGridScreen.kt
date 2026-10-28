@@ -489,6 +489,8 @@ fun MediaGridScreen(
     }
     // Whichever video a long press is asking about: the quick menu, which leads to the page.
     var heldMenuOf by remember(chatId) { mutableStateOf<MediaItem?>(null) }
+    // A show card held: its menu (HX20).
+    var heldSeries by remember(chatId) { mutableStateOf<com.tmplayer.data.Series?>(null) }
 
     // The videos ticked for one batch download, held as the items themselves rather than as ids:
     // the download is worked out and started well after the tick, by which time paging may have
@@ -799,6 +801,11 @@ fun MediaGridScreen(
                                             dense = dense,
                                             poster = true,
                                             onFocused = { standingOn = shelved.series.cover },
+                                            // The show's menu (HX20); not while picking videos to download.
+                                            onLongClick = if (selecting) null else ({
+                                                tileReturn.open(shelved.key)
+                                                heldSeries = shelved.series
+                                            }),
                                             modifier = focusOf(shelved).returnTile(tileReturn, shelved.key),
                                         )
                                     } else {
@@ -853,6 +860,16 @@ fun MediaGridScreen(
                 }
                 val scrollLabel: (Any) -> String? = { key -> entryByKey[key]?.let { ScrollLabels.video(it, order, scrollStrings) } }
                 FastScroller(gridState, label = scrollLabel)
+
+                heldSeries?.let { series ->
+                    SeriesMenuOpened(
+                        series = series,
+                        watch = watch,
+                        chatTitle = chatTitle,
+                        onOpen = { openSeries.open(series) },
+                        onDismiss = { heldSeries = null },
+                    )
+                }
 
                 openSeries.series?.let { series ->
                     SeriesOpened(
