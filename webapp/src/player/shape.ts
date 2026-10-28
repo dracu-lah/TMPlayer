@@ -31,6 +31,25 @@ export function pinchShape(s: Shape, wider: boolean): Shape {
 /** The video's object-fit for a shape: a fixed ratio fills the box [ratioBox] gives it. */
 export const objectFit = (s: Shape) => (s === 'fit' ? 'contain' : s === 'crop' ? 'cover' : 'fill')
 
+/**
+ * Where the picture of a [frameW] by [frameH] video lands on a [stageW] by [stageH] stage for a
+ * shape, as the browser draws it: object-fit for the first three, the [ratioBox] filled for a
+ * fixed ratio, whatever the frame's own shape (a squeezed side by side 3D file is drawn at the
+ * ratio chosen, never at its two eyes' width). Width and height of the drawn picture, which may
+ * spill past the stage for Fill.
+ */
+export function pictureSize(stageW: number, stageH: number, frameW: number, frameH: number, s: Shape): { width: number; height: number } | null {
+    if (!(stageW > 0) || !(stageH > 0) || !(frameW > 0) || !(frameH > 0)) return null
+    const ratio = shapeRatio(s)
+    if (ratio !== null) {
+        const box = ratioBox(stageW, stageH, ratio)
+        return box && { width: box.width, height: box.height }
+    }
+    if (s === 'stretch') return { width: stageW, height: stageH }
+    const scale = s === 'fit' ? Math.min(stageW / frameW, stageH / frameH) : Math.max(stageW / frameW, stageH / frameH)
+    return { width: Math.round(frameW * scale), height: Math.round(frameH * scale) }
+}
+
 /** The glyph of a fixed shape: a rounded frame at its ratio in the 24 unit box, as the desktop's. */
 export function ratioPath(ratio: number): string {
     const w = Math.min(20, 15 * ratio)

@@ -2,7 +2,7 @@
 // shape button and a pinch step through. `node --test "src/player/*.test.ts"` (pnpm test:player).
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { nextShape, objectFit, pinchShape, ratioBox, ratioPath, shapeRatio, SHAPES } from './shape.ts'
+import { nextShape, objectFit, pictureSize, pinchShape, ratioBox, ratioPath, shapeRatio, SHAPES, type Shape } from './shape.ts'
 
 test('the eight shapes in the apps order, W going round all of them', () => {
     assert.deepEqual(SHAPES, ['fit', 'crop', 'stretch', '16:9', '4:3', '21:9', '2.35:1', '1:1'])
@@ -61,4 +61,22 @@ test('the ratio glyph stays inside the 24 unit box', () => {
         const numbers = ratioPath(r).match(/-?\d+(\.\d+)?/g)!.map(Number)
         assert.ok(numbers.every((n) => n >= 1.9 && n <= 22.1), `${s}: ${numbers}`)
     }
+})
+
+// A side by side 3D file watched flat (the web has no 3D): a squeezed one (1920x1080, two eyes at
+// half width) and a full one (3840x1080, a 32:9 looking frame), on a 1280x720 stage.
+const SBS: [string, number, number, Record<Shape, [number, number]>][] = [
+    ['squeezed', 1920, 1080, { fit: [1280, 720], crop: [1280, 720], stretch: [1280, 720], '16:9': [1280, 720], '4:3': [960, 720], '21:9': [1280, 549], '2.35:1': [1280, 545], '1:1': [720, 720] }],
+    ['full', 3840, 1080, { fit: [1280, 360], crop: [2560, 720], stretch: [1280, 720], '16:9': [1280, 720], '4:3': [960, 720], '21:9': [1280, 549], '2.35:1': [1280, 545], '1:1': [720, 720] }],
+]
+for (const [name, fw, fh, want] of SBS) {
+    test(`a ${name} side by side frame gets the box of each of the eight shapes`, () => {
+        for (const s of SHAPES) assert.deepEqual(pictureSize(1280, 720, fw, fh, s), { width: want[s][0], height: want[s][1] }, `${name} ${s}`)
+    })
+}
+
+test('16:9 forced on the 32:9 looking frame draws it at 16:9, its eyes squeezed back to their shape', () => {
+    const p = pictureSize(1920, 1080, 3840, 1080, '16:9')!
+    assert.ok(Math.abs(p.width / p.height - 16 / 9) < 0.01)
+    assert.equal(pictureSize(0, 1080, 3840, 1080, '16:9'), null)
 })
