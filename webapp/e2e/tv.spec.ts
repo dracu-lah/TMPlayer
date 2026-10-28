@@ -1,5 +1,6 @@
 // Plan 8.5: the TV layout walked with keys only (the remote's arrows, OK and Back), at both TV
 // sizes: focus comes back to the item that was open after Back, after a menu and after a dialog.
+import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 import { fakeCase } from './helpers'
 
@@ -285,7 +286,7 @@ for (const size of [
             await press(page, 'ArrowRight')
             expect(await onControl(page)).toContain('Picture shape')
             await press(page, 'Enter')
-            expect(await onControl(page)).toContain('Picture shape: Crop')
+            expect(await onControl(page)).toContain('Picture shape: Fill')
             await press(page, 'ArrowRight')
             expect(await onControl(page)).toBe('More')
             await press(page, 'Enter')
@@ -464,3 +465,85 @@ test.describe('TV sign in', () => {
         expect(await page.evaluate(() => (document.activeElement as HTMLInputElement | null)?.readOnly ?? true)).toBe(true)
     })
 })
+
+// HX18: the TV layout's alignment, measured, at both TV sizes.
+const PICTURE = readFileSync(new URL('./media/thumb.jpg', import.meta.url))
+
+/** A /tmdb worker that matches every title with a poster, a wide picture and an overview, so Recently added fills the carousel. */
+async function everyTitleMatched(page: Page) {
+    await page.route('**/tmdb/**', (route) => {
+        const path = new URL(route.request().url()).pathname
+        if (path === '/tmdb/poster') return route.fulfill({ json: { match: true, id: '77', kind: 'film', title: 'Harbour Notes', year: 2019, poster: '/p0.jpg', backdrop: '/w0.jpg', overview: 'A harbour town keeps its notes.' } })
+        if (path.startsWith('/tmdb/img/')) return route.fulfill({ contentType: 'image/jpeg', body: PICTURE })
+        return route.fulfill({ json: { found: false } })
+    })
+}
+
+const box = (page: Page, selector: string) => page.locator(selector).first().evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect)
+const mid = (r: DOMRect) => r.top + r.height / 2
+
+for (const size of [
+    { width: 1920, height: 1080 },
+    { width: 1280, height: 720 },
+]) {
+    test.describe(`TV alignment at ${size.width} x ${size.height}`, () => {
+        test.skip(({ browserName }) => browserName !== 'chromium', 'the TV walk runs in Chromium')
+        test.use({ viewport: size })
+
+        test('Home carousel: Play and the chat\'s pill are one height on one middle, the dots on it, and the title\'s wide picture is up', async ({ page, context }) => {
+            await fakeCase(context, 'big')
+            await everyTitleMatched(page)
+            await tv(page)
+            await page.goto('/')
+            await expect(page.locator('.tv-hero-play')).toBeVisible()
+            const play = await box(page, '.tv-hero-play')
+            const pill = await box(page, '.tv-hero-pill')
+            const dot = await box(page, '.tv-hero-dots span')
+            // Heights as laid out (the remote's focus grows Play from its middle, which stays put).
+            const tall = (sel: string) => page.locator(sel).first().evaluate((el) => (el as HTMLElement).offsetHeight)
+            expect(await tall('.tv-hero-play')).toBe(await tall('.tv-hero-pill'))
+            expect(Math.abs(mid(play) - mid(pill))).toBeLessThan(1)
+            expect(Math.abs(mid(play) - mid(dot))).toBeLessThan(1.5)
+            // The page's picture is drawn, never a blank dark area.
+            await expect(page.locator('.tv-hero-art img')).toHaveCount(1)
+            await expect(page.locator('.tv-hero-art.cover')).toHaveCount(0)
+        })
+
+        test('a chat whose cards take seconds to come still opens on its first card, not on Back', async ({ page, context }) => {
+            await fakeCase(context, 'slow')
+            await tv(page)
+            await page.goto('/chat/-1001')
+            await expect.poll(() => focused(page), { timeout: 15_000 }).toContain('card|/video/')
+        })
+
+        test('Sign in: the two-step password column is in the middle of the screen', async ({ page, context }) => {
+            await fakeCase(context, 'signedout', 'password')
+            await tv(page)
+            await page.goto('/')
+            await expect(page.locator('input[type=password]')).toBeVisible()
+            for (const sel of ['.password-field', '.signin form button.primary']) {
+                const r = await box(page, sel)
+                expect(Math.abs(r.left - (size.width - r.right)), sel).toBeLessThan(1)
+            }
+        })
+
+        test('Sign in: the QR code beside its words, all of it on the screen, its two buttons one height', async ({ page, context }) => {
+            await fakeCase(context, 'signedout')
+            await tv(page)
+            await page.goto('/')
+            await expect(page.locator('.signin.is-qr .qr')).toBeVisible()
+            const plate = await box(page, '.qr')
+            const words = await box(page, '.signin.is-qr h1')
+            expect(plate.right).toBeLessThan(words.left)
+            for (const sel of ['.signin-brand', '.qr', '.signin-foot']) {
+                const r = await box(page, sel)
+                expect(r.top, sel).toBeGreaterThanOrEqual(0)
+                expect(r.bottom, sel).toBeLessThanOrEqual(size.height)
+            }
+            const phone = await box(page, '.qr-actions > button.link')
+            const fresh = await box(page, '.qr-actions > .qr-refresh')
+            expect(Math.abs(phone.height - fresh.height)).toBeLessThan(1)
+            expect(Math.abs(mid(phone) - mid(fresh))).toBeLessThan(1)
+        })
+    })
+}

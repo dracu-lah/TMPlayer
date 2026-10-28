@@ -94,6 +94,7 @@ html[data-form=tv] .page > .page-title.home-title { position: absolute; width: 1
   mask-image: linear-gradient(to right, transparent, #000 45%), linear-gradient(to bottom, transparent, #000 30%, #000 62%, transparent);
   mask-composite: intersect;
 }
+.tv-hero-art.cover { opacity: .6; }
 .tv-hero-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; animation: fade 200ms ease-out; }
 .tv-hero-text {
   position: absolute; left: var(--tv-safe-h); bottom: calc(var(--dp) * (24 + 52 + 14)); width: 60%;
@@ -105,7 +106,8 @@ html[data-form=tv] .page > .page-title.home-title { position: absolute; width: 1
 }
 .tv-hero-facts { color: var(--muted); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tv-hero-actions { position: absolute; left: var(--tv-safe-h); bottom: calc(var(--dp) * 24); display: flex; align-items: center; gap: calc(var(--dp) * 12); }
-/* Play (HeroPill): the text colour as its fill, the page's ground as its ink; the remote grows it. */
+/* Play (HeroPill): the text colour as its fill, the page's ground as its ink; the remote grows it.
+   The chat's pill beside it is as tall (HERO_PILL_HEIGHT, 52 dp), so the two share one top, foot and middle. */
 .tv-hero-play, .tv-hero-pill {
   display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; text-decoration: none; white-space: nowrap;
   transition: transform var(--fast) var(--ease);
@@ -116,14 +118,15 @@ html[data-form=tv] .page > .page-title.home-title { position: absolute; width: 1
 }
 .tv-hero-play .icon { width: calc(var(--dp) * 26); height: calc(var(--dp) * 26); }
 .tv-hero-pill {
-  max-width: calc(var(--dp) * 320); height: calc(var(--dp) * 48); padding: 0 calc(var(--dp) * 20) 0 calc(var(--dp) * 16); gap: calc(var(--dp) * 8);
+  max-width: calc(var(--dp) * 320); height: calc(var(--dp) * 52); padding: 0 calc(var(--dp) * 20) 0 calc(var(--dp) * 16); gap: calc(var(--dp) * 8);
   background: color-mix(in srgb, var(--surface-high) 80%, transparent); color: var(--fg); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); font-weight: 500;
 }
 .tv-hero-pill span { overflow: hidden; text-overflow: ellipsis; }
 .tv-hero-pill .icon { width: calc(var(--dp) * 22); height: calc(var(--dp) * 22); }
 html[data-tv-keys] .tv-hero-play:focus, html[data-tv-keys] .tv-hero-pill:focus { outline: none; transform: scale(var(--focus-scale)); }
 html[data-theme=light][data-tv-keys] .tv-hero-pill:focus, html[data-theme=light][data-tv-keys] .tv-hero-play:focus { box-shadow: 0 0 0 calc(var(--dp) * 2) var(--accent); }
-.tv-hero-dots { position: absolute; right: var(--tv-end); bottom: calc(var(--dp) * 24 + var(--dp) * 15); display: flex; gap: calc(var(--dp) * 6); }
+/* Which page is up, at the end, on the buttons' middle line: a row as tall as Play, its marks centred in it. */
+.tv-hero-dots { position: absolute; right: var(--tv-end); bottom: calc(var(--dp) * 24); height: calc(var(--dp) * 52); display: flex; align-items: center; gap: calc(var(--dp) * 6); }
 .tv-hero-dots span { width: calc(var(--dp) * 6); height: calc(var(--dp) * 6); border-radius: 999px; background: color-mix(in srgb, var(--fg) 35%, transparent); transition: width var(--fast); }
 .tv-hero-dots span.on { width: calc(var(--dp) * 18); background: var(--fg); }
 /* While Recently added is asked for: the same size, still (nothing animates while waiting on a TV). */
@@ -157,6 +160,7 @@ html[data-form=tv] .vrow.cards { padding-bottom: calc(var(--dp) * 20); }
 html[data-form=tv] .card-art { border-radius: calc(var(--dp) * 12); }
 html[data-form=tv] .card-art-title { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); left: calc(var(--dp) * 10); right: calc(var(--dp) * 10); bottom: calc(var(--dp) * 12); }
 html[data-form=tv] .card-progress { height: calc(var(--dp) * 3); left: calc(var(--dp) * 8); right: calc(var(--dp) * 8); }
+html[data-form=tv] .card-name { margin-top: calc(var(--dp) * 6); min-height: calc(var(--dp) * 36); font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 18); }
 html[data-form=tv] .card-facts { margin-top: calc(var(--dp) * 6); font-size: calc(var(--dp) * 12); line-height: calc(var(--dp) * 16); }
 html[data-form=tv] .card:hover .card-art { transform: none; }
 html[data-form=tv] .card:hover .card-facts { color: var(--muted); }
@@ -261,22 +265,45 @@ html[data-form=tv] .signin {
   max-width: calc(var(--dp) * 640); min-height: 100vh; justify-content: center; gap: calc(var(--dp) * 10);
   padding: var(--tv-safe-v) var(--tv-safe-h);
 }
-html[data-form=tv] .signin-mark { width: calc(var(--dp) * 48); height: calc(var(--dp) * 48); }
+/* The brand as the app's TV sign in sets it (BrandLockup, BrandSize.Medium): a 44 dp mark, the name in 26 beside it. */
+html[data-form=tv] .signin-brand { gap: calc(var(--dp) * 14); margin-bottom: calc(var(--dp) * 12); }
+html[data-form=tv] .signin-mark, html[data-form=tv] .signin-brand .signin-mark { width: calc(var(--dp) * 44); height: calc(var(--dp) * 44); border-radius: calc(var(--dp) * 10); }
+html[data-form=tv] .signin-word { font-size: calc(var(--dp) * 26); line-height: calc(var(--dp) * 32); }
 html[data-form=tv] .signin h1 { font-size: calc(var(--dp) * 28); line-height: calc(var(--dp) * 36); }
 html[data-form=tv] .signin .steps { padding-left: calc(var(--dp) * 20); gap: calc(var(--dp) * 4); }
 html[data-form=tv] .signin-foot { padding-top: calc(var(--dp) * 8); }
 html[data-form=tv] .signin-install { display: none; }
+/*
+ * The QR pane as the app's TV QrPane: the code's plate at the start, and beside it the brand, the
+ * title, the steps and the two buttons, the pair centred on the screen. The plate's side
+ * (.qr-side) and the steps (.qr-text) come out of their wrapper into this grid.
+ */
 html[data-form=tv] .signin.is-qr {
-  max-width: calc(var(--dp) * 800); display: grid; grid-template-columns: 1fr calc(var(--dp) * 240); column-gap: calc(var(--dp) * 48);
-  align-content: center; align-items: start; justify-items: start;
+  max-width: calc(var(--dp) * 860); display: grid; grid-template-columns: calc(var(--dp) * 240) minmax(0, 1fr); column-gap: calc(var(--dp) * 40);
+  row-gap: 0; align-content: center; align-items: start;
 }
-html[data-form=tv] .signin.is-qr > * { grid-column: 1; }
-html[data-form=tv] .signin.is-qr > .qr { grid-column: 2; grid-row: 1 / span 9; align-self: center; justify-self: center; }
+/* The words' gaps are margins: the plate spans rows enough for any step's lines, and a row gap would open between empty ones. */
+html[data-form=tv] .signin.is-qr > *, html[data-form=tv] .signin.is-qr .qr-layout > * { grid-column: 2; min-width: 0; margin-bottom: calc(var(--dp) * 10); }
+html[data-form=tv] .signin.is-qr .qr-layout { display: contents; }
+html[data-form=tv] .signin.is-qr .qr-side { grid-column: 1; grid-row: 1 / span 12; align-self: center; margin: 0; gap: calc(var(--dp) * 10); }
+html[data-form=tv] .signin.is-qr .signin-foot { margin-top: 0; padding-top: calc(var(--dp) * 16); }
+html[data-form=tv] .qr-life { width: calc(var(--dp) * 240); }
+html[data-form=tv] .qr-life p { min-height: calc(var(--dp) * 16); }
+html[data-form=tv] .qr-text { gap: calc(var(--dp) * 10); }
+/* Use my phone number and Get a new code: one height, one middle line. */
+html[data-form=tv] .qr-actions { gap: calc(var(--dp) * 12); margin-top: calc(var(--dp) * 4); }
+html[data-form=tv] .qr-actions > button { min-height: calc(var(--dp) * 40); margin: 0; padding: 0 calc(var(--dp) * 16); display: inline-flex; align-items: center; gap: calc(var(--dp) * 8); }
+html[data-form=tv] .qr-actions > button.link { margin-inline-start: calc(var(--dp) * -16); }
+html[data-form=tv] .qr-refresh { font-size: calc(var(--dp) * 14); line-height: calc(var(--dp) * 20); transition: transform var(--fast) var(--ease); }
+html[data-form=tv] .qr-refresh .icon { width: calc(var(--dp) * 18); height: calc(var(--dp) * 18); }
+html[data-form=tv][data-tv-keys] .qr-refresh:focus { outline: none; background: var(--focus-fill); color: var(--on-focus-fill); transform: scale(var(--focus-scale)); }
 html[data-form=tv] .qr { width: calc(var(--dp) * 240); height: calc(var(--dp) * 240); border-radius: calc(var(--dp) * 16); }
 html[data-form=tv] .qr-code svg { width: calc(var(--dp) * 224); height: calc(var(--dp) * 224); }
-html[data-form=tv] .signin form { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto auto 1fr; column-gap: calc(var(--dp) * 24); row-gap: calc(var(--dp) * 10); align-items: start; }
+/* The pad's room is its own margin, not the grid's gap: a step with no pad (the password, an
+   email) would keep an empty 24 dp column at the end and sit off the page's middle. */
+html[data-form=tv] .signin form { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto auto 1fr; column-gap: 0; row-gap: calc(var(--dp) * 10); align-items: start; }
 html[data-form=tv] .signin form > * { grid-column: 1; }
-html[data-form=tv] .signin form > .keypad { grid-column: 2; grid-row: 1 / -1; }
+html[data-form=tv] .signin form > .keypad { grid-column: 2; grid-row: 1 / -1; margin-inline-start: calc(var(--dp) * 24); }
 .keypad { display: grid; grid-template-columns: repeat(3, calc(var(--dp, 1px) * 56)); gap: calc(var(--dp, 1px) * 8); }
 .keypad .key {
   height: calc(var(--dp, 1px) * 48); display: grid; place-items: center; border: 0; border-radius: calc(var(--dp, 1px) * 12);

@@ -353,18 +353,32 @@ export function createFocusMap(host: Host) {
         }
         const saved = wasBack ? memory.get(path) : undefined
         if (saved) return settle(() => byKey(saved.key, document.querySelector('.page') ?? document.body), saved.scroll, true)
-        // Home waits a moment for its carousel's Play before taking the first card.
+        // Home waits a moment for its carousel's Play before taking the first card. After a second
+        // the page's first item stands in (a chat's Back while its cards are still coming), and the
+        // wait goes on: the first card takes the remote when it arrives, unless the remote or a
+        // press has gone elsewhere meanwhile. A chat whose first page took over a second left the
+        // remote on Back for good (HX18).
         let tries = 0
+        let stopgap: HTMLElement | null = null
         settle(
             () => {
                 tries++
                 const page = document.querySelector('.page')
+                if (stopgap && document.activeElement !== stopgap) {
+                    stopWaiting()
+                    return null
+                }
                 const first = page && listDefault(page)
                 if (first) return first
-                return tries > 20 ? pageDefault() : null
+                if (tries > 20 && !stopgap) {
+                    stopgap = pageDefault()
+                    if (stopgap) focus(stopgap)
+                }
+                return null
             },
             null,
             true,
+            8000,
         )
     }
 
