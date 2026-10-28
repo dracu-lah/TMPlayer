@@ -1,7 +1,8 @@
 // The pieces every player menu and sheet is made of: the desktop's dropdown (Menu, Entry), the
-// phone's full-screen sheet (PhoneSheet, ChoiceRow) and Picker, which is one or the other by skin.
-import { Show, onMount, type JSX } from 'solid-js'
-import { Cancel01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+// side panel More options opens on the desktop and the TV (Panel), the phone's full-screen sheet
+// (PhoneSheet, ChoiceRow) and Picker, which is one or the other by skin.
+import { Show, createEffect, on, onCleanup, onMount, type JSX } from 'solid-js'
+import { ArrowLeft02Icon, Cancel01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { Icon, type IconData } from '../ui/Icon'
 import { t } from '../i18n'
 import { form } from '../form'
@@ -31,6 +32,57 @@ export function Menu(props: { anchor: DOMRect | null; root: HTMLElement; below?:
             <div class="pc-dismiss" onClick={props.onClose} />
             <div ref={el} class="pc-menu" role="menu" style={place()} onKeyDown={(e) => menuKeys(e, el)}>
                 {props.children}
+            </div>
+        </>
+    )
+}
+
+/** When a panel page last went, so the next one knows whether it opens or follows it. */
+let panelGone = 0
+
+/**
+ * More options as the desktop app has it (HX16): a panel docked to the player's end edge (the
+ * left in a right to left language) at its full height, sliding in over 150 ms (in place where
+ * motion is reduced), its pages shown inside it with a Back line instead of another menu. A click
+ * outside or Escape closes it; the keyboard starts on its first line (the ticked one on a TV) and
+ * Up and Down walk the lines. `page` is a key that moves the keyboard back to the top on a new page.
+ */
+export function Panel(props: { title: string; page: string; onClose: () => void; onBack?: () => void; note?: string; children: JSX.Element }) {
+    let el!: HTMLDivElement
+    let body!: HTMLDivElement
+    // A page of the panel replaces the one before in the same moment: only an opening slides in.
+    const opening = performance.now() - panelGone > 50
+    onCleanup(() => (panelGone = performance.now()))
+    createEffect(
+        on(
+            () => props.page,
+            () =>
+                queueMicrotask(() => {
+                    body.scrollTop = 0
+                    const pick = variant() === 'tv' ? '[aria-checked=true]:not(:disabled), button:not(:disabled)' : 'button:not(:disabled)'
+                    ;(body.querySelector<HTMLElement>(pick) ?? el.querySelector<HTMLElement>('button'))?.focus({ preventScroll: true })
+                }),
+        ),
+    )
+    return (
+        <>
+            <div class="pc-dismiss" onClick={props.onClose} onContextMenu={(e) => (e.preventDefault(), props.onClose())} />
+            <div ref={el} class="pc-panel" classList={{ opening }} role="dialog" aria-label={props.title} data-shot="panel" onKeyDown={(e) => menuKeys(e, el)}>
+                <div class="pc-panel-head">
+                    <Show when={props.onBack} fallback={<h2>{props.title}</h2>}>
+                        <button type="button" class="pc-panel-back" aria-label={t('common.back')} onClick={props.onBack!}>
+                            <Icon icon={ArrowLeft02Icon} size={22} />
+                            <h2>{props.title}</h2>
+                        </button>
+                    </Show>
+                    <button type="button" class="pc-sheet-close" aria-label={t('common.close')} onClick={props.onClose}>
+                        <Icon icon={Cancel01Icon} size={22} />
+                    </button>
+                </div>
+                <div ref={body} class="pc-panel-body">
+                    {props.children}
+                    <Show when={props.note}><p class="pc-menu-note">{props.note}</p></Show>
+                </div>
             </div>
         </>
     )
@@ -91,11 +143,14 @@ export function Entry(props: { text: string; detail?: string; trailing?: string;
  * A choice: on a phone the pickers' sheet (ChoiceSheet: the whole screen under 600 dp, the
  * headline and Close at the top, radio rows), on the desktop the menu over its button.
  */
-export function Picker(props: { title: string; note?: string; phone: boolean; anchor: DOMRect | null; root: HTMLElement; onClose: () => void; onBack?: () => void; children: JSX.Element }) {
+export function Picker(props: { title: string; note?: string; phone: boolean; anchor: DOMRect | null; root: HTMLElement; onClose: () => void; onBack?: () => void; panel?: boolean; children: JSX.Element }) {
     return (
         <Show
             when={props.phone}
             fallback={
+                <Show
+                    when={props.panel}
+                    fallback={
                 <Menu anchor={props.anchor} root={props.root} below={props.anchor ? props.anchor.top < props.root.getBoundingClientRect().top + props.root.clientHeight / 2 : false} onClose={props.onClose}>
                     <Show when={props.onBack}>
                         <Entry text={t('common.back')} onClick={props.onBack!} />
@@ -104,9 +159,15 @@ export function Picker(props: { title: string; note?: string; phone: boolean; an
                     {props.children}
                     <Show when={props.note}><p class="pc-menu-note">{props.note}</p></Show>
                 </Menu>
+                    }
+                >
+                    <Panel title={props.title} page={props.title} note={props.note} onClose={props.onClose} onBack={props.onBack}>
+                        {props.children}
+                    </Panel>
+                </Show>
             }
         >
-            <PhoneSheet title={props.title} note={props.note} onClose={props.onClose}>
+            <PhoneSheet title={props.title} note={props.note} onClose={props.onClose} onBack={props.onBack}>
                 {props.children}
             </PhoneSheet>
         </Show>
@@ -114,13 +175,19 @@ export function Picker(props: { title: string; note?: string; phone: boolean; an
 }
 
 /** The phone's picker sheet: the whole screen on a phone, a dialog in the middle on a wider one. */
-export function PhoneSheet(props: { title: string; note?: string; onClose: () => void; children: JSX.Element; class?: string }) {
+export function PhoneSheet(props: { title: string; note?: string; onClose: () => void; onBack?: () => void; children: JSX.Element; class?: string }) {
     let el!: HTMLDivElement
-    onMount(() => el.querySelector<HTMLElement>('[aria-checked=true], button')?.focus({ preventScroll: true }))
+    // Again on each page: More options' pages are shown in the same sheet.
+    createEffect(on(() => props.title, () => queueMicrotask(() => el.querySelector<HTMLElement>('.pc-sheet-body [aria-checked=true], .pc-sheet-body button, button')?.focus({ preventScroll: true }))))
     return (
         <div class="pc-sheet-scrim" onClick={(e) => e.target === e.currentTarget && props.onClose()}>
             <div ref={el} class={`pc-sheet ${props.class ?? ''}`} role="dialog" aria-label={props.title}>
                 <div class="pc-sheet-head">
+                    <Show when={props.onBack}>
+                        <button type="button" class="pc-sheet-close" aria-label={t('common.back')} onClick={props.onBack!}>
+                            <Icon icon={ArrowLeft02Icon} size={24} />
+                        </button>
+                    </Show>
                     <div>
                         <h2>{props.title}</h2>
                         <Show when={props.note}><p>{props.note}</p></Show>

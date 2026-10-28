@@ -97,6 +97,9 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
     @Volatile
     private var stereoApplied: Triple<Stereo3d, Int, Int>? = null
 
+    /** The picture shape and the 3D drawn, weighed into `video-aspect-override` (HX16). */
+    private val aspect = AspectOwner()
+
     /**
      * The shader file mpv was last given. mpv reads a shader file once per path and keeps it for
      * the player's life, so a file written again under the same name is never read again: each
@@ -525,28 +528,23 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
         _state.update { it.copy(scale = scale) }
     }
 
-    /** Fit is mpv's default; Crop fills by panscan; Stretch drops the aspect ratio. */
+    /**
+     * Fit is mpv's default; Crop fills by panscan; Stretch drops the aspect ratio. A fixed shape
+     * fits the picture at its ratio, through [applyAspect], which 3D shares.
+     */
     private fun applyScale(scale: VideoScale) = runCatching {
         val h = handle
-        when (scale) {
-            VideoScale.Fit -> {
-                h.setPropertyBoolean("keepaspect", true)
-                h.setPropertyDouble("panscan", 0.0)
-            }
-            VideoScale.Crop -> {
-                h.setPropertyBoolean("keepaspect", true)
-                h.setPropertyDouble("panscan", 1.0)
-            }
-            VideoScale.Stretch -> {
-                h.setPropertyDouble("panscan", 0.0)
-                h.setPropertyBoolean("keepaspect", false)
-            }
-            // HX16: the fixed shapes fit until their aspect override is wired in.
-            else -> {
-                h.setPropertyBoolean("keepaspect", true)
-                h.setPropertyDouble("panscan", 0.0)
-            }
-        }
+        val fill = VideoAspect.fill(scale)
+        h.setPropertyDouble("panscan", fill.panscan)
+        h.setPropertyBoolean("keepaspect", fill.keepAspect)
+        applyAspect(aspect.scale(scale))
+    }
+
+    /** `video-aspect-override` as [AspectOwner] has it for the shape and the 3D in force. */
+    @Synchronized
+    private fun applyAspect(wanted: String) {
+        runCatching { handle.setPropertyString("video-aspect-override", wanted) }
+            .onFailure { if (wanted == VideoAspect.NONE) runCatching { handle.setPropertyString("video-aspect-override", "-1") } }
     }
 
     override fun setStereo3d(stereo: Stereo3d) {
@@ -570,9 +568,9 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             runCatching { h.setPropertyString("glsl-shaders", "") }
             runCatching { stereoShaderFile?.delete() }
             stereoShaderFile = null
-            runCatching { h.setPropertyString("video-aspect-override", "no") }
-                .onFailure { runCatching { h.setPropertyString("video-aspect-override", "-1") } }
             stereoApplied = null
+            // Back to the picture shape's aspect, or the file's own: a chosen ratio stays.
+            applyAspect(aspect.stereoOff())
             return
         }
         val width = h.int("width")?.takeIf { it > 0 } ?: return
@@ -588,10 +586,9 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
             h.setPropertyString("glsl-shaders", file.absolutePath)
             stereoShaderFile?.takeIf { it != file }?.delete()
             stereoShaderFile = file
-            Stereo3d.aspect(width, height, wanted)?.let { aspect ->
-                h.setPropertyString("video-aspect-override", String.format(java.util.Locale.ROOT, "%.6f", aspect))
-            }
             stereoApplied = next
+            // One eye's shape, unless a fixed picture shape is chosen, which wins.
+            applyAspect(aspect.stereo(wanted, width, height))
         }.onFailure { Logger.w(TAG, "3D shader not applied", it) }
     }
 

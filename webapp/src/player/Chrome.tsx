@@ -46,7 +46,8 @@ import {
 import './player.css'
 import { Icon, type IconData } from '../ui/Icon'
 import { t } from '../i18n'
-import { Choice, Entry, Menu, PhoneSheet, Picker, variant, walk } from './sheets'
+import { Choice, Entry, Panel, PhoneSheet, Picker, variant, walk } from './sheets'
+import { nextShape, objectFit, pinchShape, ratioBox, ratioPath, shapeRatio, SHAPES, type Shape } from './shape'
 import { remoteKey } from '../tv/remote'
 import { frameAt, type Frames } from './storyboard'
 import { cardLeft, cardSize, frameSlot, GIVE_UP_MS, type FrameGrabber } from './seekpreview'
@@ -107,10 +108,12 @@ const PEEK_MS = 1200
 const FIXED_VOLUME = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 const UNLOCK_PILL_MS = 2500
 
-export type Shape = 'fit' | 'crop' | 'stretch'
-const SHAPES: Shape[] = ['fit', 'crop', 'stretch']
-const SHAPE_ICON: Record<Shape, IconData> = { fit: FitToScreenIcon, crop: CropIcon, stretch: MaximizeScreenIcon }
-const shapeName = (s: Shape) => t(`player.scale_${s}`)
+export type { Shape }
+const SHAPE_ICON: Partial<Record<Shape, IconData>> = { fit: FitToScreenIcon, crop: CropIcon, stretch: MaximizeScreenIcon }
+/** The glyph for a shape: the three of the apps' button, a frame at its ratio for a fixed one. */
+const shapeIcon = (s: Shape): IconData => SHAPE_ICON[s] ?? [['path', { d: ratioPath(shapeRatio(s) ?? 1) }]]
+/** Original, Fill and Stretch from the catalog; a ratio is its own name in every language, as in the apps. */
+const shapeName = (s: Shape) => (s === 'fit' || s === 'crop' || s === 'stretch' ? t(`player.scale_${s}`) : s)
 
 /** SeekMath.clock: 4:05, 1:02:03. */
 export function clock(seconds: number): string {
@@ -312,7 +315,8 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         on(
             sheet,
             (now, before) => {
-                if (!tv() || now !== null || !before) return
+                // The TV after any menu; the desktop after More's panel, which took the keyboard.
+                if (now !== null || !before || !(tv() || (inPanel() && !phone()))) return
                 queueMicrotask(() => visible() && focusIt(opener?.isConnected ? opener : barEl()))
             },
             { defer: true },
@@ -378,14 +382,39 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         flash(c.trackLabel(list[next], next))
     }
 
-    // Picture shape: Fit, Crop and Stretch, as object-fit on the video.
+    // Picture shape (VideoScale): Original, Fill and Stretch as object-fit on the video; a fixed
+    // ratio as the video's box sized to it inside the stage, the picture filling the box. For this
+    // player only: a new one starts on Original. The box follows the stage's size, so a resize,
+    // fullscreen and a turned phone keep the ratio.
     const [shape, setShape] = createSignal<Shape>('fit')
-    createEffect(() => (v.style.objectFit = shape() === 'fit' ? 'contain' : shape() === 'crop' ? 'cover' : 'fill'))
-    const cycleShape = () => {
-        const next = SHAPES[(SHAPES.indexOf(shape()) + 1) % SHAPES.length]
+    const [stage, setStage] = createSignal({ width: 0, height: 0 })
+    {
+        const box = v.parentElement
+        if (box && typeof ResizeObserver !== 'undefined') {
+            const watch = new ResizeObserver(() => setStage({ width: box.clientWidth, height: box.clientHeight }))
+            watch.observe(box)
+            onCleanup(() => watch.disconnect())
+        }
+    }
+    createEffect(() => {
+        const s = shape()
+        v.style.objectFit = objectFit(s)
+        const ratio = shapeRatio(s)
+        const at = ratio === null ? null : ratioBox(stage().width || v.parentElement?.clientWidth || 0, stage().height || v.parentElement?.clientHeight || 0, ratio)
+        if (!at) {
+            for (const p of ['position', 'left', 'top', 'width', 'height'] as const) v.style.removeProperty(p)
+            return
+        }
+        Object.assign(v.style, { position: 'absolute', left: `${at.left}px`, top: `${at.top}px`, width: `${at.width}px`, height: `${at.height}px` })
+    })
+    onCleanup(() => {
+        for (const p of ['position', 'left', 'top', 'width', 'height', 'object-fit'] as const) v.style.removeProperty(p)
+    })
+    const pickShape = (next: Shape) => {
         setShape(next)
         flash(t('player.picture_shape_now', { shape: shapeName(next) }))
     }
+    const cycleShape = () => pickShape(nextShape(shape()))
 
 
     // ---- chapters (Chapters.kt) --------------------------------------------------------------
@@ -601,10 +630,9 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         flash(on ? t('player.marked_watched') : t('player.marked_unwatched'))
     }
     const stepShape = (dir: 1 | -1) => {
-        const next = SHAPES[Math.max(0, Math.min(SHAPES.length - 1, SHAPES.indexOf(shape()) + dir))]
+        const next = pinchShape(shape(), dir > 0)
         if (next === shape()) return
-        setShape(next)
-        flash(t('player.picture_shape_now', { shape: shapeName(next) }))
+        pickShape(next)
     }
     const repeatText = () => (!loop() ? t('player.loop_set_start') : loop()!.end === null ? t('player.loop_set_end') : t('player.loop_clear'))
     const stepSize = (dir: -1 | 1) => {
@@ -1187,8 +1215,19 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         e.stopPropagation()
         opener = e.currentTarget as HTMLElement
         setAnchor((e.currentTarget as HTMLElement).getBoundingClientRect())
+        // More's pages follow in its panel; the bar's own buttons keep their menus.
+        setInPanel(name === 'more')
         setSheet(sheet() === name ? null : name)
     }
+    /** The sheet up was reached from More options, so it is drawn in More's panel with a Back line. */
+    const [inPanel, setInPanel] = createSignal(false)
+    const panelBack = (to: Exclude<Sheet, null>) => (inPanel() ? () => setSheet(to) : undefined)
+    /** One page of More options: the side panel on the desktop and the TV, the phone's sheet on a phone. */
+    const MorePage = (p: { title: string; back?: Exclude<Sheet, null>; children: JSX.Element }) => (
+        <Show when={phone()} fallback={<Panel title={p.title} page={p.title} onClose={() => setSheet(null)} onBack={p.back ? () => setSheet(p.back!) : undefined}>{p.children}</Panel>}>
+            <PhoneSheet title={p.title} onClose={() => setSheet(null)} onBack={p.back ? () => setSheet(p.back!) : undefined}>{p.children}</PhoneSheet>
+        </Show>
+    )
     const [anchor, setAnchor] = createSignal<DOMRect | null>(null)
 
     const Btn = (p: { icon: IconData; label: string; onClick: (e: MouseEvent) => void; class?: string; size?: number; tipBelow?: boolean; shot?: string; pressed?: boolean }) => (
@@ -1220,7 +1259,15 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                 onPointerUp={onUp}
                 onPointerCancel={onCancel}
                 onWheel={onWheel}
-                onContextMenu={(e) => (phone() || hold()) && e.preventDefault()}
+                onContextMenu={(e) => {
+                    if (phone() || hold()) return void e.preventDefault()
+                    // The desktop app's right click: More options' panel, or closed again.
+                    if (tv() || c.blocked() || locked()) return
+                    e.preventDefault()
+                    opener = c.root.querySelector<HTMLElement>('[data-shot="more"]')
+                    setInPanel(true)
+                    setSheet(sheet() === 'more' ? null : 'more')
+                }}
             />
 
             <div class="pc-layer" aria-hidden={!visible() || undefined}>
@@ -1334,7 +1381,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                                 <Btn icon={DashboardSpeed02Icon} label={t('player.playback_speed')} onClick={menuAt('speed')} shot="speed" />
                             </Show>
                             <Show when={!phone() || wideRow()}>
-                                <Btn icon={SHAPE_ICON[shape()]} label={plain() ? t('player.picture_shape_now', { shape: shapeName(shape()) }) : t('player.picture_shape_hint', { shape: shapeName(shape()) })} onClick={cycleShape} class="shape" />
+                                <Btn icon={shapeIcon(shape())} label={plain() ? t('player.picture_shape_now', { shape: shapeName(shape()) }) : t('player.picture_shape_hint', { shape: shapeName(shape()) })} onClick={cycleShape} class="shape" />
                             </Show>
                             {/* Where the app has its rotate button: the app's player already fills the screen, a page does not. */}
                             <Show when={phone() && canFullscreen()}>
@@ -1481,7 +1528,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
 
             <Switch>
                 <Match when={sheet() === 'more'}>
-                    <Menu anchor={anchor()} root={c.root} below={!tv()} onClose={() => setSheet(null)}>
+                    <MorePage title={t('player.more_options')}>
                         {/* As the app's overflow: what the phone's row shows is left out. */}
                         <Show when={!tv() && !(phone() && wideRow())}>
                             <Entry icon={SquareLock02Icon} text={t('player.lock_screen')} onClick={lock} />
@@ -1498,7 +1545,13 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                         <Show when={pipSupported()}>
                             <Entry icon={PictureInPictureOnIcon} text={t('player.picture_in_picture')} onClick={() => (setSheet(null), togglePip())} />
                         </Show>
-                        <Entry text={t('player.playback_options')} onClick={() => setSheet('options')} />
+                        {/* The bar's three, each with what it is set to, as the desktop app's panel has them. */}
+                        <Show when={!phone()}>
+                            <Entry text={t('player.subtitles')} trailing={subOn() ? subLabel(subOn()!, subs().indexOf(subOn()!)) : t('common.off')} onClick={() => setSheet('subtitles')} />
+                            <Entry text={t('player.audio')} trailing={c.audio() ? c.trackLabel(c.audio()!, c.audios().indexOf(c.audio()!)) : undefined} onClick={() => setSheet('audio')} />
+                            <Entry text={t('player.playback_speed')} trailing={speedLabel(rate())} onClick={() => setSheet('speed')} />
+                        </Show>
+                        <Entry text={t('player.playback_options')} trailing={sleepAt() !== null || sleepEnd() ? sleepSummary() : undefined} onClick={() => setSheet('options')} />
                         <Entry text={t('player.picture_shape')} trailing={shapeName(shape())} onClick={() => setSheet('shape')} />
                         <Entry text={t('player.subtitle_style_and_timing')} onClick={() => setSheet('timing')} />
                         <Entry text={t('player.load_subtitle_file')} onClick={() => (setSheet(null), c.loadSubtitleFile())} />
@@ -1511,22 +1564,20 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                             <Entry icon={KeyboardIcon} text={t('player.shortcuts')} trailing="?" onClick={() => setSheet('shortcuts')} />
                         </Show>
                         <Entry icon={InformationCircleIcon} text={t('player.playback_details')} trailing={phone() ? undefined : 'I'} onClick={() => setSheet('details')} />
-                    </Menu>
+                    </MorePage>
                 </Match>
                 <Match when={sheet() === 'options'}>
-                    <Menu anchor={anchor()} root={c.root} below={!tv()} onClose={() => setSheet(null)}>
-                        <Entry text={t('common.back')} onClick={() => setSheet('more')} />
-                        <hr />
+                    <MorePage title={t('player.playback_options')} back="more">
                         <Entry icon={Moon02Icon} text={t('player.sleep_timer')} trailing={sleepSummary()} onClick={() => setSheet('sleep')} />
                         <Entry icon={RepeatIcon} text={repeatText()} trailing={plain() ? undefined : 'R'} onClick={() => (setSheet(null), pressRepeat())} />
                         <Show when={chapters().length}>
                             <Entry text={t('player.chapter_next')} trailing={plain() ? undefined : `${t(/Mac/.test(navigator.platform) ? 'keys.cmd' : 'keys.ctrl')}+Right`} onClick={() => (setSheet(null), stepChapter(true))} />
                             <Entry text={t('player.chapter_previous')} trailing={plain() ? undefined : `${t(/Mac/.test(navigator.platform) ? 'keys.cmd' : 'keys.ctrl')}+Left`} onClick={() => (setSheet(null), stepChapter(false))} />
                         </Show>
-                    </Menu>
+                    </MorePage>
                 </Match>
                 <Match when={sheet() === 'sleep'}>
-                    <Picker title={t('player.sleep_timer')} phone={phone()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={phone() ? undefined : () => setSheet('options')}>
+                    <Picker title={t('player.sleep_timer')} phone={phone()} panel anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={() => setSheet('options')}>
                         <Show when={sleepAt() !== null || sleepEnd()}>
                             <Choice icon={Cancel01Icon} text={t('player.sleep_turn_off')} phone={phone()} onClick={() => (setSleep(null), setSheet(null))} />
                         </Show>
@@ -1574,12 +1625,20 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                     </div>
                 </Match>
                 <Match when={sheet() === 'shape'}>
-                    <Picker title={t('player.picture_shape')} phone={phone()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={phone() ? undefined : () => setSheet('more')}>
-                        <For each={SHAPES}>{(s) => <Choice text={shapeName(s)} on={shape() === s} phone={phone()} onClick={() => (setShape(s), setSheet(null))} />}</For>
+                    {/* In the panel a pick leaves it open: the picture beside it is the answer. */}
+                    <Picker title={t('player.picture_shape')} phone={phone()} panel anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={() => setSheet('more')}>
+                        <For each={SHAPES}>
+                            {(s) => (
+                                <>
+                                    <Show when={s === '16:9' && !phone()}><hr /></Show>
+                                    <Choice text={shapeName(s)} on={shape() === s} phone={phone()} onClick={() => (pickShape(s), phone() && setSheet(null))} />
+                                </>
+                            )}
+                        </For>
                     </Picker>
                 </Match>
                 <Match when={sheet() === 'subtitles'}>
-                    <Picker title={t('tracks.subtitles')} phone={phone()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)}>
+                    <Picker title={t('tracks.subtitles')} phone={phone()} panel={inPanel()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={panelBack('more')}>
                         <Choice text={t('common.off')} on={!subOn()} phone={phone()} onClick={() => (pickSub(null), setSheet(null))} />
                         <For each={subs()}>{(tt, i) => <Choice text={subLabel(tt, i())} on={subOn() === tt} phone={phone()} onClick={() => (pickSub(tt), setSheet(null))} />}</For>
                         <Show when={!phone()}><hr /></Show>
@@ -1593,7 +1652,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                     <MsoneSheet target={msoneTarget(c.item, info())} onLoad={c.addSubtitle} onPickFile={() => (setSheet(null), c.loadSubtitleFile())} onClose={() => setSheet(null)} />
                 </Match>
                 <Match when={sheet() === 'audio'}>
-                    <Picker title={t('player.audio')} phone={phone()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)}>
+                    <Picker title={t('player.audio')} phone={phone()} panel={inPanel()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={panelBack('more')}>
                         <Show when={c.audios().length} fallback={<Choice text={t('player.no_audio_tracks')} phone={phone()} onClick={() => setSheet(null)} />}>
                             <For each={c.audios()}>
                                 {(tr, i) => (
@@ -1613,7 +1672,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                     <Show
                         when={phone()}
                         fallback={
-                            <Picker title={t('player.playback_speed')} phone={false} anchor={anchor()} root={c.root} onClose={() => setSheet(null)}>
+                            <Picker title={t('player.playback_speed')} phone={false} panel={inPanel()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={panelBack('more')}>
                                 <For each={SPEEDS}>{(s) => <Choice text={speedLabel(s)} on={Math.abs(rate() - s) < 0.001} phone={false} onClick={() => (setSpeed(s), setSheet(null))} />}</For>
                             </Picker>
                         }
@@ -1622,7 +1681,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
                     </Show>
                 </Match>
                 <Match when={sheet() === 'copies'}>
-                    <Picker title={t('player.copies')} note={t('player.copies_note')} phone={phone()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={phone() ? undefined : () => setSheet('more')}>
+                    <Picker title={t('player.copies')} note={t('player.copies_note')} phone={phone()} panel={inPanel()} anchor={anchor()} root={c.root} onClose={() => setSheet(null)} onBack={panelBack('more')}>
                         <For each={[{ key: c.item.key, height: 0 }, ...c.copies]}>
                             {(copy) => <Choice text={c.qualityLabel(copy.height)} on={c.sourceKey() === copy.key} phone={phone()} onClick={() => (c.pickQuality(copy.key), setSheet(null))} />}
                         </For>

@@ -267,7 +267,7 @@ private val BookmarkColor = Color(0xE6FFFFFF)
  * The picture itself as a click target (B2.3): a single click plays or pauses 300 ms after the
  * button comes up, so a double click (fullscreen) does not flicker the picture first; holding the
  * left button down past [HOLD_MS] plays fast until it is let go ([onHold], the phone's "Hold to
- * speed up"), and is no click; right click opens the menu at the cursor; the mouse's back button
+ * speed up"), and is no click; right click opens the More options panel; the mouse's back button
  * goes back.
  */
 @Composable
@@ -409,10 +409,18 @@ internal fun BoxScope.PlayerOverlay(
     subtitlesButton: Boolean = true,
 ) {
     val s = LocalStrings.current
-    // The right click menu hangs at the cursor whether or not the controls are up.
-    if (menu?.anchor == MenuAt.Anchor.Cursor) {
-        Box(Modifier.offset { IntOffset(menu.at.x.roundToInt(), menu.at.y.roundToInt()) }.size(1.dp)) {
-            PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction)
+    // The More button, which the keyboard returns to as the panel it opened closes.
+    val moreFocus = remember { FocusRequester() }
+    val panelOpen = menu?.panel == true
+    var openedFromMore by remember { mutableStateOf(false) }
+    LaunchedEffect(panelOpen) {
+        if (panelOpen) {
+            openedFromMore = menu?.anchor == MenuAt.Anchor.Overflow
+        } else if (openedFromMore) {
+            openedFromMore = false
+            // After the player's own refocus, which runs as the panel closes.
+            androidx.compose.runtime.withFrameNanos { }
+            if (visible) runCatching { moreFocus.requestFocus() }
         }
     }
 
@@ -447,12 +455,13 @@ internal fun BoxScope.PlayerOverlay(
                         Text(subtitle, color = OnArtMuted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
-                Box {
-                    OverlayButton(TmIcons.MoreVert, s.commonMore, onClick = { onOpenMenu(MenuAt(MenuPage.Main, MenuAt.Anchor.Overflow)) })
-                    if (menu?.anchor == MenuAt.Anchor.Overflow) {
-                        PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction)
-                    }
-                }
+                // One click opens the side panel at once; a second (or Esc) closes it.
+                OverlayButton(
+                    TmIcons.MoreVert,
+                    s.commonMore,
+                    onClick = { if (panelOpen) onCloseMenu() else onOpenMenu(MenuAt(MenuPage.Main, MenuAt.Anchor.Overflow)) },
+                    modifier = Modifier.focusRequester(moreFocus),
+                )
                 if (!fullscreen) WindowControls(onArt = true)
             }
 
@@ -518,7 +527,7 @@ internal fun BoxScope.PlayerOverlay(
                                 PlayerMenu(menu, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable, watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction)
                             }
                         }
-                        // A click steps the shape, as W does; the menu keeps its page of the three.
+                        // A click steps the shape through all eight, as W does; the panel has its page of them.
                         ShapeButton(status.scale) { onMenuAction(MenuAction.Do(PlayerAction.CycleShape)) }
                     }
                     Spacer(Modifier.weight(1f))
@@ -536,6 +545,103 @@ internal fun BoxScope.PlayerOverlay(
                     // The bar's right end, where a streaming player keeps its episode list.
                     if (onEpisodes != null) EpisodesButton(onEpisodes)
                 }
+            }
+        }
+    }
+
+    // The right click's and More's panel, over the controls and whether or not they are up.
+    MenuPanel(menu?.takeIf { it.panel }, fullscreen, onCloseMenu) { open, firstFocus ->
+        PlayerMenu(
+            open, status, tracks, fullscreen, ignoreClicks, miniPlayerAvailable, alwaysOnTopAvailable, fromTelegram, savable,
+            watchedLabel, sleepTimer, bookmarks, loop, onOpenMenu, onCloseMenu, onMenuAction,
+            panel = true, subtitles = subtitlesButton, firstFocus = firstFocus,
+        )
+    }
+}
+
+/** The side panel's width: a phone's column, narrower in a mini player's small window. */
+private val MenuPanelWidth = 340.dp
+
+/**
+ * The player's More options as a side panel inside the player's own window (HX16), docked to the
+ * end edge (the left in a right to left language) at the player's full height, sliding in over
+ * [Motion.Fast] (in place where motion is reduced). A dropdown was a window of its own on a tiling
+ * window manager, which showed it as a small window somewhere.
+ *
+ * A press anywhere outside closes it, as Esc does ([PlayerScreen]'s keys); the picture stays live
+ * behind it, so a shape or 3D choice shows as it is made. The keyboard starts on its first line,
+ * and Up and Down walk its lines.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun BoxScope.MenuPanel(
+    menu: MenuAt?,
+    fullscreen: Boolean,
+    onClose: () -> Unit,
+    content: @Composable (MenuAt, FocusRequester) -> Unit,
+) {
+    // The last panel shown, so it still has its lines as it slides away.
+    val shown = remember { arrayOfNulls<MenuAt>(1) }
+    if (menu != null) shown[0] = menu
+    val open = menu ?: shown[0]
+    val close by rememberUpdatedState(onClose)
+    val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
+    val slide = !Motion.reduced
+    if (menu != null) {
+        // Outside the panel: any press closes it and goes no further, so a click meant to close
+        // does not also pause the video or open another menu.
+        Box(
+            Modifier.matchParentSize().testTag("menu-panel-outside").pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type == PointerEventType.Press) {
+                            event.changes.forEach { it.consume() }
+                            close()
+                        }
+                    }
+                }
+            },
+        )
+    }
+    AnimatedVisibility(
+        menu != null,
+        Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+        enter = if (slide) slideInHorizontally(tween(Motion.Fast, easing = Motion.Standard)) { if (rtl) -it else it } else androidx.compose.animation.EnterTransition.None,
+        exit = if (slide) slideOutHorizontally(tween(Motion.Fast, easing = Motion.Standard)) { if (rtl) -it else it } else androidx.compose.animation.ExitTransition.None,
+    ) {
+        if (open == null) return@AnimatedVisibility
+        val focus = androidx.compose.ui.platform.LocalFocusManager.current
+        val first = remember { FocusRequester() }
+        LaunchedEffect(open.page) {
+            androidx.compose.runtime.withFrameNanos { }
+            runCatching { first.requestFocus() }
+        }
+        Surface(
+            color = FloatingTone.menu,
+            border = floatingBorder(),
+            modifier = Modifier.fillMaxHeight().widthIn(max = MenuPanelWidth).fillMaxWidth()
+                .testTag("menu-panel")
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val direction = when (event.key) {
+                        Key.DirectionDown -> androidx.compose.ui.focus.FocusDirection.Down
+                        Key.DirectionUp -> androidx.compose.ui.focus.FocusDirection.Up
+                        else -> return@onPreviewKeyEvent false
+                    }
+                    focus.moveFocus(direction)
+                    true
+                },
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                // Windowed, the panel covers the bar's end and the window's buttons with it: they
+                // come back on the panel's top line, which moves the window as the bar does.
+                if (!fullscreen && com.tmplayer.desktop.ui.LocalWindowChrome.current != null) {
+                    Row(Modifier.fillMaxWidth().windowDrag().padding(top = 6.dp, end = 6.dp), horizontalArrangement = Arrangement.End) {
+                        WindowControls(onArt = true)
+                    }
+                }
+                content(open, first)
             }
         }
     }
@@ -559,12 +665,7 @@ private fun ShapeButton(scale: VideoScale, onClick: () -> Unit) {
         pop.snapTo(0.82f)
         pop.animateTo(1f, tween(220, easing = Motion.Standard))
     }
-    val icon = when (scale) {
-        VideoScale.Fit -> TmIcons.ShapeFit
-        VideoScale.Crop -> TmIcons.ShapeCrop
-        VideoScale.Stretch -> TmIcons.ShapeStretch
-        else -> TmIcons.ShapeFit
-    }
+    val icon = shapeIcon(scale)
     Box(Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value }) {
         OverlayButton(icon, s.playerPictureShapeHint(scale.label), onClick)
     }
@@ -612,7 +713,7 @@ private fun Tip(text: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-internal fun OverlayButton(icon: ImageVector, label: String, onClick: () -> Unit, size: Int = 40, tonal: Boolean = false) {
+internal fun OverlayButton(icon: ImageVector, label: String, onClick: () -> Unit, size: Int = 40, tonal: Boolean = false, modifier: Modifier = Modifier) {
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
     // A centre button sits on the tonal disc whether or not the pointer is on it, so it does not
@@ -620,7 +721,7 @@ internal fun OverlayButton(icon: ImageVector, label: String, onClick: () -> Unit
     val rest = if (tonal) PlayerTonalButton else Color.Transparent
     Tip(label) {
         Box(
-            Modifier.size(size.dp).clip(CircleShape)
+            modifier.size(size.dp).clip(CircleShape)
                 .background(rest)
                 .background(if (hovered) Color(0x33FFFFFF) else Color.Transparent)
                 .hoverable(hover)
@@ -813,7 +914,11 @@ private fun TimeBar(
     }
 }
 
-/** One menu for the right click, the overflow button and the two track buttons, paged. */
+/**
+ * One menu for the right click, the overflow button and the bar's track and speed buttons, paged:
+ * in the side panel ([panel], see [MenuPanel]) for the first two, a small menu under the button
+ * for the others.
+ */
 @Composable
 internal fun PlayerMenu(
     menu: MenuAt,
@@ -834,9 +939,17 @@ internal fun PlayerMenu(
     onOpenMenu: (MenuAt) -> Unit,
     onClose: () -> Unit,
     onAction: (MenuAction) -> Unit,
+    /** Drawn in the side panel, with its title and Back line, rather than as a dropdown. */
+    panel: Boolean = false,
+    /** Whether the subtitles can be changed now (not while a cast goes without them). */
+    subtitles: Boolean = true,
+    /** Given to the page's first line, where the panel puts the keyboard as a page opens. */
+    firstFocus: FocusRequester? = null,
 ) {
     val s = LocalStrings.current
     val copies = LocalPlayerCopies.current
+    // The first line drawn on this page takes [firstFocus].
+    var focusGiven = false
     fun pick(action: MenuAction) {
         onClose()
         onAction(action)
@@ -859,6 +972,12 @@ internal fun PlayerMenu(
                 }
             },
             onClick = onClick,
+            modifier = if (firstFocus != null && !focusGiven) {
+                focusGiven = true
+                Modifier.focusRequester(firstFocus)
+            } else {
+                Modifier
+            },
             leadingIcon = {
                 Box(Modifier.size(18.dp)) {
                     when {
@@ -890,12 +1009,7 @@ internal fun PlayerMenu(
         }
     }
 
-    TmDropdownMenu(expanded = true, onDismissRequest = onClose, modifier = Modifier.widthIn(min = 240.dp, max = 420.dp)) {
-        val parent = menu.parentPage()
-        if (parent != null) {
-            Entry(s.commonBack) { page(parent) }
-            HorizontalDivider()
-        }
+    val body: @Composable () -> Unit = {
         when (menu.page) {
             MenuPage.Main -> {
                 // First, under its own divider, with the lock the phone's and the television's
@@ -909,6 +1023,16 @@ internal fun PlayerMenu(
                     Entry(s.playerCopies, trailing = trailing) { page(MenuPage.Copies) }
                 }
                 if (alwaysOnTopAvailable) Entry(s.playerAlwaysOnTop, trailing = s.playerKeyCommandT(commandKey(s))) { pick(MenuAction.Do(PlayerAction.AlwaysOnTop)) }
+                // The bar's three, each with what it is set to, so the panel says it all in one place.
+                if (panel) {
+                    if (subtitles) {
+                        val on = tracks.firstOrNull { it.type == TrackType.Subtitle && it.selected }
+                        Entry(s.playerSubtitles, trailing = on?.label ?: s.commonOff) { page(MenuPage.Subtitles) }
+                    }
+                    val audio = tracks.firstOrNull { it.type == TrackType.Audio && it.selected }
+                    Entry(s.playerAudio, trailing = audio?.label) { page(MenuPage.Audio) }
+                    Entry(s.playerPlaybackSpeed, trailing = SeekMath.speedLabel(status.speed)) { page(MenuPage.Speed) }
+                }
                 Entry(s.playerPlaybackOptions) { page(MenuPage.Options) }
                 // On the first page, as the phone's pinch is one move away: W cycles it too.
                 Entry(s.playerPictureShape, trailing = status.scale.label) { page(MenuPage.Shape) }
@@ -1078,8 +1202,12 @@ internal fun PlayerMenu(
                 HorizontalDivider()
                 Entry(s.playerStereoSwap, checked = now.swapEyes, detail = s.playerStereoSwapDetail) { choose(now.copy(swapEyes = !now.swapEyes)) }
             }
+            // In the panel a pick keeps it open, as 3D's do: the picture behind is the answer.
             MenuPage.Shape -> VideoScale.entries.forEach { shape ->
-                Entry(shape.label, checked = shape == status.scale) { pick(MenuAction.Shape(shape)) }
+                if (shape == VideoScale.Ratio16x9) HorizontalDivider()
+                Entry(shape.label, checked = shape == status.scale, icon = shapeIcon(shape)) {
+                    if (panel) onAction(MenuAction.Shape(shape)) else pick(MenuAction.Shape(shape))
+                }
             }
             MenuPage.Bookmarks -> {
                 Entry(s.playerAddBookmark, trailing = "B") { pick(MenuAction.AddBookmark) }
@@ -1104,6 +1232,91 @@ internal fun PlayerMenu(
             }
         }
     }
+
+    val parent = menu.parentPage()
+    if (panel) {
+        // The page's title on its own line, which is the Back line on a page below the first.
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                .then(if (parent != null) Modifier.clickable { page(parent) } else Modifier)
+                .padding(start = 12.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (parent != null) {
+                Icon(TmIcons.ArrowBack, s.commonBack, Modifier.size(22.dp), tint = Color.White)
+                Spacer(Modifier.width(12.dp))
+            } else {
+                Spacer(Modifier.width(4.dp))
+            }
+            Text(
+                menuPageTitle(menu.page, s),
+                color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+            )
+            OverlayButton(TmIcons.Close, s.commonClose, onClose, size = 36)
+        }
+        HorizontalDivider()
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) { body() }
+    } else {
+        TmDropdownMenu(expanded = true, onDismissRequest = onClose, modifier = Modifier.widthIn(min = 240.dp, max = 420.dp)) {
+            if (parent != null) {
+                Entry(s.commonBack) { page(parent) }
+                HorizontalDivider()
+            }
+            body()
+        }
+    }
+}
+
+/** A menu page's name, as the side panel heads it. */
+private fun menuPageTitle(page: MenuPage, s: Strings): String = when (page) {
+    MenuPage.Main -> s.playerMoreOptions
+    MenuPage.Options -> s.playerPlaybackOptions
+    MenuPage.Shape -> s.playerPictureShape
+    MenuPage.Stereo -> s.playerStereo
+    MenuPage.Sleep -> s.playerSleepTimer
+    MenuPage.SubtitleStyle -> s.playerSubtitleStyleAndTiming
+    MenuPage.Bookmarks -> s.playerBookmarks
+    MenuPage.Copies -> s.playerCopies
+    MenuPage.Audio -> s.playerAudio
+    MenuPage.Subtitles -> s.playerSubtitles
+    MenuPage.Speed -> s.playerPlaybackSpeed
+}
+
+/**
+ * The glyph for a picture shape: the three of the bar's button, and for a fixed ratio the frame
+ * drawn at that ratio ([ratioIcon]).
+ */
+internal fun shapeIcon(scale: VideoScale): ImageVector = when (scale) {
+    VideoScale.Fit -> TmIcons.ShapeFit
+    VideoScale.Crop -> TmIcons.ShapeCrop
+    VideoScale.Stretch -> TmIcons.ShapeStretch
+    else -> ratioIcon(scale.ratio ?: 1.0)
+}
+
+private val ratioIcons = java.util.concurrent.ConcurrentHashMap<Double, ImageVector>()
+
+/**
+ * A frame at [ratio] (width over height) inside the 24 unit box, in the stroke of TmIcons' line
+ * glyphs: 16:9 a wide frame, 1:1 a square, 2.35:1 a thin band.
+ */
+private fun ratioIcon(ratio: Double): ImageVector = ratioIcons.getOrPut(ratio) {
+    val w = minOf(20.0, 15.0 * ratio).toFloat()
+    val h = (w / ratio).toFloat()
+    val x = 12f - w / 2
+    val y = 12f - h / 2
+    val r = 2f
+    val path = "M${x + r} ${y}H${x + w - r}Q${x + w} $y ${x + w} ${y + r}V${y + h - r}Q${x + w} ${y + h} ${x + w - r} ${y + h}" +
+        "H${x + r}Q$x ${y + h} $x ${y + h - r}V${y + r}Q$x $y ${x + r} ${y}Z"
+    ImageVector.Builder(name = "ShapeRatio$ratio", defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f)
+        .addPath(
+            pathData = androidx.compose.ui.graphics.vector.PathParser().parsePathString(path).toNodes(),
+            stroke = androidx.compose.ui.graphics.SolidColor(Color.Black),
+            strokeLineWidth = 1.5f,
+            strokeLineCap = androidx.compose.ui.graphics.StrokeCap.Round,
+            strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round,
+        )
+        .build()
 }
 
 /** The flashes of A4.1 and A4.2, the volume HUD, and the spinner for a stall with the controls down. */

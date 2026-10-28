@@ -179,3 +179,56 @@ test('subtitle style and timing change the look', async ({ page }) => {
     expect(vars[0]).toBe('#FFE14D')
     expect(parseInt(vars[1])).toBeGreaterThan(10)
 })
+
+/** HX16: TMPLAYER_SHOTS=<dir> keeps the panel's pictures there, as the desktop's render tests do. */
+const keep = async (page: Page, name: string) => {
+    const dir = process.env.TMPLAYER_SHOTS
+    if (!dir) return
+    // After the panel's slide and the sheet's fade.
+    await page.waitForTimeout(400)
+    await page.screenshot({ path: `${dir}/web-${name}-${test.info().project.name}.png` })
+}
+
+test('More opens the side panel on one click, its pages inside it, and a ratio shapes the picture', async ({ page }) => {
+    const phone = test.info().project.name.startsWith('phone')
+    await lighthouse(page)
+    await openMore(page)
+    // The phone's sheet on a phone, the end edge panel everywhere else, the keyboard in it at once.
+    const panel = page.locator(phone ? '.pc-sheet' : '.pc-panel')
+    await expect(panel).toBeVisible()
+    await expect(panel).toContainText('More options')
+    expect(await page.evaluate(() => !!document.activeElement?.closest('.pc-panel, .pc-sheet'))).toBe(true)
+    if (!phone) {
+        // Once its 150 ms slide is over: against the end edge, the player's full height.
+        const stage = (await page.locator('.player').boundingBox())!
+        await expect.poll(async () => Math.round((await panel.boundingBox())!.x + (await panel.boundingBox())!.width)).toBe(Math.round(stage.x + stage.width))
+        expect(Math.round((await panel.boundingBox())!.height)).toBe(Math.round(stage.height))
+        await expect(panel.getByRole('menuitem', { name: /^Playback speed/ })).toContainText('1x')
+    }
+    await keep(page, 'more')
+    await panel.getByRole('menuitem', { name: /^Picture shape/ }).click()
+    await expect(page.locator(phone ? '.pc-sheet' : '.pc-panel')).toContainText('2.35:1')
+    await keep(page, 'shape')
+    await page.getByRole(phone ? 'radio' : 'menuitemradio', { name: '4:3' }).click()
+    const shape = () => page.locator('video').evaluate((v: HTMLVideoElement) => ({ fit: v.style.objectFit, w: v.offsetWidth, h: v.offsetHeight }))
+    await expect.poll(async () => (await shape()).fit).toBe('fill')
+    const s = await shape()
+    expect(Math.abs(s.w / s.h - 4 / 3)).toBeLessThan(0.01)
+    // In the panel a pick leaves it open, with Back to the first page; on a phone the sheet closes.
+    if (!phone) {
+        await expect(page.locator('.pc-panel')).toBeVisible()
+        await page.locator('.pc-panel-back').click()
+        await expect(page.locator('.pc-panel')).toContainText('More options')
+        await page.keyboard.press('w')
+        await expect(page.locator('.pc-panel')).toBeVisible()
+        expect((await shape()).fit).toBe('fill')
+        await page.keyboard.press('Escape')
+        await expect(page.locator('.pc-panel')).toHaveCount(0)
+    } else {
+        await expect(page.locator('.pc-sheet')).toHaveCount(0)
+    }
+    // W steps through 21:9, 2.35:1 and 1:1, then round to Original, which gives the box back.
+    for (let i = 0; i < 4; i++) await page.keyboard.press('w')
+    await expect.poll(async () => (await shape()).fit).toBe('contain')
+    expect(await page.locator('video').evaluate((v: HTMLVideoElement) => v.style.width)).toBe('')
+})

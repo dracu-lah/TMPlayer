@@ -150,6 +150,13 @@ internal data class MenuAt(val page: MenuPage, val anchor: Anchor, val at: Offse
     enum class Anchor { Cursor, Overflow, Subtitles, Audio, Speed }
 
     /**
+     * The right click and the More button open the side panel docked to the window's end edge
+     * (HX16), drawn in the player's own window; the bar's subtitle, audio and speed buttons keep
+     * their small menus.
+     */
+    val panel: Boolean get() = anchor == Anchor.Cursor || anchor == Anchor.Overflow
+
+    /**
      * The page Back returns to, or null on the page a button's own menu opens at: that menu has no
      * Back line, a click outside closes it.
      */
@@ -288,6 +295,8 @@ fun PlayerScreen(
     var openingStartMs by remember { mutableStateOf(0L) }
     val openingBytesAt = remember { longArrayOf(0L) }
     var episodes by remember { mutableStateOf(Episodes()) }
+    // A fixed picture shape (16:9, 4:3...) picked in this player, which the next video keeps.
+    val heldShape = remember { arrayOfNulls<VideoScale>(1) }
     // Every copy of the video playing that the player knows of: what the opening page handed over
     // (CopyHandoff, possibly across chats) and, for an episode, its copies once the show is found.
     val copies = remember(current.item.id, episodes) {
@@ -583,7 +592,9 @@ fun PlayerScreen(
             speed = runCatching { settings.openingSpeed(resumed?.speed, speedScopes) }
                 .getOrDefault(resumed?.speed ?: PlaybackSpeed.DEFAULT)
                 .coerceIn(SeekMath.MIN_SPEED, SeekMath.MAX_SPEED),
-            scale = runCatching { VideoScale.from(settings.videoScaleNow()) }.getOrDefault(VideoScale.Fit),
+            // A fixed shape chosen in this player carries to the next episode; a new player starts
+            // from the last of Original, Fill and Stretch (HX16).
+            scale = heldShape[0] ?: runCatching { VideoScale.remembered(settings.videoScaleNow()) }.getOrDefault(VideoScale.Fit),
             downmix = prefs.now.downmix,
             volume = prefs.now.volume,
             muted = prefs.now.muted,
@@ -1158,7 +1169,9 @@ fun PlayerScreen(
     fun setScale(scale: VideoScale) {
         engine.setScale(scale)
         showFlash(Flash.Kind.Text, scale.label)
-        playerScope.launch { runCatching { settings.setVideoScale(scale.name) } }
+        // A fixed shape is for this player only; the other three are kept for every video.
+        heldShape[0] = scale.takeIf { it.fixed }
+        if (!scale.fixed) playerScope.launch { runCatching { settings.setVideoScale(scale.name) } }
     }
 
     fun setVolume(value: Int) {
@@ -1569,6 +1582,19 @@ fun PlayerScreen(
             }
             return false
         }
+        // The side panel has the keyboard while it is up: Esc closes it, Backspace goes back a
+        // page, and the rest (the arrows, Enter, Space) are its lines', never a seek or W.
+        menu?.takeIf { it.panel }?.let { open ->
+            if (!com.tmplayer.ui.nav.isBackKey(event)) return false
+            val parent = open.parentPage()
+            if (event.key == androidx.compose.ui.input.key.Key.Backspace && parent != null) {
+                menu = open.copy(page = parent)
+            } else {
+                menu = null
+                refocus()
+            }
+            return true
+        }
         // Sheets peel off before Esc means anything else.
         if (event.key == androidx.compose.ui.input.key.Key.Escape && (showShortcuts || showDetails || showOnline)) {
             showShortcuts = false
@@ -1674,7 +1700,7 @@ fun PlayerScreen(
                     if (phase != Phase.Playing || screenLocked) return@onPointerEvent
                     // A wheel over a sheet, or one a list inside has scrolled with, is the sheet's,
                     // not the volume's under it as well.
-                    if (showEpisodes || showShortcuts || showOnline || event.changes.any { it.isConsumed }) return@onPointerEvent
+                    if (showEpisodes || showShortcuts || showOnline || menu?.panel == true || event.changes.any { it.isConsumed }) return@onPointerEvent
                     val delta = event.changes.firstOrNull()?.scrollDelta ?: return@onPointerEvent
                     SeekMath.wheelAction(delta.x, delta.y, event.keyboardModifiers.pointerShift, wheelSeeksNow)
                         ?.let(dispatchNow)
@@ -1703,7 +1729,7 @@ fun PlayerScreen(
                     refocus()
                 },
                 onDoubleClick = { if (!ignoreClicks) onToggleFullscreen() },
-                onRightClick = { at -> menu = MenuAt(MenuPage.Main, MenuAt.Anchor.Cursor, at) },
+                onRightClick = { at -> menu = if (menu?.panel == true) null else MenuAt(MenuPage.Main, MenuAt.Anchor.Cursor, at) },
                 onMouseBack = onBack,
                 scope = scope,
                 onHold = { on ->
