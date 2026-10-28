@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
@@ -114,6 +115,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.CompositionLocalProvider
 import com.tmplayer.ui.components.noteTouchOrigin
+import com.tmplayer.ui.components.tvReachRoot
 import com.tmplayer.ui.theme.Motion
 import com.tmplayer.ui.theme.rememberReducedMotion
 import com.tmplayer.ui.browse.KeyPresses
@@ -340,7 +342,8 @@ class MainActivity : ComponentActivity() {
                     com.tmplayer.ui.components.LocalSheetHost provides com.tmplayer.ui.components.PhoneSheetHost,
                 ) {
                     // Where each tap lands, for a page it opens to grow out of (see PageMotion).
-                    androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().noteTouchOrigin()) {
+                    // On a TV, banners and lines with buttons are reached from the screen's edge (HX22).
+                    androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().noteTouchOrigin().tvReachRoot()) {
                         // The last runs crashed as they started: the question alone, then the shell.
                         val holding by CrashReports.holdShell.collectAsStateWithLifecycle()
                         // On a remote, a list keeps still while the focused item is in full view.
@@ -2336,10 +2339,19 @@ private fun Root() {
         if (unreachable) {
             com.tmplayer.ui.connect.ConnectBanner(
                 onOpenProxies = { com.tmplayer.ui.connect.ProxyScreenState.open = true },
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(top = 8.dp, start = 16.dp, end = 16.dp),
+                modifier = if (FormFactor.isTv(context)) {
+                    // On a TV, beside the bar's tabs at its end, never over them: Up from the bar
+                    // (or Right from its last tab) goes into it (HX22).
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = com.tmplayer.ui.theme.Tv.SafeV, end = com.tmplayer.ui.theme.Tv.SafeH)
+                        .widthIn(max = TV_BANNER_MAX)
+                } else {
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                        .padding(top = 8.dp, start = 16.dp, end = 16.dp)
+                },
             )
         }
         com.tmplayer.ui.connect.ProxyScreenHost()
@@ -2347,6 +2359,9 @@ private fun Root() {
 }
 
 private const val OFFLINE_SETTLE_MS = 750L
+
+/** The connection banner's width on a TV, clear of the bar's tabs at the start. */
+private val TV_BANNER_MAX = 440.dp
 
 /** How long a lost line may take to come back before the "Connecting" pill shows. */
 private const val CONNECTING_SETTLE_MS = 2_500L

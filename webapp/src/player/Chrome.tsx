@@ -287,6 +287,7 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
     })
     const barEl = () => c.root.querySelector<HTMLElement>('.pc-bar')
     const discEl = () => c.root.querySelector<HTMLElement>('.pc-play')
+    const noticeClose = () => c.root.querySelector<HTMLElement>('.pc-notice button')
     const rowItems = () => Array.from(c.root.querySelectorAll<HTMLElement>('.pc-row button'))
     const inLayer = (el: Element | null) => !!el && !!c.root.querySelector('.pc-layer')?.contains(el)
     const focusIt = (el: HTMLElement | null | undefined) => el?.focus({ preventScroll: true })
@@ -841,6 +842,15 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             else if (key === 'ok') return 'native'
             if (key === 'back' || key === 'left' || key === 'right') return true
         }
+        // A notice over the picture with its own close (no sound, a slow decoder): Up from the
+        // row's top reaches it; Down, Back or closing it puts the remote back there, with the row
+        // up again if it went meanwhile (HX22).
+        const closing = noticeClose()
+        if (closing && active === closing) {
+            if (key === 'ok') closing.click()
+            if (key === 'ok' || key === 'back' || key === 'down') (show(), focusIt(discEl() ?? barEl()))
+            return true
+        }
         if (!(visible() && !locked())) {
             const playNow = card?.querySelector<HTMLElement>('button:last-child')
             if (key === 'left' || key === 'right') playNow ? focusIt(playNow) : jumpRemote(key === 'right')
@@ -857,6 +867,8 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
         const at = active ? items.indexOf(active) : -1
         const bar = barEl()
         const disc = discEl()
+        const notice = noticeClose()
+        const top = disc ?? bar
         if (key === 'back') hide()
         else if (key === 'ok') {
             if (inLayer(active) && active !== bar) return 'native'
@@ -867,8 +879,9 @@ export function Chrome(props: { ctl: Ctl; children?: JSX.Element }) {
             else if (active !== disc) jumpRemote(key === 'right')
         } else if (key === 'up') {
             if (at >= 0) focusIt(bar)
-            else if (active === bar) focusIt(disc)
-            else if (active !== disc) focusIt(bar)
+            else if (active === bar && disc) focusIt(disc)
+            else if (active === top && notice) focusIt(notice)
+            else if (active !== disc && active !== bar) focusIt(bar)
         } else if (key === 'down') {
             if (at >= 0) return true
             if (active === disc) focusIt(bar)

@@ -61,8 +61,34 @@ class PauseControlsRowTest {
             onPickSpeed = {},
             onCycleOrientation = {},
             onPlayEpisode = {},
+            onCycleShape = {
+                shapes++
+                // What the Mi TV did with a 3D video (HX22): the picture redrawn under the row
+                // and the focus dropped onto the play disc.
+                root.findViewById<View>(R.id.center_play_pause).requestFocus()
+            },
         )
         return controls to root.findViewById(R.id.center_play_pause)
+    }
+
+    private var shapes = 0
+
+    @Test
+    fun `on a television OK on picture shape steps the shape and keeps the remote on it, never on the disc`() {
+        val (controls, disc) = row(tv = true)
+        controls.show()
+        val shape = disc.rootView.findViewById<View>(R.id.control_shape)
+        assertTrue(shape.requestFocus())
+        shape.performClick()
+        idle(1_000)
+        assertEquals(1, shapes)
+        assertTrue("the remote stays on picture shape", shape.isFocused)
+        assertFalse(disc.isFocused)
+        assertTrue("nothing paused", playing)
+        // A pause from elsewhere while the remote is on a row button leaves it there.
+        playing = false
+        controls.paused()
+        assertTrue(shape.isFocused)
     }
 
     private fun idle(ms: Long) = shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(ms))

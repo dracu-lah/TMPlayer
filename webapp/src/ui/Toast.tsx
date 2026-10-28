@@ -1,5 +1,7 @@
 // A short message at the foot with one action (Undo), gone by itself after 8 s: 5 s was gone before
-// a viewer reached it on the apps (5246be8). One at a time; a new one replaces the last.
+// a viewer reached it on the apps (5246be8). One at a time; a new one replaces the last. On a TV
+// the remote reaches its Undo from the bar or the page's foot (focus.ts, HX22), and it stays up
+// while the remote is in it, its 8 s starting again once the remote leaves.
 import { createSignal, onCleanup, Show } from 'solid-js'
 
 interface Toast {
@@ -10,10 +12,16 @@ interface Toast {
 const [toast, setToast] = createSignal<Toast | null>(null)
 let timer = 0
 
+const SHOWN_MS = 8000
+
 export function showToast(next: Toast) {
-    clearTimeout(timer)
     setToast(next)
-    timer = window.setTimeout(() => setToast(null), 8000)
+    restart()
+}
+
+function restart() {
+    clearTimeout(timer)
+    timer = window.setTimeout(() => setToast(null), SHOWN_MS)
 }
 
 export function Toaster() {
@@ -21,7 +29,15 @@ export function Toaster() {
     return (
         <Show when={toast()}>
             {(tt) => (
-                <div class="toast" role="status">
+                <div
+                    class="toast"
+                    role="status"
+                    data-tv-reach="bottom"
+                    onFocusIn={() => clearTimeout(timer)}
+                    onFocusOut={(e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) restart()
+                    }}
+                >
                     <p>{tt().text}</p>
                     <Show when={tt().action}>
                         {(a) => (

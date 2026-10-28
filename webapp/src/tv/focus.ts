@@ -7,6 +7,12 @@
 // leave the zone they are in; Up from the page's top-most item goes to the bar's item for the page,
 // and Down from the bar to the item the remote was last on in the page. An open dialog or menu
 // keeps the remote inside it.
+//
+// A notice with buttons that floats over the page (`[data-tv-reach]`: the update notice, a toast's
+// Undo) never takes the remote, and the page's arrows never wander into it (HX22). Up from the bar
+// goes into it (the bar is where Back always lands), and Down from the page's last item into one
+// at the foot. Inside, Left and Right walk its buttons, and Back, or an arrow off its edge back
+// the way the remote came, puts the remote back where it was; so does the notice going away.
 import { createSignal } from 'solid-js'
 
 export type Dir = 'up' | 'down' | 'left' | 'right'
@@ -77,6 +83,10 @@ function usable(el: Element): el is HTMLElement {
     return getComputedStyle(h).visibility !== 'hidden'
 }
 
+/** A notice over the page the remote can reach (HX22), and the one the remote is in. */
+const REACH = '[data-tv-reach]'
+const reachOf = (el: Element | null) => (el && el !== document.body ? el.closest(REACH) : null)
+
 /** Where the remote may go now: inside an open dialog or menu if there is one, else the whole page. */
 function scope(): Element {
     const modal = [...document.querySelectorAll('dialog[open]')].find((d) => {
@@ -92,6 +102,9 @@ function scope(): Element {
     // A menu that is open (the player keeps its own, hidden, in the page).
     const menu = [...document.querySelectorAll('[role=menu]')].find((m) => m.getClientRects().length && !m.closest('[hidden], .player'))
     if (menu) return menu
+    // In a notice over the page: its buttons, and nothing behind it.
+    const notice = reachOf(document.activeElement)
+    if (notice) return notice
     return document.body
 }
 
@@ -101,6 +114,8 @@ const inBar = (el: Element | null) => !!el && !!bar()?.contains(el)
 function candidates(within: Element, zone: 'bar' | 'page' | 'any'): HTMLElement[] {
     const b = bar()
     return [...within.querySelectorAll(FOCUSABLE)].filter((el): el is HTMLElement => {
+        // A notice's buttons only from inside it: the page's arrows never wander in (TvReach).
+        if (!within.matches(REACH) && el.closest(REACH)) return false
         if (zone !== 'any' && b && within === document.body) {
             const there = b.contains(el)
             if ((zone === 'bar') !== there) return false
@@ -195,7 +210,7 @@ export function reveal(el: Element) {
         if (r.right > s.right - padR) strip.scrollLeft += r.right - (s.right - padR)
         else if (r.left < s.left + padL) strip.scrollLeft -= s.left + padL - r.left
     }
-    if (inBar(el) || el.closest('dialog, [role=menu], .other-tab, .update-notice, .offline-line')) return
+    if (inBar(el) || el.closest('dialog, [role=menu], .other-tab, .update-notice, .offline-line, [data-tv-reach]')) return
     if (el.closest('[data-tv-top]')) {
         if (scrollY) scrollTo({ top: 0, behavior: 'instant' })
         return
@@ -264,6 +279,8 @@ export function createFocusMap(host: Host) {
     let lastDepth = currentDepth()
     let editing: HTMLInputElement | HTMLTextAreaElement | null = null
     let hold: { el: HTMLElement; at: number; long: boolean; timer: number } | null = null
+    /** The notice the remote went into, and where it was before: where it goes back to. */
+    let reach: { el: Element; from: HTMLElement | null; edge: 'top' | 'bottom' } | null = null
     let waiting = 0
     let waitToken = 0
     const watching = () => host.path().startsWith('/watch/')
@@ -313,6 +330,31 @@ export function createFocusMap(host: Host) {
         if (below) return focus(below)
         const first = pageDefault()
         if (first) focus(first)
+    }
+
+    /**
+     * Into the newest notice over the page: one at the top for Up from the bar, else the one at
+     * the foot; Down from the page's foot only into one at the foot. True if there was one.
+     */
+    const enterReach = (from: HTMLElement | null, edges: ('top' | 'bottom')[]): boolean => {
+        for (const edge of edges) {
+            const notices = [...document.querySelectorAll(`[data-tv-reach="${edge}"]`)].filter((n) => candidates(n, 'any').length)
+            const notice = notices[notices.length - 1]
+            if (!notice) continue
+            reach = { el: notice, from, edge }
+            focus(candidates(notice, 'any')[0])
+            return true
+        }
+        return false
+    }
+    /** Out of the notice: back where the remote was, else the bar's item, else the page. */
+    const leaveReach = () => {
+        const from = reach?.from
+        reach = null
+        if (from?.isConnected && usable(from)) return focus(from)
+        const item = barCurrent()
+        if (item) return focus(item)
+        intoPage()
     }
 
     /** Waits (a few seconds at most, only after a page change) for `find` to give an item, then focuses it. */
@@ -402,6 +444,14 @@ export function createFocusMap(host: Host) {
         if (!start.dispatchEvent(new CustomEvent('tvmove', { detail: dir, cancelable: true }))) return
         const zone = within !== document.body ? 'any' : inBar(start) ? 'bar' : 'page'
         const target = nearest(rectOf(start), dir, candidates(within, zone), start)
+        if (within.matches(REACH)) {
+            // Inside a notice: its own buttons, and off its edge back where the remote was, but
+            // never on through the screen's edge it stands against.
+            if (target) return focus(target)
+            const edge = within.getAttribute('data-tv-reach')
+            if ((edge === 'top' && dir === 'up') || (edge === 'bottom' && dir === 'down')) return
+            return leaveReach()
+        }
         if (target) {
             // Into a set of choices: on the chosen one, as a radio group takes the remote.
             if (isRadio(target) && !(isRadio(start) && start.name === target.name)) {
@@ -415,6 +465,10 @@ export function createFocusMap(host: Host) {
             if (item) focus(item)
         } else if (zone === 'bar' && dir === 'down') {
             intoPage()
+        } else if (zone === 'bar' && dir === 'up') {
+            enterReach(start, ['top', 'bottom'])
+        } else if (zone === 'page' && dir === 'down') {
+            enterReach(start, ['bottom'])
         }
     }
 
@@ -450,6 +504,10 @@ export function createFocusMap(host: Host) {
             if (!active.isConnected) return true
         }
         const within = scope()
+        if (within.matches?.(REACH)) {
+            leaveReach()
+            return true
+        }
         if (within instanceof HTMLDialogElement) {
             // Escape closes a modal dialog by itself; the other Back keys do it here.
             if (e.key !== 'Escape') within.close()
@@ -644,6 +702,17 @@ export function createFocusMap(host: Host) {
         pending = requestAnimationFrame(() => {
             pending = 0
             const active = document.activeElement
+            // A notice gone (Later, Undo, its time up) while it had the remote: back where it was.
+            if (reach && !reach.el.isConnected) {
+                const had = !active || active === document.body
+                const from = reach.from
+                reach = null
+                if (had && root.dataset.tvKeys !== undefined) {
+                    if (from?.isConnected && usable(from)) return focus(from, false)
+                    const item = barCurrent()
+                    if (item) return focus(item, false)
+                }
+            }
             if (active && active !== document.body) return
             if (root.dataset.tvKeys === undefined || !lastPage) return
             const was = lastPage

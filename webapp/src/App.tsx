@@ -196,7 +196,8 @@ function UpdateNotice() {
     const [later, setLater] = createSignal(false)
     return (
         <Show when={updateReady() && !later()}>
-            <div class="update-notice" role="status">
+            {/* On a TV, reached from the bar or the page's foot, never taking the remote itself (HX22). */}
+            <div class="update-notice" role="status" data-tv-reach="bottom">
                 <p>{t('web.update_ready')}</p>
                 <button class="link" type="button" onClick={() => setLater(true)}>{t('update.later_short')}</button>
                 <button class="primary" type="button" onClick={applyUpdate}>{t('player.reload')}</button>

@@ -9,6 +9,8 @@ const HOUR = 60 * 60 * 1000
 /** A new version is downloaded and waits for Reload. */
 const [updateReady, setUpdateReady] = createSignal(false)
 export { updateReady }
+// The e2e tests (the dev server) bring the notice up without a second build to wait for.
+if (import.meta.env.DEV) (window as unknown as { __e2eUpdateReady?: () => void }).__e2eUpdateReady = () => setUpdateReady(true)
 
 let wb: Workbox | null = null
 let waiting = false

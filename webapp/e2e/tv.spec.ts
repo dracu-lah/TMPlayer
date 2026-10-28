@@ -416,6 +416,100 @@ for (const size of [
             expect(await focused(page)).toBe('tv-tab|/search')
         })
 
+        test('A notice with buttons never takes the remote, but Up from the bar and Down from the foot reach it, and Back, Down or closing it gives the remote back (HX22)', async ({ page }) => {
+            await page.goto('/')
+            await expect.poll(() => focused(page)).toContain('card|/video/')
+            await press(page, 'ArrowUp')
+            await press(page, 'ArrowRight')
+            await press(page, 'Enter')
+            await expect.poll(() => focused(page)).toBe('tv-tab|/chats')
+            const barItem = await focused(page)
+            await page.evaluate(() => (window as unknown as { __e2eUpdateReady: () => void }).__e2eUpdateReady())
+            await expect(page.locator('.update-notice')).toBeVisible()
+            const inNotice = () => page.evaluate(() => !!document.activeElement?.closest('.update-notice'))
+            const words = () => page.evaluate(() => document.activeElement?.textContent ?? '')
+            // It came up without taking the remote.
+            expect(await focused(page)).toBe(barItem)
+            // Up from the bar: into it, on its first button. Left and Right walk its two buttons.
+            await press(page, 'ArrowUp')
+            expect(await inNotice()).toBe(true)
+            expect(await words()).toBe('Later')
+            await press(page, 'ArrowRight')
+            expect(await words()).toBe('Reload')
+            await press(page, 'ArrowLeft')
+            expect(await words()).toBe('Later')
+            // Back: the remote is back on the bar's item it came from, and the page did not move.
+            await press(page, 'Backspace')
+            expect(await focused(page)).toBe(barItem)
+            await expect(page).toHaveURL(/\/chats$/)
+            // Down from the bar goes into the page, not the notice.
+            await press(page, 'ArrowDown')
+            expect(await inNotice()).toBe(false)
+            expect(await focused(page)).not.toBe(barItem)
+            // A chat of a few cards: Down from its last row reaches the notice at the foot.
+            await page.goto('/chat/-1002')
+            await expect.poll(() => focused(page)).toContain('card|/video/')
+            await page.evaluate(() => (window as unknown as { __e2eUpdateReady: () => void }).__e2eUpdateReady())
+            await expect(page.locator('.update-notice')).toBeVisible()
+            for (let i = 0; i < 30 && !(await inNotice()); i++) await press(page, 'ArrowDown')
+            expect(await inNotice()).toBe(true)
+            // Up, the way the remote came, goes back onto the page's last item.
+            await press(page, 'ArrowUp')
+            expect(await inNotice()).toBe(false)
+            const last = await focused(page)
+            await press(page, 'ArrowDown')
+            expect(await inNotice()).toBe(true)
+            // OK on Later: the notice goes, and the remote is back where it was.
+            await press(page, 'Enter')
+            await expect(page.locator('.update-notice')).toHaveCount(0)
+            await expect.poll(() => focused(page)).toBe(last)
+        })
+
+        test('A toast\'s Undo is reached from the bar, stays up while the remote is on it, and OK undoes (HX22)', async ({ page }) => {
+            await page.evaluate(
+                () =>
+                    new Promise<void>((resolve, reject) => {
+                        const open = indexedDB.open('tmplayer-app')
+                        open.onerror = () => reject(open.error)
+                        open.onsuccess = () => {
+                            const tx = open.result.transaction('kv', 'readwrite')
+                            tx.objectStore('kv').put(1, 'watched:-1001:1')
+                            tx.oncomplete = () => (open.result.close(), resolve())
+                        }
+                    }),
+            )
+            await page.goto('/settings')
+            await expect.poll(() => focused(page)).not.toBe('')
+            const on = () => page.evaluate(() => document.activeElement?.getAttribute('aria-labelledby') ?? '')
+            for (let i = 0; i < 40 && (await on()) !== 'history-label'; i++) await press(page, 'ArrowDown')
+            expect(await on()).toBe('history-label')
+            await press(page, 'Enter')
+            await expect(page.locator('.toast button')).toBeVisible()
+            // The toast never takes the remote.
+            expect(await on()).toBe('history-label')
+            await press(page, 'Backspace')
+            const barItem = await focused(page)
+            await press(page, 'ArrowUp')
+            expect(await page.evaluate(() => !!document.activeElement?.closest('.toast'))).toBe(true)
+            // Past its 8 s, it stays while the remote is on it.
+            await page.waitForTimeout(9_000)
+            await expect(page.locator('.toast button')).toBeVisible()
+            await press(page, 'Enter')
+            await expect(page.locator('.toast')).toHaveCount(0)
+            await expect.poll(() => focused(page)).toBe(barItem)
+            const back = await page.evaluate(
+                () =>
+                    new Promise<unknown>((resolve) => {
+                        const open = indexedDB.open('tmplayer-app')
+                        open.onsuccess = () => {
+                            const get = open.result.transaction('kv').objectStore('kv').get('watched:-1001:1')
+                            get.onsuccess = () => (open.result.close(), resolve(get.result))
+                        }
+                    }),
+            )
+            expect(back).toBe(1)
+        })
+
         test('keys only, every screen: the remote lands on something, never falls to the page, and Back always gets out', async ({ page }) => {
             test.setTimeout(150_000)
             const onBody = () => page.evaluate(() => !document.activeElement || document.activeElement === document.body || document.activeElement === document.documentElement)
