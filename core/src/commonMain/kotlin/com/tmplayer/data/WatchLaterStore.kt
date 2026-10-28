@@ -23,6 +23,9 @@ import kotlinx.coroutines.flow.map
  * It lives in the Watched list's file ([WatchedStore.watchLater]) under a prefix of its own, which
  * is what lets finishing a video, or marking it watched, cross it off here in the same write that
  * ticks it. "Clear watched" leaves it alone; signing out clears both.
+ *
+ * A whole show can be saved too (HX20, [WatchLaterRecord.isShow]): one line by its chat and key,
+ * which finishing an episode leaves alone; marking the rest of the show watched takes it off.
  */
 class WatchLaterStore internal constructor(private val store: DataStore<Preferences>) {
 
@@ -39,9 +42,18 @@ class WatchLaterStore internal constructor(private val store: DataStore<Preferen
         decodeAll(prefs).sortedByDescending { it.addedAt }
     }.combine(ChatGate.allowed) { records, allowed -> KidsLock.filter(records, allowed) { it.chatId } }
 
-    /** Every saved video's [SettingsStore.progressKey], for a menu deciding between add and remove. */
+    /** Every saved video's [SettingsStore.progressKey], for a menu deciding between add and remove. Shows are not in it. */
     val keys: Flow<Set<String>> = read { prefs ->
-        prefs.asMap().keys.mapNotNullTo(HashSet()) { key -> key.name.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX) }
+        prefs.asMap().keys.mapNotNullTo(HashSet()) { key ->
+            key.name.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX)?.takeIf { WatchLaterRecord.SHOW_SEP !in it }
+        }
+    }
+
+    /** Every saved show's [WatchLaterRecord.showId], for a show's page or menu deciding between add and remove. */
+    val showIds: Flow<Set<String>> = read { prefs ->
+        prefs.asMap().keys.mapNotNullTo(HashSet()) { key ->
+            key.name.takeIf { it.startsWith(PREFIX) }?.removePrefix(PREFIX)?.takeIf { WatchLaterRecord.SHOW_SEP in it }
+        }
     }
 
     suspend fun contains(chatId: Long, messageId: Long): Boolean =
@@ -50,13 +62,23 @@ class WatchLaterStore internal constructor(private val store: DataStore<Preferen
     /** Adds [record], or moves it to the top with the new time when it is there already. */
     suspend fun add(record: WatchLaterRecord) {
         store.edit { prefs ->
-            prefs[keyOf(record.chatId, record.messageId)] = record.encode()
+            prefs[keyOf(record)] = record.encode()
             evictOldest(prefs)
         }
     }
 
     suspend fun remove(chatId: Long, messageId: Long) {
         store.edit { it.remove(keyOf(chatId, messageId)) }
+    }
+
+    /** Takes [record]'s line off the list, a video's or a show's alike. */
+    suspend fun remove(record: WatchLaterRecord) {
+        store.edit { it.remove(keyOf(record)) }
+    }
+
+    /** Takes the show [seriesKey] of [chatId] off the list; its episodes saved one by one stay. */
+    suspend fun removeShow(chatId: Long, seriesKey: String) {
+        store.edit { it.remove(stringPreferencesKey(PREFIX + WatchLaterRecord.showId(chatId, seriesKey))) }
     }
 
     /** Takes [ids] ([SettingsStore.progressKey]s) off the list in one edit, handed back for Undo ([putBack]). */
@@ -79,7 +101,7 @@ class WatchLaterStore internal constructor(private val store: DataStore<Preferen
         if (records.isEmpty()) return
         store.edit { prefs ->
             for (record in records) {
-                val key = keyOf(record.chatId, record.messageId)
+                val key = keyOf(record)
                 if (prefs[key] == null) prefs[key] = record.encode()
             }
             evictOldest(prefs)
@@ -111,7 +133,7 @@ class WatchLaterStore internal constructor(private val store: DataStore<Preferen
         if (all.size <= MAX_WATCH_LATER) return
         all.sortedBy { it.addedAt }
             .take(all.size - MAX_WATCH_LATER)
-            .forEach { prefs.remove(keyOf(it.chatId, it.messageId)) }
+            .forEach { prefs.remove(keyOf(it)) }
     }
 
     companion object {
@@ -123,5 +145,8 @@ class WatchLaterStore internal constructor(private val store: DataStore<Preferen
 
         internal fun keyOf(chatId: Long, messageId: Long) =
             stringPreferencesKey(PREFIX + SettingsStore.progressKey(chatId, messageId))
+
+        /** A video's line by its message, a show's by its chat and key ([WatchLaterRecord.id]). */
+        private fun keyOf(record: WatchLaterRecord) = stringPreferencesKey(PREFIX + record.id)
     }
 }

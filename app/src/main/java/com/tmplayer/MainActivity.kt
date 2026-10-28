@@ -1829,7 +1829,7 @@ private fun Root() {
                     // The card leaving the row is the answer.
                     onRemoveWatchLater = { record ->
                         App.backgroundScope.launch {
-                            runCatching { watchedStore.watchLater.remove(record.chatId, record.messageId) }
+                            runCatching { watchedStore.watchLater.remove(record) }
                         }
                     },
                     // Marked "Opens on launch" only while Carry on from the last chat is on.

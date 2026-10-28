@@ -708,6 +708,10 @@ a.detail-round { text-decoration: none; }
 .episode-name { flex: 1; min-width: 0; color: inherit; opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .episode-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(127,127,127,.3); }
 .episode-progress span { display: block; height: 100%; background: var(--accent); }
+/* A watched episode's tick, and the show's own actions over the list (HX20). */
+.episode-watched { flex: none; display: inline-flex; color: var(--accent); }
+.show-actions { justify-content: flex-start; margin: 0 0 4px; }
+.show-actions + p:empty { display: none; }
 .more-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @media (min-width: 600px) { .more-cards { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } }
 
@@ -1056,5 +1060,5 @@ button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor
 button.primary.danger:disabled { opacity: .4; }
 /* The long press menu of a history card. */
 .card { -webkit-touch-callout: none; }
-.card-menu .menu-row { display: flex; gap: 16px; align-items: center; background: none; border: 0; color: inherit; text-align: start; padding: 8px 0; font-size: 16px; }
+.card-menu .menu-row { display: flex; gap: 16px; align-items: center; background: none; border: 0; color: inherit; text-align: start; padding: 8px 0; font-size: 16px; width: 100%; }
 .card-menu .menu-row small { display: block; color: var(--muted, inherit); opacity: .7; font-size: 13px; }

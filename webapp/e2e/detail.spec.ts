@@ -59,3 +59,30 @@ test('Watched pressed and the page reloaded at once still holds it', async ({ pa
     await page.reload()
     await expect(page.locator('.detail-watched')).toBeVisible()
 })
+
+// HX20: a show's own actions over its episodes, as the apps' show page has them.
+test('a show: Mark episodes names its count and ticks the season, and the whole show goes on Watch later', async ({ page }) => {
+    // The show's card opens the episode up next, whose page lists the show's seasons.
+    await page.goto('/chat/-1002')
+    await page.locator('.card', { hasText: 'Harbour Notes' }).first().click()
+    await expect(page).toHaveURL(/\/video\//)
+    await expect(page.locator('.episode')).toHaveCount(3)
+    const marks = page.locator('.show-actions .detail-round', { hasText: 'Mark episodes' })
+    await marks.click()
+    const season = page.locator('dialog[open] .menu-row', { hasText: 'Mark season 1 as watched' })
+    await expect(season).toContainText('3 episodes')
+    await season.click()
+    await expect(page.locator('.episode-watched')).toHaveCount(3)
+    await page.reload()
+    await expect(page.locator('.episode-watched')).toHaveCount(3)
+    // And back: unwatched takes every tick off.
+    await marks.click()
+    await page.locator('dialog[open] .menu-row', { hasText: 'Mark season 1 as unwatched' }).click()
+    await expect(page.locator('.episode-watched')).toHaveCount(0)
+    const later = page.locator('.show-actions .detail-round', { hasText: 'Watch later' })
+    await expect(later).toHaveAttribute('aria-pressed', 'false')
+    await later.click()
+    await expect(later).toHaveAttribute('aria-pressed', 'true')
+    await page.goto('/history/later')
+    await expect(page.locator('.card-name', { hasText: 'Harbour Notes' })).toBeVisible()
+})

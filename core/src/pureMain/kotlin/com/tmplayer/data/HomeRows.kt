@@ -293,9 +293,10 @@ object HomeRows {
         }
 
         // Started since it was saved: Continue already has it, with its place.
-        val everyLater = watchLater.distinctBy { it.key }.filterNot { it.key in inContinue }
+        // A show stays whatever of it was begun: its page carries on from the episode up next.
+        val everyLater = watchLater.distinctBy { it.id }.filterNot { !it.isShow && it.key in inContinue }
         val later = everyLater.take(LIMIT)
-        later.forEach { seen += it.key }
+        later.forEach { if (!it.isShow) seen += it.key }
         if (later.isNotEmpty() && !autoFill) add(HomeRow.WatchLater(later, everyLater.drop(LIMIT)))
         val newEpisodes = fresh.filterNot { keyOf(it.item.chatId, it.item.messageId) in seen }.take(LIMIT)
         if (newEpisodes.isNotEmpty() && !autoFill) add(HomeRow.NewEpisodes(newEpisodes))

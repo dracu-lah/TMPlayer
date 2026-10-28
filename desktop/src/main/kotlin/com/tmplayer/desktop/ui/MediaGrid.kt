@@ -201,7 +201,7 @@ fun MediaGridPage(state: ShellState, chat: ChatSummary) {
         var gridReturn by remember(chat.id) { mutableStateOf<Pair<Int, Int>?>(null) }
         // A show's seasons and episodes take the page, as they do from Home; Close comes back here.
         openSeries?.let { shown ->
-            SeriesPage(state, shown, rememberSeriesWatch(state), onClose = { openSeries = null })
+            SeriesPage(state, shown, rememberSeriesWatch(state), onClose = { openSeries = null }, outsideChat = false)
             return@Box
         }
         // The grid's keyboard focus, once the grid exists; the search field's Down arrow enters it.
@@ -579,7 +579,7 @@ internal fun VideoGrid(
                 // A new order (a sort, a correction) moves the cards to their places.
                 Box(Modifier.animateItem()) {
                     if (show != null && watch != null) {
-                        SeriesPoster(show, watch, onOpen = { onOpenSeries(show) }, nav = nav, index = index, poster = item.id in posters)
+                        SeriesPoster(show, watch, onOpen = { onOpenSeries(show) }, nav = nav, index = index, poster = item.id in posters, state = state, outsideChat = false)
                     } else {
                         MediaTile(state, item, chatTitle, nav, index, badge = badge(item), poster = item.id in posters)
                     }
@@ -920,6 +920,8 @@ internal fun Poster(
      * Null keeps the menu, as Continue watching and Watched do.
      */
     onDetails: ((refocus: () -> Unit) -> Unit)? = null,
+    /** What a click, Enter and Play do in place of playing or the pane: a saved show's page (HX20). */
+    onOpen: (() -> Unit)? = null,
 ) {
     val s = LocalStrings.current
     val interaction = remember { MutableInteractionSource() }
@@ -961,7 +963,7 @@ internal fun Poster(
         } else if (ticksOnClick) {
             selection?.toggle(index)
         } else {
-            state.openPlayer(item, startFromBeginning = false)
+            if (onOpen != null) onOpen() else state.openPlayer(item, startFromBeginning = false)
         }
     }
     // This poster's own entry only, as the phone's tile reads it: the map changes with every
@@ -979,7 +981,7 @@ internal fun Poster(
     }
     val detailFirst = state.detailFirst
     val click: () -> Unit = {
-        if (detailFirst && !(picking && selection != null) && !ticksOnClick) page() else play()
+        if (onOpen != null && !(picking && selection != null) && !ticksOnClick) onOpen() else if (detailFirst && !(picking && selection != null) && !ticksOnClick) page() else play()
     }
     val openMenu: () -> Unit = {
         if (details != null) {

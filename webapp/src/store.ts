@@ -188,7 +188,7 @@ export async function loadSettings() {
     const known = Object.fromEntries(Object.entries(saved ?? {}).filter(([k]) => k in DEFAULTS)) as Partial<Settings>
     setSettings({ ...DEFAULTS, ...known })
     setStarredIds(new Set(stars))
-    setLaterIds(new Set(later.map((l) => id(l.item.chatId, l.item.messageId))))
+    setLaterIds(new Set(later.map(laterId)))
     applyTheme(settings().theme)
 }
 
@@ -290,6 +290,22 @@ export function setWatched(chatId: number, messageId: number, on: boolean) {
     } else remove(`watched:${key}`)
     setWatchedTick(watchedTick() + 1)
 }
+
+/**
+ * A season or a whole show marked watched or not, as the apps' show page does it (HX20): every
+ * place forgotten either way (watched leaves Continue watching, unwatched starts the show again),
+ * the marks a moment apart in watching order, and one tick for the lot.
+ */
+export function setWatchedMany(videos: readonly { chatId: number; messageId: number }[], on: boolean) {
+    const now = Date.now()
+    videos.forEach((v, i) => {
+        const key = id(v.chatId, v.messageId)
+        remove(`resume:${key}`)
+        if (on) write(`watched:${key}`, now - (videos.length - 1 - i))
+        else remove(`watched:${key}`)
+    })
+    setWatchedTick(watchedTick() + 1)
+}
 /** Bumped by every change to Watched, so what shows it reads it again. */
 const [watchedTick, setWatchedTick] = createSignal(0)
 export { watchedTick }
@@ -359,9 +375,39 @@ export async function removeFromHistory(ids: string[]): Promise<{ snapshot: Hist
 export interface Later {
     item: VideoItem
     time: number
+    /**
+     * Set for a whole show saved (HX20), as the apps keep it: the show's name, lower-cased, which
+     * with the chat is the line's key whatever episode comes next. [item] is one of its episodes
+     * under the show's name, whose page lists the show's seasons.
+     */
+    show?: string
 }
 const [laterIds, setLaterIds] = createSignal<ReadonlySet<string>>(new Set())
 export { laterIds }
+
+/** A show's Watch later key: its chat and its name, lower-cased. */
+export const showLaterId = (chatId: number, show: string) => `show:${chatId}:${show.trim().toLowerCase()}`
+
+/** The key a Watch later line is kept and looked up by: the video's, or the show's. */
+const laterId = (l: Later) => (l.show ? showLaterId(l.item.chatId, l.show) : id(l.item.chatId, l.item.messageId))
+
+/**
+ * Puts a whole show on Watch later, or takes it off (HX20). [episode] is the episode the page is
+ * about, kept under the show's name: its card opens that page, which lists the show's seasons.
+ */
+export function setShowLater(episode: VideoItem, show: string, on: boolean) {
+    const key = showLaterId(episode.chatId, show)
+    const next = new Set(laterIds())
+    if (on) {
+        next.add(key)
+        const item: VideoItem = { ...episode, title: show, name: show }
+        write(`later:${key}`, { item, time: Date.now(), show: show.trim().toLowerCase() } satisfies Later)
+    } else {
+        next.delete(key)
+        remove(`later:${key}`)
+    }
+    setLaterIds(next)
+}
 
 export function setLater(item: VideoItem, on: boolean) {
     const key = id(item.chatId, item.messageId)

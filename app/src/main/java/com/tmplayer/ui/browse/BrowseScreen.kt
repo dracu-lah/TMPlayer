@@ -353,6 +353,10 @@ internal fun BrowseScreen(
     var mediaMenu by remember { mutableStateOf<ResumeRecord?>(null) }
     var watchedMenu by remember { mutableStateOf<WatchedRecord?>(null) }
     var laterMenu by remember { mutableStateOf<WatchLaterRecord?>(null) }
+    // A show opened from Watch later, with its chat's name (HX20).
+    var laterShow by remember { mutableStateOf<Pair<com.tmplayer.data.Series, String>?>(null) }
+    // A show card held on Home: its menu, with its chat's name (HX20).
+    var heldShow by remember { mutableStateOf<Pair<com.tmplayer.data.Series, String>?>(null) }
     var confirmClearHistory by remember { mutableStateOf(false) }
     var confirmClearLater by remember { mutableStateOf(false) }
     // Remove from history on a Continue card, asked first under a remote only: a touch screen
@@ -403,8 +407,14 @@ internal fun BrowseScreen(
     val openMedia: (MediaItem, String) -> Unit = if (detailFirst) showDetail else onPlayMedia
     val openResume: (ResumeRecord) -> Unit =
         if (detailFirst) ({ record -> showDetail(record.toMediaItem(), record.chatTitle) }) else onResumeMedia
-    val openLater: (WatchLaterRecord) -> Unit =
+    val openLaterVideo: (WatchLaterRecord) -> Unit =
         if (detailFirst) ({ record -> showDetail(record.toMediaItem(), record.chatTitle) }) else onOpenWatchLater
+    // A show saved whole (HX20) opens its page, made whole from its chat; a line whose anchor no
+    // longer reads as an episode falls back to that video.
+    val openLater: (WatchLaterRecord) -> Unit = { record ->
+        val stub = record.stubSeries()
+        if (stub != null) laterShow = stub to record.chatTitle else openLaterVideo(record)
+    }
     // The Watched list follows the same rule as Continue watching: OK on a row opened the
     // player at once while a Continue row opened the page, so the two lists of History answered
     // the same press differently (user, 2026-10-23). Play again stays in the hold menu.
@@ -450,7 +460,7 @@ internal fun BrowseScreen(
         when (historyTab) {
             HistoryTab.Continue -> continuing.mapTo(LinkedHashSet()) { SettingsStore.progressKey(it.chatId, it.messageId) }
             HistoryTab.Watched -> watchedShown.mapTo(LinkedHashSet()) { it.key }
-            HistoryTab.WatchLater -> laterShown.mapTo(LinkedHashSet()) { it.key }
+            HistoryTab.WatchLater -> laterShown.mapTo(LinkedHashSet()) { it.id }
         }
     }
     // A card that left the list while ticked (finished on another device, removed from its page)
@@ -484,8 +494,8 @@ internal fun BrowseScreen(
                 historyRemoval.run({ s.browseRemovedFromHistory(it) }) { st, w -> com.tmplayer.data.HistoryEdits.removeWatchedCards(st, w, cards) }
             }
             HistoryTab.WatchLater -> {
-                val cards = laterShown.filter { it.key in keys }
-                historyRemoval.run({ s.browseRemovedFromWatchLater(it) }) { _, w -> com.tmplayer.data.HistoryEdits.removeLater(w, cards.map { it.key }, cards.size) }
+                val cards = laterShown.filter { it.id in keys }
+                historyRemoval.run({ s.browseRemovedFromWatchLater(it) }) { _, w -> com.tmplayer.data.HistoryEdits.removeLater(w, cards.map { it.id }, cards.size) }
             }
         }
         leaveSelecting()
@@ -519,7 +529,7 @@ internal fun BrowseScreen(
         historyRemoval.run({ s.browseRemovedFromHistory(it) }) { st, w -> com.tmplayer.data.HistoryEdits.removeWatchedCards(st, w, listOf(record)) }
     }
     val removeLater: (WatchLaterRecord) -> Unit = { record ->
-        historyRemoval.run({ s.browseRemovedFromWatchLater(it) }) { _, w -> com.tmplayer.data.HistoryEdits.removeLater(w, listOf(record.key), 1) }
+        historyRemoval.run({ s.browseRemovedFromWatchLater(it) }) { _, w -> com.tmplayer.data.HistoryEdits.removeLater(w, listOf(record.id), 1) }
     }
 
     // One question decides the whole shape of this screen: a permanent rail beside the listing on
@@ -648,6 +658,8 @@ internal fun BrowseScreen(
             Column(Modifier.fillMaxSize()) {
                     if (tab.isHome) {
                         val titles = remember(data.chats) { data.chats.associate { it.id to it.title } }
+                        // A show card held on Home opens its menu (HX20), drawn below with the other menus.
+                        androidx.compose.runtime.CompositionLocalProvider(LocalSeriesHold provides { show -> heldShow = show to titles[show.cover.chatId].orEmpty() }) {
                         Box(Modifier.fillMaxSize()) {
                             HomePane(
                                 rows = homeRows,
@@ -700,6 +712,7 @@ internal fun BrowseScreen(
                                 // Room for the television's top bar, which stands over the carousel's picture.
                                 tvHeader = if (touch) null else { _ -> Spacer(Modifier.fillMaxWidth().height(TV_BAR_HEIGHT)) },
                             )
+                        }
                         }
                     } else if (tab.listsVideos) {
                         // One branch for both tabs, so the chip row stays the same composition when
@@ -770,7 +783,7 @@ internal fun BrowseScreen(
                                     onResume = openLater,
                                     onHold = { laterMenu = it },
                                     ticked = tickedOrNull,
-                                    onTick = { tick(it.key) },
+                                    onTick = { tick(it.id) },
                                     refocusSignal = listRefocus,
                                 )
                             }
@@ -1331,15 +1344,48 @@ internal fun BrowseScreen(
         )
     }
 
+    laterShow?.let { (series, title) ->
+        SeriesOpened(
+            series = series,
+            watch = homeWatch,
+            onPlay = { onPlayMedia(it, title) },
+            onDismiss = { laterShow = null },
+            onLongClick = { held = it to title },
+            onDownload = { request ->
+                panelScope.launch { queueSeason(panelContext, SettingsStore(panelContext), request) { title }?.let(onMessage) }
+            },
+            chatTitle = title,
+            onOpenChat = chatsNow.firstOrNull { it.id == series.cover.chatId }?.let { chat -> { laterShow = null; onOpenChat(chat) } },
+        )
+    }
+    heldShow?.let { (series, title) ->
+        SeriesMenuOpened(
+            series = series,
+            watch = homeWatch,
+            chatTitle = title,
+            onOpen = { laterShow = series to title },
+            onDismiss = { heldShow = null },
+            onOpenChat = chatsNow.firstOrNull { it.id == series.cover.chatId }?.let { chat -> { onOpenChat(chat) } },
+        )
+    }
+
     laterMenu?.let { record ->
         TvMenu(
             title = record.title,
             subtitle = record.chatTitle.ifBlank { null },
             onDismiss = { laterMenu = null },
             actions = listOf(
-                MenuAction(s.commonPlay, TmIcons.Play) {
-                    laterMenu = null
-                    onOpenWatchLater(record)
+                // A show saved whole opens its page, where Play carries on from the episode up next.
+                if (record.isShow) {
+                    MenuAction(s.detailOpenDetails, TmIcons.Info) {
+                        laterMenu = null
+                        openLater(record)
+                    }
+                } else {
+                    MenuAction(s.commonPlay, TmIcons.Play) {
+                        laterMenu = null
+                        onOpenWatchLater(record)
+                    }
                 },
                 MenuAction(
                     label = s.detailWatchLaterRemove,
@@ -1351,7 +1397,7 @@ internal fun BrowseScreen(
                 },
                 MenuAction(s.browseSelect, TmIcons.Checklist) {
                     laterMenu = null
-                    startSelecting(record.key)
+                    startSelecting(record.id)
                 },
             ),
         )
@@ -1504,14 +1550,21 @@ private fun dayWord(day: DayGroup, s: com.tmplayer.i18n.Messages): String = when
     DayGroup.Earlier -> s.watchedEarlier
 }
 
-/** A video saved for later: how long it is and how big, and no bar until it is started. */
+/**
+ * A video saved for later: how long it is and how big, and no bar until it is started. A show
+ * saved whole (HX20) is named as the show and says so.
+ */
 private fun WatchLaterRecord.cardText() = VideoCardText(
-    key = key,
-    title = SeriesShelf.tileTitle(toMediaItem()),
-    detail = listOfNotNull(
-        durationSec.takeIf { it > 0 }?.let { L.messages.formatter.duration(it.toLong()) },
-        sizeBytes.takeIf { it > 0 }?.let { L.messages.formatter.size(it) },
-    ).joinToString("  ·  "),
+    key = id,
+    title = if (isShow) title else SeriesShelf.tileTitle(toMediaItem()),
+    detail = if (isShow) {
+        L.messages.seriesShowLabel
+    } else {
+        listOfNotNull(
+            durationSec.takeIf { it > 0 }?.let { L.messages.formatter.duration(it.toLong()) },
+            sizeBytes.takeIf { it > 0 }?.let { L.messages.formatter.size(it) },
+        ).joinToString("  ·  ")
+    },
     chatTitle = chatTitle,
     chatId = chatId,
     fraction = 0f,

@@ -53,12 +53,15 @@ internal fun SeriesCard(
     poster: Boolean = false,
     /** Episodes posted since the viewer last watched the show: a "New" badge on the picture. */
     fresh: Boolean = false,
+    /** A long press or a held OK: the show's menu ([ShowMenu]), as a video's tile opens its panel (HX20). */
+    onLongClick: (() -> Unit)? = null,
 ) {
     val summary = listOfNotNull(seriesSummary(series), seriesProgressLine(progress)).joinToString("  ·  ")
     VideoTile(
         title = series.title,
         onClick = onClick,
         onFocused = onFocused,
+        onLongClick = onLongClick ?: LocalSeriesHold.current?.let { hold -> { hold(series) } },
         dense = dense,
         poster = poster,
         modifier = modifier,
@@ -79,6 +82,32 @@ internal fun SeriesCard(
 }
 
 /**
+ * A show card's menu on a phone and a television (HX20): Details, Watch later, Mark as watched and
+ * Go to the chat, on the show made whole from its chat so "the whole show" means every episode.
+ */
+@Composable
+internal fun SeriesMenuOpened(
+    series: Series,
+    watch: SeriesWatch,
+    chatTitle: String,
+    onOpen: () -> Unit,
+    onDismiss: () -> Unit,
+    onOpenChat: (() -> Unit)? = null,
+) {
+    val whole = com.tmplayer.ui.browse.rememberWholeSeries(series)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val actions = rememberShowActions(
+        whole, watch,
+        remember(context) { com.tmplayer.data.SettingsStore(context) },
+        remember(context) { com.tmplayer.data.WatchedStore(context) },
+        chatTitle = chatTitle,
+        onMessage = { com.tmplayer.ui.components.showMessage(context, it) },
+        onOpenChat = onOpenChat,
+    )
+    ShowMenu(whole, watch, actions, onDismiss = onDismiss, onOpen = onOpen)
+}
+
+/**
  * A show, opened: a page of its own over everything, on a phone and a television alike. Choosing
  * an episode plays it with the page left open under the player, so Back from the player lands on
  * the show again, on the episode that was pressed.
@@ -94,6 +123,8 @@ internal fun SeriesOpened(
     onDownload: ((SeasonDownloadRequest) -> Unit)? = null,
     /** The chat the show is in, for the page's facts line. */
     chatTitle: String? = null,
+    /** The show's chat, from a page opened outside it (Home, search, Watch later); null leaves Go to out. */
+    onOpenChat: (() -> Unit)? = null,
 ) {
     // Every episode its chat holds, not only those the screen behind had read.
     val whole = com.tmplayer.ui.browse.rememberWholeSeries(series)
@@ -119,7 +150,14 @@ internal fun SeriesOpened(
             onPlay(item)
         }
     }
-    SeriesPage(whole, watch, onPlay, startOver, onDismiss, onLongClick.takeIf { isTouch() }, onDownload, chatTitle, downloadedIds)
+    // Watch later, Mark as watched and Go to the chat for the show as a whole (HX20).
+    val showActions = rememberShowActions(
+        whole, watch, settings, remember(context) { com.tmplayer.data.WatchedStore(context) },
+        chatTitle = chatTitle.orEmpty(),
+        onMessage = { com.tmplayer.ui.components.showMessage(context, it) },
+        onOpenChat = onOpenChat,
+    )
+    SeriesPage(whole, watch, onPlay, startOver, onDismiss, onLongClick.takeIf { isTouch() }, onDownload, chatTitle, downloadedIds, showActions)
 }
 
 /**
@@ -139,6 +177,7 @@ private fun SeriesPage(
     onDownload: ((SeasonDownloadRequest) -> Unit)?,
     chatTitle: String?,
     downloadedIds: Set<String>,
+    showActions: ShowActions,
 ) {
     val touch = isTouch()
     // On a phone the page grows out of the show's tile, and folds back towards it.
@@ -161,6 +200,7 @@ private fun SeriesPage(
                 onDownload = onDownload,
                 downloadedIds = downloadedIds,
                 chatTitle = chatTitle,
+                showActions = showActions,
                 contentPadding = if (touch) {
                     PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp)
                 } else {
@@ -201,3 +241,9 @@ private fun HideDialogBars() {
         }
     }
 }
+
+/**
+ * A show card's hold (HX20) where the card's own caller hands it none: Home's rows, whose tiles sit
+ * several functions down. The browse screen provides it and draws the show's menu.
+ */
+internal val LocalSeriesHold = androidx.compose.runtime.staticCompositionLocalOf<((Series) -> Unit)?> { null }
