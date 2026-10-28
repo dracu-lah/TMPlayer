@@ -3,7 +3,8 @@ import { useLocation, useNavigate, useParams } from '@solidjs/router'
 import { api, errorText } from '../tg/rpc'
 import { back } from '../session'
 import { t } from '../i18n'
-import { dropResume, progress as readProgress, settings } from '../store'
+import { progress as readProgress, settings } from '../store'
+import { chatGone, forgetGone } from '../goneVideos'
 import { watchPath } from './VideoList'
 import { warmFile } from '../stream/reader'
 import type { ChatView, VideoItem } from '../tg/types'
@@ -27,9 +28,17 @@ export function Watch() {
     const ids = () => ({ chatId: Number(params.chatId), messageId: Number(params.messageId) })
     const [video] = createResource(ids, async ({ chatId, messageId }) => {
         const passed = location.state?.video
-        const found = passed?.chatId === chatId && passed.messageId === messageId && (await api.known(passed.key)) ? passed : await api.video(chatId, messageId)
-        // Gone from the chat: Continue watching forgets it too.
-        if (found === null) dropResume(chatId, messageId)
+        let found: VideoItem | null
+        try {
+            found = passed?.chatId === chatId && passed.messageId === messageId && (await api.known(passed.key)) ? passed : await api.video(chatId, messageId)
+        } catch (e) {
+            // Its chat closed to this account: the page says so, and the lists let it go (HX21).
+            if (chatGone(e)) void forgetGone([{ chatId, messageId }], false)
+            throw e
+        }
+        // Gone from the chat: it leaves Continue watching, Watched and Watch later (HX21), which
+        // the page need not say on top of saying the video is gone.
+        if (found === null) void forgetGone([{ chatId, messageId }], false)
         // The file's head and tail start arriving while the player's code loads; the player takes them over.
         else warmFile(found)
         return found

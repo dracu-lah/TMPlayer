@@ -172,6 +172,14 @@ class GarbageInputTest {
                 MediaText.overviewOf("File name: $text\n$text", "$text.mkv", text)
             }
             survive("VideoCopies.keyOfTitle", text) { VideoCopies.keyOfTitle(text); VideoCopies.languagesIn(text) }
+            survive("StaleEntries.classify", text) {
+                for (code in listOf(Int.MIN_VALUE, -1, 0, 400, 404, 420, 500, Int.MAX_VALUE)) {
+                    // Only a plain answer is gone: random text with an ordinary code never is.
+                    val lookup = StaleEntries.classify(code, text)
+                    check(code == 404 || lookup is MessageLookup.Unreachable || "NOT" in text.uppercase() || "INVALID" in text.uppercase() ||
+                        "PRIVATE" in text.uppercase() || "FORBIDDEN" in text.uppercase() || "ACCESS" in text.uppercase() || "BANNED" in text.uppercase())
+                }
+            }
             survive("MsoneApi.parse", text) {
                 MsoneApi.parseHealth(text, 0)
                 MsoneApi.parseHits(text)

@@ -434,6 +434,9 @@
   },
   "continue": {
     "empty": "Nothing part-watched yet. Videos you stop half way wait here.",
+    "gone_left_history": "{count, plural, one {A video is no longer in its chat, so it left your history} other {# videos are no longer in their chats, so they left your history}}",
+    "gone_left_lists": "{count, plural, one {A video is no longer in its chat, so it left your history and Watch later} other {# videos are no longer in their chats, so they left your history and Watch later}}",
+    "gone_left_watch_later": "{count, plural, one {A video is no longer in its chat, so it left Watch later} other {# videos are no longer in their chats, so they left Watch later}}",
     "left": "{chat}  ·  {time} left",
     "pruned": "{count, plural, one {Removed a video TMPlayer can no longer open from Continue watching} other {Removed # videos TMPlayer can no longer open from Continue watching}}",
     "title": "Continue watching"
@@ -583,6 +586,7 @@
     "delete_title": "{count, plural, one {Delete this download?} other {Delete # downloads?}}",
     "did_not_finish": "The download did not finish. Try again.",
     "download": "Download",
+    "download_again": "Download again",
     "downloaded": "Downloaded",
     "downloading": "Downloading",
     "downloading_ellipsis": "Downloading…",
@@ -601,6 +605,7 @@
     "finishes_after_playback": "Finishes when playback stops",
     "finishes_when_stopped": "Finishes when playback stops",
     "folder": "TMPlayer's Downloads folder",
+    "folder_gone": "Folder not found: a drive unplugged, or the folder moved",
     "free_low_storage": "Turn on {mode}",
     "free_low_storage_detail": "Videos then stream with about {size} kept on this device instead of the whole file. Your downloads stay as they are.",
     "free_low_storage_done": "{mode} is on. Videos now stream with only a small part kept on this device.",
@@ -803,6 +808,9 @@
     "tdlib_parameters": "TDLib rejected its parameters: {message}",
     "tdlib_unavailable": "TDLib, the part of TMPlayer that talks to Telegram, could not start on this device. Please report this with the message: {message}",
     "unsupported_sign_in_step": "This account needs a step TMPlayer can't do. Finish signing in in the Telegram app first, then try again.",
+    "video_chat_closed": "This video's chat is closed to you now: you left it, or it was made private. It can't play.",
+    "video_deleted": "This video was removed from its chat, so it can't play any more.",
+    "video_not_video": "This post was edited and no longer holds a video.",
     "wrong_code": "Wrong code",
     "wrong_password": "Wrong password"
   },

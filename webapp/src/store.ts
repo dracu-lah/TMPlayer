@@ -376,6 +376,14 @@ export function setLater(item: VideoItem, on: boolean) {
     setLaterIds(next)
 }
 
+/** Takes one video off Watch later by its ids alone (a video gone from its chat, HX21); true when it was there. */
+export function dropLater(chatId: number, messageId: number): boolean {
+    const key = id(chatId, messageId)
+    if (!laterIds().has(key)) return false
+    setLater({ chatId, messageId } as VideoItem, false)
+    return true
+}
+
 /** Watch later, the latest first. */
 export async function laterList(): Promise<Later[]> {
     return (await all<Later>('later:')).sort((a, b) => b.time - a.time)

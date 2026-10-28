@@ -423,6 +423,28 @@ class ShellState(
      *   off, if anywhere.
      */
     fun openPlayer(item: MediaItem, startFromBeginning: Boolean) {
+        // Known gone from Telegram this session (HX21): said in the window, and its kept entries
+        // go ([com.tmplayer.data.GoneVideos.follow]), unless a download of it still plays.
+        val gone = com.tmplayer.data.GoneVideos.reasonFor(item.chatId, item.messageId)
+        if (gone != null && item.versions.size <= 1) {
+            Background.scope.launch {
+                val downloaded = runCatching { com.tmplayer.desktop.DownloadIndex.fileFor(settings, item.chatId, item.messageId) }.getOrNull() != null
+                withContext(Dispatchers.Main) {
+                    if (downloaded) openPlayerNow(item, startFromBeginning) else notices.tryEmit(com.tmplayer.data.GoneVideos.openMessage(gone))
+                }
+            }
+            return
+        }
+        openPlayerNow(item, startFromBeginning)
+    }
+
+    /**
+     * Lines for the window to show (a snackbar), raised by something with no screen of its own to
+     * say them on: opening a video that is gone (HX21).
+     */
+    val notices = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 4)
+
+    private fun openPlayerNow(item: MediaItem, startFromBeginning: Boolean) {
         if (detail != null) detailUnderPlayer = true
         warmStream(item, fromStart = startFromBeginning)
         if (item.versions.size <= 1) {
