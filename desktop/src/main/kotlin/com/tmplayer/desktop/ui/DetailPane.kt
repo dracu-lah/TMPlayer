@@ -145,6 +145,8 @@ private const val FOCUS_TRIES = 10
 
 @Composable
 private fun PaneSheet(state: ShellState, request: DetailRequest, open: Boolean, modifier: Modifier) {
+    // The pane runs the window's height at its right end, over the page header's buttons.
+    CoverWindowControls()
     val shape = RoundedCornerShape(0.dp)
     Surface(
         shape = shape,

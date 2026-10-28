@@ -212,11 +212,14 @@ fun DesktopShell(
                     },
                     modifier = Modifier.windowDrag(),
                 ) {
+                    // Composed only while the loader is up: over Home's header, held under it.
+                    CoverWindowControls()
                     com.tmplayer.ui.connect.ConnectingHelp(
                         onOpenProxies = { com.tmplayer.ui.connect.ProxyScreenState.open = true },
                         sendLogs = { SendLogsActions(Modifier.padding(top = 8.dp)) },
                     )
                 }
+                if (com.tmplayer.ui.connect.ProxyScreenState.open) CoverWindowControls()
                 com.tmplayer.ui.connect.ProxyScreenHost()
                 // At the foot, centred just over the floating bar or a chat's bar, as a desktop
                 // app's messages sit: the top of a window is Back, the chat's name and the window's
@@ -462,6 +465,7 @@ private fun Browse(state: ShellState, player: PlayerContent) {
         val tour by state.settings.tourState.collectAsState(initial = com.tmplayer.data.SettingsStore.TourState.Done)
         if (!setupPending && tour == com.tmplayer.data.SettingsStore.TourState.Pending) {
             val tourScope = rememberCoroutineScope()
+            CoverWindowControls()
             Surface(Modifier.fillMaxSize().windowDrag(), color = Tone.background) {
                 com.tmplayer.ui.onboarding.TourOnly(onDone = { tourScope.launch { runCatching { state.settings.markTourDone() } } })
             }
@@ -499,6 +503,7 @@ private fun SetupOverlay(state: ShellState, chatsLoaded: Boolean) {
         waitedOut = true
     }
     val finish: () -> Unit = { scope.launch { runCatching { state.settings.markSetupDone() } } }
+    CoverWindowControls()
     Surface(Modifier.fillMaxSize().windowDrag(), color = Tone.background) {
         // A disk short of room gets the Device step, offering Low storage mode (CP68).
         val fit = com.tmplayer.ui.onboarding.rememberDeviceFit()

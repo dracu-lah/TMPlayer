@@ -84,6 +84,10 @@ class WindowChrome(
     var headers by mutableIntStateOf(0)
         internal set
 
+    /** How many full window covers (the loader, the setup, the proxy page) hide those headers now. */
+    var covers by mutableIntStateOf(0)
+        internal set
+
     /** The last floating bounds, for a maximized window dragged back to its size. */
     @Volatile
     private var floating: Bounds? = null
@@ -151,13 +155,27 @@ internal fun RegisterWindowControls() {
 }
 
 /**
+ * Counts something drawn over the whole window, page headers and all, while it is composed: the
+ * buttons then show on their own over it ([WindowControlsFallback]), since the header that carries
+ * them is still composed underneath, out of sight.
+ */
+@Composable
+internal fun CoverWindowControls() {
+    val chrome = LocalWindowChrome.current ?: return
+    DisposableEffect(chrome) {
+        chrome.covers++
+        onDispose { chrome.covers-- }
+    }
+}
+
+/**
  * The buttons on their own, top right, for whatever is on screen without a page header (sign in,
- * the PIN pad, a page scrolled past its header).
+ * the PIN pad, a page scrolled past its header) or over one ([CoverWindowControls]).
  */
 @Composable
 fun WindowControlsFallback(modifier: Modifier = Modifier) {
     val chrome = LocalWindowChrome.current ?: return
-    if (chrome.headers > 0) return
+    if (chrome.headers > 0 && chrome.covers == 0) return
     Surface(
         modifier.padding(8.dp),
         shape = CircleShape,

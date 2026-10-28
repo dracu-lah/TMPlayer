@@ -196,7 +196,9 @@ fun SettingsPage(
     val appLock by settings.appLock.collectAsState(initial = AppLockSettings())
     var pinFlow by remember { mutableStateOf<DesktopPinFlow?>(null) }
     var pickingKidsChats by remember { mutableStateOf(false) }
+    // Neither the pad nor the Devices page has a page header: the buttons show on their own.
     pinFlow?.let { flow ->
+        CoverWindowControls()
         PinFlowPad(flow, state, appLock, scope, toast, onNext = { pinFlow = it }, onKidsChats = { pickingKidsChats = true })
         return
     }
@@ -204,6 +206,7 @@ fun SettingsPage(
     // and goes with Settings when the window moves elsewhere.
     androidx.compose.runtime.DisposableEffect(Unit) { onDispose { com.tmplayer.ui.settings.DevicesScreenState.open = false } }
     if (com.tmplayer.ui.settings.DevicesScreenState.open) {
+        CoverWindowControls()
         com.tmplayer.ui.settings.DevicesScreen(onClose = { com.tmplayer.ui.settings.DevicesScreenState.open = false })
         return
     }

@@ -83,6 +83,23 @@ class WindowControlsRenderTest {
         }
     }
 
+    /** A loader over Home: the header is still composed under it, and the buttons show over the cover. */
+    @Test
+    fun coverOverHeader() {
+        save("window-controls-cover.png", render(dark = true, height = 200) {
+            CompositionLocalProvider(LocalWindowChrome provides chrome(WindowChromeMode.Custom)) {
+                Box(Modifier.fillMaxSize()) {
+                    PageHeader("Home", "Under the loader")
+                    Box(Modifier.fillMaxSize().background(Color(0xFF10141B)), contentAlignment = Alignment.Center) {
+                        CoverWindowControls()
+                        Text("Loader", color = Color.White)
+                    }
+                    WindowControlsFallback(Modifier.align(Alignment.TopEnd))
+                }
+            }
+        })
+    }
+
     @Test
     fun glyphs() {
         save("window-glyphs.png", render(dark = true, width = 400, height = 120) {
