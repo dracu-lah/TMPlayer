@@ -541,6 +541,11 @@ class MpvPlaybackEngine(hwdec: String = OpenPrefs.HWDEC_AUTO) : PlaybackEngine {
                 h.setPropertyDouble("panscan", 0.0)
                 h.setPropertyBoolean("keepaspect", false)
             }
+            // HX16: the fixed shapes fit until their aspect override is wired in.
+            else -> {
+                h.setPropertyBoolean("keepaspect", true)
+                h.setPropertyDouble("panscan", 0.0)
+            }
         }
     }
 

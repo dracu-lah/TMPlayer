@@ -843,6 +843,7 @@ class PlayerControls(
                 VideoScale.Fit -> R.drawable.ic_shape_fit
                 VideoScale.Crop -> R.drawable.ic_shape_crop
                 VideoScale.Stretch -> R.drawable.ic_shape_stretch
+                else -> R.drawable.ic_shape_fit
             },
         )
         describe(shapeButton, L.playerPictureShapeNow(scale.label))
