@@ -1307,9 +1307,9 @@ private const val SEE_ALL_TILE = "see-all"
 
 /**
  * A row's last tile on a television, where Right past the last video lands: the art the size of
- * the row's own, with the same focus, and "See all" large on it with a chevron. Nothing under it:
+ * the row's own, with the same focus, and "See all" on it in the accent with a chevron. Nothing under it:
  * a count read "0 videos" on Recently added, which cannot tell, and the words on the art read
- * from across the room (user, 2026-10-28).
+ * at a glance (user, 2026-10-28).
  */
 @Composable
 private fun SeeAllTile(end: SeeAllEnd) {
@@ -1322,16 +1322,18 @@ private fun SeeAllTile(end: SeeAllEnd) {
         modifier = Modifier.width(end.width),
     ) {
         Column(
-            Modifier.fillMaxSize().background(Tone.surfaceHigh),
+            // The app's accent, faint over the surface, so it reads as the row's way on without
+            // shouting over the pictures beside it (user, 2026-10-28: "too big").
+            Modifier.fillMaxSize().background(Tone.surface).background(Tone.accent.copy(alpha = 0.10f)),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Icon(TmIcons.ChevronRight, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(48.dp))
-            Spacer(Modifier.height(8.dp))
+            Icon(TmIcons.ChevronRight, contentDescription = null, tint = Tone.accent, modifier = Modifier.size(32.dp))
+            Spacer(Modifier.height(4.dp))
             Text(
                 s.homeSeeAll,
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = Tone.text,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = Tone.accent,
                 maxLines = 2,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 12.dp),
