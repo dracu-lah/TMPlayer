@@ -88,6 +88,10 @@ class PlayerControls(
     private val clock: TextView = root.findViewById(R.id.controls_clock)
     private val rotate: ImageButton = root.findViewById(R.id.control_rotate)
     private val shapeButton: ImageButton = root.findViewById(R.id.control_shape)
+
+    /** Whether the video has a picture to shape: sound alone has none. Before any init that fits the row. */
+    private var shapeOffered = true
+
     private val lockButton: ImageButton = root.findViewById(R.id.control_lock)
     private val time: TextView get() = timeText
 
@@ -595,9 +599,9 @@ class PlayerControls(
      * shape (the lock stays first in More there, where a held OK undoes it); on a phone only when
      * the row is at least [WIDE_ROW_DP] across, which a phone held sideways or a tablet is and a
      * phone held upright is not. The overflow leaves out what the row shows, and offers what it
-     * does not.
+     * does not. Sound alone has no picture to shape, so the overflow leaves it out there too.
      */
-    val shapeOnRow: Boolean get() = shapeButton.visibility == View.VISIBLE
+    val shapeOnRow: Boolean get() = shapeButton.visibility == View.VISIBLE || !shapeOffered
     val lockOnRow: Boolean get() = lockButton.visibility == View.VISIBLE
 
     /**
@@ -605,14 +609,25 @@ class PlayerControls(
      * layout the width is the screen's, less the row's padding.
      */
     private fun fitRow() {
-        if (isTv) return
+        if (isTv) {
+            shapeButton.visibility = if (shapeOffered) View.VISIBLE else View.GONE
+            return
+        }
         val metrics = cluster.resources.displayMetrics
         val width = cluster.width.takeIf { it > 0 } ?: metrics.widthPixels
         val across = (width - cluster.paddingLeft - cluster.paddingRight) / metrics.density
         val wanted = if (across >= WIDE_ROW_DP) View.VISIBLE else View.GONE
-        if (shapeButton.visibility == wanted && lockButton.visibility == wanted) return
-        shapeButton.visibility = wanted
+        val shapeWanted = if (shapeOffered) wanted else View.GONE
+        if (shapeButton.visibility == shapeWanted && lockButton.visibility == wanted) return
+        shapeButton.visibility = shapeWanted
         lockButton.visibility = wanted
+    }
+
+    /** Offers or takes away the picture shape button, for a video that is sound alone. */
+    fun setShapeOffered(offered: Boolean) {
+        if (shapeOffered == offered) return
+        shapeOffered = offered
+        fitRow()
     }
 
     /**
@@ -843,7 +858,11 @@ class PlayerControls(
                 VideoScale.Fit -> R.drawable.ic_shape_fit
                 VideoScale.Crop -> R.drawable.ic_shape_crop
                 VideoScale.Stretch -> R.drawable.ic_shape_stretch
-                else -> R.drawable.ic_shape_fit
+                VideoScale.Ratio16x9 -> R.drawable.ic_shape_ratio_16x9
+                VideoScale.Ratio4x3 -> R.drawable.ic_shape_ratio_4x3
+                VideoScale.Ratio21x9 -> R.drawable.ic_shape_ratio_21x9
+                VideoScale.Ratio235 -> R.drawable.ic_shape_ratio_235
+                VideoScale.Square -> R.drawable.ic_shape_square
             },
         )
         describe(shapeButton, L.playerPictureShapeNow(scale.label))

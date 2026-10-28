@@ -61,6 +61,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.session.MediaSession
 import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import androidx.lifecycle.Lifecycle
@@ -128,6 +129,7 @@ import com.tmplayer.i18n.Translator
 import dev.g000sha256.tdl.TdlClient
 import dev.g000sha256.tdl.dto.File as TdFile
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
+import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -1853,7 +1855,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 // playing with there, over the series' speed and languages. See [ResumeState].
                 if (hasMessage()) runCatching { settings.resumeRecord(chatId, messageId)?.state }.getOrNull() else null
             }
-            val scaleRead = async { runCatching { VideoScale.from(settings.videoScaleNow()) }.getOrDefault(VideoScale.Fit) }
+            val scaleRead = async { runCatching { VideoScale.remembered(settings.videoScaleNow()) }.getOrDefault(VideoScale.Fit) }
             val tracksRead = async { runCatching { settings.trackChoice(seriesKey) }.getOrDefault(TrackChoice()) }
             val trackPrefsRead = async { runCatching { settings.trackPreferencesNow() }.getOrDefault(TrackPreferences()) }
             val downmixRead = async { runCatching { settings.downmixChoiceNow() }.getOrNull() }
@@ -1933,7 +1935,9 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             playbackSpeed = runCatching { settings.openingSpeed(resumed?.speed, speedScopes) }
                 .getOrDefault(resumed?.speed?.let(PlaybackSpeed::sanitise) ?: PlaybackSpeed.DEFAULT)
             resumeTracks = resumed
-            videoScale = scaleRead.await()
+            // A fixed shape (16:9, 4:3...) is about this player's videos: the episode that plays
+            // next in it keeps it, and only a new player goes back to the remembered one.
+            scaleRead.await().let { remembered -> if (!videoScale.fixed) videoScale = remembered }
             // Read before the player is built, because the track selector is configured once and
             // a preference applied after the first frame means the first line of dialogue is in
             // the wrong language.
@@ -2079,11 +2083,24 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         view.player = exo
         findViewById<FrameLayout>(R.id.playback_container).addView(view)
         touchSurface = view
-        view.resizeMode = videoScale.resizeMode
         controls?.setShape(videoScale)
+        controls?.setShapeOffered(!isAudio)
         // On a television only while 3D is drawn for a headset, which needs a copy per eye.
         view.findViewById<View>(androidx.media3.ui.R.id.exo_content_frame)
             ?.addOnLayoutChangeListener { frame, _, _, _, _, _, _, _, _ -> fitSubtitlesTo(frame) }
+        // PlayerView sets the frame's aspect from each video size it hears, after this activity
+        // heard it: a fixed shape is put back once it has, rather than fought over per event.
+        (view.findViewById<View>(androidx.media3.ui.R.id.exo_content_frame) as? AspectRatioFrameLayout)
+            ?.setAspectRatioListener { target, _, _ ->
+                val ratio = videoScale.ratio?.toFloat() ?: return@setAspectRatioListener
+                if (!shapeInPipeline() && kotlin.math.abs(target - ratio) > 0.001f) view.post { renderShape() }
+            }
+        // The pipeline draws the shape at the view's size, so a new size (a phone turned, a
+        // window resized) is a new shape to draw. Picture in picture keeps the last one.
+        view.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            if (right - left != oldRight - oldLeft || bottom - top != oldBottom - oldTop) view.post { renderShape() }
+        }
+        renderShape()
 
         if (!FormFactor.isTv(this)) {
             // Fed from dispatchTouchEvent rather than attached here: see [PlayerGestures].
@@ -2666,14 +2683,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
 
     /**
      * A pinch on the picture steps the fitting one stop, out towards filling the screen or back
-     * towards the video's own shape.
+     * towards the video's own shape. Only over Original, Fill and Stretch: a pinch is about
+     * filling the screen, and from a fixed shape it starts at Original.
      */
     private fun pinchScale(expanding: Boolean) {
-        val stops = VideoScale.entries
-        val at = videoScale.ordinal
-        val target = if (expanding) (at + 1).coerceAtMost(stops.lastIndex) else (at - 1).coerceAtLeast(0)
-        if (target == at) return
-        applyScale(stops[target])
+        val target = videoScale.pinch(wider = expanding)
+        if (target == videoScale) return
+        applyScale(target)
     }
 
     /**
@@ -2758,11 +2774,23 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         val origin = IntArray(2)
         frame.getLocationInWindow(at)
         root.getLocationInWindow(origin)
+        // Where the effects pipeline draws the shape, the frame is the whole view and the picture
+        // a box inside it, which is where the lines belong. A headset's halves stay whole.
+        var pictureWidth = frame.width
+        var pictureHeight = frame.height
+        if (!vr && shapeInPipeline()) {
+            videoScale.pictureSize(frame.width, frame.height, pipelineAspect()).let { (width, height) ->
+                at[0] += (frame.width - width) / 2
+                at[1] += (frame.height - height) / 2
+                pictureWidth = width
+                pictureHeight = height
+            }
+        }
         // Clamped to the screen, for Zoom, where the picture runs off both sides.
         val left = (at[0] - origin[0]).coerceIn(0, root.width)
         val top = (at[1] - origin[1]).coerceIn(0, root.height)
-        val right = (at[0] - origin[0] + frame.width).coerceIn(left, root.width)
-        val bottom = (at[1] - origin[1] + frame.height).coerceIn(top, root.height)
+        val right = (at[0] - origin[0] + pictureWidth).coerceIn(left, root.width)
+        val bottom = (at[1] - origin[1] + pictureHeight).coerceIn(top, root.height)
         // The whole picture, to its bottom edge. The clearance a full-height picture needs from
         // the screen's edge (a television's overscan, a phone's rounded corners) is folded into
         // the bottom padding by [subtitleBottomFraction] instead of taken off the height here:
@@ -2853,17 +2881,137 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     }
 
     /**
-     * The PlayerView owns the picture's shape on every device now, so the codec's own scaling
-     * stays on plain fit: the view sizes its surface to the chosen shape, and the codec scaling
-     * the frames again inside it would cancel the choice out.
+     * A shape picked by the row's button, a pinch or the menu: drawn ([renderShape]), shown on
+     * the button and over the picture. Original, Fill and Stretch are kept for the next video; a
+     * fixed shape lasts for this player only, so it is never written down.
+     *
+     * The codec's own scaling stays on plain fit: the view sizes its surface to the chosen shape,
+     * and the codec scaling the frames again inside it would cancel the choice out.
      */
     private fun applyScale(scale: VideoScale) {
         videoScale = scale
-        touchSurface?.resizeMode = scale.resizeMode
         player?.videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+        renderShape()
         controls?.setShape(scale, animate = true)
         showGestureFeedback(scale.label)
-        lifecycleScope.launch { runCatching { settings.setVideoScale(scale.name) } }
+        updatePictureInPictureParams()
+        if (!scale.fixed) lifecycleScope.launch { runCatching { settings.setVideoScale(scale.name) } }
+    }
+
+    /**
+     * Draws [videoScale] the way the picture reaches the screen right now.
+     *
+     * The plain path: PlayerView's frame is the shape. Original, Fill and Stretch are its own
+     * resize modes; a fixed shape fits a frame given that aspect, and the codec stretches the
+     * frames to it.
+     *
+     * Through Media3's effects pipeline (a file named as 3D, or 3D turned on in this player)
+     * that does nothing: the pipeline's last stage fits every frame into the surface with its
+     * aspect kept, so a stretched or zoomed frame came back letterboxed and the shapes looked
+     * the same (HX16). There the pipeline draws the shape itself at the view's size
+     * ([pipelineEffects]) and the view only stretches its surface over the whole screen, so the
+     * last stage has nothing left to fit.
+     */
+    private fun renderShape() {
+        val view = touchSurface ?: return
+        val frame = view.findViewById<View>(androidx.media3.ui.R.id.exo_content_frame) as? AspectRatioFrameLayout
+        if (shapeInPipeline()) {
+            view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+            sendPipelineEffects()
+        } else {
+            view.resizeMode = videoScale.resizeMode
+            frame?.setAspectRatio(videoScale.ratio?.toFloat() ?: naturalAspect())
+        }
+        refitSubtitles()
+    }
+
+    /** The video's own width over height, pixel shape included, as PlayerView sets it; 0 before it is known. */
+    private fun naturalAspect(): Float {
+        val size = player?.videoSize ?: return 0f
+        if (size.width <= 0 || size.height <= 0) return 0f
+        val pixel = size.pixelWidthHeightRatio.takeIf { it.isFinite() && it > 0f } ?: 1f
+        return size.width * pixel / size.height
+    }
+
+    /**
+     * Whether the frames go through the effects pipeline. A video on the app's own (FFmpeg)
+     * decoder does not, even in a player that has the pipeline: its shape stays on the view.
+     */
+    private fun shapeInPipeline(): Boolean {
+        val exo = player ?: return false
+        return stereoPipeline && !videoOnFfmpeg(exo)
+    }
+
+    /**
+     * The picture's width over height as the pipeline hands it to the shape: one eye's while 3D
+     * is on, pixel shape and rotation included. 0 while the format is not known.
+     */
+    private fun pipelineAspect(): Double {
+        val format = player?.videoFormat ?: return 0.0
+        if (format.width <= 0 || format.height <= 0) return 0.0
+        val pixel = format.pixelWidthHeightRatio.takeIf { it.isFinite() && it > 0f } ?: 1f
+        var width = (format.width * pixel).roundToInt().coerceAtLeast(1)
+        var height = format.height
+        if (format.rotationDegrees == 90 || format.rotationDegrees == 270) width = height.also { height = width }
+        if (stereo.on) Stereo3d.outputSize(width, height, stereo.layout).let { (w, h) -> width = w; height = h }
+        return width.toDouble() / height
+    }
+
+    /** The view's size in pixels, the box the pipeline shapes the picture for; the screen's before the first layout. */
+    private fun shapeBox(): Pair<Int, Int> {
+        // A corner window is a passing size: the full screen's shape is kept for the way back.
+        if (inPictureInPicture) sentShapeBox?.let { return it }
+        val view = touchSurface
+        if (view != null && view.width > 0 && view.height > 0) return view.width to view.height
+        val metrics = resources.displayMetrics
+        return metrics.widthPixels to metrics.heightPixels
+    }
+
+    /**
+     * The pipeline's effects: 3D as chosen, then the shape at the view's size. Original adds
+     * nothing (the last stage fits, which is Original). Fill, Stretch and the fixed shapes are a
+     * Media3 `Presentation`, a matrix the last stage folds into the pass it already makes, so a
+     * 1 GB stick pays no extra pass. A headset's pair is shaped per eye by [Stereo3dEffect].
+     */
+    private fun pipelineEffects(): List<androidx.media3.common.Effect> {
+        val (width, height) = shapeBox()
+        val effects = mutableListOf<androidx.media3.common.Effect>()
+        val vr = stereo.on && stereo.view == Stereo3d.View.Vr
+        if (stereo.on) effects += Stereo3dEffect(stereo, videoScale, width, height)
+        if (vr || width <= 0 || height <= 0) return effects
+        // Kept within a 4K pair's width, as the 3D shader keeps its output.
+        val (boxWidth, boxHeight) = Stereo3d.boxedSize(width, height)
+        val shape = when {
+            videoScale == VideoScale.Fit -> null
+            videoScale == VideoScale.Crop -> androidx.media3.effect.Presentation.createForWidthAndHeight(
+                boxWidth, boxHeight, androidx.media3.effect.Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP,
+            )
+            videoScale == VideoScale.Stretch -> androidx.media3.effect.Presentation.createForWidthAndHeight(
+                boxWidth, boxHeight, androidx.media3.effect.Presentation.LAYOUT_STRETCH_TO_FIT,
+            )
+            // A fixed shape: the picture pulled to that aspect at the size it fits the screen at.
+            else -> videoScale.pictureSize(boxWidth, boxHeight, 0.0).let { (w, h) ->
+                androidx.media3.effect.Presentation.createForWidthAndHeight(w, h, androidx.media3.effect.Presentation.LAYOUT_STRETCH_TO_FIT)
+            }
+        }
+        shape?.let(effects::add)
+        return effects
+    }
+
+    /** What the pipeline was last handed, so a layout pass that changes nothing sends nothing. */
+    private var sentPipelineKey: String? = null
+    private var sentShapeBox: Pair<Int, Int>? = null
+
+    /** Hands the pipeline [pipelineEffects] when they differ from what it already draws. */
+    private fun sendPipelineEffects(force: Boolean = false) {
+        val exo = player ?: return
+        val box = shapeBox()
+        val key = "$stereo/$videoScale/${box.first}x${box.second}"
+        if (!force && key == sentPipelineKey) return
+        sentPipelineKey = key
+        sentShapeBox = box
+        runCatching { exo.setVideoEffects(pipelineEffects()) }
+            .onFailure { Log.w("TMPlayer", "Picture shape: the effects pipeline refused the change", it) }
     }
 
     /** The speed button: every speed to pick from at once, rather than stepping through them. */
@@ -3007,6 +3155,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun buildPlayer(client: TdlClient): ExoPlayer {
         failurePinned = false
         stereoPipeline = false
+        sentPipelineKey = null
         // A new player starts with both decoders on, so each may switch by itself once again.
         decodersSwitched.clear()
         // Hardware decoders first; NextLib's FFmpeg renderers pick up the audio codecs a TV stick
@@ -3761,6 +3910,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         override fun onRenderedFirstFrame() {
             logFirstFrame()
             hintStereo()
+            // The decoder is known by now: FFmpeg's frames skip the pipeline, so the shape moves.
+            renderShape()
             if (videoBackAskedAt == 0L) return
             Log.i("TMPlayer", "Background audio: picture back in ${SystemClock.elapsedRealtime() - videoBackAskedAt} ms")
             videoBackAskedAt = 0L
@@ -3772,6 +3923,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             videoWidth = size.width
             videoHeight = size.height
             followVideoOrientation()
+            // After PlayerView's own listener has set the frame to the video's aspect: a fixed
+            // shape goes back on, the subtitles find the picture, and a decoder switched to
+            // FFmpeg takes the shape out of the pipeline.
+            touchSurface?.post { renderShape() }
+            updatePictureInPictureParams()
             if (FrameRateMatch.shouldTakeOver(this@PlayerActivity)) {
                 FrameRateMatch.apply(videoSurface(), player?.videoFormat?.frameRate ?: 0f)
             }
@@ -5716,8 +5872,13 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
         // Android refuses anything narrower than 1:2.39 or wider than 2.39:1, and a video that
         // falls outside that takes the whole request down with it, so it is only offered when
-        // the picture's own shape is known to be inside the range.
-        if (videoWidth > 0 && videoHeight > 0) {
+        // the picture's own shape is known to be inside the range. A fixed picture shape is the
+        // window's shape too, held inside the range.
+        val forced = videoScale.ratio
+        if (forced != null) {
+            val ratio = forced.coerceIn(PIP_MIN_RATIO.toDouble() + 0.001, PIP_MAX_RATIO.toDouble() - 0.001)
+            builder.setAspectRatio(Rational((ratio * 10_000).roundToInt(), 10_000))
+        } else if (videoWidth > 0 && videoHeight > 0) {
             val ratio = videoWidth.toFloat() / videoHeight
             if (ratio in PIP_MIN_RATIO..PIP_MAX_RATIO) {
                 builder.setAspectRatio(Rational(videoWidth, videoHeight))
@@ -6161,8 +6322,12 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         stereoHinted = false
         if (stereoPipeline || isAudio) return
         if (stereo.on || stereoTagged != null) {
-            exo.setVideoEffects(if (stereo.on) listOf(Stereo3dEffect(stereo)) else emptyList())
             stereoPipeline = true
+            // Before the player is attached, so read here rather than through [player].
+            val box = shapeBox()
+            sentPipelineKey = "$stereo/$videoScale/${box.first}x${box.second}"
+            sentShapeBox = box
+            exo.setVideoEffects(pipelineEffects())
         }
     }
 
@@ -6185,13 +6350,17 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private fun stereoBlocked(exo: ExoPlayer): String? {
         val color = exo.videoFormat?.colorInfo
         if (color != null && androidx.media3.common.ColorInfo.isTransferHdr(color)) return L.playerStereoNotHdr
-        val onFfmpeg = (0 until exo.rendererCount).any { index ->
+        return if (videoOnFfmpeg(exo)) L.playerStereoNotSoftware else null
+    }
+
+    /** Whether the picture is on the app's own (FFmpeg) decoder, whose frames skip Media3's effects. */
+    private fun videoOnFfmpeg(exo: ExoPlayer): Boolean = runCatching {
+        (0 until exo.rendererCount).any { index ->
             exo.getRendererType(index) == C.TRACK_TYPE_VIDEO &&
                 exo.getRenderer(index).state != androidx.media3.exoplayer.Renderer.STATE_DISABLED &&
                 DecoderSwitch.isFfmpeg(exo.getRenderer(index))
         }
-        return if (onFfmpeg) L.playerStereoNotSoftware else null
-    }
+    }.getOrDefault(false)
 
     /**
      * Puts [next] on the picture. A choice that only changes the glasses while 3D is off, or that
@@ -6213,22 +6382,22 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         }
         stereo = next
         if (!next.on && !before.on) return null
-        val effects: List<androidx.media3.common.Effect> = if (next.on) listOf(Stereo3dEffect(next)) else emptyList()
         if (stereoPipeline) {
-            exo.setVideoEffects(effects)
+            sendPipelineEffects()
         } else if (next.on) {
             stereoPipeline = true
             val at = exo.currentPosition
             val play = exo.playWhenReady
             exo.stop()
-            exo.setVideoEffects(effects)
+            sendPipelineEffects(force = true)
             exo.seekTo(at)
             exo.prepare()
             exo.playWhenReady = play
         }
         stereoHinted = true
-        // A headset's two halves take a copy of the subtitles each, and lose it after.
-        refitSubtitles()
+        // The shape moves into the pipeline with 3D (and stays there once it is built), and a
+        // headset's two halves take a copy of the subtitles each, and lose it after.
+        renderShape()
         showGestureFeedback(if (next.on) L.playerStereoOnNow(next.view.label()) else L.playerStereoOffNow)
         return null
     }

@@ -142,4 +142,24 @@ class Stereo3dTest {
         View.entries.forEach { assertEquals(it, View.ofKey(it.key)) }
         assertEquals(View.RedCyan, View.ofKey(null))
     }
+
+    @Test
+    fun aShapedVrPairFillsTheScreenWithinTheCap() {
+        assertEquals(1920 to 1080, Stereo3d.boxedSize(1920, 1080))
+        assertEquals(3840 to 1080, Stereo3d.boxedSize(7680, 2160))
+        assertEquals(0 to 0, Stereo3d.boxedSize(0, 1080))
+    }
+
+    @Test
+    fun aVrEyeShareMovesEachEyeIntoItsBox() {
+        val vr = Stereo3d(Layout.SideBySide, View.Vr)
+        fun body(share: Pair<Float, Float>?) =
+            Stereo3d.glslBody(vr, "texture2D", "p", yDown = false, texelX = 0.001f, texelY = 0.001f, eyeShare = share)
+        val shaped = body(1f to 0.5f)
+        assertTrue("vec2(1.0, 0.5)" in shaped)
+        assertTrue("vec4(0.0, 0.0, 0.0, 1.0)" in shaped)
+        // A whole half, or a share that makes no sense, keeps the plain pair.
+        assertEquals(body(null), body(1f to 1f))
+        assertEquals(body(null), body(Float.NaN to 0f))
+    }
 }

@@ -117,6 +117,17 @@ data class Stereo3d(
         }
 
         /**
+         * The size a VR pair is drawn at when it is shaped for the screen it fills: the screen's
+         * own [boxWidth] by [boxHeight], within [MAX_VR_WIDTH] as [outputSize] keeps it, so the
+         * last stage has nothing left to fit and each eye keeps the shape chosen for its half.
+         */
+        fun boxedSize(boxWidth: Int, boxHeight: Int): Pair<Int, Int> {
+            if (boxWidth <= 0 || boxHeight <= 0) return 0 to 0
+            if (boxWidth <= MAX_VR_WIDTH) return boxWidth to boxHeight
+            return MAX_VR_WIDTH to (boxHeight.toLong() * MAX_VR_WIDTH / boxWidth).toInt().coerceAtLeast(1)
+        }
+
+        /**
          * Dubois' matrices, FFmpeg's `ana_coeff` divided out of its 16.16 fixed point: three rows
          * (red, green, blue out), each the left eye's red, green and blue weights, then the right's.
          */
@@ -148,8 +159,20 @@ data class Stereo3d(
          * branching on every pixel of every frame. [texelX] and [texelY] are one source pixel, to
          * keep each eye's samples from bleeding over the seam into the other, and to find the
          * lines and columns of an interleaved file.
+         *
+         * [eyeShare] places each eye's picture in its half of a VR pair, the share of the half it
+         * covers across and down ([VideoScale.boxShare]): centred, black around it under 1, cut
+         * over 1. Null draws each eye over its whole half, as the pair's own shape does.
          */
-        fun glslBody(stereo: Stereo3d, sample: String, pos: String, yDown: Boolean, texelX: Float, texelY: Float): String {
+        fun glslBody(
+            stereo: Stereo3d,
+            sample: String,
+            pos: String,
+            yDown: Boolean,
+            texelX: Float,
+            texelY: Float,
+            eyeShare: Pair<Float, Float>? = null,
+        ): String {
             val vr = stereo.view == View.Vr
             // For VR each half of the output is a whole picture of its own eye.
             val q = if (vr) "q" else pos
@@ -159,6 +182,11 @@ data class Stereo3d(
                 return buildString {
                     append("bool second = $pos.x >= 0.5;\n")
                     append("vec2 q = vec2(second ? $pos.x * 2.0 - 1.0 : $pos.x * 2.0, $pos.y);\n")
+                    val share = eyeShare?.takeIf { (x, y) -> x > 0f && y > 0f && x.isFinite() && y.isFinite() && (x != 1f || y != 1f) }
+                    if (share != null) {
+                        append("q = (q - 0.5) / vec2(${glslFloat(share.first)}, ${glslFloat(share.second)}) + 0.5;\n")
+                        append("if (q.x < 0.0 || q.x > 1.0 || q.y < 0.0 || q.y > 1.0) return vec4(0.0, 0.0, 0.0, 1.0);\n")
+                    }
                     append("if (second) return vec4($sample($right).rgb, 1.0);\n")
                     append("return vec4($sample($left).rgb, 1.0);")
                 }

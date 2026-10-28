@@ -1,6 +1,7 @@
 package com.tmplayer.player
 
 import com.tmplayer.i18n.L
+import kotlin.math.roundToInt
 
 /**
  * How the picture is fitted to the screen, and the order the control steps through.
@@ -44,6 +45,39 @@ enum class VideoScale(val resizeMode: Int, private val labelText: () -> String, 
     }
 
     fun next(): VideoScale = entries[(ordinal + 1) % entries.size]
+
+    /**
+     * The picture's size, in pixels, drawn this way in a [boxWidth] by [boxHeight] box, for a
+     * picture [aspect] wide over high in square pixels. Centred in the box; Fill comes out larger
+     * than the box on one side, the part cut away. An aspect not known yet (0, or not a number)
+     * reads as the box's own, so nothing jumps before the first frame says what it is.
+     *
+     * Where the player draws the shape itself (3D's effects pipeline, Android), this is what it
+     * draws, and the subtitles go over this box rather than over the whole screen.
+     */
+    fun pictureSize(boxWidth: Int, boxHeight: Int, aspect: Double): Pair<Int, Int> {
+        if (boxWidth <= 0 || boxHeight <= 0) return 0 to 0
+        if (this == Stretch) return boxWidth to boxHeight
+        val box = boxWidth.toDouble() / boxHeight
+        val shape = ratio ?: aspect.takeIf { it.isFinite() && it > 0.0 } ?: box
+        // Fit is held by the box's tighter side; Fill by its looser one.
+        val wide = if (this == Crop) shape < box else shape > box
+        return if (wide) {
+            boxWidth to (boxWidth / shape).roundToInt().coerceAtLeast(1)
+        } else {
+            (boxHeight * shape).roundToInt().coerceAtLeast(1) to boxHeight
+        }
+    }
+
+    /**
+     * [pictureSize] as a share of the box across and down: 1 fills that side, under 1 leaves bars,
+     * over 1 is cut. What a shader needs to place the picture in each eye's half of a VR pair.
+     */
+    fun boxShare(boxWidth: Int, boxHeight: Int, aspect: Double): Pair<Double, Double> {
+        if (boxWidth <= 0 || boxHeight <= 0) return 1.0 to 1.0
+        val (width, height) = pictureSize(boxWidth, boxHeight, aspect)
+        return width.toDouble() / boxWidth to height.toDouble() / boxHeight
+    }
 
     companion object {
         /** By name, so a stop added or reordered later cannot move everybody's saved choice. */
