@@ -2,7 +2,7 @@ import { batch, createMemo, createSignal, For, lazy, Match, onCleanup, onMount, 
 import { renderSVG } from 'uqr'
 import { ArrowDown01Icon, Cancel01Icon, RefreshIcon, Tick02Icon, ViewIcon, ViewOffSlashIcon } from '@hugeicons/core-free-icons'
 import { api, call } from '../tg/rpc'
-import { setMe } from '../session'
+import { sessionEnded, signedIn } from '../session'
 import { iosBrowser } from '../install'
 import { form } from '../form'
 import { clock, t } from '../i18n'
@@ -64,7 +64,7 @@ export function SignIn() {
         })
 
     // The shell sees the user and leaves this page for the one asked for.
-    const done = (user: Me) => setMe(user)
+    const done = (user: Me) => signedIn(user)
 
     // ---- QR code ----
     const [qr, setQr] = createSignal<string | null>(null)
@@ -472,6 +472,10 @@ export function SignIn() {
                 <img class="signin-mark" src="/icon.svg" alt="" width="42" height="42" />
                 <span class="signin-word">TMPlayer</span>
             </div>
+            {/* Telegram ended the session (HX23): why the sign in is back, as in the apps. */}
+            <Show when={sessionEnded()}>
+                <p class="signin-ended" role="status">{t('errors.signed_out')}</p>
+            </Show>
             <Switch>
                 <Match when={step().kind === 'qr'}>
                     <h1>{t('login.qr_title')}</h1>

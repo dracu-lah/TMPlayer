@@ -39,6 +39,9 @@ const base = new BaseTelegramClient({
 })
 const tg = new TelegramClient({ client: base })
 
+/** How long a sign out waits for Telegram before forgetting the account on this device anyway. */
+const LOG_OUT_WAIT_MS = 5_000
+
 // The app's rules start loading beside the connection, so the first list does not wait for them.
 const rulesStarted = performance.now()
 rules().then(
@@ -224,7 +227,14 @@ export const api = {
     },
 
     async logOut(_: Ctx): Promise<void> {
-        await tg.logOut().catch(() => {})
+        // A session Telegram ended answers auth.logOut with a 401, or over a line that will not
+        // come up never answers (HX23): either way this device forgets the account, rather than
+        // keeping a session that opens signed in and is refused on every call.
+        const told = await Promise.race([
+            tg.logOut().then(() => true, () => false),
+            new Promise<boolean>((r) => setTimeout(() => r(false), LOG_OUT_WAIT_MS)),
+        ])
+        if (!told) await tg.notifyLoggedOut().catch(() => {})
         files.clear()
         thumbnails.clear()
         forgetAll()

@@ -532,6 +532,8 @@ html[data-form=tv] .panel .set-block-title { font-size: calc(var(--dp) * 16); li
 .signin-brand { display: flex; align-items: center; gap: 14px; }
 .signin-brand .signin-mark { width: 42px; height: 42px; border-radius: 10px; }
 .signin-word { font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -.2px; }
+/* Telegram ended the session (HX23): the apps' SessionEndedNote, one line on the surface. */
+.signin-ended { margin: 0; padding: 12px 16px; border-radius: 20px; background: var(--surface-high); }
 :root[data-form="phone"] .signin { gap: 16px; padding-top: max(16px, env(safe-area-inset-top)); }
 :root[data-form="phone"] .signin h1 { font-size: 32px; line-height: 40px; margin-top: 12px; }
 :root[data-form="phone"] .signin p.muted { font-size: 16px; line-height: 24px; color: var(--fg); }

@@ -2,7 +2,7 @@ import { createEffect, createSignal, ErrorBoundary, lazy, Match, onMount, Show, 
 import { A, Route, Router, useLocation, useNavigate } from '@solidjs/router'
 import { api, errorText, sessionHere, useHere } from './tg/rpc'
 import { online } from './net'
-import { entryState, me, setMe, signOut } from './session'
+import { entryState, me, sessionEndedElsewhere, setMe } from './session'
 import { loadSettings } from './store'
 import { form, holdForm } from './form'
 import { Home } from './screens/Home'
@@ -54,7 +54,7 @@ function Shell(props: ParentProps) {
             const [user] = await Promise.all([api.me(), loadSettings()])
             setMe(user)
             // The saved session is used at once; Telegram's answer follows, and says when it was ended elsewhere.
-            if (user) api.whoami().then((u) => void (u ? setMe(u) : signOut()), () => {})
+            if (user) api.whoami().then((u) => void (u ? setMe(u) : sessionEndedElsewhere()), () => {})
         } catch (e) {
             setError(errorText(e))
         }
