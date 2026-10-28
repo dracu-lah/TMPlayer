@@ -14,6 +14,14 @@ class OpeningStallTest {
     }
 
     @Test
+    fun `the connections are reopened before the sheet, and not for a file on this device`() {
+        assertFalse(OpeningStall.nudgeDue(local = false, lastProgressAtMs = 1_000, nowMs = 6_999))
+        assertTrue(OpeningStall.nudgeDue(local = false, lastProgressAtMs = 1_000, nowMs = 7_000))
+        assertTrue(OpeningStall.NUDGE_MS < OpeningStall.STALL_MS)
+        assertFalse(OpeningStall.nudgeDue(local = true, lastProgressAtMs = 0, nowMs = 60_000))
+    }
+
+    @Test
     fun `a new byte starts the count again`() {
         // The last byte came two seconds ago, however long the whole wait has been.
         assertFalse(OpeningStall.stalled(opening = true, local = false, lastProgressAtMs = 58_000, nowMs = 60_000))

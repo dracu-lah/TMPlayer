@@ -7506,6 +7506,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         lastProgressAtMs = SystemClock.elapsedRealtime()
         lastBufferedMs = -1L
         rebufferWatch = lifecycleScope.launch {
+            // Telegram's connections reopened once per wait (OpeningStall.NUDGE_MS).
+            var nudged = false
             while (true) {
                 delay(OPENING_WATCH_TICK_MS)
                 val exo = player ?: return@launch
@@ -7520,6 +7522,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 if (networkOffline) {
                     lastProgressAtMs = SystemClock.elapsedRealtime()
                     continue
+                }
+                if (!nudged && OpeningStall.nudgeDue(local, lastProgressAtMs, SystemClock.elapsedRealtime())) {
+                    nudged = true
+                    Td.nudgeForStream()
                 }
                 if (OpeningStall.stalled(opening = true, local = local, lastProgressAtMs, SystemClock.elapsedRealtime())) {
                     stalledMidPlay = true
@@ -7882,6 +7888,8 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
         lastProgressAtMs = SystemClock.elapsedRealtime()
         lastBufferedMs = -1L
         openingWatch = lifecycleScope.launch {
+            // Telegram's connections reopened once per wait (OpeningStall.NUDGE_MS).
+            var nudged = false
             while (true) {
                 delay(OPENING_WATCH_TICK_MS)
                 if (!openingFilm) return@launch
@@ -7894,6 +7902,10 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 if (networkOffline) {
                     noteOpeningProgress()
                     continue
+                }
+                if (!nudged && OpeningStall.nudgeDue(local, lastProgressAtMs, SystemClock.elapsedRealtime())) {
+                    nudged = true
+                    Td.nudgeForStream()
                 }
                 if (OpeningStall.stalled(opening = true, local = local, lastProgressAtMs, SystemClock.elapsedRealtime())) {
                     showSlowStart()
@@ -7946,12 +7958,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
             OpeningStall.Reason.Slow -> if (stalledMidPlay) L.playerStalledMidSlow else L.playerStalledSlow
         }
         val canDownload = canSaveToDownloads()
-        // Telegram's lighter copy (CP80), and Telegram's own cap on an account without Premium
-        // (CP83), each said where it applies.
+        // Telegram's lighter copy (CP80), said where it applies. Not Telegram's cap on an account
+        // without Premium (CP83): the cap slows a download and never stops it, and this sheet is
+        // for nothing arriving at all, so it is said on the slow line only.
         val lighter = if (OpeningStall.reason(Td.link.value) == OpeningStall.Reason.Slow) lighterQuality() else null
-        val limited = Td.speedLimitedNow()
         val detail = listOfNotNull(
-            L.playerSpeedLimited.takeIf { limited },
             L.playerLighterHint.takeIf { lighter != null },
             L.playerStalledDownloadHint.takeIf { canDownload },
         ).joinToString("\n")

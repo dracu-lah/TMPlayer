@@ -140,6 +140,7 @@ internal fun BoxScope.LoaderSheet(
         var lastFraction = fraction
         var lastBuffered = buffered()
         var lastRead = 0L
+        var nudged = false
         readMeter.reset()
         while (true) {
             val now = System.currentTimeMillis()
@@ -154,6 +155,10 @@ internal fun BoxScope.LoaderSheet(
             opening.seeks = seeks
             line = opening.update(sig, now)
             stage = opening.stage
+            if (!nudged && OpeningStall.nudgeDue(local = (fraction ?: 0f) >= 1f, lastProgressAtMs = lastAt, nowMs = now)) {
+                nudged = true
+                com.tmplayer.data.Td.nudgeForStream()
+            }
             stalled = OpeningStall.stalled(opening = true, local = (fraction ?: 0f) >= 1f, lastProgressAtMs = lastAt, nowMs = now)
             fraction?.let { meter.sample((it * item.sizeBytes).toLong(), now) }
             readMeter.sample(sig.readBytes, now)
@@ -243,6 +248,7 @@ internal fun BoxScope.PlaybackStall(
         var lastAt = System.currentTimeMillis()
         var lastFraction = fraction
         var lastBuffered = buffered()
+        var nudged = false
         while (true) {
             val now = System.currentTimeMillis()
             val bufferedNow = buffered()
@@ -250,6 +256,10 @@ internal fun BoxScope.PlaybackStall(
                 lastAt = now
                 lastFraction = fraction
                 lastBuffered = bufferedNow
+            }
+            if (!nudged && OpeningStall.nudgeDue(local = (fraction ?: 0f) >= 1f, lastProgressAtMs = lastAt, nowMs = now)) {
+                nudged = true
+                com.tmplayer.data.Td.nudgeForStream()
             }
             stalled = OpeningStall.stalled(opening = true, local = (fraction ?: 0f) >= 1f, lastProgressAtMs = lastAt, nowMs = now)
             delay(TICK_MS)
@@ -287,10 +297,9 @@ private fun BoxScope.StalledPanel(
                 color = Color.White.copy(alpha = 0.8f),
                 textAlign = TextAlign.Center,
             )
+            // Not Telegram's cap on an account without Premium (CP83): it slows a download and
+            // never stops it, and this panel is for nothing arriving, so the slow line says it.
             val slow = OpeningStall.reason(link) == OpeningStall.Reason.Slow
-            if (slow && com.tmplayer.data.Td.speedLimitedNow()) {
-                Text(s.playerSpeedLimited, color = Color.White.copy(alpha = 0.65f), textAlign = TextAlign.Center)
-            }
             if (slow && lighter != null) {
                 Text(s.playerLighterHint, color = Color.White.copy(alpha = 0.65f), textAlign = TextAlign.Center)
             }

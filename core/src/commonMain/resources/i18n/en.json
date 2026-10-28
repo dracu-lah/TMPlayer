@@ -417,6 +417,7 @@
     "network": "This device reports: {network}",
     "proxy_on": "Proxy settings",
     "retrying": "Trying again",
+    "session_ended": "Telegram ended this sign in. Starting again",
     "slow_title": "This is taking longer than usual",
     "step_catching_up": "Connected. Catching up",
     "step_connecting": "Reaching Telegram",

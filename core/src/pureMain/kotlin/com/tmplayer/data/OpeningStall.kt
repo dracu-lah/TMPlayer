@@ -14,6 +14,13 @@ object OpeningStall {
     /** How long the opening may go with no new bytes before the player says so. */
     const val STALL_MS = 10_000L
 
+    /**
+     * How long a wait goes with no new bytes before Telegram's connections are reopened once by
+     * themselves, as Try again does: a connection that had quietly stopped held a video on the
+     * stall sheet until Try again, after which it opened in 8 s (desktop, 2026-10-28).
+     */
+    const val NUDGE_MS = 6_000L
+
     /** Why nothing is arriving, which decides the words on the sheet. */
     enum class Reason {
         /** No line to Telegram: offline, blocked, or a proxy that is not answering. */
@@ -29,6 +36,10 @@ object OpeningStall {
      */
     fun stalled(opening: Boolean, local: Boolean, lastProgressAtMs: Long, nowMs: Long, stallMs: Long = STALL_MS): Boolean =
         opening && !local && nowMs - lastProgressAtMs >= stallMs
+
+    /** Whether the wait has gone [NUDGE_MS] with no new bytes, the file not on this device in full. */
+    fun nudgeDue(local: Boolean, lastProgressAtMs: Long, nowMs: Long): Boolean =
+        !local && nowMs - lastProgressAtMs >= NUDGE_MS
 
     fun reason(link: TelegramLink): Reason = if (link.isUp) Reason.Slow else Reason.NoLine
 }

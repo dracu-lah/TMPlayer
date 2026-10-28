@@ -128,9 +128,15 @@ fun ConnectingHelp(onOpenProxies: () -> Unit, sendLogs: @Composable () -> Unit) 
     val stalled by Td.signInStalled.collectAsState()
     val network by Td.network.collectAsState()
     val proxyOn by Td.proxyOn.collectAsState()
+    val ending by Td.endingSession.collectAsState()
     val retry = rememberRetry()
     ConnectingHelpView(
-        status = if (retry.busy) s.connectRetrying else connectStepLabel(ConnectAdvice.step(link), s),
+        status = when {
+            retry.busy -> s.connectRetrying
+            // Telegram ended the saved sign in: not a network problem, and the sign in comes next.
+            ending -> s.connectSessionEnded
+            else -> connectStepLabel(ConnectAdvice.step(link), s)
+        },
         stalled = stalled && !retry.busy,
         hint = connectHintLabel(ConnectAdvice.hint(link, network, proxyOn), s),
         network = networkLine(network, s),

@@ -8,6 +8,9 @@ import com.tmplayer.platform.Paths
 import dev.g000sha256.tdl.TdlClient
 import dev.g000sha256.tdl.TdlResult
 import dev.g000sha256.tdl.dto.AuthorizationState
+import dev.g000sha256.tdl.dto.AuthorizationStateClosed
+import dev.g000sha256.tdl.dto.AuthorizationStateClosing
+import dev.g000sha256.tdl.dto.AuthorizationStateLoggingOut
 import dev.g000sha256.tdl.dto.CountryInfo
 import dev.g000sha256.tdl.dto.EmailAddressAuthenticationCode
 import dev.g000sha256.tdl.dto.FileType
@@ -42,6 +45,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -104,6 +108,14 @@ object Td {
      */
     private val _signInStalled = MutableStateFlow(false)
     val signInStalled: StateFlow<Boolean> = _signInStalled.asStateFlow()
+
+    /**
+     * TDLib is logging out (Telegram ended the session, or the viewer signed out) and has not yet
+     * closed. Nothing is wrong with the network then, so the sign in's slow help stays away, and
+     * [watchLogOut] moves a logout that hangs on by itself.
+     */
+    private val _endingSession = MutableStateFlow(false)
+    val endingSession: StateFlow<Boolean> = _endingSession.asStateFlow()
 
     /**
      * True once a signed in session has had no line to Telegram for [UNREACHABLE_MS] while the
@@ -268,8 +280,8 @@ object Td {
             // Held up on Telegram (ConnectAdvice.waiting), counted afresh by a retry but not by a
             // move between two states that are both still waiting, such as Connecting to the
             // phone pane with no line yet.
-            val waiting = combine(_auth, _link, connectAttempt) { auth, link, attempt ->
-                ConnectAdvice.waiting(auth, link) to attempt
+            val waiting = combine(_auth, _link, connectAttempt, _endingSession) { auth, link, attempt, ending ->
+                (ConnectAdvice.waiting(auth, link) && !ending) to attempt
             }.distinctUntilChanged().map { it.first }
             AuthStall.watchWaiting(waiting, _signInStalled, SIGN_IN_STALL_MS)
         }
@@ -491,7 +503,27 @@ object Td {
 
         val step = AuthReducer.reduce(state, method)
         Logger.i(TAG, "auth: ${state::class.simpleName} -> ${step.state::class.simpleName}")
+        val ending = state is AuthorizationStateLoggingOut || state is AuthorizationStateClosing || state is AuthorizationStateClosed
+        if (state is AuthorizationStateLoggingOut && !_endingSession.value) scope.launch { watchLogOut(td) }
+        _endingSession.value = ending
         perform(td, step)
+    }
+
+    /**
+     * A logout that hangs on: after a session Telegram ended, TDLib kept trying to tell Telegram
+     * over a line that would not come up, and the window waited on "Reaching Telegram" until a
+     * Retry (desktop, 2026-10-28). First the connections are reopened, which lets the logout
+     * through; if it still has not closed, the client is replaced as Retry does.
+     */
+    private suspend fun watchLogOut(td: TdlClient) {
+        delay(LOG_OUT_NUDGE_MS)
+        if (td !== current || !_endingSession.value) return
+        Logger.i(TAG, "logging out is slow; reopening connections")
+        runCatching { tellNetworkType(td, force = true) }
+        delay(LOG_OUT_GIVE_UP_MS)
+        if (td !== current || !_endingSession.value) return
+        Logger.i(TAG, "logging out did not finish; starting a new client")
+        replaceClient(td)
     }
 
     /** Shows [step]'s state and carries out its action. Called with [gate] held. */
@@ -910,6 +942,24 @@ object Td {
             return
         }
         Logger.i(TAG, "sign in stalled on Connecting; starting a new client")
+        replaceClient(td)
+    }
+
+    /**
+     * A video's bytes stopped coming ([OpeningStall.nudgeDue]): the connections reopened once, as
+     * the stall sheet's Try again does, before the sheet is shown at all. TDLib's download carries
+     * on over the new connections by itself.
+     */
+    fun nudgeForStream() {
+        Logger.i(TAG, "a video's bytes stopped; reopening connections")
+        scope.launch { runCatching { retryConnecting() } }
+    }
+
+    /**
+     * Closes [td] and opens a fresh client over the same database, keeping the chosen method; if
+     * TDLib never reports [td] closed, the new one is started anyway after [RESTART_TIMEOUT_MS].
+     */
+    private suspend fun replaceClient(td: TdlClient) {
         methodAfterRestart = method
         retiring = td
         val before = _session.value?.generation
@@ -1417,6 +1467,12 @@ object Td {
      * on a working line is through in a few seconds; past this the viewer is wondering already.
      */
     const val SIGN_IN_STALL_MS = 12_000L
+
+    /** How long a logout runs before its connections are reopened ([watchLogOut]). */
+    private const val LOG_OUT_NUDGE_MS = 4_000L
+
+    /** How much longer it runs after that before the client is replaced. */
+    private const val LOG_OUT_GIVE_UP_MS = 6_000L
 
     /** How long a signed in session goes without a line before [unreachable] says so. */
     private const val UNREACHABLE_MS = 20_000L
