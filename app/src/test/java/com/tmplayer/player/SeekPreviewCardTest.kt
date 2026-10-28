@@ -88,6 +88,8 @@ class SeekPreviewCardTest {
         )
         controls.setTitle("The Coast", "S01E04 · Nature Channel")
         controls.thumbnails = source
+        // The card itself, as it shows once Trickplay.PICTURES_SHOWN is back on.
+        controls.previewsOff = false
         controls.previewPinned = true
         controls.show()
         idle()

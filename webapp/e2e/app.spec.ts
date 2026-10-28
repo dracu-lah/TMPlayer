@@ -145,12 +145,16 @@ test('a chat that is gone says so', async ({ page }) => {
 })
 
 test('?msone=1 says MSone is on only when it turns it on, not at every launch with the flag', async ({ page }) => {
-    // The TV app opens every launch with ?msone=1: a toast on Home each time is noise.
-    await page.goto('/?msone=1')
-    await expect(page.locator('.toast').filter({ hasText: 'MSone search is on' })).toBeVisible()
+    // The TV app opens every launch with ?msone=1: a toast on Home each time is noise. MSone is
+    // on by default, so the first ?msone=1 changes nothing and says nothing.
     await page.goto('/?msone=1')
     await page.waitForTimeout(1500)
     await expect(page.locator('.toast').filter({ hasText: 'MSone' })).toHaveCount(0)
     await page.goto('/?msone=0')
     await expect(page.locator('.toast').filter({ hasText: 'MSone search is off' })).toBeVisible()
+    await page.goto('/?msone=1')
+    await expect(page.locator('.toast').filter({ hasText: 'MSone search is on' })).toBeVisible()
+    await page.goto('/?msone=1')
+    await page.waitForTimeout(1500)
+    await expect(page.locator('.toast').filter({ hasText: 'MSone' })).toHaveCount(0)
 })
