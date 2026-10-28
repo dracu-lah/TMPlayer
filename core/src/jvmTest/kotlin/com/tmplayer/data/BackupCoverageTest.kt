@@ -27,6 +27,9 @@ class BackupCoverageTest {
         // Locks: a PIN's hash has no place in a mailed file, and a restore never undoes a lock.
         "app_lock_on_open", "app_pin", "app_pin_failures", "app_pin_wait_left_ms", "app_pin_wait_stamp",
         "kids_chats", "kids_lock",
+        // Whether this device was signed in: a session belongs to the device, and a restore on
+        // another one must not read as "Telegram signed you out" there (HX23).
+        "signed_in",
         // Consent is given on the device that sends.
         "crash_reports",
         // Test versions are asked for on each device, never brought along by a restore.
