@@ -38,10 +38,38 @@ export function showCrashCard() {
     const close = document.createElement('button')
     close.className = 'link'
     close.textContent = label('common.close', 'Close')
-    close.onclick = () => box.remove()
     const row = document.createElement('div')
     row.append(reload, close)
     box.append(text, row)
+    // The remote's keys come to the card first while it is up (HX19): the player behind it listens
+    // on the window and kept the focus, so on a TV neither button could be reached. Left and Right
+    // move between the two, OK presses one, Back closes the card, and nothing reaches the screen behind.
+    const keys = (ev: KeyboardEvent) => {
+        const buttons = [reload, close]
+        const at = buttons.indexOf(document.activeElement as HTMLButtonElement)
+        const typing = /^(INPUT|TEXTAREA)$/.test((document.activeElement as HTMLElement | null)?.tagName ?? '')
+        // Back as the TV layout reads it: Backspace (outside a text field) and webOS's 461 too.
+        if (ev.key === 'Escape' || ev.key === 'GoBack' || ev.key === 'BrowserBack' || ev.keyCode === 461 || (ev.key === 'Backspace' && !typing)) {
+            dismiss()
+        } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') {
+            const step = (ev.key === 'ArrowRight') === (document.dir !== 'rtl') ? 1 : -1
+            buttons[at < 0 ? 0 : (at + step + buttons.length) % buttons.length].focus()
+        } else if (ev.key === 'Enter' || ev.key === ' ') {
+            ;(at < 0 ? reload : buttons[at]).click()
+        } else if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
+            if (at < 0) reload.focus()
+        } else {
+            return
+        }
+        ev.preventDefault()
+        ev.stopImmediatePropagation()
+    }
+    const dismiss = () => {
+        window.removeEventListener('keydown', keys, true)
+        box.remove()
+    }
+    close.onclick = dismiss
+    window.addEventListener('keydown', keys, true)
     document.body.append(box)
     card = box
     reload.focus()
