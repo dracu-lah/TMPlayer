@@ -68,6 +68,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -420,19 +421,26 @@ internal fun HomePane(
         // (the carousel's Play, the first row): the television's default moved every focused item
         // to a fixed height, which scrolled Home down and back each time Play took the remote.
         val barPx = with(density) { TV_BAR_HEIGHT.toPx() }
-        // The first row under the carousel holds the list at its top rather than being brought to
-        // three tenths of the way down: that moved Home down a third of the screen on the first
-        // Down from Play, composing the rows it uncovered, and [keepCarousel] took it back up a frame
-        // later, one frame of 150 ms on the Mi TV (2026-10-23). Found by where the request lands:
-        // inside the first row's own place while the carousel is the list's first item.
-        val firstRowKey by androidx.compose.runtime.rememberUpdatedState(listed.firstOrNull()?.key.takeIf { carousel })
+        // A row the remote moves into stands just under the bar, its heading in sight, wherever it
+        // was reached from, as the web app's and Google TV's rows do. Brought to three tenths of the
+        // way down instead, a row reached by Up sat with its heading under the bar and one reached
+        // by Down with it in sight; the first row was held at the list's top with its tiles cut off
+        // at the screen's foot, and a second Down moved the page that the next Left or Right took
+        // back (user, 2026-10-28). Found by where the request lands: inside a row's own place.
+        val rowKeys by androidx.compose.runtime.rememberUpdatedState(remember(listed) { listed.mapTo(HashSet()) { it.key } })
+        // Without the carousel the bar stands above the list rather than over it.
+        val rowLine by androidx.compose.runtime.rememberUpdatedState(if (headerOnArt) barPx else 0f)
         val calm = remember(barPx, listState) {
-            calmVertical(barPx) { offset, size ->
-                val key = firstRowKey ?: return@calmVertical null
-                if (listState.firstVisibleItemIndex != 0) return@calmVertical null
-                val row = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key } ?: return@calmVertical null
-                if (offset < row.offset - 1f || offset + size > row.offset + row.size + 1f) return@calmVertical null
-                -listState.firstVisibleItemScrollOffset.toFloat()
+            calmVertical(barPx) { offset, size, _ ->
+                val info = listState.layoutInfo
+                for (row in info.visibleItemsInfo) {
+                    // The item's offset counts from inside the list's top padding; the request's from the list's top.
+                    val top = (row.offset - info.viewportStartOffset).toFloat()
+                    if (offset < top - 1f || offset + size > top + row.size + 1f) continue
+                    if (row.key !in rowKeys) return@calmVertical null
+                    return@calmVertical top - rowLine
+                }
+                null
             }
         }
         val platformSpec = androidx.compose.foundation.gestures.LocalBringIntoViewSpec.current
@@ -489,9 +497,31 @@ internal fun HomePane(
                         Modifier.onPreviewKeyEvent { event ->
                             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                             if ((event.key == Key.DirectionDown || event.key == Key.DirectionUp) && staleRepeat(event)) return@onPreviewKeyEvent true
+                            // Up the same way: the row above may be wholly over the screen now
+                            // that every row stands at the bar.
+                            if (event.key == Key.DirectionUp) {
+                                if (focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Up)) return@onPreviewKeyEvent true
+                                if (!listState.canScrollBackward) return@onPreviewKeyEvent false
+                                scope.launch {
+                                    listState.scrollBy(-rowStep)
+                                    focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Up)
+                                }
+                                return@onPreviewKeyEvent true
+                            }
                             if (event.key != Key.DirectionDown) return@onPreviewKeyEvent false
                             if (focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down)) return@onPreviewKeyEvent true
                             if (!listState.canScrollForward) return@onPreviewKeyEvent false
+                            // From the last row there is nothing to move into: the list shows what
+                            // is left under it (the favourites hint) but keeps the row whole, so the
+                            // next Left or Right does not have to bring it back.
+                            val lastKey = listed.lastOrNull()?.key
+                            if (lastKey != null && focusedSpot[0] == lastKey) {
+                                val info = listState.layoutInfo
+                                val row = info.visibleItemsInfo.firstOrNull { it.key == lastKey } ?: return@onPreviewKeyEvent true
+                                val room = (row.offset - info.viewportStartOffset - barPx).coerceIn(0f, rowStep)
+                                if (room > 0f) scope.launch { listState.scrollBy(room) }
+                                return@onPreviewKeyEvent true
+                            }
                             scope.launch {
                                 // In one step, as the rows move: a slide here drew a dozen slow frames.
                                 listState.scrollBy(rowStep)
@@ -527,6 +557,11 @@ internal fun HomePane(
                             idle = homeIdle,
                             modifier = Modifier.onFocusChanged { state ->
                                 if (state.hasFocus) {
+                                    // Up from the first row, which moved Home up to stand whole,
+                                    // brings the carousel back whole, picture and title.
+                                    if (focusedSpot[0] != FEATURED_KEY && (listState.firstVisibleItemIndex != 0 || listState.firstVisibleItemScrollOffset != 0)) {
+                                        scope.launch { listState.scrollToItem(0) }
+                                    }
                                     focusedSpot[0] = FEATURED_KEY
                                     HomeFocusMemory.spot = FEATURED_KEY
                                 } else if (focusedSpot[0] == FEATURED_KEY) {
@@ -589,15 +624,20 @@ internal fun HomePane(
                     }?.takeIf { row.hasMore }
                     val countLabel = if (row.totalAtLeast) s.homeSeeAllCountAtLeast(row.total) else s.homeSeeAllCount(row.total)
                     // On a television "See all" sits on the heading, where it can be seen, but it only
-                    // takes focus when Up is pressed from this row's tiles: moving down through Home
-                    // goes tile row to tile row and never stops on a heading on the way.
+                    // takes focus when Right is pressed on the row's last tile, as a television's
+                    // rows end: Up and Down go tile row to tile row, one press each way, and never
+                    // stop on a heading. Up used to stop on See all first, so going up took two
+                    // presses a row and going down one (user, 2026-10-28).
                     val seeAllFocus = remember { FocusRequester() }
                     var seeAllArmed by remember { mutableStateOf(false) }
                     val upToSeeAll = if (touch || seeAll == null) {
                         Modifier
                     } else {
-                        Modifier.onPreviewKeyEvent { event ->
-                            if (event.type != KeyEventType.KeyDown || event.key != Key.DirectionUp) return@onPreviewKeyEvent false
+                        Modifier.onKeyEvent { event ->
+                            if (event.type != KeyEventType.KeyDown || event.key != Key.DirectionRight) return@onKeyEvent false
+                            if (focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Right)) return@onKeyEvent true
+                            // A held Right stops at the last tile; a fresh press goes on to See all.
+                            if (event.nativeKeyEvent.repeatCount > 0) return@onKeyEvent true
                             seeAllArmed = true
                             scope.launch {
                                 // A frame for the armed heading to become focusable.
@@ -629,20 +669,7 @@ internal fun HomePane(
                         }
                     }
                     val rowTiles = upToSeeAll.focusRequester(tilesFocus)
-                    val keepCarousel = if (!touch && carousel && isFirst) {
-                        Modifier.onFocusChanged { state ->
-                            if (state.hasFocus) scope.launch {
-                                withFrameNanos {}
-                                // Already whole at the top (the usual case, now that [calm] keeps it
-                                // there): no scroll, which would measure the list again for nothing.
-                                val atTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
-                                if (!atTop || listState.isScrollInProgress) listState.scrollToItem(0)
-                            }
-                        }
-                    } else {
-                        Modifier
-                    }
-                    Column(keepCarousel.then(rowSpot)) {
+                    Column(rowSpot) {
                         RowHeading(
                             title,
                             start = start,
@@ -1147,50 +1174,28 @@ private fun TileRow(
     row: androidx.compose.foundation.lazy.LazyListState = com.tmplayer.ui.components.rememberAheadListState(),
     content: LazyListScope.() -> Unit,
 ) {
-    // The remote's tile, by index, on a television (see below); -1 until the row has had focus.
-    val at = remember { intArrayOf(-1) }
-    com.tmplayer.ui.components.KeepAtStart(row) { at[0] > 0 }
+    // Set once the remote has moved the row on a television, so new videos at its front do not
+    // send it back to its start under the viewer.
+    val moved = remember { booleanArrayOf(false) }
+    com.tmplayer.ui.components.KeepAtStart(row) { moved[0] }
     if (!isTouch()) {
         // On a television the tiles fade out over the margins rather than being cut off at the
         // rail, and the tile the remote moves to stays inside them.
-        // The remote's tile stands at one place, the start of the row, and the row moves under it
-        // in one step: Left and Right move the focus here and the row jumps to the new tile.
-        // Slid there, each press drew about nine frames, and a TV stick's GPU took some 40 ms over
-        // each, so a press held the screen for a third of a second (measured on a Mi TV, 1 GB).
-        val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
-        val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
-        val inside = remember { booleanArrayOf(false) }
-        val stepping = Modifier
-            .onFocusChanged { state ->
-                // Coming back into the row lands on the tile it was left on: put that tile back
-                // at the start, in case the row moved meanwhile (new videos at its front).
-                if (state.hasFocus && !inside[0]) {
-                    if (at[0] < 0) at[0] = row.firstVisibleItemIndex
-                    else if (row.firstVisibleItemIndex != at[0]) row.requestScrollToItem(at[0].coerceAtMost((row.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)))
-                }
-                inside[0] = state.hasFocus
-            }
-            .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                val right = event.key == Key.DirectionRight
-                if (!right && event.key != Key.DirectionLeft) return@onPreviewKeyEvent false
-                // A held button's repeats queue up behind slow frames; one already stale is
-                // dropped, so the row stops where the viewer let go instead of running on.
-                if (staleRepeat(event)) return@onPreviewKeyEvent true
-                val forward = right != rtl
-                if (at[0] < 0) at[0] = row.firstVisibleItemIndex
-                val target = at[0] + if (forward) 1 else -1
-                if (target < 0 || target >= row.layoutInfo.totalItemsCount) return@onPreviewKeyEvent false
-                if (!focusManager.moveFocus(if (right) androidx.compose.ui.focus.FocusDirection.Right else androidx.compose.ui.focus.FocusDirection.Left)) {
-                    return@onPreviewKeyEvent false
-                }
-                at[0] = target
-                // Applied at the next measure, the same frame the focus moves in, rather than a
-                // frame later from a coroutine.
-                row.requestScrollToItem(target)
-                true
-            }
-        AnchoredAtStart(start, instant = true) {
+        // Left and Right move the focus across the tiles on screen, as a television's home screen
+        // does, and the row moves only when the next tile is past its edge, by that tile, in one
+        // step ([EdgeStep]). The remote held at the row's start with the row jumping under it on
+        // every press read as the whole row swapping (user, 2026-10-28); slid, each press drew
+        // about nine frames of some 40 ms on a 1 GB stick (Mi TV).
+        val stepping = Modifier.onPreviewKeyEvent { event ->
+            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            if (event.key != Key.DirectionRight && event.key != Key.DirectionLeft) return@onPreviewKeyEvent false
+            // A held button's repeats queue up behind slow frames; one already stale is
+            // dropped, so the row stops where the viewer let go instead of running on.
+            if (staleRepeat(event)) return@onPreviewKeyEvent true
+            moved[0] = true
+            false
+        }
+        EdgeStep(start, end) {
             LazyRow(
                 state = row,
                 // Coming back down into a row lands on the tile it was left on, not whichever is nearest.
@@ -1435,18 +1440,26 @@ private fun rememberFeatured(recent: HomeRow.Recent?): List<com.tmplayer.data.Fe
 
 
 /**
- * The focused tile's leading edge held at [start] of the row, so the remote stays at one place on
- * the screen and the row slides under it, as a television's home screen does.
+ * A row that keeps still while the focused tile stands between its margins ([start], [end]) and
+ * otherwise moves just far enough to bring it inside them, at once rather than slid.
  */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun AnchoredAtStart(start: Dp, instant: Boolean = false, content: @Composable () -> Unit) {
-    val startPx = with(LocalDensity.current) { start.toPx() }
-    val spec = remember(startPx, instant) {
+private fun EdgeStep(start: Dp, end: Dp, content: @Composable () -> Unit) {
+    val density = LocalDensity.current
+    val startPx = with(density) { start.toPx() }
+    val endPx = with(density) { end.toPx() }
+    val spec = remember(startPx, endPx) {
         object : androidx.compose.foundation.gestures.BringIntoViewSpec {
-            // [instant]: the row scrolls itself, at once, so focus asks for no slide of its own.
-            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float =
-                if (instant) 0f else offset - startPx
+            @Deprecated("Matches the interface; the snap is the point.")
+            override val scrollAnimationSpec: androidx.compose.animation.core.AnimationSpec<Float> =
+                androidx.compose.animation.core.snap()
+
+            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = when {
+                offset < startPx -> offset - startPx
+                offset + size > containerSize - endPx -> offset + size - (containerSize - endPx)
+                else -> 0f
+            }
         }
     }
     CompositionLocalProvider(androidx.compose.foundation.gestures.LocalBringIntoViewSpec provides spec, content = content)
@@ -1591,17 +1604,17 @@ private const val STALE_REPEAT_MS = 80L
 private fun calmVertical(
     barPx: Float,
     /** A distance of its own for a request (the first row under the carousel), or null for the band's. */
-    held: (offset: Float, size: Float) -> Float? = { _, _ -> null },
+    held: (offset: Float, size: Float, containerSize: Float) -> Float? = { _, _, _ -> null },
 ) = object : androidx.compose.foundation.gestures.BringIntoViewSpec {
     // At once rather than slid: a slide down to the next row drew some seventeen frames on the
     // 1 GB stick, each 20 to 130 ms, so the page swam for half a second after every Up and Down.
-    // The rows already move in one step ([AnchoredAtStart]); the page now does too.
+    // The rows already move in one step ([EdgeStep]); the page now does too.
     @Deprecated("Matches the interface; the snap is the point.")
     override val scrollAnimationSpec: androidx.compose.animation.core.AnimationSpec<Float> =
         androidx.compose.animation.core.snap()
 
     override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
-        held(offset, size)?.let { return it }
+        held(offset, size, containerSize)?.let { return it }
         val lead = containerSize * 0.3f
         return when {
             offset < barPx -> offset - lead
