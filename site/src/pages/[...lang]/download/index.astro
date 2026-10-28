@@ -271,6 +271,40 @@ const trust = ['download.trust_free', 'download.trust_source', 'download.trust_a
           <p class="web-app-go"><a class="btn btn-outline" href="https://web.tmplayer.org/" rel="noopener">{t('download.web_open')}</a></p>
         </section>
 
+        {/*
+          Samsung and LG (a beta): the TV's own browser is the way most people should take, since
+          web.tmplayer.org answers an LG or Samsung browser with the TV build. The release's .ipk and
+          .wgt only open that page from the TV's app list, and both need a developer's setup (LG's
+          Developer Mode, a Samsung certificate for that one TV), so they stay folded.
+        */}
+        <section class="later web-app" id="tv-packages" aria-labelledby="tvpk-h">
+          <div class="platform-head">
+            <span class="panel-icon icon-play" aria-hidden="true"><Icon name="tv-card" /></span>
+            <div class="platform-title">
+              <h3 id="tvpk-h">{t('download.tvpk_title')}</h3>
+              <p class="platform-req">{t('download.tvpk_req')}</p>
+            </div>
+          </div>
+          <p>{t('download.tvpk_note')}</p>
+          <details class="code-fold dl-more">
+            <summary>{t('download.tvpk_more')}<Icon name="faq-chevron" /></summary>
+            <p class="platform-note">{t('download.tvpk_more_note')}</p>
+            <ul class="abi-list">
+              <AbiRow asset="tv-webos">
+                <Fragment slot="name">{t('download.tvpk_lg')}</Fragment>
+                <Fragment slot="note">{t('download.tvpk_lg_note')}</Fragment>
+                <p slot="file" class="abi-file" data-file>TMPlayer-&lt;version&gt;-lg-webos.ipk</p>
+              </AbiRow>
+              <AbiRow asset="tv-tizen">
+                <Fragment slot="name">{t('download.tvpk_samsung')}</Fragment>
+                <Fragment slot="note">{t('download.tvpk_samsung_note')}</Fragment>
+                <p slot="file" class="abi-file" data-file>TMPlayer-&lt;version&gt;-samsung-tizen.wgt</p>
+              </AbiRow>
+            </ul>
+          </details>
+          <p class="platform-foot"><a href={l('/guides/telegram-on-samsung-or-lg-tv/#tmplayer-on-the-tv')}>{t('download.tvpk_guide')}</a></p>
+        </section>
+
         {/* The technical part, folded: checksums, the release notes and the older releases. */}
         <details class="code-fold dl-files">
           <summary>{t('download.more_files')}<Icon name="faq-chevron" /></summary>

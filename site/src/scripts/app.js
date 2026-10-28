@@ -49,7 +49,7 @@ var tmT = (function () {
   /* Every file a release can carry, matched loosely on the end of its name so a
      version in the middle never matters. The label is what the previous
      releases list calls it. A release now carries the universal APK, the MSI,
-     the AppImage, the tarball and, from 1.26.0, the macOS DMG; the other kinds stay only so the previous
+     the AppImage, the tarball, from 1.26.0 the macOS DMG and from 1.28.2 the LG and Samsung TV packages; the other kinds stay only so the previous
      releases list still names the files older releases had (x86_64 and per-ABI
      APKs, the Windows zip, the deb, the rpm and the Flatpak). */
   var KINDS = [
@@ -65,6 +65,8 @@ var tmT = (function () {
     { id: 'linux-flatpak', label: 'Flatpak', test: /\.flatpak$/i },
     { id: 'linux-tar', label: tmT('kind_linux_tarball', 'Linux tarball'), test: /linux-x64\.tar\.(gz|xz)$/i },
     { id: 'mac-dmg', label: tmT('kind_mac_dmg', 'macOS DMG'), test: /macos-arm64\.dmg$/i },
+    { id: 'tv-webos', label: tmT('kind_lg_webos', 'LG webOS package'), test: /lg-webos\.ipk$/i },
+    { id: 'tv-tizen', label: tmT('kind_samsung_tizen', 'Samsung Tizen package'), test: /samsung-tizen\.wgt$/i },
     { id: 'sums', label: tmT('kind_checksums', 'Checksums'), test: /^sha256sums/i, quiet: true }
   ];
 

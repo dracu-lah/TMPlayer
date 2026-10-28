@@ -1,6 +1,7 @@
 ---
 // For the searches "telegram on samsung tv", "telegram lg tv", "telegram smart tv": an honest
-// answer (neither Tizen nor webOS installs Android apps) and the ways that work instead, compared.
+// answer (neither Tizen nor webOS installs Android apps, TMPlayer's web app opens in their browser
+// as a beta) and the ways that work, compared.
 // Every brand claim here has a source (kept in the maintainer's SEO notes), checked on the date in `checked`.
 import StarBand from '../../../../components/StarBand.astro';
 import GuidePage from '../../../../components/guides/GuidePage.astro';
@@ -39,12 +40,13 @@ const ld: Guide = {
 };
 
 // The ways, as cards: heading, then text.
-const ways = ['stick', 'cast', 'mirror', 'web'].map((w) => [`way_${w}_h`, `way_${w}_p`]);
+const ways = ['stick', 'app', 'cast', 'mirror', 'web'].map((w) => [`way_${w}_h`, `way_${w}_p`]);
 
 // The same ways side by side: the row's heading, what it needs, what it asks of the phone, its
 // catch. The mirroring and Telegram Web rows say what the no-casting guide says about them.
 const table = [
   [g('way_stick_h'), g('row_stick_needs'), n('free_once_you_have_signed'), g('row_stick_catch')],
+  [g('way_app_h'), g('row_app_needs'), n('free_once_you_have_signed'), g('row_app_catch')],
   [g('way_cast_h'), g('row_cast_needs'), g('row_cast_phone'), g('row_cast_catch')],
   [g('way_mirror_h'), g('row_mirror_needs'), n('it_stays_awake_on_the'), n('calls_and_notifications_show_on')],
   [g('way_web_h'), n('a_web_browser_on_the'), n('free_once_you_have_signed'), n('a_page_made_for_a')],
@@ -68,7 +70,15 @@ const table = [
     </div>
   </Band>
 
-  <Band wave id="compare" title={g('options_h')} sub={g('options_sub')}>
+  <Band wave id="tmplayer-on-the-tv" title={g('app_h')}>
+    <div class="section-body prose-band" data-reveal>
+      <p>{g('app_p1')}</p>
+      <p>{g('app_p2')}</p>
+      <p><T k="guide_smart_tv.app_p3"><a href={l('/download/#tv-packages')} slot="a1">{g('app_p3__a1')}</a></T></p>
+    </div>
+  </Band>
+
+  <Band wave tonal id="compare" title={g('options_h')} sub={g('options_sub')}>
     <div class="formats" data-reveal>
       {ways.map(([title, body]) => (
         <div class="format">
@@ -145,6 +155,7 @@ const table = [
     <div class="section-body prose-band" data-reveal>
       <ul class="fact-list">
         <li><T k="guide_smart_tv.pick_stick"><b slot="b1">{g('pick_stick__b1')}</b></T></li>
+        <li><T k="guide_smart_tv.pick_app"><b slot="b1">{g('pick_app__b1')}</b></T></li>
         <li><T k="guide_smart_tv.pick_cast"><b slot="b1">{g('pick_cast__b1')}</b></T></li>
         <li><T k="guide_smart_tv.pick_mirror"><b slot="b1">{g('pick_mirror__b1')}</b></T></li>
       </ul>

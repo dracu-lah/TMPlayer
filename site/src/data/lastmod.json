@@ -1,7 +1,7 @@
 [
   {
     "path": "/",
-    "lastmod": "2026-10-24",
+    "lastmod": "2026-10-29",
     "changefreq": "weekly",
     "priority": "1.0",
     "images": [
@@ -69,7 +69,7 @@
   },
   {
     "path": "/features/",
-    "lastmod": "2026-10-22",
+    "lastmod": "2026-10-29",
     "changefreq": "monthly",
     "priority": "0.9",
     "images": [
@@ -181,13 +181,13 @@
   },
   {
     "path": "/download/",
-    "lastmod": "2026-10-24",
+    "lastmod": "2026-10-29",
     "changefreq": "weekly",
     "priority": "0.9"
   },
   {
     "path": "/install/",
-    "lastmod": "2026-10-24",
+    "lastmod": "2026-10-29",
     "changefreq": "monthly",
     "priority": "0.8",
     "images": [
@@ -199,7 +199,7 @@
   },
   {
     "path": "/android-tv/",
-    "lastmod": "2026-10-24",
+    "lastmod": "2026-10-29",
     "changefreq": "monthly",
     "priority": "0.8",
     "images": [
@@ -295,7 +295,7 @@
   },
   {
     "path": "/faq/",
-    "lastmod": "2026-10-24",
+    "lastmod": "2026-10-29",
     "changefreq": "monthly",
     "priority": "0.7"
   },
@@ -313,7 +313,7 @@
   },
   {
     "path": "/signing/",
-    "lastmod": "2026-10-18",
+    "lastmod": "2026-10-29",
     "changefreq": "yearly",
     "priority": "0.3"
   },
@@ -337,19 +337,19 @@
   },
   {
     "path": "/formats/",
-    "lastmod": "2026-10-20",
+    "lastmod": "2026-10-29",
     "changefreq": "monthly",
     "priority": "0.6"
   },
   {
     "path": "/security/",
-    "lastmod": "2026-10-19",
+    "lastmod": "2026-10-29",
     "changefreq": "monthly",
     "priority": "0.6"
   },
   {
     "path": "/guides/",
-    "lastmod": "2026-10-24",
+    "lastmod": "2026-10-29",
     "changefreq": "monthly",
     "priority": "0.6"
   },
@@ -373,7 +373,7 @@
   },
   {
     "path": "/guides/telegram-on-samsung-or-lg-tv/",
-    "lastmod": "2026-10-24",
+    "lastmod": "2026-10-29",
     "changefreq": "monthly",
     "priority": "0.7",
     "images": [
@@ -493,7 +493,7 @@
   },
   {
     "path": "/alternatives/telegram-app/",
-    "lastmod": "2026-10-24",
+    "lastmod": "2026-10-29",
     "changefreq": "monthly",
     "priority": "0.6",
     "images": [

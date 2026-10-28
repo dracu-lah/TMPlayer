@@ -9,7 +9,7 @@ export const faqLd = {
       "name": "Can I download Telegram on my TV?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Telegram makes no app for televisions. Its Android phone app can be installed on an Android TV by hand, but it is laid out for touch and hard to use with a remote. TMPlayer is made for the TV: on an Android TV, Google TV or Fire TV it signs in to your own Telegram account with a QR code and plays the videos in your chats, without the messages. Samsung TVs on Tizen, LG TVs on webOS, Roku and Apple TV cannot install it, because they do not run Android; plug an Android TV stick or a Fire TV Stick into the TV's HDMI port instead."
+        "text": "Telegram makes no app for televisions. Its Android phone app can be installed on an Android TV by hand, but it is laid out for touch and hard to use with a remote. TMPlayer is made for the TV: on an Android TV, Google TV or Fire TV it signs in to your own Telegram account with a QR code and plays the videos in your chats, without the messages. Samsung TVs on Tizen, LG TVs on webOS, Roku and Apple TV cannot install it, because they do not run Android; plug an Android TV stick or a Fire TV Stick into the TV's HDMI port, or, on a Samsung or LG TV from 2020 or later, open TMPlayer's web app in the TV's browser (a beta)."
       }
     },
     {
@@ -161,7 +161,7 @@ export const faqLd = {
       "name": "How does it update if it is not in the Play Store?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "It checks GitHub and asks before installing a newer release, on Android, Windows and Linux. On a Mac it tells you and opens the release page."
+        "text": "It checks tmplayer.org, with GitHub as the fallback, and asks before installing a newer release, on Android, Windows and Linux. On Android 12 and later the update then installs without Android asking again. On a Mac it tells you and opens the release page."
       }
     },
     {

@@ -13,7 +13,7 @@ Astro.locals.lang = ENGLISH;
 <Base path="/signing/" title="Code signing policy - TMPlayer" description="How TMPlayer releases are built by GitHub Actions from the tagged source and signed, and how to check a download's signature and SHA-256.">
   <JsonLd slot="head" data={breadcrumb(['Code signing', '/signing/'])} />
   <HeaderPlain />
-  <PolicyPage eyebrow="Effective 5 October 2026" title="Code signing policy">
+  <PolicyPage eyebrow="Effective 29 October 2026" title="Code signing policy">
     <p class="policy-lede">This is the code signing policy for TMPlayer's release files: how they are built, who can start a signed release, and how to check a signature.</p>
     <p class="policy-lede"><strong>Status:</strong> our application to the SignPath Foundation is pending. Until it is approved, the Windows installer is not code signed, and Windows SmartScreen may warn before it runs. The policy below is what applies once signing starts.</p>
 
@@ -24,6 +24,7 @@ Astro.locals.lang = ENGLISH;
     <PolicySection title="Code signing">
       <p>So that you can tell a file has not been changed since it was built, the Windows releases will be signed with a certificate from the <a href="https://about.signpath.io/" rel="noopener">SignPath Foundation</a>. The signing step will run in the release job, and only for official release tags.</p>
       <p>Android releases are signed with the project's own key, kept as a GitHub Actions secret.</p>
+      <p>The LG webOS and Samsung Tizen TV packages, attached to every release since 1.28.2, are not signed by the project. Each holds only a small page that opens web.tmplayer.org. An LG TV installs the <code>.ipk</code> in its Developer Mode, and a Samsung TV installs the <code>.wgt</code> only once it has been signed with a Samsung certificate made for that one TV. Opening web.tmplayer.org in the TV's browser needs neither.</p>
     </PolicySection>
 
     <PolicySection title="Access control">

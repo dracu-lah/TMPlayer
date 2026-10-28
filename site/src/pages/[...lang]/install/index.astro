@@ -108,6 +108,7 @@ const ld1 = {
         <a href="#windows" data-os="windows"><Icon name="windows-panel" /><span>Windows</span></a>
         <a href="#macos" data-os="macos"><Icon name="laptop-panel" /><span>macOS</span></a>
         <a href="#linux" data-os="linux"><Icon name="terminal-panel" /><span>Linux</span></a>
+        <a href="#smart-tv"><Icon name="tv-card" /><span>{t('install.smart_tv_tab')}</span></a>
       </div>
       <a class="install-pick-more" href="#shortcuts">{t('install.desktop_and_menu_shortcuts')}</a>
     </nav>
@@ -239,7 +240,25 @@ chmod +x <span data-name="linux-x64-appimage">TMPlayer-&lt;version&gt;-x86_64.Ap
     <p class="muted small section-note">{t('install.the_arch_package_adds_a')}</p>
   </Band>
 
-  <Band wave id="shortcuts" labelledby="shortcuts-h" title={t('install.on_the_desktop_in_the')} sub={t('install.how_to_keep_it_one')} body>
+  {/* Samsung and LG (a beta): the TV's browser, which web.tmplayer.org answers with its TV build.
+      The release's .ipk and .wgt need a developer's setup, so they are on the download page and
+      in the Samsung and LG guide, not here. */}
+  <Band wave id="smart-tv" labelledby="smart-tv-h" title={t('install.smart_tv_title')} sub={t('install.smart_tv_sub')} body>
+    <Steps rail>
+      <Step id="smart-tv-1" title={t('install.smart_tv_step1_h')}>
+        <p>{t('install.smart_tv_step1')}</p>
+      </Step>
+      <Step id="smart-tv-2" title={t('install.smart_tv_step2_h')}>
+        <p>{t('install.smart_tv_step2')}</p>
+      </Step>
+      <Step id="smart-tv-3" title={t('home.sign_in')}>
+        <p><T k="install.smart_tv_step3"><em slot="em1">{t('install.tv_step4__em1')}</em><em slot="em2">{t('install.tv_step4__em2')}</em><em slot="em3">{t('install.tv_step4__em3')}</em></T></p>
+      </Step>
+    </Steps>
+    <p class="muted small section-note"><T k="install.smart_tv_note"><a href={l('/guides/telegram-on-samsung-or-lg-tv/#tmplayer-on-the-tv')} slot="a1">{t('install.smart_tv_note__a1')}</a></T></p>
+  </Band>
+
+  <Band wave id="shortcuts" labelledby="shortcuts-h" title={t('install.on_the_desktop_in_the')} sub={t('install.how_to_keep_it_one')} tonal body>
     <div class="two-col">
       <Panel title="Windows">
         <p><T k="install.win_pin"><em slot="em1">{t('install.win_pin__em1')}</em></T></p>
@@ -288,7 +307,7 @@ gio set ~/Desktop/tmplayer.desktop metadata::trusted true</code></pre>
     </Panel>
   </Band>
 
-  <Band wave labelledby="trouble-h" title={t('install.if_it_goes_wrong')} sub={t('install.the_fixes_for_nearly_every')} tonal>
+  <Band wave labelledby="trouble-h" title={t('install.if_it_goes_wrong')} sub={t('install.the_fixes_for_nearly_every')}>
     <div class="faq" data-reveal>
       <FaqItem q={t('install.the_television_says_the_app')}>{t('install.unknown_sources_is_set_per')}</FaqItem>
       <FaqItem q={t('install.adb_connect_refuses_the_connection')}>{t('install.turn_on_network_debugging_use')}</FaqItem>
