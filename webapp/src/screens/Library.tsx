@@ -13,6 +13,7 @@ import { form } from '../form'
 import { clearHistoryWithUndo } from '../clearHistory'
 import { historyId, removeWithUndo } from '../historyEdits'
 import { prune, range, toggleAll } from '../ui/selection'
+import { chatGone, forgetGone } from '../goneVideos'
 import type { VideoItem } from '../tg/types'
 
 /** How many videos a tab asks Telegram about at most: the ones further back wait for their own page. */
@@ -61,9 +62,23 @@ interface Entry {
     time: number
 }
 
-/** Telegram's answer for each id, the ones gone from their chat left out. */
+/**
+ * Telegram's answer for each id. One gone from its chat for good (no message, or its chat closed
+ * to this account) leaves the lists, said once (HX21); one that only failed to answer is left out
+ * of this showing and kept for the next.
+ */
 async function lookUp(list: { chatId: number; messageId: number; time: number }[]): Promise<Entry[]> {
-    const found = await Promise.all(list.slice(0, ASK_AT_MOST).map(async (r) => ({ item: await api.video(r.chatId, r.messageId).catch(() => null), time: r.time })))
+    const gone: { chatId: number; messageId: number }[] = []
+    const found = await Promise.all(
+        list.slice(0, ASK_AT_MOST).map(async (r) => {
+            const item = await api.video(r.chatId, r.messageId).then(
+                (v) => (v === null && gone.push(r), v),
+                (e) => (chatGone(e) && gone.push(r), null),
+            )
+            return { item, time: r.time }
+        }),
+    )
+    if (gone.length) void forgetGone(gone)
     return found.filter((e): e is Entry => !!e.item)
 }
 

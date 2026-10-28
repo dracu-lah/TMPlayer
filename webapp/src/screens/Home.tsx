@@ -4,7 +4,8 @@ import { ArrowLeft01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons'
 import { call, errorText } from '../tg/rpc'
 import { onBackOnline } from '../net'
 import { t } from '../i18n'
-import { dropResume, progress, resumes, settings, starredIds, watchedTick } from '../store'
+import { progress, resumes, settings, starredIds, watchedTick } from '../store'
+import { forgetGone } from '../goneVideos'
 import { Icon } from '../ui/Icon'
 import { Card, ContinueCard, tileCard, useLeft, useProgress, useWarmDataCentres, videoCard, type CardData } from './VideoList'
 import { form } from '../form'
@@ -26,17 +27,11 @@ const [last, setLast] = createSignal<HomePage | null>(null)
 export function Home() {
     const [error, setError] = createSignal<unknown>(null)
     const [busy, setBusy] = createSignal(false)
-    const dropped = new Set<string>()
     const apply = (page: HomePage) => {
         setLast(page)
         setError(null)
-        // A video part way whose message is gone is forgotten quietly.
-        for (const g of page.gone) {
-            const key = `${g.chatId}:${g.messageId}`
-            if (dropped.has(key)) continue
-            dropped.add(key)
-            dropResume(g.chatId, g.messageId)
-        }
+        // A video part way whose message is gone for good leaves the lists, and the page says so (HX21).
+        if (page.gone.length) void forgetGone(page.gone)
     }
 
     let abort: AbortController | null = null

@@ -5,6 +5,7 @@ import { api, errorText } from '../tg/rpc'
 import { back } from '../session'
 import { t } from '../i18n'
 import { dropResume, getResume, laterIds, progress as readProgress, setLater, setWatched, settings, watchedList, watchedTick } from '../store'
+import { chatGone, forgetGone } from '../goneVideos'
 import { Icon, type IconData } from '../ui/Icon'
 import { TmdbMark } from '../ui/TmdbMark'
 import { TitleLogo } from '../ui/TitleLogo'
@@ -37,8 +38,16 @@ export function Detail() {
     const ids = () => ({ chatId: Number(params.chatId), messageId: Number(params.messageId) })
     const [video] = createResource(ids, async ({ chatId, messageId }) => {
         const passed = location.state?.video
-        const found = passed?.chatId === chatId && passed.messageId === messageId && (await api.known(passed.key)) ? passed : await api.video(chatId, messageId)
-        if (found === null) dropResume(chatId, messageId)
+        let found: VideoItem | null
+        try {
+            found = passed?.chatId === chatId && passed.messageId === messageId && (await api.known(passed.key)) ? passed : await api.video(chatId, messageId)
+        } catch (e) {
+            // Its chat closed to this account: the page says so, and the lists let it go (HX21).
+            if (chatGone(e)) void forgetGone([{ chatId, messageId }], false)
+            throw e
+        }
+        // Gone from the chat: it leaves Continue watching, Watched and Watch later (HX21).
+        if (found === null) void forgetGone([{ chatId, messageId }], false)
         return found
     })
     const [seen] = createResource(readProgress)
