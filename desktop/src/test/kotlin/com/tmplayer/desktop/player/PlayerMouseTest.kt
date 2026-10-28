@@ -266,6 +266,65 @@ class PlayerMouseTest {
         waitUntil(timeoutMillis = 2_000) { media.linkAsked }
     }
 
+    /**
+     * HX16: More opens the side panel in the player's own window on one click, with the first line
+     * holding the keyboard; the player's keys do nothing behind it, Esc closes it, and a press
+     * outside closes it without pausing the video.
+     */
+    @Test
+    fun `more opens the side panel at once, and the keys behind it wait`() = runComposeUiTest {
+        open()
+        onNodeWithTag("video").performMouseInput { moveTo(onPicture) }
+        waitForIdle()
+        onNode(hasContentDescription("More")).performClick()
+        waitForIdle()
+        onNodeWithTag("menu-panel").assertExists()
+        onNodeWithText("More options").assertExists()
+        onNodeWithText("Picture shape").assertExists()
+        // W cycles the shape on the bare player; not with the panel up.
+        onNodeWithTag("menu-panel").performKeyInput { pressKey(Key.W) }
+        waitForIdle()
+        assertEquals(com.tmplayer.player.VideoScale.Fit, engine.state.value.scale)
+        onNodeWithTag("menu-panel").performKeyInput { pressKey(Key.Escape) }
+        waitForIdle()
+        onNodeWithTag("menu-panel").assertDoesNotExist()
+        assertEquals(0, backs)
+        // A press on the picture beside it closes it and is no pause.
+        onNodeWithTag("video").performMouseInput { rightClick(onPicture) }
+        waitForIdle()
+        onNodeWithTag("menu-panel").assertExists()
+        val toggles = engine.count("toggle")
+        onNodeWithTag("menu-panel-outside").performMouseInput { click(onPicture) }
+        mainClock.advanceTimeBy(600)
+        waitForIdle()
+        onNodeWithTag("menu-panel").assertDoesNotExist()
+        assertEquals(toggles, engine.count("toggle"))
+    }
+
+    /**
+     * The shape page in the panel: a pick applies with the panel left open, a fixed ratio is not
+     * saved for the next player, and Fill is.
+     */
+    @Test
+    fun `the panel's shape page picks a ratio for this player only`() = runComposeUiTest {
+        open()
+        onNodeWithTag("video").performMouseInput { rightClick(onPicture) }
+        onNodeWithText("Picture shape").performClick()
+        waitForIdle()
+        onNodeWithText("16:9").performClick()
+        waitForIdle()
+        assertEquals(com.tmplayer.player.VideoScale.Ratio16x9, engine.state.value.scale)
+        onNodeWithTag("menu-panel").assertExists()
+        onNodeWithText("Fill").performClick()
+        waitForIdle()
+        assertEquals(com.tmplayer.player.VideoScale.Crop, engine.state.value.scale)
+        waitUntil(timeoutMillis = 2_000) { runBlocking { settings.videoScaleNow() } == "Crop" }
+        onNodeWithText("2.35:1").performClick()
+        waitForIdle()
+        Thread.sleep(200)
+        assertEquals("Crop", runBlocking { settings.videoScaleNow() })
+    }
+
     @Test
     fun `the menu switches volume boost on and off, kept as the setting`() = runComposeUiTest {
         open()
