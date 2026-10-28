@@ -1030,6 +1030,7 @@
     "off_body": "Todas as linhas do Início estão desativadas nas Configurações.",
     "off_title": "O Início está vazio",
     "open_settings": "Configurações do Início",
+    "recent_capped": "A lista termina aqui. Os vídeos mais antigos estão nos próprios chats.",
     "row_chat_movies": "Filmes em {chat}",
     "row_chat_shows": "Séries em {chat}",
     "row_continue": "Continuar assistindo",

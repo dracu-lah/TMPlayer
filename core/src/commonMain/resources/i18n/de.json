@@ -1030,6 +1030,7 @@
     "off_body": "Alle Zeilen der Startseite sind in den Einstellungen ausgeschaltet.",
     "off_title": "Die Startseite ist leer",
     "open_settings": "Start-Einstellungen",
+    "recent_capped": "Die Liste endet hier. Ältere Videos findest du in ihren eigenen Chats.",
     "row_chat_movies": "Filme in {chat}",
     "row_chat_shows": "Serien in {chat}",
     "row_continue": "Weiter ansehen",

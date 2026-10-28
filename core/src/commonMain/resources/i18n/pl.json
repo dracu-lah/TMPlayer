@@ -1030,6 +1030,7 @@
     "off_body": "Wszystkie wiersze Startu są wyłączone w Ustawieniach.",
     "off_title": "Start jest pusty",
     "open_settings": "Ustawienia Startu",
+    "recent_capped": "Lista kończy się tutaj. Starsze filmy są w swoich czatach.",
     "row_chat_movies": "Filmy w {chat}",
     "row_chat_shows": "Seriale w {chat}",
     "row_continue": "Oglądaj dalej",

@@ -1030,6 +1030,7 @@
     "off_body": "Toutes les lignes de l'accueil sont désactivées dans les Réglages.",
     "off_title": "L'accueil est vide",
     "open_settings": "Réglages de l'accueil",
+    "recent_capped": "La liste s'arrête ici. Les vidéos plus anciennes sont dans leurs propres discussions.",
     "row_chat_movies": "Films dans {chat}",
     "row_chat_shows": "Séries dans {chat}",
     "row_continue": "Reprendre la lecture",

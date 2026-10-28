@@ -1030,6 +1030,7 @@
     "off_body": "Tutte le righe di Home sono disattivate nelle Impostazioni.",
     "off_title": "Home è vuota",
     "open_settings": "Impostazioni di Home",
+    "recent_capped": "L'elenco finisce qui. I video più vecchi sono nelle rispettive chat.",
     "row_chat_movies": "Film in {chat}",
     "row_chat_shows": "Serie in {chat}",
     "row_continue": "Continua a guardare",

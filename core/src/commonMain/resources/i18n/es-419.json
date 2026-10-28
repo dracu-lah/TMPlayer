@@ -1030,6 +1030,7 @@
     "off_body": "Todas las filas de Inicio están desactivadas en Configuración.",
     "off_title": "Inicio está vacío",
     "open_settings": "Configuración de Inicio",
+    "recent_capped": "La lista termina aquí. Los videos más antiguos están en sus propios chats.",
     "row_chat_movies": "Películas en {chat}",
     "row_chat_shows": "Series en {chat}",
     "row_continue": "Seguir viendo",

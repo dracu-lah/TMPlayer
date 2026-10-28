@@ -1030,6 +1030,7 @@
     "off_body": "ホームの行はすべて設定でオフになっています。",
     "off_title": "ホームは空です",
     "open_settings": "ホーム設定",
+    "recent_capped": "一覧はここまでです。古い動画はそれぞれのチャットにあります。",
     "row_chat_movies": "{chat}の映画",
     "row_chat_shows": "{chat}のシリーズ",
     "row_continue": "視聴中",
