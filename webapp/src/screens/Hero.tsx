@@ -3,7 +3,9 @@ import { A } from '@solidjs/router'
 import { InformationCircleIcon, PlayIcon } from '@hugeicons/core-free-icons'
 import { t } from '../i18n'
 import { Icon } from '../ui/Icon'
-import { loadBackdropLightFirst } from './posters'
+import { answer, loadBackdropLightFirst, loadExtras, type Extras } from './posters'
+import { settings } from '../store'
+import { TitleLogo } from '../ui/TitleLogo'
 import { coverBackground } from './cover'
 import { useFeatured } from './featured'
 import { detailPath, tileCard, useProgress, watchPath } from './VideoList'
@@ -13,6 +15,9 @@ import type { HomeRow } from '../tg/types'
 const ADVANCE_MS = 7_000
 /** Nobody has touched the page for this long: the carousel stops on the page it is on. */
 const IDLE_MS = 60_000
+/** A touchpad's sideways travel that turns the page, and the quiet that ends one gesture. */
+const WHEEL_TURN_PX = 60
+const WHEEL_QUIET_MS = 220
 
 /**
  * Home's carousel on a phone and a desktop (FeaturedCarousel): the newest five in Recently added,
@@ -71,9 +76,59 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
         onCleanup(stop)
     })
 
+    // The title's logo, by way of its extras (the apps' carousel draws the logo, not the name).
+    const [extras, setExtras] = createSignal<Extras | null>(null)
+    const [pending, setPending] = createSignal(false)
+    createEffect(() => {
+        const ask = pick()?.item.poster
+        setExtras(null)
+        setPending(!!ask && settings().posters)
+        if (!ask || !settings().posters) return
+        let live = true
+        answer(ask)
+            .then((found) => (found.match ? loadExtras(found, null) : null))
+            .then((x) => live && setExtras(x?.found ? x : null), () => {})
+            .finally(() => live && setPending(false))
+        onCleanup(() => (live = false))
+    })
+
     const progressOf = useProgress()
     const card = () => (pick() ? tileCard(pick()!, true) : null)
     const resumed = () => (pick() ? (progressOf(pick()!.item) ?? 0) > 0 : false)
+
+    // A laptop's touchpad swipes with two fingers as a sideways wheel, not a pointer drag: taken
+    // here, it turns the page once per gesture instead of reaching the browser, which read it as
+    // Back and left Home. A mostly upright scroll is left to the page.
+    let section!: HTMLElement
+    let swept = 0
+    let gestureTimer = 0
+    let turned = false
+    const wheel = (e: WheelEvent) => {
+        if (Math.abs(e.deltaX) <= Math.abs(e.deltaY) || e.ctrlKey) return
+        e.preventDefault()
+        touched()
+        clearTimeout(gestureTimer)
+        // The gesture ends once the wheel has been quiet a moment (its inertia included).
+        gestureTimer = window.setTimeout(() => {
+            swept = 0
+            turned = false
+        }, WHEEL_QUIET_MS)
+        if (turned) return
+        swept += e.deltaMode === 1 ? e.deltaX * 16 : e.deltaX
+        if (Math.abs(swept) < WHEEL_TURN_PX) return
+        turned = true
+        const rtl = getComputedStyle(section).direction === 'rtl'
+        go(index() + ((swept > 0) !== rtl ? 1 : -1))
+    }
+    // Non-passive, so the browser's Back gesture can be held off; set when the section is drawn.
+    const hold = (el: HTMLElement) => {
+        section = el
+        el.addEventListener('wheel', wheel, { passive: false })
+    }
+    onCleanup(() => {
+        section?.removeEventListener('wheel', wheel)
+        clearTimeout(gestureTimer)
+    })
 
     // A sideways swipe turns the page.
     let startX = 0
@@ -90,6 +145,7 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
     return (
         <Show when={picks()?.length !== 0}>
             <section
+                ref={hold}
                 class="hero"
                 aria-roledescription="carousel"
                 aria-label={t('home.row_recent')}
@@ -113,7 +169,10 @@ export function Hero(props: { rows: HomeRow[] | undefined }) {
                         <div class="hero-fade" />
                     </div>
                     <div class="hero-text">
-                        <h2 class="hero-title">{card()!.title}</h2>
+                        <Show when={pick()} keyed>
+                            {/* Keyed by the page, so each page's logo waits on its own clock. */}
+                            {(_page) => <TitleLogo level={2} class="hero-title" name={card()!.title} extras={extras()} pending={pending()} />}
+                        </Show>
                         <p class="hero-facts">{card()!.facts}</p>
                         <div class="hero-actions">
                             <A class="hero-play" href={watchPath(pick()!.item)} state={{ video: pick()!.item }}>

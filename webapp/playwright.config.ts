@@ -20,7 +20,7 @@ function form(layout: 'phone' | 'desktop', width: number, height: number) {
     }
 }
 // The flows that must hold in every form (session 22).
-const FORM_SPECS = /(library|extras|pages|detail|a11y)\.spec\.ts/
+const FORM_SPECS = /(library|extras|pages|detail|a11y|titlelogo)\.spec\.ts/
 
 export default defineConfig({
     testDir: 'e2e',

@@ -33,6 +33,8 @@ export interface Extras {
     ended: boolean
     /** IMDb's id ("tt0903747"), for a later look at its scores. */
     imdb: string | null
+    /** The title logo's file (MetaRules.logo): PNG, wide, English or wordless; null for none. */
+    logo: string | null
     /** The episode's own name, words and picture, when asked for (a show's episode). */
     episode?: { name: string; overview: string; still: string | null }
 }
@@ -92,6 +94,28 @@ export function trailer(videos: Json[]): string | null {
 /** A profile or still file as the page asks it by: "/abc.jpg" only. */
 const file = (v: unknown): string | null => (typeof v === 'string' && /^\/[A-Za-z0-9_-]{8,64}\.(jpg|png|webp)$/.test(v) ? v : null)
 
+/** MetaRules.LOGO_MIN_ASPECT and LOGO_MIN_WIDTH: a narrower logo is a stacked badge, a smaller one too soft. */
+const LOGO_MIN_ASPECT = 1.2
+const LOGO_MIN_WIDTH = 200
+
+/**
+ * MetaRules.logo: the title logo to draw from TMDB's `images.logos`, English before one with no
+ * words (the web is asked in English), PNG only, wide rather than tall, then by votes and width.
+ */
+export function logo(logos: Json[]): string | null {
+    const tier = (l: Json) => {
+        const lang = typeof l.iso_639_1 === 'string' && l.iso_639_1 && l.iso_639_1 !== 'xx' ? l.iso_639_1.toLowerCase() : null
+        return lang === 'en' ? 0 : lang === null ? 1 : null
+    }
+    const aspect = (l: Json) => Number(l.aspect_ratio) || (Number(l.height) > 0 ? Number(l.width) / Number(l.height) : 0)
+    const picked = logos
+        .filter((l) => !!l && typeof l === 'object' && typeof l.file_path === 'string' && /^\/[A-Za-z0-9_-]{8,64}\.png$/.test(l.file_path) && aspect(l) >= LOGO_MIN_ASPECT && Number(l.width) >= LOGO_MIN_WIDTH)
+        .map((l) => ({ l, tier: tier(l) }))
+        .filter((x): x is { l: Json; tier: number } => x.tier !== null)
+        .sort((a, b) => a.tier - b.tier || Number(b.l.vote_average ?? 0) - Number(a.l.vote_average ?? 0) || Number(b.l.vote_count ?? 0) - Number(a.l.vote_count ?? 0) || Number(b.l.width ?? 0) - Number(a.l.width ?? 0))
+    return picked[0]?.l.file_path ?? null
+}
+
 /** MetaApis.tmdbExtras. */
 export function extras(json: Json, film: boolean, region: string): Extras {
     const genres = strings(objects(json.genres), 'name')
@@ -126,5 +150,6 @@ export function extras(json: Json, film: boolean, region: string): Extras {
         trailer: trailer(objects(json.videos?.results)),
         ended: !film && ['Ended', 'Canceled'].includes(String(json.status ?? '')),
         imdb: /^tt\d+$/.test(imdb) ? imdb : null,
+        logo: logo(objects(json.images?.logos)),
     }
 }

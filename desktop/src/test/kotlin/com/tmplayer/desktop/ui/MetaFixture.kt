@@ -46,6 +46,7 @@ internal object MetaFixture {
         override suspend fun send(request: HttpRequest): HttpResponse {
             gate?.await()
             val url = URLDecoder.decode(request.url, "UTF-8")
+            if (url.endsWith("/render-bbb-logo.png")) return HttpResponse(200, body = LOGO_PNG)
             IMAGES.entries.firstOrNull { url.endsWith("/" + it.key) }?.let {
                 return HttpResponse(200, body = File(pictures, it.value).readBytes())
             }
@@ -63,6 +64,7 @@ internal object MetaFixture {
             val body = when {
                 "search/movie" in url && "Big Buck Bunny" in url -> """{"results":[$BUNNY]}"""
                 "search/tv" in url && "Harbour Lights" in url -> """{"results":[$HARBOUR]}"""
+                "/movie/10378/images" in url -> """{"logos":[{"file_path":"/render-bbb-logo.png","iso_639_1":"en","aspect_ratio":3.6,"width":900,"height":250,"vote_average":5.3,"vote_count":3}]}"""
                 "/movie/10378?" in url -> BUNNY_EXTRAS
                 "/tv/7002?" in url -> HARBOUR_EXTRAS
                 "/tv/7002/season/" in url -> """{"name":"The Storm","overview":"The storm reaches the harbour, and Mara has to choose between the boat and the house.","still_path":null}"""
@@ -70,6 +72,22 @@ internal object MetaFixture {
             }
             return HttpResponse(200, body = body.toByteArray())
         }
+    }
+
+    /**
+     * Bunny's title logo, made here (no real logo is kept in the repository): the name in white
+     * heavy type on a clear ground, as TMDB's logos are.
+     */
+    val LOGO_PNG: ByteArray by lazy {
+        val surface = org.jetbrains.skia.Surface.makeRasterN32Premul(900, 250)
+        val fonts = org.jetbrains.skia.FontMgr.default
+        val face = fonts.matchFamilyStyle("DejaVu Sans", org.jetbrains.skia.FontStyle.BOLD)
+            ?: fonts.legacyMakeTypeface("", org.jetbrains.skia.FontStyle.BOLD)
+        val font = org.jetbrains.skia.Font(face, 120f)
+        val paint = org.jetbrains.skia.Paint().apply { color = 0xFFF4F1EA.toInt() }
+        surface.canvas.drawString("BIG BUCK", 18f, 112f, font, paint)
+        surface.canvas.drawString("BUNNY", 18f, 236f, font, paint.apply { color = 0xFFF2C14E.toInt() })
+        surface.makeImageSnapshot().encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG)!!.bytes
     }
 
     private val IMAGES = mapOf(

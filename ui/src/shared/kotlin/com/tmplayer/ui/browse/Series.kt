@@ -954,8 +954,8 @@ fun SeriesPanel(
         }
         val heading: @Composable () -> Unit = {
             val title = meta?.title?.takeIf { it.isNotBlank() } ?: series.title
-            // The show's title logo from TMDB where it has one, the name in type until it is
-            // decoded and wherever it has none; read out as the name either way. Its place is as
+            // The show's title logo from TMDB where it has one, a logo shaped placeholder until it
+            // is decoded, the name wherever it has none; read out as the name either way. Its place is as
             // tall as the logo may be, so the name giving way to it moves nothing.
             val logoHeight = if (large) TITLE_LOGO_HEIGHT_LARGE else if (tv) TITLE_LOGO_HEIGHT_TV else TITLE_LOGO_HEIGHT
             TitleSlot(logoHeight, hold = holdTitle) {
@@ -964,7 +964,7 @@ fun SeriesPanel(
                     maxWidth = if (large) TITLE_LOGO_WIDTH_LARGE else if (tv) TITLE_LOGO_WIDTH_TV else TITLE_LOGO_WIDTH,
                     maxHeight = logoHeight,
                     settled = metaState.settled,
-                    waitMs = 0L,
+                    skeletonHeight = logoHeight * 0.62f,
                     modifier = Modifier.clearAndSetSemantics {
                         heading()
                         contentDescription = title

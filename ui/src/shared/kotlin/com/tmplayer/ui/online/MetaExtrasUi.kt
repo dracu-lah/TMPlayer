@@ -64,6 +64,9 @@ import com.tmplayer.online.MetaExtras
 import com.tmplayer.online.MetaInfo
 import com.tmplayer.online.MetaKind
 import com.tmplayer.online.MetaPerson
+import com.tmplayer.online.MetaProvider
+import com.tmplayer.online.withProviderScore
+import androidx.compose.ui.text.font.FontWeight
 import com.tmplayer.online.MetaScore
 import com.tmplayer.online.ScoreSource
 import com.tmplayer.online.MetaTrailer
@@ -161,7 +164,8 @@ fun MetaFactsLines(extras: MetaExtras?, modifier: Modifier = Modifier, maxLines:
  * (or splat, under 60) then "92%", Metacritic's roundel then "78" on its band's colour, and so on,
  * wrapping to another line when narrow, no more than [maxLines]. [limit] keeps only the first few
  * (the Home carousel's one line), [centered] centres them under centred text. An answer kept from
- * before the scores were asked for has only the provider's rating, which is shown as "★ 7.8" as it was.
+ * before the scores were asked for has only the provider's rating: it is shown as [provider]'s own
+ * score, with that site's mark, like any other.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -171,21 +175,11 @@ fun MetaScoresRow(
     maxLines: Int = 2,
     limit: Int = Int.MAX_VALUE,
     centered: Boolean = false,
+    provider: MetaProvider = MetaProvider.Tmdb,
+    style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium,
 ) {
-    val s = LocalStrings.current
-    val style = MaterialTheme.typography.bodyMedium
-    if (extras.scores.isEmpty()) {
-        val rating = extras.rating ?: return
-        val value = s.formatter.decimal(rating, 1)
-        Text(
-            "★ $value",
-            style = style,
-            color = Tone.muted,
-            maxLines = 1,
-            modifier = modifier.semantics { contentDescription = s.metadataRating(value) },
-        )
-        return
-    }
+    val scores = remember(extras, provider) { extras.withProviderScore(provider).scores }
+    if (scores.isEmpty()) return
     FlowRow(
         modifier,
         horizontalArrangement = if (centered) Arrangement.spacedBy(SCORE_GAP, Alignment.CenterHorizontally) else Arrangement.spacedBy(SCORE_GAP),
@@ -193,12 +187,46 @@ fun MetaScoresRow(
         itemVerticalAlignment = Alignment.CenterVertically,
         maxLines = maxLines,
     ) {
-        for (score in extras.scores.take(limit)) ScoreItem(score, style)
+        for (score in scores.take(limit)) ScoreItem(score, style)
+    }
+}
+
+/**
+ * A card's one score ([MetaScore.cardPick]) with its site's mark, in a small dark pill for the
+ * corner of a poster or a tile: only from what is already on this device
+ * ([OnlineMetadata.cachedCardScore]), never a lookup per card, and nothing at all, no placeholder,
+ * when none is kept. [meta] is the card's match, or null for none.
+ */
+@Composable
+fun CardScore(meta: MetaInfo?, modifier: Modifier = Modifier, compact: Boolean = false) {
+    meta ?: return
+    val online = OnlineMetadata.current ?: return
+    val settings by com.tmplayer.ui.components.rememberMetaSettings(online)
+    if (!settings.enabled) return
+    val known = remember(meta) { online.peekCardScore(meta) }
+    val score by produceState(known?.score, meta) {
+        if (known == null) value = withContext(Dispatchers.IO) { runCatching { online.cachedCardScore(meta) }.getOrNull() }
+    }
+    val shown = score ?: return
+    val style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold)
+    Box(
+        modifier
+            // A rounded fill, not a clip layer per card, as the tiles' other badges.
+            .background(com.tmplayer.ui.components.TileBadgeFill, CircleShape)
+            .padding(horizontal = if (compact) 6.dp else 8.dp, vertical = 3.dp),
+    ) {
+        ScoreItem(shown, style, ink = Color.White, logoHeight = if (compact) 11.dp else 12.dp, gap = 4.dp)
     }
 }
 
 @Composable
-private fun ScoreItem(score: MetaScore, style: androidx.compose.ui.text.TextStyle) {
+private fun ScoreItem(
+    score: MetaScore,
+    style: androidx.compose.ui.text.TextStyle,
+    ink: Color = Tone.text,
+    logoHeight: Dp = LOGO_HEIGHT,
+    gap: Dp = 6.dp,
+) {
     val s = LocalStrings.current
     val site = scoreSiteName(score.source)
     val whole = score.value.roundToInt()
@@ -216,7 +244,7 @@ private fun ScoreItem(score: MetaScore, style: androidx.compose.ui.text.TextStyl
     }
     Row(
         Modifier.semantics(mergeDescendants = true) { contentDescription = spoken },
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(gap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val logo = scoreLogo(score)
@@ -224,12 +252,12 @@ private fun ScoreItem(score: MetaScore, style: androidx.compose.ui.text.TextStyl
             Image(
                 logo,
                 contentDescription = null,
-                modifier = Modifier.height(if (score.source == ScoreSource.Tmdb) TMDB_HEIGHT else LOGO_HEIGHT)
+                modifier = Modifier.height(if (score.source == ScoreSource.Tmdb) logoHeight * TMDB_SHARE else logoHeight)
                     .aspectRatio(logo.viewportWidth / logo.viewportHeight),
             )
         } else {
             // TVmaze: no vector mark to hand, so its name in its place.
-            Text(site, style = style, color = Tone.muted, maxLines = 1)
+            Text(site, style = style, color = if (ink == Tone.text) Tone.muted else ink.copy(alpha = 0.8f), maxLines = 1)
         }
         if (score.source == ScoreSource.Metacritic) {
             // Metacritic's own way: the number on its band's colour, green, yellow or red.
@@ -240,7 +268,7 @@ private fun ScoreItem(score: MetaScore, style: androidx.compose.ui.text.TextStyl
                 Text(value, style = style, color = Color(0xFF131313), maxLines = 1)
             }
         } else {
-            Text(value, style = style, color = Tone.text, maxLines = 1)
+            Text(value, style = style, color = ink, maxLines = 1)
         }
     }
 }
@@ -273,8 +301,8 @@ private fun metacriticBand(value: Double): Color = when {
 
 private val LOGO_HEIGHT: Dp = 16.dp
 
-/** TMDB's mark is a long wordmark; at this height its letters stand as tall as the text's. */
-private val TMDB_HEIGHT: Dp = 11.dp
+/** TMDB's mark is a long wordmark; at this share of the others' height its letters stand as tall as the text's. */
+private const val TMDB_SHARE = 11f / 16f
 private val SCORE_GAP: Dp = 14.dp
 
 // ---- the trailer ------------------------------------------------------------------------------

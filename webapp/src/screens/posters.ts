@@ -66,6 +66,8 @@ export interface Extras {
     trailer?: string | null
     ended?: boolean
     imdb?: string | null
+    /** The title logo's file; null for none. Answers kept before it was added lack the field. */
+    logo?: string | null
     episode?: { name: string; overview: string; still: string | null }
 }
 
@@ -88,6 +90,24 @@ function ask<T extends { match?: boolean; found?: boolean }>(url: string): Promi
     return p
 }
 
+/** Whether a kept answer still stands: within its time, and not from before a field the page needs. */
+function fresh(url: string, body: { match?: boolean; found?: boolean }, saved: number): boolean {
+    // A poster answer kept before the overview and the wide picture were added is asked again,
+    // and an extras answer kept before the title logo.
+    if (body.match && url.startsWith('/tmdb/poster') && !('overview' in body)) return false
+    if (body.found && url.startsWith('/tmdb/extras') && !('logo' in body)) return false
+    return Date.now() - saved < (body.match || body.found ? FOUND_TTL : MISS_TTL)
+}
+
+/** The answer at `url` only if the Cache API holds a fresh one: never the network. */
+async function kept<T extends { match?: boolean; found?: boolean }>(url: string): Promise<T | null> {
+    const cache = await open()
+    const hit = await cache?.match(url).catch(() => undefined)
+    if (!hit) return null
+    const body = (await hit.clone().json().catch(() => null)) as T | null
+    return body && typeof body === 'object' && fresh(url, body, Number(hit.headers.get('x-saved'))) ? body : null
+}
+
 /** The worker's answer at `url`, from the Cache API while fresh, else asked and kept. Failures are not kept. */
 async function fetchAnswer<T extends { match?: boolean; found?: boolean }>(url: string): Promise<T> {
     const cache = await open()
@@ -96,9 +116,7 @@ async function fetchAnswer<T extends { match?: boolean; found?: boolean }>(url: 
         touch(POSTERS, url)
         const saved = Number(hit.headers.get('x-saved'))
         const body = (await hit.clone().json().catch(() => null)) as T | null
-        // A poster answer kept before the overview and the wide picture were added is asked again.
-        const old = !!body?.match && url.startsWith('/tmdb/poster') && !('overview' in body)
-        if (body && !old && Date.now() - saved < (body.match || body.found ? FOUND_TTL : MISS_TTL)) return body
+        if (body && fresh(url, body, saved)) return body
     }
     if (Date.now() < pausedUntil) throw new Error('paused')
     let response: Response
@@ -221,13 +239,68 @@ export function loadFile(path: string, size: 'w185' | 'w780'): Promise<string | 
 }
 
 /** The detail page's extras for the title `found` the poster answer matched, with the episode's own words for a show's episode. */
-export function loadExtras(found: Answer, episode: { season: number; episode: number } | null): Promise<Extras> {
+export async function loadExtras(found: Answer, episode: { season: number; episode: number } | null): Promise<Extras> {
+    const extras = await ask<Extras>(extrasUrl(found, episode))
+    // An episode's answer holds its show's facts too: kept under the show's own key as well, so
+    // the show's card finds its score without a lookup of its own.
+    if (episode && extras.found) void keepTitleCopy(extrasUrl(found, null), extras)
+    return extras
+}
+
+async function keepTitleCopy(url: string, extras: Extras): Promise<void> {
+    const cache = await open()
+    if (!cache || (await kept<Extras>(url))) return
+    const { episode: _episode, ...title } = extras
+    const text = JSON.stringify(title)
+    await cache.put(url, new Response(text, { headers: { 'Content-Type': 'application/json', 'x-saved': String(Date.now()) } })).then(() => touch(POSTERS, url, text.length), () => {})
+}
+
+function extrasUrl(found: Answer, episode: { season: number; episode: number } | null): string {
     const q = new URLSearchParams({ k: found.kind!, id: found.id!, r: region() })
     if (found.kind === 'show' && episode) {
         q.set('s', String(episode.season))
         q.set('e', String(episode.episode))
     }
-    return ask<Extras>(`/tmdb/extras?${q}`)
+    return `/tmdb/extras?${q}`
+}
+
+/**
+ * The extras a page has already kept for `found`, for a screen too short to wait for them (the
+ * opening loader): the episode's own, else the title's. Never the network; null when none are kept.
+ */
+export async function keptExtras(found: Answer, episode: { season: number; episode: number } | null): Promise<Extras | null> {
+    if (!found.match || !found.id || !found.kind) return null
+    const own = episode ? await kept<Extras>(extrasUrl(found, episode)) : null
+    const body = own ?? (await kept<Extras>(extrasUrl(found, null)))
+    return body?.found ? body : null
+}
+
+/**
+ * A card's one score (the apps' card score): TMDB's rating, the only site's the web is told, and
+ * only when this browser already keeps the title's answers. Never the network, so a grid of
+ * thousands of videos asks nobody for its cards; null for none, and the card shows nothing.
+ */
+export async function keptRating(a: PosterAsk): Promise<number | null> {
+    const found = await kept<Answer>(`/tmdb/poster?${query(a)}`)
+    if (!found?.match) return null
+    const rating = (await keptExtras(found, null))?.rating
+    return typeof rating === 'number' && rating > 0 && rating <= 10 ? rating : null
+}
+
+/** An address for the title logo `extras` names only if this browser already keeps its file: never the network. */
+export async function keptLogo(extras: Extras): Promise<string | null> {
+    if (!extras.logo) return null
+    const hit = await (await open())?.match(`/tmdb/img/w500${extras.logo}`).catch(() => undefined)
+    return hit ? URL.createObjectURL(await hit.blob()) : null
+}
+
+const logos = new Map<string, Promise<string | null>>()
+
+/** An address for the title logo `extras` names, or null for none. Rejects when it could not be had. */
+export function loadLogo(extras: Extras): Promise<string | null> {
+    const path = extras.logo
+    if (!path) return Promise.resolve(null)
+    return once(`logo${path}`, logos, async () => URL.createObjectURL(await picture(path, 'w500')), true)
 }
 
 /** The viewer's region for the age rating: the browser's, else the US (MetaRules.region). */

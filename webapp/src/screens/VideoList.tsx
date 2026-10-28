@@ -3,7 +3,8 @@ import { A } from '@solidjs/router'
 import { resumes, settings, watchedTick } from '../store'
 import { loadThumb } from './thumbs'
 import { coverBackground } from './cover'
-import { loadBackdrop, loadPoster, posterSizeFor } from './posters'
+import { keptRating, loadBackdrop, loadPoster, posterSizeFor } from './posters'
+import { TmdbMark } from '../ui/TmdbMark'
 import { warmDataCentres, warmFile } from '../stream/reader'
 import { t } from '../i18n'
 import { form } from '../form'
@@ -84,6 +85,15 @@ function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk
         )
         onCleanup(() => (live = false))
     })
+    // The title's one score, only once its poster is up and only from what this browser keeps.
+    const [score, setScore] = createSignal<number | null>(null)
+    createEffect(() => {
+        const ask = props.poster
+        if (!picture() || !ask) return void setScore(null)
+        let live = true
+        keptRating(ask).then((r) => live && setScore(r), () => {})
+        onCleanup(() => (live = false))
+    })
     return (
         // The desktop's cover gradient for the title under everything, so a card waiting for its
         // frame or poster, or one with neither, is never a grey box.
@@ -97,6 +107,12 @@ function CardArt(props: { thumb: string | null; title: string; poster: PosterAsk
             </Show>
             <div class="card-shade" />
             <div class="card-art-title">{props.title}</div>
+            <Show when={score()}>
+                <span class="card-score" classList={{ lifted: !!props.progress }} role="img" aria-label={t('metadata.score_out_of_ten', { site: 'TMDB', score: score()! })}>
+                    <TmdbMark height={9} />
+                    {score()!.toFixed(1)}
+                </span>
+            </Show>
             <Show when={props.progress}>
                 <div class="card-progress">
                     <div style={{ width: `${Math.min(100, props.progress! * 100)}%` }} />

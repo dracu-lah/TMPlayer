@@ -2517,10 +2517,10 @@ private fun MediaArt(
     // would be the same words twice a few dp apart, cut short in both places.
     val cover = if ((compact && !poster) || thumb) remember(named) { named.copy(title = "") } else named
     val inset = if (compact) 4.dp else TileBadgeInset
+    // Whether the answer is still on its way too: a television holds the thumbnail back for it.
+    val meta = com.tmplayer.ui.online.rememberMetaState(item, showOnly = true)
     Box(modifier) {
         if (poster) {
-            // Whether the answer is still on its way too: a television holds the thumbnail back for it.
-            val meta = com.tmplayer.ui.online.rememberMetaState(item, showOnly = true)
             PosterArt(
                 item.miniThumbnail,
                 item.thumbnailFileId,
@@ -2593,6 +2593,14 @@ private fun MediaArt(
         val fraction = watched?.takeIf { it.positionMs > 0 }?.fraction ?: 0f
         if (fraction > 0f) {
             ProgressLine(fraction, Modifier.align(Alignment.BottomCenter), inset = if (compact) 6.dp else ProgressLineInset)
+        }
+        // The bottom end corner: the title's one score, only when it is already on the device.
+        if (!thumb) {
+            com.tmplayer.ui.online.CardScore(
+                meta.value,
+                Modifier.align(Alignment.BottomEnd).padding(end = inset, bottom = inset + if (fraction > 0f) 6.dp else 0.dp),
+                compact = compact,
+            )
         }
         if (selected != null) {
             val ring = if (compact) 30.dp else 44.dp

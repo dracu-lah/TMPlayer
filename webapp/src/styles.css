@@ -958,6 +958,7 @@ button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor
  * first frame.
  */
 .hero {
+  overscroll-behavior-x: contain;
   position: relative; height: min(66dvh, 560px); overflow: hidden; touch-action: pan-y;
   margin: calc(-1 * (12px + 40px + max(8px, env(safe-area-inset-top)))) calc(-1 * (var(--gutter) + env(safe-area-inset-right))) 16px calc(-1 * (var(--gutter) + env(safe-area-inset-left)));
 }
@@ -994,6 +995,35 @@ button.nav-cell { border: 0; background: none; padding: 0; font: inherit; cursor
 :root[data-form="desktop"] .hero-dots { left: auto; right: calc(var(--gutter) + 8px); bottom: 56px; }
 :root[data-form="desktop"] .hero-frame { left: auto; right: 0; transform: translateY(-50%); width: min(70%, 900px); -webkit-mask-image: linear-gradient(to right, transparent, #000 30%); mask-image: linear-gradient(to right, transparent, #000 30%); }
 @media (prefers-reduced-motion: reduce) { .hero-wait, .hero-fill, .hero-frame { animation: none; } }
+
+/* The title logo (TitleLogo): its slot as tall as a logo may be while one is coming or drawn, a
+   soft block in it while it loads, the logo kept to its own shape at the slot's start. */
+.title-logo-slot { display: flex; align-items: flex-end; min-height: var(--logo-h, 96px); }
+.title-logo { display: block; max-width: min(100%, var(--logo-w, 380px)); max-height: var(--logo-h, 96px); object-fit: contain; object-position: left bottom; animation: fade 200ms ease-out; }
+.title-logo-skeleton { display: block; width: min(66%, calc(var(--logo-w, 380px) * .66)); height: calc(var(--logo-h, 96px) * .62); border-radius: 12px; background: var(--surface-high); animation: waiting 1.2s ease-in-out infinite alternate; }
+.detail-title { --logo-h: 120px; --logo-w: 380px; }
+.hero-title { --logo-h: 96px; --logo-w: 360px; }
+:root[data-form="desktop"] .detail-title { --logo-h: 150px; --logo-w: 460px; }
+:root[data-form="desktop"] .hero-title { --logo-h: 120px; --logo-w: 440px; }
+/* The clamp a two line name wears would cut a logo's slot: the slot is a flex row instead. */
+.hero-title.title-logo-slot { display: flex; -webkit-line-clamp: unset; justify-content: center; }
+.hero-title .title-logo { object-position: center bottom; }
+.hero-title .title-logo-skeleton { margin-inline: auto; }
+:root[data-form="desktop"] .hero-title.title-logo-slot { justify-content: flex-start; }
+:root[data-form="desktop"] .hero-title .title-logo { object-position: left bottom; }
+:root[data-form="desktop"] .hero-title .title-logo-skeleton { margin-inline: 0; }
+:root[data-theme="light"] .title-logo.bright { filter: brightness(0); opacity: .88; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]):not([data-theme="black"]):not([data-form="tv"]) .title-logo.bright { filter: brightness(0); opacity: .88; }
+}
+@media (prefers-reduced-motion: reduce) { .title-logo-skeleton, .title-logo { animation: none; } }
+
+/* A card's one score (the apps' CardScore): TMDB's mark and number in a dark pill at the art's bottom end. */
+.card-score {
+  position: absolute; right: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px;
+  border-radius: 999px; background: rgb(0 0 0 / .64); color: #fff; font-size: 12px; line-height: 16px; font-weight: 600; pointer-events: none;
+}
+.card-score.lifted { bottom: 14px; }
 
 /* A chat's own bar at the foot (ChatBar): Search, Favourite, Sort and Refresh in the main bar's pill. */
 .chat-bar .nav-cell[aria-pressed="true"] { color: var(--accent); }

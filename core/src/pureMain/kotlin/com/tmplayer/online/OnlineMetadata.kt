@@ -599,27 +599,48 @@ class OnlineMetadata(
         }
     }
 
+    /**
+     * The one score a card shows for [info] ([MetaScore.cardPick]), if this run has it: from the
+     * extras in memory, else from an earlier [cachedCardScore]. Null when it has not been looked
+     * for; a [CardScore] with no score when nothing is cached. Never the disk or the network.
+     */
+    fun peekCardScore(info: MetaInfo): CardScore? {
+        if (!store.now.enabled) return CardScore(null)
+        val key = extrasKey(info, tmdbLanguage(), region())
+        extrasMemory[key]?.let { return CardScore(MetaScore.cardPick(it.withProviderScore(info.provider).scores)) }
+        return cardScores[key]
+    }
+
+    /**
+     * [peekCardScore], else the extras kept on the disk by an earlier detail page: never the
+     * network, so a grid of 20,000 videos asks nobody for its cards. Reads a file; call it off the
+     * main thread. The answer is kept in [cardScores], a few bytes a title, and not in the extras
+     * memory, so scrolling a grid never pushes out the detail pages' answers.
+     */
+    fun cachedCardScore(info: MetaInfo): MetaScore? {
+        peekCardScore(info)?.let { return it.score }
+        val key = extrasKey(info, tmdbLanguage(), region())
+        val score = cache.extras(key)?.let { MetaScore.cardPick(it.withProviderScore(info.provider).scores) }
+        cardScores[key] = CardScore(score)
+        return score
+    }
+
+    /**
+     * [info]'s extras from memory or the disk cache, never the network: for a screen too short to
+     * wait for a lookup (the opening loader). Reads a file; call it off the main thread.
+     */
+    fun storedExtras(info: MetaInfo): MetaExtras? {
+        if (!store.now.enabled) return null
+        return rememberedExtras(extrasKey(info, tmdbLanguage(), region()), info)
+    }
+
+    private val cardScores = LruMap<String, CardScore>(CARD_SCORE_ENTRIES)
+
     private fun rememberedExtras(key: String, info: MetaInfo): MetaExtras? {
         extrasMemory[key]?.let { return it }
         val stored = cache.extras(key)?.withProviderScore(info.provider) ?: return null
         extrasMemory[key] = stored
         return stored
-    }
-
-    /**
-     * An answer kept before the provider's score had its own place in [MetaExtras.scores] carries
-     * it in [MetaExtras.rating] alone; it is put in the list here, AniList's back on its scale.
-     * (TVmaze never fills the rating, so an old TVmaze answer gains its score on its next fetch.)
-     */
-    private fun MetaExtras.withProviderScore(provider: MetaProvider): MetaExtras {
-        val rating = rating ?: return this
-        val score = when (provider) {
-            MetaProvider.Tmdb -> MetaScore(ScoreSource.Tmdb, rating)
-            MetaProvider.TvMaze -> MetaScore(ScoreSource.TvMaze, rating)
-            MetaProvider.AniList -> MetaScore(ScoreSource.AniList, kotlin.math.round(rating * 10))
-        }
-        if (scores.any { it.source == score.source }) return this
-        return copy(scores = MetaScore.merge(scores, listOf(score)))
     }
 
     // ---- the other sites' scores, from OMDb and Wikidata ---------------------------------------
@@ -1034,6 +1055,9 @@ class OnlineMetadata(
          * and at 24 a scroll down Home and back read them all from the disk again.
          */
         private const val EXTRAS_MEMORY_ENTRIES = 96
+
+        /** Cards' scores ([cachedCardScore]): a score or a "none" each, so thousands cost little. */
+        private const val CARD_SCORE_ENTRIES = 4_096
 
         /** Where posters may come from. Nothing else is fetched, whatever an answer says. */
         val IMAGE_HOSTS = setOf("image.tmdb.org", "static.tvmaze.com", "s4.anilist.co", "img.anili.st")

@@ -456,7 +456,7 @@ private fun TitleBlock(page: DetailPage, holds: Holds) {
                 maxWidth = if (tv) TITLE_LOGO_WIDTH_TV else TITLE_LOGO_WIDTH,
                 maxHeight = logoHeight,
                 settled = page.metaState.settled,
-                waitMs = 0L,
+                skeletonHeight = logoHeight * 0.62f,
                 modifier = Modifier.clearAndSetSemantics {
                     heading()
                     contentDescription = heading

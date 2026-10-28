@@ -23,6 +23,10 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.luminance
@@ -430,9 +434,11 @@ fun MetaCredit(info: MetaInfo, modifier: Modifier = Modifier) {
  * A film's or show's name for the Home carousel: its title logo from TMDB where it has one (the
  * name drawn as a picture on a clear ground, [OnlineMetadata.logo]), else [text], the name set in
  * type. The logo is what is waited for: while it may still come the place is held, the name laid
- * out but not drawn, so nothing jumps, and the logo fades in there. The name is shown only once it
- * is clear there is no logo (lookups off, TMDB has none, it could not be had) or after
- * [LOGO_WAIT_MS]; a logo arriving later still takes over from it. A logo already known and
+ * out but not drawn and a logo shaped placeholder over it, so nothing jumps, and the logo fades in
+ * there. The name is shown only once it is clear there is no logo (lookups off, no match, TMDB has
+ * none, it could not be had or decoded) or after [LOGO_WAIT_MS]; a logo arriving later still takes
+ * over from it. With lookups off or no match known, the name is there on the first frame and no
+ * placeholder is ever drawn. A logo already known and
  * decoded (the carousel fetches its pages' logos ahead, [PrefetchTitleLogos]) is there on the
  * first frame. The picture is never the only way to the name: the carousel page carries the title
  * as its description, so a screen reader still says it.
@@ -441,9 +447,11 @@ fun MetaCredit(info: MetaInfo, modifier: Modifier = Modifier) {
  *   [maxHeight], set at the start (or the centre, by [alignment]) of that box.
  * @param settled true once it is known whether [meta] is all there will be: with no match then,
  *   the name is set at once rather than its place held for a logo that cannot come.
- * @param waitMs how long the name's place is held for a logo still on its way. A title page sets
- *   0: its title area is already as tall as the logo, so the name stands there at once and the
- *   logo fades in over it in the same place.
+ * @param waitMs how long the name's place is held for a logo still on its way: the ceiling after
+ *   which the name is set in type whatever is still coming.
+ * @param skeletonHeight the placeholder's height where the caller's slot is already as tall as
+ *   the logo (a title page's [com.tmplayer.ui.browse.TitleSlot]); unset, it takes the name's own
+ *   height, so a carousel page never grows while it waits.
  */
 @Composable
 fun TitleArt(
@@ -454,6 +462,7 @@ fun TitleArt(
     alignment: Alignment = Alignment.BottomStart,
     settled: Boolean = false,
     waitMs: Long = LOGO_WAIT_MS,
+    skeletonHeight: androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp.Unspecified,
     text: @Composable () -> Unit,
 ) {
     val online = OnlineMetadata.current
@@ -504,27 +513,95 @@ fun TitleArt(
     }
     androidx.compose.animation.Crossfade(targetState = step, animationSpec = com.tmplayer.ui.theme.Motion.standard(), modifier = modifier, label = "titleArt") { picture ->
         when (picture) {
-            is ImageBitmap -> {
-                val ratio = picture.width.toFloat() / picture.height.coerceAtLeast(1)
-                Box(Modifier.fillMaxWidth(), contentAlignment = alignment) {
-                    Box(Modifier.sizeIn(maxWidth = maxWidth, maxHeight = maxHeight), contentAlignment = alignment) {
-                        Image(
-                            picture,
-                            contentDescription = null,
-                            contentScale = ContentScale.Fit,
-                            alignment = alignment,
-                            filterQuality = Thumbnails.drawFilter,
-                            colorFilter = tint,
-                            modifier = Modifier.aspectRatio(ratio, matchHeightConstraintsFirst = maxWidth / maxHeight > ratio),
-                        )
-                    }
-                }
-            }
+            is ImageBitmap -> LogoImage(picture, tint, maxWidth, maxHeight, alignment)
             TitleStep.Name -> text()
-            // The name laid out and not drawn: the place it would take, and nothing a screen reader reads twice.
-            else -> Box(Modifier.alpha(0f).clearAndSetSemantics {}) { text() }
+            // The name laid out and not drawn, the place it would take, with a logo shaped
+            // placeholder over it; nothing a screen reader reads twice.
+            else -> Box(
+                Modifier.fillMaxWidth().then(if (skeletonHeight.isSpecified) Modifier.heightIn(min = skeletonHeight) else Modifier),
+                contentAlignment = alignment,
+            ) {
+                Box(Modifier.alpha(0f).clearAndSetSemantics {}) { text() }
+                LogoSkeleton(maxWidth, alignment, Modifier.matchParentSize())
+            }
         }
     }
+}
+
+/**
+ * A logo's stand in: one soft block about as wide as a title logo, set where the logo will be, at
+ * the slot's height (most logos are a wide line or two of lettering). Still on a television and
+ * with reduced motion, as every [rememberShimmer] is; gone with the slot when it scrolls away.
+ */
+@Composable
+private fun LogoSkeleton(maxWidth: androidx.compose.ui.unit.Dp, alignment: Alignment, modifier: Modifier) {
+    val shimmer = com.tmplayer.ui.components.rememberShimmer()
+    Box(modifier, contentAlignment = alignment) {
+        com.tmplayer.ui.components.SkeletonBox(
+            shimmer,
+            Modifier.fillMaxWidth(LOGO_SKELETON_SHARE).widthIn(max = maxWidth * LOGO_SKELETON_SHARE).fillMaxHeight(0.86f),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(com.tmplayer.ui.theme.Corner.Medium),
+        )
+    }
+}
+
+/** A decoded title logo inside [maxWidth] by [maxHeight], its own shape kept, at [alignment]. */
+@Composable
+private fun LogoImage(
+    picture: ImageBitmap,
+    tint: androidx.compose.ui.graphics.ColorFilter?,
+    maxWidth: androidx.compose.ui.unit.Dp,
+    maxHeight: androidx.compose.ui.unit.Dp,
+    alignment: Alignment,
+) {
+    val ratio = picture.width.toFloat() / picture.height.coerceAtLeast(1)
+    Box(Modifier.fillMaxWidth(), contentAlignment = alignment) {
+        Box(Modifier.sizeIn(maxWidth = maxWidth, maxHeight = maxHeight), contentAlignment = alignment) {
+            Image(
+                picture,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                alignment = alignment,
+                filterQuality = Thumbnails.drawFilter,
+                colorFilter = tint,
+                modifier = Modifier.aspectRatio(ratio, matchHeightConstraintsFirst = maxWidth / maxHeight > ratio),
+            )
+        }
+    }
+}
+
+/** A title logo already decoded, and whether it is white or near it (set in the page's ink on a light page). */
+@androidx.compose.runtime.Immutable
+class TitleLogo(val picture: ImageBitmap, val bright: Boolean)
+
+/**
+ * [meta]'s title logo only if it is already decoded with its tone known, for a screen too short to
+ * wait for one (the opening loader). Never fetches; null otherwise, and the caller sets the name.
+ */
+@Composable
+fun rememberCachedTitleLogo(meta: MetaInfo?): TitleLogo? {
+    val online = OnlineMetadata.current ?: return null
+    val enabled = online.settings.collectAsState().value.enabled
+    return remember(meta, enabled) {
+        val url = if (meta != null && enabled) online.peekLogo(meta)?.url else null
+        val picture = url?.let { Thumbnails.peekOnline(it, LOGO_PIXELS) }
+        val bright = url?.let { LogoTone.known(it) }
+        if (picture != null && bright != null) TitleLogo(picture, bright) else null
+    }
+}
+
+/** [logo] as [TitleArt] draws it: inside [maxWidth] by [maxHeight], a white one inked on a light page. */
+@Composable
+fun TitleLogoImage(
+    logo: TitleLogo,
+    maxWidth: androidx.compose.ui.unit.Dp,
+    maxHeight: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier,
+    alignment: Alignment = Alignment.BottomStart,
+) {
+    val light = Tone.background.luminance() > 0.5f
+    val tint = if (light && logo.bright) androidx.compose.ui.graphics.ColorFilter.tint(Tone.text) else null
+    Box(modifier) { LogoImage(logo.picture, tint, maxWidth, maxHeight, alignment) }
 }
 
 /** What [TitleArt] shows while it has no logo: the name, or the name's place held for one. */
@@ -708,10 +785,14 @@ private object LogoTone {
 private const val LOGO_TONES = 512
 
 /**
- * How long a carousel page holds the name's place for its logo before setting the name in type:
- * a logo known on this device is decoded well within it, one fetched in the time a page is read.
+ * How long a carousel page or a title page holds the name's place for its logo, a placeholder in
+ * it, before setting the name in type: a logo known on this device is decoded well within it, one
+ * fetched in the time a page is read.
  */
-private const val LOGO_WAIT_MS = 1_500L
+private const val LOGO_WAIT_MS = 2_500L
+
+/** How wide the logo placeholder is, of the slot and of the widest logo. */
+private const val LOGO_SKELETON_SHARE = 0.66f
 
 /**
  * Whether a title logo is white or near white: the mean luminance of its solid pixels, sampled,

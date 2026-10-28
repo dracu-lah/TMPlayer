@@ -31,7 +31,7 @@ class PlayerLoaderRenderTest {
 
     private val words = LoaderWords(
         title = "Big Buck Bunny",
-        line = "2008  ·  10m",
+        line = "2008  ·  Animation, Comedy  ·  10m",
         overview = "A large and lovable rabbit deals with three tiny bullies, led by a flying squirrel, " +
             "who are determined to squelch his happiness.",
     )
@@ -43,8 +43,24 @@ class PlayerLoaderRenderTest {
     fun loaderAtEverySize() {
         val backdrop = art("promo_bbb_backdrop")
         val poster = art("promo_bbb_poster")
-        val full = LoaderContent(words, backdrop, poster)
-        val bare = LoaderContent(words.copy(overview = ""))
+        // Scores made up but for TMDB's, as the metadata fixture's.
+        val extras = com.tmplayer.online.MetaExtras(
+            genres = listOf("Animation", "Comedy"),
+            scores = listOf(
+                com.tmplayer.online.MetaScore(com.tmplayer.online.ScoreSource.Imdb, 7.8),
+                com.tmplayer.online.MetaScore(com.tmplayer.online.ScoreSource.RottenTomatoes, 92.0),
+                com.tmplayer.online.MetaScore(com.tmplayer.online.ScoreSource.Metacritic, 78.0),
+                com.tmplayer.online.MetaScore(com.tmplayer.online.ScoreSource.Tmdb, 6.5),
+            ),
+        )
+        val logo = com.tmplayer.ui.online.TitleLogo(
+            SkImage.makeFromEncoded(com.tmplayer.desktop.ui.MetaFixture.LOGO_PNG).toComposeImageBitmap(),
+            bright = true,
+        )
+        val full = LoaderContent(words, backdrop, poster, extras = extras)
+        val logoed = full.copy(logo = logo)
+        val legacy = LoaderContent(words, backdrop, poster, extras = com.tmplayer.online.MetaExtras(rating = 6.5))
+        val bare = LoaderContent(words.copy(overview = "", line = "10m"))
         val sizes = listOf(
             Shot("phone-portrait", 1080, 2400, 2.625f, tv = false, insets = PaddingValues(top = 32.dp, bottom = 24.dp)),
             Shot("phone-landscape", 2400, 1080, 2.625f, tv = false, insets = PaddingValues(start = 32.dp, bottom = 16.dp)),
@@ -55,7 +71,7 @@ class PlayerLoaderRenderTest {
             Shot("desktop-1440p", 2560, 1440, 1f, tv = false),
         )
         for (shot in sizes) {
-            for ((suffix, content) in listOf("" to full, "-noart" to bare)) {
+            for ((suffix, content) in listOf("" to full, "-logo" to logoed, "-legacy" to legacy, "-noart" to bare)) {
                 val png = render(shot, content)
                 assertTrue("${shot.name}$suffix drew nothing", png.size > 5_000)
                 File(OUT).apply { mkdirs() }.resolve("${shot.name}$suffix.png").writeBytes(png)
@@ -105,6 +121,9 @@ class PlayerLoaderRenderTest {
         assertEquals("S01E04", episode.line)
         val film = loaderWords(null, "Big Buck Bunny", null, 2008, "10m", "bbb.mp4")
         assertEquals("2008  ·  10m", film.line)
+        // A match's genres sit between the year and the length, two at most.
+        val genred = loaderWords(null, "Big Buck Bunny", null, 2008, "10m", "bbb.mp4", listOf("Animation", "Comedy", "Family"))
+        assertEquals("2008  ·  Animation, Comedy  ·  10m", genred.line)
         assertEquals("", film.overview)
         val nothing = loaderWords(null, "", null, null, "", "clip.mp4")
         assertEquals("clip.mp4", nothing.title)

@@ -111,6 +111,12 @@ fun SeriesArt(
             )
             if (fraction > 0f) ProgressLine(fraction, inset = inset)
         }
+        // The show's one score at the bottom end, only when it is already on the device.
+        // Not on a small card, where the episodes pill takes the foot.
+        if (!compact) com.tmplayer.ui.online.CardScore(
+            meta,
+            Modifier.align(Alignment.BottomEnd).padding(end = inset, bottom = if (fraction > 0f) 8.dp else inset),
+        )
         if (progress.finished) {
             WatchedBadge(Modifier.align(Alignment.TopStart).padding(TileBadgeInset))
         }

@@ -1,6 +1,7 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js'
 import { ArrowLeft02Icon } from '@hugeicons/core-free-icons'
-import { answer, loadBackdropLightFirst, loadPoster } from '../screens/posters'
+import { answer, keptExtras, keptLogo, loadBackdropLightFirst, loadPoster, type Extras } from '../screens/posters'
+import { TmdbMark } from '../ui/TmdbMark'
 import { loadThumb } from '../screens/thumbs'
 import { shortLength } from '../screens/VideoList'
 import { clock } from './Chrome'
@@ -11,9 +12,10 @@ import type { VideoItem, WatchInfo } from '../tg/types'
 
 /**
  * The short pre-roll while a video opens, the apps' PlayerLoader: TMDB's wide picture for the
- * title (or the video's own frame), drifting very slowly behind scrims, the clean name and one
- * line under it, the overview when there is one, and one thin progress line with one small status
- * line. No picture at all leaves a calm tonal ground, never a blurred logo. It stands until the
+ * title (or the video's own frame), drifting very slowly behind scrims, the title logo (only one
+ * this browser already keeps, never waited for) or the clean name, one line of facts under it
+ * (year, genres, length, or the episode), TMDB's score when it is kept, the overview when there
+ * is one, and one thin progress line with one small status line under the poster and the words. No picture at all leaves a calm tonal ground, never a blurred logo. It stands until the
  * first frame; a stall or a failure hands over to the status sheet.
  *
  * `stage` is how far the opening has come: 0 reading the file, 1 its head read, 2 able to play.
@@ -23,6 +25,8 @@ export function OpeningLoader(props: { item: VideoItem; info: WatchInfo | null; 
     const [art, setArt] = createSignal<string | null>(null)
     const [poster, setPoster] = createSignal<string | null>(null)
     const [found, setFound] = createSignal<{ title?: string; year?: number | null; overview?: string } | null>(null)
+    const [extras, setExtras] = createSignal<Extras | null>(null)
+    const [logo, setLogo] = createSignal<string | null>(null)
     let wide = false
     onMount(() => {
         if (item.thumb) loadThumb(item.thumb).then((u) => !wide && setArt(u), () => {})
@@ -33,6 +37,15 @@ export function OpeningLoader(props: { item: VideoItem; info: WatchInfo | null; 
             (f) => {
                 if (!f.match) return
                 setFound(f)
+                // What a page or a card already kept: the loader is gone before a lookup would answer.
+                const code = props.info?.episode?.code
+                const m = code ? /^S(\d+)E(\d+)/i.exec(code) : null
+                keptExtras(f, m ? { season: Number(m[1]), episode: Number(m[2]) } : null)
+                    .then((x) => {
+                        setExtras(x)
+                        return x ? keptLogo(x) : null
+                    })
+                    .then((u) => u && setLogo(u), () => {})
                 if (f.backdrop) {
                     stop = loadBackdropLightFirst(ask, (u) => {
                         wide = true
@@ -51,7 +64,8 @@ export function OpeningLoader(props: { item: VideoItem; info: WatchInfo | null; 
     const line = () => {
         const e = ep()
         if (e) return [e.code, e.name].filter(Boolean).join('  ·  ')
-        return [found()?.year?.toString(), shortLength(item.duration)].filter(Boolean).join('  ·  ')
+        const genres = (extras()?.genres ?? []).slice(0, 2).join(', ')
+        return [found()?.year?.toString(), genres, shortLength(item.duration)].filter(Boolean).join('  ·  ')
     }
     // An episode's own words are not in the poster answer: a show's overview would describe the wrong thing.
     const overview = () => (ep() ? '' : (found()?.overview ?? '').trim())
@@ -68,22 +82,35 @@ export function OpeningLoader(props: { item: VideoItem; info: WatchInfo | null; 
                 <Icon icon={ArrowLeft02Icon} size={24} />
             </button>
             <div class="pc-loader-words">
-                <Show when={poster()}>
-                    <img class="pc-loader-poster" src={poster()!} alt="" />
-                </Show>
-                <div class="pc-loader-text">
-                    <h2 class="pc-loader-title">{title()}</h2>
-                    <Show when={line()}>
-                        <p class="pc-loader-line">{line()}</p>
+                {/* The poster and the words share one foot, and the progress runs under both. */}
+                <div class="pc-loader-block">
+                    <Show when={poster()}>
+                        <img class="pc-loader-poster" src={poster()!} alt="" />
                     </Show>
-                    <Show when={overview()}>
-                        <p class="pc-loader-overview">{overview()}</p>
-                    </Show>
-                    <div class="pc-loader-progress">
-                        <span style={{ transform: `scaleX(${progress()})` }} />
+                    <div class="pc-loader-text">
+                        <h2 class="pc-loader-title" classList={{ logo: !!logo() }} aria-label={title()}>
+                            <Show when={logo()} fallback={title()}>
+                                <img class="pc-loader-logo" src={logo()!} alt="" onError={() => setLogo(null)} />
+                            </Show>
+                        </h2>
+                        <Show when={line()}>
+                            <p class="pc-loader-line">{line()}</p>
+                        </Show>
+                        <Show when={extras()?.rating}>
+                            <p class="pc-loader-scores" role="img" aria-label={t('metadata.score_out_of_ten', { site: 'TMDB', score: extras()!.rating! })}>
+                                <TmdbMark height={11} />
+                                <span>{extras()!.rating!.toFixed(1)}</span>
+                            </p>
+                        </Show>
+                        <Show when={overview()}>
+                            <p class="pc-loader-overview">{overview()}</p>
+                        </Show>
                     </div>
-                    <p class="pc-loader-status">{status()}</p>
                 </div>
+                <div class="pc-loader-progress">
+                    <span style={{ transform: `scaleX(${progress()})` }} />
+                </div>
+                <p class="pc-loader-status">{status()}</p>
             </div>
         </div>
     )

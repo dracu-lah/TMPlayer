@@ -7,6 +7,7 @@ import { t } from '../i18n'
 import { dropResume, getResume, laterIds, progress as readProgress, setLater, setWatched, settings, watchedList, watchedTick } from '../store'
 import { Icon, type IconData } from '../ui/Icon'
 import { TmdbMark } from '../ui/TmdbMark'
+import { TitleLogo } from '../ui/TitleLogo'
 import { initialOf } from '../ui/initial'
 import { StarButton } from './Chats'
 import { loadThumb } from './thumbs'
@@ -203,7 +204,14 @@ function Page(props: { item: VideoItem; info: WatchInfo | null; infoSettled: boo
                     <Show when={ep()}>
                         {(e) => <p class="detail-code">{episodeName() ? `${e().code}${dot}${episodeName()}` : e().code}</p>}
                     </Show>
-                    <h1 class="detail-title">{title()}</h1>
+                    {/* The title logo where TMDB has one, a placeholder while it may still come, the name otherwise. */}
+                    <TitleLogo
+                        level={1}
+                        class="detail-title"
+                        name={title()}
+                        extras={extras()}
+                        pending={!!(settings().posters && item.poster) && (!props.infoSettled || meta.loading)}
+                    />
                     <p class="detail-facts">
                         <For each={facts()}>
                             {(f) => (

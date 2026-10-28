@@ -228,7 +228,8 @@ export function createHandler(deps: Deps) {
 
     /** What the cache files an extras answer under. */
     function extrasRequest(origin: string, q: { film: boolean; id: number; season: number | null; episode: number | null; region: string }): Request {
-        const p = new URLSearchParams({ k: q.film ? 'film' : 'show', id: String(q.id), s: String(q.season ?? ''), e: String(q.episode ?? ''), r: q.region })
+        // v2: with the title logo; answers kept before it are asked again rather than shown without.
+        const p = new URLSearchParams({ v: '2', k: q.film ? 'film' : 'show', id: String(q.id), s: String(q.season ?? ''), e: String(q.episode ?? ''), r: q.region })
         return new Request(`${origin}/tmdb/extras?${p}`)
     }
 
@@ -259,8 +260,9 @@ export function createHandler(deps: Deps) {
         if (now() < pausedUntil) return unavailable('throttled', (pausedUntil - now()) / 1000)
         if (refusedAt && now() - refusedAt < REFUSED_RETRY) return unavailable('refused', (REFUSED_RETRY - (now() - refusedAt)) / 1000)
         // MetaApis.extras: the title's own page with its credits, videos and age ratings appended; videos in English and with no language.
-        const append = film ? 'credits,videos,release_dates' : 'aggregate_credits,videos,content_ratings,external_ids'
-        const reply = await retrying(key, `${film ? 'movie' : 'tv'}/${id}`, `language=en-US&include_video_language=en,null&append_to_response=${append}`)
+        // The logos come with them (MetaApis.logos), English or wordless, so the page needs no second call.
+        const append = film ? 'credits,videos,release_dates,images' : 'aggregate_credits,videos,content_ratings,external_ids,images'
+        const reply = await retrying(key, `${film ? 'movie' : 'tv'}/${id}`, `language=en-US&include_video_language=en,null&include_image_language=en,null&append_to_response=${append}`)
         const blocked = (r: Reply) => {
             const out = stopped(r)
             return unavailable(out.kind === 'blocked' ? out.reason : 'unavailable', out.kind === 'blocked' ? out.waitS : 30)

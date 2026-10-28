@@ -845,14 +845,19 @@ internal fun MediaTile(
             )
         },
         art = {
-            if (poster) {
-                val meta = com.tmplayer.ui.online.rememberMeta(item, showOnly = true)
-                PosterArt(item.miniThumbnail, item.thumbnailFileId, rememberCover(item), meta?.posterUrl, Modifier.fillMaxSize())
-            } else {
-                // On Home, the show's or the film's own picture over the frame once a match arrives.
-                com.tmplayer.ui.online.OnlineArt(item, Modifier.fillMaxSize()) {
-                    MediaArt(item.miniThumbnail, item.thumbnailFileId, Modifier.fillMaxSize(), cover = rememberCover(item))
+            val meta = com.tmplayer.ui.online.rememberMeta(item, showOnly = true)
+            Box(Modifier.fillMaxSize()) {
+                if (poster) {
+                    PosterArt(item.miniThumbnail, item.thumbnailFileId, rememberCover(item), meta?.posterUrl, Modifier.fillMaxSize())
+                } else {
+                    // On Home, the show's or the film's own picture over the frame once a match arrives.
+                    com.tmplayer.ui.online.OnlineArt(item, Modifier.fillMaxSize()) {
+                        MediaArt(item.miniThumbnail, item.thumbnailFileId, Modifier.fillMaxSize(), cover = rememberCover(item))
+                    }
                 }
+                // The title's one score at the bottom end, only when it is already on the device;
+                // clear of the progress line on the art's foot.
+                com.tmplayer.ui.online.CardScore(meta, Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = if (point?.fraction != null) 14.dp else 8.dp))
             }
         },
         subtitle = buildString {

@@ -59,13 +59,26 @@ import com.tmplayer.ui.components.CoverArt
 import com.tmplayer.ui.components.GeneratedCover
 import com.tmplayer.ui.i18n.LocalStrings
 import com.tmplayer.ui.online.rememberMeta
+import com.tmplayer.ui.online.TitleLogo
+import com.tmplayer.ui.online.TitleLogoImage
+import com.tmplayer.ui.online.rememberCachedTitleLogo
+import com.tmplayer.ui.online.MetaScoresRow
+import com.tmplayer.online.MetaExtras
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.unit.Dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /*
  * The short pre-roll shown while a video opens, on the phone, the television and the desktop.
  *
  * A calm wait rather than a status report: the show's or film's own backdrop from the online
- * metadata, full bleed and drifting very slowly, its clean name and one line under it, the
- * overview when there is one, and one thin progress line with one small status line under it.
+ * metadata, full bleed and drifting very slowly, its title logo (only one already decoded on this
+ * device, never waited for) or its clean name, one line of facts under it (year, genres, length,
+ * or the episode), the score sites' marks and scores when they are kept here, the overview when
+ * there is one, and one thin progress line with one small status line under it.
  * The raw file name, the size, "Loading..." and the bare speed are gone from the main view; the
  * speed comes back, small and muted, only when the wait is slow (the caller decides when).
  *
@@ -75,7 +88,7 @@ import com.tmplayer.ui.online.rememberMeta
  * words, the theme's primary for the line.
  */
 
-/** The words the loader shows. [line] is "S01E04 · The Nexus Event" or "2021 · 2h 12m". */
+/** The words the loader shows. [line] is "S01E04 · The Nexus Event" or "2021 · Drama, Crime · 2h 12m". */
 @Immutable
 data class LoaderWords(
     val title: String,
@@ -95,6 +108,12 @@ data class LoaderContent(
     val backdrop: ImageBitmap? = null,
     val poster: ImageBitmap? = null,
     val cover: Cover? = null,
+    /** The match, for the provider of its scores. */
+    val meta: MetaInfo? = null,
+    /** The match's facts and scores as kept on this device; null when none are. */
+    val extras: MetaExtras? = null,
+    /** The title logo, only one already decoded on this device; the name in type without. */
+    val logo: TitleLogo? = null,
 )
 
 /** A wide TMDB picture at a size fit for [screenWidthPx]: w780 up to a phone or a 1080p stick, w1280 past that. */
@@ -127,8 +146,9 @@ fun rememberLoaderContent(
     val s = LocalStrings.current
     val parsed = remember(fileName, caption) { MediaName.parse(fileName.ifBlank { fallbackTitle }, caption) }
     val meta = rememberMeta(fileName.ifBlank { fallbackTitle }, caption)
-    val words = remember(meta, parsed, durationSec, fallbackTitle, s) {
-        loaderWords(meta, parsed.title, parsed.episodeCode, parsed.year, s.formatter.duration(durationSec.toLong()), fallbackTitle)
+    val extras = rememberStoredExtras(meta)
+    val words = remember(meta, extras, parsed, durationSec, fallbackTitle, s) {
+        loaderWords(meta, parsed.title, parsed.episodeCode, parsed.year, s.formatter.duration(durationSec.toLong()), fallbackTitle, extras?.genres.orEmpty())
     }
     val backdropUrl = (meta?.backdropUrl ?: meta?.episode?.stillUrl)?.let { backdropUrlFor(it, screenWidthPx) }
     val backdrop = rememberOnlinePicture(backdropUrl, screenWidthPx.coerceIn(320, 1280))
@@ -136,7 +156,24 @@ fun rememberLoaderContent(
     val cover = remember(chatId, fileName, caption, fallbackTitle) {
         CoverArt.of(chatId, fileName.ifBlank { fallbackTitle }, caption, fallbackTitle = fallbackTitle)
     }
-    return LoaderContent(words, backdrop ?: thumbnail, poster, cover)
+    val logo = rememberCachedTitleLogo(meta)
+    return LoaderContent(words, backdrop ?: thumbnail, poster, cover, meta, extras, logo)
+}
+
+/**
+ * [meta]'s facts and scores from memory, else from the disk once read, never the network: the
+ * loader is gone before a lookup would answer. What a detail page or a card has kept is here.
+ */
+@Composable
+private fun rememberStoredExtras(meta: MetaInfo?): MetaExtras? {
+    meta ?: return null
+    val online = OnlineMetadata.current ?: return null
+    val settings by online.settings.collectAsState()
+    if (!settings.enabled) return null
+    val stored by produceState(online.peekExtras(meta), meta) {
+        if (value == null) value = withContext(Dispatchers.IO) { runCatching { online.storedExtras(meta) }.getOrNull() }
+    }
+    return stored
 }
 
 /** The loader's words from a match, or from the parsed name when there is none. Pure, for the tests. */
@@ -147,6 +184,7 @@ fun loaderWords(
     year: Int?,
     duration: String,
     fallbackTitle: String,
+    genres: List<String> = emptyList(),
 ): LoaderWords {
     val title = meta?.title?.takeIf { it.isNotBlank() }
         ?: parsedTitle.takeIf { it.isNotBlank() }
@@ -155,7 +193,11 @@ fun loaderWords(
     val line = if (episodeCode != null) {
         listOfNotNull(episodeCode, episodeName).joinToString(DOT)
     } else {
-        listOfNotNull((meta?.year ?: year)?.toString(), duration.takeIf { it.isNotBlank() }).joinToString(DOT)
+        listOfNotNull(
+            (meta?.year ?: year)?.toString(),
+            genres.take(LINE_GENRES).joinToString(", ").ifBlank { null },
+            duration.takeIf { it.isNotBlank() },
+        ).joinToString(DOT)
     }
     val overview = meta?.episode?.overview?.takeIf { it.isNotBlank() } ?: meta?.overview.orEmpty()
     return LoaderWords(title, line, overview.trim())
@@ -284,6 +326,33 @@ fun PlayerLoader(
         }
 
         val words = content.words
+        // One rhythm for the words, from the body size: a small step inside a group (title to
+        // line to scores), a larger one between groups (the overview, then the progress).
+        val step = (bodySp * 0.5f).dp
+        val gap = (bodySp * 1.1f).dp
+        val head: @Composable (Dp, Int) -> Unit = { logoWidth, titleLines ->
+            // Read out as the name whether the logo or the type is drawn.
+            Box(Modifier.clearAndSetSemantics { heading(); contentDescription = words.title }) {
+                val logo = content.logo
+                if (logo != null) {
+                    TitleLogoImage(logo, maxWidth = logoWidth, maxHeight = (titleSp * LOGO_LINES).dp)
+                } else {
+                    Title(words.title, titleSp, maxLines = titleLines)
+                }
+            }
+            // Two lines where an upright phone is too narrow for year, genres and length in one.
+            Line(words.line, lineSp, Modifier.padding(top = step), maxLines = if (portrait) 2 else 1)
+            content.extras?.let { extras ->
+                MetaScoresRow(
+                    extras,
+                    Modifier.padding(top = step),
+                    maxLines = 1,
+                    limit = SCORES_SHOWN,
+                    provider = content.meta?.provider ?: com.tmplayer.online.MetaProvider.Tmdb,
+                    style = MaterialTheme.typography.labelLarge.copy(fontSize = labelSp.sp, lineHeight = (labelSp * 1.4f).sp),
+                )
+            }
+        }
         if (portrait) {
             // Laid out from the bottom up: the words take the height they need and the backdrop
             // keeps everything above them, so a short overview leaves more picture, not a gap.
@@ -297,37 +366,32 @@ fun PlayerLoader(
                         Poster(poster, Modifier.width(posterWidth).height(posterHeight))
                         Spacer(Modifier.width(16.dp))
                     }
-                    Column(Modifier.weight(1f)) {
-                        Title(words.title, titleSp, maxLines = 3)
-                        Line(words.line, lineSp)
-                    }
+                    Column(Modifier.weight(1f)) { head(w * 0.6f, 3) }
                 }
-                Spacer(Modifier.height(16.dp))
-                Overview(words.overview, bodySp, maxLines = 4)
-                Spacer(Modifier.height(28.dp))
-                Progress(progress, status, note, labelSp, Modifier.fillMaxWidth())
+                Overview(words.overview, bodySp, maxLines = 4, Modifier.padding(top = gap))
+                Progress(progress, status, note, labelSp, Modifier.fillMaxWidth().padding(top = gap * 1.4f))
             }
         } else {
             // A measure of about 64 characters for the overview, and never more than 60 per cent
             // of the screen, so the backdrop keeps the rest.
             val measure = minOf(w - start - end, (bodySp * 32f).dp, w * 0.6f)
             val posterHeight = (h * 0.34f).coerceAtMost(300.dp)
-            Row(
-                Modifier.align(Alignment.BottomStart).padding(start = start, end = end, bottom = bottom),
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                content.poster?.let { poster ->
-                    Poster(poster, Modifier.width(posterHeight / 1.5f).height(posterHeight))
-                    Spacer(Modifier.width(side))
+            val posterWidth = posterHeight / 1.5f
+            // The poster and the words share one foot, the overview's last line, and the progress
+            // runs under both from the poster's edge, so the block reads as one piece.
+            Column(Modifier.align(Alignment.BottomStart).padding(start = start, end = end, bottom = bottom)) {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    content.poster?.let { poster ->
+                        Poster(poster, Modifier.width(posterWidth).height(posterHeight))
+                        Spacer(Modifier.width(side))
+                    }
+                    Column(Modifier.widthIn(max = measure)) {
+                        head(measure * 0.8f, 2)
+                        Overview(words.overview, bodySp, maxLines = 3, Modifier.padding(top = gap))
+                    }
                 }
-                Column(Modifier.widthIn(max = measure)) {
-                    Title(words.title, titleSp, maxLines = 2)
-                    Line(words.line, lineSp)
-                    Spacer(Modifier.height((bodySp * 0.8f).dp))
-                    Overview(words.overview, bodySp, maxLines = 3)
-                    Spacer(Modifier.height((bodySp * 1.2f).dp))
-                    Progress(progress, status, note, labelSp, Modifier.width(measure))
-                }
+                val track = (if (content.poster != null) posterWidth + side + measure else measure).coerceAtMost(w - start - end)
+                Progress(progress, status, note, labelSp, Modifier.width(track).padding(top = gap * 1.4f))
             }
         }
     }
@@ -418,21 +482,21 @@ private fun Title(text: String, sizeSp: Float, maxLines: Int) {
 }
 
 @Composable
-private fun Line(text: String, sizeSp: Float) {
+private fun Line(text: String, sizeSp: Float, modifier: Modifier = Modifier, maxLines: Int = 1) {
     if (text.isBlank()) return
     Text(
         text,
         style = MaterialTheme.typography.titleMedium.copy(fontSize = sizeSp.sp, lineHeight = (sizeSp * 1.35f).sp),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
+        maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.padding(top = 4.dp),
+        modifier = modifier,
     )
 }
 
 @Composable
-private fun Overview(text: String, sizeSp: Float, maxLines: Int) {
-    AnimatedVisibility(text.isNotBlank(), enter = fadeIn(tween(FADE_MS))) {
+private fun Overview(text: String, sizeSp: Float, maxLines: Int, modifier: Modifier = Modifier) {
+    AnimatedVisibility(text.isNotBlank(), modifier, enter = fadeIn(tween(FADE_MS))) {
         Text(
             text,
             style = MaterialTheme.typography.bodyLarge.copy(fontSize = sizeSp.sp, lineHeight = (sizeSp * 1.45f).sp),
@@ -472,6 +536,11 @@ private fun Progress(progress: Float, status: String, note: String?, labelSp: Fl
 }
 
 private const val DOT = "  ·  "
+private const val LINE_GENRES = 2
+private const val SCORES_SHOWN = 3
+
+/** A title logo is at most this many title lines tall. */
+private const val LOGO_LINES = 2.4f
 private const val ART_SHARE = 0.72f
 private const val FADE_MS = 600
 private const val DRIFT_MS = 12_000

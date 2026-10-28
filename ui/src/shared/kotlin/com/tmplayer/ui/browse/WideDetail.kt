@@ -219,7 +219,7 @@ fun WideDetailPanel(
                             maxWidth = if (roomy) 460.dp else 380.dp,
                             maxHeight = logoHeight,
                             settled = metaState.settled,
-                            waitMs = 0L,
+                            skeletonHeight = logoHeight * 0.62f,
                             modifier = Modifier.clearAndSetSemantics {
                                 heading()
                                 contentDescription = heading
