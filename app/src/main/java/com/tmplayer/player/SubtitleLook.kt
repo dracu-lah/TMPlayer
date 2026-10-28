@@ -32,15 +32,17 @@ object SubtitleLook {
 
     /**
      * The caption style for [style]. With a box the edge is dropped, as on the desktop: the box
-     * is what separates the letters then, and an outline inside it only thickens them.
+     * is what separates the letters then, and an outline inside it only thickens them. [script]
+     * is a bundled font the lines need ([SubtitleScripts]), which then stands in for the face.
      */
     @OptIn(UnstableApi::class)
-    fun captionStyle(style: SubtitleStyle): CaptionStyleCompat = CaptionStyleCompat(
+    fun captionStyle(style: SubtitleStyle, script: Typeface? = null): CaptionStyleCompat = CaptionStyleCompat(
         style.colour.argb,
         if (style.box) style.boxLevel.argb else Color.TRANSPARENT,
         Color.TRANSPARENT,
         if (style.box) CaptionStyleCompat.EDGE_TYPE_NONE else edgeType(style.edge),
         Color.BLACK,
-        typeface(style.face, style.bold),
+        script?.let { Typeface.create(it, if (style.bold) Typeface.BOLD else Typeface.NORMAL) }
+            ?: typeface(style.face, style.bold),
     )
 }

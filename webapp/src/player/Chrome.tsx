@@ -44,6 +44,7 @@ import {
     VolumeMute02Icon,
 } from '@hugeicons/core-free-icons'
 import './player.css'
+import './subfonts.css'
 import { Icon, type IconData } from '../ui/Icon'
 import { t } from '../i18n'
 import { Choice, Entry, Panel, PhoneSheet, Picker, variant, walk } from './sheets'
