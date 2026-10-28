@@ -472,7 +472,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
     private var scrubArt: android.graphics.Bitmap? = null
         set(value) {
             field = value
-            controls?.previewArt = value
+            controls?.previewArt = value.takeIf { Trickplay.PICTURES_SHOWN }
         }
 
     /** Why a lighter copy was picked by the player itself, said once it plays; null for none. */
@@ -1465,7 +1465,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
                 }
             },
         )
-        controls?.previewArt = scrubArt
+        controls?.previewArt = scrubArt.takeIf { Trickplay.PICTURES_SHOWN }
         // The text answers (and the resume offer) on both devices; the touch feedback around them
         // only ever fires from the phone's gestures.
         feedback = PlayerFeedback(findViewById(R.id.player_root), findViewById(R.id.overlay_container))
@@ -5638,11 +5638,11 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      */
     private fun startTrickplay() {
         lifecycleScope.launch {
-            val on = runCatching { settings.trickplayNow() }.getOrDefault(true)
+            val on = Trickplay.PICTURES_SHOWN && runCatching { settings.trickplayNow() }.getOrDefault(true)
             controls?.previewsOff = !on
             if (!on) stopTrickplaySpans()
         }
-        if (FormFactor.isTv(this) || !DeviceQuirks.trickplayMemory(this)) {
+        if (!Trickplay.PICTURES_SHOWN || FormFactor.isTv(this) || !DeviceQuirks.trickplayMemory(this)) {
             stopTrickplaySpans()
             return
         }
@@ -5674,6 +5674,7 @@ class PlayerActivity : FragmentActivity(), TrackPickerHost {
      * [TrickplayFrames], else asked before them. Its two small files are fetched at once.
      */
     private fun startStoryboard(fresh: MediaItem) {
+        if (!Trickplay.PICTURES_SHOWN) return
         val board = fresh.storyboard ?: return
         if (storyboardFrames != null) return
         lifecycleScope.launch {

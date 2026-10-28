@@ -50,7 +50,7 @@ fun rememberDeviceFit(): DeviceFit {
 @Composable
 fun rememberSeekThumbnailsShown(): Boolean {
     val context = LocalContext.current
-    return remember(context) { DeviceQuirks.trickplayMemory(context) }
+    return remember(context) { com.tmplayer.data.Trickplay.PICTURES_SHOWN && DeviceQuirks.trickplayMemory(context) }
 }
 
 /** The phone and the television have the Lighter pictures and Reduce motion rows. */

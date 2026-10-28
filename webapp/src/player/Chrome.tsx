@@ -51,7 +51,7 @@ import { Choice, Entry, Panel, PhoneSheet, Picker, variant, walk } from './sheet
 import { nextShape, objectFit, pinchShape, ratioBox, ratioPath, shapeRatio, SHAPES, type Shape } from './shape'
 import { remoteKey } from '../tv/remote'
 import { frameAt, type Frames } from './storyboard'
-import { cardLeft, cardSize, frameSlot, GIVE_UP_MS, type FrameGrabber } from './seekpreview'
+import { cardLeft, cardSize, frameSlot, GIVE_UP_MS, PICTURES_SHOWN, type FrameGrabber } from './seekpreview'
 import { coverBackground } from '../screens/cover'
 import { loadThumb } from '../screens/thumbs'
 import { chapterAt, chapterMarks, chapterNext, chapterPrevious, isGeneric, skipSegments, type Chapter, type SkipSegment } from './chapters'
@@ -1995,6 +1995,7 @@ function PreviewCard(props: {
     })
     return (
         <div class="pc-preview" style={{ left: `${left()}px`, width: `${size().width}px` }} aria-hidden="true">
+            <Show when={PICTURES_SHOWN} fallback={<span class="pc-chip">{clock(props.time())}</span>}>
             <div class="pc-card" style={{ width: `${size().width}px`, height: `${size().height}px` }}>
                 <Show
                     when={tile()}
@@ -2020,6 +2021,7 @@ function PreviewCard(props: {
                     <span class="pc-chip">{clock(props.time())}</span>
                 </Show>
             </div>
+            </Show>
             <Show when={props.chapter()}>{(name) => <span class="pc-chapter">{name()}</span>}</Show>
             <Show when={props.slow() < 1}>
                 <span class="pc-slow">{t(props.slow() <= 0.25 ? 'player.scrub_quarter' : 'player.scrub_half')}</span>

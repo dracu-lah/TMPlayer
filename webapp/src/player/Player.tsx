@@ -7,7 +7,7 @@ import { codecName, keyFrames, nativeEngine, playableSound, probe, RemuxEngine, 
 import { LIBAV_FORMATS, LibavEngine } from './libav'
 import { MoviEngine, moviSupported } from './movi'
 import { storyboardFrames, type Frames } from './storyboard'
-import { appleTouch, FrameGrabber } from './seekpreview'
+import { appleTouch, FrameGrabber, PICTURES_SHOWN } from './seekpreview'
 import { Chrome, variant } from './Chrome'
 import { OpeningLoader } from './loader'
 import { readChapters, type Chapter } from './chapters'
@@ -243,7 +243,7 @@ export function Player(props: {
                 engine = nativeEngine(video, url, at)
                 // A second element on the same stream for the seek bar's frames; not on an iPhone or
                 // iPad (Safari's memory and range limits) nor on the TV layout.
-                if (!appleTouch && form() !== 'tv') setGrabber(new FrameGrabber(url))
+                if (PICTURES_SHOWN && !appleTouch && form() !== 'tv') setGrabber(new FrameGrabber(url))
             } else engine = await remux(p, at)
             if (gen !== generation) return
             video.playbackRate = rate
@@ -418,7 +418,7 @@ export function Player(props: {
     // Telegram's storyboard for the seek bar's preview card, fetched once the picture is up.
     let storyboardAsked = false
     const addStoryboard = async () => {
-        if (storyboardAsked || !item.storyboard) return
+        if (!PICTURES_SHOWN || storyboardAsked || !item.storyboard) return
         storyboardAsked = true
         try {
             const f = await storyboardFrames(item.storyboard)

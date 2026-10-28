@@ -15,6 +15,13 @@ package com.tmplayer.data
 object Trickplay {
 
     /**
+     * Scrub pictures are hidden on every device for now: what showed was mostly Telegram's own
+     * thumbnail, not the moment under the finger. The time still shows while scrubbing. Set back
+     * to true to bring the card's pictures and their Settings row back.
+     */
+    const val PICTURES_SHOWN = false
+
+    /**
      * Devices with less memory than this get no thumbnails. A "1 GB" device reports a little under
      * a gigabyte to apps and a "1.5 GB" one a little under that, so the line sits between them.
      */

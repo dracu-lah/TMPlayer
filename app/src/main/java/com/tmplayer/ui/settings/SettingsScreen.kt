@@ -989,7 +989,8 @@ fun SettingsScreen(
                 // Thumbnails over the scrub bar, from what is already downloaded. Shown even where the
                 // memory rules them out, switched off and saying why, so a 1 GB stick's owner who read
                 // about the feature finds out it is not for this device rather than looking for it.
-                item {
+                // Left out while the pictures are hidden everywhere (Trickplay.PICTURES_SHOWN).
+                if (com.tmplayer.data.Trickplay.PICTURES_SHOWN) item {
                     val on = trickplayOn && trickplayMemory
                     ToggleRow(
                         title = s.settingsTrickplay,

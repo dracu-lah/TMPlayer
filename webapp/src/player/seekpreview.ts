@@ -256,5 +256,11 @@ const MISS_MEMORY_MS = 4000
 const CACHE = 40
 const FRAME_WIDTH = 480
 
+/**
+ * The seek bar's pictures are hidden on every device for now (Trickplay.PICTURES_SHOWN in core):
+ * what showed was mostly Telegram's own thumbnail. Scrubbing shows the time in a chip alone.
+ */
+export const PICTURES_SHOWN = false
+
 /** No answer from any source for this long and the card shows its fallback instead of shimmering. */
 export const GIVE_UP_MS = 1500

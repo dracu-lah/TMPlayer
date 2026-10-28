@@ -328,7 +328,8 @@ fun PlayerScreen(
     }
     val qualities = if (current.isDownload || current.item.isJoined) emptyList() else (post?.qualities ?: current.item.qualities)
     // Telegram's storyboard (CP80): the timebar's hover pictures, where scrub pictures are on.
-    val scrubPictures by remember(settings) { settings.trickplay }.collectAsState(initial = true)
+    val scrubSetting by remember(settings) { settings.trickplay }.collectAsState(initial = true)
+    val scrubPictures = scrubSetting && com.tmplayer.data.Trickplay.PICTURES_SHOWN
     val boardFiles = (post ?: current.item).storyboard
     val storyboard = remember(boardFiles, scrubPictures) {
         boardFiles?.takeIf { scrubPictures }?.let { files -> DesktopStoryboard(files, durationMs = { engine.state.value.durationMs.takeIf { it > 0 } ?: current.item.durationSec * 1000L }) }

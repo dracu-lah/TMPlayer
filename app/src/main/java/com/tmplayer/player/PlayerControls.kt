@@ -333,7 +333,7 @@ class PlayerControls(
      * under the bar already says the time); a television, whose clock sits apart from the bar,
      * keeps the card's still face with the time on it.
      */
-    var previewsOff = false
+    var previewsOff = !com.tmplayer.data.Trickplay.PICTURES_SHOWN
 
     /** The video's own thumbnail, for the card's fallback; null draws a plain cover. */
     var previewArt: android.graphics.Bitmap?
